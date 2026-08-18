@@ -1,0 +1,458 @@
+/*
+ * Application styles — Phase 01.12.
+ *
+ * §25: "Consistent navigation, terminology, status colours, action placement
+ * and keyboard behaviour across modules", and "the localisation architecture
+ * shall allow Arabic labels and right-to-left layout later without redesign."
+ *
+ * Two rules follow from the second, and they are the whole reason this file is
+ * written the way it is:
+ *
+ *   1. **No physical direction properties.** `margin-inline-start`, never
+ *      `margin-left`; `padding-inline`, never `padding-left/right`; `inset-
+ *      inline-start`, never `left`. Under `dir="rtl"` these flip on their own.
+ *      A single `margin-left` survives the flip and quietly breaks the layout.
+ *   2. **No text baked into CSS.** No `content: "Draft"`, no `::after` labels.
+ *      A string in a stylesheet cannot be translated.
+ *
+ * Status colours are defined once here (§25's "consistent status colours") so
+ * that a posted document looks the same in Treasury as it does in Sales.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  --radius: 0.375rem;
+
+  --surface: #ffffff;
+  --surface-sunken: #f6f7f9;
+  --surface-raised: #ffffff;
+  --border: #dfe3e8;
+  --border-strong: #c4cbd4;
+  --text: #1b1f24;
+  --text-muted: #5b6572;
+  --accent: #1f4e79;
+  --accent-contrast: #ffffff;
+
+  /* Status colours — one definition, every module (§25). */
+  --status-draft: #6b7280;
+  --status-submitted: #b45309;
+  --status-approved: #1d4ed8;
+  --status-executed: #0f766e;
+  --status-posted: #15803d;
+  --status-settled: #15803d;
+  --status-rejected: #b91c1c;
+  --status-cancelled: #6b7280;
+  --status-reversed: #7c3aed;
+  --status-closed: #374151;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #16191d;
+    --surface-sunken: #101317;
+    --surface-raised: #1d2126;
+    --border: #2c323a;
+    --border-strong: #3d444e;
+    --text: #e8eaed;
+    --text-muted: #9aa3af;
+    --accent: #6ea8dc;
+    --accent-contrast: #0d1117;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--surface-sunken);
+}
+
+/* ── Shell ───────────────────────────────────────────────────────────────── */
+
+.shell {
+  display: grid;
+  grid-template-columns: 16rem 1fr;
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+}
+
+.shell__header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding-inline: var(--space-4);
+  padding-block: var(--space-3);
+  background: var(--surface);
+  border-block-end: 1px solid var(--border);
+}
+
+.shell__brand {
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--accent);
+}
+
+.shell__spacer {
+  flex: 1;
+}
+
+.shell__identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.shell__nav {
+  background: var(--surface);
+  border-inline-end: 1px solid var(--border);
+  padding-block: var(--space-4);
+  overflow-y: auto;
+}
+
+.shell__main {
+  padding: var(--space-6);
+  min-width: 0; /* so a wide table scrolls instead of stretching the grid */
+}
+
+@media (max-width: 60rem) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .shell__nav {
+    border-inline-end: none;
+    border-block-end: 1px solid var(--border);
+  }
+}
+
+/* ── Navigation ──────────────────────────────────────────────────────────── */
+
+.nav__section {
+  margin-block-end: var(--space-4);
+}
+
+.nav__heading {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding-inline: var(--space-4);
+  margin-block-end: var(--space-1);
+}
+
+.nav__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nav__link {
+  display: block;
+  padding-block: var(--space-1);
+  padding-inline-start: var(--space-6);
+  padding-inline-end: var(--space-4);
+  color: var(--text);
+  text-decoration: none;
+  border-inline-start: 2px solid transparent;
+}
+
+.nav__link:hover {
+  background: var(--surface-sunken);
+}
+
+.nav__link[aria-current='page'] {
+  border-inline-start-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* An item whose module has not been delivered. Not hidden — Appendix A's tree
+   is mandatory — but honestly marked, so nobody reports it as broken. */
+.nav__link--pending {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.nav__pending-mark {
+  font-size: 0.6875rem;
+  margin-inline-start: var(--space-2);
+  opacity: 0.7;
+}
+
+/* ── Page furniture ──────────────────────────────────────────────────────── */
+
+.page__header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  margin-block-end: var(--space-6);
+}
+
+.page__title {
+  margin: 0;
+  font-size: 1.375rem;
+  font-weight: 650;
+}
+
+.panel {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  margin-block-end: var(--space-4);
+}
+
+.panel__title {
+  margin: 0 0 var(--space-3);
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+/* ── Status and draft marking (Appendix A rule 4) ────────────────────────── */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-inline: var(--space-2);
+  padding-block: 0.0625rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-contrast);
+  background: var(--status-draft);
+  white-space: nowrap;
+}
+
+.status--draft { background: var(--status-draft); }
+.status--submitted { background: var(--status-submitted); }
+.status--approved { background: var(--status-approved); }
+.status--partially_executed { background: var(--status-executed); }
+.status--executed { background: var(--status-executed); }
+.status--posted { background: var(--status-posted); }
+.status--settled { background: var(--status-settled); }
+.status--rejected { background: var(--status-rejected); }
+.status--cancelled { background: var(--status-cancelled); }
+.status--reversed { background: var(--status-reversed); }
+.status--closed { background: var(--status-closed); }
+
+/*
+ * The draft band. Appendix A: "Draft documents are clearly marked and cannot be
+ * confused with final documents." Colour alone would fail that for a colour-
+ * blind reader and on a monochrome printout, so the band also carries a text
+ * label and a hatched edge.
+ */
+.draft-band {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  margin-block-end: var(--space-4);
+  border: 1px dashed var(--status-submitted);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--status-submitted) 8%, transparent);
+  color: var(--status-submitted);
+  font-weight: 600;
+}
+
+@media print {
+  /* A draft must never print looking final. */
+  .draft-band {
+    border-width: 2px;
+  }
+
+  .shell__nav,
+  .shell__header,
+  .actions {
+    display: none;
+  }
+}
+
+/* ── Lists ───────────────────────────────────────────────────────────────── */
+
+.list__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-block-end: var(--space-3);
+}
+
+.list__search {
+  flex: 1 1 16rem;
+  min-width: 12rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+}
+
+table.list {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+table.list th,
+table.list td {
+  padding: var(--space-2) var(--space-3);
+  border-block-end: 1px solid var(--border);
+  text-align: start; /* logical — flips under rtl */
+  white-space: nowrap;
+}
+
+table.list th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  position: sticky;
+  inset-block-start: 0;
+}
+
+table.list td.numeric,
+table.list th.numeric {
+  text-align: end;
+}
+
+table.list tbody tr:hover {
+  background: var(--surface-sunken);
+}
+
+.empty {
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.empty__hint {
+  font-size: 0.8125rem;
+  margin-block-start: var(--space-1);
+}
+
+/* ── Actions (Appendix A rule 3) ─────────────────────────────────────────── */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block-end: var(--space-4);
+}
+
+.action {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.action:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+/* Keyboard behaviour is part of §25's consistency requirement — the focus ring
+   is never removed, only replaced with a clearer one. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Record header (Appendix A rule 2) ───────────────────────────────────── */
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.facts dt {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.facts dd {
+  margin: 0;
+  margin-block-start: var(--space-1);
+}
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.timeline li {
+  padding-block: var(--space-2);
+  border-block-end: 1px solid var(--border);
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+.timeline time {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--text-muted);
+}

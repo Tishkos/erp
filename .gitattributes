@@ -1,0 +1,26 @@
+# Normalise line endings so a Windows and a Linux checkout produce identical
+# files. Migrations especially: a diff caused by line endings makes a release's
+# "migration notes" (§25) unreviewable.
+
+* text=auto eol=lf
+
+# Windows-only tooling keeps CRLF.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binary — never normalise, never diff as text.
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+
+# Generated. Collapsed in review, but still versioned.
+package-lock.json  linguist-generated=true -diff
+
+# Migrations are reviewed line by line — never collapse them.
+src/server/db/migrations/**/*.sql  -linguist-generated

@@ -1,0 +1,30 @@
+# Local development database.
+#
+# PostgreSQL is the product here — see TECHSTACK.md Part A, constraints A1, A2,
+# A4, A5 and A6 all depend on it. Integration tests run against a real instance,
+# never a mock, because the guarantees under test belong to the database.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: erp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: erp_owner
+      POSTGRES_PASSWORD: owner_dev_password
+      POSTGRES_DB: erp
+      # Deterministic collation so ORDER BY is stable across machines.
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/sql/00-init-roles.sql:/docker-entrypoint-initdb.d/00-init-roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U erp_owner -d erp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:

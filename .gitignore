@@ -1,0 +1,40 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# next
+.next/
+out/
+next-env.d.ts
+
+# build
+dist/
+build/
+*.tsbuildinfo
+
+# env — never commit real secrets (TECHSTACK.md A13)
+.env
+.env.*
+!.env.example
+
+# test output
+coverage/
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# editor / os
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*
+
+# local database volume
+.postgres-data/

@@ -1,0 +1,708 @@
+/**
+ * Integration test setup — Phase 00.5.
+ *
+ * Runs migrations against the test database before the suite, and exposes two
+ * pools mirroring production role separation:
+ *
+ *   ownerPool  erp_owner — owns the schema, BYPASSES RLS.
+ *              Used only to arrange fixtures and to prove that FORCE ROW LEVEL
+ *              SECURITY closes the owner-bypass hole.
+ *
+ *   appPool    erp_app  — owns nothing. Every assertion about what the
+ *              application can and cannot do runs through this pool.
+ *
+ * If these tests ran as the owner, every authorisation assertion would pass for
+ * the wrong reason. That is the specific trap recorded in TECHSTACK.md B2.
+ */
+import 'dotenv/config';
+import { afterAll, beforeAll } from 'vitest';
+import { Pool } from 'pg';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import { configurePgTypes } from '../../src/server/db/types';
+
+// The same parsers the application runs with, applied before the pools below
+// are created. Without this the raw pools would read a business date as an
+// instant and the tests would disagree with production about what day it is.
+configurePgTypes();
+
+const ownerUrl = process.env.DATABASE_URL_TEST;
+
+if (!ownerUrl) {
+  throw new Error(
+    'DATABASE_URL_TEST is not set. Copy .env.example to .env and run `npm run db:up`.',
+  );
+}
+
+const appUrl = ownerUrl
+  .replace('erp_owner', 'erp_app')
+  .replace('owner_dev_password', 'app_dev_password');
+
+// Point the application's own client at the test database, as the app role.
+// Set before any test imports src/server/db/client.ts, which reads this at
+// module load. Without it the service layer under test would connect to the
+// development database — the tests would pass and prove nothing about the
+// schema they just migrated.
+process.env.DATABASE_URL = appUrl;
+
+export const ownerPool = new Pool({ connectionString: ownerUrl, max: 4 });
+export const appPool = new Pool({ connectionString: appUrl, max: 8 });
+
+beforeAll(async () => {
+  // Fail loudly and early if the database is not up — a confusing connection
+  // error inside a test is far harder to diagnose than this.
+  try {
+    await ownerPool.query('select 1');
+  } catch (cause) {
+    throw new Error(
+      'Cannot reach the test database. Run `npm run db:up` first.\n' +
+        `Tried: ${ownerUrl.replace(/:[^:@]*@/, ':***@')}`,
+      { cause },
+    );
+  }
+
+  // Serialised across workers with a session-level advisory lock.
+  //
+  // `migrate` runs every pending migration in one transaction. Two of them
+  // starting together against an *empty* database both try to create the same
+  // types and one dies on `pg_type_typname_nsp_index` — a failure that only
+  // appears the first time a database is created, which is exactly when it is
+  // hardest to recognise. Against an already-migrated database both are no-ops
+  // and the race is invisible, so this cannot be left to luck.
+  const gate = await ownerPool.connect();
+  try {
+    await gate.query('select pg_advisory_lock(hashtext($1))', ['erp-test-migrate']);
+    await migrate(drizzle(ownerPool), { migrationsFolder: './src/server/db/migrations' });
+  } finally {
+    await gate.query('select pg_advisory_unlock(hashtext($1))', ['erp-test-migrate']);
+    gate.release();
+  }
+});
+
+afterAll(async () => {
+  // Imported dynamically: a static import would load the client before the line
+  // above rewrites DATABASE_URL, and the pool would point at the wrong database.
+  const { pool } = await import('../../src/server/db/client');
+  await Promise.all([ownerPool.end(), appPool.end(), pool.end()]);
+});
+
+/**
+ * Awaits a promise that must reject, and returns every message in the cause
+ * chain joined together.
+ *
+ * Drizzle wraps a driver error in one of its own ("Failed query: insert into…"),
+ * so a plain `.rejects.toThrow(/duplicate key/)` matches the wrapper and misses
+ * the constraint that actually fired. Asserting on the chain keeps the test
+ * pointed at the database guarantee rather than at the ORM's phrasing.
+ */
+export async function rejection(promise: Promise<unknown>): Promise<string> {
+  try {
+    await promise;
+  } catch (error) {
+    const messages: string[] = [];
+    let current: unknown = error;
+    while (current instanceof Error) {
+      messages.push(current.message);
+      current = current.cause;
+    }
+    return messages.join('\n');
+  }
+  throw new Error('Expected the operation to be rejected, but it succeeded.');
+}
+
+/**
+ * Creates a branch with the default warehouse and default cash account §4.1
+ * requires, in one transaction.
+ *
+ * The three cannot be created separately: a warehouse belongs to a branch and a
+ * branch has a default warehouse, so neither can exist first. The constraint
+ * that enforces it is DEFERRED and judged at COMMIT, which is exactly what lets
+ * this work — and is why every fixture goes through here rather than inserting
+ * a bare branch row that production would refuse.
+ *
+ * The G/L account is written directly rather than raised through the Chart of
+ * Accounts service: the maker-checker route is proved in its own tests, and a
+ * fixture that had to approve an account before it could make a branch would
+ * test the wrong thing.
+ */
+export async function seedBranch(code: string, name: string): Promise<void> {
+  const client = await ownerPool.connect();
+  try {
+    await client.query('begin');
+
+    await client.query(`insert into branch (code, name) values ($1, $2)`, [code, name]);
+
+    await client.query(
+      `insert into warehouse (code, name, branch_code, warehouse_type)
+       values ($1, $2, $3, 'main')`,
+      [`WH-${code}`, `${name} Main Warehouse`, code],
+    );
+
+    const { rows: roots } = await client.query(
+      `select id from chart_of_account where code = 'A000001'`,
+    );
+    const { rows: account } = await client.query(
+      `insert into chart_of_account
+         (code, name, account_type, parent_id, is_group, is_active, approval_status, level,
+          currency_restriction)
+       values ($1, $2, 'asset', $3, false, true, 'approved', 1, 'IQD') returning id`,
+      [`CASH-${code}`, `${name} Cash at Bank`, roots[0].id],
+    );
+
+    const { rows: cash } = await client.query(
+      `insert into bank_cash_account
+         (code, name, account_type, bank_name, account_number, gl_account_id, branch_code)
+       values ($1, $2, 'bank', 'Seed Bank', $3, $4, $5) returning id`,
+      [`CASH-${code}`, `${name} Cash Account`, `ACC-${code}`, account[0].id, code],
+    );
+
+    await client.query(
+      `update branch set default_warehouse_code = $1, default_cash_account_id = $2 where code = $3`,
+      [`WH-${code}`, cash[0].id, code],
+    );
+
+    await client.query('commit');
+  } catch (error) {
+    await client.query('rollback').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Returns the database to the state the migrations leave it in.
+ *
+ * Not a truncate: the migrations seed things the system needs to work at all —
+ * the five account roots, the accounting roles, the Chart of Account approval
+ * route, the account-code counters. Wiping those would leave later tests
+ * testing a system that could never exist in production.
+ *
+ * So this removes what tests create and leaves what migrations installed.
+ * Runs as the owner with `session_replication_role = replica`, so the guards
+ * the application lives under are lifted for the length of the reset. Those
+ * guards are controls on the *application*, and this is not the application —
+ * each of them is asserted in its own test.
+ */
+export async function resetTestData(): Promise<void> {
+  // One connection for the whole reset, and every production guard lifted in
+  // a single statement.
+  //
+  // `session_replication_role = replica` is what a logical-replication apply
+  // worker runs as: user triggers and foreign-key triggers do not fire. It
+  // replaces thirty-six `ALTER TABLE … DISABLE TRIGGER` pairs, each of which
+  // took an ACCESS EXCLUSIVE lock and invalidated cached plans — seventy-two
+  // DDL statements before every one of eight hundred tests.
+  //
+  // It is a *session* setting, so the whole reset runs on one checked-out
+  // client rather than on whichever of the pool's four connections comes to
+  // hand. And it is restored in the `finally`: a connection returned to the
+  // pool still in `replica` would silently disable every guard for whatever
+  // ran next, which is the one failure mode worth being careful about.
+  const client = await ownerPool.connect();
+  try {
+    await client.query("set session_replication_role = replica");
+
+    await client.query(`
+      truncate audit_event, workflow_decision, workflow_instance restart identity cascade
+    `);
+
+    // Journals first: they reference accounts, periods and rate rows, and a
+    // posted one is protected from deletion by the triggers §14.4 requires. The
+    // The guarantees they carry are asserted elsewhere, and a fixture must not
+    // be able to defeat them in production.
+    // Three statements, not one block: deleting a line retotals its header, which
+    // queues the DEFERRED balance constraint, and PostgreSQL refuses to ALTER a
+    // table that has pending trigger events. Each statement commits on its own so
+    // the deferred events resolve between them.
+    // Attachments and their access log are append-only in production; TRUNCATE
+    // does not fire row triggers, which is why it is used here and nowhere else.
+    await client.query('truncate attachment_access, attachment restart identity cascade');
+
+    // Notifications reference users and rules; the rules themselves are seeded by
+    // a migration and are restored rather than wiped.
+    await client.query('truncate notification_delivery, notification restart identity cascade');
+    await client.query(`
+      update notification_rule
+         set active = true,
+             channels = case code
+               when 'chart_account_awaiting_approval' then ARRAY['in_app']
+               when 'journal_rejected'                then ARRAY['in_app']
+               else ARRAY['in_app','email'] end
+    `);
+
+    // Job runs and outbox rows are append-only in production; TRUNCATE does not
+    // fire row triggers, which is why it is used here and nowhere else. Queue
+    // policies are seeded by a migration, so they are restored rather than wiped.
+    await client.query('truncate job_run, job_outbox restart identity');
+    await client.query(`
+      update job_queue
+         set retry_limit = case name when 'document.expiry_reminder' then 3 else 5 end,
+             retry_delay_seconds = case name
+               when 'posting.posted' then 30
+               when 'notification.deliver' then 60
+               else 3600 end,
+             retry_backoff = true,
+             target_seconds = case name
+               when 'posting.posted' then 300
+               when 'notification.deliver' then 900
+               else 86400 end,
+             active = true
+    `);
+
+    // The posting log and failure queue reference journals, so they go first.
+    // Both are append-only in production — TRUNCATE does not fire row triggers,
+    // which is exactly why it is used here and nowhere in the application.
+    await client.query('truncate posting_log, posting_failure restart identity');
+
+    // The retotal trigger is off too: with it, deleting a line would requeue the
+    // deferred balance check and trip the posted-immutable rule on the way out.
+    await client.query(`
+    `);
+    // Subledger entries point at both, and are append-only in production —
+    // TRUNCATE does not fire row triggers, which is why it is used here only.
+    await client.query('truncate subledger_entry restart identity');
+    // Transfers reference items and the movements they produced, so they go
+    // before both. A transfer is a document and is never deleted in production
+    // (§1.1) — only cancelled — so this is a test-harness affordance.
+    //
+    // Goods returns and credit memos before the invoices and receipts they
+    // answer to. A shipped return is final in production (blueprint 3.2); the
+    // guard is lifted here only.
+    // Sales orders before the items, customers and reservations they name. A
+  // submitted order's lines are fixed in production (blueprint 7.4) because the
+  // reservation and delivery are matched against them.
+  // Other receipts before the accounts they arrived in.
+  await client.query('delete from other_receipt');
+
+  // Reconciliations before the statements and journals they match together.
+  await client.query('delete from bank_reconciliation_match_line');
+  await client.query('delete from bank_reconciliation_match');
+  await client.query('delete from bank_reconciliation');
+
+  // Bank statements are evidence rather than transactions, so nothing depends
+  // on them — but they hold the unique import keys, and a key left behind would
+  // make the next test's import look like a duplicate.
+  await client.query('delete from bank_statement_rejected_line');
+  await client.query('delete from bank_statement_line');
+  await client.query('delete from bank_statement');
+
+  // Petty cash advances before the floats they came out of.
+  await client.query('delete from cash_advance_settlement');
+  await client.query('delete from cash_advance');
+
+  // Treasury documents before the accounts they move money between. The batch
+  // and its proposal go before the supplier payments the batch created, and
+  // before the invoices those payments settled.
+  await client.query('delete from payment_batch_line');
+  await client.query('delete from payment_batch');
+  await client.query('delete from payment_proposal_item');
+  await client.query('delete from payment_proposal');
+  await client.query('delete from bank_transfer');
+  await client.query('delete from cash_count');
+
+  // Collections and write-offs before the invoices they hang off. The activity
+  // log is append-only in production (blueprint 5.4); the guard is lifted here.
+  await client.query('delete from collection_activity');
+  await client.query('delete from promise_to_pay');
+  await client.query('delete from ar_write_off');
+
+  // Credit memos and returns before the invoices they answer to.
+  await client.query('delete from customer_credit_memo_line');
+  await client.query('delete from customer_credit_memo');
+  await client.query('delete from sales_return_line');
+  await client.query('delete from sales_return');
+
+  // Receipts and their allocations before the invoices they settle. Both are
+  // append-only in production (blueprint 5.4); the guard is lifted here only.
+  await client.query('delete from customer_receipt_allocation');
+  await client.query('delete from customer_receipt');
+
+  // The warranty register before the invoice lines it hangs off. Append-only in
+  // production (blueprint 5.4); the guard is lifted here only.
+  await client.query('delete from warranty_registration');
+
+  // A/R invoices before the deliveries they bill.
+  await client.query('delete from ar_invoice_line');
+  await client.query('delete from ar_invoice');
+
+  // Delivery notes before the pick lists and order lines they answer to, and
+  // the proof of delivery before the note it proves. Both are append-only in
+  // production (blueprint 5.4); the guard is lifted here only.
+  await client.query('delete from proof_of_delivery_photo');
+  await client.query('delete from proof_of_delivery');
+  await client.query('delete from delivery_note_line_unit');
+  await client.query('delete from delivery_note_line');
+  await client.query('delete from delivery_note');
+
+  // Pick lists before the order lines they draw down, and their unit selections
+  // before the lines those hang off.
+  await client.query('delete from pick_list_line_unit');
+  await client.query('delete from pick_list_line');
+  await client.query('delete from pick_list');
+
+  await client.query('delete from sales_order_line');
+  await client.query('delete from sales_order');
+
+  // Supplier payments before the invoices they settle.
+  await client.query('delete from supplier_payment_allocation');
+  await client.query('delete from supplier_payment');
+
+  await client.query('delete from supplier_credit_memo');
+    await client.query(`
+      delete from goods_return_line;
+      delete from goods_return;
+    `);
+
+    // Supplier advances before the invoices they settle and the orders they
+    // answer to. A settlement is a record in production (Appendix C calls it the
+    // settlement history) and carries no DELETE grant; the reset is the only
+    // place it is removed.
+    await client.query('delete from supplier_advance_settlement');
+    await client.query('delete from supplier_advance');
+
+    // A/P invoices before the receipts and orders they match against. A posted
+    // invoice is final in production (§3.2) because it moved the supplier ledger
+    // and the G/L; the guards are lifted here only. Exceptions carry no DELETE
+    // grant in production either — they are resolved, never removed.
+    await client.query(`
+      delete from ap_match_exception;
+      delete from ap_invoice_line;
+      delete from ap_invoice;
+    `);
+
+    // The match tolerance is configuration (§8.4). Supplier rows are fixtures;
+    // the company default is seeded by migration 0036 and restored to zero, since
+    // a missing default would silently change what the next test is judged
+    // against.
+    await client.query(`delete from ap_match_tolerance where supplier_id is not null`);
+    await client.query(`
+      update ap_match_tolerance
+         set quantity_percent = 0, price_percent = 0, value_percent = 0, updated_by = null
+       where supplier_id is null
+    `);
+
+    // Service confirmations before the orders they answer to. An approved
+    // confirmation is evidence in production (§8.6) and is withdrawn by reversal
+    // rather than deleted; the guards are lifted here only.
+    await client.query(`
+      delete from service_receipt_line;
+      delete from service_receipt;
+    `);
+
+    // Goods receipts before the orders they answer to, and before the movements
+    // they created. A posted receipt is final in production (§3.2) because stock
+    // moved and the ledger recorded it; the guard is lifted here only.
+    await client.query(`
+      delete from goods_receipt_line;
+      delete from goods_receipt;
+    `);
+
+    // The receipt tolerance is configuration (§8.4). Item-level rows are test
+    // fixtures; the company default is seeded by migration 0033 and is restored
+    // to zero rather than deleted, because a missing default would silently
+    // change what the next test is judged against.
+    await client.query(`delete from purchase_receipt_tolerance where item_code is not null`);
+    await client.query(`
+      update purchase_receipt_tolerance
+         set over_receipt_percent = 0, updated_by = null
+       where item_code is null
+    `);
+
+    // Purchase orders before the items and partners they reference. A submitted
+    // order's lines are fixed in production (§8.3) because the receipt is matched
+    // against them; the guard is lifted here only.
+    await client.query(`
+      delete from purchase_order_line;
+      delete from purchase_order;
+    `);
+
+    // Stock counts before the items and movements they reference. An adjusted
+    // count is final in production (§9.6) because its movements exist; the guard
+    // is lifted here only.
+    await client.query(`
+      delete from stock_count_line;
+      delete from stock_count;
+    `);
+
+    await client.query('delete from warehouse_transfer_line');
+    await client.query('delete from warehouse_transfer');
+
+    // Opening stock likewise: an approved document is immutable in production
+    // (§1.1) because its lines are the FIFO layers every margin rests on. The
+    // guard is lifted here only.
+    await client.query(`
+      delete from opening_stock_line;
+      delete from opening_stock;
+    `);
+
+    // Inventory next: a movement references the journal that posted it, and the
+    // ledger is append-only in production (§9.9), so the guards are lifted here
+    // only — exactly as they are for the journal and the audit trail.
+    await client.query(`
+      delete from cost_layer_consumption;
+      delete from cost_layer;
+      delete from stock_reservation;
+      delete from inventory_movement;
+    `);
+
+    await client.query('delete from journal_line; delete from journal_entry;');
+    await client.query(`
+    `);
+
+    // After the journals, because their lines point at the rule that chose each
+    // account — that reference is the traceability §24 asks for.
+    await client.query('delete from posting_rule');
+
+    // Items and cash accounts point at G/L accounts, so they go before the chart
+    // is cleared. Both carry the "deactivate, never delete" trigger §4.4 asks
+    // for, lifted here and put straight back.
+    await client.query(`
+    `);
+    // Prices point at items; tax codes and payment methods point at G/L accounts.
+    // All three go before the things they reference.
+    await client.query('delete from price_list_item');
+    await client.query('delete from tax_rate');
+    await client.query(`
+      delete from tax_code;
+    `);
+    await client.query('delete from payment_method');
+
+    await client.query('delete from item_uom');
+    await client.query('delete from item');
+    await client.query('update branch set default_cash_account_id = null');
+    await client.query('delete from bank_cash_account');
+    await client.query(`
+    `);
+
+    await client.query('delete from account_required_dimension');
+    // Document-type dimension overrides are configured per test; the §4.2
+    // account-type defaults seeded by migration 0005 stay. The one row the
+    // migrations seed here is restored, because §4.2 makes Branch mandatory on
+    // every operational transaction and a test run must not quietly drop that.
+    await client.query('delete from document_type_dimension');
+    await client.query(`
+      insert into document_type_dimension (document_type_code, dimension, requirement)
+      values ('journal_entry', 'branch', 'mandatory')
+      on conflict do nothing
+    `);
+
+    // §4.2's own defaults, restored rather than assumed. A test that alters them
+    // would otherwise poison every file that runs after it, and the failure would
+    // appear far from its cause.
+    await client.query(`
+      insert into account_type_dimension_default (account_type, dimension)
+      values ('expense', 'department'), ('expense', 'business_line'), ('revenue', 'business_line')
+      on conflict do nothing
+    `);
+
+    // Accounts are deleted leaves-first: parent_id is RESTRICT, and an approved
+    // account is protected by a trigger that production must keep and a test
+    // fixture must not be defeated by.
+    await client.query(`
+      do $$
+      begin
+        loop
+          delete from chart_of_account c
+           where not c.is_system
+             and not exists (select 1 from chart_of_account d where d.parent_id = c.id);
+          exit when not found;
+        end loop;
+      end $$;
+    `);
+
+    // Keep the allocations that gave the five roots their codes; drop the rest.
+    // The append-only trigger refuses this even to the owner — which is the
+    // guarantee tests assert elsewhere — so it is lifted for the length of the
+    // statement and put straight back.
+    await client.query(`
+      do $$
+      begin
+        delete from doc_number_allocation
+         where document_no not in (select code from chart_of_account where is_system);
+      end $$;
+    `);
+
+    // Drop the counters tests created, keep the five account-code counters, and
+    // wind those back to 1 so the next account of each type is again 000002.
+    await client.query(`
+      do $$
+      declare r record; v_keep text[];
+      begin
+        select coalesce(array_agg(doc_sequence_name(key, '')), '{}')
+          into v_keep
+          from doc_sequence where key like 'ACCOUNT_CODE_%';
+
+        for r in select c.relname
+                   from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                  where c.relkind = 'S' and n.nspname = 'public'
+                    and c.relname like 'docseq_%'
+        loop
+          if r.relname = any (v_keep) then
+            execute format('select setval(%L, 1, true)', r.relname);
+          else
+            execute format('drop sequence %I', r.relname);
+          end if;
+        end loop;
+      end $$;
+    `);
+
+    // Sequence *definitions* seeded by migrations stay; the year- and
+    // branch-scoped counters they spawn were dropped above, so each test file
+    // starts its numbering from one.
+    await client.query(`
+      delete from doc_sequence
+       where key not like 'ACCOUNT_CODE_%'
+         and key not in ('JOURNAL_ENTRY', 'WAREHOUSE_TRANSFER', 'OPENING_STOCK', 'STOCK_COUNT',
+                         'PURCHASE_ORDER', 'GOODS_RECEIPT', 'SERVICE_RECEIPT', 'AP_INVOICE',
+                         'SUPPLIER_ADVANCE',
+                         'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
+                         'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
+                         'AR_INVOICE', 'CUSTOMER_RECEIPT',
+                         'SALES_RETURN', 'CUSTOMER_CREDIT_MEMO', 'AR_WRITE_OFF', 'CASH_COUNT', 'BANK_TRANSFER',
+                         'PAYMENT_PROPOSAL', 'PAYMENT_BATCH', 'BANK_STATEMENT', 'CASH_ADVANCE', 'BANK_RECONCILIATION', 'OTHER_RECEIPT')
+    `);
+
+    // §17's high-risk threshold is configuration a migration seeded, and a test
+    // that raises it must not leave it raised for the next one — the whole
+    // point of the zero default is that it applies unless somebody decided
+    // otherwise (D13).
+    await client.query(`delete from payment_risk_policy where branch_code is not null`);
+    await client.query(
+      `update payment_risk_policy set high_risk_threshold_iqd = 0 where branch_code is null`,
+    );
+
+    // The fiscal calendar is created per test. TRUNCATE rather than DELETE on the
+    // override log: it is append-only, and TRUNCATE does not fire row triggers.
+    await client.query('truncate period_override restart identity');
+    await client.query('delete from fiscal_period');
+    await client.query('delete from fiscal_year');
+
+    // Rates likewise, keeping the two currencies and the IQD identity rate that
+    // migration 0004 seeds — §1.1 does not make those optional.
+    await client.query(`
+      do $$
+      begin
+        -- Only the self-reference is cleared, so the rows can be deleted in any
+        -- order. Clearing superseded_at too would make two rates live for the
+        -- same currency and date, which the partial unique index rightly refuses.
+        update exchange_rate set superseded_by = null where superseded_by is not null;
+        delete from exchange_rate
+         where not (currency_code = 'IQD' and effective_from = date '1900-01-01');
+      end $$;
+    `);
+    await client.query(`delete from currency where code not in ('IQD', 'USD')`);
+
+    // Phase 03 masters. Business partners and warehouses carry a "deactivate,
+    // never delete" trigger — the guarantee §4.4 asks for, lifted here only.
+    await client.query(`
+    `);
+    await client.query('delete from project');
+    await client.query('delete from partner_bank_account');
+    await client.query('delete from business_partner');
+    // Import batches reference the users who ran them, and a committed batch is
+    // protected from deletion — the guarantee §26 asks for, lifted here only.
+    await client.query(`
+      delete from import_row;
+      delete from import_batch;
+    `);
+
+    await client.query('delete from partner_role_required_field');
+    // After the partners, which point at a price list and payment terms.
+    await client.query(`
+      delete from price_list;
+    `);
+    await client.query('delete from payment_term_instalment');
+    await client.query('delete from payment_terms');
+    // Organisation records are deactivated, never deleted, in production (§1.1) —
+    // the guard is lifted here only, exactly as it is for the other masters.
+    await client.query(`
+      delete from cost_centre;
+    `);
+    await client.query('delete from bin');
+    // Branch points at its default warehouse and the warehouse points back.
+    await client.query('update branch set default_warehouse_code = null, manager_user_id = null');
+    await client.query('delete from warehouse');
+    await client.query('delete from company');
+    await client.query(`
+    `);
+    await client.query('update department set parent_code = null, manager_user_id = null');
+
+    // Sessions and credentials cascade from the user, but a revoked session is
+    // protected from reinstatement by a trigger that also guards the token — off
+    // for the delete, back on after.
+    await client.query('delete from auth_session');
+    await client.query('delete from auth_account');
+    await client.query('delete from auth_verification');
+    await client.query('delete from user_mfa');
+    await client.query(`update role set requires_mfa = false`);
+
+    // A saved view belongs to a user but does not cascade from one: deleting an
+    // account should not silently discard a view other people are sharing, so the
+    // reference is restricting and the view is cleared here first.
+    await client.query('delete from saved_view');
+
+    // A user's roles and scopes, explicitly.
+    //
+    // These used to be left to `ON DELETE CASCADE`, and under
+    // `session_replication_role = replica` the cascade does not fire — the
+    // foreign-key actions are triggers too. The rows survived as orphans, a
+    // later test loaded a principal from them, and the notification it raised
+    // named a user who no longer existed.
+    //
+    // Explicit is better here regardless: a reset that relies on a cascade
+    // hides what it removes, and the next person to add a child table has no
+    // reason to notice.
+    await client.query('delete from user_role');
+    await client.query('delete from user_branch_scope');
+    await client.query('delete from user_department_scope');
+
+    // Roles seeded by a migration stay.
+    await client.query('delete from app_user');
+    await client.query('delete from role where not is_system');
+    await client.query(`
+      delete from branch;
+      delete from department;
+    `);
+
+  } finally {
+    await client.query("set session_replication_role = origin");
+    client.release();
+  }
+}
+
+/**
+ * Runs `fn` in a transaction on the app pool with the RLS scope set. Mirrors
+ * `withScope` in src/server/db/client.ts.
+ *
+ * Rolls back by default, so a test that only reads or only probes a rejection
+ * cannot contaminate the next one. Pass `{ commit: true }` when the rows are a
+ * fixture a later statement must actually see — an append-only trigger fires
+ * per row, so an UPDATE against rows that were rolled back matches nothing and
+ * the assertion passes for the wrong reason. `beforeEach` truncates, which is
+ * what keeps committed fixtures from leaking between tests.
+ */
+export async function asApp<T>(
+  scope: { userId: string; branchCode: string; isSuperUser?: boolean },
+  fn: (query: (text: string, values?: unknown[]) => Promise<{ rows: any[] }>) => Promise<T>,
+  { commit = false }: { commit?: boolean } = {},
+): Promise<T> {
+  const client = await appPool.connect();
+  try {
+    await client.query('begin');
+    await client.query('select set_config($1, $2, true)', ['app.user_id', scope.userId]);
+    await client.query('select set_config($1, $2, true)', ['app.branch_code', scope.branchCode]);
+    await client.query('select set_config($1, $2, true)', [
+      'app.is_super_user',
+      scope.isSuperUser ? 'true' : 'false',
+    ]);
+    const result = await fn((text, values) => client.query(text, values as any[]));
+    await client.query(commit ? 'commit' : 'rollback');
+    return result;
+  } catch (error) {
+    await client.query('rollback').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}

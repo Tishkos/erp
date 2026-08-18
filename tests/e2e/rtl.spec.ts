@@ -1,0 +1,128 @@
+import { expect, test, type Page } from '@playwright/test';
+
+/**
+ * Phase 01.12 test gate — right-to-left.
+ *
+ * *"Flipping the layout to RTL produces a usable screen with no code change."*
+ *
+ * §25: *"the localisation architecture shall allow Arabic labels and
+ * right-to-left layout later without redesign."*
+ *
+ * The flip here is one attribute on <html>, set from the outside. Nothing else
+ * changes — no stylesheet is swapped, no component takes a direction prop. If a
+ * rule anywhere used `margin-left` instead of `margin-inline-start`, these
+ * assertions would fail, which is the point: the cost of RTL is paid once, now,
+ * rather than as a rewrite in Phase 20.
+ *
+ * §1.1 keeps English as the launch language. This proves the mechanism, not a
+ * shipped Arabic locale.
+ */
+
+const OFFICER = { email: 'officer@example.com', password: 'Ledger-Trial-Balance-7' };
+
+async function signIn(page: Page) {
+  await page.goto('/sign-in');
+  await page.getByLabel('Email').fill(OFFICER.email);
+  await page.getByLabel('Password').fill(OFFICER.password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.waitForURL('/');
+}
+
+/** Flips direction the way a locale would, without touching the application. */
+async function flipToRtl(page: Page) {
+  await page.evaluate(() => document.documentElement.setAttribute('dir', 'rtl'));
+}
+
+test.describe('§25 · the layout mirrors without a code change', () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page);
+    await page.goto('/master-data/chart-of-accounts');
+  });
+
+  test('moves the navigation to the other side of the page', async ({ page }) => {
+    const viewport = page.viewportSize()!.width;
+
+    const before = await page.getByRole('navigation').boundingBox();
+    expect(before!.x).toBeLessThan(viewport / 2);
+
+    await flipToRtl(page);
+
+    const after = await page.getByRole('navigation').boundingBox();
+    expect(after!.x).toBeGreaterThan(viewport / 2);
+  });
+
+  test('aligns table cells logically, so they follow the direction', async ({ page }) => {
+    const cell = page.locator('table.list td').first();
+
+    // The computed value is the logical keyword itself. A cell written as
+    // `text-align: left` would report "left" here and would stay left-aligned
+    // in an Arabic layout — which is the defect this asserts against.
+    expect(await cell.evaluate((el) => getComputedStyle(el).textAlign)).toBe('start');
+
+    // And it actually moves: under rtl the text sits at the far end of the cell.
+    const before = await cell.evaluate((el) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      return range.getBoundingClientRect().left - el.getBoundingClientRect().left;
+    });
+
+    await flipToRtl(page);
+
+    const after = await cell.evaluate((el) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      return range.getBoundingClientRect().left - el.getBoundingClientRect().left;
+    });
+
+    expect(after).toBeGreaterThan(before);
+  });
+
+  test('does not make the page scroll sideways', async ({ page }) => {
+    await flipToRtl(page);
+
+    const overflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    );
+
+    // A mirrored layout that overflows is the usual sign of a physical margin
+    // surviving the flip.
+    expect(overflows).toBe(false);
+  });
+
+  test('keeps every menu item on screen', async ({ page }) => {
+    await flipToRtl(page);
+
+    const viewport = page.viewportSize()!.width;
+    const links = page.getByRole('navigation').getByRole('link');
+    const count = await links.count();
+    expect(count).toBeGreaterThan(0);
+
+    for (let i = 0; i < count; i++) {
+      const box = await links.nth(i).boundingBox();
+      if (!box) continue;
+      expect(box.x).toBeGreaterThanOrEqual(-1);
+      expect(box.x + box.width).toBeLessThanOrEqual(viewport + 1);
+    }
+  });
+
+  test('keeps the record page usable, including the draft band', async ({ page }) => {
+    await page.locator('table.list tbody tr td:first-child a').first().click();
+    await page.waitForURL(/chart-of-accounts\/[^/]+$/);
+
+    await flipToRtl(page);
+
+    // The band is the Appendix A rule 4 marking; it must still be legible and
+    // on screen after the flip.
+    const band = page.locator('.draft-band');
+    if (await band.count()) {
+      const box = await band.boundingBox();
+      expect(box!.width).toBeGreaterThan(0);
+      expect(box!.x).toBeGreaterThanOrEqual(-1);
+    }
+
+    const overflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    );
+    expect(overflows).toBe(false);
+  });
+});

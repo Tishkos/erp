@@ -1,0 +1,412 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1786838400000,
+      "tag": "0000_phase00_spike",
+      "breakpoints": false
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786904813537,
+      "tag": "0001_phase01_platform_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786906411064,
+      "tag": "0002_phase01_status_workflow",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786906527567,
+      "tag": "0003_phase02_chart_of_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786907647666,
+      "tag": "0004_phase02_periods_rates",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786908463750,
+      "tag": "0005_phase02_dimensions",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786909098452,
+      "tag": "0006_phase02_journal_entry",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786910514751,
+      "tag": "0007_phase02_posting_engine",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786911000000,
+      "tag": "0008_phase02_drop_spike",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786911531659,
+      "tag": "0009_phase02_reversal_subledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786912581130,
+      "tag": "0010_phase03_master_data",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786914455889,
+      "tag": "0011_phase03_item_bank_masters",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1786915516576,
+      "tag": "0012_phase03_pricing_terms",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1786916863832,
+      "tag": "0013_phase01_import_framework",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1786917626001,
+      "tag": "0014_phase01_authentication",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1786918289928,
+      "tag": "0015_phase01_background_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1786919168424,
+      "tag": "0016_phase01_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1786919848790,
+      "tag": "0017_phase01_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1786920528713,
+      "tag": "0018_phase01_department_routing",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786922679949,
+      "tag": "0019_phase01_saved_views",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1786923056857,
+      "tag": "0020_phase01_default_branch",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1786923057857,
+      "tag": "0021_phase01_branch_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1786928537365,
+      "tag": "0022_phase01_controlled_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1786928538365,
+      "tag": "0023_phase02_reversal_link_permanent",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1786928539365,
+      "tag": "0024_phase03_organisation_delete_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1786945453735,
+      "tag": "0025_phase04_inventory_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1786948592221,
+      "tag": "0026_phase04_transfers",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1786948593221,
+      "tag": "0027_phase04_availability_by_warehouse_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1786951432614,
+      "tag": "0028_phase04_opening_stock",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1786953151908,
+      "tag": "0029_phase04_stock_count",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1786953152908,
+      "tag": "0030_phase04_inventory_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1786959287997,
+      "tag": "0031_phase05_purchase_order",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1787000000000,
+      "tag": "0032_d7_account_currency",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1787001000000,
+      "tag": "0033_phase05_goods_receipt",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1787002000000,
+      "tag": "0034_d7_dimension_inheritance",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1787003000000,
+      "tag": "0035_phase05_service_receipt",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1787004000000,
+      "tag": "0036_phase05_ap_invoice",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1787005000000,
+      "tag": "0037_phase05_supplier_advance",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1787006000000,
+      "tag": "0038_phase05_goods_return",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1787007000000,
+      "tag": "0039_phase05_supplier_payment",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1787008000000,
+      "tag": "0040_phase06_sales_order",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1787009000000,
+      "tag": "0041_d10_permitted_branches",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1787010000000,
+      "tag": "0042_d10_audit_trail_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1787011000000,
+      "tag": "0043_d10_document_line_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1787012000000,
+      "tag": "0044_phase06_pick_list",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1787013000000,
+      "tag": "0045_phase06_delivery_note",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1787014000000,
+      "tag": "0046_phase06_sales_dimensions",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1787015000000,
+      "tag": "0047_phase06_ar_invoice",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1787016000000,
+      "tag": "0048_phase06_warranty",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1787017000000,
+      "tag": "0049_phase06_customer_receipt",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1787018000000,
+      "tag": "0050_phase06_sales_return",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1787019000000,
+      "tag": "0051_phase06_ar_collections",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1787020000000,
+      "tag": "0052_phase07_treasury",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1787021000000,
+      "tag": "0053_phase07_payment_run",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1787022000000,
+      "tag": "0054_phase07_bank_statement",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1787023000000,
+      "tag": "0055_phase07_cash_advance",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1787024000000,
+      "tag": "0056_phase07_bank_reconciliation",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1787025000000,
+      "tag": "0057_phase07_other_receipt",
+      "breakpoints": true
+    }
+  ]
+}

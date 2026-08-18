@@ -1,0 +1,57 @@
+{
+  "name": "erp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/server/db/migrate.ts",
+    "db:reset": "tsx scripts/db-reset.ts",
+    "db:seed": "tsx scripts/seed-dev.ts",
+    "db:studio": "drizzle-kit studio",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "vitest run --project unit",
+    "test:coverage": "vitest run --project unit --coverage",
+    "verify:recovery": "tsx scripts/verify-recovery.ts",
+    "test:integration": "vitest run --project integration",
+    "test:e2e": "playwright test",
+    "test:load": "k6 run tests/load/smoke.js",
+    "test:watch": "vitest --project unit"
+  },
+  "dependencies": {
+    "@casl/ability": "^7.0.1",
+    "better-auth": "^1.6.29",
+    "drizzle-orm": "^0.45.2",
+    "next": "16.3.1",
+    "next-intl": "^4.13.6",
+    "pg": "^8.23.0",
+    "pg-boss": "^12.27.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.12",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.10"
+  }
+}

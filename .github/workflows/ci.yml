@@ -1,0 +1,138 @@
+# CI — Phase 00.4
+#
+# Gates every change. Blueprint §25: "Automated unit, integration and end-to-end
+# tests cover critical posting and permission paths" and "Every release has
+# scope, migration notes, test evidence, approvals and rollback plan."
+#
+# Integration tests run against a REAL PostgreSQL service, with the same
+# owner/app role separation as production — otherwise every authorisation
+# assertion would pass for the wrong reason (TECHSTACK.md A3).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  quality:
+    name: Types and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm run test:unit
+
+      # Phase 00.5 gate: "Coverage is measured and published per build."
+      # Published as a build artefact rather than gated on a threshold: a
+      # percentage target invites tests written to raise the number. What the
+      # figure is for is noticing when a domain rule arrives with none.
+      - name: Coverage
+        run: npm run test:coverage
+      - name: Publish coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-domain
+          path: coverage/
+          retention-days: 30
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: erp_owner
+          POSTGRES_PASSWORD: owner_dev_password
+          POSTGRES_DB: erp
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U erp_owner"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL_OWNER: postgres://erp_owner:owner_dev_password@localhost:5432/erp
+      DATABASE_URL_TEST: postgres://erp_owner:owner_dev_password@localhost:5432/erp_test
+      DATABASE_URL: postgres://erp_app:app_dev_password@localhost:5432/erp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+
+      # The service container does not run docker-entrypoint-initdb.d, so the
+      # role separation is applied here instead.
+      - name: Create database roles
+        run: psql "$DATABASE_URL_OWNER" -v ON_ERROR_STOP=1 -f scripts/sql/00-init-roles.sql
+
+      - name: Migrations run clean on an empty database
+        run: npm run db:migrate
+
+      - name: Migrations are idempotent
+        # Phase 00.3 gate: "A migration applied twice is a no-op, not an error."
+        run: npm run db:migrate
+
+      - name: Integration tests
+        run: npm run test:integration
+
+  e2e:
+    name: End-to-end tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    needs: [quality]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+  secrets:
+    name: No secrets committed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan history for secrets
+        # §25: "No passwords, tokens, private keys … in logs" and A13 requires
+        # keys managed separately from application code.
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
