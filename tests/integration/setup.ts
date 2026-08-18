@@ -272,6 +272,37 @@ export async function resetTestData(): Promise<void> {
     // Sales orders before the items, customers and reservations they name. A
   // submitted order's lines are fixed in production (blueprint 7.4) because the
   // reservation and delivery are matched against them.
+  // §11.4's stage mapping ships empty and stays empty between tests. It is the
+  // one piece of configuration Phase 10 deliberately does not seed — Finance
+  // decides which stage credits which clearing role (open question Q10-1) — so a
+  // row left behind by one test would let the next one post funding without
+  // anybody having made that decision.
+  await client.query('delete from logistics_funding_stage_role');
+
+  // Phase 10 — Logistics, before the journals its postings point at and before
+  // the partners, branches and departments its jobs reference. Inside-out: a
+  // settlement is referenced by the charges it billed, and a job cascades to its
+  // legs, charges and evidence.
+  //
+  // In production none of these is deleted — a billed charge is what the G/L was
+  // told (§11.4), a resolved claim is the record of a decision (§5.4), and a
+  // master is deactivated rather than removed (§4.4). The session is already in
+  // `replica`, so those guards do not fire and there is nothing to disable.
+  await client.query('delete from logistics_delivery_evidence');
+  await client.query('delete from logistics_claim');
+  await client.query('delete from logistics_job_cost');
+  await client.query('delete from logistics_client_charge');
+  await client.query('delete from logistics_client_funding');
+  await client.query('delete from logistics_job_settlement');
+  await client.query('delete from logistics_job_leg');
+  await client.query('delete from logistics_job');
+  await client.query('delete from logistics_client_import_file_reference');
+  await client.query('delete from logistics_client_import_file');
+  await client.query('delete from logistics_service_type_evidence');
+  await client.query('delete from logistics_service_type');
+  await client.query('delete from logistics_route');
+  await client.query('delete from logistics_carrier');
+
   // Phase 09 — Money Transfer. Every one of these references a journal, so they
   // go before the journals do; the order within the block is child-first.
   //
@@ -588,7 +619,10 @@ export async function resetTestData(): Promise<void> {
                          -- Phase 09, seeded by migrations 0120-0125.
                          'MT_CLIENT_ACCOUNT', 'MT_CLIENT_DEPOSIT', 'MONEY_TRANSFER', 'MT_EXPENSE',
                          'CLIENT_IMPORT_FILE', 'CLIENT_IMPORT_PAYMENT', 'CLIENT_GOODS_DELIVERY',
-                         'BANK_EXECUTION_BATCH')
+                         'BANK_EXECUTION_BATCH',
+                         -- Phase 10, seeded by migrations 0140-0146.
+                         'LOGISTICS_CLIENT_IMPORT_FILE', 'LOGISTICS_JOB', 'LOGISTICS_CLIENT_FUNDING',
+                         'LOGISTICS_JOB_COST', 'LOGISTICS_JOB_SETTLEMENT', 'LOGISTICS_CLAIM')
     `);
 
     // §17's high-risk threshold is configuration a migration seeded, and a test

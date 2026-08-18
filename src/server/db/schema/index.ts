@@ -64,3 +64,4 @@ export * from './money-transfer-client';
 export * from './client-import';
 export * from './money-transfer';
 export * from './bank-execution-batch';
+export * from './logistics';

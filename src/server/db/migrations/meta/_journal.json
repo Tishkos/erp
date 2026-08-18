@@ -449,6 +449,55 @@
       "when": 1789005000000,
       "tag": "0125_phase09_bank_execution_batch",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1790000000000,
+      "tag": "0140_phase10_client_import_file",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1790001000000,
+      "tag": "0141_phase10_logistics_masters",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1790002000000,
+      "tag": "0142_phase10_logistics_job",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1790003000000,
+      "tag": "0143_phase10_client_charges_funding",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1790004000000,
+      "tag": "0144_phase10_job_cost",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1790005000000,
+      "tag": "0145_phase10_delivery_evidence_claims",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1790006000000,
+      "tag": "0146_phase10_settlement_close",
+      "breakpoints": true
     }
   ]
 }
