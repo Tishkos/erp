@@ -273,3 +273,11 @@ Plus §27 Release 7: *"Module subledgers and G/L reconcile."*
 ## Notes for the team
 
 This is the largest module in the blueprint after the platform, and the one with the most cross-module dependencies — it consumes procurement, inventory, A/P, A/R, HR and Treasury. Sequence 11.1 through 11.9 while D1 is pending, but do not let the schedule pressure produce a "temporary" recognition rule. §28.2 is explicit that the implementation team does not select accounting outcomes.
+
+**Status vocabulary.** `project_status` (draft, active, on_hold, closing, closed)
+is the project's operational lifecycle and is enforced in the service. Migration
+`0151` separately registers the project's §24 **approval shape** — raised,
+reviewed, approved by somebody other than its author (§5.2), closed — in
+`document_status_transition`, which is where the workflow engine and an auditor
+both look. The two vocabularies are deliberate; see the note at the foot of
+[PHASE-12](PHASE-12-fixed-assets.md) for why they are not merged.

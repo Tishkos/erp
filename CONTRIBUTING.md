@@ -86,6 +86,32 @@ Atomicity, append-only, RLS, locking and constraints are guarantees of the **dat
 
 Every acceptance criterion in a requirement specification maps to a named test. A criterion with no test is not a criterion.
 
+### Running the integration suite
+
+**One run at a time. Never two.** Every integration test file shares a single
+database, `erp_test`, and `resetTestData` empties it between tests. Two runs
+against it interleave their resets, and the result is not a clean failure — it is
+a scatter of unrelated tests failing on unique-constraint violations in
+`doc_number_allocation` and on rows a neighbour deleted mid-transaction. The
+failures point at innocent modules, which is the expensive part: they read as a
+regression in whatever ran second.
+
+Two things make this easy to do by accident:
+
+- **A cancelled command is not a stopped run.** Killing the terminal, or a tool
+  timing out, ends the thing that was watching the run. The vitest process keeps
+  going, holds its connections, and finishes minutes later. Check with
+  `Get-Process node` before starting another.
+- **Chunking the suite does not halve the wall clock** if the chunks overlap. It
+  multiplies the failures instead.
+
+The suite takes roughly 90 minutes end to end and cannot usefully be shortened by
+running it in parallel — `fileParallelism` is off deliberately, because these
+tests assert database guarantees and concurrent writers would make the assertions
+meaningless. Run one file while iterating (`npx vitest run --project integration
+tests/integration/phase12-fixed-assets.test.ts`) and the whole suite once, before
+committing.
+
 ---
 
 ## Migrations

@@ -9,6 +9,19 @@ services:
     image: postgres:17-alpine
     container_name: erp-postgres
     restart: unless-stopped
+    # The integration suite runs its 62 files serially, but each file is a fresh
+    # process that opens three pools — owner (4), app (8) and the application's
+    # own (10). Teardown of one file overlaps the setup of the next, so the peak
+    # is roughly twice that, and the stock limit of 100 leaves no headroom: the
+    # suite fails with "Connection terminated due to connection timeout" on a
+    # scatter of unrelated tests, which reads as a regression and is not one.
+    #
+    # 300 is not tuning. It is the difference between a suite that reports what
+    # the code does and one that reports what the connection limit does.
+    command:
+      - postgres
+      - -c
+      - max_connections=300
     environment:
       POSTGRES_USER: erp_owner
       POSTGRES_PASSWORD: owner_dev_password

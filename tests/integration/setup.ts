@@ -279,6 +279,15 @@ export async function resetTestData(): Promise<void> {
   // anybody having made that decision.
   await client.query('delete from logistics_funding_stage_role');
 
+  // Phase 12 — fixed assets. Before the journals recognition and depreciation
+  // point at, and before the branches, departments and cost centres they carry.
+  await client.query('delete from asset_verification');
+  await client.query('delete from asset_impairment');
+  await client.query('delete from asset_transfer');
+  await client.query('delete from asset_depreciation');
+  await client.query('delete from fixed_asset');
+  await client.query('delete from asset_category');
+
   // Phase 11 — projects. Before the journals its costs point at, and before the
   // project dimension row every one of them hangs off. Children first.
   await client.query('delete from project_balance_movement');
@@ -649,7 +658,9 @@ export async function resetTestData(): Promise<void> {
                          -- Phase 08, seeded by migration 0147.
                          'LEAD', 'OPPORTUNITY', 'CRM_CASE',
                          -- Phase 11, seeded by migration 0148.
-                         'PROJECT_CERTIFICATE', 'PROJECT_VARIATION')
+                         'PROJECT_CERTIFICATE', 'PROJECT_VARIATION',
+                         -- Phase 12, seeded by migration 0149.
+                         'FIXED_ASSET')
     `);
 
     // §17's high-risk threshold is configuration a migration seeded, and a test
