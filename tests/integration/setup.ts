@@ -279,6 +279,18 @@ export async function resetTestData(): Promise<void> {
   // anybody having made that decision.
   await client.query('delete from logistics_funding_stage_role');
 
+  // Phase 08 — CRM. Before the sales orders an opportunity converted into and
+  // before the partners everything here points at. Nothing in this block posts,
+  // so nothing here has to go before the journals — it goes before the partners.
+  await client.query('delete from crm_activity');
+  await client.query('delete from crm_case');
+  await client.query('delete from crm_contact');
+  await client.query('delete from opportunity_item');
+  await client.query('delete from opportunity');
+  await client.query('delete from lead');
+  await client.query('delete from crm_campaign');
+  await client.query('delete from lead_source');
+
   // Phase 10 — Logistics, before the journals its postings point at and before
   // the partners, branches and departments its jobs reference. Inside-out: a
   // settlement is referenced by the charges it billed, and a job cascades to its
@@ -622,7 +634,9 @@ export async function resetTestData(): Promise<void> {
                          'BANK_EXECUTION_BATCH',
                          -- Phase 10, seeded by migrations 0140-0146.
                          'LOGISTICS_CLIENT_IMPORT_FILE', 'LOGISTICS_JOB', 'LOGISTICS_CLIENT_FUNDING',
-                         'LOGISTICS_JOB_COST', 'LOGISTICS_JOB_SETTLEMENT', 'LOGISTICS_CLAIM')
+                         'LOGISTICS_JOB_COST', 'LOGISTICS_JOB_SETTLEMENT', 'LOGISTICS_CLAIM',
+                         -- Phase 08, seeded by migration 0147.
+                         'LEAD', 'OPPORTUNITY', 'CRM_CASE')
     `);
 
     // §17's high-risk threshold is configuration a migration seeded, and a test

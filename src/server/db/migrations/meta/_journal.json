@@ -498,6 +498,13 @@
       "when": 1790006000000,
       "tag": "0146_phase10_settlement_close",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1791000000000,
+      "tag": "0147_phase08_crm",
+      "breakpoints": true
     }
   ]
 }
