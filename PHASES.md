@@ -143,21 +143,62 @@ Two items in the §27 roadmap are internally inconsistent as a *build* sequence.
 
 ## Open decisions blocking build
 
-The blueprint explicitly withholds these. Each blocks the phase named. Tracked in full in [`phases/PHASE-00-program-setup.md`](phases/PHASE-00-program-setup.md).
+**The register is [`docs/DECISIONS.md`](docs/DECISIONS.md).** It is the single
+source; this section is a pointer and a snapshot, and the register wins wherever
+the two disagree. Answered decisions move to
+[`docs/DecisionAnswered.md`](docs/DecisionAnswered.md) in full.
+
+**Snapshot at 2026-08-18** — 8 open, 16 partially answered, 4 decided.
+
+| Answered so far | What it released |
+|---|---|
+| **D7** Chart of Accounts | The Phase 02 and Phase 04 acceptance hold — the largest single blocker in the programme |
+| **D10** Branch access and the Active Branch | §7.2 multi-branch Sales Orders in Phase 06; replaced the session-branch model Phase 01 had chosen |
+| **D4** Availability, RPO and RTO | Phase 20.3 |
+| **D6** Accessibility level | Phase 20.5 |
+
+**Blocking a posting today — one item:**
+
+| # | Decision | Blocks |
+|---|---|---|
+| D22 | Which clearing account a logistics client funding credits, at each job stage (§11.4) | Phase 10.4 — client funding cannot post at all. It is a four-row table |
+
+**Blocking a phase from being *used* rather than built.** The
+[programme ruling of 2026-08-17](docs/DECISIONS.md) settled how to proceed while
+D1, D2 and D3 are open: build the mechanism, leave the business values empty, and
+make sure emptiness refuses rather than permits. Each of the three still stops its
+phase from going live.
 
 | # | Decision | Blueprint | Blocks | Owner |
 |---|---|---|---|---|
-| D1 | Project revenue-recognition and cost-recognition policy; WIP treatment | §10 — *"Finance must approve … IT must not invent the accounting treatment"* | Phase 11.10 | Finance / BPO |
+| D1 | Project revenue-recognition and cost-recognition policy; WIP treatment | §10 — *"Finance must approve … IT must not invent the accounting treatment"* | Phase 11.10 only; 11.1–11.9 and 11.11–11.12 are built | Finance / BPO |
 | D2 | Investment categories, valuation methods and frequency, posting rules | §13 — *"implement configurable types and posting rules only after Finance defines the required categories"* | Phase 13.1, 13.5 | Finance / BPO |
-| D3 | Payroll formulas, statutory deductions, benefits | §20 — *"Payroll shall not be programmed from assumptions"*; requires signed HR/Finance specification | Phase 15.9 | HR + Finance / BPO |
-| D4 | Availability target, maintenance window, RPO, RTO, backup retention | §25 — all marked *"to be confirmed"* | Phase 20.3 | BPO |
-| D5 | Target concurrent users, annual transaction volumes, attachment volume, integration throughput, retention horizon | §25 — *"before sizing"* | Phase 20.2, infrastructure sizing | BPO |
-| D6 | Accessibility level to be targeted | §25 — *"a recognised web accessibility level selected by the company"* | Phase 20.5 | BPO |
-| D7 | Chart of Accounts structure and account codes | App. C — *"Exact account codes and account names are selected through Accounting Mapping after the Chart of Accounts is configured by Issa Mohammed"* | Phase 02.1, all posting mappings | BPO |
-| D8 | Cut-over date, historical data depth, archive approach | §26 | Phase 21.1 | BPO |
-| D9 | Legal/compliance approval for Money Transfer as a regulated service | §26 go-live gate 5 | Phase 21 exit | Legal / BPO |
+| D3 | Payroll formulas, statutory deductions, benefits | §20 — *"Payroll shall not be programmed from assumptions"* | Phase 15.9 | HR + Finance / BPO |
+| D5 | Response-time targets (items 1–5 answered) | §25 — *"before sizing"* | Phase 20.4 judgement | BPO |
+| D8 | Cut-over date, historical data depth, archive approach | §26 | Phase 21.1 — approach proposed, awaiting signature | BPO |
+| D9 | Legal/compliance approval for Money Transfer, incl. what "KYC complete" contains | §26 go-live gate 5 | Phase 21 exit | Legal / BPO |
+| D15 | Dimensions on system-generated postings | §4.2 | Phase 12's first live depreciation run; every Phase 16 close step | Finance / BPO |
+| D16–D28 | Thirteen raised by Phases 08–12 and the 09/10 merge | see the register | Mostly nothing — built the defensible way | various |
 
-**D7 is the most urgent.** Phase 02 cannot complete and no posting mapping in Appendix C can be configured until the Chart of Accounts exists.
+**Most urgent now: D22, then D15, then D5 item 6.** All three are short answers.
+D22 is a four-row table, D15 is a configuration choice on seven kinds of posting,
+and D5 item 6 is a response-time table. None needs a meeting.
+
+---
+
+## Build status
+
+At 2026-08-18. Test counts are the phase's own; the totals are the whole suite.
+
+| Phase | State |
+|---|---|
+| 00–07 | Complete, exit gates closed |
+| 08 CRM | Complete, less lead import, opportunity-to-project conversion and Customer 360 over Logistics / Money Transfer history |
+| 09 Money Transfer | Complete and merged. Known gap: the Bank Execution Batch does not yet reconcile to a bank statement (§12.5, §12.7) — Phase 07.7's matching was built for it |
+| 10 Logistics | Complete and merged. Cannot post client funding until **D22** |
+| 11 Projects | 9 of 12 sub-phases. 11.5 awaits Phase 15 timesheets; 11.6 subcontracts needs its own document set; 11.10 awaits **D1** |
+| 12 Fixed Assets | Complete, exit gate closed |
+| 13–21 | Not started |
 
 ---
 

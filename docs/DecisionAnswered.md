@@ -23,6 +23,7 @@ what has.
 | D6 | Accessibility level | 2026-08-17 | Tishko | Phase 20.5 |
 | D7 | Chart of Accounts | 2026-08-17 | Tishko | Phase 02 and Phase 04 acceptance |
 | D10 | Branch access and the Active Branch | 2026-08-17 | Tishko | Phase 01 RLS, Phase 02 and 04 reports, Phase 06 §7.2 |
+| D16 | One client import register | 2026-08-18 | Tishko | The §12.2 Import File ↔ Logistics Job link; one document number per consignment |
 
 **One term still to confirm under D7**, and it blocks nothing: the dimension
 answer names "Cost Center", which is not one of §4.2's seven dimensions. Almost
@@ -735,3 +736,126 @@ When a decision is made, update its entry in place:
 Then raise the corresponding change request if the decision alters anything already built, using [`CHANGE-REQUEST-TEMPLATE.md`](CHANGE-REQUEST-TEMPLATE.md).
 
 Per §28.1, a change is not complete until documentation, automated tests, UAT evidence and training material are updated.
+
+---
+
+## D16 — One client import register
+
+| | |
+|---|---|
+| **Status** | 🟢 **Decided 2026-08-18 by Tishko** |
+| **Blueprint** | §11 opening paragraph, §11.5, §12.2, §12.6, §22 |
+| **Raised** | 2026-08-17 by the Phase 09/10 merge |
+| **Released** | The §12.2 link between a Client Import File and a Logistics Job, and one document number per consignment |
+
+### The decision
+
+**One register. The paperwork arrives once.**
+
+### The question it answered
+
+Phases 09 and 10 were built on parallel branches from the same Phase 05 base.
+Both created a table called `client_import_file` — Phase 09 for §12.6's Money
+Transfer client imports, Phase 10 for §11's logistics import files. Neither
+branch could see the other. The merge renamed Phase 10's to
+`logistics_client_import_file` so both phases would work, which kept the build
+moving and left the modelling question open.
+
+### Why the blueprint pointed this way
+
+§11's first paragraph:
+
+> "Logistics is a separate revenue service. It manages customer import and
+> shipping service jobs, direct third-party expenses and the separate logistics
+> margin. **A logistics job can be linked to the same client import file as a
+> Money Transfer transaction without combining their accounting results.**"
+
+And Phase 09's own schema note, written months before Phase 10 existed:
+
+> §12.2 — *"Related Client Import File and Logistics Job where the approved
+> process requires it."* … `logistics_job_ref` is text and carries no foreign key
+> because the Logistics module is Phase 10 and its table does not exist yet;
+> **the constraint belongs to whoever builds it.**
+
+Phase 10 was built without seeing that note, and produced a second table instead
+of the constraint. The decision supplies the constraint.
+
+### What it turned up on the way
+
+Two registers meant two document sequences, and **both minted the same numbers**.
+`CLIENT_IMPORT_FILE` and `LOGISTICS_CLIENT_IMPORT_FILE` each carried prefix `CIF`
+and pattern `{PREFIX}-{BRANCH}-{YYYY}-{SERIAL}`, and `formatDocumentNumber` never
+uses the sequence key — so serial 1 of each formatted to
+`CIF-BGW-2026-000001`. Two different import files, one number, same branch, same
+year. Nothing collided only because they sat in separate tables with separate
+unique indexes.
+
+§3.4 exists to make that impossible. One register makes it impossible by
+construction: one sequence, one number, one consignment.
+
+### What is *not* merged
+
+The accounting. §11.3 and §12.4 require Money Transfer and Logistics to keep
+separate revenue, expense and margin **on the same consignment**, and this
+changes nothing about that:
+
+- the import file carries no amount, in either module's sense;
+- `client_import_file_reference` — the table that links any module's document to
+  the file — has no amount, currency, debit, credit or margin column, so no query
+  can net a logistics job against a money transfer however it is written;
+- each service still reads its own figures from its own tables, and §22's two
+  cross-reference reports present them side by side.
+
+The two services share a case. They do not share a ledger.
+
+### What changed in the build
+
+| | |
+|---|---|
+| Migration | `0153_d16_one_client_import_register.sql` |
+| Surviving table | `client_import_file` |
+| Dropped | `logistics_client_import_file` |
+| Renamed | `logistics_client_import_file_reference` → `client_import_file_reference` |
+
+- `client_id` → `business_partner` was added and is **NOT NULL**. Every money
+  transfer client account already belongs to a partner
+  (`money_transfer_client_account.partner_id`), so the partner is the identity
+  the two modules always shared without saying so.
+- `client_account_id` became **optional**: a logistics-only file has no Money
+  Transfer account. A new trigger,
+  `client_import_file_account_matches_client`, refuses a file whose account
+  belongs to a different partner — otherwise the file would name one client and
+  its money another, and §12.4's Remaining Client Balance would be computed
+  against a stranger.
+- Phase 10's rows moved across **keeping their `id`s**, so `logistics_job` and
+  the cross-reference table needed no remapping and there was no window in which
+  a link dangled.
+- **The status vocabularies reconciled rather than collided.** Phase 10 used
+  `open`/`closed` and said so deliberately — *"this is not a document and giving
+  it a document's vocabulary would invite somebody to post it."* But `open` is
+  only *not closed*: it spans Phase 09's `draft`, `posted` and `settled`. One
+  axis, coarser. So `open` became `draft`, which is what an import file with
+  nothing posted against it actually is, and `draft → closed` was registered for
+  a logistics-only file that never carries a payment.
+- All three existing triggers carried across unchanged: the file still clears to
+  zero before settling (§12.4), still refuses to close while a logistics job is
+  running, and its client must still be a customer.
+- `client_import_file.logistics_job_ref` was **dropped**. §12.2 wanted a related
+  Logistics Job and now has one by the only route that cannot drift: the job
+  names the file.
+- `LOGISTICS_CLIENT_IMPORT_FILE` was deactivated rather than deleted, so the
+  allocations it already handed out keep their audit trail (§3.4).
+
+### The principle it settled, beyond itself
+
+Three text columns in this codebase were placeholders for links that could not be
+made across parallel branches — `client_import_file.logistics_job_ref`,
+`money_transfer.logistics_job_ref` and
+`bank_execution_batch.statement_line_ref`. Each carried a note naming who should
+replace it. All three are now foreign keys.
+
+A text reference is not a weaker link. It is a link that **can be wrong**:
+nothing stops it naming a cancelled job, a statement line on another account, or
+a document that never existed. Where an acceptance criterion turns on the
+reference being right — §12.5 and §12.7 both do — the reference has to be a
+foreign key.

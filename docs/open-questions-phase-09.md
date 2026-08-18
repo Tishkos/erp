@@ -1,5 +1,9 @@
 # Open questions — Phase 09, Money Transfer
 
+> **Merged into the register on 2026-08-18.** Q9.1 is now part of **D9**; Q9.2 to
+> Q9.6 are **D17, D18, D19, D20 and D21** in `docs/DECISIONS.md`. This file stays
+> because it carries the worked reasoning; the register carries the question.
+
 Raised while building Phase 09 (§12). Each is a **business or accounting outcome**
 that the blueprint does not settle, so §28.1 forbids the implementation team from
 choosing it. Written in the register's format for merging into D-numbers by

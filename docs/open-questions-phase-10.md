@@ -1,5 +1,9 @@
 # Open questions raised by Phase 10 — Logistics Operations
 
+> **Merged into the register on 2026-08-18.** Q10-1 to Q10-4 are **D22, D23, D24
+> and D25** in `docs/DECISIONS.md`. This file stays because it carries the worked
+> reasoning; the register carries the question.
+
 **Phase 10** · Blueprint §11 · raised 2026-08-17 by the Phase 10 build
 
 > §28.1: *"When a technical constraint or ambiguity is identified, the IT specialist shall document the issue and available technical options. Issa Mohammed selects and approves the final business treatment. The IT specialist shall not select a business or accounting outcome independently."*

@@ -14,25 +14,39 @@ Decisions that have been made move to [`DecisionAnswered.md`](DecisionAnswered.m
 
 ## Status summary
 
+**Last reviewed:** 2026-08-18, after Phases 08, 11 and 12 and the Phase 09/10 merge.
+
 | Status | Count |
 |---|---|
-| 🔴 Open — blocking a phase | 5 |
-| 🟡 Partially answered | 6 |
-| 🟢 Decided — moved to `DecisionAnswered.md` | 4 |
+| 🔴 Open — one of them blocking a posting outright | 7 |
+| 🟡 Partially answered, or built the defensible way | 16 |
+| 🟢 Decided — moved to `DecisionAnswered.md` | 5 |
 
-| # | Decision | Status | Blocks |
-|---|---|---|---|
-| D1 | Project revenue and cost recognition | 🔴 Open | Phase 11.10 |
-| D2 | Investment categories and valuation | 🔴 Open | Phase 13.1, 13.5 |
-| D3 | Payroll formulas and deductions | 🔴 Open | Phase 15.9 |
-| D5 | Volumes and retention | 🟡 All but response-time targets | Phase 20.4 judgement |
-| D8 | Cut-over date and historical depth | 🟡 Approach proposed, awaiting approval | Phase 21.1 |
-| D9 | Money Transfer legal approval | 🔴 Open | Phase 21 go-live |
-| D11 | Accrual for confirmed uninvoiced services | 🟡 Built the defensible way, confirmation invited | Nothing — would be Phase 16 |
-| D12 | Days Sales Outstanding formula and period basis | 🟡 Built one way, confirmation needed | Nothing — the figure computes |
-| D13 | What makes a payment "high-risk" | 🟡 Safe default in force, figure needed | Nothing — every payment takes the control |
-| D14 | Payment priority scale and settlement discounts | 🟡 Mechanism built and neutral | Nothing — the run ranks by due date |
-| D15 | Dimensions on system-generated expenses | 🔴 Open | Nothing yet — recurs at Phase 16 close |
+| # | Decision | Status | Blocks | Raised by |
+|---|---|---|---|---|
+| D1 | Project revenue and cost recognition | 🔴 Open (policy) · build approach ruled | Phase 11.10 only | Blueprint §10 |
+| D2 | Investment categories and valuation | 🔴 Open (policy) · build approach ruled | Phase 13.1, 13.5 | Blueprint §13 |
+| D3 | Payroll formulas and deductions | 🔴 Open (policy) · build approach ruled | Phase 15.9 | Blueprint §20 |
+| D5 | Volumes and retention | 🟡 All but response-time targets | Phase 20.4 judgement | Blueprint §25 |
+| D8 | Cut-over date and historical depth | 🟡 Approach proposed, awaiting signature | Phase 21.1 | Blueprint §26 |
+| D9 | Money Transfer legal approval, incl. what "KYC complete" contains | 🔴 Open | Phase 21 go-live | §21, Phase 09 |
+| D11 | Accrual for confirmed uninvoiced services | 🟡 Built the defensible way | Nothing — would be Phase 16 | Phase 05 |
+| D12 | Days Sales Outstanding formula and period basis | 🟡 Built one way, confirmation needed | Nothing | Phase 06 |
+| D13 | What makes a payment "high-risk" | 🟡 Threshold seeded at 0 — everything is high-risk | Nothing | Phase 07 |
+| D14 | Payment priority scale and settlement discounts | 🟡 Mechanism built and neutral | Nothing | Phase 07 |
+| D15 | Dimensions on system-generated **postings** | 🔴 Open — widened at Phase 12 | Phase 12's first live depreciation run | Phase 07, widened Phase 12 |
+| D17 | Whose money a residual client balance is | 🔴 Open | Phase 09 exit gate | Phase 09 |
+| D18 | Is a deposit "Available" separately from "Posted"? | 🟡 Built as one state | Nothing | Phase 09 |
+| D19 | May a client hold two open accounts? | 🟡 Built permissive | Nothing | Phase 09 |
+| D20 | Who bears a Money Transfer direct expense | 🟡 No default — every charge states it | Nothing | Phase 09 |
+| D21 | Does a cross-branch bank debit need a Super User? | 🟡 A consequence to confirm | Nothing | Phase 09 |
+| D22 | Which clearing account a logistics funding credits | 🔴 **Blocking** | Phase 10.4 — funding cannot post at all | Phase 10 |
+| D23 | Clearing-versus-receivable split at recognition | 🟡 Built funded-first | Nothing | Phase 10 |
+| D24 | Cancelling a logistics job that carries posted money | 🟡 Refused for now | Cancellation past Approved | Phase 10 |
+| D25 | Accounting treatment of a logistics claim | 🟡 Posts nothing, by design | Nothing | Phase 10 |
+| D26 | What a duplicate customer match obliges | 🟡 Reports, never refuses | Nothing | Phase 08 |
+| D27 | Progress approval, retention release, advance recovery | 🟡 Mechanisms built and neutral | Nothing | Phase 11 |
+| D28 | Does depreciation re-base after an impairment? | 🟡 Built without re-basing | Nothing | Phase 12 |
 
 **Answered and moved out:** D4 (availability and recovery), D6 (accessibility),
 D7 (Chart of Accounts) and D10 (branch access and the Active Branch) — all on
@@ -41,18 +55,122 @@ acceptance hold**, which was the single largest thing standing in front of the
 build. **D10 replaced the session-branch model** Phase 01 had chosen, which in
 turn unblocked §7.2 multi-branch Sales Orders in Phase 06.
 
-**Most urgent now: D1, D2 and D3.** Each blocks a whole phase outright — 11, 13
-and 15 — and none has a partial answer to build on. They are also the three that
-cannot be answered by IT under any reading of §28.1: they are accounting policy
-and statutory rules, not technical choices.
+---
 
-**Cheapest to answer: D5 item 6** — response-time targets. One short table, and
-without it the §25 load test can be run but not judged.
+### What is needed from you now
+
+**Updated 2026-08-18**, after Phases 08, 11 and 12 and the Phase 09/10 merge.
+
+Eight things are owed. Six of them are a number, a word, or a short table — not a
+policy document — and are set out here in the form the answer takes, so they can
+be given without a meeting. The two that genuinely need Finance to sit down are
+marked as such.
+
+**D16 was answered on 2026-08-18** — one client import register, because the
+paperwork arrives once. It is in
+[`DecisionAnswered.md`](DecisionAnswered.md#d16--one-client-import-register)
+with what it changed, including a duplicate-numbering defect it turned up on the
+way: the two registers ran two sequences that minted the **same** file numbers.
+
+| # | The question, in one line | The answer looks like | What it unblocks |
+|---|---|---|---|
+| **D22** | Which clearing account does a logistics client funding credit, at each job stage? | **Four rows.** For Draft, Approved, In Progress and Delivered, pick one of *Client Logistics Clearing* or *Deferred Service Balance* | Phase 10 client funding. **It cannot post at all today** |
+| **D15** | Which department and business line does a system-generated posting belong to? | **Seven rows.** For cash count variance, FX revaluation, rounding, bank charges, depreciation, impairment and gain/loss on disposal: a named department, *the branch's default*, or *none required*. Then: does the same answer cover business line? | Phase 12's first live depreciation run, and every Phase 16 close step |
+| **D13** | Above what amount is a payment "high-risk"? | **One number, in IQD.** It is seeded at 0, which makes every payment high-risk and demands a separate creator, approver and executor for all of them | Nothing. It **relaxes** a control that is currently at maximum |
+| **D28** | Does depreciation re-base onto the revised carrying value after an impairment? | **Yes or no**, and whether it applies per category or per asset | Nothing. It changes future monthly profit, and is far cheaper to answer before there are impairments in the ledger |
+| **D5** item 6 | What response time is acceptable? | **One small table** — list screens, document save, posting, reports | Judging the §25 load test. It can be run today but not scored |
+| **D8** | Approve the migration approach, and supply two values | **A signature**, plus the target cut-over period and the named owner of each §26 data class | Phase 21.1 |
+| **D27** | Who approves a progress measurement, when does retention release, and how does an advance recover? | **Three short rules.** The rates are already per contract; what is missing is when they fire | Nothing today. Retention and advances are recorded but nothing releases or recovers automatically |
+| **D9** | What does "KYC complete" contain? | **The catalogue**: risk bands, the documents each band requires, and how often identification is renewed. Legal and compliance own this, and it has the **longest external lead time of anything here** | Money Transfer go-live |
+
+### The two that need Finance in a room
+
+**D1, D2 and D3** — project revenue recognition, investment valuation, payroll
+formulas. Your
+[programme ruling](#programme-ruling--d1-d2-and-d3-build-the-mechanism-leave-the-business-values-empty)
+means none of them stops a phase being *built*, and Phase 11 shipped nine of
+twelve sub-phases under it. Each still stops its phase being *used*, and that
+distinction disappears at go-live. They are also the three that cannot be
+answered here under any reading of §28.1 — they are accounting policy and
+statutory rules, not technical choices.
+
+### If only two get answered this week
+
+**D22 first.** It is a four-row table and it is the only item in this register
+that stops a posting outright. Phase 10 is built and tested; it cannot take a
+client's money in production until this lands.
+
+**D15 second.** It was a Phase 16 inconvenience when raised. Phase 12 brought it
+forward — a depreciation run against accounts that still require a department
+fails on the first asset, and Phase 12 is built and waiting. Every month that
+passes adds postings that will have to be classified twice if the answer is late.
+
+### What is deliberately not being asked
+
+The register is longer than it was, and that is the ruling working rather than a
+backlog forming. Of the twenty-four open items, **two** stop work: D22 and D15.
+The rest are either a value to configure or a confirmation of something already
+built the defensible way, and none of them is waiting on you to keep the build
+moving.
 
 **Waiting on a signature rather than a decision: D8.** The migration approach was
-proposed on 2026-08-17 and needs the Business Process Owner's written approval
-under §28.1. Two things inside it are still genuinely open: the target cut-over
-period, and the named owner of each §26 data class.
+proposed on 2026-08-17 and needs written approval under §28.1. Two things inside
+it are genuinely open: the target cut-over period, and the named owner of each
+§26 data class.
+
+---
+
+## Programme ruling — D1, D2 and D3: build the mechanism, leave the business values empty
+
+**Decided 2026-08-17 by Tishko.** This is not an answer to D1, D2 or D3. Their
+business content — the recognition method, the valuation basis, the payroll
+formula — remains 🔴 Open and can only be settled by Finance and HR. What was
+decided is *how the build proceeds while they are open*, which is a technical
+question and therefore one §28.1 does allow to be settled here.
+
+**The ruling, in the words it was given in**
+
+> Build the mechanism, leave the business values empty.
+>
+> - **D1 — Projects.** Build 11.1–11.9 and 11.11–11.12. Leave only the
+>   revenue-recognition / WIP calculation in 11.10 inactive until Finance
+>   supplies the policy.
+> - **D2 — Investments.** Build the register, the configurable type structure,
+>   mappings, income events and disposal logic. Leave the investment categories,
+>   valuation methods and impairment rules empty until Finance defines them.
+> - **D3 — Payroll.** Build the HR master, expenses, advances and the payroll
+>   framework. Do not activate payroll calculations until HR and Finance provide
+>   the formulas and statutory rules.
+>
+> Zero and neutral defaults are only safe where they make the system **stricter
+> or inactive**. There is no safe neutral default for a revenue-recognition
+> method, an investment valuation basis, or a payroll formula. Those stay
+> unconfigured, not guessed.
+
+**Why this matters beyond the three.** It states the test every other open
+decision in this file is now held to: *an empty configuration is acceptable when
+emptiness refuses; it is not acceptable when emptiness permits.* Two entries
+below are in this file precisely because they fail that test if left empty —
+D22 (which clearing account a logistics funding credits) refuses to post at all
+until it is answered, which is correct; D13's risk threshold is seeded at zero,
+which makes every payment high-risk, which is correct for the same reason.
+
+**Where the ruling is already visible in the build**
+
+| Phase | The mechanism that exists | The value that is deliberately absent |
+|---|---|---|
+| 11 | `project.recognition_method` is a column; progress certificates carry no journal link; there is no WIP table | Nothing reads the column. Nothing can post recognition |
+| 13 | not yet built — the register and mappings may proceed | The category list ships empty |
+| 15 | not yet built — HR master, expenses and advances may proceed | No payroll formula is programmed |
+| 10 | `logistics_funding_stage_role` is a table, and posting resolves through it | It ships **empty**, so client funding cannot post until D22 is answered |
+| 09 | `kyc_required_document` and `kyc_risk_rating` are catalogues | They ship empty; see D9 |
+| 07 | `payment_risk_policy` holds a threshold | Seeded at 0 — every payment is high-risk until D13 lands |
+
+**What it does not authorise.** It does not permit a plausible default anywhere
+the default would let a posting through. A category list with sensible-looking
+rows, a recognition method that defaults to percentage-of-completion, or a
+payroll formula "for testing" would each be a §28.1 breach — and each would be
+invisible, because the tests would be written against the same invented rule.
 
 ---
 
@@ -138,7 +256,8 @@ period, and the named owner of each §26 data class.
 **Can proceed without it:** Phases 15.1–15.8. The blueprint itself prescribes this sequencing.
 
 **Note:** if D3 is outstanding at Release 9, the phase ships without payroll and that is declared as a known limitation under §27.1 — not glossed over.
-For scalability, I would change the way D1, D2 and D3 are treated.
+
+**Build approach:** ruled on 2026-08-17 — see [the programme ruling](#programme-ruling--d1-d2-and-d3-build-the-mechanism-leave-the-business-values-empty).
 
 
 ---
@@ -327,7 +446,7 @@ looks right" into someone's signature at the go-live gate.
 | **Blueprint** | §26 go-live gate 5 |
 | **Blocks** | Phase 21 exit — go-live |
 | **Owner** | Legal / compliance → Business Process Owner |
-| **Raised** | 2026-08-16 |
+| **Raised** | 2026-08-16 · **item 2 sharpened 2026-08-17** by the Phase 09 build |
 
 > "Legal/compliance approval exists for regulated service processes, **especially Money Transfer**."
 
@@ -336,6 +455,32 @@ looks right" into someone's signature at the go-live gate.
 2. KYC and AML control requirements to implement — Appendix E cites FATF MVTS guidance
 3. Reporting or record-keeping obligations
 4. Confirmation on client-fund handling and segregation
+
+### Item 2, as Phase 09 now needs it: what does "KYC complete" contain?
+
+Raised while building Phase 09 (`docs/open-questions-phase-09.md` §Q9.1) and kept
+inside D9 rather than given its own number, because it is the same decision asked
+as a data question instead of a policy one.
+
+§21 requires KYC records linked to the partner and the transfer case, and Appendix
+E cites the FATF MVTS guidance for *risk-based* controls. Neither says which
+documents a client must produce, what the risk bands are, what each band obliges,
+or how often identification must be renewed.
+
+**What is built.** `kyc_risk_rating` and `kyc_required_document` are catalogues
+Compliance fills; both ship **empty**. A transfer cannot be initiated unless the
+client has an approved, unexpired KYC record carrying every active required
+document that applies to their rating — enforced by trigger, on every path.
+
+**The consequence of the empty catalogue, stated plainly.** With nothing
+configured, "complete" reduces to *an approved, unexpired record*. That is a real
+control and deliberately the weakest one that is still defensible. Every row
+Compliance adds tightens it, with no code change.
+
+**The risk this carries.** If the answer needs controls a document checklist
+cannot express — transaction thresholds, sanctions screening, periodic review
+triggers — those are new requirements under §28.1 and Phase 09 needs re-planning.
+That is precisely the outcome D9 was raised early to surface.
 
 **Why raise it now, not at go-live:** if compliance requires controls not in §12, those are new requirements needing a change request under §28.1, and Phase 09 must be re-planned. Discovering that at the go-live gate is discovering it too late.
 
@@ -433,7 +578,7 @@ and they are independent:
 **2. Which sales.** Credit sales only, or all sales including cash? A cash sale
 is collected the day it is made, so including it *lowers* DSO — which is
 arithmetically true and arguably misleading, because DSO is meant to measure how
-long credit takes to collect. QS makes both kinds of sale (§7.4), so this matters
+long credit takes to collect. The company makes both kinds of sale (§7.4), so this matters
 here more than it does at most companies.
 
 **3. Which period basis.** Calendar month, rolling 90 days, or year to date. The
@@ -563,15 +708,22 @@ the run is less clever than §15 imagined, not that it is wrong.
 
 ---
 
-## D15 — Which department and business line a system-generated expense belongs to
+## D15 — Which department and business line a system-generated posting belongs to
 
 | | |
 |---|---|
-| **Status** | 🔴 Open |
+| **Status** | 🔴 Open — **and now recurring**; widened at Phase 12 |
 | **Blueprint** | §4.2; migration 0005 |
-| **Blocks** | Nothing today. It recurs at every Phase 16 close step |
+| **Blocks** | Nothing today. It recurs at every Phase 16 close step, and now in every depreciation run |
 | **Owner** | Finance → Business Process Owner |
-| **Raised** | 2026-08-17, while building Phase 07.5 |
+| **Raised** | 2026-08-17, while building Phase 07.5 · widened 2026-08-18 at Phase 12 |
+
+> **Widened 2026-08-18, at Phase 12.** This was raised about *expenses*. Phase 12 produced the
+> same problem on the revenue side — a gain on disposal is credited to a revenue
+> account, and §4.2 makes **business line** mandatory on revenue accounts. Nobody
+> chooses a business line for a gain that arises because an asset sold for more
+> than its written-down value. The question is therefore about system-generated
+> **postings**, not system-generated expenses, and the table below has grown.
 
 ### The problem
 
@@ -589,9 +741,19 @@ about the ledger rather than from anybody's decision:
 | **FX revaluation difference** (§16) | A rate moved between posting and close | It belongs to a currency, not a department |
 | **Rounding difference** | Arithmetic | Nobody's |
 | **Bank charges** (§17, Appendix D) | The bank took a fee | Finance's? The account's branch? |
+| **Depreciation** (§18.5) | Time passed | The asset has a department — but the *charge* is nobody's decision |
+| **Impairment loss** (§18) | An asset was written down | The asset's department, or Finance's? |
+| **Gain or loss on disposal** (§18.6) | Proceeds differed from carrying value | Which **business line** profits from selling a mixer? |
 
 Each has a branch — that much is always known. None has a department or a
 business line that anybody chose.
+
+Depreciation is the mildest of these and the most instructive. The asset *does*
+carry a department, and each charge is stamped with the asset's own — so the
+answer is available. But it was chosen for the asset, not for the charge, and a
+transfer changes it mid-life. The build carries it forward because doing so is
+what makes the register reconcile by dimension; whether Finance wants the charge
+to follow the asset or to sit somewhere fixed is still their call.
 
 ### What is built
 
@@ -605,7 +767,7 @@ with no required dimensions says so, and can be listed.
 
 ### What is needed
 
-1. For each of the four kinds above, one of: **a department to use**, **a
+1. For each of the seven kinds above, one of: **a department to use**, **a
    department per branch**, or **confirmation that none is required**.
 2. Whether the same answer covers business line, or whether the two differ.
 3. Whether Finance wants these postings gathered into a single "unallocated"
@@ -619,34 +781,478 @@ Every one of these appears in the close. If the answer is "they need a
 department", it is a small configuration change made once; if it is discovered
 during the close, it is discovered while somebody is trying to close.
 
+**And now before Phase 12 runs in production.** A depreciation run against
+accounts that still require a department fails on the first asset. The Phase 12
+tests clear the requirement on the four affected accounts to prove the gate
+rather than the gap, and the mapped accounts must be configured the same way
+before the first live run — or D15 answered, which is better.
 
 
-Yes — this is the right approach.
+---
 
-The key principle is:
+# Raised by Phases 08 to 12, and by the Phase 09/10 merge
 
-Build the mechanism, leave the business values empty.
+The nine entries D17 to D25 were written during the Phase 09 and Phase 10 builds
+and held in `docs/open-questions-phase-09.md` and `docs/open-questions-phase-10.md`
+because those phases were built on separate branches and neither would edit this
+file behind the other's back. They are given D-numbers here. The two source
+documents stay where they are — they carry the worked reasoning, and this register
+carries the question.
 
-That keeps development moving without forcing Finance to answer everything immediately, while still respecting the blueprint.
+**D16 was the tenth** and is already answered — see
+[`DecisionAnswered.md`](DecisionAnswered.md#d16--one-client-import-register).
 
-For the three items:
+D26 to D28 are new, raised while building Phases 08, 11 and 12.
 
-D1 — Projects: build Phases 11.1–11.9 and 11.11–11.12. Leave only the revenue-recognition/WIP calculation in 11.10 inactive until Finance supplies the policy.
-D2 — Investments: build the register, configurable type structure, mappings, income events and disposal logic. Leave the investment categories, valuation methods and impairment rules empty until Finance defines them.
-D3 — Payroll: build HR master, expenses, advances and the payroll framework. Do not activate payroll calculations until HR/Finance provide the formulas and statutory rules.
+---
 
-The important distinction is that zero/neutral defaults are only safe where they make the system stricter or inactive. There is no safe neutral default for:
+## D17 — Does a residual client balance belong to the client or to the company?
 
-revenue-recognition method,
-investment valuation basis,
-payroll formula.
+| | |
+|---|---|
+| **Status** | 🔴 Open — **the most consequential of the Phase 09 items**; mechanism built, treatment deferred |
+| **Blueprint** | §12.4, §12.7, §22 KPI dictionary |
+| **Blocks** | Nothing today. The Phase 09 exit gate — *"service margin … reconcile"* |
+| **Owner** | Finance → Business Process Owner |
+| **Raised** | 2026-08-17, building Phase 09 · full text in `docs/open-questions-phase-09.md` §Q9.2 |
 
-So those should remain unconfigured, not guessed.
+A client funds an account, the goods are sent, and a small balance is left over.
+§12.4 tracks a Remaining Client Balance but does not say what becomes of it: it is
+refundable to the client, carried to their next cycle, or — after some period —
+company income. Each answer posts differently and each changes what the service
+margin means.
 
-I would also keep D1/D2/D3 marked 🔴 Open for business policy, but add something like:
+**What is built.** The balance is computed from deposits and usage, never stored,
+so no answer is baked in. Nothing sweeps it anywhere.
 
-Development impact: The surrounding configurable framework may proceed. Only the accounting/payroll treatment that depends on an approved policy remains blocked.
+---
 
-That makes it clear that “Open” does not mean the whole phase is stopped.
+## D18 — Is "Available" a state a client deposit can be in without being usable?
 
-And your idea about getting worked examples instead of long policy documents is very good. For example, five real payroll examples or three sample project contracts with expected accounting entries would probably be more useful to development and UAT than a long written explanation.
+| | |
+|---|---|
+| **Status** | 🟡 Open — built as one state; a second is cheap to add |
+| **Blueprint** | §12.3, Appendix B |
+| **Blocks** | Nothing |
+| **Owner** | Treasury → Business Process Owner |
+| **Raised** | 2026-08-17 · `docs/open-questions-phase-09.md` §Q9.3 |
+
+Appendix B lists Posted and Available as separate deposit statuses, which implies
+a gap between them; §12.3 admits only cleared funds, which implies there is none.
+Built as one state (`posted`). If a hold, a clearing delay, or a second pair of
+eyes is wanted before client money can be spent, that is one status and one
+transition — and it would be a **control**, so it may turn out to be part of D9.
+
+---
+
+## D19 — May a client hold more than one open account at once?
+
+| | |
+|---|---|
+| **Status** | 🟡 Open — built permissive; balances are unambiguous either way |
+| **Blueprint** | §12.3 |
+| **Blocks** | Nothing |
+| **Owner** | Treasury → Business Process Owner |
+| **Raised** | 2026-08-17 · `docs/open-questions-phase-09.md` §Q9.4 |
+
+§12.3 makes an account one funding cycle but does not say whether two cycles may
+run at once. Built permissive: every deposit names its account and every transfer
+draws only on its own account's deposits. Restricting it later is a partial unique
+index — cheap now, disruptive once clients have history.
+
+---
+
+## D20 — Who bears a Money Transfer direct expense, by default?
+
+| | |
+|---|---|
+| **Status** | 🟡 Open — built with **no default**, so every charge states it |
+| **Blueprint** | §12.4, §12.6 |
+| **Blocks** | Nothing |
+| **Owner** | Finance → Business Process Owner |
+| **Raised** | 2026-08-17 · `docs/open-questions-phase-09.md` §Q9.5 |
+
+§12.6 settles one case — on a returned transfer *"the company absorbs all bank
+charges"* — which shows the distinction matters without giving the general rule.
+It changes the client's Remaining Client Balance and, on a return, whether the
+refund is whole. `money_transfer_expense.charged_to_client` is NOT NULL with no
+default and is frozen once posted, so nobody's silence decides and no posted
+balance can be silently restated.
+
+---
+
+## D21 — Does a cross-branch bank debit need a Super User?
+
+| | |
+|---|---|
+| **Status** | 🟡 A design consequence worth confirming, not a defect |
+| **Blueprint** | §12.5, §5.1, §22 |
+| **Blocks** | Nothing |
+| **Owner** | Treasury → Business Process Owner |
+| **Raised** | 2026-08-17 · `docs/open-questions-phase-09.md` §Q9.6 |
+
+§12.5's own example combines a client transfer and a company import payment in one
+bank debit, and those need not share a branch. Each line is row-level-security
+scoped to its own branch (§22), and §5.1 makes Super User the only blanket grant —
+so today only a Super User can compose such a batch. Accept it, give Treasury a
+multi-branch data scope for this document type (a §5 decision, not a Phase 09 one),
+or forbid cross-branch batches with a CHECK.
+
+---
+
+## D22 — Which clearing account a logistics client funding credits, at each job stage
+
+| | |
+|---|---|
+| **Status** | 🔴 **Open and blocking** — the only open item that stops a posting outright |
+| **Blueprint** | §11.4 |
+| **Blocks** | Phase 10.4 — client funding cannot be posted at all |
+| **Owner** | Finance → Business Process Owner |
+| **Raised** | 2026-08-17 · `docs/open-questions-phase-10.md` §Q10-1 |
+
+> §11.4: *"Client logistics funding or charge | Bank, Cash or Client Account | **Client Logistics Clearing / Deferred Service Balance according to document stage**"*
+
+The blueprint names two credit accounts and says the choice depends on the stage.
+It does not say which stage takes which. *Client Logistics Clearing* is money held
+on the client's behalf; *Deferred Service Balance* is consideration for a service
+not yet performed. Which one a receipt belongs in is a judgement about when the
+company's obligation arises.
+
+**What is needed:** one value for each stage at which funding can be received —
+Draft, Approved, In Progress, Delivered. It is a four-row table, not a policy
+document, and it is **the cheapest blocking answer in this register.**
+
+**What is built.** `logistics_funding_stage_role` exists and posting resolves
+through it. It ships **empty**, so funding cannot post — which is the ruling above
+working as intended: emptiness refuses.
+
+---
+
+## D23 — How a part-funded logistics job divides at recognition
+
+| | |
+|---|---|
+| **Status** | 🟡 Built the defensible way, confirmation invited |
+| **Blueprint** | §11.4 |
+| **Blocks** | Nothing |
+| **Owner** | Finance → Business Process Owner |
+| **Raised** | 2026-08-17 · `docs/open-questions-phase-10.md` §Q10-2 |
+
+> §11.4: *"Service completion and recognition | **Client Logistics Clearing / Client A/R** | Logistics Revenue"*
+
+Two possible debits and no statement of how a job funded 600,000 against a charge
+of 1,500,000 divides. **Built funded-first:** discharge the clearing balance up to
+what the client actually paid, bill the remainder to Client A/R. The reasoning is
+not preference — debiting more clearing than was credited would leave a liability
+account in debit, presenting an unfunded balance as money the company is holding.
+Confirmation would settle whether Finance instead wants A/R taken first, leaving
+client money on account until the job closes.
+
+---
+
+## D24 — What becomes of posted cost and client funding when a logistics job is cancelled
+
+| | |
+|---|---|
+| **Status** | 🟡 Refused for now; the wider case is open |
+| **Blueprint** | Appendix B |
+| **Blocks** | Cancelling a job that has passed Approved |
+| **Owner** | Logistics + Finance → Business Process Owner |
+| **Raised** | 2026-08-17 · `docs/open-questions-phase-10.md` §Q10-3 |
+
+Appendix B lists Cancelled among the Logistics Job statuses without saying what
+happens to money already posted against the job. Cancellation past Approved is
+refused — in the service with a message naming this question, and again by trigger.
+Refusal is the recoverable direction: a job wrongly held open can be cancelled once
+the rule is known; a job wrongly cancelled has already reversed postings.
+
+---
+
+## D25 — Accounting treatment of a logistics claim
+
+| | |
+|---|---|
+| **Status** | 🟡 Posts nothing, by design |
+| **Blueprint** | §11.1, §11.5, Appendix C |
+| **Blocks** | Nothing — the claims register is built |
+| **Owner** | Finance → Business Process Owner |
+| **Raised** | 2026-08-17 · `docs/open-questions-phase-10.md` §Q10-4 |
+
+§11.1 puts Claims and Exceptions in the Logistics menu and §11.5 requires a
+Delivery Exceptions report, but **Appendix C — which is exhaustive — has no posting
+row for a claim.** A claim for damaged goods plainly has financial consequences.
+Needed: whether an open claim posts or only discloses; if it posts, at what point;
+which account bears it and whether that differs by claim type; and whether a claim
+against a carrier reduces that carrier's payable or stands as a separate
+receivable. `logistics_claim` is a register with no journal link, and a claim must
+be resolved or rejected before its job can close.
+
+---
+
+## D26 — What a duplicate customer match obliges
+
+| | |
+|---|---|
+| **Status** | 🟡 Built to report, never to refuse; confirmation invited |
+| **Blueprint** | §6 and its acceptance criteria |
+| **Blocks** | Nothing |
+| **Owner** | Sales + Compliance → Business Process Owner |
+| **Raised** | 2026-08-17, building Phase 08 |
+
+§6 requires duplicate detection across five criteria — name, phone, e-mail, tax
+identifier and bank account — and requires that duplicates be *"identified"*. It
+does not say what identification obliges.
+
+**What is built.** Detection reports; it never refuses. A second enquiry from a
+known customer is an ordinary event, and a system that blocked it would be worked
+around within a week. Every match is returned with the criterion that produced it
+and recorded in the audit trail, so no duplicate goes unnoticed.
+
+**What is needed**
+
+1. Whether any criterion is strong enough to *refuse* rather than warn. A repeated
+   tax identifier or bank account is the likeliest candidate; both are the kind of
+   match that is rarely innocent.
+2. Whether a match on a **bank account** across two different partners should
+   notify Compliance. It is the classic shared-beneficiary signal, and Phase 09's
+   §12 work is what makes it visible.
+3. Who merges duplicates once found, and whether a merge is reversible.
+
+---
+
+## D27 — Progress measurement, retention release and advance recovery on projects
+
+| | |
+|---|---|
+| **Status** | 🟡 Mechanisms built and neutral; the rates are per contract, the *rules* are not stated |
+| **Blueprint** | §10 |
+| **Blocks** | Nothing today. It sits beside D1 |
+| **Owner** | Finance + Projects → Business Process Owner |
+| **Raised** | 2026-08-17, building Phase 11 |
+
+D1 covers recognition. These three are adjacent and were not settled by it.
+
+1. **Who may approve a progress measurement, and against what evidence.** §10
+   requires measured progress to gate certification, and the build enforces
+   `certificate ≤ measured progress` by trigger. It does not say whether a client
+   representative's signature is required or an internal approval suffices.
+2. **When retention releases.** Retention accumulates as movements and can never go
+   negative. §10 does not say whether release is at practical completion, at the end
+   of a defects period, or in instalments — nor whether a partial release needs the
+   same approval as the certificate that withheld it.
+3. **How an advance recovers.** `advance_recovery_percent` is per project. What is
+   unstated is whether recovery is proportional on every certificate, deferred until
+   a threshold, or subject to a minimum — and what happens if a contract ends with
+   an advance unrecovered.
+
+Each is a rate today and a rule tomorrow. Until answered, the figures are recorded
+and reported but nothing recovers or releases automatically.
+
+---
+
+## D28 — Whether depreciation re-bases after an impairment
+
+| | |
+|---|---|
+| **Status** | 🟡 Built the straightforward way; a method change if Finance wants otherwise |
+| **Blueprint** | §18, Appendix E (IAS 16; IAS 36 by implication) |
+| **Blocks** | Nothing |
+| **Owner** | Finance → Business Process Owner |
+| **Raised** | 2026-08-18, building Phase 12 |
+
+§18 requires impairment to be visible separately from depreciation, and it is: two
+accounts, two registers, one net book value. What §18 does not say is whether the
+**future depreciation charge** changes after an impairment.
+
+**What is built.** It does not. Straight line charges cost less residual over the
+useful life, and the impairment sits in its own account. Carrying value reflects
+both, and the register and the G/L agree.
+
+**The alternative.** IAS 36 §63 bases post-impairment depreciation on the *revised*
+carrying value over the remaining life. Under that reading, a 20,000 impairment on
+a 120,000 asset with 33 months left would cut every future charge. Both are
+defensible; they produce different monthly profit and are not a rounding apart.
+
+**What is needed:** one answer, and whether it applies per category or per asset.
+It is a configuration field and a branch in `monthlyCharge` — small, and much
+smaller before there are impairments in the ledger than after.
+
+---
+
+# What the phases still to be built will need
+
+Added 2026-08-18, at the request of the Business Process Owner: *"what is needed
+for current that have completed in the phases but not decided, [and] what is
+needed in future so far."* Everything above answers the first half. This section
+answers the second.
+
+Nothing here has a D-number yet, and deliberately so. A decision register that
+fills up with questions nobody is being asked to answer stops being read. These
+are **flagged early because they are cheap now and expensive later** — each one
+is either a configuration table that must be populated before a phase can be
+used, or a policy that determines what gets built rather than how.
+
+The rule they are held to is the one in the
+[programme ruling](#programme-ruling--d1-d2-and-d3-build-the-mechanism-leave-the-business-values-empty):
+build the mechanism, leave the value empty, and make sure emptiness refuses
+rather than permits. Where that is not possible, the item is marked ⚠.
+
+---
+
+## Phases already built, with work deliberately left
+
+| Phase | What is not built | Why | Needs a decision? |
+|---|---|---|---|
+| 08 CRM | Lead import through the Phase 01 import framework | Sequencing only | No |
+| 08 CRM | Opportunity-to-project conversion | Needed Phase 11, which now exists | No — schedule it |
+| 08 CRM | Customer 360 across Logistics and Money Transfer history | Reachable only since the 09/10 merge | No — schedule it |
+| 09 Money Transfer | Bank Execution Batch does not reconcile to a bank statement (§12.5, §12.7) | Phase 07.7's set-against-set matching was built for exactly this; the two were built on separate branches | No — it is wiring, not design |
+| 11 Projects | 11.5 project labour and timesheets | The interface exists; Phase 15 is the source | No |
+| 11 Projects | 11.6 subcontracts | Needs its own document set | No |
+| 11 Projects | 11.10 WIP and revenue recognition | **D1** | Yes — D1 |
+
+The four "no" rows are the honest ones to act on first: they are finished work
+waiting to be connected, not questions waiting to be answered.
+
+---
+
+## Phase 13 — Investments
+
+**Governed by D2.** §13 is explicit that the IT team implements configurable
+types and posting rules *"only after Finance defines the required categories"*.
+Under the programme ruling the register, the type structure, the mappings, income
+events and disposal mechanics may all be built. The category list ships empty.
+
+Also likely to surface, once building starts:
+
+- Which categories require **related-party approval**, and what that approval is.
+  §13 asks for it without defining the relationship test.
+- Whether an investment can be held in a currency other than IQD or USD, which
+  decides whether §14's two-currency model reaches far enough.
+
+---
+
+## Phase 14 — Budgeting
+
+No open decision blocks it, but two things must come from the business rather
+than from the build:
+
+1. **What a budget check does when it fails.** §19 requires commitment control
+   and a budget check. It does not say whether an over-budget purchase is
+   *refused*, *warned*, or *routed for approval* — and whether the answer differs
+   by amount, by account, or by who is asking. This is the same shape as D13 and
+   should get the same treatment: build all three behaviours, configure none.
+2. ⚠ **Allocation drivers.** §19 requires allocations to *"use documented drivers
+   and create auditable journals"*. A driver is a business rule — headcount,
+   floor area, revenue share — and there is no safe empty default: an allocation
+   rule with no driver cannot run, which is correct, but an allocation rule with a
+   *plausible* driver silently misstates departmental profit. Finance must supply
+   the drivers before 14.6 is switched on.
+
+---
+
+## Phase 15 — HR and Payroll
+
+**Governed by D3**, and the blueprint prescribes the sequencing itself: HR master,
+employee expenses and advances first; payroll only once the formulas are signed.
+Two adjacent items are not covered by D3:
+
+- **Offboarding clearance.** §20 requires it, and Phase 12 already exposes
+  `assetsHeldBy(userId)` for the asset half. What clearance must *cover* —
+  assets, cash advances, project commitments, document custody — is a policy list.
+- **Whether an unrecovered advance survives termination**, and against what it
+  offsets. It touches D27's third item.
+
+---
+
+## Phase 16 — Close and statements
+
+The phase where several existing open items stop being theoretical:
+
+| Existing item | What Phase 16 does to it |
+|---|---|
+| **D11** accrual for uninvoiced services | The close is where the accrual is made or not made |
+| **D12** DSO formula | 16.7's control reports publish it |
+| **D15** dimensions on system-generated postings | Every one of the seven kinds posts during the close |
+
+New, and worth raising before 16.3 is built:
+
+- ⚠ **Whether FX revaluation reverses in the following period.** §26's UAT
+  scenario says *"with reversal in the next period **where policy requires**"* —
+  the blueprint defers to a policy that does not exist yet. Both behaviours are
+  buildable and both are common. The gate "reversal restores the pre-revaluation
+  position exactly" can only be tested once it is known whether reversal happens.
+- **Which balances are revalued.** Monetary items only, per IAS 21 — but which
+  accounts the company treats as monetary is a mapping, and it must exist before the first
+  revaluation rather than after.
+- **What may remain open when a period closes.** §16 requires the close to be
+  gated; the list of conditions is a business one.
+
+---
+
+## Phase 17 — Documents
+
+- ⚠ **Retention periods and confidentiality classifications.** §21 requires them
+  to be *"configurable rather than hard-coded"*, which the build will honour — but
+  configurable and empty means nothing is ever disposed of, and that is a legal
+  exposure rather than a safe default. Legal must supply the periods.
+- **Who may impose and lift a legal hold**, and whether lifting one requires two
+  people. A hold that one person can lift is not a hold.
+- **What "authorised administrator" means for disposal** (§21) — a role, or a
+  named individual.
+
+---
+
+## Phase 18 — Reporting
+
+Largely mechanical, with one exception: **who may see what, in the reports that
+cross branches**. D10 settled the transaction boundary. A consolidated report is
+the one place where a legitimate business need points the other way, and §22's
+report list contains several. Expect a data-scope decision in the shape of D21.
+
+---
+
+## Phase 19 — Integrations
+
+- **The interface catalogue** — which external systems the company actually connects to.
+  §23 requires each interface to have a **named reconciliation owner**, and that
+  is a person, not a design.
+- **What happens to a failed inbound accounting interface.** §23 requires
+  idempotency and a dead-letter queue, both of which the build provides. Whether a
+  message that dead-letters raises an alert, blocks the close, or waits is policy.
+
+---
+
+## Phase 20 — Non-functional hardening
+
+**D5 item 6** — the response-time targets — is the only outstanding input, and it
+is the cheapest answer in this file. D4 and D6 are answered and in
+`DecisionAnswered.md`.
+
+---
+
+## Phase 21 — Migration and go-live
+
+- **D8** — the cut-over date, the historical depth, and the named owner of each
+  §26 data class. The approach is proposed and needs a signature.
+- **D9** — legal and compliance approval for Money Transfer, including what
+  "KYC complete" contains. This is a go-live gate, not a build gate, and it is the
+  one on this list with the longest external lead time.
+- **What the parallel run must agree on before go-live is declared.** §26 requires
+  a parallel run; the tolerance — exact agreement, or agreement within a stated
+  materiality — is Finance's to set, and setting it afterwards is not setting it.
+
+---
+
+## The pattern worth noticing
+
+Of the twenty-three open items above, exactly **two** stop work today: D22, which
+refuses to post, and D15, which will refuse to depreciate. Every other one is
+either a value to configure or a confirmation of something already built the
+defensible way.
+
+That is the programme ruling working. It is also why the count keeps rising
+without the build slowing down — and why the count must be read as *work owed to
+the business*, not work owed by the build. Each unanswered item is a place where
+the system will do the safe thing rather than the right thing, and the two are
+only the same until somebody notices.
