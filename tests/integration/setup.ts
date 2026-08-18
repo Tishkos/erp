@@ -272,6 +272,30 @@ export async function resetTestData(): Promise<void> {
     // Sales orders before the items, customers and reservations they name. A
   // submitted order's lines are fixed in production (blueprint 7.4) because the
   // reservation and delivery are matched against them.
+  // Phase 09 — Money Transfer. Every one of these references a journal, so they
+  // go before the journals do; the order within the block is child-first.
+  //
+  // In production none of them carries a DELETE grant: a transfer is corrected
+  // by reversal and a new transaction (§12.3), a client deposit is a record of
+  // money arriving, and a KYC record is the evidence a regulated transfer rested
+  // on. The guards are lifted here only, and by the same means as everything
+  // else in this function — the session is already in `replica`, so the
+  // append-only triggers do not fire and there is nothing to disable by hand.
+  await client.query('delete from bank_execution_batch_line');
+  await client.query('delete from bank_execution_batch');
+  await client.query('delete from money_transfer_expense');
+  await client.query('delete from money_transfer_deposit_usage');
+  await client.query('delete from money_transfer');
+  await client.query('delete from client_goods_delivery');
+  await client.query('delete from client_import_payment');
+  await client.query('delete from client_import_file');
+  await client.query('delete from money_transfer_deposit');
+  await client.query('delete from money_transfer_client_account');
+  await client.query('delete from client_kyc_document');
+  await client.query('delete from client_kyc_record');
+  await client.query('delete from kyc_required_document');
+  await client.query('delete from kyc_risk_rating');
+
   // Other receipts before the accounts they arrived in.
   await client.query('delete from other_receipt');
 
@@ -560,7 +584,11 @@ export async function resetTestData(): Promise<void> {
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',
                          'SALES_RETURN', 'CUSTOMER_CREDIT_MEMO', 'AR_WRITE_OFF', 'CASH_COUNT', 'BANK_TRANSFER',
-                         'PAYMENT_PROPOSAL', 'PAYMENT_BATCH', 'BANK_STATEMENT', 'CASH_ADVANCE', 'BANK_RECONCILIATION', 'OTHER_RECEIPT')
+                         'PAYMENT_PROPOSAL', 'PAYMENT_BATCH', 'BANK_STATEMENT', 'CASH_ADVANCE', 'BANK_RECONCILIATION', 'OTHER_RECEIPT',
+                         -- Phase 09, seeded by migrations 0120-0125.
+                         'MT_CLIENT_ACCOUNT', 'MT_CLIENT_DEPOSIT', 'MONEY_TRANSFER', 'MT_EXPENSE',
+                         'CLIENT_IMPORT_FILE', 'CLIENT_IMPORT_PAYMENT', 'CLIENT_GOODS_DELIVERY',
+                         'BANK_EXECUTION_BATCH')
     `);
 
     // §17's high-risk threshold is configuration a migration seeded, and a test

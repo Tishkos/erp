@@ -407,6 +407,48 @@
       "when": 1787025000000,
       "tag": "0057_phase07_other_receipt",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1789000000000,
+      "tag": "0120_phase09_client_account_kyc",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1789001000000,
+      "tag": "0121_phase09_client_deposits",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1789002000000,
+      "tag": "0122_phase09_client_import",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1789003000000,
+      "tag": "0123_phase09_transfer_instruction",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1789004000000,
+      "tag": "0124_phase09_transfer_expenses",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1789005000000,
+      "tag": "0125_phase09_bank_execution_batch",
+      "breakpoints": true
     }
   ]
 }
