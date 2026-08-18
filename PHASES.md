@@ -188,14 +188,38 @@ and D5 item 6 is a response-time table. None needs a meeting.
 
 ## Build status
 
-At 2026-08-18. Test counts are the phase's own; the totals are the whole suite.
+At 2026-08-18.
+
+### What parallel branches left behind, and where it stands
+
+Phases 09 and 10 were built by separate agents on branches taken from the same
+Phase 05 base. Neither could see the other, and neither could see Phases 06 or 07,
+which were built later. That produced seven artefacts of one kind — a placeholder
+standing in for a link that could not be made yet — each with a note naming who
+should replace it. All seven are now closed:
+
+| | Left behind | Closed by |
+|---|---|---|
+| 1 | Two client-import registers | **D16** — one register (`0153`, `0155`, `0156`) |
+| 2 | Two sequences minting the *same* file numbers | the same merge: one register, one sequence |
+| 3 | `client_import_file.logistics_job_ref` text | dropped — the job names the file |
+| 4 | `money_transfer.logistics_job_ref` text | a foreign key, with a trigger requiring the job to be on that file |
+| 5 | `bank_execution_batch.statement_line_ref` text | a foreign key, with §12.5's amount and account checks |
+| 6 | Two gates "waiting on Phase 06" | Phase 06 closed both without knowing: `ar_invoice` needs a delivery note **and** a sales order, both NOT NULL |
+| 7 | A gate "waiting on Phase 09" | Phase 10 holds no Client Inventory and has no column for one |
+
+The lesson worth keeping: a text column standing in for a foreign key is not a
+weaker link, it is a link that **can be wrong**. Where an acceptance criterion
+turns on the reference being right — §12.5 and §12.7 both do — it has to be a
+foreign key, and the phase that arrives second has to go looking for the notes the
+phase before it left.
 
 | Phase | State |
 |---|---|
 | 00–07 | Complete, exit gates closed |
 | 08 CRM | Complete, less lead import, opportunity-to-project conversion and Customer 360 over Logistics / Money Transfer history |
-| 09 Money Transfer | Complete and merged. Known gap: the Bank Execution Batch does not yet reconcile to a bank statement (§12.5, §12.7) — Phase 07.7's matching was built for it |
-| 10 Logistics | Complete and merged. Cannot post client funding until **D22** |
+| 09 Money Transfer | **Complete — every gate closed** (2026-08-18). The Bank Execution Batch now reconciles to a real bank statement line (§12.5, §12.7) |
+| 10 Logistics | Complete and merged. Cannot post client funding until **D22** — a four-row table |
 | 11 Projects | 9 of 12 sub-phases. 11.5 awaits Phase 15 timesheets; 11.6 subcontracts needs its own document set; 11.10 awaits **D1** |
 | 12 Fixed Assets | Complete, exit gate closed |
 | 13–21 | Not started |

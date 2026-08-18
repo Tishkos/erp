@@ -81,7 +81,6 @@ async function paidImport(amountIqd = '4000000') {
       branchCode: BRANCH,
       openedOn: '2026-02-01',
       description: 'Consignment 42',
-      logisticsJobRef: 'LOG-JOB-42',
     }),
   );
 
@@ -311,7 +310,11 @@ describe('09.10 — client goods never enter company inventory (§11.3, §12.4)'
     // cross-reference links the cases; it reports no combined figure, and there
     // is no transfer on this file at all.
     expect(rows[0]!.transferNo).toBeNull();
-    expect(rows[0]!.logisticsJobRef).toBe('LOG-JOB-42');
+    // Since D16 the job names the file rather than the file naming a text
+    // reference, so an import file with no logistics job reports none. That the
+    // link resolves when a job *does* exist is asserted in phase10-logistics,
+    // where there is a job to resolve to.
+    expect(rows[0]!.logisticsJobNo).toBeNull();
   });
 
   it('a posted client-import document is corrected by reversal, never by editing', async () => {

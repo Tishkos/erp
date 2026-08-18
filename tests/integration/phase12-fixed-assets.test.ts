@@ -793,6 +793,44 @@ describe('12.6 gate · disposal (§18.6)', () => {
     ).rejects.toThrow(/takes no further depreciation/);
   });
 
+  it('rejects a transfer once disposed, in the service and in the database', async () => {
+    const created = await depreciatedAsset();
+    await ownerPool.query(
+      `insert into department (code, name) values ('SITE','Site works') on conflict do nothing`,
+    );
+    await withScope(scope(manager), (tx) =>
+      assets.dispose(tx, manager, created.id, {
+        disposedOn: '2026-05-01',
+        proceedsIqd: price('100000'),
+        proceedsAccountId: accounts.disposal_proceeds!,
+      }),
+    );
+
+    expect(
+      await rejection(
+        withScope(scope(manager), (tx) =>
+          assets.transfer(tx, manager, created.id, {
+            transferredOn: '2026-05-02',
+            reason: 'Moved after sale',
+            requestedBy: clerk.principal.userId,
+            toDepartmentCode: 'SITE',
+          }),
+        ),
+      ),
+    ).toMatch(/disposed asset cannot be moved/);
+
+    // §18.5 asks transfer and disposal to retain complete history. Moving an
+    // asset that has left the register is the one movement that cannot be true
+    // of it, so the refusal belongs where the row would be written.
+    await expect(
+      ownerPool.query(
+        `insert into asset_transfer
+           (asset_id, transferred_on, reason, requested_by, approved_by)
+         values ($1,'2026-05-02','Moved after sale',$2,$3)`,
+        [created.id, clerk.principal.userId, manager.principal.userId],
+      ),
+    ).rejects.toThrow(/takes no further depreciation, impairment or transfer/);
+  });
   it('refuses to dispose of the same asset twice', async () => {
     const created = await depreciatedAsset();
     await withScope(scope(manager), (tx) =>

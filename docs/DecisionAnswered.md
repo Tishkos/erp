@@ -812,7 +812,7 @@ The two services share a case. They do not share a ledger.
 
 | | |
 |---|---|
-| Migration | `0153_d16_one_client_import_register.sql` |
+| Migrations | `0153` the tables · `0155` the document type, grants and sequence · `0156` two trigger functions |
 | Surviving table | `client_import_file` |
 | Dropped | `logistics_client_import_file` |
 | Renamed | `logistics_client_import_file_reference` → `client_import_file_reference` |
@@ -845,6 +845,25 @@ The two services share a case. They do not share a ledger.
   names the file.
 - `LOGISTICS_CLIENT_IMPORT_FILE` was deactivated rather than deleted, so the
   allocations it already handed out keep their audit trail (§3.4).
+
+### Two things the merge turned up that reasoning alone would have missed
+
+**A dropped table does not break a trigger until somebody inserts a row.**
+PostgreSQL resolves table names inside a PL/pgSQL body at execution, not at
+definition, so dropping `logistics_client_import_file` broke neither the
+migration nor the schema. It broke the *next insert* into `logistics_job`, with a
+42P01 raised from inside a trigger — 54 tests failing on a table nobody had
+mentioned. Two function bodies had to be found by searching `pg_proc`, which is
+the only place they were visible. Any future rename in this codebase needs the
+same search.
+
+**Merging two registers silently merged a permission object.** §5.3 checks a user
+against the object, so two tables meant two grant sets and a Logistics clerk saw
+logistics files without anyone having decided that — it fell out of the table
+split. One register means one object, and the grants were merged as a union so
+that no verb was silently withdrawn. Whether a Logistics user *should* see a
+Money Transfer client's file is a real question, and it is raised as **D29**
+rather than answered here: it was a consequence of this decision, not part of it.
 
 ### The principle it settled, beyond itself
 

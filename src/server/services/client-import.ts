@@ -40,6 +40,7 @@ import {
   clientGoodsDelivery,
   clientImportFile,
   clientImportPayment,
+  logisticsJob,
   moneyTransfer,
   moneyTransferClientAccount,
 } from '../db/schema';
@@ -74,14 +75,20 @@ async function loadFile(tx: Tx, id: string) {
   return row;
 }
 
-async function partnerFor(tx: Tx, clientAccountId: string) {
+/**
+ * The partner a file belongs to.
+ *
+ * Reads `client_id` rather than going through the Money Transfer account, which
+ * is optional since D16 merged the two registers: a file opened for a logistics
+ * job alone has no account, and the partner is still the answer.
+ */
+async function partnerFor(tx: Tx, clientId: string) {
   const [row] = await tx
     .select({ id: businessPartner.id, code: businessPartner.code })
-    .from(moneyTransferClientAccount)
-    .innerJoin(businessPartner, eq(businessPartner.id, moneyTransferClientAccount.partnerId))
-    .where(eq(moneyTransferClientAccount.id, clientAccountId))
+    .from(businessPartner)
+    .where(eq(businessPartner.id, clientId))
     .limit(1);
-  if (!row) throw new Error(`No client account '${clientAccountId}'.`);
+  if (!row) throw new Error(`No business partner '${clientId}'.`);
   return row;
 }
 
@@ -89,17 +96,45 @@ export async function openFile(
   tx: Tx,
   ctx: ActorContext,
   input: {
-    clientAccountId: string;
+    /**
+     * The Money Transfer client account, where the file has one. A file opened
+     * for a logistics job alone has none — one register serves both (D16).
+     */
+    clientAccountId?: string | null;
+    /** The business partner. Derived from the account when one is given. */
+    clientId?: string | null;
     branchCode: string;
     openedOn: string;
+    originCountry?: string | null;
     description?: string | null;
-    logisticsJobRef?: string | null;
+    note?: string | null;
   },
 ): Promise<{ id: string; fileNo: string }> {
   await authz.authorize(ctx.principal, 'create', FILE_DOCUMENT_TYPE, {
     branchCode: input.branchCode,
     requestId: ctx.requestId ?? null,
   });
+
+  // The partner is the identity both services share. Given an account, it is
+  // not a separate fact — reading it here means the caller cannot supply one
+  // that disagrees, which the database would refuse anyway.
+  let clientId = input.clientId ?? null;
+  if (input.clientAccountId) {
+    const [account] = await tx
+      .select({ partnerId: moneyTransferClientAccount.partnerId })
+      .from(moneyTransferClientAccount)
+      .where(eq(moneyTransferClientAccount.id, input.clientAccountId))
+      .limit(1);
+    if (!account) throw new Error(`No money transfer client account '${input.clientAccountId}'.`);
+    clientId = account.partnerId;
+  }
+
+  if (!clientId) {
+    throw new Error(
+      'An import file names its client (§11, §12.2). Supply a client account, or ' +
+        'the business partner directly for a file that is only ever a logistics job.',
+    );
+  }
 
   const allocated = await allocateDocumentNumber(
     tx,
@@ -112,11 +147,13 @@ export async function openFile(
     .insert(clientImportFile)
     .values({
       fileNo: allocated.documentNo,
-      clientAccountId: input.clientAccountId,
+      clientId,
+      clientAccountId: input.clientAccountId ?? null,
       branchCode: input.branchCode,
       openedOn: input.openedOn,
+      originCountry: input.originCountry ?? null,
       description: input.description ?? null,
-      logisticsJobRef: input.logisticsJobRef ?? null,
+      note: input.note ?? null,
       createdBy: ctx.principal.userId,
     })
     .returning({ id: clientImportFile.id });
@@ -200,7 +237,7 @@ export async function postPayment(
   }
 
   const file = await loadFile(tx, payment.clientImportFileId);
-  const partner = await partnerFor(tx, file.clientAccountId);
+  const partner = await partnerFor(tx, file.clientId);
 
   const criteria = { branchCode: payment.branchCode };
   const dimensions = { branch: payment.branchCode, business_partner: partner.code };
@@ -333,7 +370,7 @@ export async function postDelivery(
   }
 
   const file = await loadFile(tx, delivery.clientImportFileId);
-  const partner = await partnerFor(tx, file.clientAccountId);
+  const partner = await partnerFor(tx, file.clientId);
 
   const criteria = { branchCode: delivery.branchCode };
   const dimensions = { branch: delivery.branchCode, business_partner: partner.code };
@@ -441,7 +478,8 @@ export async function crossReference(tx: Tx, options: { clientAccountId?: string
       openedOn: clientImportFile.openedOn,
       clientCode: businessPartner.code,
       clientName: businessPartner.legalName,
-      logisticsJobRef: clientImportFile.logisticsJobRef,
+      logisticsJobNo: logisticsJob.jobNo,
+      logisticsJobStatus: logisticsJob.status,
       transferNo: moneyTransfer.transferNo,
       transferStatus: moneyTransfer.status,
       transferAmountIqd: moneyTransfer.transferAmountIqd,
@@ -458,12 +496,11 @@ export async function crossReference(tx: Tx, options: { clientAccountId?: string
                                     and d.status = 'posted')`,
     })
     .from(clientImportFile)
-    .innerJoin(
-      moneyTransferClientAccount,
-      eq(moneyTransferClientAccount.id, clientImportFile.clientAccountId),
-    )
-    .innerJoin(businessPartner, eq(businessPartner.id, moneyTransferClientAccount.partnerId))
+    // The partner comes from the file, not through the Money Transfer account:
+    // since D16 the account is optional and a logistics-only file has none.
+    .innerJoin(businessPartner, eq(businessPartner.id, clientImportFile.clientId))
     .leftJoin(moneyTransfer, eq(moneyTransfer.clientImportFileId, clientImportFile.id))
+    .leftJoin(logisticsJob, eq(logisticsJob.importFileId, clientImportFile.id))
     .orderBy(clientImportFile.openedOn);
 
   return options.clientAccountId

@@ -23,6 +23,7 @@ import type { Tx } from '../db/client';
 import {
   bankExecutionBatch,
   bankExecutionBatchLine,
+  bankStatementLine,
   businessPartner,
   journalEntry,
   journalLine,
@@ -155,7 +156,7 @@ export async function transferRegister(tx: Tx, options: ReportOptions = {}) {
       returnJournalEntryId: moneyTransfer.returnJournalEntryId,
       refundAmountIqd: moneyTransfer.refundAmountIqd,
       recognisedResultIqd: moneyTransfer.recognisedResultIqd,
-      logisticsJobRef: moneyTransfer.logisticsJobRef,
+      logisticsJobId: moneyTransfer.logisticsJobId,
       directExpensesIqd: sql<string>`(select coalesce(sum(e.amount_iqd), 0)
          from money_transfer_expense e
         where e.money_transfer_id = ${moneyTransfer.id} and e.status = 'posted')`,
@@ -293,7 +294,15 @@ export async function transferToBankStatement(tx: Tx, options: ReportOptions = {
       batchNo: bankExecutionBatch.batchNo,
       batchStatus: bankExecutionBatch.status,
       batchTotalIqd: bankExecutionBatch.totalIqd,
-      statementLineRef: bankExecutionBatch.statementLineRef,
+      statementLineId: bankExecutionBatch.statementLineId,
+      /**
+       * What the bank called it. §12.7's reader is reconciling against a
+       * statement, so the report has to name the line the way the statement
+       * does — a uuid identifies the row but answers nobody's question.
+       */
+      statementReference: bankStatementLine.reference,
+      statementAmountIqd: bankStatementLine.amountIqd,
+      statementBookingDate: bankStatementLine.bookingDate,
       reconciledAt: bankExecutionBatch.reconciledAt,
       lineReversedAt: bankExecutionBatchLine.reversedAt,
     })
@@ -303,6 +312,7 @@ export async function transferToBankStatement(tx: Tx, options: ReportOptions = {
       eq(bankExecutionBatchLine.moneyTransferId, moneyTransfer.id),
     )
     .leftJoin(bankExecutionBatch, eq(bankExecutionBatch.id, bankExecutionBatchLine.batchId))
+    .leftJoin(bankStatementLine, eq(bankStatementLine.id, bankExecutionBatch.statementLineId))
     .where(dateRange(options))
     .orderBy(asc(moneyTransfer.transferDate), asc(moneyTransfer.transferNo));
 }

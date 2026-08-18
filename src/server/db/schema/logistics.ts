@@ -12,20 +12,28 @@
  *
  * A rule stated four times is one somebody expects to be broken. So it is not
  * expressed as a rule here at all — it is expressed as a missing column.
- * `logistics_client_import_file_reference` is the only place the two services meet, and it
+ * `client_import_file_reference` is the only place the two services meet, and it
  * has no amount, no currency, no debit and no credit. A report cannot net two
  * services across a table that holds no money, and no future developer can add
  * a subtotal to a row that has nothing to subtotal. That is the whole design:
  * the import file is a *reference*, and the schema makes it incapable of being
  * anything else.
  *
- * ── Why Logistics owns the import file ──────────────────────────────────────
- * Appendix A lists *Client Import Files* under menu 7, Logistics. Menu 8, Money
- * Transfer, does not list it; §12.2 refers to the *"Related Client Import File
- * and Logistics Job where the approved process requires it"* — the language of a
- * module pointing at something another module owns. So the table lives here and
- * Phase 09 registers against it, rather than the two phases each keeping half of
- * one identity.
+ * ── Where the import file lives, and why not here ───────────────────────────
+ * In `./client-import.ts`, as `client_import_file` — one register for both
+ * services (D16, answered 2026-08-18).
+ *
+ * This phase originally created its own, because it was built on a branch that
+ * could not see Phase 09's. Appendix A does list *Client Import Files* under
+ * menu 7, Logistics, and §12.2 speaks of the *"Related Client Import File and
+ * Logistics Job"* in the language of a module pointing at something another
+ * module owns — so the reasoning for owning it here was sound. What it could not
+ * account for was that Phase 09 had already built it, with a note saying the
+ * foreign key back to Logistics *"belongs to whoever builds"* this phase.
+ *
+ * Two tables meant two document sequences, both minting `CIF-…` numbers from
+ * separate counters: the same number for different consignments. One register
+ * makes that impossible rather than merely unlikely.
  *
  * ── Why there is no item, quantity or warehouse column anywhere below ───────
  * §11.3: *"Goods imported for a client do not enter company warehouses"* and
@@ -64,70 +72,30 @@ import { currency } from './fiscal';
 import { journalEntry } from './journal';
 import { attachment } from './attachments';
 import { documentStatus } from './workflow';
+import { clientImportFile } from './client-import';
 
 // ---------------------------------------------------------------------------
-// 10.1 Client import files — the shared reference
+// 10.1 Client import files — one register, shared (D16)
 // ---------------------------------------------------------------------------
 
 /**
- * The client's import consignment, as one identity both services can point at.
+ * The client's import consignment lives in `client_import_file`, which Phase 09
+ * created and this phase used to duplicate.
  *
- * It is not a document in Appendix B's sense: it has no accounting effect, no
- * posting and no approval route. It is the answer to "which shipment are we
- * talking about?" — which is precisely why a logistics job and a money transfer
- * can both name it without either becoming the other.
+ * Both phases were built on parallel branches and both created a table of this
+ * name; the merge renamed this one and D16 asked whether there should be one
+ * register or two. Answered 2026-08-18: **one**. §11's own first paragraph says
+ * a logistics job can be linked to *the same* client import file as a money
+ * transfer, and Phase 09's schema note said the constraint "belongs to whoever
+ * builds" this phase.
+ *
+ * It is still not a document in Appendix B's sense for Logistics: no posting, no
+ * approval route, no accounting effect of its own. It is the answer to "which
+ * shipment are we talking about?" — which is why a logistics job and a money
+ * transfer can both name it without either becoming the other.
+ *
+ * @see `clientImportFile` in `./client-import.ts`
  */
-export const logisticsClientImportFile = pgTable(
-  'logistics_client_import_file',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    fileNo: text('file_no').notNull(),
-
-    /** §11 — the client whose import this is. A customer, never a supplier. */
-    clientId: uuid('client_id')
-      .notNull()
-      .references(() => businessPartner.id),
-
-    branchCode: text('branch_code')
-      .notNull()
-      .references(() => branch.code),
-
-    /** When the file was opened — a business date, not an instant. */
-    openedOn: date('opened_on').notNull(),
-
-    /** Where the goods are coming from, for the Import File Status report. */
-    originCountry: text('origin_country'),
-    description: text('description'),
-
-    /**
-     * Open until every service touching the file has finished with it.
-     * Deliberately not `document_status`: this is not a document and giving it
-     * a document's vocabulary would invite somebody to post it.
-     */
-    status: text('status').notNull().default('open'),
-
-    closedOn: date('closed_on'),
-    note: text('note'),
-
-    createdBy: uuid('created_by')
-      .notNull()
-      .references(() => appUser.id),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    uniqueIndex('logistics_client_import_file_no_uniq').on(t.fileNo),
-    index('logistics_client_import_file_client_idx').on(t.clientId, t.status),
-    index('logistics_client_import_file_branch_idx').on(t.branchCode, t.openedOn),
-
-    check('logistics_client_import_file_status', sql`${t.status} in ('open', 'closed')`),
-    check(
-      'logistics_client_import_file_closed_has_date',
-      sql`(${t.status} <> 'closed' and ${t.closedOn} is null)
-          or (${t.status} = 'closed' and ${t.closedOn} is not null)`,
-    ),
-  ],
-);
 
 /**
  * A document in some module, declaring that it concerns this import file.
@@ -140,17 +108,18 @@ export const logisticsClientImportFile = pgTable(
  * service's own tables and presents them side by side; it has nowhere to add
  * them together even if somebody tried.
  *
- * `module` is free text rather than a check against a fixed list, because Phase
- * 09 has not been built yet and a CHECK naming `money_transfer` would be this
- * phase deciding what that phase calls itself.
+ * `module` stays free text rather than a CHECK against a fixed list. It was left
+ * open because Phase 09 did not exist on this branch; it is left open now for a
+ * better reason — the next service that shares a consignment should not need a
+ * migration to say so.
  */
-export const logisticsClientImportFileReference = pgTable(
-  'logistics_client_import_file_reference',
+export const clientImportFileReference = pgTable(
+  'client_import_file_reference',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     importFileId: uuid('import_file_id')
       .notNull()
-      .references(() => logisticsClientImportFile.id),
+      .references(() => clientImportFile.id),
 
     /** 'logistics', 'money_transfer', … — the module that owns the document. */
     module: text('module').notNull(),
@@ -170,10 +139,10 @@ export const logisticsClientImportFileReference = pgTable(
     // One document belongs to at most one import file. Two files claiming the
     // same job would make "which shipment is this?" have two answers, and the
     // cross-reference report would double-count the job across both.
-    uniqueIndex('logistics_client_import_file_reference_document_uniq').on(t.module, t.documentId),
-    index('logistics_client_import_file_reference_file_idx').on(t.importFileId, t.module),
+    uniqueIndex('client_import_file_reference_document_uniq').on(t.module, t.documentId),
+    index('client_import_file_reference_file_idx').on(t.importFileId, t.module),
 
-    check('logistics_client_import_file_reference_module', sql`btrim(${t.module}) <> ''`),
+    check('client_import_file_reference_module', sql`btrim(${t.module}) <> ''`),
   ],
 );
 
@@ -330,7 +299,7 @@ export const logisticsJob = pgTable(
      */
     importFileId: uuid('import_file_id')
       .notNull()
-      .references(() => logisticsClientImportFile.id),
+      .references(() => clientImportFile.id),
 
     /** Denormalised from the file so the job's own RLS and reports need no join. */
     clientId: uuid('client_id')

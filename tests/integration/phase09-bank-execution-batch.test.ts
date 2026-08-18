@@ -507,63 +507,165 @@ describe('09.6 — one bank debit, several internally separate transactions (§1
   });
 });
 
-describe('09.6 — reconciliation to one bank statement line (§12.5)', () => {
-  it('the batch matches to one statement reference, and the reference is unique per account', async () => {
-    // The Phase 07.7 reconciliation workspace does not exist yet, so this is the
-    // half of the gate that can be tested now: one batch, one statement line,
-    // and the database refusing a second batch that claims the same one.
-    const { batch } = await composedBatch();
+describe('09.6 — reconciliation to one bank statement line (§12.5, §12.7)', () => {
+  /**
+   * A statement line on the batch's own bank account, for `amountIqd` out.
+   *
+   * The sign convention is the one `directionOf` reads: money leaving is
+   * negative. A batch pays out, so its line is a debit.
+   */
+  async function statementLine(amountIqd: string, accountId?: string) {
+    const { rows: st } = await ownerPool.query(
+      `insert into bank_statement
+         (statement_no, bank_cash_account_id, branch_code, period_from, period_to,
+          currency, opening_balance_iqd, closing_balance_iqd, created_by)
+       values ($1,$2,$3,'2026-02-01','2026-02-28','IQD',0,$4,$5) returning id`,
+      [
+        'STMT-' + Math.abs(Number(amountIqd)) + '-' + (accountId ?? world.bankAccountId).slice(0, 8),
+        accountId ?? world.bankAccountId,
+        BRANCH,
+        amountIqd,
+        world.manager.principal.userId,
+      ],
+    );
+    const { rows } = await ownerPool.query(
+      `insert into bank_statement_line
+         (statement_id, line_no, import_key, booking_date, value_date, amount_iqd, reference)
+       values ($1, 1, $2, '2026-02-15', '2026-02-15', $3, $4) returning id`,
+      [st[0].id, 'key-' + st[0].id, amountIqd, 'STMT-2026-02-0042'],
+    );
+    return rows[0].id as string;
+  }
+
+  async function executedBatch(total = '17050000') {
+    const { batch } = await composedBatch(total);
     await withScope(scopeOf(world.manager), (tx) =>
       batches.approveBatch(tx, world.manager, batch.id),
     );
     await withScope(scopeOf(world.manager), (tx) =>
       batches.executeBatch(tx, world.manager, batch.id),
     );
+    return batch;
+  }
+
+  it('matches one batch to one statement line, and refuses a second claim on it', async () => {
+    const batch = await executedBatch();
+    const lineId = await statementLine('-17050000');
+
     await withScope(scopeOf(world.manager), (tx) =>
-      batches.reconcileToStatement(tx, world.manager, batch.id, 'STMT-2026-02-0042'),
+      batches.reconcileToStatement(tx, world.manager, batch.id, lineId),
     );
 
     const view = await withScope(scopeOf(world.manager), (tx) =>
       batches.reconciliationFor(tx, batch.id),
     );
     expect(view.status).toBe('settled'); // Appendix B — Reconciled
-    expect(view.statementLineRef).toBe('STMT-2026-02-0042');
+    expect(view.statementLineId).toBe(lineId);
 
+    // §12.7 — the statement side of the match. The line now explains a batch,
+    // so Phase 07.7's unreconciled report stops offering it.
+    const { rows: line } = await ownerPool.query(
+      `select match_status from bank_statement_line where id = $1`,
+      [lineId],
+    );
+    expect(line[0].match_status).toBe('matched');
+
+    // §12.5 — the bank made one movement, so it has one explanation.
     const second = await withScope(scopeOf(world.clerk), (tx) =>
       batches.openBatch(tx, world.clerk, {
         branchCode: BRANCH,
         bankCashAccountId: world.bankAccountId,
         executionDate: FEB,
-        totalIqd: iqd('500000'),
+        totalIqd: iqd('17050000'),
       }),
     );
 
     const message = await asApp(scopeOf(world.manager), (query) =>
       rejection(
         query(
-          `update bank_execution_batch set statement_line_ref = 'STMT-2026-02-0042',
+          `update bank_execution_batch set statement_line_id = $3,
              reconciled_at = now(), reconciled_by = $2 where id = $1`,
-          [second.id, world.manager.principal.userId],
+          [second.id, world.manager.principal.userId, lineId],
         ),
       ),
     );
     expect(message).toMatch(/bank_execution_batch_statement_uniq|duplicate key/i);
   });
 
-  it('a reconciliation with nothing on the other side is refused', async () => {
-    const { batch } = await composedBatch();
-    await withScope(scopeOf(world.manager), (tx) =>
-      batches.approveBatch(tx, world.manager, batch.id),
-    );
-    await withScope(scopeOf(world.manager), (tx) =>
-      batches.executeBatch(tx, world.manager, batch.id),
-    );
+  it('refuses a statement line that does not exist', async () => {
+    const batch = await executedBatch();
 
     const message = await rejection(
       withScope(scopeOf(world.manager), (tx) =>
-        batches.reconcileToStatement(tx, world.manager, batch.id, '   '),
+        batches.reconcileToStatement(
+          tx,
+          world.manager,
+          batch.id,
+          '00000000-0000-0000-0000-000000000000',
+        ),
       ),
     );
-    expect(message).toMatch(/naming the statement line/i);
+    expect(message).toMatch(/no bank statement line/i);
+  });
+
+  it('refuses a line whose amount is not the batch total — §12.5 says *shall*', async () => {
+    const batch = await executedBatch();
+    const lineId = await statementLine('-17050001'); // one ten-thousandth out
+
+    const message = await rejection(
+      withScope(scopeOf(world.manager), (tx) =>
+        batches.reconcileToStatement(tx, world.manager, batch.id, lineId),
+      ),
+    );
+    expect(message).toMatch(/shall reconcile to the single bank-statement amount/i);
+  });
+
+  it('refuses a line on another bank account', async () => {
+    const batch = await executedBatch();
+
+    // One bank account, one control account — so the second bank needs its own.
+    const { rows: gl } = await ownerPool.query(
+      `insert into chart_of_account
+         (code, name, account_type, parent_id, is_group, is_active, approval_status, level,
+          currency_restriction)
+       select 'A9OTHBNK', 'Other bank control', a.account_type, a.parent_id, false, true,
+              'approved', a.level, a.currency_restriction
+         from chart_of_account a
+         join bank_cash_account b on b.gl_account_id = a.id
+        where b.id = $1
+       returning id`,
+      [world.bankAccountId],
+    );
+
+    const { rows: other } = await ownerPool.query(
+      `insert into bank_cash_account
+         (code, name, account_type, account_number, branch_code, currency, gl_account_id)
+       select 'BANK-OTHER', 'Other bank', account_type, 'ACC-OTHER-1', branch_code,
+              currency, $2
+         from bank_cash_account where id = $1
+       returning id`,
+      [world.bankAccountId, gl[0].id],
+    );
+
+    const lineId = await statementLine('-17050000', other[0].id);
+
+    const message = await rejection(
+      withScope(scopeOf(world.manager), (tx) =>
+        batches.reconcileToStatement(tx, world.manager, batch.id, lineId),
+      ),
+    );
+    expect(message).toMatch(/one bank account and statement line .* on another/i);
+  });
+
+  it('refuses at the database too, bypassing the service', async () => {
+    const batch = await executedBatch();
+    const lineId = await statementLine('-9999999');
+
+    await expect(
+      ownerPool.query(
+        `update bank_execution_batch set statement_line_id = $2 where id = $1`,
+        [batch.id, lineId],
+      ),
+    ).rejects.toThrow(/shall reconcile to the single bank-statement amount/i);
   });
 });

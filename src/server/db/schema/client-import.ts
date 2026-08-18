@@ -49,14 +49,18 @@ import { moneyTransferClientAccount } from './money-transfer-client';
  * process requires it."*
  *
  * The file is the case: one client, one consignment, the payments made for it
- * and the settlement that hands it over. `logistics_job_ref` is text and carries
- * no foreign key because the Logistics module is Phase 10 and its table does not
- * exist yet; the constraint belongs to whoever builds it.
+ * and the settlement that hands it over. **One register serves both services**
+ * (D16, answered 2026-08-18), because §11 opens by saying a logistics job can be
+ * linked to *the same* client import file as a money transfer. The Logistics Job
+ * names this file; the money transfer names this file; neither needs a copy.
  *
  * §11.3 and §12.4 both insist Money Transfer and Logistics keep separate revenue,
  * expenses and margin even on the same consignment. Nothing in this file records
- * a logistics figure — the reference links the two cases without letting either
- * one's result leak into the other's.
+ * a figure from either service — sharing the case does not share the ledger.
+ *
+ * `clientId` is the business partner both services know. `clientAccountId` is
+ * the Money Transfer client account, and is null on a file that is only ever a
+ * logistics job; where it is set, a trigger requires it to belong to `clientId`.
  */
 export const clientImportFile = pgTable(
   'client_import_file',
@@ -64,9 +68,18 @@ export const clientImportFile = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     fileNo: text('file_no').notNull(),
 
-    clientAccountId: uuid('client_account_id')
+    /** The business partner. Both services know the client by this. */
+    clientId: uuid('client_id')
       .notNull()
-      .references(() => moneyTransferClientAccount.id),
+      .references(() => businessPartner.id),
+
+    /**
+     * Null on a file that never involves a transfer. Where it is set,
+     * `client_import_file_account_matches_client` requires its partner to be
+     * `clientId` — a file naming one client and its money another would compute
+     * §12.4's Remaining Client Balance against a stranger.
+     */
+    clientAccountId: uuid('client_account_id').references(() => moneyTransferClientAccount.id),
 
     branchCode: text('branch_code')
       .notNull()
@@ -81,11 +94,14 @@ export const clientImportFile = pgTable(
     status: documentStatus('status').notNull().default('draft'),
 
     openedOn: date('opened_on').notNull(),
+
+    /** Where the goods are coming from, for the Import File Status report. */
+    originCountry: text('origin_country'),
     description: text('description'),
+    note: text('note'),
 
-    /** Phase 10 fills this. Text, not a reference — see the note above. */
-    logisticsJobRef: text('logistics_job_ref'),
-
+    /** The business date it closed on — §18-style dates, never an instant. */
+    closedOn: date('closed_on'),
     closedBy: uuid('closed_by').references(() => appUser.id),
     closedAt: timestamp('closed_at', { withTimezone: true }),
 
@@ -98,7 +114,14 @@ export const clientImportFile = pgTable(
   (t) => [
     uniqueIndex('client_import_file_no_uniq').on(t.fileNo),
     index('client_import_file_account_idx').on(t.clientAccountId, t.status),
-    index('client_import_file_logistics_idx').on(t.logisticsJobRef),
+    index('client_import_file_client_idx').on(t.clientId, t.status),
+
+    // Phase 10's rule, kept: a closed file states the business date it closed on.
+    check(
+      'client_import_file_closed_has_date',
+      sql`(${t.status} <> 'closed' and ${t.closedOn} is null)
+          or (${t.status} = 'closed' and ${t.closedOn} is not null)`,
+    ),
   ],
 );
 

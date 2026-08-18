@@ -533,6 +533,41 @@
       "when": 1793200000000,
       "tag": "0151_phase11_12_status_graphs",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1793200000001,
+      "tag": "0152_phase12_transfer_after_disposal",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1793300000000,
+      "tag": "0153_d16_one_client_import_register",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1793400000000,
+      "tag": "0154_merge_leftover_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1793500000000,
+      "tag": "0155_d16_one_document_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1793600000000,
+      "tag": "0156_d16_trigger_functions",
+      "breakpoints": true
     }
   ]
 }

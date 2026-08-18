@@ -200,13 +200,16 @@ Client accounts, deposits, exchange rate reference, transfer instructions and in
 - [x] Batch total equals the sum of lines exactly, to the last unit of currency
       — *`total_iqd` is the **bank's** figure from the bank advice, not a sum this
       system computes, which is what makes the check a control rather than a tautology.*
-- [ ] The batch matches to **one** bank statement line in the Phase 07.7 workspace
-      — **Waiting on Phase 07 (Treasury).** The bank statement table and the 07.7
-      reconciliation workspace do not exist. What is built and tested: the batch
-      records a `statement_line_ref`, a partial unique index refuses two live batches
-      claiming the same statement line on the same account, and a reconciliation with
-      no reference is refused. Phase 07 replaces the text reference with its own
-      foreign key; the report's shape does not change.
+- [x] The batch matches to **one** bank statement line in the Phase 07.7 workspace
+      — *Closed 2026-08-18.* Phase 07.7 was built after this phase and on a different
+      branch, so this shipped with a text `statement_line_ref` and a note saying the
+      column should become a foreign key. It has. `statement_line_id` references
+      `bank_statement_line`, and a trigger checks both halves of §12.5: the line
+      belongs to the batch's own bank account, and its amount equals the batch total
+      **exactly** — the blueprint's word is *shall*, so not a tolerance. A partial
+      unique index still refuses a second live batch claiming the line, matching now
+      marks the line `matched` so 07.7 stops offering it, and a line that does not
+      exist is refused by name. Six tests.
 - [x] Reversing one line does not corrupt the others
       — *True by construction: there is no shared journal to corrupt. Asserted by
       deep-comparing the surviving line before and after, and confirming its journal
@@ -328,14 +331,14 @@ Client accounts, deposits, exchange rate reference, transfer instructions and in
       after a full client-funded import. Stronger still: `inventory_movement`,
       `cost_layer`, `cost_layer_consumption` and `stock_reservation` are all **empty** —
       not netted to zero, never written.*
-- [ ] No Sales Invoice can be created for client-funded goods by any path
-      — **Waiting on Phase 06 (Sales).** There is no Sales Invoice in the system yet,
-      so this cannot be tested. What is built: the company never owns the goods, no
-      company inventory quantity exists to sell, and delivery charges the client's
-      account directly rather than recognising revenue (asserted — the service revenue
-      account stays at zero through a full import and delivery). **Phase 06 must not
-      offer client-funded goods as invoiceable**; there is nothing in Phase 09 for it
-      to pick up, which is the intended state.
+- [x] No Sales Invoice can be created for client-funded goods by any path
+      — *Closed 2026-08-18.* This shipped waiting on Phase 06, which did not exist on
+      this branch. Phase 06 closed it without knowing: an A/R invoice names a
+      **delivery note and a sales order, both NOT NULL**, and there is no column on
+      `ar_invoice` that could hold a client goods delivery. §11.3's *"No Sales
+      Invoice is issued for the goods"* is therefore not a rule anyone enforces — it
+      is a record nobody can write. Also asserted at runtime: the service revenue
+      account stays at zero through a full import and delivery.
 - [x] Client Inventory is a financial balance only, with no quantity ledger
       — *No table in this module has an item, warehouse or quantity column; asserted
       against `information_schema`. An **event trigger** refuses an `ALTER TABLE` that
@@ -364,16 +367,21 @@ Client accounts, deposits, exchange rate reference, transfer instructions and in
       one cache. After a return and a full refund the client subledger and the Client
       Clearing G/L account are both at zero and the bank is down by exactly the absorbed
       charge.*
-- [x] Client Import Cross-Reference links transfers to their Logistics jobs *(completed in Phase 10)*
-      — *The report exists and links client account → import file → transfer →
-      `logistics_job_ref`. The reference is text and carries no foreign key because the
-      Logistics table is Phase 10's; **Phase 10 adds the constraint**, and the report's
-      shape does not change when it does.*
-- [ ] Transfer-to-Bank Statement Reconciliation ties every transfer to a statement line
-      — **Waiting on Phase 07 (Treasury).** The report is built and tested: it ties a
-      transfer through its Bank Execution Batch to a statement reference, and keeps a
-      transfer with no batch as a visible gap rather than filtering it out. It cannot
-      tie to a *real* statement line until Phase 07.7 provides one.
+- [x] Client Import Cross-Reference links transfers to their Logistics jobs
+      — *Closed 2026-08-18.* This shipped linking client account → import file →
+      transfer → a text `logistics_job_ref`, with a note that Phase 10 would add the
+      constraint. Phase 10 was built on a parallel branch, did not see the note, and
+      created a **second import-file table** instead. **D16** answered that — one
+      register, because §11's first paragraph says a logistics job can be linked to
+      *the same* client import file as a money transfer. So the report now joins the
+      job itself, and `money_transfer.logistics_job_id` is a foreign key with a
+      trigger requiring the job to be on the same file.
+- [x] Transfer-to-Bank Statement Reconciliation ties every transfer to a statement line
+      — *Closed 2026-08-18*, against a real statement line. The report ties a transfer
+      through its Bank Execution Batch to the line, and names it the way the bank's
+      statement does — `statementReference`, its amount and its booking date, because
+      the reader is holding a statement and a uuid answers nobody's question. A
+      transfer with no batch stays in the report as the visible gap it is.
 - [x] Reports respect data scope and distinguish posted from provisional data
       — *Every report reads through RLS, so a manager of another branch with identical
       permissions sees nothing of this branch's — asserted both ways round. Draft
@@ -434,7 +442,7 @@ increasing and sits above Phase 05's last (`1787005000000`):
 | Gate | Waiting on |
 |---|---|
 | 09.6 — batch matches one statement line in the 07.7 workspace | **Phase 07** — bank statements |
-| 09.10 — no Sales Invoice can be created for client-funded goods | **Phase 06** — there is no Sales Invoice yet |
+| 09.10 — no Sales Invoice can be created for client-funded goods | ✅ closed 2026-08-18 — `ar_invoice` requires a delivery note and a sales order, both NOT NULL |
 | 09.11 — Transfer-to-Bank Statement Reconciliation ties every transfer to a statement line | **Phase 07** |
 
 **Six open questions** are in `docs/open-questions-phase-09.md`, none blocking.

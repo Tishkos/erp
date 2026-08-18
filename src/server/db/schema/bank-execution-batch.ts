@@ -47,6 +47,7 @@ import { journalEntry } from './journal';
 import { bankCashAccount } from './item';
 import { moneyTransfer } from './money-transfer';
 import { clientImportPayment } from './client-import';
+import { bankStatementLine } from './bank-statement';
 
 export const bankExecutionBatch = pgTable(
   'bank_execution_batch',
@@ -82,12 +83,19 @@ export const bankExecutionBatch = pgTable(
 
     /**
      * §12.5 — *"The batch total shall reconcile to the single bank-statement
-     * amount."* Text and not a reference: the bank statement line is Phase 07.7
-     * and does not exist yet. Phase 07 replaces this with its own foreign key
-     * when there is a row to point at; until then the reconciliation records
-     * which statement line was matched, which is what the 09.11 report needs.
+     * amount."*
+     *
+     * This was text until 2026-08-18, because Phase 07.7 did not exist on the
+     * branch Phase 09 was built on. It does now, and §12.7's acceptance criterion
+     * — Transfer-to-Bank Statement Reconciliation — turns on the reference being
+     * *right*, which a text column cannot promise: nothing stopped it naming a
+     * line on another account, or none at all.
+     *
+     * `bank_execution_batch_line_is_same_account` checks both halves of §12.5:
+     * the line belongs to this batch's bank account, and its amount equals the
+     * batch total **exactly**. Not a tolerance — the blueprint's word is "shall".
      */
-    statementLineRef: text('statement_line_ref'),
+    statementLineId: uuid('statement_line_id').references(() => bankStatementLine.id),
     reconciledBy: uuid('reconciled_by').references(() => appUser.id),
     reconciledAt: timestamp('reconciled_at', { withTimezone: true }),
 
@@ -114,15 +122,15 @@ export const bankExecutionBatch = pgTable(
     // One statement line matches one batch: §12.5's whole purpose is that the
     // bank's single movement has a single explanation on this side.
     uniqueIndex('bank_execution_batch_statement_uniq')
-      .on(t.bankCashAccountId, t.statementLineRef)
-      .where(sql`statement_line_ref is not null and reversed_at is null`),
+      .on(t.statementLineId)
+      .where(sql`statement_line_id is not null and reversed_at is null`),
 
     check('bank_execution_batch_total_positive', sql`${t.totalIqd} > 0`),
     check(
       'bank_execution_batch_reconciliation_complete',
       sql`(${t.reconciledAt} is null and ${t.reconciledBy} is null)
           or (${t.reconciledAt} is not null and ${t.reconciledBy} is not null
-              and coalesce(btrim(${t.statementLineRef}), '') <> '')`,
+              and ${t.statementLineId} is not null)`,
     ),
     check(
       'bank_execution_batch_reversal_has_reason',

@@ -84,7 +84,6 @@ async function sentTransfer(accountId: string) {
       transferAmountIqd: iqd('13050000'),
       companyBankAccountId: world.bankAccountId,
       beneficiaryName: 'Beneficiary Trading LLC',
-      logisticsJobRef: 'LOG-JOB-42',
     }),
   );
 
@@ -313,8 +312,27 @@ describe('09.11 — the §12.7 report set', () => {
     await withScope(scopeOf(world.manager), (tx) =>
       batches.executeBatch(tx, world.manager, batch.id),
     );
+    // A real statement line, since Phase 07.7 exists: §12.5's "shall reconcile
+    // to the single bank-statement amount" is checked against the line's own
+    // amount, so the batch and the bank have to agree exactly.
+    const { rows: st } = await ownerPool.query(
+      `insert into bank_statement
+         (statement_no, bank_cash_account_id, branch_code, period_from, period_to,
+          currency, opening_balance_iqd, closing_balance_iqd, created_by)
+       values ('STMT-FEB', $1, $2, '2026-02-01', '2026-02-28', 'IQD', 0, -13050000, $3)
+       returning id`,
+      [world.bankAccountId, BRANCH, world.manager.principal.userId],
+    );
+    const { rows: line } = await ownerPool.query(
+      `insert into bank_statement_line
+         (statement_id, line_no, import_key, booking_date, value_date, amount_iqd, reference)
+       values ($1, 1, 'k1', '2026-02-15', '2026-02-15', -13050000, 'STMT-2026-02-0042')
+       returning id`,
+      [st[0].id],
+    );
+
     await withScope(scopeOf(world.manager), (tx) =>
-      batches.reconcileToStatement(tx, world.manager, batch.id, 'STMT-2026-02-0042'),
+      batches.reconcileToStatement(tx, world.manager, batch.id, line[0].id),
     );
 
     const rows = await withScope(scopeOf(world.manager), (tx) =>
@@ -323,7 +341,11 @@ describe('09.11 — the §12.7 report set', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.transferNo).toBe(transfer.transferNo);
     expect(rows[0]!.batchNo).toBe(batch.batchNo);
-    expect(rows[0]!.statementLineRef).toBe('STMT-2026-02-0042');
+    expect(rows[0]!.statementLineId).toBe(line[0].id);
+    // §12.7's reader is holding a bank statement, so the report names the line
+    // the way the statement does rather than by its primary key.
+    expect(rows[0]!.statementReference).toBe('STMT-2026-02-0042');
+    expect(rows[0]!.statementAmountIqd).toBe('-13050000.0000');
     expect(rows[0]!.reconciledAt).not.toBeNull();
   });
 
@@ -338,7 +360,7 @@ describe('09.11 — the §12.7 report set', () => {
     expect(rows[0]!.transferNo).toBe(transfer.transferNo);
     // The report exists to find these, so the row stays and the columns are null.
     expect(rows[0]!.batchNo).toBeNull();
-    expect(rows[0]!.statementLineRef).toBeNull();
+    expect(rows[0]!.statementLineId).toBeNull();
   });
 
   it('Client Import Cross-Reference links a transfer to its file and logistics job', async () => {
@@ -349,7 +371,6 @@ describe('09.11 — the §12.7 report set', () => {
         clientAccountId: account.id,
         branchCode: BRANCH,
         openedOn: '2026-02-01',
-        logisticsJobRef: 'LOG-JOB-42',
       }),
     );
 
@@ -369,7 +390,6 @@ describe('09.11 — the §12.7 report set', () => {
         companyBankAccountId: world.bankAccountId,
         beneficiaryName: 'Beneficiary Trading LLC',
         clientImportFileId: file.id,
-        logisticsJobRef: 'LOG-JOB-42',
       }),
     );
 
@@ -380,9 +400,11 @@ describe('09.11 — the §12.7 report set', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.fileNo).toBe(file.fileNo);
     expect(rows[0]!.transferNo).toBe(transfer.transferNo);
-    // The logistics job is a reference until Phase 10 exists. The link is here;
-    // what it points at is Phase 10's to build.
-    expect(rows[0]!.logisticsJobRef).toBe('LOG-JOB-42');
+    // Phase 10 exists now, and D16 merged the two registers: the job names the
+    // file, so a file with no job reports none rather than carrying a text
+    // reference to something that may not exist. phase10-logistics asserts the
+    // link where there is a job to assert it against.
+    expect(rows[0]!.logisticsJobNo).toBeNull();
   });
 });
 

@@ -18,8 +18,8 @@ Decisions that have been made move to [`DecisionAnswered.md`](DecisionAnswered.m
 
 | Status | Count |
 |---|---|
-| 🔴 Open — one of them blocking a posting outright | 7 |
-| 🟡 Partially answered, or built the defensible way | 16 |
+| 🔴 Open — one of them blocking a posting outright | 8 |
+| 🟡 Partially answered, or built the defensible way | 17 |
 | 🟢 Decided — moved to `DecisionAnswered.md` | 5 |
 
 | # | Decision | Status | Blocks | Raised by |
@@ -47,6 +47,8 @@ Decisions that have been made move to [`DecisionAnswered.md`](DecisionAnswered.m
 | D26 | What a duplicate customer match obliges | 🟡 Reports, never refuses | Nothing | Phase 08 |
 | D27 | Progress approval, retention release, advance recovery | 🟡 Mechanisms built and neutral | Nothing | Phase 11 |
 | D28 | Does depreciation re-base after an impairment? | 🟡 Built without re-basing | Nothing | Phase 12 |
+| D29 | Who may see a client import file, now one register serves both | 🔴 Open — a consequence of D16 | Nothing; a row-level policy is cheaper now than later | 09/10 merge |
+| D30 | The four thresholds seeded at zero | 🟡 All in force at their strictest | Nothing — each **tightens** | Configuration sweep |
 
 **Answered and moved out:** D4 (availability and recovery), D6 (accessibility),
 D7 (Chart of Accounts) and D10 (branch access and the Active Branch) — all on
@@ -61,10 +63,14 @@ turn unblocked §7.2 multi-branch Sales Orders in Phase 06.
 
 **Updated 2026-08-18**, after Phases 08, 11 and 12 and the Phase 09/10 merge.
 
-Eight things are owed. Six of them are a number, a word, or a short table — not a
-policy document — and are set out here in the form the answer takes, so they can
+Nine things are owed. Seven of them are a number, a word, or a short table — not
+a policy document — and are set out here in the form the answer takes, so they can
 be given without a meeting. The two that genuinely need Finance to sit down are
 marked as such.
+
+**D13 now sits inside D30**, which gathers the four thresholds this system seeds
+at zero. They were scattered across three entries and nobody scanning for what
+they owed would have found them; they are one sitting's work between them.
 
 **D16 was answered on 2026-08-18** — one client import register, because the
 paperwork arrives once. It is in
@@ -80,7 +86,9 @@ way: the two registers ran two sequences that minted the **same** file numbers.
 | **D28** | Does depreciation re-base onto the revised carrying value after an impairment? | **Yes or no**, and whether it applies per category or per asset | Nothing. It changes future monthly profit, and is far cheaper to answer before there are impairments in the ledger |
 | **D5** item 6 | What response time is acceptable? | **One small table** — list screens, document save, posting, reports | Judging the §25 load test. It can be run today but not scored |
 | **D8** | Approve the migration approach, and supply two values | **A signature**, plus the target cut-over period and the named owner of each §26 data class | Phase 21.1 |
+| **D30** | Four thresholds are seeded at zero. What should they be? | **Four numbers** — match tolerance and over-receipt (§8.4), write-off threshold (§16), high-risk payment (§17, = D13) | Nothing. Each one **tightens** today, so answering them relaxes work people are doing by hand |
 | **D27** | Who approves a progress measurement, when does retention release, and how does an advance recover? | **Three short rules.** The rates are already per contract; what is missing is when they fire | Nothing today. Retention and advances are recorded but nothing releases or recovers automatically |
+| **D29** | May a Logistics user see an import file belonging to a Money Transfer client? | **Yes or no.** If no, it needs a row-level policy beside D10's branch policy, which is cheap now and a migration later | Nothing today |
 | **D9** | What does "KYC complete" contain? | **The catalogue**: risk bands, the documents each band requires, and how often identification is renewed. Legal and compliance own this, and it has the **longest external lead time of anything here** | Money Transfer go-live |
 
 ### The two that need Finance in a room
@@ -1079,6 +1087,100 @@ smaller before there are impairments in the ledger than after.
 
 ---
 
+## D29 — Who may see a client import file, now that one register serves both services
+
+| | |
+|---|---|
+| **Status** | 🔴 Open — a consequence of D16 that D16 did not settle |
+| **Blueprint** | §5.1, §5.3, §11, §12.6, §21 |
+| **Blocks** | Nothing today. It is a permission question, and permissions are configuration |
+| **Owner** | Compliance + Operations → Business Process Owner |
+| **Raised** | 2026-08-18, on merging the registers |
+
+**What changed.** Before D16 there were two tables and therefore two permission
+objects: `logistics_client_import_file` and `client_import_file`, each with its
+own `role_grant` rows. §5.3 checks a user against the object, so a Logistics
+clerk saw logistics import files and a Money Transfer clerk saw transfer ones,
+without anybody having decided that — it fell out of the table split.
+
+One register means one object. Migration `0155` merged the two grant sets as a
+**union**, because narrowing a grant silently is how a control becomes an outage:
+Logistics held `print` and `configure` that Money Transfer did not, Money
+Transfer held `reverse_cancel` that Logistics did not, and both services still do
+the work those verbs describe.
+
+**The consequence, stated plainly.** A Logistics clerk with `view` on
+`client_import_file` can now see an import file that arose from a Money Transfer
+client, in their own branch. Row-level security still confines them to that
+branch (D10), and the file itself carries no amount from either service — but it
+carries the client, the consignment and the origin country.
+
+**Why this is a question and not a defect.** Both readings are defensible:
+
+| | Reading | Consequence |
+|---|---|---|
+| a | One consignment, one record, one visibility. If the two services share a case, the people running them share the case | No change. What is built |
+| b | Money Transfer is a regulated service (§21, D9) and its client files carry information a logistics clerk has no business need for | Not a grant change — a grant is per object and the object is now shared. It would need a **row-level rule**, in the shape of D10's branch policy: a Logistics role sees rows with no Money Transfer client account, and Compliance sees all |
+
+**What is needed**
+
+1. Whether a Logistics user should see an import file that belongs to a Money
+   Transfer client.
+2. If not: whether the boundary is *has a client account* or something narrower —
+   a risk rating, a flag Compliance sets.
+3. Whether the reverse holds. A Money Transfer clerk can now see logistics-only
+   files; that is the same question with the parties swapped, and it is likelier
+   to be acceptable.
+
+**Why it is worth answering before go-live and not after.** A row-level policy
+added later is a migration and a re-test of every read path on the table. Added
+now it is one policy beside the branch policy that is already there. This is the
+same shape as D21, and probably the same conversation.
+
+---
+
+## D30 — The four thresholds that are seeded at zero, and who owns each
+
+| | |
+|---|---|
+| **Status** | 🟡 All four in force at their strictest; four numbers owed |
+| **Blueprint** | §8.4, §15, §16, §17 |
+| **Blocks** | Nothing. Every one of them **tightens** rather than permits |
+| **Owner** | Four different people — see the table |
+| **Raised** | 2026-08-18, sweeping the configuration for the programme ruling's test |
+
+**Why this entry exists.** All four are already mentioned somewhere in this
+register — two of them inside D12 and D13, in passing. Nobody scanning for what
+they owe would find them there, and each is a single number. Gathered here so
+they can be answered in one sitting.
+
+**They all pass the [programme ruling](#programme-ruling--d1-d2-and-d3-build-the-mechanism-leave-the-business-values-empty)'s
+test**, which is why none of them blocks anything: a threshold of zero makes the
+system *stricter*, not looser. Every variance is a decision, every write-off needs
+the higher approval, every payment takes the maker-checker route. The cost of
+leaving them is not risk — it is that people approve things all day that the
+company would rather they did not have to.
+
+| Table | The number | Today | Whose |
+|---|---|---|---|
+| `ap_match_tolerance` | Quantity, price and value variance a three-way match may absorb (§8.4) | **0%** — nothing absorbed, every variance goes to a manager | Finance |
+| `purchase_receipt_tolerance` | Over-receipt allowed against a purchase order (§8.4) | **0%** — every over-receipt is a decision | Purchasing |
+| `ar_write_off_policy` | Write-off below which the ordinary approval suffices (§16) | **0 IQD** — every write-off needs the higher approval | Finance (raised under D12) |
+| `payment_risk_policy` | Amount above which a payment is high-risk (§17) | **0 IQD** — every payment needs separate creator, approver and executor | Finance (this is **D13**) |
+
+**What is needed:** four numbers. Each is per-company by default, and three of the
+four also accept a per-supplier, per-item or per-branch override if the business
+wants one — so "it depends" is a supported answer, not a blocked one.
+
+**What is deliberately not here.** `kyc_risk_rating`, `kyc_required_document` and
+`logistics_funding_stage_role` also ship empty, but they are not thresholds and
+they do not fail safe in the same way. The first two are D9 — an empty catalogue
+means "an approved, unexpired record", which is the *weakest* defensible reading
+rather than the strictest. The third is D22, and it refuses to post at all. Both
+are already in the register with that difference stated.
+
+---
+
 # What the phases still to be built will need
 
 Added 2026-08-18, at the request of the Business Process Owner: *"what is needed
@@ -1246,7 +1348,7 @@ is the cheapest answer in this file. D4 and D6 are answered and in
 
 ## The pattern worth noticing
 
-Of the twenty-three open items above, exactly **two** stop work today: D22, which
+Of the twenty-five open items above, exactly **two** stop work today: D22, which
 refuses to post, and D15, which will refuse to depreciate. Every other one is
 either a value to configure or a confirmation of something already built the
 defensible way.

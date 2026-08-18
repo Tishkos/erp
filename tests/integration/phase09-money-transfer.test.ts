@@ -649,7 +649,7 @@ describe('09.4 — the §12.2 required transaction data', () => {
               t.official_rate_id, t.client_rate_id,
               t.transfer_amount_iqd, t.company_bank_account_id,
               t.beneficiary_name, t.beneficiary_bank, t.beneficiary_account,
-              t.client_import_file_id, t.logistics_job_ref
+              t.client_import_file_id, t.logistics_job_id
          from money_transfer t
          join money_transfer_client_account a on a.id = t.client_account_id
         where t.id = $1`,
@@ -673,7 +673,7 @@ describe('09.4 — the §12.2 required transaction data', () => {
     // 7 — related client import file and logistics job, optional by §12.2's own
     // "where the approved process requires it".
     expect(row.client_import_file_id).toBeNull();
-    expect(row.logistics_job_ref).toBeNull();
+    expect(row.logistics_job_id).toBeNull();
 
     // 4 — actual IQD deposits and deposit dates, on the account.
     const { rows: deposits } = await ownerPool.query(
@@ -821,7 +821,10 @@ describe('09.5 — the edit lock (§12.3, §12.7 acceptance 2)', () => {
       ['client_account_id', `null`],
       ['branch_code', `'${OTHER_BRANCH}'`],
       ['note', `'a note'`],
-      ['logistics_job_ref', `'JOB-1'`],
+      // A real foreign key since D16 merged the import registers. The freeze
+      // trigger is BEFORE UPDATE, so it refuses the edit before the reference is
+      // ever checked — which is the point: the row is frozen, not validated.
+      ['logistics_job_id', `'00000000-0000-0000-0000-000000000001'::uuid`],
       ['journal_entry_id', `null`],
       ['initiated_at', `now()`],
     ];

@@ -287,7 +287,7 @@ export interface CreateTransferInput {
   readonly beneficiaryCountry?: string | null;
   /** §12.2 — *"where the approved process requires it."* */
   readonly clientImportFileId?: string | null;
-  readonly logisticsJobRef?: string | null;
+  readonly logisticsJobId?: string | null;
   readonly note?: string | null;
 }
 
@@ -361,7 +361,7 @@ export async function createTransfer(
       beneficiaryAccount: input.beneficiaryAccount ?? null,
       beneficiaryCountry: input.beneficiaryCountry ?? null,
       clientImportFileId: input.clientImportFileId ?? null,
-      logisticsJobRef: input.logisticsJobRef ?? null,
+      logisticsJobId: input.logisticsJobId ?? null,
       note: input.note ?? null,
       createdBy: ctx.principal.userId,
     })
@@ -411,7 +411,7 @@ export async function amendTransfer(
       | 'beneficiaryAccount'
       | 'beneficiaryCountry'
       | 'clientImportFileId'
-      | 'logisticsJobRef'
+      | 'logisticsJobId'
       | 'note'
     >
   >,
@@ -455,7 +455,7 @@ export async function amendTransfer(
       ...(changes.clientImportFileId !== undefined
         ? { clientImportFileId: changes.clientImportFileId }
         : {}),
-      ...(changes.logisticsJobRef !== undefined ? { logisticsJobRef: changes.logisticsJobRef } : {}),
+      ...(changes.logisticsJobId !== undefined ? { logisticsJobId: changes.logisticsJobId } : {}),
       ...(changes.note !== undefined ? { note: changes.note } : {}),
       updatedAt: new Date(),
     })

@@ -27,8 +27,8 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   businessPartner,
-  logisticsClientImportFile,
-  logisticsClientImportFileReference,
+  clientImportFile,
+  clientImportFileReference,
   logisticsCarrier,
   logisticsClaim,
   logisticsClientCharge,
@@ -66,7 +66,8 @@ export const BUSINESS_LINE = 'LOGISTICS';
 /** The module name on every source reference, for §3.3's drill-down. */
 export const MODULE = 'logistics';
 
-export const IMPORT_FILE_TYPE = 'logistics_client_import_file';
+/** One register for both services — D16, answered 2026-08-18. */
+export const IMPORT_FILE_TYPE = 'client_import_file';
 export const JOB_TYPE = 'logistics_job';
 export const FUNDING_TYPE = 'logistics_client_funding';
 export const COST_TYPE = 'logistics_job_cost';
@@ -161,13 +162,15 @@ export async function createImportFile(
 
   const allocated = await allocateDocumentNumber(
     tx,
-    'LOGISTICS_CLIENT_IMPORT_FILE',
+    // One register, one counter. Two sequences both minting CIF numbers gave
+    // two consignments the same file number (D16).
+    'CLIENT_IMPORT_FILE',
     { branchCode: input.branchCode, year: Number(input.openedOn.slice(0, 4)) },
     ctx.principal.userId,
   );
 
   const [created] = await tx
-    .insert(logisticsClientImportFile)
+    .insert(clientImportFile)
     .values({
       fileNo: allocated.documentNo,
       clientId: input.clientId,
@@ -178,11 +181,11 @@ export async function createImportFile(
       note: input.note ?? null,
       createdBy: ctx.principal.userId,
     })
-    .returning({ id: logisticsClientImportFile.id });
+    .returning({ id: clientImportFile.id });
 
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
-    action: 'logistics_client_import_file.created',
+    action: 'client_import_file.created',
     objectType: IMPORT_FILE_TYPE,
     objectId: created!.id,
     branchCode: input.branchCode,
@@ -221,7 +224,7 @@ export async function linkToImportFile(
   });
 
   const [created] = await tx
-    .insert(logisticsClientImportFileReference)
+    .insert(clientImportFileReference)
     .values({
       importFileId: input.importFileId,
       module: input.module,
@@ -231,11 +234,11 @@ export async function linkToImportFile(
       note: input.note ?? null,
       linkedBy: ctx.principal.userId,
     })
-    .returning({ id: logisticsClientImportFileReference.id });
+    .returning({ id: clientImportFileReference.id });
 
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
-    action: 'logistics_client_import_file.linked',
+    action: 'client_import_file.linked',
     objectType: IMPORT_FILE_TYPE,
     objectId: input.importFileId,
     branchCode: file.branchCode,
@@ -259,11 +262,11 @@ export async function unlinkFromImportFile(
 ): Promise<void> {
   const [reference] = await tx
     .select()
-    .from(logisticsClientImportFileReference)
+    .from(clientImportFileReference)
     .where(
       and(
-        eq(logisticsClientImportFileReference.module, input.module),
-        eq(logisticsClientImportFileReference.documentId, input.documentId),
+        eq(clientImportFileReference.module, input.module),
+        eq(clientImportFileReference.documentId, input.documentId),
       ),
     )
     .limit(1);
@@ -283,12 +286,12 @@ export async function unlinkFromImportFile(
   }
 
   await tx
-    .delete(logisticsClientImportFileReference)
-    .where(eq(logisticsClientImportFileReference.id, reference.id));
+    .delete(clientImportFileReference)
+    .where(eq(clientImportFileReference.id, reference.id));
 
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
-    action: 'logistics_client_import_file.unlinked',
+    action: 'client_import_file.unlinked',
     objectType: IMPORT_FILE_TYPE,
     objectId: reference.importFileId,
     branchCode: file.branchCode,
@@ -311,13 +314,13 @@ export async function closeImportFile(
   });
 
   await tx
-    .update(logisticsClientImportFile)
+    .update(clientImportFile)
     .set({ status: 'closed', closedOn, updatedAt: new Date() })
-    .where(eq(logisticsClientImportFile.id, id));
+    .where(eq(clientImportFile.id, id));
 
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
-    action: 'logistics_client_import_file.closed',
+    action: 'client_import_file.closed',
     objectType: IMPORT_FILE_TYPE,
     objectId: id,
     branchCode: file.branchCode,
@@ -330,8 +333,8 @@ export async function closeImportFile(
 async function loadImportFile(tx: Tx, id: string) {
   const [file] = await tx
     .select()
-    .from(logisticsClientImportFile)
-    .where(eq(logisticsClientImportFile.id, id))
+    .from(clientImportFile)
+    .where(eq(clientImportFile.id, id))
     .limit(1);
   if (!file) throw new LogisticsNotFoundError('client import file', id);
   return file;

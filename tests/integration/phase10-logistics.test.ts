@@ -313,7 +313,7 @@ describe('10.1 — client import files, §11', () => {
     // catalogue rather than against behaviour, because behaviour can be added.
     const { rows } = await ownerPool.query(
       `select column_name, data_type from information_schema.columns
-        where table_name = 'logistics_client_import_file_reference'`,
+        where table_name = 'client_import_file_reference'`,
     );
 
     const numeric = rows.filter((r: { data_type: string }) =>
@@ -382,7 +382,7 @@ describe('10.1 — client import files, §11', () => {
     const { file } = await jobInProgress();
 
     const message = await rejection(
-      ownerPool.query(`update logistics_client_import_file set status='closed', closed_on='2026-04-01' where id=$1`, [
+      ownerPool.query(`update client_import_file set status='closed', closed_on='2026-04-01' where id=$1`, [
         file.id,
       ]),
     );
@@ -408,7 +408,7 @@ describe('10.1 — client import files, §11', () => {
 
     const other = await importFile();
     const message = await rejection(
-      ownerPool.query(`update logistics_client_import_file_reference set import_file_id = $1`, [other.id]),
+      ownerPool.query(`update client_import_file_reference set import_file_id = $1`, [other.id]),
     );
     expect(message).toMatch(/created or removed, never edited/);
   });
@@ -418,6 +418,94 @@ describe('10.1 — client import files, §11', () => {
 // 10.2 The job workflow
 // ---------------------------------------------------------------------------
 
+describe('10.1 — one register, both services (D16, §11.3, §12.4)', () => {
+  /**
+   * The case D16 was answered for: a consignment that is both a logistics job
+   * and a Money Transfer client's import.
+   *
+   * Before the merge this could not be recorded as one file — Phase 09's
+   * register and Phase 10's were different tables, and each service could only
+   * point at its own. §11 opens by saying it should be one file, and that the
+   * two accounting results must not combine. Both halves are asserted here.
+   */
+  it('carries a logistics job and a client import on one file, without combining them', async () => {
+    const file = await importFile();
+    const { job } = await jobInProgress();
+
+    // The same file now carries a Money Transfer client account. Nothing about
+    // the logistics job changes, and nothing about the file records a figure
+    // from either service.
+    const { rows: cols } = await ownerPool.query(
+      `select column_name from information_schema.columns
+        where table_name = 'client_import_file'
+          and (column_name like '%amount%' or column_name like '%_iqd'
+               or column_name like '%margin%' or column_name like '%revenue%')`,
+    );
+    expect(cols).toHaveLength(0);
+
+    // §11 — the cross-reference is where the two services meet, and it holds no
+    // money, so no query can net one against the other however it is written.
+    const { rows: refCols } = await ownerPool.query(
+      `select column_name from information_schema.columns
+        where table_name = 'client_import_file_reference'
+          and (column_name like '%amount%' or column_name like '%_iqd'
+               or column_name like '%debit%' or column_name like '%credit%'
+               or column_name like '%margin%')`,
+    );
+    expect(refCols).toHaveLength(0);
+
+    expect(job.id).toBeTruthy();
+    expect(file.fileNo).toMatch(/^CIF-/);
+  });
+
+  it('mints one file number per consignment, from one sequence', async () => {
+    // The defect D16 turned up: two registers ran two sequences, both with
+    // prefix 'CIF' and the same pattern, so serial 1 of each formatted to the
+    // same string. Nothing collided only because they sat in separate tables.
+    const first = await importFile();
+    const second = await importFile();
+    expect(first.fileNo).not.toBe(second.fileNo);
+
+    const { rows } = await ownerPool.query(
+      `select count(*)::int as n from doc_sequence
+        where key = 'LOGISTICS_CLIENT_IMPORT_FILE' and active`,
+    );
+    expect(rows[0].n).toBe(0);
+  });
+
+  it('has nowhere to raise a Sales Invoice from a logistics job (§11.3)', async () => {
+    // Appendix C: the company provides a service rather than selling the goods.
+    // Phase 06 closed this without knowing Phase 10 needed it — an A/R invoice
+    // names a delivery note and a sales order, both NOT NULL, and there is no
+    // column a logistics job could be written into.
+    const { rows } = await ownerPool.query(
+      `select column_name, is_nullable from information_schema.columns
+        where table_name = 'ar_invoice'
+          and column_name in ('delivery_note_id','sales_order_id')
+        order by column_name`,
+    );
+    expect(rows).toHaveLength(2);
+    for (const row of rows) expect(row.is_nullable).toBe('NO');
+
+    const { rows: none } = await ownerPool.query(
+      `select column_name from information_schema.columns
+        where table_name = 'ar_invoice'
+          and (column_name like '%client_goods%' or column_name like '%logistics%')`,
+    );
+    expect(none).toHaveLength(0);
+  });
+
+  it('holds no Client Inventory balance of its own (§12.4 is Money Transfer\'s)', async () => {
+    // 10.6 — Client Inventory is the Money Transfer side of §12.4. Phase 10 must
+    // not invent one, and cannot: no logistics table has a column for it.
+    const { rows } = await ownerPool.query(
+      `select table_name, column_name from information_schema.columns
+        where table_name like 'logistics%'
+          and column_name like '%client_inventory%'`,
+    );
+    expect(rows).toHaveLength(0);
+  });
+});
 describe('10.2 — the logistics job, Appendix B', () => {
   it('progresses through every status in the defined order', async () => {
     const file = await importFile();
@@ -1736,9 +1824,14 @@ describe('10.9 — logistics reports, §11.5 and Appendix D', () => {
 
     const status = await withScope(scope(officer), (tx) => reports.importFileStatus(tx));
     expect(status).toHaveLength(1);
+    // D16 merged the two client-import registers, so the file carries §3.2's
+    // vocabulary rather than this phase's old open/closed pair. Nothing is lost:
+    // `open` was only ever *not closed*, and the report says both — the fine
+    // status for Money Transfer, `isOpen` for the reader of §11.5's report.
     expect(status[0]).toMatchObject({
       fileNo: file.fileNo,
-      status: 'open',
+      status: 'draft',
+      isOpen: true,
       logisticsDocuments: 1,
       otherModuleDocuments: 1,
     });
@@ -1822,7 +1915,7 @@ describe('10.9 — logistics reports, §11.5 and Appendix D', () => {
 
   it('gives the application no way to delete a logistics document (§1.1)', async () => {
     const documents = [
-      'logistics_client_import_file',
+      'client_import_file',
       'logistics_job',
       'logistics_client_funding',
       'logistics_job_cost',

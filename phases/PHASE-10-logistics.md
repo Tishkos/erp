@@ -113,8 +113,8 @@ is enforced by refusing the raiser's own approval.
 
 **Test gate**
 - [x] A logistics job creates zero company inventory quantity in every Phase 04 availability bucket — a full job lifecycle leaves `inventory_movement`, `cost_layer` and `stock_reservation` empty. The reason it will stay true: **no table in Phase 10 has an item, quantity, UOM or warehouse column**, asserted against `information_schema` and against the source in `tests/unit/phase10-no-company-inventory.test.ts`
-- [x] No Sales Invoice can be raised for the goods on a logistics job — *partially*. Phase 06 does not exist, so there is no Sales Invoice to refuse. What is enforced now is that Phase 10 cannot reach for one: no logistics module imports or names any sales/A-R symbol, asserted structurally. **Re-check when Phase 06 lands** — the remaining half is that Phase 06 must refuse a logistics job as an invoice source
-- [ ] The Client Inventory balance is shared correctly with the Phase 09.10 model and clears on delivery — **waiting on Phase 09.** Client Inventory is the Money Transfer side of §12.4 (*Dr Client Inventory / Cr Company Bank* on payment, *Dr Client Account / Cr Client Inventory* on delivery); Phase 10 holds no Client Inventory balance of its own and must not invent one. Testable as soon as 09.10 exists
+- [x] No Sales Invoice can be raised for the goods on a logistics job — *fully, from 2026-08-18*. Two halves, both structural. Phase 10 cannot reach for an invoice: no logistics module imports or names any sales/A-R symbol. And Phase 06 cannot accept a logistics job as a source: `ar_invoice` requires a **delivery note and a sales order, both NOT NULL**, and has no column a logistics job could be written into. Neither side has a rule to break
+- [x] The Client Inventory balance is shared correctly with the Phase 09.10 model and clears on delivery — *closed 2026-08-18.* Client Inventory is the Money Transfer side of §12.4 (*Dr Client Inventory / Cr Company Bank* on payment, *Dr Client Account / Cr Client Inventory* on delivery). Phase 10 holds none of its own and **cannot**: no logistics table has a column for it, asserted. The balance clears through Phase 09.10, whose trigger refuses to settle or close a file while paid and delivered disagree
 
 ---
 
@@ -196,7 +196,7 @@ tested including the negative cases.
 |---|---|
 | 1 · Logistics separate from Money Transfer in every report and account | ✅ Structural — the shared table holds no money |
 | 2 · Every logistics cost job-linked, none absorbed as overhead | ✅ NOT NULL column, single line role |
-| 3 · No company inventory quantity and no Sales Invoice from a logistics job | ✅ inventory · ⚠️ Sales Invoice half-testable until Phase 06 |
+| 3 · No company inventory quantity and no Sales Invoice from a logistics job | ✅ inventory · ✅ Sales Invoice — closed 2026-08-18, structurally on both sides |
 | 4 · Job margin reconciles to the G/L | ✅ |
 | 5 · No close with unsettled costs, unbilled charges or missing evidence | ✅ |
 

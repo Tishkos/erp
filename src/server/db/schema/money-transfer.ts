@@ -38,6 +38,7 @@ import { exchangeRate } from './fiscal';
 import { bankCashAccount } from './item';
 import { moneyTransferClientAccount } from './money-transfer-client';
 import { clientImportFile } from './client-import';
+import { logisticsJob } from './logistics';
 
 // ---------------------------------------------------------------------------
 // 09.2 — client deposits
@@ -229,13 +230,18 @@ export const moneyTransfer = pgTable(
      * approved process requires it."* Both optional, because "where required" is
      * the blueprint's own qualifier.
      *
-     * The logistics job is text and not a foreign key: the Logistics module is
-     * Phase 10 and its table does not exist yet. Same reasoning `subledger_entry`
-     * gives for `party_code` — the framework must not wait for the last master to
-     * arrive. Phase 10 adds the constraint when there is something to point at.
+     * Both are real links. `logistics_job_id` was text until 2026-08-18, on the
+     * grounds that Phase 10 did not exist yet and the framework must not wait for
+     * the last master to arrive. Phase 10 arrived; a text reference is not a
+     * weaker link but one that *can be wrong*, and nothing stopped it naming a
+     * cancelled job or a job on another consignment.
+     *
+     * `money_transfer_job_is_on_the_same_file` closes that: if a transfer names
+     * both, the job must be on that file. §11.3 and §12.4 keep the two services'
+     * results apart **on the same consignment**, not on two.
      */
     clientImportFileId: uuid('client_import_file_id').references(() => clientImportFile.id),
-    logisticsJobRef: text('logistics_job_ref'),
+    logisticsJobId: uuid('logistics_job_id').references(() => logisticsJob.id),
 
     /** §12.4 — Dr Client Clearing / Cr Company Bank Account, at initiation. */
     journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
@@ -295,7 +301,7 @@ export const moneyTransfer = pgTable(
     index('money_transfer_account_idx').on(t.clientAccountId, t.status),
     index('money_transfer_date_idx').on(t.transferDate, t.branchCode),
     index('money_transfer_import_file_idx').on(t.clientImportFileId),
-    index('money_transfer_logistics_idx').on(t.logisticsJobRef),
+    index('money_transfer_logistics_idx').on(t.logisticsJobId),
 
     check('money_transfer_requested_usd_positive', sql`${t.requestedUsd} > 0`),
     check('money_transfer_amount_positive', sql`${t.transferAmountIqd} > 0`),

@@ -328,8 +328,9 @@ export async function resetTestData(): Promise<void> {
   await client.query('delete from logistics_job_settlement');
   await client.query('delete from logistics_job_leg');
   await client.query('delete from logistics_job');
-  await client.query('delete from logistics_client_import_file_reference');
-  await client.query('delete from logistics_client_import_file');
+  // D16 — one register. The reference table survives the merge under its own
+  // name; the file itself is deleted with the Phase 09 block below.
+  await client.query('delete from client_import_file_reference');
   await client.query('delete from logistics_service_type_evidence');
   await client.query('delete from logistics_service_type');
   await client.query('delete from logistics_route');
@@ -653,7 +654,7 @@ export async function resetTestData(): Promise<void> {
                          'CLIENT_IMPORT_FILE', 'CLIENT_IMPORT_PAYMENT', 'CLIENT_GOODS_DELIVERY',
                          'BANK_EXECUTION_BATCH',
                          -- Phase 10, seeded by migrations 0140-0146.
-                         'LOGISTICS_CLIENT_IMPORT_FILE', 'LOGISTICS_JOB', 'LOGISTICS_CLIENT_FUNDING',
+                         'LOGISTICS_JOB', 'LOGISTICS_CLIENT_FUNDING',
                          'LOGISTICS_JOB_COST', 'LOGISTICS_JOB_SETTLEMENT', 'LOGISTICS_CLAIM',
                          -- Phase 08, seeded by migration 0147.
                          'LEAD', 'OPPORTUNITY', 'CRM_CASE',

@@ -24,8 +24,8 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   businessPartner,
-  logisticsClientImportFile,
-  logisticsClientImportFileReference,
+  clientImportFile,
+  clientImportFileReference,
   logisticsCarrier,
   logisticsClaim,
   logisticsClientCharge,
@@ -108,27 +108,40 @@ export async function openJobs(tx: Tx, filters: ReportFilters = {}) {
 export async function importFileStatus(tx: Tx, filters: ReportFilters = {}) {
   return tx
     .select({
-      importFileId: logisticsClientImportFile.id,
-      fileNo: logisticsClientImportFile.fileNo,
-      status: logisticsClientImportFile.status,
+      importFileId: clientImportFile.id,
+      fileNo: clientImportFile.fileNo,
+      /**
+       * The register's own status. Since D16 merged the two registers this is
+       * §3.2's vocabulary — draft, posted, settled, closed — which carries Money
+       * Transfer's detail about whether the client's goods have been paid for
+       * and delivered.
+       */
+      status: clientImportFile.status,
+      /**
+       * The coarse answer §11.5's reader wants. Phase 10 used to store exactly
+       * this and nothing else, on the ground that a logistics import file is not
+       * a document. It is still the useful question, so it is reported rather
+       * than stored: `open` was only ever *not closed*.
+       */
+      isOpen: sql<boolean>`${clientImportFile.status} <> 'closed'`,
       clientCode: businessPartner.code,
       clientName: businessPartner.legalName,
-      openedOn: logisticsClientImportFile.openedOn,
-      closedOn: logisticsClientImportFile.closedOn,
-      originCountry: logisticsClientImportFile.originCountry,
-      branchCode: logisticsClientImportFile.branchCode,
+      openedOn: clientImportFile.openedOn,
+      closedOn: clientImportFile.closedOn,
+      originCountry: clientImportFile.originCountry,
+      branchCode: clientImportFile.branchCode,
       /** How many documents in each module cite this file (§11's cross-reference). */
-      logisticsDocuments: sql<number>`(select count(*)::int from logistics_client_import_file_reference r
-                                        where r.import_file_id = ${logisticsClientImportFile.id}
+      logisticsDocuments: sql<number>`(select count(*)::int from client_import_file_reference r
+                                        where r.import_file_id = ${clientImportFile.id}
                                           and r.module = 'logistics')`,
-      otherModuleDocuments: sql<number>`(select count(*)::int from logistics_client_import_file_reference r
-                                          where r.import_file_id = ${logisticsClientImportFile.id}
+      otherModuleDocuments: sql<number>`(select count(*)::int from client_import_file_reference r
+                                          where r.import_file_id = ${clientImportFile.id}
                                             and r.module <> 'logistics')`,
     })
-    .from(logisticsClientImportFile)
-    .innerJoin(businessPartner, eq(businessPartner.id, logisticsClientImportFile.clientId))
-    .where(filters.clientId ? eq(logisticsClientImportFile.clientId, filters.clientId) : sql`true`)
-    .orderBy(logisticsClientImportFile.openedOn, logisticsClientImportFile.fileNo);
+    .from(clientImportFile)
+    .innerJoin(businessPartner, eq(businessPartner.id, clientImportFile.clientId))
+    .where(filters.clientId ? eq(clientImportFile.clientId, filters.clientId) : sql`true`)
+    .orderBy(clientImportFile.openedOn, clientImportFile.fileNo);
 }
 
 // ---------------------------------------------------------------------------
@@ -561,14 +574,14 @@ export async function crossReference(
 ): Promise<CrossReferenceReport> {
   const [file] = await tx
     .select({
-      id: logisticsClientImportFile.id,
-      fileNo: logisticsClientImportFile.fileNo,
-      status: logisticsClientImportFile.status,
+      id: clientImportFile.id,
+      fileNo: clientImportFile.fileNo,
+      status: clientImportFile.status,
       clientCode: businessPartner.code,
     })
-    .from(logisticsClientImportFile)
-    .innerJoin(businessPartner, eq(businessPartner.id, logisticsClientImportFile.clientId))
-    .where(eq(logisticsClientImportFile.id, importFileId))
+    .from(clientImportFile)
+    .innerJoin(businessPartner, eq(businessPartner.id, clientImportFile.clientId))
+    .where(eq(clientImportFile.id, importFileId))
     .limit(1);
 
   if (!file) {
@@ -577,14 +590,14 @@ export async function crossReference(
 
   const references = await tx
     .select({
-      module: logisticsClientImportFileReference.module,
-      documentType: logisticsClientImportFileReference.documentType,
-      documentId: logisticsClientImportFileReference.documentId,
-      documentNo: logisticsClientImportFileReference.documentNo,
+      module: clientImportFileReference.module,
+      documentType: clientImportFileReference.documentType,
+      documentId: clientImportFileReference.documentId,
+      documentNo: clientImportFileReference.documentNo,
     })
-    .from(logisticsClientImportFileReference)
-    .where(eq(logisticsClientImportFileReference.importFileId, importFileId))
-    .orderBy(logisticsClientImportFileReference.module, logisticsClientImportFileReference.documentNo);
+    .from(clientImportFileReference)
+    .where(eq(clientImportFileReference.importFileId, importFileId))
+    .orderBy(clientImportFileReference.module, clientImportFileReference.documentNo);
 
   const byModule = new Map<string, typeof references>();
   for (const reference of references) {

@@ -30,6 +30,8 @@ import type { Tx } from '../db/client';
 import {
   bankExecutionBatch,
   bankExecutionBatchLine,
+  bankStatement,
+  bankStatementLine,
   businessPartner,
   clientImportPayment,
   moneyTransfer,
@@ -363,18 +365,29 @@ export async function executeBatch(
 
 /**
  * §12.5 — *"The batch total shall reconcile to the single bank-statement
- * amount."*
+ * amount"* — and §12.7's Transfer-to-Bank Statement Reconciliation.
  *
- * The statement line is a reference rather than a link: Phase 07.7 owns bank
- * statements and does not exist yet. When it does, this column becomes a foreign
- * key and this function gains a lookup; nothing else about the reconciliation
- * changes, which is why it is worth building now rather than waiting.
+ * The statement line used to be a text reference, because Phase 07.7 owned bank
+ * statements and did not exist on the branch this was built on. The note here
+ * said the column would become a foreign key and this function would gain a
+ * lookup. That is what happened, on 2026-08-18.
+ *
+ * The lookup is the point. A text reference cannot be wrong in any way the
+ * system can see: it could name a line on another account, a line already
+ * matched to a different batch, or nothing at all, and the reconciliation would
+ * still record a tick. Three things are now checked, and two of them by the
+ * database as well, so no other path can skip them:
+ *
+ *   - the line belongs to this batch's bank account;
+ *   - its amount equals the batch total **exactly** — the blueprint's word is
+ *     *shall*, so this is equality and not a tolerance;
+ *   - no other live batch has claimed it.
  */
 export async function reconcileToStatement(
   tx: Tx,
   ctx: ActorContext,
   id: string,
-  statementLineRef: string,
+  statementLineId: string,
 ): Promise<void> {
   const batch = await load(tx, id);
 
@@ -392,10 +405,45 @@ export async function reconcileToStatement(
     );
   }
 
-  if (statementLineRef.trim().length === 0) {
+  const [line] = await tx
+    .select({
+      id: bankStatementLine.id,
+      amountIqd: bankStatementLine.amountIqd,
+      reference: bankStatementLine.reference,
+      accountId: bankStatement.bankCashAccountId,
+    })
+    .from(bankStatementLine)
+    .innerJoin(bankStatement, eq(bankStatement.id, bankStatementLine.statementId))
+    .where(eq(bankStatementLine.id, statementLineId))
+    .limit(1);
+
+  if (!line) {
     throw new Error(
-      'Reconciling a batch means naming the statement line it matched (§12.5). ' +
-        'A reconciliation with nothing on the other side is a tick, not a match.',
+      `There is no bank statement line ${statementLineId} (§12.5). Reconciling a ` +
+        'batch means naming the line it matched; a reconciliation with nothing on ' +
+        'the other side is a tick, not a match.',
+    );
+  }
+
+  if (line.accountId !== batch.bankCashAccountId) {
+    throw new Error(
+      `Batch ${batch.batchNo} is on one bank account and statement line ` +
+        `${line.reference ?? statementLineId} is on another (§12.5). A ` +
+        'reconciliation that crosses accounts is two errors that cancel.',
+    );
+  }
+
+  // The batch pays out, so the line is a debit — negative, by the sign
+  // convention `directionOf` reads.
+  const lineAmount = parseDecimal(line.amountIqd, 4n);
+  const magnitude = lineAmount < 0n ? -lineAmount : lineAmount;
+  const total = parseDecimal(batch.totalIqd, 4n);
+
+  if (magnitude !== total) {
+    throw new Error(
+      `Batch ${batch.batchNo} totals ${toDecimalString(total, 4n)} and the ` +
+        `statement line is ${toDecimalString(lineAmount, 4n)} (§12.5). The batch ` +
+        'total shall reconcile to the single bank-statement amount.',
     );
   }
 
@@ -405,12 +453,19 @@ export async function reconcileToStatement(
     .update(bankExecutionBatch)
     .set({
       status: 'settled',
-      statementLineRef: statementLineRef.trim(),
+      statementLineId,
       reconciledBy: ctx.principal.userId,
       reconciledAt: new Date(),
       updatedAt: new Date(),
     })
     .where(eq(bankExecutionBatch.id, id));
+
+  // §12.7 — the statement side of the match. A line that explains a batch is
+  // matched, so the unreconciled report (07.7) stops offering it.
+  await tx
+    .update(bankStatementLine)
+    .set({ matchStatus: 'matched' })
+    .where(eq(bankStatementLine.id, statementLineId));
 }
 
 /**
@@ -532,7 +587,7 @@ export async function reconciliationFor(tx: Tx, batchId: string) {
     status: batch.status,
     executionDate: batch.executionDate,
     bankReference: batch.bankReference,
-    statementLineRef: batch.statementLineRef,
+    statementLineId: batch.statementLineId,
     totalIqd: batch.totalIqd,
     lineSumIqd: toDecimalString(lineSum, 4n),
     differenceIqd: toDecimalString(parseDecimal(batch.totalIqd, 4n) - lineSum, 4n),
