@@ -66,3 +66,4 @@ export * from './money-transfer';
 export * from './bank-execution-batch';
 export * from './logistics';
 export * from './crm';
+export * from './projects';

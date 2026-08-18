@@ -1,0 +1,429 @@
+/**
+ * Projects and contracting — Phase 11, §10, §19 and Appendix B.
+ *
+ * > §10: *"Retention and advances are separate balances, not ordinary revenue or
+ * > expense."*
+ * > §10: *"Change orders are versioned and require commercial and budget
+ * > approval … preserving baseline."*
+ * > Appendix B, Project/Contract: *"Status, budget and change control; mandatory
+ * > project dimension."*
+ *
+ * **The baseline columns are never written twice.** Contract value, budget and
+ * the baseline dates are set when the contract is approved and are not touched
+ * again; variations accumulate beside them. A project whose baseline moved with
+ * each change order could not answer *"how far have we drifted?"*, which is the
+ * only question a baseline exists to answer.
+ *
+ * **Retention and advances have their own tables.** §10 says they are separate
+ * balances; giving them separate rows rather than columns on the invoice means
+ * *"what is held?"* and *"what is still owed of the advance?"* are queries over
+ * facts rather than arithmetic over a net figure somebody would have to unpick.
+ *
+ * **There is no recognition table.** §10 requires Finance to approve the
+ * revenue-recognition policy before WIP and progress billing are developed, and
+ * D1 is open. The configuration slot exists (`recognition_method` on the
+ * project); nothing reads it yet, and no default is seeded.
+ */
+import { sql } from 'drizzle-orm';
+import {
+  check,
+  date,
+  index,
+  integer,
+  numeric,
+  pgEnum,
+  pgTable,
+  smallint,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
+import { appUser, branch } from './platform';
+import { project } from './organisation';
+import { purchaseOrder } from './purchase-order';
+import { arInvoice } from './ar-invoice';
+import { documentStatus } from './workflow';
+import { journalEntry } from './journal';
+import { chartOfAccount } from './accounting';
+
+/** §10 — the work breakdown structure. A tree; cycles refused by trigger. */
+export const projectWbs = pgTable(
+  'project_wbs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    code: text('code').notNull(),
+    name: text('name').notNull(),
+    parentCode: text('parent_code'),
+
+    /** §10 — who is answerable for this element. */
+    responsibleUserId: uuid('responsible_user_id').references(() => appUser.id),
+    plannedStartsOn: date('planned_starts_on'),
+    plannedEndsOn: date('planned_ends_on'),
+    /** §10 — a milestone is a WBS element somebody bills against. */
+    isMilestone: text('is_milestone').notNull().default('false'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('project_wbs_code_uniq').on(t.projectCode, t.code),
+    index('project_wbs_parent_idx').on(t.projectCode, t.parentCode),
+    check('project_wbs_name_present', sql`btrim(${t.name}) <> ''`),
+    check('project_wbs_not_own_parent', sql`${t.parentCode} is distinct from ${t.code}`),
+    check(
+      'project_wbs_dates_ordered',
+      sql`${t.plannedStartsOn} is null or ${t.plannedEndsOn} is null
+          or ${t.plannedEndsOn} >= ${t.plannedStartsOn}`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// 11.2 — the budget, and §19's five amounts
+// ---------------------------------------------------------------------------
+
+/**
+ * §10 — one row per cost code, carrying the baseline and the forecast.
+ *
+ * Committed and actual are **not** columns here. They are sums over the
+ * commitments and the ledger, and a cached copy is the thing that drifts: §10
+ * acceptance criterion 2 requires availability to update *immediately* after a
+ * commitment or a posting, and the cheapest way to be sure of that is to have
+ * nothing to update.
+ */
+export const projectBudgetLine = pgTable(
+  'project_budget_line',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    costCode: text('cost_code').notNull(),
+    description: text('description').notNull(),
+    /** The WBS element this budget belongs to, where the project uses one. */
+    wbsCode: text('wbs_code'),
+    /** The G/L account costs on this code post to. */
+    accountId: uuid('account_id').references(() => chartOfAccount.id),
+
+    baselineIqd: numeric('baseline_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    /** §10 — the project manager's view of the final figure. Not availability. */
+    forecastIqd: numeric('forecast_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('project_budget_line_code_uniq').on(t.projectCode, t.costCode),
+    check('project_budget_line_description_present', sql`btrim(${t.description}) <> ''`),
+    check('project_budget_line_amounts_not_negative', sql`${t.baselineIqd} >= 0 and ${t.forecastIqd} >= 0`),
+  ],
+);
+
+/**
+ * §19 — a commitment: money promised on an approved order, not yet spent.
+ *
+ * Released when the order closes or is cancelled, which is why the release is a
+ * column on the row rather than a deletion: *"what did we commit and when was it
+ * released?"* is a question the budget history has to answer.
+ */
+export const projectCommitment = pgTable(
+  'project_commitment',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    costCode: text('cost_code').notNull(),
+    purchaseOrderId: uuid('purchase_order_id').references(() => purchaseOrder.id),
+
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+    /** How much of the commitment has become an actual cost. */
+    consumedIqd: numeric('consumed_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+
+    committedOn: date('committed_on').notNull(),
+    releasedOn: date('released_on'),
+    releaseReason: text('release_reason'),
+
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('project_commitment_project_idx').on(t.projectCode, t.costCode),
+    index('project_commitment_order_idx').on(t.purchaseOrderId),
+    check('project_commitment_amount_positive', sql`${t.amountIqd} > 0`),
+    check(
+      'project_commitment_consumed_within',
+      sql`${t.consumedIqd} >= 0 and ${t.consumedIqd} <= ${t.amountIqd}`,
+    ),
+    check(
+      'project_commitment_release_has_reason',
+      sql`${t.releasedOn} is null or coalesce(btrim(${t.releaseReason}), '') <> ''`,
+    ),
+  ],
+);
+
+/**
+ * Project actual cost — one row per posting that hit the project.
+ *
+ * Written alongside the journal rather than derived from it, because §10 asks
+ * for cost by **WBS element and cost code**, and the ledger carries the project
+ * dimension but not the WBS. The journal remains the authority on the money;
+ * this is the analysis of it, and the two are written in one transaction.
+ */
+export const projectCost = pgTable(
+  'project_cost',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    costCode: text('cost_code').notNull(),
+    wbsCode: text('wbs_code'),
+
+    kind: text('kind').notNull(),
+    description: text('description').notNull(),
+    incurredOn: date('incurred_on').notNull(),
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+
+    /** Where the money is in the ledger — §3.3's drill-down. */
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    /** True once the cost has been included in a certificate. */
+    billed: text('billed').notNull().default('false'),
+
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('project_cost_project_idx').on(t.projectCode, t.costCode),
+    index('project_cost_wbs_idx').on(t.projectCode, t.wbsCode),
+    index('project_cost_date_idx').on(t.incurredOn),
+    check('project_cost_amount_not_zero', sql`${t.amountIqd} <> 0`),
+    check('project_cost_description_present', sql`btrim(${t.description}) <> ''`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// 11.7 and 11.8 — progress, certificates and billing
+// ---------------------------------------------------------------------------
+
+/** §10 — progress measured per WBS element, by somebody, and approved. */
+export const projectProgress = pgTable(
+  'project_progress',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    wbsCode: text('wbs_code').notNull(),
+    measuredOn: date('measured_on').notNull(),
+    percentComplete: numeric('percent_complete', { precision: 9, scale: 4 }).notNull(),
+
+    measuredBy: uuid('measured_by')
+      .notNull()
+      .references(() => appUser.id),
+    approvedBy: uuid('approved_by').references(() => appUser.id),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    note: text('note'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('project_progress_period_uniq').on(t.projectCode, t.wbsCode, t.measuredOn),
+    index('project_progress_project_idx').on(t.projectCode),
+    check('project_progress_percent_range', sql`${t.percentComplete} between 0 and 100`),
+    check(
+      'project_progress_approval_complete',
+      sql`(${t.approvedBy} is null) = (${t.approvedAt} is null)`,
+    ),
+    // §5.2 — the person who measured is not the person who approves.
+    check(
+      'project_progress_approver_is_another',
+      sql`${t.approvedBy} is null or ${t.approvedBy} <> ${t.measuredBy}`,
+    ),
+  ],
+);
+
+/**
+ * §10 — the client certificate, and the three figures it produces.
+ *
+ * Retention and advance recovery are stored, not recomputed, because the terms
+ * can change between certificates and each one was issued under the terms of its
+ * day. The net is what the customer was asked for.
+ */
+export const projectCertificate = pgTable(
+  'project_certificate',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    certificateNo: text('certificate_no').notNull(),
+    status: documentStatus('status').notNull().default('draft'),
+
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+
+    certifiedOn: date('certified_on').notNull(),
+    /** Cumulative percentage this certificate takes the project to. */
+    percentComplete: numeric('percent_complete', { precision: 9, scale: 4 }).notNull(),
+
+    grossIqd: numeric('gross_iqd', { precision: 19, scale: 4 }).notNull(),
+    retentionIqd: numeric('retention_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    advanceRecoveredIqd: numeric('advance_recovered_iqd', { precision: 19, scale: 4 })
+      .notNull()
+      .default('0'),
+    netIqd: numeric('net_iqd', { precision: 19, scale: 4 }).notNull(),
+
+    /** The A/R invoice this certificate became, once it was billed. */
+    arInvoiceId: uuid('ar_invoice_id').references(() => arInvoice.id),
+
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    approvedBy: uuid('approved_by').references(() => appUser.id),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('project_certificate_no_uniq').on(t.certificateNo),
+    index('project_certificate_project_idx').on(t.projectCode, t.certifiedOn),
+
+    check('project_certificate_gross_positive', sql`${t.grossIqd} > 0`),
+    check('project_certificate_percent_range', sql`${t.percentComplete} between 0 and 100`),
+    check(
+      'project_certificate_deductions_not_negative',
+      sql`${t.retentionIqd} >= 0 and ${t.advanceRecoveredIqd} >= 0`,
+    ),
+    // The arithmetic §10 asks for, held by the table rather than by the caller.
+    check(
+      'project_certificate_net_is_the_remainder',
+      sql`${t.netIqd} = ${t.grossIqd} - ${t.retentionIqd} - ${t.advanceRecoveredIqd}`,
+    ),
+    check(
+      'project_certificate_deductions_within_gross',
+      sql`${t.retentionIqd} + ${t.advanceRecoveredIqd} <= ${t.grossIqd}`,
+    ),
+  ],
+);
+
+/**
+ * §10 — *"retention and advances are separate balances, not ordinary revenue or
+ * expense."*
+ *
+ * One row per movement, so the balance is a sum of facts rather than a figure
+ * somebody maintains. Retention is withheld by certificates and released by an
+ * explicit release; an advance is received and recovered. Both directions are
+ * the same shape, which is why one table serves them with a `kind`.
+ */
+export const PROJECT_BALANCE_KINDS = ['retention', 'advance'] as const;
+export const projectBalanceKind = pgEnum('project_balance_kind', PROJECT_BALANCE_KINDS);
+
+export const projectBalanceMovement = pgTable(
+  'project_balance_movement',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    kind: projectBalanceKind('kind').notNull(),
+
+    /** Positive increases the balance held or owed; negative reduces it. */
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+    movedOn: date('moved_on').notNull(),
+    description: text('description').notNull(),
+
+    certificateId: uuid('certificate_id').references(() => projectCertificate.id),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('project_balance_movement_project_idx').on(t.projectCode, t.kind),
+    check('project_balance_movement_amount_not_zero', sql`${t.amountIqd} <> 0`),
+    check('project_balance_movement_description_present', sql`btrim(${t.description}) <> ''`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// 11.9 — variations
+// ---------------------------------------------------------------------------
+
+/**
+ * §10 — *"change orders are versioned and require commercial and budget
+ * approval."*
+ *
+ * Two approvals, two columns, and both required before the variation counts.
+ * Superseded versions are kept: §10 asks for versions to be retained, and a
+ * variation that replaced another is only readable if the other is still there.
+ */
+export const projectVariation = pgTable(
+  'project_variation',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    variationNo: text('variation_no').notNull(),
+    status: documentStatus('status').notNull().default('draft'),
+
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    version: smallint('version').notNull().default(1),
+    /** The version this one replaces, where it replaces one. */
+    supersedesId: uuid('supersedes_id'),
+
+    raisedOn: date('raised_on').notNull(),
+    description: text('description').notNull(),
+
+    contractDeltaIqd: numeric('contract_delta_iqd', { precision: 19, scale: 4 })
+      .notNull()
+      .default('0'),
+    budgetDeltaIqd: numeric('budget_delta_iqd', { precision: 19, scale: 4 })
+      .notNull()
+      .default('0'),
+    revisedEndsOn: date('revised_ends_on'),
+
+    /** §10 — commercial approval and budget approval, separately. */
+    commercialApprovedBy: uuid('commercial_approved_by').references(() => appUser.id),
+    commercialApprovedAt: timestamp('commercial_approved_at', { withTimezone: true }),
+    budgetApprovedBy: uuid('budget_approved_by').references(() => appUser.id),
+    budgetApprovedAt: timestamp('budget_approved_at', { withTimezone: true }),
+
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('project_variation_no_uniq').on(t.variationNo),
+    index('project_variation_project_idx').on(t.projectCode, t.status),
+
+    check('project_variation_description_present', sql`btrim(${t.description}) <> ''`),
+    check('project_variation_version_positive', sql`${t.version} >= 1`),
+    check(
+      'project_variation_commercial_complete',
+      sql`(${t.commercialApprovedBy} is null) = (${t.commercialApprovedAt} is null)`,
+    ),
+    check(
+      'project_variation_budget_complete',
+      sql`(${t.budgetApprovedBy} is null) = (${t.budgetApprovedAt} is null)`,
+    ),
+    // §10 — approved means *both* approvals are in. One is not enough, and the
+    // table says so rather than trusting whoever writes the status.
+    check(
+      'project_variation_approved_needs_both',
+      sql`${t.status} <> 'approved'
+          or (${t.commercialApprovedBy} is not null and ${t.budgetApprovedBy} is not null)`,
+    ),
+  ],
+);

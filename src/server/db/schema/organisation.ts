@@ -14,6 +14,7 @@ import {
   boolean,
   char,
   check,
+  date,
   index,
   integer,
   numeric,
@@ -347,18 +348,119 @@ export const partnerRoleRequiredField = pgTable(
 // Project — the master shell only (§4.3). Phase 11 gives it a lifecycle.
 // ---------------------------------------------------------------------------
 
+export const PROJECT_STATES = [
+  'draft',
+  'active',
+  'on_hold',
+  'closing',
+  'closed',
+] as const;
+export const projectStatus = pgEnum('project_status', PROJECT_STATES);
+
+export const BILLING_METHODS = ['milestone', 'progress', 'time_and_material', 'lump_sum'] as const;
+export const billingMethod = pgEnum('project_billing_method', BILLING_METHODS);
+
+/**
+ * §4.2's project dimension **and** §10's project master — one record.
+ *
+ * Phase 02 created this as a dimension so that a posting could be tagged with a
+ * project; Phase 11 gave it the contract that makes it a project. They are
+ * deliberately the same row: a second table would mean a posting's project and a
+ * contract's project were two records that had to be kept in step, and the first
+ * time somebody renamed one the reports would disagree.
+ *
+ * **The baseline columns are written once.** Contract value, budget and the
+ * baseline dates are set when the contract is approved and never touched again;
+ * variations accumulate in `project_variation` beside them. A baseline that
+ * moved with each change order could not answer "how far have we drifted?",
+ * which is the only question it exists to answer (§10 acceptance criterion 3).
+ */
 export const project = pgTable(
   'project',
   {
     code: text('code').primaryKey(),
     name: text('name').notNull(),
+    /** §10 — the customer the work is for. */
     partnerId: uuid('partner_id').references(() => businessPartner.id),
     branchCode: text('branch_code').references(() => branch.code),
     businessLineCode: text('business_line_code').references(() => businessLine.code),
-    /** Phase 11 owns budgets, WBS and revenue recognition (D1). */
     active: boolean('active').notNull().default(true),
+
+    // ---- §10, Phase 11: the contract ------------------------------------
+    status: projectStatus('status').notNull().default('draft'),
+    departmentCode: text('department_code'),
+    costCentreCode: text('cost_centre_code'),
+    managerUserId: uuid('manager_user_id').references(() => appUser.id),
+
+    /** §10 — where it came from, when it came from an approved opportunity. */
+    opportunityId: uuid('opportunity_id'),
+
+    contractValueIqd: numeric('contract_value_iqd', { precision: 19, scale: 4 })
+      .notNull()
+      .default('0'),
+    baselineBudgetIqd: numeric('baseline_budget_iqd', { precision: 19, scale: 4 })
+      .notNull()
+      .default('0'),
+    baselineStartsOn: date('baseline_starts_on'),
+    baselineEndsOn: date('baseline_ends_on'),
+
+    billingMethod: billingMethod('billing_method').notNull().default('progress'),
+    retentionPercent: numeric('retention_percent', { precision: 9, scale: 4 })
+      .notNull()
+      .default('0'),
+    advanceRecoveryPercent: numeric('advance_recovery_percent', { precision: 9, scale: 4 })
+      .notNull()
+      .default('0'),
+    /**
+     * §10 — configuration only, and nothing reads it.
+     *
+     * Finance must approve the revenue-recognition policy before WIP and
+     * progress billing are developed, and §10 forbids IT from inventing the
+     * treatment. **D1 is open**, so this column exists to be filled in and no
+     * default is seeded — not even a percentage-of-completion one "to be
+     * changed later", which is the exact shape of the mistake §28 prevents.
+     */
+    recognitionMethod: text('recognition_method'),
+    /** §10 — whether project spending must name a valid cost code. */
+    requiresCostCode: boolean('requires_cost_code').notNull().default(true),
+
+    approvedBy: uuid('approved_by').references(() => appUser.id),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    closedBy: uuid('closed_by').references(() => appUser.id),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    closeNote: text('close_note'),
+
+    createdBy: uuid('created_by').references(() => appUser.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
+  (t) => [
+    index('project_customer_idx').on(t.partnerId, t.status),
+    // One project per opportunity: two would count the same win twice.
+    uniqueIndex('project_opportunity_uniq')
+      .on(t.opportunityId)
+      .where(sql`opportunity_id is not null`),
+
+    check('project_contract_value_not_negative', sql`${t.contractValueIqd} >= 0`),
+    check('project_baseline_budget_not_negative', sql`${t.baselineBudgetIqd} >= 0`),
+    check(
+      'project_percentages_in_range',
+      sql`${t.retentionPercent} between 0 and 100
+          and ${t.advanceRecoveryPercent} between 0 and 100`,
+    ),
+    check(
+      'project_baseline_dates_ordered',
+      sql`${t.baselineStartsOn} is null or ${t.baselineEndsOn} is null
+          or ${t.baselineEndsOn} >= ${t.baselineStartsOn}`,
+    ),
+    check('project_approval_complete', sql`(${t.approvedBy} is null) = (${t.approvedAt} is null)`),
+    check(
+      'project_closed_is_explained',
+      sql`${t.status} <> 'closed'
+          or (${t.closedBy} is not null and ${t.closedAt} is not null
+              and coalesce(btrim(${t.closeNote}), '') <> '')`,
+    ),
+  ],
 );
 
 /**

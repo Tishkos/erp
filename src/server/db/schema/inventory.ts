@@ -61,6 +61,16 @@ export const MOVEMENT_KINDS = [
   'write_off',
   'count_adjustment',
   'reversal',
+  /**
+   * §10 — stock issued to a project and stock returned from one.
+   *
+   * Their own kinds rather than `delivery`: a delivery leaves the company and a
+   * project issue does not, and §10 asks for "material issued and returned, and
+   * stock at project site" to be reported. Reusing the sales kind would make
+   * that report impossible to write truthfully.
+   */
+  'project_issue',
+  'project_return',
 ] as const;
 
 export const movementKind = pgEnum('inventory_movement_kind', MOVEMENT_KINDS);

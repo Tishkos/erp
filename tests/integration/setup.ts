@@ -279,6 +279,17 @@ export async function resetTestData(): Promise<void> {
   // anybody having made that decision.
   await client.query('delete from logistics_funding_stage_role');
 
+  // Phase 11 — projects. Before the journals its costs point at, and before the
+  // project dimension row every one of them hangs off. Children first.
+  await client.query('delete from project_balance_movement');
+  await client.query('delete from project_certificate');
+  await client.query('delete from project_progress');
+  await client.query('delete from project_cost');
+  await client.query('delete from project_commitment');
+  await client.query('delete from project_variation');
+  await client.query('delete from project_budget_line');
+  await client.query('delete from project_wbs');
+
   // Phase 08 — CRM. Before the sales orders an opportunity converted into and
   // before the partners everything here points at. Nothing in this block posts,
   // so nothing here has to go before the journals — it goes before the partners.
@@ -636,7 +647,9 @@ export async function resetTestData(): Promise<void> {
                          'LOGISTICS_CLIENT_IMPORT_FILE', 'LOGISTICS_JOB', 'LOGISTICS_CLIENT_FUNDING',
                          'LOGISTICS_JOB_COST', 'LOGISTICS_JOB_SETTLEMENT', 'LOGISTICS_CLAIM',
                          -- Phase 08, seeded by migration 0147.
-                         'LEAD', 'OPPORTUNITY', 'CRM_CASE')
+                         'LEAD', 'OPPORTUNITY', 'CRM_CASE',
+                         -- Phase 11, seeded by migration 0148.
+                         'PROJECT_CERTIFICATE', 'PROJECT_VARIATION')
     `);
 
     // §17's high-risk threshold is configuration a migration seeded, and a test
