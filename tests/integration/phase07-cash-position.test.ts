@@ -355,17 +355,22 @@ describe('07.8 gate · liquidity by currency, never collapsed to base (§17)', (
 });
 
 describe('07.8 gate · the forecast and its five sources (§17)', () => {
-  it('names all five, and says which ones can contribute today', async () => {
+  it('names §17’s five and §13’s one, and says which can contribute today', async () => {
     const result = await withScope(scope(manager), (tx) =>
       cash.forecast(tx, manager, { from: '2026-02-01', to: '2026-02-28' }),
     );
 
+    // §17 names five. `investment_calls` is the sixth, added when Phase 13 was
+    // built: §13.8 requires the investment cash-flow forecast to feed this one,
+    // and a second forecast nobody reconciled against would be worse than a
+    // longer list here.
     expect(result.sources.map((s) => s.source)).toEqual([
       'ap_due',
       'ar_expected',
       'project_commitments',
       'payroll',
       'transfer_funding',
+      'investment_calls',
     ]);
 
     // Three of §17's five belong to phases that do not exist yet, and the
@@ -373,6 +378,7 @@ describe('07.8 gate · the forecast and its five sources (§17)', () => {
     expect(result.sources.filter((s) => s.available).map((s) => s.source)).toEqual([
       'ap_due',
       'ar_expected',
+      'investment_calls',
     ]);
     for (const source of result.sources.filter((s) => !s.available)) {
       expect(source.note).toMatch(/Awaits Phase \d+/);

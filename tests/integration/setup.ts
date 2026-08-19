@@ -279,6 +279,23 @@ export async function resetTestData(): Promise<void> {
   // anybody having made that decision.
   await client.query('delete from logistics_funding_stage_role');
 
+  // Phase 13 — investments. Children first, then the register, then the proposal
+  // it rests on. The two catalogues go too: they ship **empty** because §13
+  // leaves the categories and valuation methods to Finance (D2), and a type left
+  // behind by one test would let the next one record an investment under a
+  // category nobody defined — which is the whole thing this phase is built to
+  // make impossible.
+  await client.query('delete from investment_capital_call');
+  await client.query('delete from investment_disposal');
+  await client.query('delete from investment_impairment');
+  await client.query('delete from investment_valuation');
+  await client.query('delete from investment_income');
+  await client.query('delete from investment_funding');
+  await client.query('delete from investment');
+  await client.query('delete from investment_proposal');
+  await client.query('delete from investment_valuation_method');
+  await client.query('delete from investment_type');
+
   // Phase 12 — fixed assets. Before the journals recognition and depreciation
   // point at, and before the branches, departments and cost centres they carry.
   await client.query('delete from asset_verification');
@@ -661,7 +678,10 @@ export async function resetTestData(): Promise<void> {
                          -- Phase 11, seeded by migration 0148.
                          'PROJECT_CERTIFICATE', 'PROJECT_VARIATION',
                          -- Phase 12, seeded by migration 0149.
-                         'FIXED_ASSET')
+                         'FIXED_ASSET',
+                         -- Phase 13, seeded by migration 0157.
+                         'INVESTMENT_PROPOSAL', 'INVESTMENT', 'INVESTMENT_FUNDING',
+                         'INVESTMENT_INCOME', 'INVESTMENT_DISPOSAL')
     `);
 
     // §17's high-risk threshold is configuration a migration seeded, and a test

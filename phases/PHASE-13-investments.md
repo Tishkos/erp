@@ -34,10 +34,17 @@ The **structure** is built now. The **categories, valuation methods and posting 
 - §13 — *"Foreign-currency investments store transaction currency and base-currency equivalents"*
 
 **Test gate (structure, testable now)**
-- [ ] Adding a new investment type requires no code change
-- [ ] Required fields vary by type and are enforced at save
-- [ ] Account mappings resolve through the Phase 02 posting profile
-- [ ] Foreign-currency investments store both transaction and base-currency amounts per §A4 of `TECHSTACK.md`
+- [x] Adding a new investment type requires no code change
+- [x] Required fields vary by type and are enforced at save
+- [x] Account mappings resolve through the Phase 02 posting profile
+- [x] Foreign-currency investments store both transaction and base-currency amounts per §A4 of `TECHSTACK.md`
+      — this gate was ticked once before it was true. The investment row, income,
+      funding and disposal all carried both amounts; `investment_capital_call`
+      carried only `amount_txn`, and it is the one row another module reads —
+      §13.8 feeds it to the Phase 07.8 forecast. A dollar-denominated call
+      therefore reached a treasurer's dinar forecast at one to one. Every
+      capital-call test held an IQD investment, where the two amounts are the
+      same number, so nothing caught it. There is now a test holding dollars.
 
 ---
 
@@ -50,10 +57,10 @@ The **structure** is built now. The **categories, valuation methods and posting 
 - §13 — *"Related-party status and approval are captured where the approved process requires it"*
 
 **Test gate**
-- [ ] A proposal requires all five fields before submission
-- [ ] Both management approval and funding source approval are required before acquisition
-- [ ] Related-party status is captured and drives additional approval where configured
-- [ ] Approval history is complete and auditable
+- [x] A proposal requires all five fields before submission
+- [x] Both management approval and funding source approval are required before acquisition
+- [x] Related-party status is captured and drives additional approval where configured
+- [x] Approval history is complete and auditable
 
 ---
 
@@ -66,10 +73,10 @@ The **structure** is built now. The **categories, valuation methods and posting 
 - §13 acceptance criterion 1 — *"An approved investment proposal creates a controlled acquisition record and accounting entry"*
 
 **Test gate**
-- [ ] Acquisition without an approved proposal is impossible
-- [ ] The register entry and the accounting entry are created in one transaction
-- [ ] Funding flows through a Treasury payment (Phase 07), not a direct journal
-- [ ] Additional funding / capital call increases the register entry and posts correctly
+- [x] Acquisition without an approved proposal is impossible
+- [x] The register entry and the accounting entry are created in one transaction
+- [x] Funding flows through a Treasury payment (Phase 07), not a direct journal
+- [x] Additional funding / capital call increases the register entry and posts correctly
 
 ---
 
@@ -82,10 +89,10 @@ The **structure** is built now. The **categories, valuation methods and posting 
 - §13 acceptance criterion 3 — *"Income and disposal trace to bank transactions and supporting documents"*
 
 **Test gate**
-- [ ] An income event without source evidence attached cannot be posted
-- [ ] Income traces to the receiving bank transaction
-- [ ] Income posts to the account mapped for the investment's type
-- [ ] Income by investment reconciles to the income G/L accounts
+- [x] An income event without source evidence attached cannot be posted
+- [x] Income traces to the receiving bank transaction
+- [x] Income posts to the account mapped for the investment's type
+- [x] Income by investment reconciles to the income G/L accounts
 
 ---
 
@@ -105,10 +112,13 @@ The **structure** is built now. The **categories, valuation methods and posting 
 - Appendix E — IFRS 9 reference
 
 **Test gate**
-- [ ] A new valuation creates a new record; the prior valuation remains retrievable
-- [ ] Every valuation records its approver and date
-- [ ] Valuation history is visible in chronological order with the method used at the time
+- [x] A new valuation creates a new record; the prior valuation remains retrievable
+- [x] Every valuation records its approver and date
+- [x] Valuation history is visible in chronological order with the method used at the time
 - [ ] Once D2 is decided: the approved method reproduces Finance's worked examples
+      — **blocked on D2, by design.** `investment_valuation_method` ships empty and a
+      valuation cannot name a method that is not in it, so there is no method whose
+      worked examples could be reproduced. The mechanism is tested; the answer is owed.
 
 ---
 
@@ -117,10 +127,10 @@ The **structure** is built now. The **categories, valuation methods and posting 
 **Build** — partial or full disposal, proceeds, realised result calculation
 
 **Test gate**
-- [ ] Partial disposal reduces units and carrying value proportionally per the approved method
-- [ ] Realised result computes correctly for proceeds above and below carrying value
-- [ ] Full disposal clears the register entry and its balances to zero
-- [ ] Disposal traces to the receiving bank transaction and supporting documents
+- [x] Partial disposal reduces units and carrying value proportionally per the approved method
+- [x] Realised result computes correctly for proceeds above and below carrying value
+- [x] Full disposal clears the register entry and its balances to zero
+- [x] Disposal traces to the receiving bank transaction and supporting documents
 
 ---
 
@@ -133,8 +143,19 @@ The **structure** is built now. The **categories, valuation methods and posting 
 
 **Test gate**
 - [ ] Documents attach through the Phase 01 service and inherit access from the investment record
+      — *partially.* Income and disposal both require a real `attachment` row and refuse
+      without one, and RLS reaches the investment through `object_id`. What is not built is
+      an investment-specific wrapper over the Phase 01 upload service; the tests attach
+      directly. Small, and worth doing when 13.7 gets its screen.
 - [ ] Expiry reminders fire through the Phase 01 notification engine
+      — **not built.** `attachment` has no expiry column: §21 gives the Document Centre
+      *"expiry date and renewal owner"* and that is **Phase 17**. Adding one here would give
+      this module a private copy of a field the whole system will share, which is the mistake
+      Phases 09 and 10 made with the client import file and it cost a merge to undo.
 - [ ] The maturity, review, document expiry and capital-call calendar shows all four event types
+      — *three of four, tested.* Maturity, review and capital call are in one chronological
+      list. Document expiry waits on Phase 17 for the same reason as above, and the union is
+      shaped so adding it is one `union all` and no change to the result.
 
 ---
 
@@ -147,10 +168,10 @@ The **structure** is built now. The **categories, valuation methods and posting 
 - §13 — *"BI combines investment cost, income, current value and realised/unrealised result"*
 
 **Test gate**
-- [ ] Portfolio totals reconcile to the investment G/L accounts
-- [ ] Realised and unrealised results are reported separately, each with audit history
-- [ ] The cash-flow forecast feeds the Phase 07.8 Treasury forecast
-- [ ] Reports respect data scope
+- [x] Portfolio totals reconcile to the investment G/L accounts
+- [x] Realised and unrealised results are reported separately, each with audit history
+- [x] The cash-flow forecast feeds the Phase 07.8 Treasury forecast
+- [x] Reports respect data scope
 
 ---
 

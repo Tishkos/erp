@@ -40,3 +40,5 @@ Cash USD → USD
 Bank EUR → EUR
 
 If Accounting needs the same type of account in another currency, they should create a separate account for that currency.
+
+

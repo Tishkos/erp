@@ -105,13 +105,22 @@ export async function dailyPosition(
 // The forecast — §17's five sources
 // ---------------------------------------------------------------------------
 
-/** §17's five, in §17's own order. */
+/**
+ * §17's five, in §17's own order — and a sixth.
+ *
+ * §13.8 requires the investment cash-flow forecast to feed this one, so
+ * `investment_calls` is here rather than in a second forecast nobody would
+ * reconcile against. A source that is not in this list cannot be named,
+ * excluded, or reported on, which is why adding one is a change here and not
+ * only in the gathering below.
+ */
 export const FORECAST_SOURCES = [
   'ap_due',
   'ar_expected',
   'project_commitments',
   'payroll',
   'transfer_funding',
+  'investment_calls',
 ] as const;
 
 export type ForecastSource = (typeof FORECAST_SOURCES)[number];
@@ -153,7 +162,51 @@ export const SOURCE_STATUS: readonly SourceStatus[] = [
     available: false,
     note: 'Awaits Phase 09 — funding requirements arrive with the transfer register (§12).',
   },
+  {
+    source: 'investment_calls',
+    available: true,
+    note: 'Unmet capital calls, by due date (§13.7). Committed money with a date on it, which is exactly what a forecast is for.',
+  },
 ];
+
+/**
+ * §13.7 — unmet capital calls, by the date they fall due.
+ *
+ * A call that has been funded is gone from the forecast, because the money has
+ * already left and the daily position has it. Only `funded_by_id is null`
+ * remains, which is the definition of a commitment: promised, dated, unpaid.
+ *
+ * Amounts are negative because they are money leaving, the same convention
+ * every other outflow in this file uses.
+ *
+ * The figure is `amount_iqd` and not `amount_txn`. Every source in this file
+ * contributes a base-currency amount converted when its document was raised —
+ * `ap_invoice.total_iqd` is the pattern. Reading the transaction amount here
+ * would have shown a treasurer a dollar-denominated call as though the number
+ * were dinars, which looks plausible and is wrong by the exchange rate.
+ */
+async function investmentCalls(
+  tx: Tx,
+  from: string,
+  to: string,
+  branchCode: string | null,
+): Promise<{ date: string; source: ForecastSource; amountIqd: bigint }[]> {
+  const result = (await tx.execute(sql`
+    select c.due_on::text as due_on, c.amount_iqd::text as amount
+      from investment_capital_call c
+      join investment i on i.id = c.investment_id
+     where c.funded_by_id is null
+       and c.due_on between ${from} and ${to}
+       and i.disposed_on is null
+       and (${branchCode}::text is null or i.branch_code = ${branchCode})
+  `)) as unknown as { rows: Array<{ due_on: string; amount: string }> };
+
+  return result.rows.map((row) => ({
+    date: row.due_on,
+    source: 'investment_calls' as const,
+    amountIqd: -parseDecimal(row.amount, 4n),
+  }));
+}
 
 export interface ForecastLine {
   readonly periodStart: string;
@@ -227,9 +280,19 @@ export async function forecast(
   if (!excluded.includes('ar_expected')) {
     movements.push(...(await arExpected(tx, input.from, input.to, branchCode)));
   }
+  if (!excluded.includes('investment_calls')) {
+    movements.push(...(await investmentCalls(tx, input.from, input.to, branchCode)));
+  }
   // project_commitments, payroll and transfer_funding contribute nothing until
   // their phases exist. They appear in `sources` either way, so the report says
   // what it drew on rather than leaving the reader to assume.
+  //
+  // Two of those three phases now exist — Phase 11 built project commitments and
+  // Phase 09 the transfer register — so their notes are out of date rather than
+  // wrong. Wiring them is a Phase 07 remediation of the same kind Phase 13 has
+  // just done for itself, and it is tracked rather than done here, because a
+  // forecast that silently gained two sources would change every treasurer's
+  // numbers without anybody deciding it should.
 
   const byPeriodSource = new Map<string, { in: bigint; out: bigint }>();
   const byPeriod = new Map<string, { in: bigint; out: bigint }>();

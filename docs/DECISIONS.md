@@ -19,7 +19,7 @@ Decisions that have been made move to [`DecisionAnswered.md`](DecisionAnswered.m
 | Status | Count |
 |---|---|
 | 🔴 Open — one of them blocking a posting outright | 8 |
-| 🟡 Partially answered, or built the defensible way | 17 |
+| 🟡 Partially answered, or built the defensible way | 18 |
 | 🟢 Decided — moved to `DecisionAnswered.md` | 5 |
 
 | # | Decision | Status | Blocks | Raised by |
@@ -49,6 +49,7 @@ Decisions that have been made move to [`DecisionAnswered.md`](DecisionAnswered.m
 | D28 | Does depreciation re-base after an impairment? | 🟡 Built without re-basing | Nothing | Phase 12 |
 | D29 | Who may see a client import file, now one register serves both | 🔴 Open — a consequence of D16 | Nothing; a row-level policy is cheaper now than later | 09/10 merge |
 | D30 | The four thresholds seeded at zero | 🟡 All in force at their strictest | Nothing — each **tightens** | Configuration sweep |
+| D31 | What role an investment counterparty holds in the partner master | 🟡 Recorded as a supplier, which is the nearest true thing | Nothing — master-data quality | Phase 13 |
 
 **Answered and moved out:** D4 (availability and recovery), D6 (accessibility),
 D7 (Chart of Accounts) and D10 (branch access and the Active Branch) — all on
@@ -102,16 +103,34 @@ distinction disappears at go-live. They are also the three that cannot be
 answered here under any reading of §28.1 — they are accounting policy and
 statutory rules, not technical choices.
 
-### If only two get answered this week
+### The three that matter this week
 
-**D22 first.** It is a four-row table and it is the only item in this register
-that stops a posting outright. Phase 10 is built and tested; it cannot take a
-client's money in production until this lands.
+Ranked by what each one is holding up **today**, not by size.
 
-**D15 second.** It was a Phase 16 inconvenience when raised. Phase 12 brought it
-forward — a depreciation run against accounts that still require a department
-fails on the first asset, and Phase 12 is built and waiting. Every month that
-passes adds postings that will have to be classified twice if the answer is late.
+**1 · D22 — which clearing account a logistics funding credits, per job stage.**
+A four-row table, and the only item in this register that stops a posting
+outright. Phase 10 is built and tested and cannot take a client's money in
+production until it lands. Nothing else in the register is in that position.
+
+**2 · D2 — the investment categories and valuation methods.** Promoted on
+2026-08-18 because **Phase 13 is being built now**. The structure ships with
+`investment_type` and `investment_valuation_method` **empty**, which is
+deliberate and safe — without a type no investment can be created, and without a
+method no valuation can be recorded. But it means Phase 13 ships as a shell:
+every mechanism real and tested, and **nothing recordable** until Finance fills
+the two catalogues. The rest of the phase — proposals, approvals, funding through
+Treasury, income, disposal, the register and the reports — is being built now and
+does not wait.
+
+**3 · D15 — dimensions on system-generated postings.** Seven rows. It was a
+Phase 16 inconvenience when raised; Phase 12 brought it forward, because a
+depreciation run against accounts that still require a department fails on the
+first asset, and Phase 12 is built and waiting. Every month that passes adds
+postings that will have to be classified twice if the answer is late.
+
+**Why D1 and D3 are not on this list.** They are just as large, and neither is in
+flight: Phase 11.10 is the only thing D1 holds and Phase 15 has not started. They
+matter at go-live, not this week.
 
 ### What is deliberately not being asked
 
@@ -212,30 +231,9 @@ invisible, because the tests would be written against the same invented rule.
 
 ## D2 — Investment categories, valuation methods and posting rules
 
-| | |
-|---|---|
-| **Status** | 🔴 Open |
-| **Blueprint** | §13 |
-| **Blocks** | Phase 13.1 (type list), Phase 13.5 (valuation and impairment) |
-| **Owner** | Finance → Business Process Owner |
-| **Raised** | 2026-08-16 |
-
-**The blueprint's own words**
-
-> "The legal and accounting treatment of investments differs by instrument. The IT team must implement configurable types and posting rules only after Finance defines the required categories."
-> "Valuation methods and frequency require Finance approval."
-
-**What is needed**
-1. The investment category list
-2. Required fields per category
-3. Account mappings per category
-4. Valuation method and frequency per category
-5. Impairment trigger and measurement basis
-6. Which categories require related-party approval
-
-**Reference:** Appendix E cites IFRS 9.
-
-**Can proceed without it:** the configurable structure, the register, income events, disposal mechanics.
+> **Moved to [`ImportantDecision.md`](ImportantDecision.md).** This is one of the
+> three the build is waiting on today, and it is kept there in full so the short
+> list stays short. Nothing about it changed; only where it lives.
 
 ---
 
@@ -718,83 +716,9 @@ the run is less clever than §15 imagined, not that it is wrong.
 
 ## D15 — Which department and business line a system-generated posting belongs to
 
-| | |
-|---|---|
-| **Status** | 🔴 Open — **and now recurring**; widened at Phase 12 |
-| **Blueprint** | §4.2; migration 0005 |
-| **Blocks** | Nothing today. It recurs at every Phase 16 close step, and now in every depreciation run |
-| **Owner** | Finance → Business Process Owner |
-| **Raised** | 2026-08-17, while building Phase 07.5 · widened 2026-08-18 at Phase 12 |
-
-> **Widened 2026-08-18, at Phase 12.** This was raised about *expenses*. Phase 12 produced the
-> same problem on the revenue side — a gain on disposal is credited to a revenue
-> account, and §4.2 makes **business line** mandatory on revenue accounts. Nobody
-> chooses a business line for a gain that arises because an asset sold for more
-> than its written-down value. The question is therefore about system-generated
-> **postings**, not system-generated expenses, and the table below has grown.
-
-### The problem
-
-§4.2 — as built in migration 0005 — makes **department and business line
-mandatory on every expense account**. That was the right answer for expenses a
-person raises: somebody bought something, for some department, in some line of
-business, and the system should not let them avoid saying which.
-
-Some expenses have nobody to ask. They are produced by the system from a fact
-about the ledger rather than from anybody's decision:
-
-| Expense | Where it comes from | Who would the department be? |
-|---|---|---|
-| **Cash count variance** (§17) | A float was counted and disagreed with the books | The custodian's department? The branch's? Nobody's? |
-| **FX revaluation difference** (§16) | A rate moved between posting and close | It belongs to a currency, not a department |
-| **Rounding difference** | Arithmetic | Nobody's |
-| **Bank charges** (§17, Appendix D) | The bank took a fee | Finance's? The account's branch? |
-| **Depreciation** (§18.5) | Time passed | The asset has a department — but the *charge* is nobody's decision |
-| **Impairment loss** (§18) | An asset was written down | The asset's department, or Finance's? |
-| **Gain or loss on disposal** (§18.6) | Proceeds differed from carrying value | Which **business line** profits from selling a mixer? |
-
-Each has a branch — that much is always known. None has a department or a
-business line that anybody chose.
-
-Depreciation is the mildest of these and the most instructive. The asset *does*
-carry a department, and each charge is stamped with the asset's own — so the
-answer is available. But it was chosen for the asset, not for the charge, and a
-transfer changes it mid-life. The build carries it forward because doing so is
-what makes the register reconcile by dimension; whether Finance wants the charge
-to follow the asset or to sit somewhere fixed is still their call.
-
-### What is built
-
-The mechanism §4.2 requires, unchanged. Where a system-generated posting has no
-department to give, the **requirement is relaxed on that specific account**
-through the existing per-account configuration (`chart_of_account`'s required
-dimensions), rather than by inventing a value or weakening the rule generally.
-
-That is a configuration decision made per account, and it is visible: an account
-with no required dimensions says so, and can be listed.
-
-### What is needed
-
-1. For each of the seven kinds above, one of: **a department to use**, **a
-   department per branch**, or **confirmation that none is required**.
-2. Whether the same answer covers business line, or whether the two differ.
-3. Whether Finance wants these postings gathered into a single "unallocated"
-   department so that they are visible as a total rather than invisible as an
-   absence — which is the option most likely to be wanted and the least likely
-   to be asked for.
-
-### Why it is worth answering before Phase 16
-
-Every one of these appears in the close. If the answer is "they need a
-department", it is a small configuration change made once; if it is discovered
-during the close, it is discovered while somebody is trying to close.
-
-**And now before Phase 12 runs in production.** A depreciation run against
-accounts that still require a department fails on the first asset. The Phase 12
-tests clear the requirement on the four affected accounts to prove the gate
-rather than the gap, and the mapped accounts must be configured the same way
-before the first live run — or D15 answered, which is better.
-
+> **Moved to [`ImportantDecision.md`](ImportantDecision.md).** This is one of the
+> three the build is waiting on today, and it is kept there in full so the short
+> list stays short. Nothing about it changed; only where it lives.
 
 ---
 
@@ -910,29 +834,9 @@ or forbid cross-branch batches with a CHECK.
 
 ## D22 — Which clearing account a logistics client funding credits, at each job stage
 
-| | |
-|---|---|
-| **Status** | 🔴 **Open and blocking** — the only open item that stops a posting outright |
-| **Blueprint** | §11.4 |
-| **Blocks** | Phase 10.4 — client funding cannot be posted at all |
-| **Owner** | Finance → Business Process Owner |
-| **Raised** | 2026-08-17 · `docs/open-questions-phase-10.md` §Q10-1 |
-
-> §11.4: *"Client logistics funding or charge | Bank, Cash or Client Account | **Client Logistics Clearing / Deferred Service Balance according to document stage**"*
-
-The blueprint names two credit accounts and says the choice depends on the stage.
-It does not say which stage takes which. *Client Logistics Clearing* is money held
-on the client's behalf; *Deferred Service Balance* is consideration for a service
-not yet performed. Which one a receipt belongs in is a judgement about when the
-company's obligation arises.
-
-**What is needed:** one value for each stage at which funding can be received —
-Draft, Approved, In Progress, Delivered. It is a four-row table, not a policy
-document, and it is **the cheapest blocking answer in this register.**
-
-**What is built.** `logistics_funding_stage_role` exists and posting resolves
-through it. It ships **empty**, so funding cannot post — which is the ruling above
-working as intended: emptiness refuses.
+> **Moved to [`ImportantDecision.md`](ImportantDecision.md).** This is one of the
+> three the build is waiting on today, and it is kept there in full so the short
+> list stays short. Nothing about it changed; only where it lives.
 
 ---
 
@@ -1181,6 +1085,56 @@ are already in the register with that difference stated.
 
 ---
 
+## D31 — What role does an investment counterparty hold in the partner master?
+
+| | |
+|---|---|
+| **Status** | 🟡 Built the defensible way; the master data is slightly wrong until answered |
+| **Blueprint** | §4.4, §13 |
+| **Blocks** | Nothing. It is a data-quality question, not a posting one |
+| **Owner** | Finance + Master Data → Business Process Owner |
+| **Raised** | 2026-08-18, building Phase 13 |
+
+**How it surfaced.** §13 requires an investment to name its counterparty, and
+§4.4 requires *one identity per counterparty* — so the investee is a Business
+Partner rather than a second master. But `business_partner` carries a CHECK:
+
+```
+business_partner_has_role  CHECK (is_customer OR is_supplier)
+```
+
+Those are the only two roles the master has, and **an investee is neither.** It
+does not buy from the company and it does not sell to it. It is a company the
+company owns a stake in.
+
+**What is built.** An investment counterparty is recorded as a **supplier**,
+because money flows to it at acquisition and that is the nearest true thing the
+model can say. Nothing depends on the flag — the investment module never reads
+it, and the partner is used only for identity and reporting.
+
+**Why it still matters.** The supplier ledger, the A/P ageing and the supplier
+reports all key on `is_supplier`. An investee marked as a supplier will appear in
+lists of people the company buys from, with no transactions, forever. That is not
+a misstatement of the accounts, but it is a misstatement of the master data, and
+those get harder to correct as they accumulate.
+
+**Options**
+
+| | Option | Consequence |
+|---|---|---|
+| a | Leave it. Investees are suppliers with no purchases | No change. They clutter supplier lists |
+| b | Add `is_investee` beside the other two, and relax the CHECK to include it | One column and one constraint change. The supplier reports keep meaning what they say |
+| c | Investment counterparties are not Business Partners at all | Contradicts §4.4's one-identity rule, and loses the link when the same company is *also* a customer — which is exactly the case §4.4 exists for |
+
+**What would settle it in one question.** *Should a company the business holds a
+stake in appear in the supplier list?* If no, (b).
+
+**Cost of a late answer.** (b) is a column and a CHECK today. Once investees have
+accumulated in the supplier master, it is also a data-cleansing exercise across
+whatever reports and ledgers have been built on the flag in the meantime.
+
+---
+
 # What the phases still to be built will need
 
 Added 2026-08-18, at the request of the Business Process Owner: *"what is needed
@@ -1348,7 +1302,7 @@ is the cheapest answer in this file. D4 and D6 are answered and in
 
 ## The pattern worth noticing
 
-Of the twenty-five open items above, exactly **two** stop work today: D22, which
+Of the twenty-six open items above, exactly **two** stop work today: D22, which
 refuses to post, and D15, which will refuse to depreciate. Every other one is
 either a value to configure or a confirmation of something already built the
 defensible way.

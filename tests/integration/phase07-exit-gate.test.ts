@@ -235,7 +235,11 @@ describe('Phase 07 exit gate · §17, end to end', () => {
     );
     expect(Number(forecast.openingIqd)).toBe(20000);
     expect(Number(forecast.closingIqd)).toBe(15500); // 20,000 − 4,500 due
-    expect(forecast.sources).toHaveLength(5);
+    // §17 names five sources; Phase 13 added `investment_calls` as a sixth,
+    // because §13.8 requires the investment cash-flow forecast to feed this one
+    // rather than stand beside it as a second forecast nobody reconciles.
+    // The closing balance above is unchanged: there are no capital calls here.
+    expect(forecast.sources).toHaveLength(6);
 
     // ── 3 · A payment run: proposed by one, approved by another ───────────
     const proposal = await withScope(scope(maker), (tx) =>
