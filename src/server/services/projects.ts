@@ -1338,30 +1338,36 @@ export async function projectView(tx: Tx, ctx: ActorContext, projectCode: string
     branchCode: row.branchCode ?? ctx.branchCode,
   });
 
-  const [wbs, budget, commitments, costs, certificates, variations] = await Promise.all([
-    tx.select().from(projectWbs).where(eq(projectWbs.projectCode, projectCode)).orderBy(projectWbs.code),
-    budgetReport(tx, ctx, projectCode),
-    tx
-      .select()
-      .from(projectCommitment)
-      .where(eq(projectCommitment.projectCode, projectCode))
-      .orderBy(projectCommitment.committedOn),
-    tx
-      .select()
-      .from(projectCost)
-      .where(eq(projectCost.projectCode, projectCode))
-      .orderBy(desc(projectCost.incurredOn)),
-    tx
-      .select()
-      .from(projectCertificate)
-      .where(eq(projectCertificate.projectCode, projectCode))
-      .orderBy(projectCertificate.certifiedOn),
-    tx
-      .select()
-      .from(projectVariation)
-      .where(eq(projectVariation.projectCode, projectCode))
-      .orderBy(projectVariation.version),
-  ]);
+  // Sequential, not `Promise.all`: a transaction is one connection, and issuing
+  // concurrent queries on it is deprecated in `pg` and an error from pg@9. The
+  // driver serialises them regardless, so the parallel form buys nothing — the
+  // rule `dimensions.ts` writes down, applied here too.
+  const wbs = await tx
+    .select()
+    .from(projectWbs)
+    .where(eq(projectWbs.projectCode, projectCode))
+    .orderBy(projectWbs.code);
+  const budget = await budgetReport(tx, ctx, projectCode);
+  const commitments = await tx
+    .select()
+    .from(projectCommitment)
+    .where(eq(projectCommitment.projectCode, projectCode))
+    .orderBy(projectCommitment.committedOn);
+  const costs = await tx
+    .select()
+    .from(projectCost)
+    .where(eq(projectCost.projectCode, projectCode))
+    .orderBy(desc(projectCost.incurredOn));
+  const certificates = await tx
+    .select()
+    .from(projectCertificate)
+    .where(eq(projectCertificate.projectCode, projectCode))
+    .orderBy(projectCertificate.certifiedOn);
+  const variations = await tx
+    .select()
+    .from(projectVariation)
+    .where(eq(projectVariation.projectCode, projectCode))
+    .orderBy(projectVariation.version);
 
   return {
     project: row,

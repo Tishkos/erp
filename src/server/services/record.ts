@@ -183,19 +183,21 @@ export async function view(
   const header = await source.loadHeader(tx, documentId);
   if (!header) throw new RecordNotFoundError(documentType, documentId);
 
-  const [transitions, approvals, related, journals, timeline, overrides] = await Promise.all([
-    transitionsFor(tx, documentType),
-    approvalsFor(tx, documentType, documentId),
-    source.loadRelated?.(tx, documentId) ?? Promise.resolve([]),
-    source.loadJournals?.(tx, documentId) ?? Promise.resolve([]),
-    audit.timelineFor(
-      tx,
-      source.object,
-      header.auditObjectId ?? documentId,
-      options.auditLimit ?? 200,
-    ),
-    source.actionOverrides?.(tx, header) ?? Promise.resolve({}),
-  ]);
+  // Sequential, not `Promise.all`: a transaction is one connection, and issuing
+  // concurrent queries on it is deprecated in `pg` and an error from pg@9. The
+  // driver serialises them regardless, so the parallel form buys nothing — the
+  // rule `dimensions.ts` writes down, applied here too.
+  const transitions = await transitionsFor(tx, documentType);
+  const approvals = await approvalsFor(tx, documentType, documentId);
+  const related = await (source.loadRelated?.(tx, documentId) ?? Promise.resolve([]));
+  const journals = await (source.loadJournals?.(tx, documentId) ?? Promise.resolve([]));
+  const timeline = await audit.timelineFor(
+    tx,
+    source.object,
+    header.auditObjectId ?? documentId,
+    options.auditLimit ?? 200,
+  );
+  const overrides = await (source.actionOverrides?.(tx, header) ?? Promise.resolve({}));
 
   const actions = actionsFor(
     {

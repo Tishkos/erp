@@ -1011,28 +1011,30 @@ export async function register(
 
 export async function view(tx: Tx, id: string) {
   const asset = await load(tx, id);
-  const [depreciation, impairments, transfers, verifications] = await Promise.all([
-    tx
-      .select()
-      .from(assetDepreciation)
-      .where(eq(assetDepreciation.assetId, id))
-      .orderBy(assetDepreciation.periodEnd),
-    tx
-      .select()
-      .from(assetImpairment)
-      .where(eq(assetImpairment.assetId, id))
-      .orderBy(assetImpairment.impairedOn),
-    tx
-      .select()
-      .from(assetTransfer)
-      .where(eq(assetTransfer.assetId, id))
-      .orderBy(assetTransfer.transferredOn),
-    tx
-      .select()
-      .from(assetVerification)
-      .where(eq(assetVerification.assetId, id))
-      .orderBy(desc(assetVerification.verifiedOn)),
-  ]);
+  // Sequential, not `Promise.all`: a transaction is one connection, and issuing
+  // concurrent queries on it is deprecated in `pg` and an error from pg@9. The
+  // driver serialises them regardless, so the parallel form buys nothing — the
+  // rule `dimensions.ts` writes down, applied here too.
+  const depreciation = await tx
+    .select()
+    .from(assetDepreciation)
+    .where(eq(assetDepreciation.assetId, id))
+    .orderBy(assetDepreciation.periodEnd);
+  const impairments = await tx
+    .select()
+    .from(assetImpairment)
+    .where(eq(assetImpairment.assetId, id))
+    .orderBy(assetImpairment.impairedOn);
+  const transfers = await tx
+    .select()
+    .from(assetTransfer)
+    .where(eq(assetTransfer.assetId, id))
+    .orderBy(assetTransfer.transferredOn);
+  const verifications = await tx
+    .select()
+    .from(assetVerification)
+    .where(eq(assetVerification.assetId, id))
+    .orderBy(desc(assetVerification.verifiedOn));
 
   return {
     asset,
