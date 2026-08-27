@@ -48,6 +48,7 @@ export default async function ManagersPage({ searchParams }: { searchParams: Sea
       actions={<LinkButton href="/master-data/departments" label={t('departments.title')} />}
       subtitle={t('managers.subtitle')}
       title={t('managers.title')}
+      variant="sap"
     >
       <Panel flush>
         <ListToolbar

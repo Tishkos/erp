@@ -113,6 +113,7 @@ export default async function PeriodsPage({ searchParams }: { searchParams: Sear
       tabs={<SectionTabs route="/finance/periods" />}
       subtitle={t('periods.subtitle')}
       title={t('periods.title')}
+      variant="sap"
     >
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
 

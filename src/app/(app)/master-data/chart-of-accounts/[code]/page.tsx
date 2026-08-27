@@ -1,4 +1,6 @@
 import { notFound } from 'next/navigation';
+import { admin as s } from '@/components/admin';
+import { Workspace } from '@/components/ui';
 import { visibleRoute } from '@/server/phase-gate';
 import { RecordPage } from '@/components/record-page';
 import { registerAllRecords } from '@/server/records';
@@ -61,7 +63,7 @@ export default async function AccountRecordPage({
   });
 
   return (
-    <>
+    <Workspace className={s.sapPage}>
       {/* An action that was refused says so. The record framework decides which
           buttons to *offer* from status and permission; whether the workflow
           will accept the decision — self-approval, for one — is only known when
@@ -76,6 +78,6 @@ export default async function AccountRecordPage({
       {account ? (
         <AccountControls account={account.node} mayConfigure={account.mayConfigure} />
       ) : null}
-    </>
+    </Workspace>
   );
 }

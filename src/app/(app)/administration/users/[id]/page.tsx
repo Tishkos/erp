@@ -114,6 +114,7 @@ export default async function UserPage({
       back={{ href: '/administration/users', label: t('back') }}
       title={user.displayName}
       trail={[{ href: '/', label: t('dashboard_label') }]}
+      variant="sap"
     >
       {mailed ? <Flash error={null} errorTitle="" saved savedLabel={t('users.mailed', { email: user.email })} /> : null}
       {mailFailed ? <Flash error={t('users.mail_failed')} errorTitle={t('error_title')} saved={false} savedLabel="" /> : null}

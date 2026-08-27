@@ -53,7 +53,7 @@ export default async function CompanyPage({ searchParams }: { searchParams: Sear
   });
 
   return (
-    <AdminPage tabs={<SectionTabs route="/administration/company" />} back={{ href: '/', label: t('dashboard_label') }} subtitle={t('company.subtitle')} title={t('company.title')}>
+    <AdminPage tabs={<SectionTabs route="/administration/company" />} back={{ href: '/', label: t('dashboard_label') }} subtitle={t('company.subtitle')} title={t('company.title')} variant="sap">
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
       {current ? null : <p className={s.sectionHint}>{t('company.not_set')}</p>}
 

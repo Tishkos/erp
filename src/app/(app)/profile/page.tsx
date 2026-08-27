@@ -58,7 +58,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
       .toUpperCase() || '?';
 
   return (
-    <AdminPage back={{ href: '/', label: admin('dashboard_label') }} title={t('title')}>
+    <AdminPage back={{ href: '/', label: admin('dashboard_label') }} title={t('title')} variant="sap">
       <Flash
         error={outcome.error}
         errorTitle={admin('error_title')}

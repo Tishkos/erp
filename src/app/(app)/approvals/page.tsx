@@ -63,7 +63,7 @@ export default async function ApprovalsPage({ searchParams }: { searchParams: Se
     ref.href ? <Link href={ref.href}>{ref.label}</Link> : <span className={s.mono}>{ref.label}</span>;
 
   return (
-    <AdminPage back={{ href: '/', label: t('dashboard_label') }} subtitle={t('approvals.subtitle')} title={t('approvals.title')}>
+    <AdminPage back={{ href: '/', label: t('dashboard_label') }} subtitle={t('approvals.subtitle')} title={t('approvals.title')} variant="sap">
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
 
       <div className={s.statRow}>

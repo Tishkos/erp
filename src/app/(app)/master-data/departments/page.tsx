@@ -78,6 +78,7 @@ export default async function DepartmentsPage({ searchParams }: { searchParams: 
       tabs={<SectionTabs route="/master-data/departments" />}
       subtitle={t('departments.subtitle')}
       title={t('departments.title')}
+      variant="sap"
     >
       <Flash
         error={outcome.error}

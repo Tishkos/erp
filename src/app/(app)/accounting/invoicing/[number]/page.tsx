@@ -146,6 +146,7 @@ export default async function InvoicePage({
       back={{ href: '/accounting/invoicing', label: t('back') }}
       title={row.documentNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
+      variant="sap"
     >
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
 

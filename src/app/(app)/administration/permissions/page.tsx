@@ -41,7 +41,7 @@ export default async function PermissionsPage({ searchParams }: { searchParams: 
   const held = new Set(role?.grants.map((g) => `${g.object}:${g.verb}`) ?? []);
 
   return (
-    <AdminPage tabs={<SectionTabs route="/administration/permissions" />} back={{ href: '/', label: t('dashboard_label') }} subtitle={t('permissions.subtitle')} title={t('permissions.title')}>
+    <AdminPage tabs={<SectionTabs route="/administration/permissions" />} back={{ href: '/', label: t('dashboard_label') }} subtitle={t('permissions.subtitle')} title={t('permissions.title')} variant="sap">
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
 
       <div className={s.profileGrid} style={{ gridTemplateColumns: 'minmax(15rem, 19rem) minmax(0, 1fr)' }}>

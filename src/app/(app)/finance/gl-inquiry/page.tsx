@@ -70,6 +70,7 @@ export default async function GeneralLedgerPage({ searchParams }: { searchParams
       tabs={<SectionTabs route="/finance/gl-inquiry" />}
       subtitle={t('reports.gl_subtitle')}
       title={t('reports.gl')}
+      variant="sap"
     >
       <Panel>
         <FilterForm action="/finance/gl-inquiry">

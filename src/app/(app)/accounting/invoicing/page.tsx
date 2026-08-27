@@ -61,6 +61,7 @@ export default async function InvoicingPage({ searchParams }: { searchParams: Se
       back={{ href: '/', label: t('dashboard_label') }}
       subtitle={t('invoicing.subtitle')}
       title={t('invoicing.title')}
+      variant="sap"
     >
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
       {mayCreate && !hasDepartment ? (

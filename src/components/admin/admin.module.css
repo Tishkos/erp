@@ -2700,3 +2700,396 @@
     max-block-size: 22rem;
   }
 }
+
+/* ── The rest of the application, in the same window ──────────────────────
+   Every other screen is built from the stock parts: a Panel, a `table.list`
+   inside a `.table-wrap`, a ListToolbar above it, status pills in a column.
+   Those are global class names, so they can be reached from here — which
+   means a screen joins the workspace by setting `variant="sap"` on its
+   AdminPage and changing nothing else.
+
+   Written this way on purpose. Twenty-five screens hand-converted would be
+   twenty-five chances to drift; one block that dresses the shared parts keeps
+   them identical by construction, and a screen that has not opted in is
+   untouched. */
+
+/* The Panel becomes a window: squared off, its heading a title bar. The
+   padding is set here rather than inherited because the header below cancels
+   this exact figure to reach the edges. */
+.sapPage :global(section.panel),
+.sapPage :global(section[class*='panel']) {
+  padding: 1rem;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 0.2rem;
+  background: var(--w-bg);
+  box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
+}
+
+.sapPage :global(section[class*='panel']) > header {
+  margin: -1rem -1rem 0.85rem;
+  padding: 0.4rem 0.75rem;
+  border-block-end: 1px solid var(--w-line);
+  border-radius: 0;
+  background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
+  box-shadow: inset 0 -2px 0 var(--w-title-line);
+}
+
+.sapPage :global(section[class*='panel']) > header h2 {
+  color: #0f3350;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* A flush panel holds a toolbar and a grid edge to edge, so it keeps no
+   padding of its own and its header needs no negative margin to escape one. */
+.sapPage :global(section[class*='panelFlush']) {
+  padding: 0;
+}
+
+.sapPage :global(section[class*='panelFlush']) > header {
+  margin: 0;
+}
+
+/* The search bar above a list. */
+.sapPage .toolbar {
+  padding: 0.55rem 0.7rem;
+  border-block-end-color: var(--w-line);
+  background: var(--w-bg);
+}
+
+.sapPage .toolbarMeta {
+  color: var(--w-muted);
+  font-size: 0.74rem;
+}
+
+.sapPage .toolbarSearch input {
+  min-block-size: 2.05rem;
+  block-size: 2.05rem;
+  border-color: var(--w-line-strong);
+  border-radius: 0.12rem;
+  background: var(--w-field);
+}
+
+/* ── The grid every list screen already uses ──────────────────────────── */
+.sapPage :global(.table-wrap) {
+  border: 1px solid var(--w-rule);
+  border-radius: 0;
+  background: #ffffff;
+  scrollbar-color: var(--w-line-strong) var(--w-canvas);
+  scrollbar-width: thin;
+}
+
+.sapPage :global(table.list) {
+  background: #ffffff;
+  color: var(--w-text);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sapPage :global(table.list) th,
+.sapPage :global(table.list) td {
+  block-size: 1.85rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--w-rule);
+  font-size: 0.78rem;
+}
+
+.sapPage :global(table.list) thead th {
+  background: var(--w-head-strong);
+  color: var(--w-label);
+  font-size: 0.73rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Banded, the way a long register is read. */
+.sapPage :global(table.list) tbody tr:nth-child(even) > td {
+  background: #f6f7f0;
+}
+
+.sapPage :global(table.list) tbody tr:hover > td,
+.sapPage :global(table.list) tbody tr:focus-within > td {
+  background: var(--w-selected);
+}
+
+.sapPage :global(table.list) tfoot td,
+.sapPage :global(table.list) tfoot th {
+  background: var(--w-head);
+  font-weight: 700;
+}
+
+.sapPage :global(table.list) a {
+  color: #14507d;
+  font-weight: 700;
+}
+
+/* ── Status, as a pill rather than a solid block ──────────────────────── */
+.sapPage :global(.status) {
+  min-block-size: 1.4rem;
+  padding-inline: 0.5rem;
+  border: 1px solid #c1aa67;
+  border-radius: 999px;
+  background: #fff3bd;
+  color: #654b06;
+  font-size: 0.69rem;
+  font-weight: 750;
+}
+
+.sapPage :global(.status--posted),
+.sapPage :global(.status--approved),
+.sapPage :global(.status--active),
+.sapPage :global(.status--open) {
+  border-color: #86a28c;
+  background: #e2f0df;
+  color: #235b32;
+}
+
+.sapPage :global(.status--submitted),
+.sapPage :global(.status--partially_executed) {
+  border-color: #91a8bb;
+  background: #e5eef5;
+  color: #294f6d;
+}
+
+.sapPage :global(.status--rejected),
+.sapPage :global(.status--cancelled),
+.sapPage :global(.status--reversed),
+.sapPage :global(.status--closed),
+.sapPage :global(.status--inactive) {
+  border-color: #ca9b94;
+  background: #f7e5e2;
+  color: #7e332c;
+}
+
+/* Odds and ends the screens lean on. */
+.sapPage :global(.muted) {
+  color: var(--w-muted);
+}
+
+.sapPage :global(.numeric) {
+  text-align: end;
+}
+
+.sapPage .empty,
+.sapPage :global(.empty) {
+  padding: 1.6rem 0.8rem;
+  color: var(--w-muted);
+  background: var(--w-bg);
+}
+
+/* The search button beside a list's search box carries no class of its own —
+   it is styled by its position — so the generic .button rule above never
+   reaches it, and it stayed the application's blue on an otherwise amber
+   screen. */
+.sapPage.sapPage .toolbarSearch button {
+  min-inline-size: 2.35rem;
+  inline-size: 2.35rem;
+  min-block-size: 2.05rem;
+  block-size: 2.05rem;
+  padding: 0;
+  border: 1px solid var(--w-amber-line);
+  border-radius: 0.12rem;
+  background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
+  color: #3a2600;
+}
+
+.sapPage.sapPage .toolbarSearch button:hover {
+  background: linear-gradient(180deg, #ffe6a8, #f2b12f);
+}
+
+/* Pill carries a yes/no rather than a status name — active, self-approving,
+   in balance. It reads as the same kind of mark as a status, so it is given
+   the same shape and the same three colours. */
+.sapPage .pill {
+  min-block-size: 1.4rem;
+  padding-inline: 0.5rem;
+  border: 1px solid #b9c2b4;
+  background: var(--w-head-strong);
+  color: var(--w-label);
+  font-size: 0.69rem;
+  font-weight: 750;
+}
+
+.sapPage .pillOn {
+  border-color: #86a28c;
+  background: #e2f0df;
+  color: #235b32;
+}
+
+.sapPage .pillOff {
+  border-color: #ca9b94;
+  background: #f7e5e2;
+  color: #7e332c;
+}
+
+/* ── Chart of Accounts, and the record framework ──────────────────────────
+   These two screens are not built from AdminPage — the chart has its own
+   workspace component and a record is drawn by the record framework — so they
+   never picked up anything above. Both name their parts with plain global
+   classes rather than CSS modules, which is why they can be reached from here
+   at all. They are wrapped in the same Workspace + .sapPage the variant sets,
+   so the geometry matches rather than merely resembling. */
+
+/* Panels become windows, their headings title bars. */
+.sapPage :global(.coa-panel),
+.sapPage :global(.coa-balance-card),
+.sapPage :global(.coa-kpi-card),
+.sapPage :global(.panel) {
+  border: 1px solid var(--w-line-strong);
+  border-radius: 0.2rem;
+  background: var(--w-bg);
+  box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
+}
+
+.sapPage :global(.coa-panel-header),
+.sapPage :global(.coa-balance-header),
+.sapPage :global(.coa-page-header) {
+  border-block-end: 1px solid var(--w-line);
+  background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
+  box-shadow: inset 0 -2px 0 var(--w-title-line);
+}
+
+.sapPage :global(.coa-panel-heading),
+.sapPage :global(.coa-title),
+.sapPage :global(.panel__title),
+.sapPage :global(.page__title) {
+  color: #0f3350;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.sapPage :global(.coa-subtitle),
+.sapPage :global(.coa-context-label) {
+  color: var(--w-muted);
+}
+
+/* The chart's own grid, ruled like every other. */
+.sapPage :global(.coa-table-wrap) {
+  border: 1px solid var(--w-rule);
+  border-radius: 0;
+  background: #ffffff;
+}
+
+.sapPage :global(.coa-table) {
+  background: #ffffff;
+  color: var(--w-text);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sapPage :global(.coa-table) th,
+.sapPage :global(.coa-table) td {
+  block-size: 1.85rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--w-rule);
+  font-size: 0.78rem;
+}
+
+.sapPage :global(.coa-table) thead th {
+  background: var(--w-head-strong);
+  color: var(--w-label);
+  font-size: 0.73rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.sapPage :global(.coa-table) tbody tr:nth-child(even) > td {
+  background: #f6f7f0;
+}
+
+.sapPage :global(.coa-table) tbody tr:hover > td {
+  background: var(--w-selected);
+}
+
+/* The open row, marked the way the register marks it. */
+.sapPage :global(.coa-row--selected) > td {
+  background: var(--w-selected-strong);
+  font-weight: 650;
+}
+
+.sapPage :global(.coa-account-code),
+.sapPage :global(.coa-account-link),
+.sapPage :global(.coa-detail-link),
+.sapPage :global(.coa-inline-link) {
+  color: #14507d;
+  font-weight: 700;
+}
+
+/* Buttons, in the workspace's amber. */
+.sapPage :global(.coa-button),
+.sapPage :global(.coa-compact-button),
+.sapPage :global(.coa-icon-button),
+.sapPage :global(.coa-search-submit),
+.sapPage :global(.coa-page-button),
+.sapPage :global(.action) {
+  border: 1px solid var(--w-amber-line);
+  border-radius: 0.12rem;
+  background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
+  color: #3a2600;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.sapPage :global(.coa-button):hover,
+.sapPage :global(.coa-compact-button):hover,
+.sapPage :global(.coa-icon-button):hover,
+.sapPage :global(.coa-search-submit):hover,
+.sapPage :global(.coa-page-button):hover,
+.sapPage :global(.action):hover {
+  background: linear-gradient(180deg, #ffe6a8, #f2b12f);
+}
+
+/* A disabled page button, and the page you are already on, must not look like
+   something to press. */
+.sapPage :global(.coa-page-button--disabled),
+.sapPage :global(.coa-page-button--current) {
+  border-color: var(--w-line-strong);
+  background: var(--w-head-strong);
+  color: var(--w-muted);
+}
+
+.sapPage :global(.coa-search-input),
+.sapPage :global(.coa-select),
+.sapPage :global(.coa-context-field) {
+  border: 1px solid var(--w-line-strong);
+  border-radius: 0.12rem;
+  background: var(--w-field);
+  color: var(--w-text);
+  font-size: 0.78rem;
+}
+
+/* The record framework: its facts strip and its timeline. */
+.sapPage :global(.page__header) {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 0.2rem;
+  background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
+  box-shadow: inset 0 -2px 0 var(--w-title-line);
+}
+
+.sapPage :global(.facts) > * {
+  color: var(--w-text);
+}
+
+.sapPage :global(.timeline) {
+  color: var(--w-text);
+}
+
+/* A button that cannot be pressed must not look like one. The record
+   framework offers every action a document type has and disables the ones
+   this document's status forbids, so on a typical record most of the row is
+   disabled — in amber they all read as available. */
+.sapPage :global(.action):disabled,
+.sapPage :global(.action)[aria-disabled='true'],
+.sapPage.sapPage button:disabled,
+.sapPage :global(.coa-button):disabled,
+.sapPage :global(.coa-page-button--disabled) {
+  border-color: var(--w-line);
+  background: var(--w-head-strong);
+  color: var(--w-muted);
+  cursor: not-allowed;
+}

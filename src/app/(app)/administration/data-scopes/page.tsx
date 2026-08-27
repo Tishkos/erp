@@ -45,7 +45,7 @@ export default async function DataScopesPage({ searchParams }: { searchParams: S
   const shown = rows.filter((row) => matches(row, outcome.q));
 
   return (
-    <AdminPage tabs={<SectionTabs route="/administration/data-scopes" />} back={{ href: '/', label: t('dashboard_label') }} subtitle={t('data_scopes.subtitle')} title={t('data_scopes.title')}>
+    <AdminPage tabs={<SectionTabs route="/administration/data-scopes" />} back={{ href: '/', label: t('dashboard_label') }} subtitle={t('data_scopes.subtitle')} title={t('data_scopes.title')} variant="sap">
       <Panel flush>
         <ListToolbar
           clearHref="/administration/data-scopes"

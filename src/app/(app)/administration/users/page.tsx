@@ -133,6 +133,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Search
       tabs={<SectionTabs route="/administration/users" />}
       subtitle={t('users.subtitle')}
       title={t('users.title')}
+      variant="sap"
     >
       <Flash
         error={outcome.error}

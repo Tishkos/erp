@@ -1,4 +1,6 @@
 import { getTranslations } from 'next-intl/server';
+import { admin as s } from '@/components/admin';
+import { Workspace } from '@/components/ui';
 import { visibleRoute } from '@/server/phase-gate';
 import { notFound } from 'next/navigation';
 import { ChartOfAccountsWorkspace } from '@/components/chart-of-accounts-workspace';
@@ -63,7 +65,7 @@ export default async function ChartOfAccountsPage({
   );
 
   return (
-    <>
+    <Workspace className={s.sapPage}>
       <div className="new-account-bar">
         <SectionTabs route="/master-data/chart-of-accounts" />
         {accounts.length > 0 ? (
@@ -76,6 +78,6 @@ export default async function ChartOfAccountsPage({
         total={result.total}
         search={search ?? ''}
       />
-    </>
+    </Workspace>
   );
 }

@@ -55,6 +55,7 @@ export default async function TrialBalancePage({ searchParams }: { searchParams:
       tabs={<SectionTabs route="/finance/trial-balance" />}
       subtitle={t('reports.trial_balance_subtitle')}
       title={t('reports.trial_balance')}
+      variant="sap"
     >
       <Panel>
         {/* A GET form: the report is a place, so it can be linked to and

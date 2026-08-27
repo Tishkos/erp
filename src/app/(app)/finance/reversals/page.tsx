@@ -47,6 +47,7 @@ export default async function ReversalsPage() {
       tabs={<SectionTabs route="/finance/reversals" />}
       subtitle={t('reversals.subtitle')}
       title={t('reversals.title')}
+      variant="sap"
     >
       <Panel flush>
         <div className="table-wrap" style={{ border: 0 }}>

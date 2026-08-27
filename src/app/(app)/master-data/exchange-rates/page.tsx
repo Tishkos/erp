@@ -134,6 +134,7 @@ export default async function ExchangeRatesPage({ searchParams }: { searchParams
       tabs={<SectionTabs route="/master-data/exchange-rates" />}
       subtitle={t('rates.subtitle')}
       title={t('rates.title')}
+      variant="sap"
     >
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
 

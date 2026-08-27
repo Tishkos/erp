@@ -85,6 +85,7 @@ export default async function BranchesPage({ searchParams }: { searchParams: Sea
       tabs={<SectionTabs route="/master-data/branches" />}
       subtitle={t('branches.subtitle')}
       title={t('branches.title')}
+      variant="sap"
     >
       <Flash
         error={outcome.error}

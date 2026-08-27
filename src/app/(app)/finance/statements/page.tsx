@@ -83,6 +83,7 @@ export default async function StatementsPage({ searchParams }: { searchParams: S
       tabs={<SectionTabs route="/finance/statements" />}
       subtitle={t('reports.statements_subtitle')}
       title={t('reports.statements')}
+      variant="sap"
     >
       <Panel>
         <FilterForm action="/finance/statements">

@@ -83,6 +83,7 @@ export default async function NumberingPage({ searchParams }: { searchParams: Se
       tabs={<SectionTabs route="/administration/numbering" />}
       subtitle={t('numbering.subtitle')}
       title={t('numbering.title')}
+      variant="sap"
     >
       <Flash
         error={outcome.error}

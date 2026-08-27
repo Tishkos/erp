@@ -58,6 +58,7 @@ export default async function RolesPage({ searchParams }: { searchParams: Search
       tabs={<SectionTabs route="/administration/roles" />}
       subtitle={t('roles.subtitle')}
       title={t('roles.title')}
+      variant="sap"
     >
       <Flash
         error={outcome.error}

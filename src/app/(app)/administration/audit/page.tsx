@@ -44,7 +44,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Search
   const hrefFor = (p: number) => `/administration/audit?${outcome.q ? `q=${encodeURIComponent(outcome.q)}&` : ''}page=${p}`;
 
   return (
-    <AdminPage tabs={<SectionTabs route="/administration/audit" />} back={{ href: '/', label: t('dashboard_label') }} subtitle={t('audit.subtitle')} title={t('audit.title')}>
+    <AdminPage tabs={<SectionTabs route="/administration/audit" />} back={{ href: '/', label: t('dashboard_label') }} subtitle={t('audit.subtitle')} title={t('audit.title')} variant="sap">
       <Panel
         actions={<SearchBox defaultValue={outcome.q} label={list('search')} placeholder={t('audit.search_placeholder')} />}
         flush
