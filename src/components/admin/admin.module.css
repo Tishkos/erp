@@ -3897,3 +3897,16 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* A file on a document is a door: it looks like one. */
+.sapDoc .fileList a,
+.sapPage .fileList a {
+  color: #14507d;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.sapDoc .fileList a:hover,
+.sapPage .fileList a:hover {
+  background: var(--w-selected);
+}

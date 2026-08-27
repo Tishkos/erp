@@ -9,8 +9,13 @@ import { getRequestConfig } from 'next-intl/server';
 import { cookies } from 'next/headers';
 import { DEFAULT_LOCALE, isLocale, LOCALE_COOKIE } from './config';
 
-export default getRequestConfig(async () => {
-  const requested = (await cookies()).get(LOCALE_COOKIE)?.value;
+export default getRequestConfig(async ({ requestLocale }) => {
+  // A caller may name the locale outright — getTranslations({locale}) does,
+  // and the print voucher depends on it: an Arabic-working accountant prints
+  // an English voucher without touching their own setting. Only when nothing
+  // is named does the device preference in the cookie decide.
+  const named = await requestLocale;
+  const requested = named ?? (await cookies()).get(LOCALE_COOKIE)?.value;
   const locale = requested && isLocale(requested) ? requested : DEFAULT_LOCALE;
 
   return {

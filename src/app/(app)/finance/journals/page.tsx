@@ -22,6 +22,7 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as journal from '@/server/services/journal';
+import * as attachments from '@/server/services/attachments';
 import { startJournal } from './actions';
 
 /**
@@ -52,8 +53,9 @@ export default async function JournalsPage({ searchParams }: { searchParams: Sea
   const mayCreate = can(principal, 'create', journal.PERMISSION_OBJECT);
   const today = new Date().toISOString().slice(0, 10);
 
-  const { rows, inFinance } = await withCurrentUser(async (tx) => ({
+  const { rows, files, inFinance } = await withCurrentUser(async (tx) => ({
     rows: await journal.listAll(tx),
+    files: await attachments.countByObject(tx, journal.PERMISSION_OBJECT),
     // §14 — an entry can only be raised from a Finance department, so say so
     // here rather than after the entry has been filled in and refused.
     inFinance: await journal.isInFinanceDepartment(tx, principal.userId),
@@ -156,6 +158,9 @@ export default async function JournalsPage({ searchParams }: { searchParams: Sea
                   <th className={s.sapNum} scope="col">
                     {column('amount')}
                   </th>
+                  <th aria-label={t('journals.attachments_col')} scope="col" title={t('journals.attachments_col')}>
+                    📎
+                  </th>
                   <th scope="col">{column('branch_code')}</th>
                   <th scope="col">{t('journals.raised_by')}</th>
                   <th scope="col">{column('status')}</th>
@@ -190,6 +195,9 @@ export default async function JournalsPage({ searchParams }: { searchParams: Sea
                     <td className={s.sapNum}>
                       <bdi dir="ltr">{formatMoney(row.totalDebitIqd, 'IQD', locale as Locale)}</bdi>
                     </td>
+                    {/* Whether the paperwork is on the entry, before it is
+                        opened — a register is where that gets checked. */}
+                    <td className={s.sapNum}>{files.get(row.id) ?? '—'}</td>
                     <td>
                       <bdi dir="ltr">{row.branchCode}</bdi>
                     </td>

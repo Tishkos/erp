@@ -98,6 +98,9 @@ describe('§25 · every key a component asks for exists', () => {
     // of them, or at the root.
     const namespaces = [
       ...source.matchAll(/(?:getTranslations|useTranslations)\(\s*'([^']+)'\s*\)/g),
+      // The object form names a locale and a namespace both — the print
+      // voucher uses it to render either language on demand.
+      ...source.matchAll(/namespace:\s*'([^']+)'/g),
     ].map((m) => m[1]!);
 
     for (const match of source.matchAll(/\b(?:t|label|status|nav|page|phase)\(\s*'([a-z0-9_.]+)'/gi)) {

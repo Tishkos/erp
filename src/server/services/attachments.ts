@@ -13,7 +13,7 @@
  * That is why `objectType`/`objectId` are loose text: the check is not a join,
  * it is a question put to whoever owns the record.
  */
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull } from 'drizzle-orm';
 import {
   AttachmentAccessError,
   DEFAULT_UPLOAD_POLICY,
@@ -398,6 +398,30 @@ export async function download(
 }
 
 /** The attachments a document currently shows: clean, not superseded, not disposed. */
+/**
+ * How many current files each record of a type carries — one grouped query,
+ * for a register that wants to say which entries have their paperwork. The
+ * same filters as currentFor, so the count never disagrees with the panel.
+ */
+export async function countByObject(
+  tx: Tx,
+  objectType: string,
+): Promise<ReadonlyMap<string, number>> {
+  const rows = await tx
+    .select({ objectId: attachment.objectId, n: count() })
+    .from(attachment)
+    .where(
+      and(
+        eq(attachment.objectType, objectType),
+        eq(attachment.scanStatus, 'clean'),
+        isNull(attachment.supersededById),
+        isNull(attachment.disposedAt),
+      ),
+    )
+    .groupBy(attachment.objectId);
+  return new Map(rows.map((r) => [r.objectId, Number(r.n)]));
+}
+
 export async function currentFor(tx: Tx, objectType: string, objectId: string) {
   return tx
     .select()

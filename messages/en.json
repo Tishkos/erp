@@ -1264,7 +1264,16 @@
       "rate_note": "The rate is the one in force on the posting date; it is set in Currencies and Rates, never here.",
       "entry_no": "Entry no.",
       "remove_line": "Remove line",
-      "month_filter": "Showing entries posted in {month}."
+      "month_filter": "Showing entries posted in {month}.",
+      "attachments_col": "Attachments",
+      "no_attachments_posted": "No attachments were found on this entry when it was posted.",
+      "print": "Print",
+      "print_title": "Journal Voucher",
+      "printed_line": "Printed by {name} on {when} · branch {branch}",
+      "signature_prepared": "Prepared by",
+      "signature_approved": "Approved by",
+      "signature_received": "Received by",
+      "print_back": "Back to the entry"
     },
     "reversals": {
       "title": "Reversals",

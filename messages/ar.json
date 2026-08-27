@@ -1264,7 +1264,16 @@
       "rate_note": "يُؤخذ سعر الصرف الساري في تاريخ الترحيل، ويُحدَّد في شاشة العملات وأسعار الصرف لا هنا.",
       "entry_no": "رقم القيد",
       "remove_line": "إزالة البند",
-      "month_filter": "تُعرض القيود المرحّلة في {month}."
+      "month_filter": "تُعرض القيود المرحّلة في {month}.",
+      "attachments_col": "المرفقات",
+      "no_attachments_posted": "لم يُعثر على أي مرفقات في هذا القيد عند ترحيله.",
+      "print": "طباعة",
+      "print_title": "سند قيد",
+      "printed_line": "طبعه {name} في {when} · الفرع {branch}",
+      "signature_prepared": "إعداد",
+      "signature_approved": "اعتماد",
+      "signature_received": "استلام",
+      "print_back": "العودة إلى القيد"
     },
     "reversals": {
       "title": "القيود العكسية",

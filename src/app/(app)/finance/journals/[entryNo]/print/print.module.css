@@ -1,0 +1,190 @@
+/*
+ * A journal voucher on paper.
+ *
+ * Deliberately not the application's skin: paper is black on white whatever
+ * palette the person works in, because the printout outlives the screen it
+ * came from. A4, ruled the way a voucher is ruled, and nothing interactive
+ * on it — the toolbar hides itself when the printer asks.
+ */
+.sheet {
+  max-inline-size: 190mm;
+  margin-inline: auto;
+  padding: 10mm 6mm 6mm;
+  background: #fff;
+  color: #111;
+  font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+  font-size: 10.5pt;
+}
+
+/* The toolbar exists only on screen. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  max-inline-size: 190mm;
+  margin: 0.6rem auto;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #b8b8b2;
+  background: #f4f4ee;
+}
+
+.toolbar a,
+.toolbar button {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid #b77d0b;
+  background: linear-gradient(180deg, #ffd978, #e9aa24);
+  color: #3a2600;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.toolbar .quiet {
+  border-color: #8d8d89;
+  background: #fff;
+  color: #333;
+}
+
+/* Letterhead: the logo, the company, and which document this is. */
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8mm;
+  padding-block-end: 4mm;
+  border-block-end: 2.5pt solid #111;
+}
+
+.head img {
+  inline-size: 24mm;
+  block-size: auto;
+}
+
+.company {
+  text-align: center;
+}
+
+.company strong {
+  display: block;
+  font-size: 14pt;
+}
+
+.company span {
+  display: block;
+  color: #444;
+  font-size: 9pt;
+}
+
+.docname {
+  text-align: end;
+}
+
+.docname strong {
+  display: block;
+  font-size: 13pt;
+}
+
+.docname span {
+  font-size: 10pt;
+  letter-spacing: 0.04em;
+}
+
+/* The header facts, two ruled columns. */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 8mm;
+  margin-block: 4mm;
+}
+
+.facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 4mm;
+  padding: 1.4mm 0;
+  border-block-end: 0.5pt solid #999;
+}
+
+.facts dt {
+  color: #333;
+  font-weight: 700;
+}
+
+.facts dd {
+  margin: 0;
+  text-align: end;
+}
+
+/* The lines, ruled both ways. */
+.lines {
+  inline-size: 100%;
+  margin-block: 3mm 0;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.lines th,
+.lines td {
+  padding: 1.6mm 2mm;
+  border: 0.6pt solid #444;
+  font-size: 9.5pt;
+  text-align: start;
+}
+
+.lines th {
+  background: #eee;
+  font-size: 8.5pt;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.lines .num {
+  text-align: end;
+  white-space: nowrap;
+}
+
+.lines tfoot td {
+  border-block-start: 1.4pt solid #111;
+  background: #f3f3f3;
+  font-weight: 700;
+}
+
+/* Who touched it, and who signs it. */
+.provenance {
+  margin-block-start: 4mm;
+  color: #333;
+  font-size: 8.5pt;
+}
+
+.signatures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10mm;
+  margin-block-start: 14mm;
+}
+
+.signatures span {
+  padding-block-start: 2mm;
+  border-block-start: 0.7pt solid #111;
+  font-size: 9pt;
+  text-align: center;
+}
+
+@media print {
+  .toolbar {
+    display: none;
+  }
+
+  .sheet {
+    max-inline-size: none;
+    padding: 0;
+  }
+}
+
+@page {
+  size: A4;
+  margin: 12mm;
+}

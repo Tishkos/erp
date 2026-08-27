@@ -652,6 +652,15 @@ export default async function JournalPage({
           {/* The foot: what may be done, and what the document comes to. */}
           <div className={s.sapFoot}>
             <div className={s.sapFootActions}>
+              {/* Paper is a status-free right: a draft prints stamped as a
+                  draft, which is sometimes exactly what a reviewer wants. */}
+              <Link
+                className={s.button}
+                href={`/finance/journals/${encodeURIComponent(header.entryNo)}/print`}
+                target="_blank"
+              >
+                {t('journals.print')}
+              </Link>
               {maySubmit ? (
                 <ActionButton
                   action={submitJournal}
@@ -752,7 +761,22 @@ export default async function JournalPage({
             </div>
           </div>
         ) : (
-          <RecordHistory objectId={header.id} objectType={journal.PERMISSION_OBJECT} />
+          <div className={s.profileGrid}>
+            <div className={s.profileStack}>
+              {/* A document that went through with no paperwork says so in
+                  words — silence reads as a screen that forgot to load, and
+                  an auditor should not have to infer the difference. */}
+              <section className={s.sapWindow}>
+                <div className={s.sapTitle}>{t('attachments.title')}</div>
+                <div className={s.sapBody}>
+                  <p className={s.sapNote}>{t('journals.no_attachments_posted')}</p>
+                </div>
+              </section>
+            </div>
+            <div className={s.profileStack}>
+              <RecordHistory objectId={header.id} objectType={journal.PERMISSION_OBJECT} />
+            </div>
+          </div>
         )}
         </div>
       </div>
