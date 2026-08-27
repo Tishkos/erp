@@ -1,0 +1,352 @@
+/*
+ * The three states a route can be in besides showing its screen: loading,
+ * missing, failed. All three use the same tokens as the screens themselves —
+ * a reader should be able to tell the application is still the application.
+ */
+
+/* Skeleton ---------------------------------------------------------------- */
+
+.skeleton {
+  display: grid;
+  gap: 1rem;
+  animation: fade-in 240ms ease-out both;
+}
+
+/*
+ * A bar that advances quickly and then never quite reaches the end. It is
+ * fixed to the viewport, above the shell header, so it is visible whatever
+ * the scroll position — the one place a reader's eye goes to ask "is it
+ * working?".
+ */
+.progress {
+  position: fixed;
+  z-index: 120;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  inline-size: 100%;
+  block-size: 3px;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.progress::before {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  content: "";
+  inline-size: 0;
+  border-start-end-radius: 3px;
+  border-end-end-radius: 3px;
+  background: var(--accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 70%, transparent);
+  animation: progress-advance 6s cubic-bezier(0.1, 0.6, 0.2, 1) forwards;
+}
+
+.progress::after {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  content: "";
+  inline-size: 30%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 55%), transparent);
+  animation: progress-glide 1.3s ease-in-out infinite;
+}
+
+.skeletonHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.skeletonHeading {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.55rem;
+}
+
+.skeletonActions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+}
+
+.skeletonStrip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.8rem;
+}
+
+.skeletonTable {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.skeletonToolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-block-end: 1px solid var(--border);
+}
+
+.skeletonRow {
+  display: grid;
+  grid-template-columns: 1.6fr 2fr 1fr 1fr 0.8fr;
+  gap: 1rem;
+  padding: 0.8rem 1rem;
+  border-block-end: 1px solid var(--border);
+  animation: fade-in 400ms ease-out both;
+  animation-delay: calc(var(--row, 0) * 45ms);
+}
+
+.skeletonRow:last-child {
+  border-block-end: 0;
+}
+
+.skeletonRowHead {
+  background: var(--surface-muted);
+}
+
+.skeletonRowHead .cell {
+  block-size: 0.6rem;
+  inline-size: 55%;
+}
+
+.bar {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    100deg,
+    var(--surface-muted) 30%,
+    color-mix(in srgb, var(--surface-muted) 55%, var(--surface-raised)) 50%,
+    var(--surface-muted) 70%
+  );
+  background-size: 220% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.crumb {
+  block-size: 0.65rem;
+  inline-size: min(9rem, 30%);
+}
+
+.title {
+  block-size: 1.6rem;
+  inline-size: min(18rem, 60%);
+}
+
+.subtitle {
+  block-size: 0.8rem;
+  inline-size: min(26rem, 80%);
+}
+
+.ghostButton,
+.primaryButton {
+  block-size: 2.1rem;
+  inline-size: 6.5rem;
+}
+
+.primaryButton {
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface-muted));
+}
+
+.card {
+  display: grid;
+  align-content: space-between;
+  block-size: 6.4rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.cardLabel {
+  block-size: 0.65rem;
+  inline-size: 45%;
+}
+
+.cardValue {
+  block-size: 1.4rem;
+  inline-size: 65%;
+}
+
+.search {
+  block-size: 2rem;
+  inline-size: min(18rem, 50%);
+}
+
+.chip {
+  block-size: 2rem;
+  inline-size: 5rem;
+  border-radius: 999px;
+}
+
+.cell {
+  block-size: 0.8rem;
+  inline-size: 80%;
+}
+
+.cell:nth-child(2) {
+  inline-size: 60%;
+}
+
+.cell:nth-child(5) {
+  inline-size: 45%;
+  border-radius: 999px;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -80% 0;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes progress-advance {
+  0% {
+    inline-size: 0;
+  }
+  15% {
+    inline-size: 40%;
+  }
+  40% {
+    inline-size: 70%;
+  }
+  100% {
+    inline-size: 92%;
+  }
+}
+
+@keyframes progress-glide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+/*
+ * A skeleton that pulses is decoration, not information. Someone who has asked
+ * not to see motion still needs to know the screen is coming, so the shimmer
+ * stops and the placeholders stay.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .bar,
+  .skeleton,
+  .skeletonRow,
+  .progress::after {
+    animation: none;
+  }
+
+  .progress::before {
+    inline-size: 60%;
+    animation: none;
+  }
+}
+
+/* Missing and failed ------------------------------------------------------ */
+
+.state {
+  display: grid;
+  min-block-size: 60vh;
+  place-items: center;
+  padding: 2rem 1rem;
+}
+
+.stateCard {
+  display: grid;
+  justify-items: center;
+  max-inline-size: 30rem;
+  gap: 0.45rem;
+  padding: 2rem 1.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+.stateIcon {
+  display: inline-grid;
+  inline-size: 2.6rem;
+  block-size: 2.6rem;
+  place-items: center;
+  margin-block-end: 0.35rem;
+  border-radius: 50%;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.stateIconAlert {
+  color: var(--status-rejected);
+  background: color-mix(in srgb, var(--status-rejected) 12%, var(--surface));
+}
+
+.stateIcon svg {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+}
+
+.stateCard h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.1rem;
+  font-weight: var(--weight-strong);
+  letter-spacing: -0.02em;
+}
+
+.stateCard p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-body);
+}
+
+.stateAction {
+  min-block-size: var(--control-height);
+  display: inline-flex;
+  align-items: center;
+  margin-block-start: 0.75rem;
+  padding-inline: 1rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--accent-contrast);
+  background: var(--accent);
+  font-size: var(--font-button);
+  font-weight: var(--weight-button);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.stateAction:hover {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.srOnly {
+  position: absolute;
+  overflow: hidden;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  border: 0;
+  margin: -1px;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

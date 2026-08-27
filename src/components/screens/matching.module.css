@@ -1,0 +1,149 @@
+/* Layout for the matching workspace. Look comes from the UI kit. */
+
+.balanceStrip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: stretch;
+  gap: 0.8rem;
+  margin-block-end: 0.9rem;
+}
+
+.balanceCard {
+  display: grid;
+  align-content: center;
+  gap: 0.15rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.balanceCard h2 {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-label);
+  font-weight: var(--weight-label);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+html[lang="ar"] .balanceCard h2 {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.balanceCard p {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.08rem;
+  font-weight: var(--weight-strong);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/*
+ * The verdict is a word and an icon, never colour alone — a reader who cannot
+ * separate the green from the amber still has to be able to tell whether this
+ * account reconciles.
+ */
+.verdict {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-block-start: 0.15rem;
+  font-size: var(--font-meta);
+  font-weight: var(--weight-button);
+}
+
+.verdict svg {
+  inline-size: 0.85rem;
+  block-size: 0.85rem;
+}
+
+.settled {
+  border-color: color-mix(in srgb, var(--status-posted) 40%, transparent);
+}
+
+.settled .verdict {
+  color: var(--status-posted);
+}
+
+.outstanding {
+  border-color: color-mix(in srgb, var(--status-submitted) 45%, transparent);
+}
+
+.outstanding .verdict {
+  color: var(--status-submitted);
+}
+
+.balanceActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* The two populations, side by side. */
+.panes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 0.8rem;
+  margin-block-end: 0.9rem;
+}
+
+.panes > * {
+  min-inline-size: 0;
+}
+
+@media (max-width: 68rem) {
+  .balanceStrip,
+  .panes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .balanceActions {
+    justify-content: flex-end;
+  }
+}
+
+/* What has already been agreed. */
+.matchedList {
+  display: grid;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.matchedList li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.85rem;
+  padding-block: 0.55rem;
+  border-block-end: 1px solid var(--border);
+  color: var(--text-soft);
+  font-size: var(--font-cell);
+}
+
+.matchedList li:last-child {
+  border-block-end: 0;
+}
+
+.matchedList li > span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matchedList bdi:first-child {
+  color: var(--accent);
+  font-weight: var(--weight-button);
+}
+
+.matchedList bdi {
+  font-variant-numeric: tabular-nums;
+}

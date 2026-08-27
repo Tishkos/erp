@@ -1,9 +1,14 @@
-import { getTranslations } from 'next-intl/server';
+import Image from 'next/image';
+import { getLocale, getTranslations } from 'next-intl/server';
+import { Globe, ShieldCheck } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import { cookies, headers } from 'next/headers';
 import { db, applyScope } from '@/server/db/client';
 import { createSession, verifyCredentials } from '@/server/services/authentication';
 import { optionalContext, SESSION_COOKIE } from '@/server/session';
+import { LoginForm } from '@/components/login-form';
+import mainLogo from '../../../mainLogo.png';
+import styles from './sign-in.module.css';
 
 /**
  * Sign-in — Phase 01.1's authentication, given a screen in Phase 01.12.
@@ -24,6 +29,9 @@ async function signIn(formData: FormData) {
 
   const email = String(formData.get('email') ?? '').trim();
   const password = String(formData.get('password') ?? '');
+  // Unticked, the cookie is dropped when the browser closes; ticked, it lasts
+  // as long as the session the server issued. Neither extends the session.
+  const remember = formData.get('remember') === '1';
 
   if (!email || !password) redirect('/sign-in?error=1');
 
@@ -49,7 +57,7 @@ async function signIn(formData: FormData) {
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     path: '/',
-    expires: issued.expiresAt,
+    ...(remember ? { expires: issued.expiresAt } : {}),
   });
 
   redirect('/');
@@ -62,59 +70,59 @@ export default async function SignInPage({
 }) {
   if (await optionalContext()) redirect('/');
 
-  const t = await getTranslations();
+  const [t, locale] = await Promise.all([getTranslations(), getLocale()]);
   const failed = (await searchParams).error !== undefined;
 
   return (
-    <main
-      style={{
-        maxInlineSize: '22rem',
-        marginInline: 'auto',
-        marginBlockStart: '6rem',
-        padding: 'var(--space-4)',
-      }}
-    >
-      <h1 className="page__title" style={{ marginBlockEnd: 'var(--space-4)' }}>
-        {t('app.name')}
-      </h1>
+    <main className={styles.page}>
+      {/*
+        The brand panel. The grid and concentric rings are pseudo-elements on
+        this section; the lockup already carries the company name and
+        strapline, so the panel adds only the product tagline beneath it.
+      */}
+      <section className={styles.brand}>
+        <div className={styles.brandHeading}>
+          <Image
+            alt={t('shell.logo_alt')}
+            className={styles.brandLogo}
+            preload
+            sizes="(max-width: 52rem) 96px, 132px"
+            src={mainLogo}
+          />
+          <p className={styles.brandStrapline}>{t('app.tagline')}</p>
+        </div>
 
-      <form action={signIn}>
-        <label htmlFor="email" className="nav__heading" style={{ paddingInline: 0 }}>
-          {t('auth.email')}
-        </label>
-        <input
-          className="list__search"
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="username"
-          required
-          style={{ inlineSize: '100%', marginBlockEnd: 'var(--space-3)' }}
-        />
+        <div className={styles.brandFooter}>
+          <div>
+            <p className={styles.pillarTitle}>{t('auth.pillar_one_title')}</p>
+            <p className={styles.pillarBody}>{t('auth.pillar_one_body')}</p>
+          </div>
+          <i aria-hidden="true" />
+          <div>
+            <p className={styles.pillarTitle}>{t('auth.pillar_two_title')}</p>
+            <p className={styles.pillarBody}>{t('auth.pillar_two_body')}</p>
+          </div>
+        </div>
+      </section>
 
-        <label htmlFor="password" className="nav__heading" style={{ paddingInline: 0 }}>
-          {t('auth.password')}
-        </label>
-        <input
-          className="list__search"
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          style={{ inlineSize: '100%', marginBlockEnd: 'var(--space-4)' }}
-        />
+      <section className={styles.formSide}>
+        <p className={styles.authorized}>
+          <ShieldCheck aria-hidden="true" />
+          <span>{t('auth.authorized')}</span>
+        </p>
 
-        {failed && (
-          <p role="alert" style={{ color: 'var(--status-rejected)' }}>
-            {t('auth.failed')}
-          </p>
-        )}
+        <LoginForm action={signIn} className={styles.card} failed={failed} />
 
-        <button className="action action--primary" type="submit" style={{ inlineSize: '100%' }}>
-          {t('auth.sign_in')}
-        </button>
-      </form>
+        <footer className={styles.pageFooter}>
+          <span>
+            © {new Date().getFullYear()} {t('auth.company')}
+          </span>
+          <span className={styles.pageFooterLang}>
+            <Globe aria-hidden="true" />
+            {locale === 'ar' ? t('shell.arabic') : t('shell.english')}
+          </span>
+        </footer>
+      </section>
     </main>
   );
 }

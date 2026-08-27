@@ -1,0 +1,809 @@
+/*
+ * The UI kit — the visual language of the two approved screens, extracted.
+ *
+ * Every value here is either a token from globals.css or a number lifted
+ * verbatim from the Chart of Accounts workspace, which is the implementation
+ * of UI.png. Nothing is invented: a primitive that looked *nearly* like the
+ * approved screen would give the application two design languages, which is
+ * the one outcome this file exists to prevent.
+ *
+ * Logical properties throughout — `padding-inline`, never `padding-left` — so
+ * the Arabic layout mirrors without a second stylesheet (§25).
+ */
+
+/* Page furniture --------------------------------------------------------- */
+
+.workspace {
+  position: relative;
+  color: var(--text);
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-block-end: 1.25rem;
+}
+
+.heading {
+  min-inline-size: 0;
+}
+
+.title {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(1.3rem, 1.75vw, 1.62rem);
+  font-weight: var(--weight-strong);
+  letter-spacing: -0.035em;
+  line-height: 1.25;
+}
+
+html[lang="ar"] .title {
+  letter-spacing: 0;
+}
+
+.subtitle {
+  margin: 0.28rem 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-body);
+}
+
+/*
+ * Actions wrap. A record page offers up to eight of them — edit, submit,
+ * approve, reject, execute, post, reverse, cancel — and in one non-wrapping
+ * row that is 858px of buttons, which pushed the whole document sideways on a
+ * 390px screen. Wrapping is the honest answer: every action stays reachable.
+ */
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem 0.65rem;
+}
+
+/* The honesty marker ------------------------------------------------------
+   A screen drawn over samples says so, every time it is shown. Small, but
+   never hidden: a mock at a real address that reads as live data is the
+   failure mode this whole build has to avoid. */
+
+.presentation {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-block-end: 1rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--status-submitted);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--status-submitted) 9%, var(--surface));
+  color: var(--text-soft);
+  font-size: var(--font-meta);
+}
+
+.presentation svg {
+  flex: 0 0 auto;
+  inline-size: 0.9rem;
+  block-size: 0.9rem;
+  color: var(--status-submitted);
+}
+
+.presentationBadge {
+  color: var(--status-submitted);
+  font-weight: var(--weight-strong);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+html[lang="ar"] .presentationBadge {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Buttons ---------------------------------------------------------------- */
+
+.button,
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color var(--motion), border-color var(--motion), background var(--motion),
+    box-shadow var(--motion), transform var(--motion);
+}
+
+.button {
+  min-block-size: var(--control-height);
+  gap: 0.48rem;
+  padding-inline: 0.9rem;
+  font-size: var(--font-button);
+  font-weight: var(--weight-button);
+  white-space: nowrap;
+}
+
+.button > svg,
+.iconButton > svg {
+  inline-size: 0.96rem;
+  block-size: 0.96rem;
+  stroke-width: 2;
+}
+
+.secondary {
+  border-color: var(--border-strong);
+  color: var(--accent);
+  background: var(--surface);
+}
+
+.secondary:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+
+.primary {
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  background: var(--accent);
+  box-shadow: 0 7px 18px rgb(var(--accent-rgb) / 20%);
+}
+
+.primary:hover {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.button:disabled,
+.iconButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
+.iconButton {
+  inline-size: var(--control-height);
+  block-size: var(--control-height);
+  border-color: var(--border-strong);
+  color: var(--text-soft);
+  background: var(--surface);
+}
+
+.iconButton:hover {
+  border-color: var(--accent-border);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.countBadge {
+  display: inline-grid;
+  min-inline-size: 1.3rem;
+  min-block-size: 1.3rem;
+  place-items: center;
+  padding-inline: 0.35rem;
+  border-radius: 999px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-size: 0.62rem;
+  font-weight: var(--weight-strong);
+}
+
+/* Context bar ------------------------------------------------------------ */
+
+.contextBar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  align-items: end;
+  gap: 0.75rem;
+  margin-block-end: 1rem;
+}
+
+.contextBarWithSearch {
+  grid-template-columns: repeat(var(--context-fields, 4), minmax(9rem, 1fr)) minmax(15rem, 1.65fr) auto;
+}
+
+.contextField {
+  position: relative;
+  display: grid;
+  min-inline-size: 0;
+  min-block-size: 3.65rem;
+  align-content: center;
+  gap: 0.27rem;
+  padding: 0.48rem 0.75rem 0.43rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  transition: border-color var(--motion), box-shadow var(--motion);
+}
+
+.contextField:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.contextLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.32rem;
+  color: var(--text-muted);
+  font-size: var(--font-label);
+  font-weight: var(--weight-label);
+}
+
+.contextLabel svg {
+  inline-size: 0.75rem;
+  block-size: 0.75rem;
+  color: var(--accent);
+}
+
+.select {
+  inline-size: 100%;
+  min-inline-size: 0;
+  border: 0;
+  color: var(--text-soft);
+  background: transparent;
+  font-size: 0.7rem;
+  font-weight: var(--weight-label);
+  outline: 0;
+}
+
+.search {
+  position: relative;
+  display: flex;
+  min-inline-size: 0;
+  block-size: var(--control-height);
+  align-items: center;
+  align-self: end;
+}
+
+.searchInput {
+  inline-size: 100%;
+  block-size: 100%;
+  padding-inline: 0.85rem 2.65rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  background: var(--surface);
+  font-size: var(--font-control);
+  outline: none;
+  transition: border-color var(--motion), box-shadow var(--motion);
+}
+
+.searchInput:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.searchInput::placeholder {
+  color: var(--text-muted);
+}
+
+.searchSubmit {
+  position: absolute;
+  inset-inline-end: 0.38rem;
+  display: inline-grid;
+  inline-size: 2rem;
+  block-size: 2rem;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-soft);
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--motion), background var(--motion);
+}
+
+.searchSubmit:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.searchSubmit svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+}
+
+/* Panels ----------------------------------------------------------------- */
+
+.panel {
+  min-inline-size: 0;
+  /* A panel is a card, and a card that hugs its content reads as cramped.
+     Record pages override this to 1.5rem; this is the floor. */
+  padding: 1.35rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.panelFlush {
+  padding: 0;
+  overflow: hidden;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-block-end: 1.05rem;
+}
+
+.panelFlush .panelHeader {
+  margin-block-end: 0;
+  padding: 1.1rem 1.5rem;
+  border-block-end: 1px solid var(--border);
+}
+
+.panelTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  color: var(--text);
+  font-size: var(--font-panel-title);
+  font-weight: var(--weight-strong);
+  letter-spacing: -0.01em;
+}
+
+.panelTitle > svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+  color: var(--accent);
+}
+
+.panelActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.periodPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-soft);
+  background: var(--surface);
+  font-size: var(--font-meta);
+  font-weight: var(--weight-button);
+}
+
+.panelFooter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-block-start: 0.85rem;
+  padding-block-start: 0.75rem;
+  border-block-start: 1px solid var(--border);
+}
+
+.panelFlush .panelFooter {
+  margin-block-start: 0;
+  padding: 0.75rem 1rem;
+}
+
+/* Status ----------------------------------------------------------------- */
+
+/*
+ * A soft pill, derived from the --status-* tokens rather than written out per
+ * status in hex. The Chart of Accounts workspace hand-wrote four of them and
+ * left the other seven falling back to the solid global .status; mixing the
+ * token instead covers all eleven, and follows the token into dark mode where
+ * a fixed hex would not.
+ */
+.status {
+  --pill: var(--status-draft);
+
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 1.45rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--pill) 34%, transparent);
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--pill) 78%, var(--text));
+  background: color-mix(in srgb, var(--pill) 12%, var(--surface));
+  font-size: 0.64rem;
+  font-weight: var(--weight-button);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.status[data-status="draft"] { --pill: var(--status-draft); }
+.status[data-status="submitted"] { --pill: var(--status-submitted); }
+.status[data-status="approved"] { --pill: var(--status-approved); }
+.status[data-status="partially_executed"] { --pill: var(--status-executed); }
+.status[data-status="executed"] { --pill: var(--status-executed); }
+.status[data-status="posted"] { --pill: var(--status-posted); }
+.status[data-status="settled"] { --pill: var(--status-settled); }
+.status[data-status="rejected"] { --pill: var(--status-rejected); }
+.status[data-status="cancelled"] { --pill: var(--status-cancelled); }
+.status[data-status="reversed"] { --pill: var(--status-reversed); }
+.status[data-status="closed"] { --pill: var(--status-closed); }
+
+/* Tables ----------------------------------------------------------------- */
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-cell);
+}
+
+.table th {
+  padding: 0.6rem 0.8rem;
+  border-block-end: 1px solid var(--border);
+  color: var(--text-muted);
+  background: var(--surface-muted);
+  font-size: var(--font-label);
+  font-weight: var(--weight-strong);
+  letter-spacing: 0.05em;
+  text-align: start;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+html[lang="ar"] .table th {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.table td {
+  block-size: var(--table-row-height);
+  padding: 0.4rem 0.8rem;
+  border-block-end: 1px solid var(--border);
+  color: var(--text-soft);
+  text-align: start;
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-block-end: 0;
+}
+
+.table tbody tr:hover td {
+  background: var(--accent-soft);
+}
+
+.numeric {
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.cellStrong {
+  color: var(--text);
+  font-weight: var(--weight-button);
+}
+
+.cellLink {
+  color: var(--accent);
+  font-weight: var(--weight-button);
+  text-decoration: none;
+}
+
+.cellLink:hover {
+  text-decoration: underline;
+}
+
+/* Pagination ------------------------------------------------------------- */
+
+.tableFooter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.pageButton {
+  display: inline-grid;
+  min-inline-size: 2rem;
+  block-size: 2rem;
+  place-items: center;
+  padding-inline: 0.4rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-soft);
+  background: var(--surface);
+  font-size: var(--font-meta);
+  font-weight: var(--weight-button);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color var(--motion), border-color var(--motion), background var(--motion);
+}
+
+.pageButton:hover {
+  border-color: var(--accent-border);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.pageCurrent,
+.pageCurrent:hover {
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  background: var(--accent);
+}
+
+.pageDisabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.pageEllipsis {
+  padding-inline: 0.2rem;
+  color: var(--text-muted);
+}
+
+/* Directional icons — the chevron that must flip in Arabic. */
+.directionalIcon {
+  transform: scaleX(1);
+}
+
+html[dir="rtl"] .directionalIcon {
+  transform: scaleX(-1);
+}
+
+/* Empty state ------------------------------------------------------------ */
+
+.empty {
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  padding: 2.75rem 1rem;
+  text-align: center;
+}
+
+.empty > svg {
+  inline-size: 1.6rem;
+  block-size: 1.6rem;
+  margin-block-end: 0.3rem;
+  color: var(--accent);
+  opacity: 0.65;
+}
+
+.emptyTitle {
+  color: var(--text);
+  font-size: var(--font-body);
+  font-weight: var(--weight-button);
+}
+
+.emptyHint {
+  max-inline-size: 26rem;
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+}
+
+/* Utility ---------------------------------------------------------------- */
+
+.srOnly {
+  position: absolute;
+  overflow: hidden;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  border: 0;
+  margin: -1px;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 60rem) {
+  .contextBarWithSearch {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pageHeader {
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+}
+
+/*
+ * A report's totals row. Sticky to the bottom of a scrolling table so the
+ * figure the reader came for does not scroll away from the rows it sums.
+ */
+.totalsRow td {
+  position: sticky;
+  inset-block-end: 0;
+  border-block-start: 2px solid var(--border-strong);
+  border-block-end: 0;
+  color: var(--text);
+  background: var(--surface-muted);
+  font-weight: var(--weight-strong);
+}
+
+/* Parameters — a report asks before it answers. */
+.parameters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  align-items: end;
+  gap: 0.75rem;
+  margin-block-end: 0.9rem;
+  padding: 0.9rem;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+  box-shadow: var(--shadow-card);
+}
+
+.parameterActions {
+  display: flex;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.drillHint {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.55rem 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+}
+
+.drillHint svg {
+  inline-size: 0.85rem;
+  block-size: 0.85rem;
+}
+
+/* Settings — the save bar follows the reader down the page. */
+.saveBar {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-block-start: 1rem;
+  padding: 0.7rem 0.95rem;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius);
+  background: var(--surface-overlay);
+  box-shadow: var(--shadow-menu);
+  backdrop-filter: blur(6px);
+}
+
+.saveBarNote {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--status-submitted);
+  font-size: var(--font-meta);
+  font-weight: var(--weight-button);
+}
+
+.saveBarNote svg {
+  inline-size: 0.9rem;
+  block-size: 0.9rem;
+}
+
+.saveBarActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* The preview dialog ------------------------------------------------------ */
+
+.dialog {
+  inline-size: min(100%, 26rem);
+  padding: 1.1rem 1.2rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-menu);
+}
+
+.dialog::backdrop {
+  background: rgb(9 17 33 / 45%);
+  backdrop-filter: blur(2px);
+}
+
+.dialogHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-block-end: 0.85rem;
+}
+
+.dialogHead h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--font-panel-title);
+  font-weight: var(--weight-strong);
+  letter-spacing: -0.01em;
+}
+
+.dialogClose {
+  display: inline-grid;
+  inline-size: 1.9rem;
+  block-size: 1.9rem;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--motion), background var(--motion);
+}
+
+.dialogClose:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.dialogClose svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+}
+
+.dialogNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text-soft);
+  font-size: var(--font-meta);
+  line-height: 1.5;
+}
+
+.dialogNotice svg {
+  flex: 0 0 auto;
+  inline-size: 0.95rem;
+  block-size: 0.95rem;
+  margin-block-start: 0.1rem;
+  color: var(--accent);
+}
+
+.dialogNotice strong {
+  display: block;
+  margin-block-end: 0.15rem;
+  color: var(--text);
+}
+
+.dialogActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-block-start: 1rem;
+}
+
+.dialogBadge {
+  color: var(--status-submitted);
+  font-size: 0.62rem;
+  font-weight: var(--weight-strong);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+html[lang="ar"] .dialogBadge {
+  letter-spacing: 0;
+  text-transform: none;
+}

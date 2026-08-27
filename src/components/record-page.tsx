@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 import type { RecordView } from '@domain/record-view';
 import { formatBusinessDate, formatMoney, formatTimestamp } from '@/i18n/config';
+import { performRecordAction } from '@/server/record-action';
 
 /**
  * The record framework's rendering half — Phase 01.12, Appendix A rules 2–4.
@@ -13,7 +14,14 @@ import { formatBusinessDate, formatMoney, formatTimestamp } from '@/i18n/config'
  * than disappearing, because an absent section and an empty one look identical
  * to a reader who is trying to establish that a document never posted.
  */
-export async function RecordPage({ view }: { view: RecordView }) {
+export async function RecordPage({
+  view,
+  returnTo,
+}: {
+  view: RecordView;
+  /** Where to come back to after an action. The record's own address. */
+  readonly returnTo?: string;
+}) {
   const t = await getTranslations('record');
   const statusLabel = await getTranslations('status');
   const actionLabel = await getTranslations('action');
@@ -22,8 +30,11 @@ export async function RecordPage({ view }: { view: RecordView }) {
   return (
     <article>
       {/* Rule 4 — a draft is marked, in text as well as colour, and the marking
-          survives printing (see globals.css @media print). */}
-      {!draftMarking.isFinal && (
+          survives printing (see globals.css @media print). Keyed off the label,
+          not `isFinal`: approved and executed carry the label `final` without
+          being terminal, and rejected/cancelled/reversed are terminal but must
+          still show their stamp. */}
+      {draftMarking.labelKey === 'record.marking.final' ? null : (
         <div className="draft-band" role="status">
           {t(draftMarking.labelKey.replace('record.marking.', 'marking.'))}
         </div>
@@ -36,21 +47,39 @@ export async function RecordPage({ view }: { view: RecordView }) {
 
       {/* Rule 3 — only actions valid for status and permission are enabled, and
           a disabled one says why (§25: reason and corrective action). */}
-      <div className="actions">
+<div className="actions">
         {actions.map((action) => (
-          <button
-            key={action.key}
-            className={`action${action.key === 'submit' || action.key === 'post' ? ' action--primary' : ''}`}
-            disabled={!action.enabled}
-            title={
-              action.disabledReasonKey
-                ? actionLabel(action.disabledReasonKey.replace('action.', ''))
-                : undefined
-            }
-            type="button"
-          >
-            {actionLabel(action.key)}
-          </button>
+          // One form per action, because each posts a different verb. A
+          // disabled button still renders, so a reader can see what would be
+          // possible and why it is not.
+          <form action={performRecordAction} key={action.key}>
+            <input name="documentType" type="hidden" value={header.documentType} />
+            <input name="documentId" type="hidden" value={header.documentId} />
+            <input name="action" type="hidden" value={action.key} />
+            <input name="returnTo" type="hidden" value={returnTo ?? ''} />
+            {/* §5.4 — a rejection or a cancellation carries a reason. */}
+            {action.enabled && (action.key === 'reject' || action.key === 'cancel' || action.key === 'reverse') ? (
+              <input
+                aria-label={t('reason')}
+                className="action__reason"
+                name="reason"
+                placeholder={t('reason')}
+                required
+              />
+            ) : null}
+            <button
+              className={`action${action.key === 'submit' || action.key === 'post' ? ' action--primary' : ''}`}
+              disabled={!action.enabled}
+              title={
+                action.disabledReasonKey
+                  ? actionLabel(action.disabledReasonKey.replace('action.', ''))
+                  : undefined
+              }
+              type="submit"
+            >
+              {actionLabel(action.key)}
+            </button>
+          </form>
         ))}
       </div>
 

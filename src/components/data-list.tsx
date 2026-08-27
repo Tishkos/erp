@@ -1,6 +1,11 @@
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import type { ColumnDefinition, ListQuery } from '@domain/list-view';
-import { formatBusinessDate, formatMoney, formatQuantity } from '@/i18n/config';
+import {
+  formatBusinessDate,
+  formatMoney,
+  formatQuantity,
+  type Locale,
+} from '@/i18n/config';
 
 /**
  * The list framework's rendering half — Phase 01.12, Appendix A rule 1.
@@ -29,18 +34,19 @@ function cellText(
   column: ColumnDefinition,
   value: unknown,
   currencyFor: (key: string) => 'IQD' | 'USD',
+  locale: Locale,
 ): string {
   if (value === null || value === undefined) return '—';
 
   switch (column.kind) {
     case 'money':
-      return formatMoney(value as string, currencyFor(column.key));
+      return formatMoney(value as string, currencyFor(column.key), locale);
     case 'number':
-      return formatQuantity(value as string);
+      return formatQuantity(value as string, locale);
     case 'date':
       // An ISO business date string, formatted as UTC — never parsed into a
       // local Date, which can shift it a day and so a period (TECHSTACK A10).
-      return formatBusinessDate(String(value));
+      return formatBusinessDate(String(value), locale);
     case 'boolean':
       return value ? '✓' : '—';
     default:
@@ -59,6 +65,7 @@ export async function DataList({
   const t = await getTranslations('list');
   const status = await getTranslations('status');
   const label = await getTranslations('column');
+  const locale = (await getLocale()) as Locale;
 
   if (rows.length === 0) {
     return (
@@ -103,7 +110,7 @@ export async function DataList({
                         {status(String(value))}
                       </span>
                     ) : (
-                      cellText(column, value, currencyFor)
+                      cellText(column, value, currencyFor, locale)
                     );
 
                     return (

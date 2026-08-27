@@ -1,40 +1,57 @@
 import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
 import { visibleMenu } from '@domain/menu';
-import { requireContext } from '@/server/session';
-import { Navigation } from './navigation';
+import { routeFor } from '@domain/screens';
+import { visibleRoute } from '@/server/phase-gate';
+import { eq } from 'drizzle-orm';
+import { appUser } from '@/server/db/schema';
+import { requireContext, withCurrentUser } from '@/server/session';
+import { AppFooter } from './app-footer';
+import { ErpShell } from './erp-shell';
 
 /**
- * The application shell — Phase 01.12.
+ * The authenticated application shell.
  *
- * Resolves the caller once per request and hands the pruned menu to the
- * navigation. Doing it here rather than in each page means no screen can be
- * reached without a resolved principal, which is what §25's deny-by-default
- * requires of *"every page, API and record"*.
+ * Identity, scope, and menu visibility remain server-resolved and deny by
+ * default. Only the interactive presentation is delegated to the client shell.
  */
 export async function AppShell({ children }: { children: ReactNode }) {
   const t = await getTranslations();
   const { principal, scope } = await requireContext();
-  const sections = visibleMenu(principal);
+  // The phase gate: only the accepted phase's screens exist, on every surface.
+  const sections = visibleMenu(principal)
+    .map((section) => ({
+      ...section,
+      items: section.items.filter(
+        (item) =>
+          // The audit trail is filed under Documents as well as Administration;
+          // one address appears once, under Settings, while the gate is on.
+          item.key !== 'document_audit' && visibleRoute(routeFor(item, section.key)),
+      ),
+    }))
+    .filter((section) => section.items.length > 0);
+  const [me] = await withCurrentUser((tx) =>
+    tx
+      .select({ displayName: appUser.displayName, email: appUser.email, image: appUser.image })
+      .from(appUser)
+      .where(eq(appUser.id, principal.userId))
+      .limit(1),
+  );
 
   return (
-    <div className="shell">
-      <header className="shell__header">
-        <span className="shell__brand">{t('app.name')}</span>
-        <span className="shell__spacer" />
-        <div className="shell__identity">
-          {/* The branch a document raised now will belong to — shown, not
-              buried in a menu, because posting to the wrong branch is
-              expensive to unwind (§4.1). */}
-          <span>{scope.branchCode || '—'}</span>
-          <span aria-hidden>·</span>
-          <span>{principal.userId.slice(0, 8)}</span>
-        </div>
-      </header>
-
-      <Navigation sections={sections} />
-
-      <main className="shell__main">{children}</main>
-    </div>
+    <ErpShell
+      brand={t('shell.brand')}
+      branchCode={scope.branchCode}
+      userId={principal.userId}
+      displayName={me?.displayName ?? principal.userId.slice(0, 8)}
+      email={me?.email ?? ''}
+      image={me?.image ?? null}
+      roleCodes={principal.roleCodes}
+      isSuperUser={principal.isSuperUser}
+      sections={sections}
+      footer={<AppFooter />}
+    >
+      {children}
+    </ErpShell>
   );
 }

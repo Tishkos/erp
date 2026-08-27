@@ -1,0 +1,345 @@
+/*
+ * Chart primitives.
+ *
+ * The categorical palette below is the validated default from the data-viz
+ * reference, checked against *this* application's surfaces rather than the
+ * reference's — `#ffffff` light, `#111e32` dark:
+ *
+ *   light  ALL CHECKS PASS  (worst adjacent CVD ΔE 9.1, normal-vision 19.6)
+ *   dark   ALL CHECKS PASS  (worst adjacent CVD ΔE 8.4, normal-vision 19.3)
+ *
+ * Light mode warns on contrast for aqua, yellow and magenta (2.2–2.8 against
+ * white), so the relief rule applies and is honoured: every legend entry
+ * carries its own visible label and value, and each chart ships an sr-only
+ * table. Identity is never colour alone.
+ *
+ * The five hues the dashboard workspace used before — two blues 12.5 ΔE apart
+ * for normal vision, plus a slate that reads as grey — failed four of the six
+ * checks. They are still in `dashboard-workspace.module.css`; see the note in
+ * the handover.
+ *
+ * The dark column is the same hues re-stepped for the dark surface, not an
+ * automatic flip, and is declared under both the media query and the
+ * `data-theme` scope so the viewer's toggle wins either way.
+ */
+
+.viz {
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --grid: var(--border);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .viz {
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+  }
+}
+
+:root[data-theme="dark"] .viz {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+}
+
+/* Trend — one series, so no legend: the panel title names it. --------------- */
+
+.trend {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 0.5rem;
+}
+
+.scale {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-block-end: 1.1rem;
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.plot {
+  display: grid;
+  min-inline-size: 0;
+}
+
+.plotSvg {
+  display: block;
+  inline-size: 100%;
+  block-size: 9rem;
+}
+
+/* Recessive grid — present enough to read a value off, never competing. */
+.gridLine {
+  stroke: var(--grid);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.line {
+  fill: none;
+  stroke: var(--series-1);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.area {
+  fill: color-mix(in srgb, var(--series-1) 14%, transparent);
+  stroke: none;
+}
+
+/* ≥8px markers, with a 2px surface ring so they stay legible over the line. */
+.point {
+  fill: var(--series-1);
+  stroke: var(--surface-raised);
+  stroke-width: 2;
+}
+
+.axis {
+  display: flex;
+  justify-content: space-between;
+  padding-block-start: 0.3rem;
+  color: var(--text-muted);
+  font-size: 0.58rem;
+}
+
+/* Donut ------------------------------------------------------------------- */
+
+.donutLayout {
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.9fr) minmax(8rem, 1.1fr);
+  align-items: center;
+  gap: 1rem;
+}
+
+.donut {
+  position: relative;
+  display: grid;
+  inline-size: min(100%, 10rem);
+  aspect-ratio: 1;
+  place-items: center;
+  justify-self: center;
+}
+
+.donutSvg {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+/*
+ * The arc itself carries its hue and width as presentation attributes, because
+ * each slice differs. Nothing here may set `stroke` or `stroke-width`: a CSS
+ * rule beats an SVG presentation attribute, so declaring them here painted
+ * every arc in the surface colour at 2px and the donut came out blank.
+ *
+ * The 2px gap between adjacent fills is in the geometry instead — each arc is
+ * drawn two units short of its true length.
+ */
+.slice {
+  stroke-linecap: butt;
+}
+
+.donutCentre {
+  display: grid;
+  justify-items: center;
+  gap: 0.05rem;
+  text-align: center;
+}
+
+.donutValue {
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: var(--weight-strong);
+  letter-spacing: -0.02em;
+}
+
+.donutLabel {
+  color: var(--text-muted);
+  font-size: var(--font-label);
+}
+
+/* The legend is always present for two or more series, and each entry carries
+   its own value — this is the relief the contrast warning requires. */
+.legend {
+  display: grid;
+  gap: 0.42rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.legend li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.45rem;
+}
+
+.swatch {
+  inline-size: 0.6rem;
+  block-size: 0.6rem;
+  margin-block-start: 0.18rem;
+  border-radius: 0.15rem;
+}
+
+.legendText {
+  display: grid;
+  min-inline-size: 0;
+  gap: 0.05rem;
+}
+
+/* Text wears text tokens, never the series colour. */
+.legendName {
+  color: var(--text);
+  font-size: var(--font-meta);
+  font-weight: var(--weight-button);
+}
+
+.legendValue {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Bars -------------------------------------------------------------------- */
+
+.bars {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: end;
+  block-size: 9rem;
+  gap: 0.35rem;
+}
+
+.barGroup {
+  display: grid;
+  align-content: end;
+  justify-items: center;
+  gap: 0.3rem;
+  min-inline-size: 0;
+}
+
+.barPair {
+  display: flex;
+  align-items: flex-end;
+  /* 2px of surface between adjacent bars. */
+  gap: 2px;
+  block-size: 7.4rem;
+  inline-size: 100%;
+  justify-content: center;
+}
+
+/* 4px rounded data-ends, anchored square to the baseline. */
+.bar {
+  inline-size: 45%;
+  max-inline-size: 0.7rem;
+  border-start-start-radius: 4px;
+  border-start-end-radius: 4px;
+}
+
+.barPrimary {
+  background: var(--series-1);
+}
+
+.barSecondary {
+  background: var(--series-2);
+}
+
+.barLabel {
+  color: var(--text-muted);
+  font-size: 0.58rem;
+}
+
+/* Ranked list ------------------------------------------------------------- */
+
+.ranked {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  counter-reset: rank;
+}
+
+.rankedRow {
+  display: grid;
+  grid-template-columns: 1.15rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.rankNumber {
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.rankBody {
+  display: grid;
+  gap: 0.25rem;
+  min-inline-size: 0;
+}
+
+.rankName {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--font-meta);
+  font-weight: var(--weight-button);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rankTrack {
+  block-size: 0.3rem;
+  border-radius: 999px;
+  background: var(--surface-muted);
+}
+
+.rankFill {
+  display: block;
+  block-size: 100%;
+  border-radius: 999px;
+  background: var(--series-1);
+}
+
+.rankValue {
+  color: var(--text-soft);
+  font-size: var(--font-meta);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The table view every chart ships, for screen readers and for the CVD case. */
+.srOnly {
+  position: absolute;
+  overflow: hidden;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  border: 0;
+  margin: -1px;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 52rem) {
+  .donutLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
