@@ -14,7 +14,13 @@
  * the same figure — §22 requires it, and recomputing from today's rate would
  * quietly rewrite history.
  */
-import { parseDecimal, RATE_SCALE, type CurrencyCode } from './money';
+import {
+  LEDGER_CURRENCY,
+  parseDecimal,
+  RATE_SCALE,
+  UNIT_RATE,
+  type CurrencyCode,
+} from './money';
 
 /**
  * §4.3 lists an accounting rate, a market rate and a client rate type.
@@ -57,9 +63,13 @@ export class NoRateForDateError extends Error {
     readonly rateType: RateType,
     readonly onDate: string,
   ) {
+    // Only reachable now when a currency has *no* published rate at all: a
+    // date outside the published range falls back to the nearest rate rather
+    // than refusing. So the remedy is always the same one sentence — publish a
+    // rate — and the screen is named the way the menu names it.
     super(
-      `No ${rateType} rate for ${currency} is effective on ${onDate}. ` +
-        'Rates are maintained in the Finance Exchange Rate section (§14.3) and must exist before a posting can use them.',
+      `No ${currency} exchange rate has been published yet, so this cannot be valued. ` +
+        'Add one in Accounting → Master Data → Currencies and Rates.',
     );
     this.name = 'NoRateForDateError';
   }
@@ -78,12 +88,37 @@ export class RateNotEditableError extends Error {
 }
 
 /**
- * The rate in force on a date: the latest one effective on or before it.
+ * The identity rate — IQD per one IQD, which is one.
  *
- * Not "the nearest" and not "the newest row". A rate published on 1 March
- * governs 15 March even if a 1 April rate already exists — otherwise re-running
- * a March report after April's rate lands would produce different numbers, and
- * §14.8 requires it to reproduce.
+ * The ledger currency never needed a published row: `toIqd` already documents
+ * an IQD amount as converting at a rate of one, by definition. Asking the
+ * table for one meant an ordinary dinar journal was refused for want of a rate
+ * nobody could sensibly publish.
+ */
+export function identityRate(currency: string = LEDGER_CURRENCY): PublishedRate {
+  return {
+    currency,
+    rateType: LEDGER_RATE_TYPE,
+    iqdPerUnit: UNIT_RATE,
+    // Earlier than any calendar this system will meet, so it covers every date.
+    effectiveFrom: '0001-01-01',
+    source: 'ledger currency',
+  };
+}
+
+/**
+ * The rate to use on a date: the latest one effective on or before it, and
+ * failing that the earliest one published.
+ *
+ * The first clause is the accounting rule — a rate published on 1 March
+ * governs 15 March even once an April rate exists, so re-running a March
+ * report after April's rate lands still reproduces (§14.8). The second is the
+ * concession that makes it usable: a date preceding every published rate used
+ * to refuse outright, which stopped the ledger dead over a gap no accountant
+ * caused. It now reaches for the nearest rate there is. Either way the row
+ * that answered is stored on the line, so the figure still explains itself.
+ *
+ * The ledger currency answers one, always, with no row required.
  */
 export function rateOn(
   rates: readonly PublishedRate[],
@@ -91,11 +126,17 @@ export function rateOn(
   rateType: RateType,
   onDate: string,
 ): PublishedRate {
-  const candidates = rates
-    .filter((r) => r.currency === currency && r.rateType === rateType && r.effectiveFrom <= onDate)
+  if (currency === LEDGER_CURRENCY) return identityRate(currency);
+
+  // Newest first, so the first row on or before the date is the one in force.
+  const published = rates
+    .filter((r) => r.currency === currency && r.rateType === rateType)
     .sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : -1));
 
-  const selected = candidates[0];
+  // Nothing on or before the date: the earliest published rate is the nearest
+  // in time, so it is the one that values the entry.
+  const selected = published.find((r) => r.effectiveFrom <= onDate) ?? published.at(-1);
+
   if (!selected) throw new NoRateForDateError(currency, rateType, onDate);
   return selected;
 }

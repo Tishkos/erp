@@ -9,8 +9,9 @@
  * transaction, which is what makes §22's "a reprint reproduces" achievable
  * rather than aspirational.
  */
-import { and, desc, eq, isNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, lte } from 'drizzle-orm';
 import {
+  identityRate,
   LEDGER_RATE_TYPE,
   NoRateForDateError,
   parseRate,
@@ -138,31 +139,59 @@ export async function publishRate(
 }
 
 /**
- * The rate in force on a date — the latest effective on or before it.
+ * A resolved rate. `id` is the row that answered — null for the ledger
+ * currency, which converts at one and has no row to point at.
+ */
+export type ResolvedRate = PublishedRate & { id: string | null };
+
+/**
+ * The rate to use on a date — the latest effective on or before it, and
+ * failing that the earliest published.
  *
- * Superseded rows are excluded. A later effective date does not affect an
- * earlier one, so re-running last month's report after this month's rate is
- * published produces the same figures (§14.8).
+ * Superseded rows are excluded throughout. The first clause is the accounting
+ * rule: a later effective date does not disturb an earlier one, so re-running
+ * last month's report after this month's rate is published gives the same
+ * figures (§14.8). The second exists because refusing a date that precedes
+ * every published rate was refusing *work* — back-dating an entry a day past
+ * the first rate ever entered stopped it dead. The nearest rate values it, and
+ * the line records which row that was.
+ *
+ * IQD short-circuits: IQD per one IQD is one, by definition, and no row is
+ * needed to say so. Requiring one is what made an ordinary dinar journal fail
+ * with "there is no IQD rate covering ...".
  */
 export async function rateOn(
   tx: Tx,
   currencyCode: string,
   onDate: string,
   rateType: RateType = LEDGER_RATE_TYPE,
-): Promise<PublishedRate & { id: string }> {
-  const [row] = await tx
+): Promise<ResolvedRate> {
+  if (currencyCode === LEDGER_CURRENCY) {
+    return { id: null, ...identityRate(currencyCode) };
+  }
+
+  const live = and(
+    eq(exchangeRate.currencyCode, currencyCode),
+    eq(exchangeRate.rateType, rateType),
+    isNull(exchangeRate.supersededAt),
+  );
+
+  const [inForce] = await tx
     .select()
     .from(exchangeRate)
-    .where(
-      and(
-        eq(exchangeRate.currencyCode, currencyCode),
-        eq(exchangeRate.rateType, rateType),
-        lte(exchangeRate.effectiveFrom, onDate),
-        isNull(exchangeRate.supersededAt),
-      ),
-    )
+    .where(and(live, lte(exchangeRate.effectiveFrom, onDate)))
     .orderBy(desc(exchangeRate.effectiveFrom))
     .limit(1);
+
+  // Nothing on or before the date — reach forward to the earliest there is.
+  const [row] = inForce
+    ? [inForce]
+    : await tx
+        .select()
+        .from(exchangeRate)
+        .where(live)
+        .orderBy(asc(exchangeRate.effectiveFrom))
+        .limit(1);
 
   if (!row) throw new NoRateForDateError(currencyCode, rateType, onDate);
 
@@ -183,9 +212,12 @@ export interface ConvertedAmount {
   readonly currency: string;
   readonly amountIqd: bigint;
   readonly amountUsd: bigint;
-  /** The rate rows used, so the posting can point at them forever. */
-  readonly txnRateId: string;
-  readonly usdRateId: string;
+  /**
+   * The rate rows used, so the posting can point at them forever. Null for
+   * the ledger currency, which converts at one and has no row.
+   */
+  readonly txnRateId: string | null;
+  readonly usdRateId: string | null;
 }
 
 /**
