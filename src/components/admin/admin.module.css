@@ -1,0 +1,2702 @@
+/*
+ * The administration screens' furniture — forms, key/value blocks, inline
+ * action rows and the record-history timeline. Everything is in the
+ * application's tokens, so the screens follow the accent themes and dark mode.
+ */
+
+.flash {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 0 0 var(--space-4);
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.flash svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex: 0 0 auto;
+  margin-block-start: 0.1rem;
+  color: var(--accent);
+}
+
+.flashError {
+  border-color: color-mix(in srgb, var(--status-rejected) 40%, transparent);
+  background: color-mix(in srgb, var(--status-rejected) 9%, var(--surface));
+}
+
+.flashError svg {
+  color: var(--status-rejected);
+}
+
+.flash strong {
+  display: block;
+  margin-block-end: 0.15rem;
+}
+
+.secret {
+  display: inline-block;
+  margin-block-start: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px dashed var(--accent-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  user-select: all;
+}
+
+/* Forms ------------------------------------------------------------------ */
+
+.form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.9rem 1rem;
+  align-items: start;
+}
+
+.field {
+  display: grid;
+  gap: 0.3rem;
+  min-inline-size: 0;
+}
+
+.fieldWide {
+  grid-column: 1 / -1;
+}
+
+.label {
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.required {
+  margin-inline-start: 0.25rem;
+  color: var(--status-rejected);
+}
+
+.input,
+.select {
+  block-size: var(--control-height);
+}
+
+.input,
+.select,
+.textarea {
+  min-block-size: var(--control-height);
+  inline-size: 100%;
+  padding-inline: 0.7rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  background: var(--surface);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color var(--motion), box-shadow var(--motion);
+}
+
+.textarea {
+  min-block-size: 4.5rem;
+  padding-block: 0.5rem;
+  resize: vertical;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.check input {
+  inline-size: 1rem;
+  block-size: 1rem;
+  accent-color: var(--accent);
+}
+
+.submitRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-block-start: 0.3rem;
+}
+
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+
+.inline .field {
+  flex: 1 1 12rem;
+}
+
+/* Buttons ---------------------------------------------------------------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-block-size: var(--control-height);
+  padding-inline: 0.9rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  background: var(--surface);
+  font-size: 0.82rem;
+  font-weight: var(--weight-button);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--motion), border-color var(--motion), color var(--motion);
+}
+
+.button:hover {
+  border-color: var(--accent-border);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.button svg {
+  inline-size: 0.95rem;
+  block-size: 0.95rem;
+}
+
+.primary {
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  background: var(--accent);
+}
+
+.primary:hover {
+  border-color: var(--accent-hover);
+  color: var(--accent-contrast);
+  background: var(--accent-hover);
+}
+
+/* Quiet until pointed at. A destructive action should be findable without
+   shouting from the page every time somebody opens a draft. */
+.danger {
+  border-color: color-mix(in srgb, var(--status-rejected) 35%, var(--border));
+  color: var(--status-rejected);
+}
+
+.danger:hover {
+  border-color: var(--status-rejected);
+  color: var(--status-rejected);
+  background: color-mix(in srgb, var(--status-rejected) 8%, var(--surface));
+}
+
+/* The two answers to a confirmation, cancel first: the safe one sits where the
+   hand already is, and the destructive one is never the default. */
+.confirmActions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-block-start: 1.25rem;
+}
+
+.small {
+  min-block-size: 1.9rem;
+  padding-inline: 0.6rem;
+  font-size: 0.74rem;
+}
+
+/* Key / value ------------------------------------------------------------ */
+
+.kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.8rem 1.2rem;
+  margin: 0;
+}
+
+.kv > div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.kv dt {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kv dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
+/* Pills ------------------------------------------------------------------ */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-soft);
+  background: var(--surface-muted);
+}
+
+.pillOn {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.pillOff {
+  color: var(--status-rejected);
+  background: color-mix(in srgb, var(--status-rejected) 10%, var(--surface));
+}
+
+/* Timeline --------------------------------------------------------------- */
+
+.timeline {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 10rem minmax(0, 1fr);
+  gap: 0.2rem 1rem;
+  padding: 0.6rem 0 0.6rem 1.1rem;
+  border-inline-start: 2px solid var(--border);
+}
+
+.timeline li::before {
+  position: absolute;
+  inset-inline-start: -0.4rem;
+  inset-block-start: 0.95rem;
+  inline-size: 0.7rem;
+  block-size: 0.7rem;
+  content: "";
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.timeline li[data-outcome="denied"]::before,
+.timeline li[data-outcome="failure"]::before {
+  background: var(--status-rejected);
+}
+
+.timelineWhen {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.timelineAction {
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.timelineMeta {
+  grid-column: 2;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.timelineMeta code {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+}
+
+/* Matrix ----------------------------------------------------------------- */
+
+.matrixWrap {
+  overflow-x: auto;
+}
+
+.matrix {
+  border-collapse: collapse;
+  inline-size: 100%;
+  font-size: 0.78rem;
+}
+
+.matrix th,
+.matrix td {
+  padding: 0.35rem 0.45rem;
+  border-block-end: 1px solid var(--border);
+  text-align: start;
+  white-space: nowrap;
+}
+
+.matrix th {
+  position: sticky;
+  inset-block-start: 0;
+  color: var(--text-muted);
+  background: var(--surface-raised);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.matrix td.verbs {
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+}
+
+.matrix td input {
+  accent-color: var(--accent);
+}
+
+.matrixSection {
+  font-weight: 600;
+  color: var(--text);
+}
+
+@media (max-width: 40rem) {
+  .timeline li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .timelineMeta {
+    grid-column: 1;
+  }
+}
+
+/* Grant matrix ----------------------------------------------------------- */
+
+.grantForm {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.grantSection {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.grantSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.75rem 1rem;
+  color: var(--text);
+  background: var(--surface-muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.grantSummary::-webkit-details-marker {
+  display: none;
+}
+
+.grantSummary::before {
+  content: "›";
+  margin-inline-end: 0.5rem;
+  color: var(--text-muted);
+  font-size: 1rem;
+  transition: transform var(--motion);
+}
+
+.grantSection[open] > .grantSummary::before {
+  transform: rotate(90deg);
+}
+
+.grantSummary > span:first-child {
+  flex: 1;
+}
+
+.grantTable th,
+.grantTable td {
+  padding: 0.55rem 0.5rem;
+  text-align: center;
+  white-space: normal;
+}
+
+.grantTable thead th {
+  position: static;
+  font-size: 0.64rem;
+  line-height: 1.15;
+  max-inline-size: 5.5rem;
+}
+
+.grantTable thead th:first-child,
+.grantTable tbody th {
+  text-align: start;
+}
+
+.grantTable tbody tr:nth-child(2n) {
+  background: color-mix(in srgb, var(--surface-muted) 55%, var(--surface));
+}
+
+.grantTable tbody tr:hover {
+  background: var(--accent-soft);
+}
+
+.grantObject {
+  display: grid;
+  gap: 0.1rem;
+  min-inline-size: 14rem;
+  padding-inline-start: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.grantObject code {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 400;
+}
+
+.grantCell {
+  display: grid;
+  inline-size: 100%;
+  min-block-size: 1.6rem;
+  place-items: center;
+  cursor: pointer;
+}
+
+.grantCell input {
+  inline-size: 1.05rem;
+  block-size: 1.05rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.grantTable tbody th.grantObject,
+.grantTable tbody th.grantObject code {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.grantTable tbody th.grantObject > span {
+  font-size: 0.8rem;
+}
+
+/* Back / breadcrumb -------------------------------------------------------- */
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block-end: 0.9rem;
+  font-size: 0.8rem;
+}
+
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-block-size: 2.1rem;
+  padding-inline: 0.7rem 0.85rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text);
+  background: var(--surface);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background var(--motion), border-color var(--motion), color var(--motion);
+}
+
+.backButton:hover {
+  border-color: var(--accent-border);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.backButton svg {
+  inline-size: 0.95rem;
+  block-size: 0.95rem;
+}
+
+[dir="rtl"] .backButton svg {
+  transform: scaleX(-1);
+}
+
+.crumbTrail {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-muted);
+}
+
+.crumbTrail a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.crumbTrail a:hover {
+  color: var(--accent);
+}
+
+.crumbTrail strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Dialog ------------------------------------------------------------------- */
+
+.dialog {
+  inline-size: min(44rem, calc(100vw - 2rem));
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text);
+  background: var(--surface-raised);
+  box-shadow: 0 30px 80px -30px rgb(10 17 36 / 45%);
+}
+
+.dialog::backdrop {
+  background: rgb(10 17 36 / 45%);
+  backdrop-filter: blur(2px);
+}
+
+.dialogBody {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem 1.4rem 1.4rem;
+}
+
+.dialogHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block-end: 0.8rem;
+  border-block-end: 1px solid var(--border);
+}
+
+.dialogHeader h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.dialogClose {
+  display: grid;
+  inline-size: 2rem;
+  block-size: 2rem;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-muted);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.dialogClose:hover {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+
+.dialogClose svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+}
+
+/* List toolbar ------------------------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.7rem 0.8rem;
+  border-block-end: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.toolbarSearch {
+  display: flex;
+  flex: 1 1 18rem;
+  max-inline-size: 26rem;
+  align-items: center;
+  gap: 0;
+}
+
+.toolbarSearch input {
+  flex: 1;
+  min-inline-size: 0;
+  block-size: 2.25rem;
+  padding-inline: 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-inline-end: 0;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  color: var(--text);
+  background: var(--surface);
+  font-size: 0.82rem;
+  outline: none;
+}
+
+[dir="rtl"] .toolbarSearch input {
+  border-inline-end: 1px solid var(--border-strong);
+  border-inline-start: 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.toolbarSearch input:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.toolbarSearch button {
+  display: grid;
+  block-size: 2.25rem;
+  inline-size: 2.5rem;
+  place-items: center;
+  border: 1px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--accent-contrast);
+  background: var(--accent);
+  cursor: pointer;
+}
+
+[dir="rtl"] .toolbarSearch button {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.toolbarSearch button svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+}
+
+.toolbarMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.toolbarClear {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+/* Avatars ------------------------------------------------------------------ */
+
+.avatarRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1.2rem;
+}
+
+.avatarLarge,
+.avatarSmall {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(145deg, #162352, var(--accent));
+  font-weight: 800;
+  object-fit: cover;
+}
+
+.avatarLarge {
+  inline-size: 5.5rem;
+  block-size: 5.5rem;
+  margin-block-end: 0.8rem;
+  font-size: 1.4rem;
+}
+
+.avatarSmall {
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  font-size: 0.7rem;
+}
+
+.personCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+/* Profile ------------------------------------------------------------------ */
+
+.profileGrid {
+  display: grid;
+  grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+  gap: 1.35rem;
+  align-items: start;
+}
+
+@media (max-width: 60rem) {
+  .profileGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.profileCard {
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  padding: 1.6rem 1.2rem 1.2rem;
+  text-align: center;
+}
+
+.profileCard h2 {
+  margin: 0.4rem 0 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.profileCard p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.profileAvatar {
+  inline-size: 6.5rem;
+  block-size: 6.5rem;
+  margin: 0;
+  font-size: 1.8rem;
+}
+
+.profileActions {
+  display: grid;
+  gap: 0.5rem;
+  inline-size: 100%;
+  margin-block-start: 0.9rem;
+  padding-block-start: 0.9rem;
+  border-block-start: 1px solid var(--border);
+}
+
+.profileActions input[type="file"] {
+  inline-size: 100%;
+  font-size: 0.78rem;
+}
+
+.profileFacts {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profileFacts li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.55rem 0;
+  border-block-end: 1px solid var(--border);
+  font-size: 0.82rem;
+}
+
+.profileFacts li:last-child {
+  border-block-end: 0;
+}
+
+.profileFacts li > span:first-child {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.profileFacts li > span:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.3rem;
+  color: var(--text);
+  text-align: end;
+}
+
+.profileStack {
+  display: grid;
+  gap: 1.35rem;
+}
+
+.profileStack > section {
+  margin-block-end: 0;
+}
+
+.sectionHint {
+  margin: -0.3rem 0 0.9rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+/* Assignment cards (roles / branches / departments) ------------------------ */
+
+.assignGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1.35rem;
+}
+
+.assignGrid > section {
+  margin-block-end: 0;
+}
+
+.assignList {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.assignList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.assignList li > div {
+  display: grid;
+  min-inline-size: 0;
+}
+
+.assignList strong {
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.assignList small {
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.assignActions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.3rem;
+}
+
+.assignAdd {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin-block-start: 0.8rem;
+  padding-block-start: 0.8rem;
+  border-block-start: 1px solid var(--border);
+}
+
+.assignAdd > div {
+  flex: 1;
+}
+
+/* Stat tiles + empty states (approvals) ------------------------------------ */
+
+.statRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 1rem;
+  margin-block-end: 1.35rem;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.3rem 1.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.statIcon {
+  display: grid;
+  inline-size: 2.6rem;
+  block-size: 2.6rem;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 0.8rem;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.statIcon svg {
+  inline-size: 1.2rem;
+  block-size: 1.2rem;
+}
+
+.stat strong {
+  display: block;
+  font-size: 1.5rem;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.stat span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.emptyState {
+  display: grid;
+  justify-items: center;
+  gap: 0.4rem;
+  padding: 2.2rem 1rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.emptyState svg {
+  inline-size: 2rem;
+  block-size: 2rem;
+  color: var(--accent-border);
+}
+
+.emptyState strong {
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}
+
+.inboxList {
+  display: grid;
+}
+.inboxItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.9rem 2rem;
+  padding: 1.4rem 1.5rem;
+  border-block-end: 1px solid var(--border);
+}
+.inboxItem:last-child {
+  border-block-end: 0;
+}
+.inboxItem:hover {
+  background: var(--surface-sunken);
+}
+
+.inboxDoc {
+  display: grid;
+  gap: 0.3rem;
+  min-inline-size: 0;
+}
+.inboxDoc a {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.inboxDoc a:hover {
+  color: var(--accent);
+}
+.inboxKind {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.inboxWaiting {
+  justify-self: start;
+  margin-block-start: 0.15rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: var(--accent-soft, var(--surface-sunken));
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.inboxFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2.2rem;
+  grid-column: 1;
+  margin: 0;
+}
+.inboxFacts dt {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.inboxFacts dd {
+  margin: 0.2rem 0 0;
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.inboxDecide {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  min-inline-size: 11rem;
+  padding-inline-start: 1.6rem;
+  border-inline-start: 1px solid var(--border);
+}
+@media (max-width: 720px) {
+  .inboxItem {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .inboxDecide {
+    grid-row: auto;
+    grid-column: 1;
+    padding-inline-start: 0;
+    border-inline-start: 0;
+  }
+}
+
+@media (max-width: 60rem) {
+  .inboxItem {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/* More room inside the two-column pages. */
+.profileStack > section,
+.assignGrid > section {
+  padding: 1.5rem;
+}
+
+/* Cards inside a column already have their own gap; keep them from doubling it. */
+.profileStack > section,
+.assignGrid > section,
+.profileStack > form {
+  margin-block-end: 0;
+}
+
+/* Role tabs (Permissions editor) ------------------------------------------ */
+
+.roleTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.roleTab {
+  display: grid;
+  gap: 0.1rem;
+  min-inline-size: 11rem;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  background: var(--surface);
+  text-decoration: none;
+  transition: border-color var(--motion), background var(--motion);
+}
+
+.roleTab small {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.roleTab:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+
+.roleTab[aria-current="page"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: var(--focus-ring);
+}
+
+.roleTab[aria-current="page"] strong {
+  color: var(--accent);
+}
+
+.verbHelp {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 0.6rem 1.2rem;
+  margin: 0;
+}
+
+.verbHelp > div {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.verbHelp dt {
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.verbHelp dd {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+}
+
+/* Section tabs ------------------------------------------------------------ */
+
+.tabsBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-block-end: 1rem;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+  inline-size: fit-content;
+  max-inline-size: 100%;
+}
+
+.tabItem {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2rem;
+  padding-inline: 0.85rem;
+  border-radius: 999px;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background var(--motion), color var(--motion);
+}
+
+.tabItem:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.tabItem[aria-current="page"] {
+  color: var(--accent-contrast);
+  background: var(--accent);
+}
+
+/* ---------------------------------------------------------------------------
+   Phase 0 · the document record — attachments, the returned note, actions
+   --------------------------------------------------------------------------- */
+
+/* An approver sent it back. Loud enough to be read before anything is edited,
+   quiet enough not to look like a system failure. */
+.calloutReturned {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  margin-block-end: 1.1rem;
+  padding: 1.05rem 1.2rem;
+  border: 1px solid var(--status-rejected-border, var(--border));
+  border-inline-start: 3px solid var(--status-rejected);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+.calloutReturned svg {
+  flex: none;
+  inline-size: 1.15rem;
+  block-size: 1.15rem;
+  margin-block-start: 0.1rem;
+  color: var(--status-rejected);
+}
+.calloutReturned strong {
+  display: block;
+  color: var(--text);
+  font-size: 0.86rem;
+}
+.calloutReturned p {
+  margin: 0.3rem 0 0;
+  color: var(--text-soft);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.actionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-block-end: 1.1rem;
+}
+
+/* Attachments ------------------------------------------------------------- */
+
+.fileList {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fileList li {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.75rem 0.2rem;
+  border-block-end: 1px solid var(--border);
+}
+.fileList li:last-child {
+  border-block-end: 0;
+}
+.fileIcon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border-radius: var(--radius-sm, 0.5rem);
+  background: var(--accent-soft, var(--surface-sunken));
+  color: var(--accent);
+}
+.fileIcon svg {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+}
+.fileBody {
+  display: grid;
+  gap: 0.15rem;
+  min-inline-size: 0;
+}
+.fileBody a {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fileMeta {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.uploadForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.7rem;
+  margin-block-start: 1.15rem;
+  padding-block-start: 1.15rem;
+  border-block-start: 1px solid var(--border);
+}
+/* The native file input is unstyleable and looks it; the label is the control
+   and the input is what it is wired to. */
+.uploadPicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px dashed var(--accent-border, var(--border));
+  border-radius: var(--radius-sm, 0.5rem);
+  background: var(--surface-sunken);
+  color: var(--text-soft);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.uploadPicker:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.uploadPicker svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+}
+.uploadPicker input[type="file"] {
+  max-inline-size: 11rem;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+.uploadHint {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+/* ---------------------------------------------------------------------------
+   The document band — what this document is, and what happens to it next
+   --------------------------------------------------------------------------- */
+
+.docBand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem 2rem;
+  margin-block-end: 1.35rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+.docIdentity {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-inline-size: 0;
+}
+.docNumber {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.docTotal {
+  display: grid;
+  gap: 0.1rem;
+  margin-inline-start: auto;
+  text-align: end;
+}
+.docTotal span {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.docTotal strong {
+  color: var(--text);
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.docActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+@media (max-width: 640px) {
+  .docTotal {
+    margin-inline-start: 0;
+    text-align: start;
+  }
+}
+
+/* The line the total sits on, marked off from the items above it. */
+.totalCell {
+  border-block-start: 2px solid var(--border);
+  color: var(--text);
+  font-weight: 650;
+}
+
+/* Adding an item, under the items it joins. */
+.lineForm {
+  padding: 1.35rem 1.5rem;
+  border-block-start: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+/* The filter bar above a report: fields on one line, the button beside them. */
+.filterForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.9rem 1.1rem;
+}
+.filterForm > * {
+  margin: 0;
+}
+/* The button belongs on the inputs' line, so it clears the label above them. */
+.filterForm > button {
+  margin-block-start: 1.55rem;
+}
+
+/* Controls that belong on one line — a select, a reason, a button. */
+.inlineRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+.inlineRow > * {
+  margin: 0;
+}
+.inlineRow > button {
+  margin-block-start: 1.55rem;
+}
+
+/* A statement: the line is the heading, the accounts behind it are indented
+   beneath so the reader can see where a figure came from without a drill-down. */
+.statementAccount {
+  padding-inline-start: 2rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.statementSection {
+  padding-block: 0.9rem;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: start;
+  text-transform: uppercase;
+}
+
+/* The date beside a document's status, when the number is already the heading. */
+.docWhen {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+/* A date input. The browser draws the calendar; this only makes its button
+   findable and keeps the height in line with every other field. */
+.dateInput {
+  composes: input;
+}
+.dateInput::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.55;
+}
+.dateInput::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+:global(:root[data-theme='dark']) .dateInput::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
+/* ── The document window ─────────────────────────────────────────────────
+   The Journal Entry screen, drawn the way the accounting package the company
+   already works in draws it: a titled window, a block of labelled boxes, a
+   ruled grid with the empty rows still showing, and the buttons along the
+   bottom.
+
+   Every colour here is written out rather than taken from the app's tokens.
+   This is a deliberate single look — it does not follow the light/dark switch,
+   and if it read its colours from the theme it would come apart the moment
+   somebody flipped it. Scoped to the journal's .sapDoc and route-owned
+   .sapPage classes so none of it escapes onto the rest of the application. */
+.sapDoc,
+.sapPage {
+  --w-bg: #fbfbf4;
+  --w-canvas: #f3f2e9;
+  --w-line: #aeb8ad;
+  --w-line-strong: #87968d;
+  --w-rule: #c7cec3;
+  --w-field: #fffef4;
+  --w-field-ro: #edf1e7;
+  --w-label: #2d4038;
+  --w-text: #17241f;
+  --w-muted: #68766e;
+  --w-title-a: #e5e9e5;
+  --w-title-b: #cdd5d0;
+  --w-title-line: #e0a415;
+  --w-head: #e7ebe3;
+  --w-head-strong: #dbe2d8;
+  --w-filler: #f8f8f0;
+  --w-selected: #fff2af;
+  --w-selected-strong: #f7cf7a;
+  --w-amber-a: #ffd978;
+  --w-amber-b: #e9aa24;
+  --w-amber-line: #b77d0b;
+  --w-focus: #fff5b8;
+
+  color: var(--w-text);
+  font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+  font-size: 0.8rem;
+}
+
+/* The window itself. */
+.sapWindow {
+  margin-block-end: 0.85rem;
+  overflow: hidden;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 0.2rem;
+  background: var(--w-bg);
+  box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
+}
+
+/* The title bar, and the name of the document on it. */
+.sapTitle {
+  display: flex;
+  min-block-size: 2.35rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0;
+  padding: 0.4rem 0.75rem 0.35rem;
+  border-block-end: 4px solid var(--w-title-line);
+  background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
+  color: #21362e;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.sapTitleMeta {
+  color: #3b5046;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+}
+
+.sapBody {
+  padding: 0.85rem;
+  background: var(--w-bg);
+}
+
+/* ── The field block ─────────────────────────────────────────────────────
+   Labels above their boxes, as many to a row as fit. Read-only boxes are
+   filled grey; the package uses white for what may be typed and grey for what
+   may not, and every field up here is decided when the entry is opened. */
+.sapFields {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(8.5rem, 1fr));
+  gap: 0.55rem 0.7rem;
+  align-items: start;
+}
+.sapField {
+  display: grid;
+  gap: 0.2rem;
+  min-inline-size: 0;
+}
+.sapWide {
+  grid-column: 1 / -1;
+}
+.sapLabel {
+  color: var(--w-label);
+  font-size: 0.73rem;
+  font-weight: 650;
+}
+.sapBox {
+  display: flex;
+  align-items: center;
+  min-block-size: 2rem;
+  padding: 0.25rem 0.45rem;
+  overflow: hidden;
+  border: 1px solid var(--w-line);
+  border-radius: 0.12rem;
+  background: var(--w-field-ro);
+  color: var(--w-text);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sapWide .sapBox {
+  white-space: normal;
+}
+
+.sapStatus {
+  inline-size: fit-content;
+  min-inline-size: 5.5rem;
+  justify-content: center;
+  border-color: #c1aa67;
+  background: #fff3bd;
+  font-weight: 700;
+}
+
+.sapStatus[data-status='posted'],
+.sapStatus[data-status='approved'] {
+  border-color: #86a28c;
+  background: #e2f0df;
+  color: #235b32;
+}
+
+.sapStatus[data-status='submitted'] {
+  border-color: #91a8bb;
+  background: #e5eef5;
+  color: #294f6d;
+}
+
+.sapStatus[data-status='rejected'],
+.sapStatus[data-status='cancelled'],
+.sapStatus[data-status='reversed'] {
+  border-color: #ca9b94;
+  background: #f7e5e2;
+  color: #7e332c;
+}
+
+.sapGridCaption {
+  display: flex;
+  min-block-size: 2.1rem;
+  align-items: center;
+  gap: 0.4rem;
+  margin-block-start: 0.9rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--w-line);
+  border-block-end: 0;
+  background: var(--w-head-strong);
+  color: var(--w-label);
+}
+
+.sapDisclosure {
+  color: #765b0b;
+  font-size: 0.82rem;
+}
+
+.sapGridCount {
+  display: inline-grid;
+  min-inline-size: 1.4rem;
+  min-block-size: 1.4rem;
+  place-items: center;
+  margin-inline-start: auto;
+  padding-inline: 0.35rem;
+  border: 1px solid var(--w-line);
+  border-radius: 999px;
+  background: var(--w-bg);
+  color: var(--w-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+/* ── The grid ────────────────────────────────────────────────────────────
+   Ruled every way, header in grey, and the unused rows left drawn rather than
+   hidden — an accountant reads the empty rows as room still to fill. */
+.sapTableWrap {
+  overflow: auto;
+  border: 1px solid var(--w-rule);
+  background: var(--w-bg);
+  scrollbar-color: var(--w-line-strong) var(--w-canvas);
+  scrollbar-width: thin;
+}
+
+.sapLineTableWrap {
+  max-block-size: min(31rem, 58vh);
+}
+.sapTable {
+  inline-size: 100%;
+  min-inline-size: 76rem;
+  border-collapse: collapse;
+  background: var(--w-bg);
+  color: var(--w-text);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+.sapTable th,
+.sapTable td {
+  block-size: 1.9rem;
+  padding: 0.22rem 0.45rem;
+  border: 1px solid var(--w-rule);
+  text-align: start;
+  white-space: nowrap;
+}
+.sapTable thead th {
+  position: sticky;
+  z-index: 2;
+  background: var(--w-head);
+  color: var(--w-label);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.012em;
+}
+/* The head is two rows — a currency over its debit and credit pair. The
+   second parks under the first rather than on top of it. */
+.sapTable thead tr:first-child th {
+  inset-block-start: 0;
+}
+.sapTable thead tr:nth-child(2) th {
+  inset-block-start: 1.9rem;
+}
+.sapTable .sapNum {
+  text-align: end;
+}
+.sapTable .sapGroup {
+  background: var(--w-head-strong);
+  text-align: center;
+}
+
+.sapTable tbody tr:not(.sapFiller):not(.sapEntryRow):hover > td {
+  background: #fff8d9;
+}
+
+.sapAccountCell {
+  color: #284e3f;
+  font-weight: 650;
+}
+/* The row being typed. */
+.sapTable .sapEntryRow > td {
+  padding: 0.12rem 0.25rem;
+  background: var(--w-selected);
+}
+/* Room still to fill. */
+.sapTable .sapFiller > td {
+  background: var(--w-filler);
+}
+.sapTable .sapTotalRow > td {
+  position: sticky;
+  z-index: 1;
+  inset-block-end: 0;
+  border-block-start-color: var(--w-line-strong);
+  background: var(--w-head-strong);
+  font-weight: 700;
+}
+
+/* ── Controls ────────────────────────────────────────────────────────────
+   The class is repeated so these beat the app's own button and input rules on
+   specificity, whichever order the two stylesheets land in. */
+.sapDoc.sapDoc input,
+.sapDoc.sapDoc select,
+.sapDoc.sapDoc textarea {
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 1.75rem;
+  block-size: auto;
+  padding: 0.18rem 0.35rem;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 0.12rem;
+  background: var(--w-field);
+  color: var(--w-text);
+  font: inherit;
+  font-size: 0.78rem;
+  box-shadow: none;
+}
+/* The field the cursor is in, marked the way the package marks it. */
+.sapDoc.sapDoc input:focus,
+.sapDoc.sapDoc select:focus,
+.sapDoc.sapDoc textarea:focus {
+  background: var(--w-focus);
+  outline: 2px solid #9a760d;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 1px #fff;
+}
+.sapDoc.sapDoc input[type='number'] {
+  text-align: end;
+}
+
+.sapDoc.sapDoc button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-inline-size: 5.5rem;
+  min-block-size: 2rem;
+  padding: 0.28rem 0.9rem;
+  border: 1px solid var(--w-amber-line);
+  border-radius: 0.14rem;
+  background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
+  color: #3a2600;
+  font-size: 0.78rem;
+  font-weight: 700;
+  box-shadow: none;
+}
+.sapDoc.sapDoc button:hover {
+  background: linear-gradient(180deg, #ffdf95, #f2b12f);
+}
+.sapDoc.sapDoc button:focus-visible {
+  outline: 2px solid #745807;
+  outline-offset: 2px;
+}
+.sapDoc.sapDoc .danger {
+  border-color: #b96358;
+  background: linear-gradient(180deg, #fff7f5, #f1d7d2);
+  color: #7d2d25;
+}
+.sapDoc.sapDoc .danger:hover {
+  border-color: #98443a;
+  background: linear-gradient(180deg, #fff2ef, #e8c5be);
+  color: #6e251e;
+}
+.sapDoc.sapDoc button svg {
+  inline-size: 0.85rem;
+  block-size: 0.85rem;
+}
+
+/* ── The foot ────────────────────────────────────────────────────────────
+   Buttons on the left, what the document comes to on the right. */
+.sapFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1.2rem;
+  padding: 0.65rem 0.85rem;
+  border-block-start: 1px solid var(--w-line-strong);
+  background: var(--w-canvas);
+}
+.sapFootActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.sapFootTotals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1.1rem;
+  margin-inline-start: auto;
+}
+.sapFootTotal {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.sapFootTotal span {
+  color: var(--w-label);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.sapFootTotal strong {
+  min-inline-size: 6rem;
+  padding: 0.24rem 0.4rem;
+  border: 1px solid var(--w-line);
+  border-radius: 0.12rem;
+  background: var(--w-field-ro);
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+/* The strip under the grid: the button that commits the typed row, and the
+   one thing about that row nobody may type. */
+.sapEntryBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+  margin-block-start: 0.65rem;
+}
+.sapNote {
+  color: var(--w-muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+/* An out-of-balance document says so where the totals are. */
+.sapWarn {
+  padding: 0.28rem 0.5rem;
+  border: 1px solid #b03a2e;
+  border-radius: 0.12rem;
+  background: #f8d7d2;
+  color: #7d201a;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+/* The drill-down mark the package puts before a document you can open. */
+.sapLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #274f3f;
+  font-weight: 700;
+  text-decoration: none;
+}
+.sapLink:hover {
+  color: #183c2f;
+  text-decoration: underline;
+  text-underline-offset: 0.15rem;
+}
+.sapLink::before {
+  content: '➜';
+  color: #dfa312;
+  text-decoration: none;
+}
+/* The arrow means "opens this", so in an RTL document it points the other
+   way. A mirrored glyph, not a different one, stays recognisable. */
+:global(html[dir='rtl']) .sapLink::before {
+  transform: scaleX(-1);
+}
+
+/* The panels that hang off the document — its attachments and its history.
+   They are not on the paper form, but leaving them in the application's own
+   card style put a blue button beside an amber one on the same screen. Inside
+   the scope they take the window's chrome: squared off, titled the same way. */
+.sapDoc.sapDoc section {
+  /* Set here rather than inherited, because the title bar below cancels this
+     exact figure to reach the edges. Two numbers that must agree are better
+     written next to each other than guessed from another stylesheet. */
+  padding: 1rem;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 0.2rem;
+  background: var(--w-bg);
+  box-shadow: 0 1px 2px rgb(24 39 31 / 8%);
+}
+.sapDoc.sapDoc section > header {
+  margin: -1rem -1rem 0.8rem;
+  padding: 0.4rem 0.7rem 0.35rem;
+  border-block-end: 4px solid var(--w-title-line);
+  border-radius: 0.15rem 0.15rem 0 0;
+  background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
+}
+.sapDoc.sapDoc section > header h2 {
+  color: #21362e;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+/* The journal register uses the same visual language as the document: a
+   compact title strip, a dense ruled ledger, and a yellow current-row cue. */
+.sapRegister .sapWindow {
+  margin-block-end: 0;
+}
+
+.sapRegister .toolbar {
+  padding: 0.6rem 0.7rem;
+  border-block-end-color: var(--w-line);
+  background: var(--w-bg);
+}
+
+.sapRegister .toolbarMeta {
+  color: var(--w-muted);
+  font-size: 0.74rem;
+}
+
+.sapRegister .toolbarClear {
+  color: #315f4d;
+}
+
+.sapRegister .toolbarSearch input {
+  min-block-size: 2.05rem;
+  block-size: 2.05rem;
+  border-color: var(--w-line-strong);
+  border-inline-end: 0;
+  border-radius: 0.12rem 0 0 0.12rem;
+  background: var(--w-field);
+}
+
+.sapRegister.sapRegister .toolbarSearch button {
+  min-inline-size: 2.35rem;
+  inline-size: 2.35rem;
+  min-block-size: 2.05rem;
+  block-size: 2.05rem;
+  padding: 0;
+  border-radius: 0 0.12rem 0.12rem 0;
+}
+
+:global(html[dir='rtl']) .sapRegister .toolbarSearch input {
+  border-inline-start: 1px solid var(--w-line-strong);
+  border-inline-end: 0;
+  border-radius: 0 0.12rem 0.12rem 0;
+}
+
+:global(html[dir='rtl']) .sapRegister.sapRegister .toolbarSearch button {
+  border-radius: 0.12rem 0 0 0.12rem;
+}
+
+.sapRegisterTableWrap {
+  max-block-size: min(42rem, 68vh);
+  border: 0;
+  border-block-start: 1px solid var(--w-rule);
+}
+
+.sapRegisterTable {
+  min-inline-size: 58rem;
+}
+
+.sapRegisterTable thead th {
+  inset-block-start: 0;
+  background: var(--w-head-strong);
+}
+
+.sapRegisterTable tbody tr:nth-child(even) > td {
+  background: #f6f7f0;
+}
+
+.sapRegisterTable tbody tr:hover > td,
+.sapRegisterTable tbody tr:focus-within > td {
+  background: var(--w-selected);
+}
+
+.sapRegisterDescription {
+  display: block;
+  max-inline-size: 30rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sapRegister .sapRegisterStatus {
+  min-block-size: 1.45rem;
+  padding-inline: 0.55rem;
+  border: 1px solid #c1aa67;
+  border-radius: 999px;
+  background: #fff3bd;
+  color: #654b06;
+  font-size: 0.69rem;
+  font-weight: 750;
+}
+
+.sapRegister .sapRegisterStatus[data-status='posted'],
+.sapRegister .sapRegisterStatus[data-status='approved'] {
+  border-color: #86a28c;
+  background: #e2f0df;
+  color: #235b32;
+}
+
+.sapRegister .sapRegisterStatus[data-status='submitted'] {
+  border-color: #91a8bb;
+  background: #e5eef5;
+  color: #294f6d;
+}
+
+.sapRegister .sapRegisterStatus[data-status='rejected'],
+.sapRegister .sapRegisterStatus[data-status='cancelled'],
+.sapRegister .sapRegisterStatus[data-status='reversed'] {
+  border-color: #ca9b94;
+  background: #f7e5e2;
+  color: #7e332c;
+}
+
+.sapEmptyRow {
+  block-size: 7rem !important;
+  color: var(--w-muted);
+  text-align: center !important;
+}
+
+@media (max-width: 72rem) {
+  .sapFields {
+    grid-template-columns: repeat(3, minmax(8.5rem, 1fr));
+  }
+}
+
+@media (max-width: 48rem) {
+  .sapFields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sapBody {
+    padding: 0.7rem;
+  }
+
+  .sapFootTotals {
+    inline-size: 100%;
+    margin-inline-start: 0;
+  }
+
+  .sapFootTotal {
+    flex: 1 1 10rem;
+  }
+
+  .sapFootTotal strong {
+    flex: 1;
+  }
+}
+
+@media (max-width: 34rem) {
+  .sapFields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sapWide {
+    grid-column: auto;
+  }
+
+  .sapTitle {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .sapFootActions,
+  .sapFootActions > * {
+    inline-size: 100%;
+  }
+
+  .sapDoc.sapDoc .sapFootActions button {
+    inline-size: 100%;
+  }
+}
+
+@media print {
+  .sapLineTableWrap,
+  .sapRegisterTableWrap {
+    max-block-size: none;
+    overflow: visible;
+  }
+
+  .sapTable {
+    min-inline-size: 0;
+  }
+
+  .sapWindow,
+  .sapDoc.sapDoc section {
+    box-shadow: none;
+  }
+}
+
+/* The complete journal workspace ------------------------------------------------
+   `AdminPage variant="sap"` puts this class on the route's Workspace. The
+   selectors below deliberately stop there: Journal Entries can mirror the
+   accounting package without changing Company, Users, Inventory, or any of
+   the other shared AdminPage consumers. */
+.sapPage {
+  min-block-size: calc(100vh - 9rem);
+  margin: -0.25rem;
+  padding: 0.75rem;
+  border: 1px solid var(--w-line);
+  border-radius: 0.2rem;
+  background:
+    linear-gradient(rgb(255 255 255 / 18%), rgb(255 255 255 / 0%)),
+    var(--w-canvas);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 65%);
+  color-scheme: light;
+}
+
+.sapPage .sapPageHeader {
+  min-block-size: 3.35rem;
+  align-items: center;
+  gap: 1rem;
+  margin-block-end: 0.65rem;
+  padding: 0.55rem 0.75rem 0.5rem;
+  border: 1px solid var(--w-line-strong);
+  border-block-end: 5px solid var(--w-title-line);
+  border-radius: 0.18rem 0.18rem 0 0;
+  background: linear-gradient(180deg, #e8ece9, #cbd4cf);
+  box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
+}
+
+.sapPage .sapPageHeader h1 {
+  color: #1d3129;
+  font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.sapPage .sapPageHeader p {
+  margin-block-start: 0.2rem;
+  color: #51645b;
+  font-size: 0.73rem;
+}
+
+.sapPage .crumbs {
+  gap: 0.4rem;
+  margin-block-end: 0.55rem;
+  color: var(--w-muted);
+  font-size: 0.74rem;
+}
+
+.sapPage .backButton {
+  min-block-size: 1.9rem;
+  padding-inline: 0.55rem 0.7rem;
+  border-color: #557890;
+  border-radius: 0.18rem;
+  color: #f8fbfd;
+  background: linear-gradient(180deg, #7299b4, #456f8c);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 35%);
+  font-size: 0.72rem;
+}
+
+.sapPage .backButton:hover {
+  border-color: #355e7b;
+  color: #fff;
+  background: linear-gradient(180deg, #7ca5c0, #3e6985);
+}
+
+.sapPage .crumbTrail,
+.sapPage .crumbTrail a {
+  color: var(--w-muted);
+}
+
+.sapPage .crumbTrail a:hover {
+  color: #315f4d;
+}
+
+.sapPage .crumbTrail strong {
+  color: var(--w-label);
+}
+
+.sapPage .tabsBar {
+  display: flex;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  flex-wrap: nowrap;
+  gap: 0;
+  margin-block-end: 0.75rem;
+  padding: 0;
+  overflow-x: auto;
+  border-color: var(--w-line-strong);
+  border-radius: 0.15rem;
+  background: var(--w-head);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 55%);
+  scrollbar-color: var(--w-line-strong) var(--w-canvas);
+  scrollbar-width: thin;
+}
+
+.sapPage .tabItem {
+  min-block-size: 2.05rem;
+  padding-inline: 0.8rem;
+  border-inline-end: 1px solid var(--w-rule);
+  border-radius: 0;
+  color: #3f534a;
+  background: transparent;
+  font-size: 0.73rem;
+  font-weight: 650;
+}
+
+.sapPage .tabItem:hover {
+  color: #213c31;
+  background: #fff7d4;
+}
+
+.sapPage .tabItem[aria-current='page'] {
+  color: #493400;
+  background: linear-gradient(180deg, #ffe59c, #efb737);
+  box-shadow: inset 0 -3px 0 #b97e08;
+}
+
+.sapPage .flash {
+  margin-block-end: 0.7rem;
+  padding: 0.55rem 0.7rem;
+  border-color: #93a58f;
+  border-radius: 0.15rem;
+  background: #edf4e9;
+  color: #284b33;
+  font-size: 0.76rem;
+}
+
+.sapPage .flashError {
+  border-color: #bd746a;
+  background: #f8e5e1;
+  color: #782f28;
+}
+
+.sapPage .sectionHint {
+  margin-block-end: 0.7rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--w-line);
+  border-inline-start: 3px solid var(--w-title-line);
+  background: #fff9dc;
+  color: #5f593f;
+  font-size: 0.75rem;
+}
+
+.sapPage.sapPage .button {
+  min-block-size: 2rem;
+  padding-inline: 0.8rem;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 0.14rem;
+  color: #293a33;
+  background: linear-gradient(180deg, #fffef7, #e6e9e1);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
+  font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.sapPage.sapPage .button:hover {
+  border-color: #8b751f;
+  color: #3f3007;
+  background: linear-gradient(180deg, #fff9dc, #eadb9b);
+}
+
+.sapPage.sapPage .primary {
+  border-color: var(--w-amber-line);
+  color: #3a2600;
+  background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
+}
+
+.sapPage.sapPage .primary:hover {
+  border-color: #966707;
+  color: #2e2000;
+  background: linear-gradient(180deg, #ffe5a0, #efa91d);
+}
+
+.sapPage.sapPage .danger {
+  border-color: #b96358;
+  color: #7d2d25;
+  background: linear-gradient(180deg, #fff7f5, #f1d7d2);
+}
+
+.sapPage.sapPage .danger:hover {
+  border-color: #98443a;
+  color: #6e251e;
+  background: linear-gradient(180deg, #fff2ef, #e8c5be);
+}
+
+.sapPage.sapPage .button:focus-visible,
+.sapPage .backButton:focus-visible,
+.sapPage .tabItem:focus-visible {
+  outline: 2px solid #745807;
+  outline-offset: 2px;
+}
+
+.sapPage .dialog {
+  max-block-size: calc(100dvh - 2rem);
+  overflow-y: auto;
+  border-color: var(--w-line-strong);
+  border-radius: 0.2rem;
+  color: var(--w-text);
+  background: var(--w-bg);
+  box-shadow: 0 22px 60px -20px rgb(15 27 21 / 55%);
+}
+
+.sapPage .dialog::backdrop {
+  background: rgb(22 31 27 / 42%);
+  backdrop-filter: blur(1px);
+}
+
+.sapPage .dialogBody {
+  gap: 0.85rem;
+  padding: 0.9rem 1rem 1rem;
+}
+
+.sapPage .dialogHeader {
+  margin: -0.9rem -1rem 0;
+  padding: 0.5rem 0.65rem 0.42rem;
+  border-block-end: 4px solid var(--w-title-line);
+  background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
+}
+
+.sapPage .dialogHeader h2 {
+  color: #21362e;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.sapPage.sapPage .dialogClose {
+  inline-size: 1.7rem;
+  min-inline-size: 1.7rem;
+  block-size: 1.7rem;
+  min-block-size: 1.7rem;
+  padding: 0;
+  border-color: var(--w-line-strong);
+  border-radius: 0.12rem;
+  color: #42564c;
+  background: var(--w-field-ro);
+}
+
+.sapPage.sapPage .dialogClose:hover {
+  border-color: #8b751f;
+  color: #3f3007;
+  background: var(--w-focus);
+}
+
+.sapPage .dialog .grid {
+  grid-template-columns: repeat(2, minmax(12rem, 1fr));
+  gap: 0.7rem 0.8rem;
+}
+
+.sapPage .dialog .form {
+  gap: 0.8rem;
+}
+
+.sapPage .dialog .field {
+  gap: 0.2rem;
+}
+
+.sapPage .dialog .label {
+  color: var(--w-label);
+  font-size: 0.73rem;
+  font-weight: 650;
+}
+
+.sapPage.sapPage .input,
+.sapPage.sapPage .select,
+.sapPage.sapPage .textarea {
+  min-block-size: 2rem;
+  padding-inline: 0.45rem;
+  border-color: var(--w-line-strong);
+  border-radius: 0.12rem;
+  color: var(--w-text);
+  background: var(--w-field);
+  font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+  font-size: 0.78rem;
+  box-shadow: none;
+}
+
+.sapPage.sapPage .textarea {
+  min-block-size: 4.2rem;
+  padding-block: 0.4rem;
+}
+
+.sapPage.sapPage .input:focus,
+.sapPage.sapPage .select:focus,
+.sapPage.sapPage .textarea:focus {
+  border-color: #8b751f;
+  background: var(--w-focus);
+  outline: 2px solid #9a760d;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 1px #fff;
+}
+
+.sapPage .dateInput::-webkit-calendar-picker-indicator {
+  filter: none;
+}
+
+.sapPage .hint,
+.sapPage .uploadHint {
+  color: var(--w-muted);
+  font-size: 0.7rem;
+}
+
+.sapPage .required {
+  color: #9a3229;
+}
+
+.sapPage .confirmActions {
+  padding-block-start: 0.7rem;
+  border-block-start: 1px solid var(--w-rule);
+}
+
+/* SAP treatment for the document's supporting panes, not only its ledger. */
+.sapDoc .profileGrid {
+  gap: 0.85rem;
+}
+
+.sapDoc .profileStack {
+  gap: 0.85rem;
+}
+
+.sapDoc .inline {
+  align-items: end;
+  gap: 0.55rem;
+}
+
+.sapDoc .field {
+  gap: 0.2rem;
+}
+
+.sapDoc .label {
+  color: var(--w-label);
+  font-size: 0.73rem;
+  font-weight: 650;
+}
+
+.sapDoc .timelineMeta code {
+  color: #43574d;
+}
+
+.sapDoc .emptyState {
+  padding: 1.6rem 0.8rem;
+  color: var(--w-muted);
+}
+
+.sapDoc .emptyState svg {
+  color: #c48b12;
+}
+
+.sapDoc .emptyState strong {
+  color: var(--w-label);
+  font-size: 0.8rem;
+}
+
+.sapDoc .fileList li {
+  gap: 0.65rem;
+  padding: 0.55rem 0.15rem;
+  border-block-end-color: var(--w-rule);
+}
+
+.sapDoc .fileIcon {
+  inline-size: 1.9rem;
+  block-size: 1.9rem;
+  border: 1px solid var(--w-line);
+  border-radius: 0.12rem;
+  color: #9a6d0b;
+  background: var(--w-field-ro);
+}
+
+.sapDoc .fileBody a {
+  color: #274f3f;
+  font-size: 0.78rem;
+}
+
+.sapDoc .fileMeta {
+  color: var(--w-muted);
+  font-size: 0.7rem;
+}
+
+.sapDoc .uploadForm {
+  gap: 0.55rem;
+  margin-block-start: 0.8rem;
+  padding-block-start: 0.8rem;
+  border-block-start-color: var(--w-rule);
+}
+
+.sapDoc .uploadPicker {
+  padding: 0.4rem 0.6rem;
+  border-color: var(--w-line-strong);
+  border-radius: 0.12rem;
+  color: var(--w-label);
+  background: var(--w-field-ro);
+  font-size: 0.73rem;
+}
+
+.sapDoc .uploadPicker:hover {
+  border-color: #8b751f;
+  color: #3f3007;
+  background: var(--w-focus);
+}
+
+.sapDoc .timeline li {
+  grid-template-columns: 9rem minmax(0, 1fr);
+  padding: 0.5rem 0 0.5rem 0.9rem;
+  border-inline-start-color: var(--w-line);
+}
+
+.sapDoc .timeline li::before {
+  inline-size: 0.58rem;
+  block-size: 0.58rem;
+  inset-inline-start: -0.33rem;
+  background: var(--w-title-line);
+}
+
+.sapDoc .timelineWhen,
+.sapDoc .timelineMeta {
+  color: var(--w-muted);
+  font-size: 0.7rem;
+}
+
+.sapDoc .timelineAction {
+  color: var(--w-label);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 48rem) {
+  .sapPage {
+    min-block-size: 0;
+    margin: -0.15rem;
+    padding: 0.5rem;
+  }
+
+  .sapPage .sapPageHeader {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .sapPage .sapPageHeader > :last-child:not(:first-child) {
+    justify-content: flex-start;
+  }
+
+  .sapPage .dialog .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sapPage.sapPage .dialog {
+    inline-size: min(44rem, calc(100vw - 1rem));
+  }
+}
+
+@media print {
+  .sapPage {
+    min-block-size: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: #fff;
+    box-shadow: none;
+  }
+
+  .sapPage .crumbs,
+  .sapPage .tabsBar,
+  .sapPage .sapPageHeader > :last-child:not(:first-child) {
+    display: none;
+  }
+}
+
+/* ── The journal workspace ───────────────────────────────────────────────
+   Opening an entry opens a workspace: the register stays beside the document
+   so the next entry is one click away and the one being read keeps its place
+   in the list. The register's own page stays a plain full-width list — the
+   split is what having a document open looks like, not a permanent layout. */
+.sapSplit {
+  display: grid;
+  grid-template-columns: minmax(15rem, 21rem) minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.sapSplitAside {
+  position: sticky;
+  /* Clears the application's own header, so the register does not slide up
+     underneath it while the document scrolls. */
+  inset-block-start: 0.75rem;
+  min-inline-size: 0;
+}
+
+.sapSplitMain {
+  min-inline-size: 0;
+}
+
+.sapSplitAside .sapWindow {
+  margin-block-end: 0;
+}
+
+.sapAsideTableWrap {
+  max-block-size: min(34rem, 62vh);
+  border: 0;
+  border-block-start: 1px solid var(--w-rule);
+}
+
+/* Three columns, not the register's seven, so it fits the pane instead of
+   scrolling sideways in it. The compound selector is deliberate: it has to
+   beat .sapRegisterTable's own minimum, which is sized for the full list. */
+.sapRegisterTable.sapAsideTable {
+  min-inline-size: 0;
+}
+
+.sapAsideTable th,
+.sapAsideTable td {
+  padding-inline: 0.45rem;
+}
+
+/* The row whose document is open. Marked with aria-current as well, because
+   an amber band means nothing to somebody not looking at it. */
+.sapRowSelected > td {
+  background: var(--w-selected-strong) !important;
+  font-weight: 650;
+}
+
+/* Below this the two panes stop fitting side by side. The document goes
+   first — it is why the page was opened — and the register follows it, no
+   longer sticky because it is no longer beside anything. */
+@media (max-width: 78rem) {
+  .sapSplit {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sapSplitMain {
+    order: 1;
+  }
+
+  .sapSplitAside {
+    position: static;
+    order: 2;
+  }
+
+  .sapAsideTableWrap {
+    max-block-size: 22rem;
+  }
+}
