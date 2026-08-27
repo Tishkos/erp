@@ -960,7 +960,13 @@
       "main_branch_hint": "The first branch is the head office. Other branches are added later under Master Data → Branches.",
       "main_branch_name": "Branch name",
       "main_branch_location": "Branch location",
-      "open_branches": "Open Branches"
+      "open_branches": "Open Branches",
+      "appearance": "Appearance",
+      "appearance_hint": "How the system looks, for everybody. The sign-in page keeps its own look.",
+      "palette_sand": "Sand",
+      "palette_classic": "Classic blue",
+      "palette_slate": "Slate",
+      "palette_graphite": "Graphite"
     },
     "branches": {
       "title": "Branches",

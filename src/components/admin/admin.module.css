@@ -1518,8 +1518,7 @@
    and if it read its colours from the theme it would come apart the moment
    somebody flipped it. Scoped to the journal's .sapDoc and route-owned
    .sapPage classes so none of it escapes onto the rest of the application. */
-.sapDoc,
-.sapPage {
+:global([data-palette]) {
   --w-bg: #fbfbf4;
   --w-canvas: #f3f2e9;
   --w-line: #aeb8ad;
@@ -1542,7 +1541,10 @@
   --w-amber-b: #e9aa24;
   --w-amber-line: #b77d0b;
   --w-focus: #fff5b8;
+}
 
+.sapDoc,
+.sapPage {
   color: var(--w-text);
   font-family: Tahoma, "Segoe UI", Arial, sans-serif;
   font-size: 0.8rem;
@@ -3092,4 +3094,183 @@
   background: var(--w-head-strong);
   color: var(--w-muted);
   cursor: not-allowed;
+}
+
+/* ── The palettes the company chooses between ─────────────────────────────
+   Set on <html> from the company row, so one choice dresses the navigation,
+   the footer and every screen at once. The names here are the four the
+   migration's check constraint allows and the appearance screen offers; a
+   fifth added in one place and not the others is a system nobody can open,
+   so they are meant to be compared by eye.
+
+   'sand' is the default and is defined above rather than here, so that a
+   company with no choice recorded — and a browser that fails to receive the
+   attribute — still gets a complete palette. */
+
+/* The accounting package as most people first met it: cool blue-grey chrome,
+   a blue title bar, amber buttons. */
+:global([data-palette='classic']) {
+  --w-bg: #eef2f7;
+  --w-canvas: #dfe6ee;
+  --w-line: #9fb2c6;
+  --w-line-strong: #7f9db9;
+  --w-rule: #b6c4d3;
+  --w-field: #ffffff;
+  --w-field-ro: #e7ebf1;
+  --w-label: #16344f;
+  --w-text: #101d28;
+  --w-muted: #4a6076;
+  --w-title-a: #d6e8f6;
+  --w-title-b: #a7cae3;
+  --w-title-line: #3f7fb5;
+  --w-head: #dbe4ed;
+  --w-head-strong: #cfdae6;
+  --w-filler: #eef2f7;
+  --w-selected: #fff2af;
+  --w-selected-strong: #f7cf7a;
+  --w-amber-a: #fbd071;
+  --w-amber-b: #eaa621;
+  --w-amber-line: #b47c12;
+  --w-focus: #ffffcc;
+}
+
+/* Cooler and quieter than classic, for a room with a lot of screens in it. */
+:global([data-palette='slate']) {
+  --w-bg: #f4f6f8;
+  --w-canvas: #e3e8ed;
+  --w-line: #a8b3bf;
+  --w-line-strong: #8593a2;
+  --w-rule: #c2cad3;
+  --w-field: #ffffff;
+  --w-field-ro: #eaeef2;
+  --w-label: #23323f;
+  --w-text: #131c24;
+  --w-muted: #566573;
+  --w-title-a: #dde4ea;
+  --w-title-b: #bcc8d3;
+  --w-title-line: #4c667e;
+  --w-head: #dfe5eb;
+  --w-head-strong: #d2dae2;
+  --w-filler: #f2f5f7;
+  --w-selected: #fdf0b8;
+  --w-selected-strong: #f4cd82;
+  --w-amber-a: #cfd8e0;
+  --w-amber-b: #9fb0bf;
+  --w-amber-line: #6f8496;
+  --w-focus: #fff6c9;
+}
+
+/* Near-neutral chrome, white paper. The one to pick when the company's own
+   colours are doing the talking elsewhere. */
+:global([data-palette='graphite']) {
+  --w-bg: #f7f7f6;
+  --w-canvas: #e6e6e4;
+  --w-line: #b0b0ad;
+  --w-line-strong: #8d8d89;
+  --w-rule: #c9c9c5;
+  --w-field: #ffffff;
+  --w-field-ro: #eeeeec;
+  --w-label: #2b2b29;
+  --w-text: #161615;
+  --w-muted: #63635f;
+  --w-title-a: #e4e4e1;
+  --w-title-b: #c9c9c5;
+  --w-title-line: #7a7a75;
+  --w-head: #e6e6e3;
+  --w-head-strong: #dadad6;
+  --w-filler: #f4f4f2;
+  --w-selected: #fbf0bb;
+  --w-selected-strong: #f2cd85;
+  --w-amber-a: #d8d8d4;
+  --w-amber-b: #b4b4af;
+  --w-amber-line: #868681;
+  --w-focus: #fdf7cf;
+}
+
+/* ── Choosing the palette ─────────────────────────────────────────────────
+   Each choice is a small drawing of the thing it selects — a title bar, two
+   grid rows, a button — painted from that palette's own tokens. A row of
+   colour names would make somebody guess; this shows them. */
+.paletteChoices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: 0.7rem;
+}
+
+.paletteChoice {
+  display: grid;
+  gap: 0.4rem;
+  justify-items: center;
+  padding: 0.6rem;
+  border: 1px solid var(--w-line, var(--border));
+  border-radius: 0.2rem;
+  background: var(--w-bg, var(--surface));
+  cursor: pointer;
+}
+
+/* The selected one is marked by more than colour, so it survives being
+   printed and being read by somebody who cannot distinguish the swatches. */
+.paletteChoice:has(input:checked) {
+  border-color: var(--w-title-line, var(--accent));
+  box-shadow: inset 0 0 0 1px var(--w-title-line, var(--accent));
+}
+
+.paletteChoice:focus-within {
+  outline: 2px solid var(--w-title-line, var(--accent));
+  outline-offset: 1px;
+}
+
+.paletteChoice input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* The drawing. Each swatch carries its own data-palette, so it is painted by
+   the same tokens the application would use — not by a copy of them that can
+   drift from the real thing. */
+.paletteSwatch {
+  display: block;
+  inline-size: 100%;
+  overflow: hidden;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 0.15rem;
+  background: var(--w-canvas);
+}
+
+.paletteSwatchBar {
+  display: block;
+  block-size: 0.85rem;
+  border-block-end: 1px solid var(--w-title-line);
+  background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
+}
+
+.paletteSwatchBody {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.35rem;
+  background: var(--w-bg);
+}
+
+.paletteSwatchRow {
+  display: block;
+  block-size: 0.4rem;
+  border: 1px solid var(--w-rule);
+  background: var(--w-field);
+}
+
+.paletteSwatchButton {
+  display: block;
+  inline-size: 55%;
+  block-size: 0.5rem;
+  border: 1px solid var(--w-amber-line);
+  background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
+}
+
+.paletteName {
+  color: var(--w-label, var(--text));
+  font-size: 0.76rem;
+  font-weight: 650;
 }

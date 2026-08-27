@@ -960,7 +960,13 @@
       "main_branch_hint": "الفرع الأول هو المكتب الرئيسي. تُضاف الفروع الأخرى لاحقاً من البيانات الرئيسية ← الفروع.",
       "main_branch_name": "اسم الفرع",
       "main_branch_location": "موقع الفرع",
-      "open_branches": "فتح الفروع"
+      "open_branches": "فتح الفروع",
+      "appearance": "المظهر",
+      "appearance_hint": "شكل النظام للجميع. تحتفظ شاشة تسجيل الدخول بمظهرها الخاص.",
+      "palette_sand": "رملي",
+      "palette_classic": "أزرق كلاسيكي",
+      "palette_slate": "رمادي أردوازي",
+      "palette_graphite": "جرافيت"
     },
     "branches": {
       "title": "الفروع",

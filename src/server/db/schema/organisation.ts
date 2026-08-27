@@ -55,12 +55,24 @@ export const company = pgTable(
     baseCurrency: char('base_currency', { length: 3 }).notNull().default('IQD'),
     /** Head office address, as shown on documents (Phase 0 Company Setup). */
     address: text('address'),
+    /**
+     * Which palette the application wears — one of the presets the stylesheet
+     * defines. A company decision rather than a personal one: two people
+     * describing the same screen should be looking at the same screen.
+     */
+    uiPalette: text('ui_palette').notNull().default('sand'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex('company_code_uniq').on(t.code),
     uniqueIndex('company_singleton').on(sql`(true)`),
     check('company_base_currency_shape', sql`${t.baseCurrency} ~ '^[A-Z]{3}$'`),
+    // A palette with no definition renders an unstyled application, and the
+    // failure shows on every screen at once with nothing to explain it.
+    check(
+      'company_ui_palette_known',
+      sql`${t.uiPalette} in ('sand', 'classic', 'slate', 'graphite')`,
+    ),
   ],
 );
 

@@ -3651,3 +3651,104 @@ html[dir="rtl"] .coa-directional-icon {
 :root[data-theme="dark"] .admin-date::-webkit-calendar-picker-indicator {
   filter: invert(1);
 }
+
+/* ── The shell, in the same window as the screens ─────────────────────────
+   The navigation, the module launcher and the footer are drawn from the
+   palette the company chose, so the chrome and the pages inside it are one
+   application rather than two.
+
+   These selectors are unscoped on purpose: `.erp-shell` is rendered by the
+   authenticated layout and by nothing else, so sign-in — which lives outside
+   that route group — is untouched. That is the boundary the request asked
+   for, and it is structural rather than a class somebody has to remember.
+
+   The --w-* tokens are defined on <html> by the admin stylesheet, with the
+   company's choice selecting between them. */
+
+.erp-header {
+  border-block-end: 1px solid var(--w-line-strong, var(--border));
+  background: linear-gradient(
+    180deg,
+    var(--w-title-a, var(--surface)),
+    var(--w-title-b, var(--surface))
+  );
+  box-shadow: inset 0 -2px 0 var(--w-title-line, transparent);
+}
+
+.erp-brand,
+.erp-brand strong,
+.erp-header__identity {
+  color: var(--w-label, var(--text));
+}
+
+/* The module bar. A chosen module is the tab you are standing on, so it takes
+   the same amber the tab strip inside the page takes. */
+.erp-nav .erp-launcher-trigger,
+.erp-nav > button,
+.erp-icon-button {
+  border: 1px solid transparent;
+  border-radius: 0.12rem;
+  color: var(--w-label, var(--text));
+}
+
+.erp-icon-button:hover,
+.erp-nav > button:hover,
+.erp-launcher-trigger:hover,
+.erp-icon-button[aria-expanded="true"],
+.erp-launcher-trigger[aria-expanded="true"] {
+  border-color: var(--w-line-strong, var(--border));
+  background: var(--w-selected, var(--accent-soft));
+  color: var(--w-label, var(--text));
+}
+
+/* The popover a module opens, and the drawers beside it. */
+.erp-module-popover,
+.erp-mobile-drawer,
+.erp-appearance-drawer {
+  border: 1px solid var(--w-line-strong, var(--border));
+  border-radius: 0.2rem;
+  background: var(--w-bg, var(--surface-raised));
+  color: var(--w-text, var(--text));
+}
+
+.erp-module-section > h3,
+.erp-appearance-drawer h2,
+.erp-appearance-drawer h3 {
+  color: var(--w-label, var(--text-muted));
+}
+
+.erp-menu-item--link:hover {
+  background: var(--w-selected, var(--accent-soft));
+  color: var(--w-label, var(--text));
+}
+
+/* A screen that is planned but not built says so; it must not look pressable. */
+.erp-menu-item--pending,
+.erp-menu-item--preview {
+  color: var(--w-muted, var(--text-muted));
+}
+
+/* The workspace the pages sit on. */
+.erp-main {
+  background: var(--w-canvas, var(--surface-sunken));
+}
+
+.erp-footer {
+  border-block-start: 1px solid var(--w-line-strong, var(--border));
+  background: linear-gradient(
+    180deg,
+    var(--w-title-a, var(--surface)),
+    var(--w-title-b, var(--surface))
+  );
+}
+
+.erp-footer__copy,
+.erp-footer__version {
+  color: var(--w-label, var(--text-muted));
+}
+
+/* The context strip: company, branch, currency, period. */
+.erp-context,
+.erp-branch {
+  color: var(--w-label, var(--text-soft));
+}
