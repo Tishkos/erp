@@ -3752,3 +3752,285 @@ html[dir="rtl"] .coa-directional-icon {
 .erp-branch {
   color: var(--w-label, var(--text-soft));
 }
+
+/* ── The toolbar, as a toolbar ────────────────────────────────────────────
+   The chrome was still the modern application's: pill-shaped switches, a
+   round avatar, tab underlines, generous height. Alongside a ruled grid it
+   read as two products stacked on each other.
+
+   What follows squares everything off and shrinks it. The rules are ordered
+   after the originals and match on the same classes, so they replace rather
+   than fight; anything not restated here is deliberately left alone. */
+
+.erp-shell {
+  font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+}
+
+.erp-header {
+  block-size: 3.4rem;
+  border-block-end: 1px solid var(--w-chrome-line, var(--border));
+  background: linear-gradient(
+    180deg,
+    var(--w-chrome-a, var(--surface)),
+    var(--w-chrome-b, var(--surface))
+  );
+  box-shadow: none;
+  backdrop-filter: none;
+  color: var(--w-chrome-text, var(--text));
+}
+
+.erp-brand strong,
+.erp-header__identity,
+.erp-user-trigger__name {
+  color: var(--w-chrome-text, var(--text));
+  font-size: 0.82rem;
+}
+
+.erp-user-trigger__role,
+.erp-brand span {
+  color: var(--w-chrome-text, var(--text-muted));
+  font-size: 0.7rem;
+  opacity: 0.75;
+}
+
+/* Every control in the bar is the same square button. A toolbar in this kind
+   of software is a row of identical stamps, not a set of shapes. */
+.erp-icon-button,
+.erp-launcher-trigger,
+.erp-locale-toggle,
+.erp-theme-toggle,
+.erp-mobile-trigger,
+.erp-appearance-trigger {
+  inline-size: 1.9rem;
+  block-size: 1.9rem;
+  min-inline-size: 1.9rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 0.12rem;
+  background: transparent;
+  color: var(--w-chrome-text, var(--text));
+  box-shadow: none;
+}
+
+.erp-icon-button svg,
+.erp-launcher-trigger svg,
+.erp-locale-toggle svg,
+.erp-theme-toggle svg,
+.erp-mobile-trigger svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+  stroke-width: 1.8;
+}
+
+.erp-icon-button:hover,
+.erp-launcher-trigger:hover,
+.erp-locale-toggle:hover,
+.erp-theme-toggle:hover,
+.erp-mobile-trigger:hover,
+.erp-icon-button[aria-expanded="true"],
+.erp-locale-toggle[aria-expanded="true"],
+.erp-launcher-trigger[aria-expanded="true"] {
+  border-color: var(--w-chrome-line, var(--border));
+  background: var(--w-field, #fff);
+  color: var(--w-chrome-text, var(--text));
+}
+
+/* The language button carries two characters beside its icon. */
+.erp-locale-toggle {
+  inline-size: auto;
+  min-inline-size: 2.6rem;
+  gap: 0.25rem;
+  padding-inline: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+/* Was a sliding pill with a sun and a moon in it. */
+.erp-theme-toggle {
+  display: inline-grid;
+  place-items: center;
+}
+
+.erp-theme-toggle::before,
+.erp-theme-toggle::after {
+  content: none;
+}
+
+.erp-theme-toggle__sun,
+.erp-theme-toggle__moon {
+  grid-area: 1 / 1;
+}
+
+[data-theme="light"] .erp-theme-toggle__moon,
+[data-theme="dark"] .erp-theme-toggle__sun {
+  display: none;
+}
+
+/* The module bar: menu entries, not tabs with an underline. */
+.erp-nav > button,
+.erp-nav [class*="erp-module"] > button {
+  border: 1px solid transparent;
+  border-radius: 0.12rem;
+  color: var(--w-chrome-text, var(--text));
+  font-size: 0.79rem;
+  font-weight: 600;
+}
+
+.erp-nav > button::after,
+.erp-nav [class*="erp-module"] > button::after {
+  content: none;
+}
+
+.erp-nav > button:hover,
+.erp-nav > button[aria-expanded="true"] {
+  border-color: var(--w-chrome-line, var(--border));
+  background: var(--w-field, #fff);
+}
+
+/* The person, as a tile rather than a badge. */
+.erp-user-trigger {
+  gap: 0.45rem;
+  padding: 0.15rem 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 0.12rem;
+}
+
+.erp-user-trigger:hover,
+.erp-user-trigger[aria-expanded="true"] {
+  border-color: var(--w-chrome-line, var(--border));
+  background: var(--w-field, #fff);
+}
+
+.erp-user-trigger__avatar {
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border: 1px solid var(--w-chrome-line, var(--border));
+  border-radius: 0.12rem;
+  background: var(--w-head-strong, var(--surface-sunken));
+  color: var(--w-label, var(--text));
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.erp-user-trigger__chevron {
+  inline-size: 0.8rem;
+  block-size: 0.8rem;
+}
+
+/* Popovers and drawers: squared, and drawn from the palette. */
+.erp-utility-popover,
+.erp-module-popover,
+.erp-mobile-drawer,
+.erp-appearance-drawer,
+.erp-launcher {
+  border: 1px solid var(--w-line-strong, var(--border));
+  border-radius: 0.2rem;
+  background: var(--w-bg, var(--surface-raised));
+  color: var(--w-text, var(--text));
+  box-shadow: 0 2px 6px rgb(24 39 31 / 18%);
+}
+
+.erp-utility-popover__heading,
+.erp-module-popover h2,
+.erp-appearance-drawer h2 {
+  padding: 0.35rem 0.7rem;
+  border-block-end: 1px solid var(--w-title-line, var(--border));
+  background: linear-gradient(180deg, var(--w-title-a, var(--surface)), var(--w-title-b, var(--surface)));
+  color: var(--w-label, var(--text));
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+/* The preference rows inside the appearance drawer. */
+.erp-preference {
+  border-block-end: 1px solid var(--w-rule, var(--border));
+}
+
+.erp-preference button,
+.erp-preference [role="radio"] {
+  border: 1px solid var(--w-line-strong, var(--border));
+  border-radius: 0.12rem;
+  background: var(--w-field, #fff);
+  color: var(--w-text, var(--text));
+  font-size: 0.74rem;
+}
+
+.erp-preference button[aria-checked="true"],
+.erp-preference button[aria-pressed="true"] {
+  border-color: var(--w-amber-line, var(--accent));
+  background: linear-gradient(180deg, var(--w-amber-a, var(--accent-soft)), var(--w-amber-b, var(--accent-soft)));
+  color: #3a2600;
+}
+
+.erp-footer {
+  block-size: auto;
+  padding-block: 0.35rem;
+  border-block-start: 1px solid var(--w-chrome-line, var(--border));
+  background: linear-gradient(
+    180deg,
+    var(--w-chrome-a, var(--surface)),
+    var(--w-chrome-b, var(--surface))
+  );
+  font-size: 0.74rem;
+}
+
+.erp-footer__copy,
+.erp-footer__version {
+  color: var(--w-chrome-text, var(--text-muted));
+}
+
+/* The module entries: a menu bar. The underline that slid in under the active
+   one, and the accent colour it carried, belong to a different kind of
+   application — here the active module is the one drawn as pressed. */
+.erp-nav__trigger {
+  border: 1px solid transparent;
+  border-radius: 0.12rem;
+  color: var(--w-chrome-text, var(--text-soft));
+  font-size: 0.79rem;
+  font-weight: 600;
+}
+
+.erp-nav__trigger::after {
+  content: none;
+}
+
+.erp-nav__trigger:hover,
+.erp-nav__trigger[aria-expanded="true"],
+.erp-nav__trigger[data-active="true"] {
+  border-color: var(--w-chrome-line, var(--border));
+  background: var(--w-field, #fff);
+  color: var(--w-chrome-text, var(--text));
+}
+
+/* The module you are in is pressed, not underlined. */
+.erp-nav__trigger[data-active="true"] {
+  background: var(--w-selected, var(--accent-soft));
+  box-shadow: inset 0 1px 2px rgb(24 39 31 / 14%);
+}
+
+/* The screen you are on, inside an open module menu. Marked the way the grid
+   marks the row you are reading, not in the application's accent blue. */
+.erp-menu-item--link[aria-current="page"] {
+  border-inline-start: 3px solid var(--w-amber-line, var(--accent));
+  background: var(--w-selected, var(--accent-soft));
+  color: var(--w-label, var(--text));
+  font-weight: 700;
+}
+
+.erp-menu-item--link {
+  border-inline-start: 3px solid transparent;
+  border-radius: 0;
+  color: var(--w-text, var(--text));
+}
+
+.erp-menu-item__label {
+  font-size: 0.79rem;
+}
+
+/* The section headings inside the menu. */
+.erp-module-section > h3,
+.erp-utility-popover h3 {
+  color: var(--w-muted, var(--text-muted));
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+}

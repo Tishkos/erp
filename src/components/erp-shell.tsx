@@ -25,10 +25,8 @@ import {
   LogOut,
   Mail,
   Menu,
-  Moon,
   Palette,
   Settings,
-  Sun,
   Truck,
   UserCog,
   Users,
@@ -390,10 +388,6 @@ export function ErpShell({
     applyPreference(name, value);
   };
 
-  const toggleTheme = () => {
-    changeAppearance('theme', appearance.theme === 'dark' ? 'light' : 'dark');
-  };
-
   const openAppearance = () => {
     setOpenPopover(null);
     setMobileOpen(false);
@@ -534,20 +528,6 @@ export function ErpShell({
               onClick={openAppearance}
             >
               <Palette aria-hidden="true" />
-            </button>
-
-            <button
-              className="erp-theme-toggle"
-              type="button"
-              aria-label={`${shell('theme')}: ${shell('light')} / ${shell('dark')}`}
-              aria-pressed={appearance.theme === 'dark'}
-              title={`${shell('theme')}: ${
-                appearance.theme === 'dark' ? shell('dark') : shell('light')
-              }`}
-              onClick={toggleTheme}
-            >
-              <Sun className="erp-theme-toggle__sun" aria-hidden="true" />
-              <Moon className="erp-theme-toggle__moon" aria-hidden="true" />
             </button>
 
             <button
@@ -828,19 +808,6 @@ export function ErpShell({
                 <Languages aria-hidden="true" />
                 <span>{currentLocale === 'ar' ? shell('english') : shell('arabic')}</span>
               </button>
-              <button
-                className="erp-mobile-action erp-mobile-theme-action"
-                type="button"
-                aria-label={`${shell('theme')}: ${shell('light')} / ${shell('dark')}`}
-                aria-pressed={appearance.theme === 'dark'}
-                onClick={toggleTheme}
-              >
-                <span className="erp-mobile-theme-action__icons" aria-hidden="true">
-                  <Sun className="erp-theme-toggle__sun" />
-                  <Moon className="erp-theme-toggle__moon" />
-                </span>
-                <span>{appearance.theme === 'dark' ? shell('dark') : shell('light')}</span>
-              </button>
               <button className="erp-mobile-action" type="button" onClick={openAppearance}>
                 <Palette aria-hidden="true" />
                 <span>{shell('appearance')}</span>
@@ -883,7 +850,9 @@ export function ErpShell({
             </div>
 
             <div className="erp-appearance-drawer__body">
-              {(Object.keys(APPEARANCE_OPTIONS) as PreferenceName[]).map((name) => (
+              {(Object.keys(APPEARANCE_OPTIONS) as PreferenceName[])
+                .filter((name) => name !== 'theme' && name !== 'accent')
+                .map((name) => (
                 <fieldset className="erp-preference" key={name}>
                   <legend className="erp-preference__legend">{shell(name)}</legend>
                   <div className={`erp-preference__options erp-preference__options--${name}`}>
@@ -899,15 +868,6 @@ export function ErpShell({
                           key={value}
                           onClick={() => changeAppearance(name, value)}
                         >
-                          {name === 'theme' ? (
-                            value === 'light' ? (
-                              <Sun aria-hidden="true" />
-                            ) : (
-                              <Moon aria-hidden="true" />
-                            )
-                          ) : name === 'accent' ? (
-                            <span className="erp-preference__swatch" aria-hidden="true" />
-                          ) : null}
                           <span>{shell(value)}</span>
                           {selected ? <Check aria-hidden="true" /> : null}
                         </button>

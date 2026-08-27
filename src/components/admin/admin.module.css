@@ -1541,6 +1541,10 @@
   --w-amber-b: #e9aa24;
   --w-amber-line: #b77d0b;
   --w-focus: #fff5b8;
+  --w-chrome-a: #dfe3dc;
+  --w-chrome-b: #c4ccc2;
+  --w-chrome-line: #a3aea0;
+  --w-chrome-text: #22322a;
 }
 
 .sapDoc,
@@ -3132,6 +3136,10 @@
   --w-amber-b: #eaa621;
   --w-amber-line: #b47c12;
   --w-focus: #ffffcc;
+  --w-chrome-a: #cfe0ef;
+  --w-chrome-b: #9dbfd9;
+  --w-chrome-line: #6f9bbd;
+  --w-chrome-text: #0f3350;
 }
 
 /* Cooler and quieter than classic, for a room with a lot of screens in it. */
@@ -3158,6 +3166,10 @@
   --w-amber-b: #9fb0bf;
   --w-amber-line: #6f8496;
   --w-focus: #fff6c9;
+  --w-chrome-a: #d5dde4;
+  --w-chrome-b: #adbcc9;
+  --w-chrome-line: #7c8f9f;
+  --w-chrome-text: #1d2a35;
 }
 
 /* Near-neutral chrome, white paper. The one to pick when the company's own
@@ -3185,6 +3197,10 @@
   --w-amber-b: #b4b4af;
   --w-amber-line: #868681;
   --w-focus: #fdf7cf;
+  --w-chrome-a: #dededa;
+  --w-chrome-b: #c0c0bb;
+  --w-chrome-line: #8f8f8a;
+  --w-chrome-text: #232320;
 }
 
 /* ── Choosing the palette ─────────────────────────────────────────────────
@@ -3273,4 +3289,183 @@
   color: var(--w-label, var(--text));
   font-size: 0.76rem;
   font-weight: 650;
+}
+
+/* The back button was a pill. Nothing else in the window is round. */
+.sapPage .backButton {
+  min-block-size: 1.75rem;
+  padding-inline: 0.5rem 0.65rem;
+  border: 1px solid var(--w-amber-line);
+  border-radius: 0.12rem;
+  background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
+  color: #3a2600;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.sapPage .backButton:hover {
+  border-color: var(--w-amber-line);
+  background: linear-gradient(180deg, #ffe6a8, #f2b12f);
+  color: #3a2600;
+}
+
+.sapPage .backButton svg {
+  inline-size: 0.8rem;
+  block-size: 0.8rem;
+}
+
+/* ── Permissions, and the matrix on it ────────────────────────────────────
+   The role picker was a column of rounded cards with a blue selected state,
+   and each system section a rounded band with a green count on it. Beside a
+   ruled grid they read as a different product. Squared off, and the selected
+   role marked the way the register marks the row you are reading. */
+.sapPage .roleTabs {
+  gap: 0;
+  border: 1px solid var(--w-rule);
+  background: #ffffff;
+}
+
+.sapPage .roleTab {
+  border: 0;
+  border-block-end: 1px solid var(--w-rule);
+  border-inline-start: 3px solid transparent;
+  border-radius: 0;
+  background: #ffffff;
+  color: var(--w-text);
+}
+
+.sapPage .roleTab:nth-child(even) {
+  background: #f6f7f0;
+}
+
+.sapPage .roleTab:hover {
+  background: var(--w-selected);
+}
+
+.sapPage .roleTab[aria-current='page'] {
+  border-inline-start-color: var(--w-amber-line);
+  background: var(--w-selected-strong);
+  color: var(--w-label);
+  font-weight: 700;
+}
+
+.sapPage .role,
+.sapPage .title {
+  color: var(--w-label);
+}
+
+.sapPage .holders,
+.sapPage .grants,
+.sapPage .subtitle,
+.sapPage .verbHelp {
+  color: var(--w-muted);
+  font-size: 0.73rem;
+}
+
+/* One system section, and the count of what is ticked in it. */
+/* One system section. .grantSummary is the summary itself, sitting inside
+   .grantSection — a ruled band with the count of what is ticked on its right. */
+.sapPage .grantSection,
+.sapPage .how {
+  border: 1px solid var(--w-rule);
+  border-radius: 0;
+  background: var(--w-bg);
+  color: var(--w-text);
+}
+
+.sapPage .grantSection + .grantSection {
+  border-block-start: 0;
+}
+
+.sapPage .grantSummary,
+.sapPage .how > summary {
+  padding: 0.4rem 0.6rem;
+  border-radius: 0;
+  background: var(--w-head);
+  color: var(--w-label);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.sapPage .grantSummary:hover,
+.sapPage .how > summary:hover {
+  background: var(--w-selected);
+}
+
+/* The "3 / 4" beside a section: a count, not a health indicator. */
+.sapPage .grantSummary span:last-child,
+.sapPage .effect {
+  border: 1px solid var(--w-line);
+  border-radius: 999px;
+  background: var(--w-field-ro);
+  color: var(--w-label);
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+/* The verb checkboxes in the matrix. */
+.sapPage .verb {
+  color: var(--w-text);
+  font-size: 0.76rem;
+}
+
+.sapPage .system {
+  border: 1px solid #91a8bb;
+  border-radius: 999px;
+  background: #e5eef5;
+  color: #294f6d;
+  font-size: 0.69rem;
+  font-weight: 750;
+}
+
+/* ── Counters ─────────────────────────────────────────────────────────────
+   A row of figures above a list — waiting, pending, decided. They were
+   rounded white cards with a tinted icon tile, which is the one shape on an
+   otherwise ruled screen that still read as a different product. */
+.sapPage .stat {
+  border: 1px solid var(--w-line-strong);
+  border-radius: 0.2rem;
+  background: var(--w-bg);
+  box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
+}
+
+.sapPage .statIcon {
+  border: 1px solid var(--w-line);
+  border-radius: 0.12rem;
+  background: var(--w-head-strong);
+  color: var(--w-label);
+}
+
+.sapPage .stat strong {
+  color: var(--w-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.sapPage .stat span {
+  color: var(--w-muted);
+}
+
+/* The empty state a list shows when it has nothing in it. */
+.sapPage .emptyState,
+.sapPage .emptyState strong {
+  color: var(--w-label);
+}
+
+.sapPage .emptyState svg {
+  color: var(--w-line-strong);
+}
+
+/* An item waiting in the approvals inbox. */
+.sapPage .inboxItem {
+  border: 1px solid var(--w-rule);
+  border-radius: 0;
+  background: #ffffff;
+}
+
+.sapPage .inboxItem:nth-child(even) {
+  background: #f6f7f0;
+}
+
+.sapPage .inboxItem:hover {
+  background: var(--w-selected);
 }
