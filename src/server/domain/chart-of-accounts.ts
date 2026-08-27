@@ -68,6 +68,12 @@ export interface AccountNode {
   readonly controlAccount: ControlAccountKind | null;
   /** ISO code when the account may only hold one currency; null means unrestricted. */
   readonly currencyRestriction: string | null;
+  /**
+   * Phase 1 §5 — the statement line this account reports on, or null to take
+   * its type's default. Carried on the node so no reader has to know the
+   * column exists.
+   */
+  readonly statementLine: string | null;
   /** Dimensions a posting to this account must supply (§4.2). */
   readonly requiredDimensions: readonly DimensionType[];
   /** One of the five roots. Renameable, never deletable. */

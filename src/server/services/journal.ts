@@ -13,8 +13,10 @@
  * configured. An approved-but-unposted journal is a state this service cannot
  * produce, which is the 02.6 gate.
  */
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import {
+  JournalValidationError,
   assertFinanceDepartment,
   assertJournalValid,
   assertLineWellFormed,
@@ -27,6 +29,7 @@ import { can } from '../domain/permissions';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 import type { SuppliedDimensions } from '../domain/dimensions';
 import {
+  appUser,
   chartOfAccount,
   department,
   journalEntry,
@@ -45,6 +48,7 @@ import * as rateService from './exchange-rates';
 import * as statuses from './statuses';
 import * as subledgerService from './subledger';
 import * as workflow from './workflow';
+import * as attachmentService from './attachments';
 
 export const DOCUMENT_TYPE = 'journal_entry';
 export const PERMISSION_OBJECT = 'journal_entry';
@@ -71,6 +75,23 @@ export class JournalBranchMismatchError extends Error {
         `Raise a separate journal in ${lineBranch}, or leave the line's branch unset to inherit ${journalBranch}.`,
     );
     this.name = 'JournalBranchMismatchError';
+  }
+}
+
+export class JournalNotDraftError extends Error {
+  readonly code = 'JOURNAL_NOT_DRAFT';
+  constructor(
+    readonly entryNo: string,
+    readonly status: string,
+  ) {
+    // §7 — once a document leaves draft it is never deleted, only reversed.
+    // Say which of the two applies rather than only refusing.
+    super(
+      `${entryNo} is ${status}, not a draft, so it cannot be deleted. ` +
+        'Only a draft can be thrown away. An entry that has been posted is corrected by reversing it, ' +
+        'which leaves both facts on the record: that it was posted, and that it was undone.',
+    );
+    this.name = 'JournalNotDraftError';
   }
 }
 
@@ -486,9 +507,273 @@ export async function reject(
   });
 }
 
+/**
+ * Throwing away a draft.
+ *
+ * §7 says a saved record is not deleted — and that rule is about *documents*,
+ * things that have entered the flow and that somebody may later be asked to
+ * account for. A draft has entered nothing: nobody has approved it, no ledger
+ * has moved, and the only thing it holds is a person's unfinished typing.
+ * Forcing them to keep it forever fills the list with abandoned work and makes
+ * the real entries harder to find.
+ *
+ * Two things keep §7 intact anyway:
+ *
+ *   - The audit event is written **before** the rows go, so the trail still
+ *     says this entry existed, what number it held, and who discarded it.
+ *   - The number is not returned to the series. The gap stays, because §14.2
+ *     says a number is never reused, and a reader who sees JV-2026-00007
+ *     missing can be told what happened to it.
+ *
+ * Anything past draft is refused here and by the status rules underneath.
+ */
+export async function discardDraft(
+  tx: Tx,
+  ctx: ActorContext,
+  journalEntryId: string,
+): Promise<{ entryNo: string }> {
+  const entry = await loadHeader(tx, journalEntryId);
+
+  // Whoever may edit the draft may throw it away: discarding is the furthest
+  // edit there is, and inventing a separate verb would need a grant on every
+  // role before anybody could use it.
+  await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, {
+    branchCode: entry.branchCode,
+    objectId: journalEntryId,
+    requestId: ctx.requestId ?? null,
+  });
+
+  if (entry.status !== 'draft') {
+    throw new JournalNotDraftError(entry.entryNo, entry.status);
+  }
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'journal_entry.discarded',
+    objectType: PERMISSION_OBJECT,
+    objectId: journalEntryId,
+    branchCode: entry.branchCode,
+    before: {
+      entryNo: entry.entryNo,
+      status: entry.status,
+      postingDate: entry.postingDate,
+      description: entry.description,
+      totalDebitIqd: entry.totalDebitIqd,
+    },
+    after: null,
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+
+  // Attachments hang off the document by type and id rather than by a foreign
+  // key, so nothing would remove them with it — and an attachment to a
+  // document that no longer exists is unreachable, not preserved.
+  await attachmentService.discardFor(tx, PERMISSION_OBJECT, journalEntryId);
+
+  await tx.delete(journalLine).where(eq(journalLine.journalEntryId, journalEntryId));
+  await tx.delete(journalEntry).where(eq(journalEntry.id, journalEntryId));
+
+  return { entryNo: entry.entryNo };
+}
+
 // ---------------------------------------------------------------------------
 // Reads
 // ---------------------------------------------------------------------------
+
+/**
+ * Reverses a posted journal — Phase 1 requirement 3.
+ *
+ * "A posted entry cannot be edited or deleted. If a correction is required,
+ * the original entry is reversed through a linked full reversal."
+ *
+ * Full reversal, and nothing else: every line of the original comes back with
+ * its sides swapped and its **own** figures — the same IQD and USD amounts,
+ * carrying the same rate references. Re-deriving them at today's rate would
+ * leave a residue in the ledger and call it a correction, which is the thing
+ * a reversal exists to avoid.
+ *
+ * The reversal is created and posted in one act. It is not a proposal anybody
+ * drafts: it is the mirror of a document that has already been approved, and
+ * the authority to reverse is the authority to post it. The database holds
+ * both ends of that promise — the link cannot later be edited away, a reversal
+ * cannot itself be reversed, and a journal is reversed once.
+ */
+export async function reverse(
+  tx: Tx,
+  ctx: ActorContext,
+  journalEntryId: string,
+  input: { readonly reason: string; readonly postingDate?: string | null },
+): Promise<{ id: string; entryNo: string }> {
+  const original = await loadHeader(tx, journalEntryId);
+
+  await authz.authorize(ctx.principal, 'reverse_cancel', PERMISSION_OBJECT, {
+    branchCode: original.branchCode,
+    objectId: journalEntryId,
+    requestId: ctx.requestId ?? null,
+  });
+
+  const reason = input.reason?.trim();
+  if (!reason) {
+    throw new JournalValidationError(
+      'A reversal records why the original was wrong; give a reason.',
+    );
+  }
+
+  if (original.status !== 'posted') {
+    throw new JournalValidationError(
+      `Journal ${original.entryNo} is ${original.status}; only a posted journal is reversed.`,
+    );
+  }
+  if (original.reversesId) {
+    throw new JournalValidationError(
+      `Journal ${original.entryNo} is itself a reversal and cannot be reversed (§14.3).`,
+    );
+  }
+  if (original.reversedById) {
+    throw new JournalValidationError(`Journal ${original.entryNo} has already been reversed.`);
+  }
+
+  // §14.3 — the reversal is never dated before what it undoes. Today, unless
+  // the original posted later than today, in which case the original's own
+  // date is the earliest honest answer.
+  const today = new Date().toISOString().slice(0, 10);
+  const requested = input.postingDate?.trim() || today;
+  const postingDate = requested < original.postingDate ? original.postingDate : requested;
+
+  const period = await periodService.periodFor(tx, postingDate);
+  // A reversal still has to land in a period that accepts postings; a closed
+  // month is closed to corrections too, and reopening it is somebody's decision.
+  await periodService.authorisePosting(tx, ctx, {
+    postingDate,
+    documentType: DOCUMENT_TYPE,
+    documentId: original.entryNo,
+  });
+
+  const { documentNo: entryNo } = await allocateDocumentNumber(
+    tx,
+    SEQUENCE_KEY,
+    { year: Number(postingDate.slice(0, 4)) },
+    ctx.principal.userId,
+  );
+
+  // Draft first, because a posted journal will not accept lines — the same
+  // rule that makes the original immutable applies to this one the moment it
+  // is posted, so the lines go on while it is still a draft.
+  const [created] = await tx
+    .insert(journalEntry)
+    .values({
+      entryNo,
+      // The reversal has no paper of its own, so its document date is the day
+      // it takes effect. Anything else can put the document date after the
+      // posting date, which the ledger refuses — rightly, since a document
+      // cannot be written after the entry that records it.
+      documentDate: postingDate,
+      postingDate,
+      fiscalPeriodId: period.id,
+      branchCode: original.branchCode,
+      description: `Reversal of ${original.entryNo} — ${reason}`,
+      journalType: original.journalType,
+      source: 'manual',
+      status: 'draft',
+      reversesId: original.id,
+      createdBy: ctx.principal.userId,
+    })
+    .returning({ id: journalEntry.id, entryNo: journalEntry.entryNo });
+
+  const lines = await tx
+    .select()
+    .from(journalLine)
+    .where(eq(journalLine.journalEntryId, journalEntryId))
+    .orderBy(asc(journalLine.lineNo));
+
+  if (lines.length === 0) {
+    throw new JournalValidationError(
+      `Journal ${original.entryNo} has no lines, so there is nothing to reverse.`,
+    );
+  }
+
+  for (const line of lines) {
+    await tx.insert(journalLine).values({
+      journalEntryId: created!.id,
+      lineNo: line.lineNo,
+      accountId: line.accountId,
+      // The swap, and the whole of it: debit becomes credit, credit becomes
+      // debit, in every currency the line was measured in.
+      debitTxn: line.creditTxn,
+      creditTxn: line.debitTxn,
+      currency: line.currency,
+      debitIqd: line.creditIqd,
+      creditIqd: line.debitIqd,
+      debitUsd: line.creditUsd,
+      creditUsd: line.debitUsd,
+      txnRateId: line.txnRateId,
+      usdRateId: line.usdRateId,
+      branchCode: line.branchCode,
+      departmentCode: line.departmentCode,
+      businessLineCode: line.businessLineCode,
+      projectCode: line.projectCode,
+      warehouseCode: line.warehouseCode,
+      businessPartnerCode: line.businessPartnerCode,
+      employeeCode: line.employeeCode,
+      bankAccountCode: line.bankAccountCode,
+      lineDescription: line.lineDescription,
+      sourceLineId: line.id,
+    });
+  }
+
+  const now = new Date();
+  await tx
+    .update(journalEntry)
+    .set({ status: 'posted', approvedBy: ctx.principal.userId, approvedAt: now, postedAt: now })
+    .where(eq(journalEntry.id, created!.id));
+
+  // And the original is closed, pointing at what undid it.
+  await tx
+    .update(journalEntry)
+    .set({ status: 'reversed', reversedById: created!.id })
+    .where(eq(journalEntry.id, journalEntryId));
+
+  await subledgerService.writeForJournal(tx, created!.id);
+
+  for (const [id, action, after] of [
+    [created!.id, 'journal_entry.reversal_posted', { entryNo, reverses: original.entryNo, postingDate }],
+    [journalEntryId, 'journal_entry.reversed', { status: 'reversed', reversedBy: entryNo }],
+  ] as const) {
+    await audit.record(tx, {
+      actorUserId: ctx.principal.userId,
+      action,
+      objectType: PERMISSION_OBJECT,
+      objectId: id,
+      branchCode: original.branchCode,
+      after,
+      reason,
+      outcome: 'success',
+      requestId: ctx.requestId ?? null,
+    });
+  }
+
+  return { id: created!.id, entryNo };
+}
+
+/** The two halves of a reversal, for the screen that lists them. */
+export async function reversals(tx: Tx) {
+  const reversal = alias(journalEntry, 'reversal');
+  return tx
+    .select({
+      originalId: journalEntry.id,
+      originalNo: journalEntry.entryNo,
+      originalPostingDate: journalEntry.postingDate,
+      originalAmount: journalEntry.totalDebitIqd,
+      reversalId: reversal.id,
+      reversalNo: reversal.entryNo,
+      reversalPostingDate: reversal.postingDate,
+      reason: reversal.description,
+      reversedBy: reversal.createdBy,
+    })
+    .from(journalEntry)
+    .innerJoin(reversal, eq(reversal.id, journalEntry.reversedById))
+    .orderBy(desc(reversal.postingDate), desc(reversal.entryNo));
+}
 
 export async function loadHeader(tx: Tx, id: string) {
   const [row] = await tx.select().from(journalEntry).where(eq(journalEntry.id, id)).limit(1);
@@ -543,6 +828,117 @@ export async function load(tx: Tx, id: string) {
   const header = await loadHeader(tx, id);
   const lines = await loadLines(tx, id);
   return { header, lines };
+}
+
+/**
+ * The journals a person may see, newest posting date first.
+ *
+ * No branch predicate: row-level security has already decided which branches
+ * this user's transaction can read, and adding a second filter here would let
+ * the two disagree — which is how a report ends up quietly showing less than
+ * the person is entitled to and nobody notices for a quarter.
+ */
+/** §14 — is this person in a Finance department, and so able to raise entries? */
+export async function isInFinanceDepartment(tx: Tx, userId: string): Promise<boolean> {
+  const rows = await financeDepartmentsOf(tx, userId);
+  return rows.some((row) => row.isFinance);
+}
+
+export async function listAll(tx: Tx) {
+  const raiser = alias(appUser, 'raiser');
+  return tx
+    .select({
+      id: journalEntry.id,
+      entryNo: journalEntry.entryNo,
+      documentDate: journalEntry.documentDate,
+      postingDate: journalEntry.postingDate,
+      description: journalEntry.description,
+      branchCode: journalEntry.branchCode,
+      status: journalEntry.status,
+      totalDebitIqd: journalEntry.totalDebitIqd,
+      reversesId: journalEntry.reversesId,
+      reversedById: journalEntry.reversedById,
+      createdBy: journalEntry.createdBy,
+      raisedBy: raiser.displayName,
+    })
+    .from(journalEntry)
+    .leftJoin(raiser, eq(raiser.id, journalEntry.createdBy))
+    .orderBy(desc(journalEntry.postingDate), desc(journalEntry.entryNo));
+}
+
+/** One journal by its number — what a person knows, rather than its id. */
+export async function byEntryNo(tx: Tx, entryNo: string) {
+  const [row] = await tx
+    .select()
+    .from(journalEntry)
+    .where(eq(journalEntry.entryNo, entryNo))
+    .limit(1);
+  if (!row) throw new JournalNotFoundError(entryNo);
+  return row;
+}
+
+/**
+ * The journal as its record page shows it: the header, its lines with the
+ * accounts named, who raised it, and — if it has been reversed or is itself a
+ * reversal — the entry at the other end of that link.
+ */
+export async function detail(tx: Tx, entryNo: string) {
+  const header = await byEntryNo(tx, entryNo);
+  const lines = await tx
+    .select({
+      id: journalLine.id,
+      lineNo: journalLine.lineNo,
+      accountId: journalLine.accountId,
+      accountCode: chartOfAccount.code,
+      accountName: chartOfAccount.name,
+      debitIqd: journalLine.debitIqd,
+      creditIqd: journalLine.creditIqd,
+      // §24's four-part tuple, read back whole. The USD pair was stored and
+      // never shown, which is why an entry could not be checked in the
+      // reporting currency without leaving the entry.
+      debitUsd: journalLine.debitUsd,
+      creditUsd: journalLine.creditUsd,
+      currency: journalLine.currency,
+      debitTxn: journalLine.debitTxn,
+      creditTxn: journalLine.creditTxn,
+      description: journalLine.lineDescription,
+      departmentCode: journalLine.departmentCode,
+    })
+    .from(journalLine)
+    .innerJoin(chartOfAccount, eq(chartOfAccount.id, journalLine.accountId))
+    .where(eq(journalLine.journalEntryId, header.id))
+    .orderBy(asc(journalLine.lineNo));
+
+  const people = await tx
+    .select({ id: appUser.id, displayName: appUser.displayName })
+    .from(appUser)
+    .where(
+      inArray(
+        appUser.id,
+        [header.createdBy, header.approvedBy].filter((id): id is string => Boolean(id)),
+      ),
+    );
+  const name = (id: string | null) =>
+    id ? (people.find((person) => person.id === id)?.displayName ?? null) : null;
+
+  const linkedId = header.reversedById ?? header.reversesId;
+  const [linked] = linkedId
+    ? await tx
+        .select({ id: journalEntry.id, entryNo: journalEntry.entryNo, status: journalEntry.status })
+        .from(journalEntry)
+        .where(eq(journalEntry.id, linkedId))
+        .limit(1)
+    : [];
+
+  return {
+    header,
+    lines,
+    raisedBy: name(header.createdBy),
+    approvedBy: name(header.approvedBy),
+    linked: linked
+      ? { ...linked, relation: header.reversedById ? ('reversed_by' as const) : ('reverses' as const) }
+      : null,
+  };
 }
 
 /** Journals awaiting a decision — the Finance Manager's inbox. */

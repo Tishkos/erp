@@ -89,6 +89,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ordinal: 3,
     items: [
       page('sales_dashboard', 'sales_dashboard', '06'),
+      page('customers', 'business_partner', '03'),
       page('customer_price_lists', 'price_list', '03'),
       page('sales_orders', 'sales_order', '06'),
       page('reservations', 'stock_reservation', '06'),
@@ -110,6 +111,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ordinal: 4,
     items: [
       page('procurement_dashboard', 'procurement_dashboard', '05'),
+      page('suppliers', 'business_partner', '03'),
       page('purchase_orders', 'purchase_order', '05'),
       page('goods_receipts', 'goods_receipt', '05'),
       page('service_receipts', 'service_receipt', '05'),
@@ -166,6 +168,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'logistics',
     ordinal: 7,
     items: [
+      page('logistics_dashboard', 'logistics_dashboard', '10'),
       page('client_import_files', 'client_import_file', '10'),
       page('logistics_jobs', 'logistics_job', '10'),
       page('routes', 'route', '10'),
@@ -183,6 +186,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'money_transfer',
     ordinal: 8,
     items: [
+      page('money_transfer_dashboard', 'money_transfer_dashboard', '09'),
       page('client_accounts', 'client_account', '09'),
       page('deposits', 'client_deposit', '09'),
       page('transfer_instructions', 'transfer_instruction', '09'),
@@ -218,13 +222,12 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('journal_entry', 'journal_entry', '02', '/finance/journals'),
       page('recurring_journals', 'recurring_journal', '16'),
       page('reversals', 'journal_reversal', '02', '/finance/reversals'),
-      page('exchange_rates', 'exchange_rate', '02', '/master-data/exchange-rates'),
       page('gl_inquiry', 'gl_inquiry', '02', '/finance/gl-inquiry'),
       page('trial_balance', 'trial_balance', '02', '/finance/trial-balance'),
       page('soft_close', 'accounting_period', '02', '/finance/periods'),
       page('year_end_close', 'year_end_close', '16'),
       page('posting_mappings', 'posting_mapping', '02', '/finance/posting-mappings'),
-      page('financial_statements', 'financial_statement', '16'),
+      page('financial_statements', 'financial_statement', '02', '/finance/statements'),
     ],
   },
   {
@@ -369,8 +372,16 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ],
   },
   {
-    key: 'administration',
+    // Phase 0's own document. The foundation is a set of rules until
+    // something goes through it, so the phase ships one document that does —
+    // numbered, routed for approval, and remembered.
+    key: 'sample_documenting',
     ordinal: 20,
+    items: [page('invoicing', 'invoice', '00', '/accounting/invoicing')],
+  },
+  {
+    key: 'administration',
+    ordinal: 21,
     items: [
       page('company', 'company', '01', '/administration/company'),
       page('users', 'app_user', '01', '/administration/users'),
@@ -387,7 +398,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
   },
   {
     key: 'integrations',
-    ordinal: 21,
+    ordinal: 22,
     items: [
       page('api_clients', 'api_client', '19'),
       page('imports', 'import_batch', '01', '/integrations/imports'),

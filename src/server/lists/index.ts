@@ -99,6 +99,37 @@ let registered = false;
  * Registers every list. Idempotent, because Next.js re-evaluates modules on
  * hot reload and a duplicate registration would otherwise be a silent replace.
  */
+/**
+ * Audit Trail — Phase 0 requirement 10, the company-wide report (§5.4).
+ *
+ * Row scope is the audit policy's, not this list's: a branch-scoped user sees
+ * the events of their permitted branches, a super user sees everything
+ * including the unbranched administration events. The list adds no branch
+ * filter of its own, so it cannot widen or narrow what the policy decided.
+ */
+export const auditEventList: ListDefinition = {
+  key: 'audit_event',
+  object: 'audit_event',
+  columns: [
+    { key: 'occurred_at', kind: 'date', sortable: true, filterable: true },
+    { key: 'action', kind: 'text', searchable: true, sortable: true, filterable: true },
+    { key: 'object_type', kind: 'text', searchable: true, sortable: true, filterable: true },
+    { key: 'object_id', kind: 'text', searchable: true, filterable: true },
+    { key: 'actor', kind: 'text', searchable: true, sortable: true },
+    { key: 'branch_code', kind: 'text', filterable: true, sortable: true },
+    {
+      key: 'outcome',
+      kind: 'enum',
+      values: ['success', 'denied', 'failure'],
+      filterable: true,
+      sortable: true,
+    },
+    { key: 'reason', kind: 'text', searchable: true },
+  ],
+  defaultSort: [{ column: 'occurred_at', direction: 'desc' }],
+  maxPageSize: 200,
+};
+
 export function registerAllLists(): void {
   if (registered) return;
   registered = true;
@@ -140,6 +171,22 @@ export function registerAllLists(): void {
       total_credit_iqd: sql`journal_entry.total_credit_iqd`,
     },
     branchColumn: 'branch_code',
+  });
+
+  registerList({
+    definition: auditEventList,
+    from: sql`audit_event left join app_user actor_user on actor_user.id = audit_event.actor_user_id`,
+    columnSql: {
+      id: sql`audit_event.id`,
+      occurred_at: sql`audit_event.occurred_at`,
+      action: sql`audit_event.action`,
+      object_type: sql`audit_event.object_type`,
+      object_id: sql`audit_event.object_id`,
+      actor: sql`coalesce(actor_user.display_name, actor_user.email)`,
+      branch_code: sql`audit_event.branch_code`,
+      outcome: sql`audit_event.outcome::text`,
+      reason: sql`audit_event.reason`,
+    },
   });
 
   registerList({

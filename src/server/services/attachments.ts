@@ -13,7 +13,7 @@
  * That is why `objectType`/`objectId` are loose text: the check is not a join,
  * it is a question put to whoever owns the record.
  */
-import { and, asc, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import {
   AttachmentAccessError,
   DEFAULT_UPLOAD_POLICY,
@@ -527,4 +527,38 @@ export async function dispose(
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });
+}
+
+/**
+ * Everything attached to a record that is being thrown away.
+ *
+ * An attachment points at its record by type and id rather than by a foreign
+ * key, so nothing removes it when that record goes and the rows would linger
+ * pointing at nothing — unreachable rather than preserved, which is the worst
+ * of both. This is only ever called for a draft: §21's retention rules are
+ * about documents that entered the flow, and a draft never did.
+ *
+ * A legal hold still wins. If somebody has frozen a file, the draft it hangs
+ * off cannot be discarded until that is lifted.
+ */
+export async function discardFor(tx: Tx, objectType: string, objectId: string): Promise<number> {
+  const rows = await tx
+    .select({ id: attachment.id, legalHold: attachment.legalHold, fileName: attachment.fileName })
+    .from(attachment)
+    .where(and(eq(attachment.objectType, objectType), eq(attachment.objectId, objectId)));
+
+  if (rows.length === 0) return 0;
+
+  const held = rows.filter((row) => row.legalHold);
+  if (held.length > 0) {
+    throw new AttachmentAccessError(
+      `${held.map((row) => row.fileName).join(', ')} is under legal hold and cannot be removed. ` +
+        'Lift the hold before discarding this draft.',
+    );
+  }
+
+  const ids = rows.map((row) => row.id);
+  await tx.delete(attachmentAccess).where(inArray(attachmentAccess.attachmentId, ids));
+  await tx.delete(attachment).where(inArray(attachment.id, ids));
+  return ids.length;
 }

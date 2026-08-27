@@ -15,6 +15,8 @@ import type { RecordHeader, RelatedDocument } from '../domain/record-view';
 import type { DocumentStatus } from '../domain/statuses';
 import { registerRecord } from '../services/record';
 import { registerActionEffect } from '../services/document-actions';
+import { registerAttachmentRuntime } from '../attachments-runtime';
+import * as invoicing from '../services/invoicing';
 import * as accounts from '../services/chart-of-accounts';
 
 /**
@@ -103,6 +105,43 @@ let registered = false;
 export function registerAllRecords(): void {
   if (registered) return;
   registered = true;
+
+  // §21 — where files go, what scans them, and who may read them back.
+  registerAttachmentRuntime();
+
+  // Phase 0's invoice. Its rules live in the service; the framework only
+  // needs to know how to read one and what an action does to it.
+  invoicing.registerInvoiceEffect();
+  registerRecord({
+    documentType: invoicing.DOCUMENT_TYPE,
+    object: invoicing.PERMISSION_OBJECT,
+    loadHeader: async (tx, documentId) => {
+      const row = await invoicing.byId(tx, documentId).catch(() => null);
+      if (!row) return null;
+      return {
+        documentType: invoicing.DOCUMENT_TYPE,
+        documentId: row.id,
+        documentNumber: row.documentNo,
+        status: row.status,
+        ownerUserId: row.createdBy,
+        branchCode: row.branchCode,
+        departmentCode: row.departmentCode,
+        documentDate: row.documentDate,
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+        source: null,
+      };
+    },
+  });
+  registerActionEffect(invoicing.DOCUMENT_TYPE, 'submit', async (tx, documentId, ctx) => {
+    await invoicing.submit(tx, { principal: ctx.principal, branchCode: ctx.branchCode }, documentId);
+  });
+  registerActionEffect(invoicing.DOCUMENT_TYPE, 'approve', async (tx, documentId, ctx) => {
+    await invoicing.approve(tx, { principal: ctx.principal, branchCode: ctx.branchCode }, documentId);
+  });
+  registerActionEffect(invoicing.DOCUMENT_TYPE, 'reject', async (tx, documentId, ctx) => {
+    await invoicing.reject(tx, { principal: ctx.principal, branchCode: ctx.branchCode }, documentId, ctx.reason ?? '');
+  });
 
   registerRecord({
     documentType: 'chart_of_account',

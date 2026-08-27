@@ -118,9 +118,17 @@ export class NotFinanceDepartmentError extends Error {
   readonly code = 'NOT_FINANCE_DEPARTMENT';
 
   constructor(readonly userId: string) {
+    // Naming the rule is only half a message. A person reading this cannot
+    // fix it themselves and needs to know what to ask for, so the refusal
+    // names the two screens and the order to use them in.
+    //
+    // It says "you", not "this account": in an accounting system "account"
+    // means a line in the Chart of Accounts, so telling somebody their account
+    // is in the wrong department sends them to the wrong screen entirely.
     super(
-      'Journal Entries belong exclusively to the Finance Department (§14). ' +
-        'This user is not assigned to a Finance department.',
+      'Only people in a finance department can raise journal entries, and you are not in one yet. ' +
+        'To fix it: Accounting → Master Data → Departments, add a department with ' +
+        '"Finance department" ticked; then Settings → Users, open your user and add it to that department.',
     );
     this.name = 'NotFinanceDepartmentError';
   }

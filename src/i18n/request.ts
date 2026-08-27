@@ -1,15 +1,17 @@
 /**
  * next-intl request configuration — Phase 01.12.
  *
- * One locale is offered (§1.1, English-only) and the plumbing that would offer
- * more is in place (§25, "without redesign"). Adding Arabic is: add `'ar'` to
- * LOCALES, add messages/ar.json, and the layout's `dir` follows on its own.
+ * The selected UI locale is a device preference stored in a non-sensitive
+ * cookie. The root layout reads the resolved locale and mirrors the entire
+ * interface through its `dir` attribute.
  */
 import { getRequestConfig } from 'next-intl/server';
-import { DEFAULT_LOCALE } from './config';
+import { cookies } from 'next/headers';
+import { DEFAULT_LOCALE, isLocale, LOCALE_COOKIE } from './config';
 
 export default getRequestConfig(async () => {
-  const locale = DEFAULT_LOCALE;
+  const requested = (await cookies()).get(LOCALE_COOKIE)?.value;
+  const locale = requested && isLocale(requested) ? requested : DEFAULT_LOCALE;
 
   return {
     locale,

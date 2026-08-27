@@ -42,8 +42,12 @@ export class NoPeriodForDateError extends Error {
   readonly code = 'NO_FISCAL_PERIOD';
 
   constructor(readonly postingDate: string) {
+    // "Extend the fiscal calendar" is the right words for somebody who already
+    // knows where the calendar lives. On a company's first day nobody does, and
+    // the screen is called Accounting Periods, so name it and the button on it.
     super(
-      `No fiscal period covers ${postingDate}. The fiscal calendar must be extended before anything can be posted on that date.`,
+      `No accounting period covers ${postingDate}, so nothing can be posted on that date yet. ` +
+        'Open the year first: Accounting → General Ledger → Accounting Periods, then "Open a year".',
     );
     this.name = 'NoPeriodForDateError';
   }

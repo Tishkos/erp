@@ -24,7 +24,9 @@ import {
   type ControlAccountKind,
   type DimensionType,
 } from '../domain/chart-of-accounts';
+import { AccountPlacementError } from '../domain/chart-of-accounts';
 import type { AccountType } from '../domain/accounts';
+import { assertLineAllowed } from '../domain/financial-statements';
 import { accountRequiredDimension, chartOfAccount } from '../db/schema';
 import type { Principal } from '../domain/permissions';
 import type { Tx } from '../db/client';
@@ -115,6 +117,14 @@ export interface CreateAccountInput {
   readonly currencyRestriction?: string | null;
   readonly requiredDimensions?: readonly DimensionType[];
   readonly description?: string | null;
+  /**
+   * Phase 1 §5 — the line of the Statement of Profit or Loss or Statement of
+   * Financial Position this account reports on.
+   *
+   * Optional, and it stays optional: an account with no line assigned reports
+   * on its type's default, so a statement is complete from the first day.
+   */
+  readonly statementLine?: string | null;
 }
 
 function toNode(
@@ -132,6 +142,7 @@ function toNode(
     approvalStatus: row.approvalStatus,
     controlAccount: row.controlAccount,
     currencyRestriction: row.currencyRestriction,
+    statementLine: row.statementLine,
     requiredDimensions,
     isSystem: row.isSystem,
     level: row.level,
@@ -209,6 +220,11 @@ export async function createAccount(
       approvalStatus: 'draft',
       controlAccount: input.controlAccount ?? null,
       currencyRestriction: currency,
+      // Phase 1 §5 — checked here rather than trusted, because the database
+      // check would refuse it later with a message about a constraint.
+      statementLine: input.statementLine?.trim()
+        ? assertLineAllowed(accountType, input.statementLine.trim()).code
+        : null,
       description: input.description ?? null,
       createdBy: ctx.principal.userId,
     })
@@ -624,6 +640,141 @@ export async function returnToDraft(
  * A group cannot be deactivated while it still has active children — the chart
  * would show a live account underneath a retired heading.
  */
+/**
+ * Assigns the account to a financial statement line — Phase 1 §5.
+ *
+ * Separate from `createAccount` because it is a decision that gets revisited:
+ * an account opened as an ordinary expense turns out to be cost of sales, and
+ * moving it should not mean opening a second account. The move changes how
+ * every statement reads from that moment, so it is written to the trail.
+ */
+export async function setStatementLine(
+  tx: Tx,
+  ctx: ActorContext,
+  accountId: string,
+  line: string | null,
+): Promise<void> {
+  const account = await loadAccount(tx, accountId);
+
+  await authz.authorize(ctx.principal, 'configure', PERMISSION_OBJECT, {
+    branchCode: ctx.branchCode,
+    objectId: accountId,
+    requestId: ctx.requestId ?? null,
+  });
+
+  const chosen = line?.trim() ? assertLineAllowed(account.accountType, line.trim()).code : null;
+
+  await tx
+    .update(chartOfAccount)
+    .set({ statementLine: chosen })
+    .where(eq(chartOfAccount.id, accountId));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'chart_of_account.statement_line_set',
+    objectType: PERMISSION_OBJECT,
+    objectId: accountId,
+    branchCode: ctx.branchCode,
+    after: { code: account.code, statementLine: chosen },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+}
+
+/**
+ * Turns a posting account into a header, so it can hold sub-accounts.
+ *
+ * The placement rule already said this was the way — *"convert it to a group
+ * first, which is only possible while it has no transactions"* — and there was
+ * no way to do it. This is that way.
+ *
+ * The condition is not a formality. A header holds no balance of its own: its
+ * figure is the sum of its children. An account that has been posted to *does*
+ * hold a balance, and converting it would leave that balance in a place no
+ * statement adds up. So an account with even one journal line against it is
+ * refused, and the answer is a new sub-account beside it rather than above it.
+ *
+ * The currency goes with the change, for the same reason: a group summarises
+ * children that may each hold a different one.
+ */
+/**
+ * One account by its code — what a person knows, and what the record page is
+ * addressed by.  takes the id, which the screen never sees.
+ */
+export async function loadAccountByCode(tx: Tx, code: string): Promise<AccountNode | null> {
+  const [row] = await tx
+    .select({ id: chartOfAccount.id })
+    .from(chartOfAccount)
+    .where(eq(chartOfAccount.code, code))
+    .limit(1);
+  return row ? loadAccount(tx, row.id) : null;
+}
+
+export async function convertToGroup(
+  tx: Tx,
+  ctx: ActorContext,
+  accountId: string,
+): Promise<void> {
+  const account = await loadAccount(tx, accountId);
+
+  await authz.authorize(ctx.principal, 'configure', PERMISSION_OBJECT, {
+    branchCode: ctx.branchCode,
+    objectId: accountId,
+    requestId: ctx.requestId ?? null,
+  });
+
+  if (account.isGroup) {
+    throw new AccountPlacementError(`${account.code} already holds sub-accounts.`);
+  }
+
+  const counted = await tx.execute(
+    sql`select count(*)::int as postings from journal_line where account_id = ${accountId}`,
+  );
+  const postings = Number((counted.rows[0] as { postings?: number } | undefined)?.postings ?? 0);
+
+  if (postings > 0) {
+    throw new AccountPlacementError(
+      `${account.code} has ${postings} posting${postings === 1 ? '' : 's'} against it, so it holds a balance of its own and cannot become a header. ` +
+        'Open the sub-accounts beside it instead, and stop using this one.',
+    );
+  }
+
+  await tx
+    .update(chartOfAccount)
+    .set({ isGroup: true, currencyRestriction: null, statementLine: null })
+    .where(eq(chartOfAccount.id, accountId));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'chart_of_account.converted_to_group',
+    objectType: PERMISSION_OBJECT,
+    objectId: accountId,
+    branchCode: ctx.branchCode,
+    before: { isGroup: false, currencyRestriction: account.currencyRestriction },
+    after: { code: account.code, isGroup: true },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+}
+
+/**
+ * Every account, flat, in code order — for a picker that has to show where a
+ * new one would sit. Groups and posting accounts alike: the screen shows both
+ * so the shape of the chart is visible, and offers only the groups.
+ */
+export async function pickerTree(tx: Tx) {
+  const rows = await tx.select().from(chartOfAccount).orderBy(asc(chartOfAccount.code));
+  return rows.map((row) => ({
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    accountType: row.accountType,
+    isGroup: row.isGroup,
+    isActive: row.isActive,
+    level: row.level,
+  }));
+}
+
 export async function deactivate(
   tx: Tx,
   ctx: ActorContext,

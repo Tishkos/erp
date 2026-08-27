@@ -161,6 +161,27 @@ function fromScaled(value: bigint): string {
  * journal has neither, and that absence is itself the answer to "where did this
  * come from?"
  */
+/** One posted line of the General Ledger, as the report reads it. */
+export interface AccountActivityRow {
+  readonly entryNo: string;
+  readonly postingDate: string;
+  readonly description: string | null;
+  readonly sourceModule: string | null;
+  readonly sourceDocId: string | null;
+  readonly status: string;
+  readonly lineNo: number;
+  readonly lineRole: string | null;
+  readonly sourceLineId: string | null;
+  readonly debitIqd: string;
+  readonly creditIqd: string;
+  readonly debitUsd: string;
+  readonly creditUsd: string;
+  readonly currency: string;
+  readonly departmentCode: string | null;
+  readonly businessPartnerCode: string | null;
+  readonly journalEntryId: string;
+}
+
 export async function accountActivity(
   tx: Tx,
   accountCode: string,
@@ -199,7 +220,7 @@ export async function accountActivity(
      order by e.posting_date, e.entry_no, l.line_no
   `);
 
-  return result.rows as unknown as Array<Record<string, unknown>>;
+  return result.rows as unknown as AccountActivityRow[];
 }
 
 export interface IntegrityIssue {

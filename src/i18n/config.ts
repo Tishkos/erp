@@ -3,14 +3,9 @@
  *
  * §25: *"The localisation architecture shall allow Arabic labels and
  * right-to-left layout later without redesign."*
- * §1.1: *"English-only user interface and documents."*
- *
- * Both at once: English is the only locale offered today, and the mechanism
- * that would add Arabic exists from the first screen. That is not speculative
- * generality — retrofitting RTL means revisiting every margin, every icon and
- * every table in the application, which is a redesign by any honest name
- * (TECHSTACK A11). The cost of carrying `dir` and a message catalogue now is
- * close to nothing; the cost of adding them in Phase 20 is the whole UI.
+ * Arabic is offered alongside English while the underlying accounting rules
+ * remain unchanged. Direction, labels and formatting are presentation
+ * concerns; permissions, scope and posting behavior stay locale-independent.
  *
  * What the architecture commits to:
  *
@@ -27,10 +22,13 @@
  * reconcile.
  */
 
-export const LOCALES = ['en'] as const;
+export const LOCALES = ['en', 'ar'] as const;
 export type Locale = (typeof LOCALES)[number];
 
 export const DEFAULT_LOCALE: Locale = 'en';
+
+/** Device-local UI preference. It never carries identity or business data. */
+export const LOCALE_COOKIE = 'erp-locale';
 
 /** Locales that read right to left. Consulted, not hardcoded per component. */
 const RTL_LOCALES: readonly string[] = ['ar', 'fa', 'he', 'ur'];
@@ -55,17 +53,30 @@ export function isLocale(value: string): value is Locale {
  */
 export function formatMoney(
   amount: string | number,
-  currency: 'IQD' | 'USD',
+  currency: string,
   locale: Locale = DEFAULT_LOCALE,
 ): string {
   const value = typeof amount === 'string' ? Number(amount) : amount;
+  // The dinar has no subunit in practice and the rest carry two places. Any
+  // code outside the four the company trades in still formats — it takes
+  // Intl's own idea of the currency rather than being rounded to a guess.
+  const decimals = DECIMALS[currency];
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
-    minimumFractionDigits: currency === 'IQD' ? 0 : 2,
-    maximumFractionDigits: currency === 'IQD' ? 0 : 2,
+    ...(decimals === undefined
+      ? {}
+      : { minimumFractionDigits: decimals, maximumFractionDigits: decimals }),
   }).format(value);
 }
+
+/** What each currency the company trades in shows after the point. */
+const DECIMALS: Readonly<Record<string, number>> = {
+  IQD: 0,
+  USD: 2,
+  EUR: 2,
+  CNY: 2,
+};
 
 /** Quantities — six decimals kept, trailing zeros dropped for reading. */
 export function formatQuantity(
