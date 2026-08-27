@@ -716,7 +716,7 @@ export default async function JournalPage({
         {/* Deciding on somebody else's entry, and correcting one's own. Both
             need a reason typed, so neither belongs on the button bar. */}
         {mayDecide || mayReverse ? (
-          <div className={s.sapWindow}>
+          <div className={`${s.sapWindow} ${s.noPrint}`}>
             <div className={s.sapTitle}>{t('journals.actions')}</div>
             <div className={s.sapBody}>
               {mayDecide ? (

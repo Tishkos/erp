@@ -4170,3 +4170,27 @@ html:has([data-palette]) body {
     display: flex;
   }
 }
+
+/* ── Printing a screen directly ───────────────────────────────────────────
+   The dedicated voucher route is the good printout; this covers the person
+   who presses Ctrl+P on the screen itself. The chrome is navigation, and
+   navigation on paper is clutter: what prints is the document, on white,
+   whatever palette the screen wore. */
+@media print {
+  .erp-header,
+  .erp-footer,
+  .erp-popover-scrim,
+  .erp-utility-popover,
+  .erp-mobile-layer {
+    display: none !important;
+  }
+
+  html:has([data-palette]),
+  html:has([data-palette]) body {
+    background: #fff;
+  }
+
+  .erp-main {
+    background: #fff;
+  }
+}

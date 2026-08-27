@@ -3910,3 +3910,53 @@
 .sapPage .fileList a:hover {
   background: var(--w-selected);
 }
+
+/* Printing a screen directly: the document stays, the workspace goes.
+   Buttons cannot be pressed on paper, the register aside is navigation, the
+   entry row is unfinished typing, and the upload form is an invitation no
+   sheet of paper can accept. */
+@media print {
+  .crumbs,
+  .flash,
+  .tabsBar,
+  .sapPageHeader,
+  .sapTitleMeta,
+  .sapSplitAside,
+  .sapFootActions,
+  .sapEntryRow,
+  .sapEntryBar,
+  .sapRowRemove,
+  .uploadForm,
+  .toolbar,
+  .docActions,
+  .docFootActions,
+  .lineForm,
+  .sapDoc button,
+  .sapPage button,
+  .noPrint {
+    display: none !important;
+  }
+
+  .sapPage {
+    min-block-size: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: #fff;
+    box-shadow: none;
+  }
+
+  .sapSplit {
+    display: block;
+  }
+
+  .sapWindow,
+  .sapDoc.sapDoc section {
+    box-shadow: none;
+    background: #fff;
+  }
+
+  .sapBody {
+    padding: 0.4rem 0;
+  }
+}
