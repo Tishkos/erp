@@ -16,7 +16,7 @@ import {
   rateOn,
   type PublishedRate,
 } from '@domain/exchange-rates';
-import { MONEY_SCALE, parseDecimal, toDecimalString, toIqd, toUsd } from '@domain/money';
+import { MONEY_SCALE, parseDecimal, toDecimalString, toIqd, toUsd, UNIT_RATE } from '@domain/money';
 
 const rate = (overrides: Partial<PublishedRate> = {}): PublishedRate => ({
   currency: 'USD',
@@ -56,11 +56,25 @@ describe('the rate in force on a date', () => {
     expect(afterJuneWasPublished.iqdPerUnit).toBe(inMarch.iqdPerUnit);
   });
 
-  it('refuses a date before any rate exists, rather than guessing', () => {
-    expect(() => rateOn(rates, 'USD', 'accounting', '2025-12-31')).toThrow(NoRateForDateError);
-    expect(() => rateOn(rates, 'USD', 'accounting', '2025-12-31')).toThrow(
-      /Rates are maintained in the Finance Exchange Rate section/,
-    );
+  it('falls back to the earliest rate for a date before any of them', () => {
+    // Refusing here refused *work*: an entry back-dated one day past the first
+    // rate ever published stopped the ledger for a gap nobody caused. The
+    // nearest rate in time values it, and the line records which one that was.
+    expect(rateOn(rates, 'USD', 'accounting', '2025-12-31').effectiveFrom).toBe('2026-01-01');
+  });
+
+  it('refuses only when the currency has no published rate at all', () => {
+    expect(() => rateOn(rates, 'EUR', 'accounting', '2026-04-15')).toThrow(NoRateForDateError);
+    // The refusal has to name the screen that fixes it, or the reader is told
+    // only that something is missing.
+    expect(() => rateOn(rates, 'EUR', 'accounting', '2026-04-15')).toThrow(/Currencies and Rates/);
+  });
+
+  it('answers one for the ledger currency, with no rate published', () => {
+    // §1.1 makes IQD the ledger currency; IQD per one IQD is one by
+    // definition. Asking the table for that row is what made an ordinary
+    // dinar journal fail with "there is no IQD rate covering ...".
+    expect(rateOn([], 'IQD', 'accounting', '2026-08-27').iqdPerUnit).toBe(UNIT_RATE);
   });
 
   it('does not mix rate types', () => {
@@ -74,6 +88,13 @@ describe('the rate in force on a date', () => {
   it('does not mix currencies', () => {
     const withEur = [...rates, rate({ currency: 'EUR', iqdPerUnit: parseRate('1450') })];
     expect(rateOn(withEur, 'EUR', 'accounting', '2026-08-01').iqdPerUnit).toBe(parseRate('1450'));
+  });
+
+  it('does not let the fallback reach across currencies either', () => {
+    // The nearest rate in time, yes — but only among rates for the currency
+    // being valued. A dollar rate must never value a euro line.
+    const withEur = [...rates, rate({ currency: 'EUR', effectiveFrom: '2026-09-01' })];
+    expect(rateOn(withEur, 'EUR', 'accounting', '2026-01-01').effectiveFrom).toBe('2026-09-01');
   });
 });
 

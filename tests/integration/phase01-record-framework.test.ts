@@ -363,21 +363,52 @@ describe('01.12 gate · an invalid action is rejected server-side, not only disa
   });
 });
 
-describe('01.6 gate · a saved draft cannot be deleted by any path', () => {
+describe('01.6 gate · a saved record cannot be deleted by any path', () => {
   it('withholds DELETE on every document header from the application role', async () => {
     // §3.2: "No deletion of saved or posted records. Drafts may be cancelled
     // and retained." The domain refuses it and the service never offers it, but
     // "by any path" means the privilege itself is absent — a future module
     // cannot delete what the role cannot delete.
+    //
+    // Two tables left this list in 0169, by direction: a *draft* journal entry
+    // or invoice may be thrown away, because a draft is unfinished typing that
+    // never entered the flow, and keeping every abandoned attempt buries the
+    // real documents. They are covered by the case below instead, which is the
+    // stronger claim — the grant exists and a guard makes it useless on
+    // anything but a draft. Everything else here keeps the flat prohibition.
     const { rows } = await ownerPool.query(
       `select table_name from information_schema.role_table_grants
         where grantee = 'erp_app' and privilege_type = 'DELETE'
-          and table_name in ('journal_entry','chart_of_account','business_partner','item',
+          and table_name in ('chart_of_account','business_partner','item',
                              'workflow_instance','subledger_entry','audit_event',
                              'posting_log','bank_cash_account','warehouse')`,
     );
 
     expect(rows.map((r) => r.table_name)).toEqual([]);
+  });
+
+  it('lets the application role delete a journal entry only while it is a draft', async () => {
+    // The privilege is present, so the guarantee has to come from the guard.
+    // This is the test that matters after 0169: not "can the role delete?" but
+    // "can it delete anything a person could be asked to account for?"
+    const { rows: granted } = await ownerPool.query(
+      `select table_name from information_schema.role_table_grants
+        where grantee = 'erp_app' and privilege_type = 'DELETE'
+          and table_name in ('journal_entry','invoice')`,
+    );
+    expect(granted.map((r) => r.table_name).sort()).toEqual(['invoice', 'journal_entry']);
+
+    // A guard on each, refusing anything that is not a draft — enforced in the
+    // database, so it holds for a caller that never goes near the service.
+    const { rows: guards } = await ownerPool.query(
+      `select tgname from pg_trigger
+        where not tgisinternal
+          and tgname in ('journal_entry_reject_delete','invoice_reject_delete')`,
+    );
+    expect(guards.map((r) => r.tgname).sort()).toEqual([
+      'invoice_reject_delete',
+      'journal_entry_reject_delete',
+    ]);
   });
 
   it('refuses a delete attempted through the application role', async () => {

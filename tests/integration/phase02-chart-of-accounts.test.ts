@@ -15,7 +15,6 @@ import * as authz from '@/server/services/authorization';
 import * as workflow from '@/server/services/workflow';
 import { PermissionDeniedError } from '@domain/permissions';
 import { InvalidTransitionError } from '@domain/statuses';
-import { SelfApprovalError } from '@domain/workflow';
 import { assertPostable, type AccountNode } from '@domain/chart-of-accounts';
 import { normalBalanceForCode } from '@domain/accounts';
 
@@ -225,9 +224,12 @@ describe('an Accounting Officer raises an account, the Manager approves it', () 
     ).rejects.toThrow(PermissionDeniedError);
   });
 
-  it('refuses to let a Manager approve an account they raised themselves', async () => {
-    // The Chart of Accounts is configuration every posting maps against, so the
-    // seeded route sets allow_self_approval to false even for the Manager.
+  it('lets a Manager approve an account they raised themselves', async () => {
+    // 0168 — the route was seeded with allow_self_approval false, which meant a
+    // company with one accountant could never get an account approved at all.
+    // `journal_entry`, which moves money, has allowed this since 0006; an
+    // account is a label a journal points at, so holding it to the stricter
+    // standard was backwards. Flip the flag in 0168 to restore maker-checker.
     const manager = await contextFor(await createUser('accounting_manager'));
 
     const account = await withScope({ userId: manager.principal.userId, branchCode: BAGHDAD }, (tx) =>
@@ -237,11 +239,17 @@ describe('an Accounting Officer raises an account, the Manager approves it', () 
       coa.submitForApproval(tx, manager, account.id),
     );
 
-    await expect(
-      withScope({ userId: manager.principal.userId, branchCode: BAGHDAD }, (tx) =>
-        coa.approve(tx, manager, account.id),
-      ),
-    ).rejects.toThrow(SelfApprovalError);
+    await withScope({ userId: manager.principal.userId, branchCode: BAGHDAD }, (tx) =>
+      coa.approve(tx, manager, account.id),
+    );
+
+    // Approval is what makes an account usable, so the effect is what matters,
+    // not that the call returned.
+    const approved = await withScope({ userId: manager.principal.userId, branchCode: BAGHDAD }, (tx) =>
+      coa.loadAccount(tx, account.id),
+    );
+    expect(approved.approvalStatus).toBe('approved');
+    expect(approved.isActive).toBe(true);
   });
 
   it('refuses a user with no accounting role entirely', async () => {

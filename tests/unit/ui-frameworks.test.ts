@@ -50,19 +50,23 @@ const superUser = principal([], { isSuperUser: true });
 // ---------------------------------------------------------------------------
 
 describe('Appendix A · the approved menu tree', () => {
-  it('has all twenty-one top-level menus, in the approved order', () => {
-    expect(MENU).toHaveLength(21);
-    expect(MENU.map((s) => s.ordinal)).toEqual(Array.from({ length: 21 }, (_, i) => i + 1));
+  it('has every top-level menu, in the approved order', () => {
+    // Appendix A's twenty-one, plus the Invoicing menu Phase 0 delivers.
+    expect(MENU).toHaveLength(22);
+    expect(MENU.map((s) => s.ordinal)).toEqual(Array.from({ length: 22 }, (_, i) => i + 1));
   });
 
   it('names every required submenu of Finance — General Ledger', () => {
-    // Appendix A, menu 10, verbatim.
+    // Appendix A, menu 10 — less `exchange_rates`, removed by direction
+    // (2026-08-25). The tree offered the rates screen twice under one
+    // dropdown, as "Exchange Rates" here and "Currencies and Rates" under
+    // Master Data, both leading to the same page. It is master data, so
+    // Master Data keeps it and this menu does not repeat it.
     const gl = MENU.find((s) => s.key === 'finance_gl');
     expect(gl?.items.map((i) => i.key)).toEqual([
       'journal_entry',
       'recurring_journals',
       'reversals',
-      'exchange_rates',
       'gl_inquiry',
       'trial_balance',
       'soft_close',
@@ -103,7 +107,7 @@ describe('Appendix A · the approved menu tree', () => {
 
 describe('§25 · navigation reflects permission, and is not the control', () => {
   it('shows a Super User everything', () => {
-    expect(visibleMenu(superUser)).toHaveLength(21);
+    expect(visibleMenu(superUser)).toHaveLength(22);
   });
 
   it('shows a user only the sections they hold a grant in', () => {

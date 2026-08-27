@@ -250,7 +250,7 @@ Given  the layout is rendered right-to-left
 When   the screen is displayed
 Then   it remains usable, with no code change and no sideways scroll
 ```
-→ `tests/e2e/rtl.spec.ts` › *moves the navigation to the other side of the page*
+→ `tests/e2e/rtl.spec.ts` › *mirrors the brand and user utilities in the application header*
 → `tests/e2e/rtl.spec.ts` › *does not make the page scroll sideways*
 
 ## 16. Out of scope

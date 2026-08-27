@@ -23,7 +23,7 @@ const OFFICER = { email: 'officer@example.com', password: 'Ledger-Trial-Balance-
 async function signIn(page: Page) {
   await page.goto('/sign-in');
   await page.getByLabel('Email').fill(OFFICER.email);
-  await page.getByLabel('Password').fill(OFFICER.password);
+  await page.getByLabel('Password', { exact: true }).fill(OFFICER.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL('/');
 }
@@ -37,22 +37,31 @@ test.describe('§25 · the layout mirrors without a code change', () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page);
     await page.goto('/master-data/chart-of-accounts');
+    // The chart is drawn by a client component; measuring before it has put a
+    // row on screen measures nothing.
+    await expect(page.locator('table.list tbody tr').first()).toBeVisible();
   });
 
-  test('moves the navigation to the other side of the page', async ({ page }) => {
-    const viewport = page.viewportSize()!.width;
+  test('mirrors the brand and user utilities in the application header', async ({ page }) => {
+    const brand = page.locator('.erp-brand');
+    const utilities = page.locator('.erp-header__utilities');
 
-    const before = await page.getByRole('navigation').boundingBox();
-    expect(before!.x).toBeLessThan(viewport / 2);
+    const brandBefore = await brand.boundingBox();
+    const utilitiesBefore = await utilities.boundingBox();
+    expect(brandBefore!.x).toBeLessThan(utilitiesBefore!.x);
 
     await flipToRtl(page);
 
-    const after = await page.getByRole('navigation').boundingBox();
-    expect(after!.x).toBeGreaterThan(viewport / 2);
+    const brandAfter = await brand.boundingBox();
+    const utilitiesAfter = await utilities.boundingBox();
+    expect(brandAfter!.x).toBeGreaterThan(utilitiesAfter!.x);
   });
 
   test('aligns table cells logically, so they follow the direction', async ({ page }) => {
-    const cell = page.locator('table.list td').first();
+    // The first cell is the tree column: its content is a full-width flex row
+    // (toggle, icon, code), so it fills the cell in either direction and cannot
+    // show the shift. The name cell is a plain text run, which can.
+    const cell = page.locator('table.list tbody tr').first().locator('td').nth(1);
 
     // The computed value is the logical keyword itself. A cell written as
     // `text-align: left` would report "left" here and would stay left-aligned
@@ -89,16 +98,16 @@ test.describe('§25 · the layout mirrors without a code change', () => {
     expect(overflows).toBe(false);
   });
 
-  test('keeps every menu item on screen', async ({ page }) => {
+  test('keeps every top-level module on screen', async ({ page }) => {
     await flipToRtl(page);
 
     const viewport = page.viewportSize()!.width;
-    const links = page.getByRole('navigation').getByRole('link');
-    const count = await links.count();
+    const modules = page.getByRole('navigation').locator('.erp-nav__trigger');
+    const count = await modules.count();
     expect(count).toBeGreaterThan(0);
 
     for (let i = 0; i < count; i++) {
-      const box = await links.nth(i).boundingBox();
+      const box = await modules.nth(i).boundingBox();
       if (!box) continue;
       expect(box.x).toBeGreaterThanOrEqual(-1);
       expect(box.x + box.width).toBeLessThanOrEqual(viewport + 1);

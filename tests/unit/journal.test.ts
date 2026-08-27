@@ -246,7 +246,16 @@ describe('§14 · Journal Entries belong to the Finance Department', () => {
 
   it('rejects a user in no department at all', () => {
     expect(() => assertFinanceDepartment('u-1', [])).toThrow(
-      /belong exclusively to the Finance Department/,
+      /finance department/i,
     );
+  });
+
+  it('tells the reader which screens fix it, and does not call them an account', () => {
+    // "This account is not in one" reads, in an accounting system, as a line
+    // in the Chart of Accounts — which sends the reader to the wrong screen.
+    const message = new NotFinanceDepartmentError('u-1').message;
+    expect(message).toMatch(/Departments/);
+    expect(message).toMatch(/Users/);
+    expect(message).not.toMatch(/this account/i);
   });
 });

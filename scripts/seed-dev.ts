@@ -22,6 +22,20 @@ import { sql } from 'drizzle-orm';
 const OFFICER_EMAIL = 'officer@example.com';
 const MANAGER_EMAIL = 'manager@example.com';
 const OUTSIDER_EMAIL = 'outsider@example.com';
+/**
+ * A super user, for reviewing screens rather than for testing permissions.
+ *
+ * The three roles above exist to *demonstrate* permission: the officer may read
+ * and submit, the manager may approve and export, the outsider is refused. None
+ * of them holds a grant on a reporting or configuration object, so of the 218
+ * screens in the approved tree the most privileged of them can open 43. That is
+ * correct behaviour and wrong for a developer, who needs to see the other 175
+ * to know whether they are built properly.
+ *
+ * Kept deliberately separate from the three: nothing that asserts a denial
+ * should ever sign in as this user, and no test does.
+ */
+const ADMIN_EMAIL = 'admin@example.com';
 const PASSWORD = 'Ledger-Trial-Balance-7';
 
 async function main() {
@@ -120,6 +134,33 @@ async function main() {
 
       await setPassword(tx, userId, PASSWORD, { temporary: false });
     }
+
+    // The reviewer. `is_super_user` is the same flag the permission layer
+    // already honours, so this adds no new path through authorisation — it
+    // exercises the one that exists, from a user who is not part of any
+    // permission assertion.
+    const [admin] = (
+      await tx.execute(sql`
+        INSERT INTO app_user (email, display_name, is_active, is_super_user)
+        VALUES (${ADMIN_EMAIL}, 'System Administrator', true, true)
+        ON CONFLICT (lower(email)) DO UPDATE
+          SET display_name = excluded.display_name, is_super_user = true
+        RETURNING id
+      `)
+    ).rows as { id: string }[];
+
+    const adminId = admin!.id;
+    await tx.execute(sql`
+      INSERT INTO user_department_scope (user_id, department_code, is_manager)
+      VALUES (${adminId}, 'FIN', true)
+      ON CONFLICT (user_id, department_code) DO UPDATE SET is_manager = true
+    `);
+    await tx.execute(sql`
+      INSERT INTO user_branch_scope (user_id, branch_code, is_default)
+      VALUES (${adminId}, 'HQ', true)
+      ON CONFLICT (user_id, branch_code) DO UPDATE SET is_default = true
+    `);
+    await setPassword(tx, adminId, PASSWORD, { temporary: false });
   });
 
   // Stock to look at and to issue from — Phase 04. Written through raw SQL
@@ -164,7 +205,8 @@ async function main() {
   });
 
   console.log(
-    `seeded ${OFFICER_EMAIL}, ${MANAGER_EMAIL} and ${OUTSIDER_EMAIL} — password ${PASSWORD}`,
+    `seeded ${OFFICER_EMAIL}, ${MANAGER_EMAIL}, ${OUTSIDER_EMAIL} and ` +
+      `${ADMIN_EMAIL} (super user) — password ${PASSWORD}`,
   );
   process.exit(0);
 }

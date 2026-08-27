@@ -117,7 +117,7 @@ describe('finding the period for a date', () => {
 
   it('names the date when there is no period for it', () => {
     expect(new NoPeriodForDateError('2027-01-01').message).toMatch(
-      /No fiscal period covers 2027-01-01/,
+      /No accounting period covers 2027-01-01/,
     );
   });
 });

@@ -588,7 +588,12 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from document_type_dimension');
     await client.query(`
       insert into document_type_dimension (document_type_code, dimension, requirement)
-      values ('journal_entry', 'branch', 'mandatory')
+      values ('journal_entry', 'branch', 'mandatory'),
+             -- Phase 1, migration 0166: Business Line is mandatory on revenue
+             -- and expense accounts by §4.2, and its master does not exist
+             -- until a later phase. Restored here for the same reason Branch
+             -- is — a test run must not quietly differ from production.
+             ('journal_entry', 'business_line', 'optional')
       on conflict do nothing
     `);
 
@@ -658,7 +663,9 @@ export async function resetTestData(): Promise<void> {
     await client.query(`
       delete from doc_sequence
        where key not like 'ACCOUNT_CODE_%'
-         and key not in ('JOURNAL_ENTRY', 'WAREHOUSE_TRANSFER', 'OPENING_STOCK', 'STOCK_COUNT',
+         and key not in (-- Phase 00, seeded by migration 0160.
+                         'INVOICE',
+                         'JOURNAL_ENTRY', 'WAREHOUSE_TRANSFER', 'OPENING_STOCK', 'STOCK_COUNT',
                          'PURCHASE_ORDER', 'GOODS_RECEIPT', 'SERVICE_RECEIPT', 'AP_INVOICE',
                          'SUPPLIER_ADVANCE',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
@@ -774,6 +781,13 @@ export async function resetTestData(): Promise<void> {
     // Explicit is better here regardless: a reset that relies on a cascade
     // hides what it removes, and the next person to add a child table has no
     // reason to notice.
+    // Phase 00 — the invoice is the document the foundation is demonstrated
+    // on. It names a branch and a department, so it goes before both. It is
+    // never deleted in production (a reject-delete trigger sees to that);
+    // this is a test-harness affordance, run with the guards lifted.
+    await client.query('delete from invoice_line');
+    await client.query('delete from invoice');
+
     await client.query('delete from user_role');
     await client.query('delete from user_branch_scope');
     await client.query('delete from user_department_scope');

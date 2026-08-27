@@ -19,7 +19,7 @@ const MANAGER = { email: 'manager@example.com', password: 'Ledger-Trial-Balance-
 async function signIn(page: Page) {
   await page.goto('/sign-in');
   await page.getByLabel('Email').fill(MANAGER.email);
-  await page.getByLabel('Password').fill(MANAGER.password);
+  await page.getByLabel('Password', { exact: true }).fill(MANAGER.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL('/');
 }

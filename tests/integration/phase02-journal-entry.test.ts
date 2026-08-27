@@ -220,7 +220,7 @@ describe('02.5 · raising a journal', () => {
           postingDate: '2027-03-01',
         }),
       ),
-    ).rejects.toThrow(/No fiscal period covers 2027-03-01/);
+    ).rejects.toThrow(/No accounting period covers 2027-03-01/);
   });
 });
 

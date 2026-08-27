@@ -24,6 +24,8 @@ what has.
 | D7 | Chart of Accounts | 2026-08-17 | Tishko | Phase 02 and Phase 04 acceptance |
 | D10 | Branch access and the Active Branch | 2026-08-17 | Tishko | Phase 01 RLS, Phase 02 and 04 reports, Phase 06 §7.2 |
 | D16 | One client import register | 2026-08-18 | Tishko | The §12.2 Import File ↔ Logistics Job link; one document number per consignment |
+| D31 | A draft may be deleted | 2026-08-26 | Tishko | "Delete draft" on Journal Entries and Invoices; migration 0169 |
+| D32 | Which rate values a posting | 2026-08-27 | Tishko | The ledger currency needs no rate row; a date outside the published range takes the nearest rate |
 
 **One term still to confirm under D7**, and it blocks nothing: the dimension
 answer names "Cost Center", which is not one of §4.2's seven dimensions. Almost
@@ -878,3 +880,145 @@ nothing stops it naming a cancelled job, a statement line on another account, or
 a document that never existed. Where an acceptance criterion turns on the
 reference being right — §12.5 and §12.7 both do — the reference has to be a
 foreign key.
+
+---
+
+## D31 — A draft may be deleted
+
+| | |
+|---|---|
+| **Status** | 🟢 **Decided 2026-08-26 by Tishko** |
+| **Blueprint** | §3.2, §7, §4.3, §14.2 |
+| **Raised** | 2026-08-26, after an afternoon of using Phase 1 |
+| **Released** | A "Delete draft" action on Journal Entries and Invoices; migration 0169 |
+
+### The decision
+
+**A draft may be deleted. Nothing else may.**
+
+### The question it answered
+
+§3.2 says:
+
+> "No deletion of saved or posted records. **Drafts may be cancelled and
+> retained.**"
+
+The build took that literally and completely: `erp_app` held `SELECT`, `INSERT`
+and `UPDATE` on every table and `DELETE` on none, so a document could only ever
+gain a status. A gate test in `phase01-record-framework` asserted the privilege
+itself was absent — "by any path" — which is a stronger guarantee than a code
+check, and the right one for a posted journal.
+
+It also meant every abandoned half-typed draft stayed for ever. After a few
+hours of real use the list of invoices was mostly attempts, and the real
+documents were the hard ones to find. That is not a state §3.2 was protecting
+anybody from.
+
+### Why this does not weaken §3.2
+
+The clause protects **documents** — things that entered the flow and that
+somebody may later be asked to account for. A draft entered nothing: no approver
+saw it, no ledger moved, and what it holds is one person's unfinished typing.
+
+Three things keep the guarantee where it matters:
+
+- **The guard, not the grant, carries the rule.** `DELETE` is granted on
+  `journal_entry`, `journal_line`, `invoice` and `invoice_line`, and a database
+  trigger on each header refuses anything that is not a draft — so it holds for
+  a caller that never goes near the service, which is what "by any path" asked
+  for. `chart_of_account`, `workflow_instance`, `subledger_entry`, `audit_event`
+  and `posting_log` keep the flat prohibition.
+- **The audit event is written before the rows go.** The trail still says the
+  document existed, what number it held, and who discarded it. A person can
+  still be told what became of JV-2026-000007.
+- **The number is not recycled.** §4.3 and §14.2 both say a number is never
+  reused, so the gap stays. The gap *is* the record of an abandoned draft.
+
+### What it changed
+
+`journal_entry_reject_delete` was widened rather than joined by a second
+trigger. Two guards on one table fire in name order and the loser's message is
+never seen — a reader would have been told a half-truth about which rule stopped
+them. `invoice_reject_delete` is new; invoices had no delete guard because
+nothing could delete anything.
+
+The 01.6 gate test was rewritten rather than deleted. It still asserts the
+absence of the privilege on every table where §3.2 applies in full, and asserts
+for the two exceptions that the grant exists **and** the guard makes it useless
+on anything but a draft — which is the stronger claim, and the one now worth
+testing.
+
+### What it did not change
+
+Invoices still require a second person to approve them, and a posted journal is
+still corrected by reversal and never by deletion. An attachment under legal
+hold blocks the discard of the draft it hangs off, so §21 wins over this.
+
+---
+
+## D32 — Which rate values a posting
+
+| | |
+|---|---|
+| **Status** | 🟢 **Decided 2026-08-27 by Tishko** |
+| **Blueprint** | §1.1, §14.3, §14.8, §22, §24 |
+| **Raised** | 2026-08-27, after a journal in dinars could not be saved |
+| **Released** | `rateOn` in the exchange rate domain and service; the Journal Entry sheet |
+
+### The decision
+
+**A posting is valued by the rate in force on its posting date; where the date
+lies outside the published range, the nearest published rate values it. The
+ledger currency is one, and needs no published rate at all.**
+
+### The question it answered
+
+A journal entered in dinars, on today's date, refused to save:
+
+> There is no IQD rate covering 2026-08-27, so this cannot be valued.
+
+Two rules met and produced a wall.
+
+The first: every posting stores four parts — the amount as typed, the IQD the
+ledger balances in, the USD reporting equivalent, and the rate that produced
+them (§24). Both conversions were resolved the same way, by asking the rate
+table for the currency on the posting date. **Including dinars.** IQD per one
+IQD is one, by definition, and the money domain already said so in as many
+words — but the resolver did not know it, so an ordinary dinar journal waited
+on a rate row nobody could sensibly publish, for a conversion that does nothing.
+
+The second: the resolver took the latest rate effective **on or before** the
+date, and refused outright when there was none. That is right in the middle of
+the published range and wrong at its edge. An entry back-dated one day past the
+first rate ever entered was stopped for a gap no accountant caused, and the
+message pointed at a screen where the fix — publishing a rate before the
+company's first — is not a thing anybody would do.
+
+### What did not change
+
+**A later rate still does not disturb an earlier one.** Re-running March after
+April's rate lands still reproduces the March figures (§14.8), because inside
+the published range nothing about the rule moved: the latest rate on or before
+the date still wins, and the row that answered is still stored on the line so a
+reprint five years on repeats it (§22).
+
+**The rate is still not typed.** §14.3 keeps it out of reach of the entry
+screen; it is resolved from the posting date and maintained only in Currencies
+and Rates. The Journal Entry sheet says so beneath the row being typed, rather
+than leaving a missing rate to explain itself in a refusal.
+
+**The refusal still exists**, for the one case that is genuinely a missing
+setting: a currency with no published rate at all. It now says that, and names
+the screen.
+
+### What it changed
+
+An IQD line stores a null `txn_rate_id` — there is no row to point at, and the
+column was already nullable. A USD reporting rate is still required, because a
+reporting figure cannot be invented; one published USD rate now covers every
+date, which is the difference between one setup step and a per-date chore.
+
+The Journal Entry screen shows the three currency pairs it always stored. Debit
+and credit as typed, in IQD, and in USD — the last two were computed on every
+line and displayed nowhere, so an entry could not be checked in the currency
+the ledger balances in without leaving the entry.

@@ -8,7 +8,7 @@ import { expect, test } from '@playwright/test';
  */
 test('the application serves a page', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('ERP');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Sign in');
 });
 
 test('the document declares a language and text direction', async ({ page }) => {
@@ -19,4 +19,5 @@ test('the document declares a language and text direction', async ({ page }) => 
   const html = page.locator('html');
   await expect(html).toHaveAttribute('lang', /.+/);
   await expect(html).toHaveAttribute('dir', /^(ltr|rtl)$/);
+  await expect(html).toHaveAttribute('data-theme', 'light');
 });

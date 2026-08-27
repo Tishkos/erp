@@ -38,6 +38,7 @@ function account(overrides: Partial<AccountNode> = {}): AccountNode {
     isActive: true,
     approvalStatus: 'approved',
     controlAccount: null,
+    statementLine: null,
     currencyRestriction: null,
     requiredDimensions: [],
     isSystem: false,

@@ -529,7 +529,7 @@ describe('02.3 · currency and exchange rates', () => {
     expect(message).toMatch(/exchange_rate_live_uniq/);
   });
 
-  it('refuses a posting date with no rate, rather than guessing one', async () => {
+  it('falls back to the earliest rate for a date before any of them', async () => {
     await withScope(scopeOf(manager), (tx) =>
       rates.publishRate(tx, manager, {
         currency: 'USD',
@@ -538,9 +538,25 @@ describe('02.3 · currency and exchange rates', () => {
       }),
     );
 
+    const resolved = await withScope(scopeOf(manager), (tx) =>
+      rates.rateOn(tx, 'USD', '2026-01-15'),
+    );
+    expect(resolved.effectiveFrom).toBe('2026-06-01');
+    expect(resolved.id).not.toBeNull();
+  });
+
+  it('refuses only when the currency has no published rate at all', async () => {
     await expect(
       withScope(scopeOf(manager), (tx) => rates.rateOn(tx, 'USD', '2026-01-15')),
     ).rejects.toThrow(NoRateForDateError);
+  });
+
+  it('values the ledger currency at one without a published rate', async () => {
+    // No IQD row is inserted by this test, and none is needed: IQD per one IQD
+    // is one. Requiring the row made a plain dinar journal unpostable.
+    const resolved = await withScope(scopeOf(manager), (tx) => rates.rateOn(tx, 'IQD', '2026-08-27'));
+    expect(resolved.iqdPerUnit).toBe(100000000n);
+    expect(resolved.id).toBeNull();
   });
 
   it('keeps eight decimal places on a published rate (A4)', async () => {

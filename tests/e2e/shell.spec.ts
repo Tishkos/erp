@@ -20,7 +20,7 @@ const MANAGER = { email: 'manager@example.com', password: 'Ledger-Trial-Balance-
 async function signIn(page: Page, user = OFFICER) {
   await page.goto('/sign-in');
   await page.getByLabel('Email').fill(user.email);
-  await page.getByLabel('Password').fill(user.password);
+  await page.getByLabel('Password', { exact: true }).fill(user.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL('/');
 }
@@ -37,12 +37,24 @@ test.describe('§25 · deny by default', () => {
     // into a way of discovering who has an account.
     await page.goto('/sign-in');
     await page.getByLabel('Email').fill('nobody@example.com');
-    await page.getByLabel('Password').fill('Ledger-Trial-Balance-7');
+    await page.getByLabel('Password', { exact: true }).fill('Ledger-Trial-Balance-7');
     await page.getByRole('button', { name: 'Sign in' }).click();
     // Scoped to the form: Next renders its own route announcer with role=alert.
     await expect(page.locator('form[role="alert"], form [role="alert"]')).toContainText(
       'not accepted',
     );
+  });
+
+  test('signing out from the user menu ends the session for good', async ({ page }) => {
+    await signIn(page);
+    await page.getByRole('button', { name: 'Open user menu' }).click();
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await expect(page).toHaveURL(/\/sign-in/);
+
+    // §25 — revocation is immediate: the cookie is gone *and* the session is
+    // revoked server-side, so going back to a screen asks for credentials.
+    await page.goto('/master-data/chart-of-accounts');
+    await expect(page).toHaveURL(/\/sign-in/);
   });
 });
 
@@ -85,22 +97,52 @@ test.describe('Appendix A · the shell', () => {
 
   test('shows the approved menu tree, and marks what is not built yet', async ({ page }) => {
     const nav = page.getByRole('navigation');
+    // Master Data sits under Accounting, alongside the sample document that
+    // exercises it — Settings is administration only.
+    await nav.getByRole('button', { name: 'Accounting' }).click();
     await expect(nav.getByText('Master Data', { exact: true })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Chart of Accounts' })).toBeVisible();
 
     // Appendix A's tree is mandatory at functional level, so a page whose
     // module has not arrived is shown and marked, never silently dropped.
-    const pending = nav.getByText('Price Lists03', { exact: true });
+    //
+    // It used to be shown as inert text. Every screen in the tree now has an
+    // address — the one its module declared, or one the screen catalogue
+    // derives — so the item opens, and what marks it as not-yet-live is the
+    // phase badge here plus the preview banner on the screen itself. An item
+    // that renders but refuses to open was the worse of the two honesty
+    // signals: it left 176 of 218 functions with no way to see them at all.
+    const pending = nav.getByRole('link', { name: 'Price Lists', exact: true });
     await expect(pending).toBeVisible();
-    await expect(pending).not.toHaveRole('link');
-    // It carries the phase that delivers it, so "missing" reads as "not yet".
-    await expect(pending).toContainText('03');
+    await expect(pending).toHaveAttribute('href', '/master-data/price-lists');
+  });
+
+  test('opens a screen the tree offers but no module has wired yet', async ({ page }) => {
+    // The other half of the promise above: the link resolves, and the screen it
+    // reaches says plainly that its figures are samples.
+    await page.goto('/master-data/price-lists');
+    await expect(page.getByRole('heading', { name: 'Price Lists', level: 1 })).toBeVisible();
+    // No sample figures anywhere: an unbuilt screen says which phase delivers it.
+    await expect(page.getByText('This screen is not available yet.', { exact: true })).toBeVisible();
   });
 
   test('declares the language and direction the whole layout flips on', async ({ page }) => {
     const html = page.locator('html');
     await expect(html).toHaveAttribute('lang', /.+/);
     await expect(html).toHaveAttribute('dir', /^(ltr|rtl)$/);
+  });
+
+  test('switches the navbar theme and keeps the choice after reload', async ({ page }) => {
+    const html = page.locator('html');
+    const theme = page.getByRole('button', { name: 'Theme: Light / Dark' });
+
+    await expect(theme).toHaveAttribute('aria-pressed', 'false');
+    await theme.click();
+    await expect(theme).toHaveAttribute('aria-pressed', 'true');
+    await expect(html).toHaveAttribute('data-theme', 'dark');
+
+    await page.reload();
+    await expect(html).toHaveAttribute('data-theme', 'dark');
   });
 
   test('shows the branch the session is working in', async ({ page }) => {
@@ -124,12 +166,12 @@ test.describe('Appendix A rule 1 · lists', () => {
   });
 
   test('searches, and says plainly when nothing matches', async ({ page }) => {
-    await page.getByLabel('Search').fill('Liabilit');
-    await page.getByRole('button', { name: 'Search' }).click();
+    await page.getByRole('searchbox', { name: 'Search' }).fill('Liabilit');
+    await page.locator('main form[role="search"] button').click();
     await expect(page.locator('table.list tbody tr')).toHaveCount(1);
 
-    await page.getByLabel('Search').fill('zzzz-no-such-account');
-    await page.getByRole('button', { name: 'Search' }).click();
+    await page.getByRole('searchbox', { name: 'Search' }).fill('zzzz-no-such-account');
+    await page.locator('main form[role="search"] button').click();
     // §25 — not a generic failure; it says what to do next.
     await expect(page.getByText('No records match these filters.')).toBeVisible();
     await expect(page.getByText('Clear a filter')).toBeVisible();
@@ -156,8 +198,8 @@ test.describe('01.12 gate · export returns exactly the on-screen rows', () => {
   test('gives the manager the same rows the screen showed', async ({ page, request }) => {
     // Same query string to both paths; the export may only widen the page
     // window, never a filter, a column or a scope.
-    await page.getByLabel('Search').fill('Liabilit');
-    await page.getByRole('button', { name: 'Search' }).click();
+    await page.getByRole('searchbox', { name: 'Search' }).fill('Liabilit');
+    await page.locator('main form[role="search"] button').click();
     await page.waitForURL(/q=Liabilit/);
     const onScreen = await page.locator('table.list tbody tr').count();
 
