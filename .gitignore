@@ -38,3 +38,10 @@ npm-debug.log*
 
 # local database volume
 .postgres-data/
+
+# Server credentials kept locally. Never commit: this file has held a root
+# password in plaintext.
+vps.md
+
+# Runtime attachment storage — uploaded documents, not source.
+var/
