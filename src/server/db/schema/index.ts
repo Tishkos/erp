@@ -20,6 +20,8 @@
 
 export * from './platform';
 export * from './workflow';
+export * from './invoice';
+export * from './invoice-line';
 export * from './accounting';
 export * from './fiscal';
 export * from './dimensions';

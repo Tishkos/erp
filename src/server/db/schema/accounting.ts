@@ -68,6 +68,16 @@ export const chartOfAccount = pgTable(
     approvalStatus: documentStatus('approval_status').notNull().default('draft'),
 
     /**
+     * Phase 1 §5 — the line of the Statement of Profit or Loss or Statement
+     * of Financial Position this account reports on.
+     *
+     * Null falls to the account type's default line, so a statement is
+     * complete before anybody has assigned anything and grows more precise as
+     * Finance works through the chart.
+     */
+    statementLine: text('statement_line'),
+
+    /**
      * §14.3 — direct manual posting to a control account requires Finance
      * Manager approval, because a manual journal into it breaks the
      * subledger-to-G/L reconciliation the account exists to provide.

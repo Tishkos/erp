@@ -53,6 +53,8 @@ export const company = pgTable(
     taxIdentifier: text('tax_identifier'),
     /** §1.1 — IQD. Held here so the entity states it rather than implying it. */
     baseCurrency: char('base_currency', { length: 3 }).notNull().default('IQD'),
+    /** Head office address, as shown on documents (Phase 0 Company Setup). */
+    address: text('address'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

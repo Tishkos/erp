@@ -575,6 +575,90 @@
       "when": 1793700000000,
       "tag": "0157_phase13_investments",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1793800000000,
+      "tag": "0158_phase00_administration_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1793900000000,
+      "tag": "0159_phase00_company_address",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1794000000000,
+      "tag": "0160_phase00_invoice",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1794100000000,
+      "tag": "0161_phase00_invoice_status_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1794200000000,
+      "tag": "0162_phase00_invoice_lines",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1794300000000,
+      "tag": "0163_phase00_invoice_draft",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1794400000000,
+      "tag": "0164_phase00_invoice_line_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1794500000000,
+      "tag": "0165_phase01_statement_lines",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1794600000000,
+      "tag": "0166_phase01_business_line_deferred",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1794700000000,
+      "tag": "0167_phase01_report_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1794800000000,
+      "tag": "0168_phase01_account_self_approval",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1794900000000,
+      "tag": "0169_phase01_discard_draft",
+      "breakpoints": true
     }
   ]
 }
