@@ -3,12 +3,14 @@ import { desc, eq, isNull } from 'drizzle-orm';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
 import {
+  ActionButton,
   AdminPage,
   Field,
   Flash,
   Form,
   Grid,
   NewRecordDialog,
+  Pill,
   Select,
   Submit,
   SubmitRow,
@@ -18,13 +20,12 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, type Locale } from '@/i18n/config';
-import { CURRENCIES } from '@domain/currencies';
 import { can } from '@domain/permissions';
 import { appUser, exchangeRate } from '@/server/db/schema';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as rates from '@/server/services/exchange-rates';
-import { publishRate } from './actions';
+import { createCurrency, publishRate, setCurrencyActive } from './actions';
 
 /**
  * The accounting rates.
@@ -57,7 +58,7 @@ export default async function ExchangeRatesPage({ searchParams }: { searchParams
   const mayPublish = can(principal, 'create', rates.PERMISSION_OBJECT);
   const today = new Date().toISOString().slice(0, 10);
 
-  const { live, ledger } = await withCurrentUser(async (tx) => ({
+  const { live, ledger, moneys } = await withCurrentUser(async (tx) => ({
     live: await tx
       .select({
         id: exchangeRate.id,
@@ -73,6 +74,7 @@ export default async function ExchangeRatesPage({ searchParams }: { searchParams
       .where(isNull(exchangeRate.supersededAt))
       .orderBy(desc(exchangeRate.effectiveFrom), exchangeRate.currencyCode),
     ledger: await rates.ledgerCurrency(tx),
+    moneys: await rates.currencies(tx),
   }));
 
   return (
@@ -91,10 +93,9 @@ export default async function ExchangeRatesPage({ searchParams }: { searchParams
                   defaultValue="USD"
                   label={t('rates.currency')}
                   name="currency"
-                  options={CURRENCIES.filter((c) => c.code !== ledger).map((c) => ({
-                    value: c.code,
-                    label: `${c.code} · ${c.name}`,
-                  }))}
+                  options={moneys
+                    .filter((c) => c.code !== ledger && c.isActive)
+                    .map((c) => ({ value: c.code, label: `${c.code} · ${c.name}` }))}
                   required
                 />
                 <Field
@@ -137,6 +138,87 @@ export default async function ExchangeRatesPage({ searchParams }: { searchParams
       variant="sap"
     >
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
+
+      {/* The currency master — §4.3. A new code joins here, and from here it
+          reaches every list that offers a currency: the rate dialog above,
+          an account's restriction, a journal line. Retiring stops new lines
+          and touches nothing already posted. */}
+      <Panel flush title={t('rates.currencies_title')}>
+        <div className="table-wrap" style={{ border: 0 }}>
+          <table className="list">
+            <thead>
+              <tr>
+                <th scope="col">{t('rates.currency')}</th>
+                <th scope="col">{t('name')}</th>
+                <th className="numeric" scope="col">{t('rates.decimals')}</th>
+                <th scope="col">{t('rates.state')}</th>
+                {mayPublish ? <th scope="col" /> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {moneys.map((c) => (
+                <tr key={c.code}>
+                  <td className={s.mono}>{c.code}</td>
+                  <td>{c.name}</td>
+                  <td className="numeric">{c.decimals}</td>
+                  <td>
+                    <Pill
+                      label={c.isActive ? t('active') : t('inactive')}
+                      on={c.isActive}
+                    />
+                  </td>
+                  {mayPublish ? (
+                    <td>
+                      {c.isLedger || c.code === 'USD' ? null : (
+                        <ActionButton
+                          action={setCurrencyActive}
+                          hidden={{ code: c.code, active: c.isActive ? '0' : '1' }}
+                          label={c.isActive ? t('rates.retire') : t('reactivate')}
+                        />
+                      )}
+                    </td>
+                  ) : null}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {mayPublish ? (
+          <div className={s.lineForm}>
+            <Form action={createCurrency}>
+              <Grid>
+                <Field
+                  hint={t('rates.code_hint')}
+                  label={t('rates.new_currency_code')}
+                  maxLength={3}
+                  name="code"
+                  pattern="[A-Za-z]{3}"
+                  required
+                  requiredLabel={t('required_hint')}
+                />
+                <Field
+                  label={t('name')}
+                  name="name"
+                  required
+                  requiredLabel={t('required_hint')}
+                />
+                <Field
+                  defaultValue={2}
+                  hint={t('rates.decimals_hint')}
+                  label={t('rates.decimals')}
+                  max={6}
+                  min={0}
+                  name="decimals"
+                  type="number"
+                />
+              </Grid>
+              <SubmitRow>
+                <Submit label={t('rates.add_currency')} />
+              </SubmitRow>
+            </Form>
+          </div>
+        ) : null}
+      </Panel>
 
       {live.length === 0 ? (
         <Panel>

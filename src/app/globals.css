@@ -3959,7 +3959,7 @@ html[dir="rtl"] .coa-directional-icon {
 .erp-preference button[aria-pressed="true"] {
   border-color: var(--w-amber-line, var(--accent));
   background: linear-gradient(180deg, var(--w-amber-a, var(--accent-soft)), var(--w-amber-b, var(--accent-soft)));
-  color: #3a2600;
+  color: var(--w-accent-ink, #3a2600);
 }
 
 .erp-footer {
@@ -4033,4 +4033,140 @@ html[dir="rtl"] .coa-directional-icon {
   color: var(--w-muted, var(--text-muted));
   font-size: 0.68rem;
   letter-spacing: 0.05em;
+}
+
+/* ── The page behind the page ─────────────────────────────────────────────
+   The workspace is sand; the document behind it was still white, so any
+   overscroll — and any screen shorter than the viewport — showed a white
+   band that read as unfinished. The tokens are hosted on <html> whenever the
+   authenticated wrapper is present (the :has() twins on the token blocks),
+   so the root can paint the same canvas. Sign-in has no wrapper: the var is
+   unset there and the fallback keeps its own background. */
+html:has([data-palette]) {
+  background: var(--w-canvas);
+}
+
+html:has([data-palette]) body {
+  background: var(--w-canvas);
+}
+
+/* ── The global search, in the window's terms ─────────────────────────────*/
+.erp-search__panel {
+  border: 1px solid var(--w-line-strong, var(--border));
+  border-radius: 0.2rem;
+  background: var(--w-bg, var(--surface-raised));
+  color: var(--w-text, var(--text));
+  box-shadow: 0 2px 6px rgb(24 39 31 / 18%);
+}
+
+.erp-search__bar {
+  border-block-end: 1px solid var(--w-rule, var(--border));
+  background: var(--w-head, var(--surface-sunken));
+}
+
+.erp-search__bar input {
+  border: 1px solid var(--w-line-strong, var(--border-strong));
+  border-radius: 0.12rem;
+  background: var(--w-field, var(--surface));
+  color: var(--w-text, var(--text));
+  font-size: 0.8rem;
+}
+
+.erp-search__bar input:focus {
+  background: var(--w-focus, var(--surface));
+  outline: 1px solid var(--w-title-line, var(--accent));
+  outline-offset: -1px;
+  box-shadow: none;
+  border-color: var(--w-line-strong, var(--border-strong));
+}
+
+.erp-search__results :is(a, button) {
+  border-inline-start: 3px solid transparent;
+  border-radius: 0;
+  color: var(--w-text, var(--text));
+  font-size: 0.79rem;
+}
+
+.erp-search__results :is(a, button):hover,
+.erp-search__results [aria-selected='true'] {
+  border-inline-start-color: var(--w-amber-line, var(--accent));
+  background: var(--w-selected, var(--accent-soft));
+  color: var(--w-label, var(--text));
+}
+
+.erp-search__hint,
+.erp-search__empty,
+.erp-search__text small {
+  color: var(--w-muted, var(--text-muted));
+  font-size: 0.74rem;
+}
+
+/* ── The app launcher: a board of square tiles ────────────────────────────*/
+.erp-launcher__grid {
+  gap: 0.45rem;
+  padding: 0.6rem;
+}
+
+.erp-launcher__item {
+  border: 1px solid var(--w-rule, var(--border));
+  border-radius: 0.15rem;
+  background: var(--w-bg, var(--surface));
+  color: var(--w-label, var(--text));
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.erp-launcher__item svg {
+  color: var(--w-label, var(--text-soft));
+}
+
+.erp-launcher__item:hover {
+  border-color: var(--w-line-strong, var(--border-strong));
+  background: var(--w-selected, var(--accent-soft));
+  color: var(--w-label, var(--text));
+  transform: none;
+  box-shadow: none;
+}
+
+/* A module that is planned but not built must not look like a door. */
+.erp-launcher__item--pending {
+  background: var(--w-filler, var(--surface-muted));
+  color: var(--w-muted, var(--text-muted));
+}
+
+/* ── The branch picker in the header ──────────────────────────────────────
+   The select dresses as the value it replaces: the person reads "Branch HQ"
+   either way, and the affordance is the chevron the browser draws. */
+.erp-branch__form {
+  display: contents;
+}
+
+.erp-branch__select {
+  max-inline-size: 9rem;
+  padding: 0 0.1rem;
+  border: 1px solid transparent;
+  border-radius: 0.12rem;
+  background: transparent;
+  color: var(--w-chrome-text, var(--text));
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.erp-branch__select:hover,
+.erp-branch__select:focus-visible {
+  border-color: var(--w-chrome-line, var(--border));
+  background: var(--w-field, var(--surface));
+  outline: none;
+}
+
+/* The branch was hidden below 108rem — on any ordinary screen it simply was
+   not there, which read as "this system has no branches" and, now that it is
+   a picker, as "I cannot change branch". It stays until the mobile drawer
+   takes over at 35rem; the drawer carries the same picker. */
+@media (min-width: 35.0625rem) {
+  .erp-branch,
+  .erp-header__utilities > .erp-branch {
+    display: flex;
+  }
 }

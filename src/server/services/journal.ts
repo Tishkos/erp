@@ -13,7 +13,7 @@
  * configured. An approved-but-unposted journal is a state this service cannot
  * produce, which is the 02.6 gate.
  */
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import {
   JournalValidationError,
@@ -311,6 +311,80 @@ export async function addLine(
   });
 
   return { lineNo: draft.lineNo };
+}
+
+/**
+ * Removes a line from a draft.
+ *
+ * Only ever a draft: once submitted the entry is a document and §7 keeps it —
+ * correction is rejection or reversal, never surgery. The database says the
+ * same thing through the D31 guard trigger, so a caller that never comes
+ * through here is refused all the same; the check here exists to say it in a
+ * sentence rather than a constraint name.
+ *
+ * The remaining lines are renumbered to close the gap — an accountant reads
+ * "1, 3" as a line that is missing, not a line that was removed. The shift
+ * runs in two steps because the (entry, line_no) unique index is immediate:
+ * moved out of range first, then down into place, every intermediate state
+ * unique and positive. The header's totals follow by trigger, the same way
+ * they follow an insert.
+ */
+export async function removeLine(
+  tx: Tx,
+  ctx: ActorContext,
+  journalEntryId: string,
+  lineId: string,
+): Promise<void> {
+  const entry = await loadHeader(tx, journalEntryId);
+
+  await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, {
+    branchCode: entry.branchCode,
+    objectId: journalEntryId,
+    requestId: ctx.requestId ?? null,
+  });
+
+  if (entry.status !== 'draft') {
+    throw new Error(
+      `Journal ${entry.entryNo} is ${entry.status} and its lines can no longer be changed.`,
+    );
+  }
+
+  const [line] = await tx
+    .select()
+    .from(journalLine)
+    .where(and(eq(journalLine.id, lineId), eq(journalLine.journalEntryId, journalEntryId)))
+    .limit(1);
+  if (!line) {
+    throw new Error(`That line is not on journal ${entry.entryNo}.`);
+  }
+
+  await tx.delete(journalLine).where(eq(journalLine.id, lineId));
+
+  await tx.execute(
+    sql`update journal_line set line_no = line_no + 1000
+         where journal_entry_id = ${journalEntryId} and line_no > ${line.lineNo}`,
+  );
+  await tx.execute(
+    sql`update journal_line set line_no = line_no - 1001
+         where journal_entry_id = ${journalEntryId} and line_no > 1000`,
+  );
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'journal_entry.line_removed',
+    objectType: PERMISSION_OBJECT,
+    objectId: journalEntryId,
+    branchCode: entry.branchCode,
+    before: {
+      lineNo: line.lineNo,
+      accountId: line.accountId,
+      debitIqd: line.debitIqd,
+      creditIqd: line.creditIqd,
+      currency: line.currency,
+    },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
 }
 
 async function nextLineNumber(tx: Tx, journalEntryId: string): Promise<number> {

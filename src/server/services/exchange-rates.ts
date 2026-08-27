@@ -18,7 +18,7 @@ import {
   type PublishedRate,
   type RateType,
 } from '../domain/exchange-rates';
-import { LEDGER_CURRENCY, REPORTING_CURRENCY, toIqd, toUsd } from '../domain/money';
+import { currency as currencyCode_, LEDGER_CURRENCY, REPORTING_CURRENCY, toIqd, toUsd } from '../domain/money';
 import { currency as currencyTable, exchangeRate } from '../db/schema';
 import type { Tx } from '../db/client';
 import type { ActorContext } from './chart-of-accounts';
@@ -265,4 +265,87 @@ export async function ledgerCurrency(tx: Tx): Promise<string> {
     .limit(1);
 
   return row?.code ?? LEDGER_CURRENCY;
+}
+
+/**
+ * Adds a currency to the master — §4.3.
+ *
+ * This is what stood between the company and a euro rate: the rate dialog
+ * offered a fixed constant list, but a published rate points at the currency
+ * *table*, so any code without a row failed on the way in. The master is now
+ * fed here, and everything downstream — the rate dialog, an account's
+ * currency restriction, a journal line's currency — reads the table.
+ *
+ * Same permission as publishing a rate: it is the same screen, maintained by
+ * the same people, and a second permission object would be a second thing to
+ * grant for one job.
+ */
+export async function createCurrency(
+  tx: Tx,
+  ctx: ActorContext,
+  input: { readonly code: string; readonly name: string; readonly decimals?: number },
+): Promise<void> {
+  await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, {
+    branchCode: ctx.branchCode,
+    requestId: ctx.requestId ?? null,
+  });
+
+  // The domain's shape rule, so the refusal names the rule rather than a
+  // constraint. The ledger currency exists from Phase 0 and is not repeatable.
+  const code = currencyCode_(input.code.trim().toUpperCase());
+  const decimals = input.decimals ?? 2;
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 6) {
+    throw new RangeError('Decimals must be a whole number between 0 and 6.');
+  }
+
+  await tx
+    .insert(currencyTable)
+    .values({ code, name: input.name.trim(), decimals, isLedger: false, isActive: true });
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'currency.created',
+    objectType: 'currency',
+    objectId: code,
+    branchCode: ctx.branchCode,
+    after: { code, name: input.name.trim(), decimals },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+}
+
+/**
+ * Retires or restores a currency.
+ *
+ * Retired means "no new lines": history keeps every posting it ever made.
+ * The ledger currency cannot be retired (§1.1), and neither can the
+ * reporting currency — every posting still needs its USD equivalent.
+ */
+export async function setCurrencyActive(
+  tx: Tx,
+  ctx: ActorContext,
+  code: string,
+  active: boolean,
+): Promise<void> {
+  await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, {
+    branchCode: ctx.branchCode,
+    requestId: ctx.requestId ?? null,
+  });
+
+  if (!active && (code === LEDGER_CURRENCY || code === REPORTING_CURRENCY)) {
+    throw new Error(`${code} cannot be retired: every posting is measured in it.`);
+  }
+
+  await tx.update(currencyTable).set({ isActive: active }).where(eq(currencyTable.code, code));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: active ? 'currency.reactivated' : 'currency.retired',
+    objectType: 'currency',
+    objectId: code,
+    branchCode: ctx.branchCode,
+    after: { isActive: active },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
 }

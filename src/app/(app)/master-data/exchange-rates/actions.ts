@@ -28,3 +28,29 @@ export async function publishRate(formData: FormData): Promise<void> {
     LIST,
   );
 }
+
+/**
+ * Adds a currency to the master — the step that used to be missing. A rate
+ * points at a currency row, so a currency the master did not hold could
+ * never be priced, and the wall appeared here, on the rate dialog.
+ */
+export async function createCurrency(formData: FormData): Promise<void> {
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      rates.createCurrency(tx, ctx, {
+        code: text(formData, 'code'),
+        name: text(formData, 'name'),
+        decimals: Number(text(formData, 'decimals') || '2'),
+      }),
+    LIST,
+  );
+}
+
+/** Retire or restore — history keeps every posting either way. */
+export async function setCurrencyActive(formData: FormData): Promise<void> {
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      rates.setCurrencyActive(tx, ctx, text(formData, 'code'), text(formData, 'active') === '1'),
+    LIST,
+  );
+}

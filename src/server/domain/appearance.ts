@@ -18,7 +18,7 @@
  * by eye.
  */
 
-export const PALETTES = ['sand', 'classic', 'slate', 'graphite'] as const;
+export const PALETTES = ['sand', 'classic', 'slate', 'graphite', 'midnight', 'carbon'] as const;
 export type Palette = (typeof PALETTES)[number];
 
 /** What the installation wears until somebody chooses otherwise. */
@@ -60,4 +60,40 @@ export function paletteOrDefault(value: string | null | undefined): Palette {
  */
 export function assertPalette(value: string): asserts value is Palette {
   if (!isPalette(value)) throw new UnknownPaletteError(value);
+}
+
+/**
+ * The accents — the one colour that marks pressed, selected and actionable.
+ *
+ * 'gold' is the accounting package's own amber and each palette defines it
+ * for itself, so gold is expressed as the absence of an override rather than
+ * as a fifth definition that could drift from four others.
+ */
+export const ACCENTS = ['gold', 'red', 'blue', 'green', 'purple'] as const;
+export type Accent = (typeof ACCENTS)[number];
+
+export const DEFAULT_ACCENT: Accent = 'gold';
+
+export function isAccent(value: string): value is Accent {
+  return (ACCENTS as readonly string[]).includes(value);
+}
+
+export class UnknownAccentError extends Error {
+  readonly code = 'UNKNOWN_ACCENT';
+  constructor(value: string) {
+    super(
+      `'${value}' is not an accent this system defines. ` +
+        `Choose one of: ${ACCENTS.join(', ')}.`,
+    );
+    this.name = 'UnknownAccentError';
+  }
+}
+
+/** Reads a stored value into an accent — falls back, like the palette. */
+export function accentOrDefault(value: string | null | undefined): Accent {
+  return value && isAccent(value) ? value : DEFAULT_ACCENT;
+}
+
+export function assertAccent(value: string): asserts value is Accent {
+  if (!isAccent(value)) throw new UnknownAccentError(value);
 }

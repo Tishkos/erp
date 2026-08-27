@@ -19,6 +19,8 @@ import { loadPrincipal } from './services/authorization';
 import { resolveSession } from './services/authentication';
 
 export const SESSION_COOKIE = 'erp_session';
+/** The branch the person chose to work in — written by the header's picker. */
+export const BRANCH_COOKIE = 'erp_branch';
 
 export class NotSignedInError extends Error {
   readonly code = 'NOT_SIGNED_IN';
@@ -61,7 +63,7 @@ export async function currentContext(): Promise<RequestContext> {
     await applyScope(tx, bootstrap);
 
     const principal = await loadPrincipal(tx, user.id);
-    const requested = jar.get('erp_branch')?.value;
+    const requested = jar.get(BRANCH_COOKIE)?.value;
 
     // A branch the user may not see is not an error worth a page for — it is
     // usually a stale cookie from a scope that was withdrawn. Fall back to one

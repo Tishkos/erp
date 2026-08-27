@@ -58,7 +58,16 @@ export default async function JournalsPage({ searchParams }: { searchParams: Sea
     // here rather than after the entry has been filled in and refused.
     inFinance: await journal.isInFinanceDepartment(tx, principal.userId),
   }));
-  const shown = rows.filter((row) => matches(row, outcome.q));
+  // A month arrives from the fiscal calendar: one press on a period shows
+  // what was posted into it. The filter reads the posting date, which is the
+  // date that decided the period (§14.6).
+  const params = await searchParams;
+  const month = typeof params.month === 'string' && /^d{4}-d{2}$/.test(params.month)
+    ? params.month
+    : null;
+  const shown = rows
+    .filter((row) => matches(row, outcome.q))
+    .filter((row) => (month ? row.postingDate.startsWith(month) : true));
 
   return (
     <AdminPage
@@ -106,6 +115,14 @@ export default async function JournalsPage({ searchParams }: { searchParams: Sea
       variant="sap"
     >
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
+      {month ? (
+        <p className={s.sectionHint}>
+          {t('journals.month_filter', { month })}{' '}
+          <Link className={s.sapLink} href="/finance/journals">
+            {t('clear_search')}
+          </Link>
+        </p>
+      ) : null}
       {mayCreate && !inFinance ? (
         <p className={s.sectionHint}>{t('journals.not_in_finance')}</p>
       ) : null}

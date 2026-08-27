@@ -42,6 +42,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
     <ErpShell
       brand={t('shell.brand')}
       branchCode={scope.branchCode}
+      branchCodes={principal.branchCodes}
       userId={principal.userId}
       displayName={me?.displayName ?? principal.userId.slice(0, 8)}
       email={me?.email ?? ''}

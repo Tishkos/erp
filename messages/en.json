@@ -962,11 +962,21 @@
       "main_branch_location": "Branch location",
       "open_branches": "Open Branches",
       "appearance": "Appearance",
-      "appearance_hint": "How the system looks, for everybody. The sign-in page keeps its own look.",
+      "appearance_hint": "The default look for everybody. Each person may choose their own on their profile.",
       "palette_sand": "Sand",
       "palette_classic": "Classic blue",
       "palette_slate": "Slate",
-      "palette_graphite": "Graphite"
+      "palette_graphite": "Graphite",
+      "accent_hint": "The highlight colour — the buttons, the selected row, the mark under a title.",
+      "accent_gold": "Gold",
+      "accent_red": "Red",
+      "accent_blue": "Blue",
+      "accent_green": "Green",
+      "accent_purple": "Purple",
+      "appearance_profile_hint": "Your own look, on every device you sign in from. Company default follows whatever the company chooses.",
+      "company_default": "Company default",
+      "palette_midnight": "Midnight",
+      "palette_carbon": "Carbon"
     },
     "branches": {
       "title": "Branches",
@@ -1252,7 +1262,9 @@
       "new_line": "New line",
       "mixed_currencies": "mixed",
       "rate_note": "The rate is the one in force on the posting date; it is set in Currencies and Rates, never here.",
-      "entry_no": "Entry no."
+      "entry_no": "Entry no.",
+      "remove_line": "Remove line",
+      "month_filter": "Showing entries posted in {month}."
     },
     "reversals": {
       "title": "Reversals",
@@ -1367,7 +1379,15 @@
       "entered_by": "Entered by",
       "in_force": "In force",
       "none": "No rate has been published yet.",
-      "none_detail": "Every entry is measured in the ledger currency and in USD, so nothing can be posted until a USD rate covers {date}."
+      "none_detail": "Every entry is measured in the ledger currency and in USD, so nothing can be posted until a USD rate covers {date}.",
+      "currencies_title": "Currencies",
+      "state": "State",
+      "retire": "Retire",
+      "new_currency_code": "Currency code",
+      "code_hint": "Three letters — EUR, AED, TRY.",
+      "decimals": "Decimals",
+      "decimals_hint": "Digits after the point when amounts are shown.",
+      "add_currency": "Add currency"
     }
   },
   "profile": {

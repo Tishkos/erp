@@ -61,6 +61,8 @@ export const company = pgTable(
      * describing the same screen should be looking at the same screen.
      */
     uiPalette: text('ui_palette').notNull().default('sand'),
+    /** The highlight colour — pressed, selected, actionable. 0171. */
+    uiAccent: text('ui_accent').notNull().default('gold'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -71,7 +73,11 @@ export const company = pgTable(
     // failure shows on every screen at once with nothing to explain it.
     check(
       'company_ui_palette_known',
-      sql`${t.uiPalette} in ('sand', 'classic', 'slate', 'graphite')`,
+      sql`${t.uiPalette} in ('sand', 'classic', 'slate', 'graphite', 'midnight', 'carbon')`,
+    ),
+    check(
+      'company_ui_accent_known',
+      sql`${t.uiAccent} in ('gold', 'red', 'blue', 'green', 'purple')`,
     ),
   ],
 );

@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { AppShell } from '@/components/app-shell';
-import { withCurrentUser } from '@/server/session';
+import { optionalContext, withCurrentUser } from '@/server/session';
 import * as companyService from '@/server/services/company';
-import { DEFAULT_PALETTE } from '@domain/appearance';
+import { DEFAULT_ACCENT, DEFAULT_PALETTE } from '@domain/appearance';
 
 /**
  * The authenticated application — every screen except sign-in lives in this
@@ -34,12 +34,20 @@ import { DEFAULT_PALETTE } from '@domain/appearance';
  * gets the default palette and an ordinary-looking system, not an unstyled one.
  */
 export default async function AuthenticatedLayout({ children }: { children: ReactNode }) {
-  const palette = await withCurrentUser((tx) => companyService.palette(tx)).catch(
-    () => DEFAULT_PALETTE,
-  );
+  // The person's own look where they chose one, the company default where
+  // they did not. optionalContext rather than require: a signed-out visitor
+  // is redirected by AppShell below, and must not be answered with a palette
+  // read that throws first.
+  const context = await optionalContext();
+  const fallback = { palette: DEFAULT_PALETTE, accent: DEFAULT_ACCENT };
+  const { palette, accent } = context
+    ? await withCurrentUser((tx) =>
+        companyService.appearanceFor(tx, context.principal.userId),
+      ).catch(() => fallback)
+    : fallback;
 
   return (
-    <div data-palette={palette}>
+    <div data-accent={accent} data-palette={palette}>
       <AppShell>{children}</AppShell>
     </div>
   );

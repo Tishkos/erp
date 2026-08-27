@@ -16,7 +16,8 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { formatTimestamp, type Locale } from '@/i18n/config';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as users from '@/server/services/users';
-import { changePassword, saveAvatar, saveProfile } from './actions';
+import { ACCENTS, PALETTES } from '@domain/appearance';
+import { changePassword, saveAvatar, saveMyAppearance, saveProfile } from './actions';
 
 /**
  * My profile — the signed-in person's own account.
@@ -43,6 +44,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
   const { user, roles, branches, departments, sessions } = await withCurrentUser((tx) =>
     users.detail(tx, context.principal.userId),
   );
+  const own = { palette: user.uiPalette ?? 'company', accent: user.uiAccent ?? 'company' };
   const fmt = (d: Date | null) => (d ? formatTimestamp(d.toISOString(), locale as Locale) : admin('none'));
   const live = sessions.filter((x) => !x.revokedAt && x.expiresAt > new Date()).length;
   const roleLabel = context.principal.isSuperUser
@@ -145,6 +147,73 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
         </div>
 
         <div className={s.profileStack}>
+          {/* The look is personal — the person staring at this screen all day
+              chooses it. 'company' stores null: follow the default, and move
+              when the company moves. The swatches carry their own data-palette
+              so each is painted by the tokens it would apply; the company one
+              carries none and shows the look now in force. */}
+          <Panel title={admin('company.appearance')}>
+            <p className={s.sectionHint}>{admin('company.appearance_profile_hint')}</p>
+            <Form action={saveMyAppearance}>
+              <div className={s.paletteChoices}>
+                {['company', ...PALETTES].map((name) => (
+                  <label className={s.paletteChoice} key={name}>
+                    <input
+                      defaultChecked={name === own.palette}
+                      name="uiPalette"
+                      type="radio"
+                      value={name}
+                    />
+                    <span
+                      className={s.paletteSwatch}
+                      data-palette={name === 'company' ? undefined : name}
+                    >
+                      <span className={s.paletteSwatchBar} />
+                      <span className={s.paletteSwatchBody}>
+                        <span className={s.paletteSwatchRow} />
+                        <span className={s.paletteSwatchRow} />
+                        <span className={s.paletteSwatchButton} />
+                      </span>
+                    </span>
+                    <span className={s.paletteName}>
+                      {name === 'company'
+                        ? admin('company.company_default')
+                        : admin(`company.palette_${name}`)}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p className={s.sectionHint} style={{ marginBlockStart: '0.8rem' }}>
+                {admin('company.accent_hint')}
+              </p>
+              <div className={s.accentChoices}>
+                {['company', ...ACCENTS].map((name) => (
+                  <label
+                    key={name}
+                    className={s.accentChoice}
+                    data-accent={name === 'company' ? undefined : name}
+                  >
+                    <input
+                      defaultChecked={name === own.accent}
+                      name="uiAccent"
+                      type="radio"
+                      value={name}
+                    />
+                    <span className={s.accentDot} />
+                    <span className={s.paletteName}>
+                      {name === 'company'
+                        ? admin('company.company_default')
+                        : admin(`company.accent_${name}`)}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <SubmitRow>
+                <Submit label={admin('update')} />
+              </SubmitRow>
+            </Form>
+          </Panel>
+
           <Panel title={t('edit_profile')}>
             <Form action={saveProfile}>
               <Grid>

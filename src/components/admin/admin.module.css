@@ -1518,6 +1518,7 @@
    and if it read its colours from the theme it would come apart the moment
    somebody flipped it. Scoped to the journal's .sapDoc and route-owned
    .sapPage classes so none of it escapes onto the rest of the application. */
+:global(html:has([data-palette])),
 :global([data-palette]) {
   --w-bg: #fbfbf4;
   --w-canvas: #f3f2e9;
@@ -1545,6 +1546,9 @@
   --w-chrome-b: #c4ccc2;
   --w-chrome-line: #a3aea0;
   --w-chrome-text: #22322a;
+  --w-accent-ink: #3a2600;
+  --w-paper: #ffffff;
+  --w-band: #f6f7f0;
 }
 
 .sapDoc,
@@ -1822,13 +1826,13 @@
   border: 1px solid var(--w-amber-line);
   border-radius: 0.14rem;
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
-  color: #3a2600;
+  color: var(--w-accent-ink, #3a2600);
   font-size: 0.78rem;
   font-weight: 700;
   box-shadow: none;
 }
 .sapDoc.sapDoc button:hover {
-  background: linear-gradient(180deg, #ffdf95, #f2b12f);
+  background: linear-gradient(180deg, #ffdf95, color-mix(in srgb, var(--w-amber-b) 88%, #fff));
 }
 .sapDoc.sapDoc button:focus-visible {
   outline: 2px solid #745807;
@@ -2036,7 +2040,7 @@
 }
 
 .sapRegisterTable tbody tr:nth-child(even) > td {
-  background: #f6f7f0;
+  background: var(--w-band, #f6f7f0);
 }
 
 .sapRegisterTable tbody tr:hover > td,
@@ -2329,7 +2333,7 @@
 
 .sapPage.sapPage .primary {
   border-color: var(--w-amber-line);
-  color: #3a2600;
+  color: var(--w-accent-ink, #3a2600);
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
 }
 
@@ -2781,13 +2785,13 @@
 .sapPage :global(.table-wrap) {
   border: 1px solid var(--w-rule);
   border-radius: 0;
-  background: #ffffff;
+  background: var(--w-paper, #ffffff);
   scrollbar-color: var(--w-line-strong) var(--w-canvas);
   scrollbar-width: thin;
 }
 
 .sapPage :global(table.list) {
-  background: #ffffff;
+  background: var(--w-paper, #ffffff);
   color: var(--w-text);
   font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
@@ -2812,7 +2816,7 @@
 
 /* Banded, the way a long register is read. */
 .sapPage :global(table.list) tbody tr:nth-child(even) > td {
-  background: #f6f7f0;
+  background: var(--w-band, #f6f7f0);
 }
 
 .sapPage :global(table.list) tbody tr:hover > td,
@@ -2898,11 +2902,11 @@
   border: 1px solid var(--w-amber-line);
   border-radius: 0.12rem;
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
-  color: #3a2600;
+  color: var(--w-accent-ink, #3a2600);
 }
 
 .sapPage.sapPage .toolbarSearch button:hover {
-  background: linear-gradient(180deg, #ffe6a8, #f2b12f);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--w-amber-a) 70%, #fff), color-mix(in srgb, var(--w-amber-b) 88%, #fff));
 }
 
 /* Pill carries a yes/no rather than a status name — active, self-approving,
@@ -2976,11 +2980,11 @@
 .sapPage :global(.coa-table-wrap) {
   border: 1px solid var(--w-rule);
   border-radius: 0;
-  background: #ffffff;
+  background: var(--w-paper, #ffffff);
 }
 
 .sapPage :global(.coa-table) {
-  background: #ffffff;
+  background: var(--w-paper, #ffffff);
   color: var(--w-text);
   font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
@@ -3004,7 +3008,7 @@
 }
 
 .sapPage :global(.coa-table) tbody tr:nth-child(even) > td {
-  background: #f6f7f0;
+  background: var(--w-band, #f6f7f0);
 }
 
 .sapPage :global(.coa-table) tbody tr:hover > td {
@@ -3035,7 +3039,7 @@
   border: 1px solid var(--w-amber-line);
   border-radius: 0.12rem;
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
-  color: #3a2600;
+  color: var(--w-accent-ink, #3a2600);
   font-weight: 700;
   box-shadow: none;
 }
@@ -3046,7 +3050,7 @@
 .sapPage :global(.coa-search-submit):hover,
 .sapPage :global(.coa-page-button):hover,
 .sapPage :global(.action):hover {
-  background: linear-gradient(180deg, #ffe6a8, #f2b12f);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--w-amber-a) 70%, #fff), color-mix(in srgb, var(--w-amber-b) 88%, #fff));
 }
 
 /* A disabled page button, and the page you are already on, must not look like
@@ -3113,6 +3117,7 @@
 
 /* The accounting package as most people first met it: cool blue-grey chrome,
    a blue title bar, amber buttons. */
+:global(html:has([data-palette='classic'])),
 :global([data-palette='classic']) {
   --w-bg: #eef2f7;
   --w-canvas: #dfe6ee;
@@ -3143,6 +3148,7 @@
 }
 
 /* Cooler and quieter than classic, for a room with a lot of screens in it. */
+:global(html:has([data-palette='slate'])),
 :global([data-palette='slate']) {
   --w-bg: #f4f6f8;
   --w-canvas: #e3e8ed;
@@ -3174,6 +3180,7 @@
 
 /* Near-neutral chrome, white paper. The one to pick when the company's own
    colours are doing the talking elsewhere. */
+:global(html:has([data-palette='graphite'])),
 :global([data-palette='graphite']) {
   --w-bg: #f7f7f6;
   --w-canvas: #e6e6e4;
@@ -3298,15 +3305,15 @@
   border: 1px solid var(--w-amber-line);
   border-radius: 0.12rem;
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
-  color: #3a2600;
+  color: var(--w-accent-ink, #3a2600);
   font-size: 0.76rem;
   font-weight: 700;
 }
 
 .sapPage .backButton:hover {
   border-color: var(--w-amber-line);
-  background: linear-gradient(180deg, #ffe6a8, #f2b12f);
-  color: #3a2600;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--w-amber-a) 70%, #fff), color-mix(in srgb, var(--w-amber-b) 88%, #fff));
+  color: var(--w-accent-ink, #3a2600);
 }
 
 .sapPage .backButton svg {
@@ -3322,7 +3329,7 @@
 .sapPage .roleTabs {
   gap: 0;
   border: 1px solid var(--w-rule);
-  background: #ffffff;
+  background: var(--w-paper, #ffffff);
 }
 
 .sapPage .roleTab {
@@ -3330,12 +3337,12 @@
   border-block-end: 1px solid var(--w-rule);
   border-inline-start: 3px solid transparent;
   border-radius: 0;
-  background: #ffffff;
+  background: var(--w-paper, #ffffff);
   color: var(--w-text);
 }
 
 .sapPage .roleTab:nth-child(even) {
-  background: #f6f7f0;
+  background: var(--w-band, #f6f7f0);
 }
 
 .sapPage .roleTab:hover {
@@ -3459,13 +3466,387 @@
 .sapPage .inboxItem {
   border: 1px solid var(--w-rule);
   border-radius: 0;
-  background: #ffffff;
+  background: var(--w-paper, #ffffff);
 }
 
 .sapPage .inboxItem:nth-child(even) {
-  background: #f6f7f0;
+  background: var(--w-band, #f6f7f0);
 }
 
 .sapPage .inboxItem:hover {
   background: var(--w-selected);
+}
+
+/* ── The accents the company chooses between ──────────────────────────────
+   The accent is the one colour that marks pressed, selected and actionable:
+   the buttons, the selected row, the rule under a title bar, the focused
+   cell. 'gold' is each palette's own amber and is expressed as the absence
+   of an override — a fifth definition could drift from the other four.
+
+   Declared after the palettes and on the same elements, so a chosen accent
+   wins over a palette's own amber by source order, never by specificity
+   games. The picker's dots carry these attributes too, which is how a dot is
+   painted by the very tokens it selects. */
+:global(html:has([data-accent='red'])),
+:global([data-accent='red']) {
+  --w-amber-a: #f2b6a6;
+  --w-amber-b: #d96a50;
+  --w-amber-line: #a63d26;
+  --w-accent-ink: #3d0f05;
+  --w-selected: #fbe3dc;
+  --w-selected-strong: #f0af9c;
+  --w-title-line: #b4462e;
+  --w-focus: #ffe9e2;
+}
+
+:global(html:has([data-accent='blue'])),
+:global([data-accent='blue']) {
+  --w-amber-a: #c6ddf3;
+  --w-amber-b: #6f9fce;
+  --w-amber-line: #37678f;
+  --w-accent-ink: #0d2740;
+  --w-selected: #e0edfa;
+  --w-selected-strong: #accdea;
+  --w-title-line: #3d76a3;
+  --w-focus: #e9f3fd;
+}
+
+:global(html:has([data-accent='green'])),
+:global([data-accent='green']) {
+  --w-amber-a: #c4e3bd;
+  --w-amber-b: #6da868;
+  --w-amber-line: #39702f;
+  --w-accent-ink: #0e260b;
+  --w-selected: #e2f2dd;
+  --w-selected-strong: #abd6a1;
+  --w-title-line: #417f38;
+  --w-focus: #edf7e9;
+}
+
+:global(html:has([data-accent='purple'])),
+:global([data-accent='purple']) {
+  --w-amber-a: #d9ccee;
+  --w-amber-b: #977bc9;
+  --w-amber-line: #644a99;
+  --w-accent-ink: #1e1136;
+  --w-selected: #ece5f7;
+  --w-selected-strong: #c2addf;
+  --w-title-line: #6f55a6;
+  --w-focus: #f3eefb;
+}
+
+/* ── Choosing the accent ──────────────────────────────────────────────────
+   A row of dots beside the palette swatches. Each label carries the accent's
+   own data-accent attribute, so its dot inherits the very tokens the choice
+   would apply — the gold dot shows the current palette's own amber. */
+.accentChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.accentChoice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--w-line, var(--border));
+  border-radius: 0.2rem;
+  background: var(--w-bg, var(--surface));
+  cursor: pointer;
+}
+
+.accentChoice:has(input:checked) {
+  border-color: var(--w-amber-line);
+  box-shadow: inset 0 0 0 1px var(--w-amber-line);
+}
+
+.accentChoice:focus-within {
+  outline: 2px solid var(--w-title-line);
+  outline-offset: 1px;
+}
+
+.accentChoice input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.accentDot {
+  display: inline-block;
+  inline-size: 1.05rem;
+  block-size: 1.05rem;
+  border: 1px solid var(--w-amber-line);
+  border-radius: 0.15rem;
+  background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
+}
+
+/* ── The record framework's type, set like the rest of the window ─────────
+   Its title was display-sized with negative tracking, its action row the
+   modern application's buttons. Inside the window they read as a heading
+   pasted in from somewhere else. */
+.sapPage :global(.page__title) {
+  color: var(--w-label);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.sapPage :global(.page__header) {
+  margin-block-end: 0.85rem;
+}
+
+.sapPage :global(.facts) {
+  font-size: 0.78rem;
+}
+
+.sapPage :global(.facts) dt {
+  color: var(--w-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.sapPage :global(.facts) dd {
+  color: var(--w-text);
+  font-weight: 600;
+}
+
+.sapPage :global(.timeline) {
+  font-size: 0.78rem;
+}
+
+.sapPage :global(.action) {
+  min-block-size: 1.75rem;
+  padding-inline: 0.6rem;
+  border-radius: 0.12rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+/* The modern hover lifted the button and turned it accent-blue. */
+.sapPage :global(.action):hover:not(:disabled) {
+  border-color: var(--w-amber-line);
+  color: var(--w-accent-ink, #3a2600);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--w-amber-a) 70%, #fff),
+    color-mix(in srgb, var(--w-amber-b) 88%, #fff)
+  );
+  box-shadow: none;
+  transform: none;
+}
+
+.sapPage :global(.action--primary) {
+  border-color: var(--w-amber-line);
+  color: var(--w-accent-ink, #3a2600);
+  background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
+}
+
+/* ── The identity tile on a profile ───────────────────────────────────────
+   Was a large round gradient badge — decoration, and the one circle on an
+   otherwise squared screen. Now the object tile: squared, drawn from the
+   palette, sized to sit beside the facts rather than crown them. */
+.sapPage .avatarLarge,
+.sapPage .avatarSmall {
+  border: 1px solid var(--w-line-strong);
+  border-radius: 0.15rem;
+  color: var(--w-label);
+  background: var(--w-head-strong);
+}
+
+.sapPage .avatarLarge {
+  inline-size: 3.75rem;
+  block-size: 3.75rem;
+  margin-block-end: 0.45rem;
+  font-size: 1.05rem;
+}
+
+.sapPage .profileCard h2 {
+  color: var(--w-label);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.sapPage .profileCard p {
+  color: var(--w-muted);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The remove cell at the end of a draft line. The button is sized to the
+   cell and quiet until pointed at — a row of them must not shout over the
+   figures they sit beside. */
+.sapTable .sapRowRemove {
+  inline-size: 1.9rem;
+  padding: 0;
+  text-align: center;
+}
+
+.sapDoc.sapDoc .sapRowRemove button {
+  min-inline-size: 1.5rem;
+  min-block-size: 1.35rem;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--w-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.sapDoc.sapDoc .sapRowRemove button:hover {
+  border-color: #b03a2e;
+  background: #f8d7d2;
+  color: #7d201a;
+}
+
+/* ── Record history, drawn like the rest of the window ────────────────────
+   The timeline's rail and dots were the application's accent blue and its
+   type the modern scale — the one panel on a document that still looked
+   pasted in from another product. */
+.sapDoc .timeline li,
+.sapPage .timeline li {
+  border-inline-start: 2px solid var(--w-rule);
+}
+
+.sapDoc .timeline li::before,
+.sapPage .timeline li::before {
+  border: 1px solid var(--w-amber-line);
+  border-radius: 0.1rem;
+  background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
+}
+
+.sapDoc .timelineWhen,
+.sapPage .timelineWhen {
+  color: var(--w-muted);
+  font-size: 0.72rem;
+}
+
+.sapDoc .timelineAction,
+.sapPage .timelineAction {
+  color: var(--w-label);
+  font-size: 0.79rem;
+  font-weight: 700;
+}
+
+.sapDoc .timelineMeta,
+.sapPage .timelineMeta {
+  font-size: 0.74rem;
+}
+
+.sapDoc .timelineMeta code,
+.sapPage .timelineMeta code {
+  color: var(--w-muted);
+  font-size: 0.72rem;
+}
+
+/* ── Pagination, squared and amber like every other control ──────────────*/
+.sapPage :global(nav[class*='pagination']) {
+  gap: 0.25rem;
+}
+
+.sapPage :global([class*='pageButton']) {
+  min-inline-size: 1.8rem;
+  min-block-size: 1.7rem;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 0.12rem;
+  background: var(--w-bg);
+  color: var(--w-label);
+  font-size: 0.76rem;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.sapPage :global(a[class*='pageButton']):hover {
+  border-color: var(--w-amber-line);
+  background: var(--w-selected);
+  color: var(--w-label);
+}
+
+.sapPage :global([class*='pageCurrent']) {
+  border-color: var(--w-amber-line);
+  background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
+  color: var(--w-accent-ink, #3a2600);
+}
+
+.sapPage :global([class*='pageDisabled']) {
+  border-color: var(--w-line);
+  background: var(--w-filler);
+  color: var(--w-muted);
+}
+
+.sapPage :global([class*='pageEllipsis']) {
+  color: var(--w-muted);
+}
+
+/* ── The dark palettes ────────────────────────────────────────────────────
+   Two of them, deliberately whole: a dark theme assembled by inverting a
+   light one always has a corner nobody inverted. The gold accent stays gold
+   — the light amber pair reads on a dark ground, and the accents override it
+   the same way they do in the light. */
+:global(html:has([data-palette='midnight'])),
+:global([data-palette='midnight']) {
+  --w-bg: #1d232a;
+  --w-canvas: #151a20;
+  --w-line: #3a4550;
+  --w-line-strong: #4d5a66;
+  --w-rule: #333e48;
+  --w-field: #232b33;
+  --w-field-ro: #20272e;
+  --w-label: #d3dde5;
+  --w-text: #e6edf3;
+  --w-muted: #8b98a5;
+  --w-title-a: #2a333c;
+  --w-title-b: #1f272e;
+  --w-title-line: #b98c1e;
+  --w-head: #2a333c;
+  --w-head-strong: #313c46;
+  --w-filler: #1a2027;
+  --w-selected: #3f3a1f;
+  --w-selected-strong: #6b5a23;
+  --w-amber-a: #ffd978;
+  --w-amber-b: #e9aa24;
+  --w-amber-line: #b77d0b;
+  --w-focus: #4a431f;
+  --w-chrome-a: #242c34;
+  --w-chrome-b: #1a2128;
+  --w-chrome-line: #0e1317;
+  --w-chrome-text: #dfe7ee;
+  --w-paper: #262e35;
+  --w-band: #222932;
+}
+
+:global(html:has([data-palette='carbon'])),
+:global([data-palette='carbon']) {
+  --w-bg: #222220;
+  --w-canvas: #191918;
+  --w-line: #40403d;
+  --w-line-strong: #55554f;
+  --w-rule: #383835;
+  --w-field: #2a2a28;
+  --w-field-ro: #262624;
+  --w-label: #ddddd8;
+  --w-text: #ecece8;
+  --w-muted: #97978f;
+  --w-title-a: #2e2e2b;
+  --w-title-b: #232321;
+  --w-title-line: #b98c1e;
+  --w-head: #2d2d2a;
+  --w-head-strong: #343431;
+  --w-filler: #1f1f1d;
+  --w-selected: #3e3a22;
+  --w-selected-strong: #665827;
+  --w-amber-a: #ffd978;
+  --w-amber-b: #e9aa24;
+  --w-amber-line: #b77d0b;
+  --w-focus: #45401f;
+  --w-chrome-a: #2b2b28;
+  --w-chrome-b: #202020;
+  --w-chrome-line: #111110;
+  --w-chrome-text: #e4e4df;
+  --w-paper: #2c2c29;
+  --w-band: #272724;
 }

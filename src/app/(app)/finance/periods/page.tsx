@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
@@ -200,7 +201,16 @@ export default async function PeriodsPage({ searchParams }: { searchParams: Sear
                 <tbody>
                   {calendar.map((period) => (
                     <tr key={period.id}>
-                      <td className={s.mono}>{period.name}</td>
+                      <td className={s.mono}>
+                        {/* The month opens its own journals. Invoices and the
+                            rest join this link as later phases land them. */}
+                        <Link
+                          className={s.sapLink}
+                          href={`/finance/journals?month=${period.startsOn.slice(0, 7)}`}
+                        >
+                          {period.name}
+                        </Link>
+                      </td>
                       <td>{period.fiscalYearCode}</td>
                       <td>{formatBusinessDate(period.startsOn, locale as Locale)}</td>
                       <td>{formatBusinessDate(period.endsOn, locale as Locale)}</td>

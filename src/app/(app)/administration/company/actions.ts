@@ -41,7 +41,11 @@ export async function saveMainBranch(formData: FormData): Promise<void> {
  */
 export async function saveAppearance(formData: FormData): Promise<void> {
   await runAdminAndReturn(
-    (tx, ctx) => company.setPalette(tx, ctx, text(formData, 'uiPalette')),
+    (tx, ctx) =>
+      company.setAppearance(tx, ctx, {
+        palette: text(formData, 'uiPalette'),
+        accent: text(formData, 'uiAccent'),
+      }),
     '/administration/company',
   );
 }

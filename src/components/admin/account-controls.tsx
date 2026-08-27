@@ -12,7 +12,6 @@ import {
   SubmitRow,
   admin as s,
 } from './index';
-import { CURRENCIES } from '@domain/currencies';
 import { linesForType } from '@domain/financial-statements';
 import type { AccountNode } from '@domain/chart-of-accounts';
 import {
@@ -44,9 +43,12 @@ export interface PickerAccount {
  */
 export async function NewAccountButton({
   accounts,
+  currencies,
   openOnLoad = false,
 }: {
   readonly accounts: readonly PickerAccount[];
+  /** Active currencies from the master — the same list every other screen offers. */
+  readonly currencies: readonly { readonly code: string; readonly name: string }[];
   readonly openOnLoad?: boolean;
 }) {
   const t = await getTranslations('admin');
@@ -104,7 +106,7 @@ export async function NewAccountButton({
             hint={t('accounts.currency_hint')}
             label={t('accounts.currency')}
             name="currencyRestriction"
-            options={CURRENCIES.map((c) => ({ value: c.code, label: `${c.code} · ${c.name}` }))}
+            options={currencies.map((c) => ({ value: c.code, label: `${c.code} · ${c.name}` }))}
           />
           <Field label={t('accounts.description')} name="description" type="textarea" wide />
         </Grid>

@@ -62,6 +62,16 @@ export async function addJournalLine(formData: FormData): Promise<void> {
   );
 }
 
+/** Taking one line off a draft. The rest renumber; the totals follow. */
+export async function removeJournalLine(formData: FormData): Promise<void> {
+  ready();
+  const entryNo = text(formData, 'entryNo');
+  await runAdminAndReturn(
+    (tx, ctx) => journal.removeLine(tx, ctx, text(formData, 'id'), text(formData, 'lineId')),
+    record(entryNo),
+  );
+}
+
 /**
  * Throwing a draft away. Back to the list, because the entry it was on is gone.
  */

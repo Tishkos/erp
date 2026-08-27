@@ -101,6 +101,13 @@ export const appUser = pgTable(
     displayName: text('display_name').notNull(),
     /** §5.1 — "Super Users retain full administration access." */
     isSuperUser: boolean('is_super_user').notNull().default(false),
+    /**
+     * This person's own look — null follows the company default. 0172.
+     * Checked like the company's: an unknown name would strip the styling
+     * from every screen this person opens.
+     */
+    uiPalette: text('ui_palette'),
+    uiAccent: text('ui_accent'),
     /** Deactivation, never deletion — §1.1 "No deletion of saved or posted records." */
     isActive: boolean('is_active').notNull().default(true),
 

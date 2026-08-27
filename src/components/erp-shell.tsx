@@ -37,6 +37,7 @@ import type { MenuItem, MenuSection } from '@domain/menu';
 import { routeFor } from '@domain/screens';
 import mainLogo from '../../mainLogo.png';
 import { GlobalSearch } from './global-search';
+import { switchBranch } from '@/app/(app)/actions';
 
 type ModuleKey =
   | 'dashboard'
@@ -67,6 +68,7 @@ interface ModuleGroup extends ModuleDefinition {
 interface ErpShellProps {
   readonly brand: string;
   readonly branchCode: string;
+  readonly branchCodes: readonly string[];
   readonly userId: string;
   readonly displayName: string;
   readonly email: string;
@@ -272,6 +274,7 @@ function ModuleContents({
 export function ErpShell({
   brand,
   branchCode,
+  branchCodes,
   userId,
   displayName,
   email,
@@ -394,6 +397,38 @@ export function ErpShell({
     setAppearanceOpen(true);
   };
 
+  // The branch control. One branch is a fact and is shown as one; more than
+  // one is a choice, and the picker submits itself — the whole layout re-reads
+  // under the new branch, which is the point of changing it.
+  const branchControl = (
+    <div className="erp-branch" title={branchCode}>
+      <Building2 className="erp-branch__icon" aria-hidden="true" />
+      <span className="erp-branch__content">
+        <small className="erp-branch__label">{shell('branch')}</small>
+        {branchCodes.length > 1 ? (
+          <form action={switchBranch} className="erp-branch__form">
+            <select
+              aria-label={shell('branch')}
+              className="erp-branch__select"
+              defaultValue={branchCode}
+              key={branchCode}
+              name="branch"
+              onChange={(event) => event.currentTarget.form?.requestSubmit()}
+            >
+              {branchCodes.map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
+            </select>
+          </form>
+        ) : (
+          <strong className="erp-branch__value">{branchCode || '—'}</strong>
+        )}
+      </span>
+    </div>
+  );
+
   return (
     <div className="erp-shell">
       <header className="erp-header">
@@ -488,13 +523,7 @@ export function ErpShell({
           </nav>
 
           <div className="erp-header__utilities">
-            <div className="erp-branch" title={branchCode}>
-              <Building2 className="erp-branch__icon" aria-hidden="true" />
-              <span className="erp-branch__content">
-                <small className="erp-branch__label">{shell('branch')}</small>
-                <strong className="erp-branch__value">{branchCode || '—'}</strong>
-              </span>
-            </div>
+            {branchControl}
 
             <GlobalSearch sections={sections} />
             <button
@@ -734,13 +763,7 @@ export function ErpShell({
             </div>
 
             <div className="erp-mobile-drawer__context">
-              <div className="erp-branch">
-                <Building2 className="erp-branch__icon" aria-hidden="true" />
-                <span className="erp-branch__content">
-                  <small className="erp-branch__label">{shell('branch')}</small>
-                  <strong className="erp-branch__value">{branchCode || '—'}</strong>
-                </span>
-              </div>
+              {branchControl}
               <div className="erp-mobile-user">
                 <strong>{shortUserId}</strong>
                 <span title={roleLabel}>{roleLabel}</span>

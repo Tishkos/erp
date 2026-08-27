@@ -12,6 +12,7 @@ import { PermissionDeniedError, can } from '@domain/permissions';
 import { NewAccountButton } from '@/components/admin/account-controls';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import * as coa from '@/server/services/chart-of-accounts';
+import * as rates from '@/server/services/exchange-rates';
 
 /**
  * Chart of Accounts list — Phase 01.12's first screen on the list framework.
@@ -63,13 +64,16 @@ export default async function ChartOfAccountsPage({
   const accounts = await withCurrentUser(async (tx, context) =>
     can(context.principal, 'create', 'chart_of_account') ? await coa.pickerTree(tx) : [],
   );
+  const moneys = await withCurrentUser(async (tx) =>
+    (await rates.currencies(tx)).filter((c) => c.isActive),
+  );
 
   return (
     <Workspace className={s.sapPage}>
       <div className="new-account-bar">
         <SectionTabs route="/master-data/chart-of-accounts" />
         {accounts.length > 0 ? (
-          <NewAccountButton accounts={accounts} openOnLoad={Boolean(params.error)} />
+          <NewAccountButton accounts={accounts} currencies={moneys} openOnLoad={Boolean(params.error)} />
         ) : null}
       </div>
       <ChartOfAccountsWorkspace

@@ -2,6 +2,7 @@
 
 import { runAdminAndReturn, text } from '@/server/admin-action';
 import * as users from '@/server/services/users';
+import * as company from '@/server/services/company';
 
 const BACK = '/profile';
 
@@ -45,6 +46,18 @@ export async function saveAvatar(formData: FormData): Promise<void> {
               bytes: async () => new Uint8Array(await file.arrayBuffer()),
             },
       ),
+    BACK,
+  );
+}
+
+/** My own look — palette and accent, or back to the company default. */
+export async function saveMyAppearance(formData: FormData): Promise<void> {
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      company.setMyAppearance(tx, ctx, {
+        palette: text(formData, 'uiPalette'),
+        accent: text(formData, 'uiAccent'),
+      }),
     BACK,
   );
 }

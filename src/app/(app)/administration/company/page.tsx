@@ -21,7 +21,7 @@ import { can } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as branches from '@/server/services/branches';
 import * as company from '@/server/services/company';
-import { PALETTES } from '@domain/appearance';
+import { ACCENTS, PALETTES } from '@domain/appearance';
 import { saveAppearance, saveCompany, saveMainBranch } from './actions';
 
 /**
@@ -46,11 +46,11 @@ export default async function CompanyPage({ searchParams }: { searchParams: Sear
   const mayEditBranch = can(context.principal, 'configure', branches.PERMISSION_OBJECT);
   const mayConfigure = can(context.principal, 'configure', company.PERMISSION_OBJECT);
 
-  const { current, main, palette } = await withCurrentUser(async (tx) => {
+  const { current, main, look } = await withCurrentUser(async (tx) => {
     const all = await branches.listAll(tx);
     return {
       current: await company.current(tx),
-      palette: await company.palette(tx),
+      look: await company.appearance(tx),
       main: all.find((b) => b.code === 'HQ') ?? all.find((b) => b.active) ?? null,
     };
   });
@@ -115,7 +115,7 @@ export default async function CompanyPage({ searchParams }: { searchParams: Sear
               {PALETTES.map((name) => (
                 <label className={s.paletteChoice} key={name}>
                   <input
-                    defaultChecked={name === palette}
+                    defaultChecked={name === look.palette}
                     name="uiPalette"
                     type="radio"
                     value={name}
@@ -132,12 +132,33 @@ export default async function CompanyPage({ searchParams }: { searchParams: Sear
                 </label>
               ))}
             </div>
+            {/* The accent: the one colour that marks pressed, selected and
+                actionable. Each dot carries its own data-accent, so it is
+                painted by the same tokens the application would use — the
+                gold dot shows the current palette's own amber. */}
+            <p className={s.sectionHint} style={{ marginBlockStart: '0.8rem' }}>
+              {t('company.accent_hint')}
+            </p>
+            <div className={s.accentChoices}>
+              {ACCENTS.map((name) => (
+                <label className={s.accentChoice} data-accent={name} key={name}>
+                  <input
+                    defaultChecked={name === look.accent}
+                    name="uiAccent"
+                    type="radio"
+                    value={name}
+                  />
+                  <span className={s.accentDot} />
+                  <span className={s.paletteName}>{t(`company.accent_${name}`)}</span>
+                </label>
+              ))}
+            </div>
             <SubmitRow>
               <Submit label={t('update')} />
             </SubmitRow>
           </Form>
         ) : (
-          <p className={s.sectionHint}>{t(`company.palette_${palette}`)}</p>
+          <p className={s.sectionHint}>{t(`company.palette_${look.palette}`)}</p>
         )}
       </Panel>
 

@@ -20,6 +20,7 @@ import { LineCurrency } from '@/components/admin/line-currency';
 import { ConfirmButton } from '@/components/admin/confirm-button';
 import {
   addJournalLine,
+  removeJournalLine,
   approveJournal,
   discardJournal,
   attachToJournal,
@@ -151,8 +152,17 @@ export default async function JournalPage({
         ? [...currenciesUsed][0]!
         : t('journals.mixed_currencies');
 
-  /** Every column the grid has, so a filler row spans them exactly. */
-  const columnCount = 11;
+  // The register beside a reversal shows the reversal register — both sides
+  // of every pair — because that is the list this document belongs to. Every
+  // other entry keeps the whole register beside it.
+  const inReversalFamily = Boolean(header.reversesId || header.reversedById);
+  const registerRows = inReversalFamily
+    ? register.filter((row) => row.status === 'reversed' || row.reversesId)
+    : register;
+
+  /** Every column the grid has, so a filler row spans them exactly. A draft
+      carries one more: the remove cell at the end of each line. */
+  const columnCount = mayEdit ? 12 : 11;
   const fillers = Array.from({ length: FILLER_ROWS }, (_, i) => i);
 
   return (
@@ -176,7 +186,7 @@ export default async function JournalPage({
           <div className={s.sapWindow}>
             <h2 className={s.sapTitle} id="journal-register-title">
               <span>{t('journals.register')}</span>
-              <span className={s.sapTitleMeta}>{t('rows_shown', { count: register.length })}</span>
+              <span className={s.sapTitleMeta}>{t('rows_shown', { count: registerRows.length })}</span>
             </h2>
             <div className={`${s.sapTableWrap} ${s.sapAsideTableWrap}`}>
               <table
@@ -191,7 +201,7 @@ export default async function JournalPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {register.map((row) => {
+                  {registerRows.map((row) => {
                     const open = row.entryNo === header.entryNo;
                     return (
                       <tr
@@ -374,6 +384,7 @@ export default async function JournalPage({
                     <th className={s.sapGroup} colSpan={2} scope="colgroup">
                       {t('journals.amount_usd')}
                     </th>
+                    {mayEdit ? <th aria-label={t('journals.remove_line')} rowSpan={2} /> : null}
                   </tr>
                   <tr>
                     <th className={s.sapNum} scope="col">
@@ -444,6 +455,26 @@ export default async function JournalPage({
                       <td className={s.sapNum}>
                         <bdi dir="ltr">{zero(line.creditUsd) ? '' : usd(line.creditUsd)}</bdi>
                       </td>
+                      {mayEdit ? (
+                        <td className={s.sapRowRemove}>
+                          {/* One press, no dialog: a draft line is one row of
+                              typing, and putting it back is one row of typing.
+                              The domain refuses this the moment the entry is
+                              no longer a draft, and so does the database. */}
+                          <form action={removeJournalLine}>
+                            <input name="id" type="hidden" value={header.id} />
+                            <input name="entryNo" type="hidden" value={header.entryNo} />
+                            <input name="lineId" type="hidden" value={line.id} />
+                            <button
+                              aria-label={t('journals.remove_line')}
+                              title={t('journals.remove_line')}
+                              type="submit"
+                            >
+                              ✕
+                            </button>
+                          </form>
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
 
@@ -548,6 +579,7 @@ export default async function JournalPage({
                       <td className={s.sapNum} />
                       <td className={s.sapNum} />
                       <td className={s.sapNum} />
+                      <td className={s.sapRowRemove} />
                     </tr>
                   ) : null}
 
@@ -583,6 +615,7 @@ export default async function JournalPage({
                     <td className={s.sapNum}>
                       <bdi dir="ltr">{totalCreditUsd}</bdi>
                     </td>
+                    {mayEdit ? <td className={s.sapRowRemove} /> : null}
                   </tr>
                 </tfoot>
               </table>

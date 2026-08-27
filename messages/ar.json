@@ -962,11 +962,21 @@
       "main_branch_location": "موقع الفرع",
       "open_branches": "فتح الفروع",
       "appearance": "المظهر",
-      "appearance_hint": "شكل النظام للجميع. تحتفظ شاشة تسجيل الدخول بمظهرها الخاص.",
+      "appearance_hint": "المظهر الافتراضي للجميع. يمكن لكل شخص اختيار مظهره من ملفه الشخصي.",
       "palette_sand": "رملي",
       "palette_classic": "أزرق كلاسيكي",
       "palette_slate": "رمادي أردوازي",
-      "palette_graphite": "جرافيت"
+      "palette_graphite": "جرافيت",
+      "accent_hint": "لون التمييز — الأزرار والصف المحدد والخط تحت العناوين.",
+      "accent_gold": "ذهبي",
+      "accent_red": "أحمر",
+      "accent_blue": "أزرق",
+      "accent_green": "أخضر",
+      "accent_purple": "بنفسجي",
+      "appearance_profile_hint": "مظهرك أنت، على كل جهاز تسجّل الدخول منه. «إعداد الشركة» يتبع ما تختاره الشركة.",
+      "company_default": "إعداد الشركة",
+      "palette_midnight": "منتصف الليل",
+      "palette_carbon": "كربون"
     },
     "branches": {
       "title": "الفروع",
@@ -1252,7 +1262,9 @@
       "new_line": "بند جديد",
       "mixed_currencies": "عملات مختلطة",
       "rate_note": "يُؤخذ سعر الصرف الساري في تاريخ الترحيل، ويُحدَّد في شاشة العملات وأسعار الصرف لا هنا.",
-      "entry_no": "رقم القيد"
+      "entry_no": "رقم القيد",
+      "remove_line": "إزالة البند",
+      "month_filter": "تُعرض القيود المرحّلة في {month}."
     },
     "reversals": {
       "title": "القيود العكسية",
@@ -1367,7 +1379,15 @@
       "entered_by": "أدخله",
       "in_force": "الساري",
       "none": "لم يُنشر أي سعر بعد.",
-      "none_detail": "تُقاس كل قيود النظام بعملة الدفاتر وبالدولار، فلا يمكن ترحيل شيء قبل وجود سعر للدولار يغطي {date}."
+      "none_detail": "تُقاس كل قيود النظام بعملة الدفاتر وبالدولار، فلا يمكن ترحيل شيء قبل وجود سعر للدولار يغطي {date}.",
+      "currencies_title": "العملات",
+      "state": "الحالة",
+      "retire": "إيقاف",
+      "new_currency_code": "رمز العملة",
+      "code_hint": "ثلاثة أحرف — EUR أو AED أو TRY.",
+      "decimals": "الخانات العشرية",
+      "decimals_hint": "عدد الأرقام بعد الفاصلة عند عرض المبالغ.",
+      "add_currency": "إضافة عملة"
     }
   },
   "profile": {
