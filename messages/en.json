@@ -1387,7 +1387,9 @@
       "code_hint": "Three letters — EUR, AED, TRY.",
       "decimals": "Decimals",
       "decimals_hint": "Digits after the point when amounts are shown.",
-      "add_currency": "Add currency"
+      "add_currency": "Add currency",
+      "symbol": "Symbol",
+      "symbol_hint": "Optional — €, £, ₺. Shown in lists; amounts still format by code."
     }
   },
   "profile": {

@@ -150,6 +150,7 @@ export default async function ExchangeRatesPage({ searchParams }: { searchParams
               <tr>
                 <th scope="col">{t('rates.currency')}</th>
                 <th scope="col">{t('name')}</th>
+                <th scope="col">{t('rates.symbol')}</th>
                 <th className="numeric" scope="col">{t('rates.decimals')}</th>
                 <th scope="col">{t('rates.state')}</th>
                 {mayPublish ? <th scope="col" /> : null}
@@ -160,6 +161,7 @@ export default async function ExchangeRatesPage({ searchParams }: { searchParams
                 <tr key={c.code}>
                   <td className={s.mono}>{c.code}</td>
                   <td>{c.name}</td>
+                  <td>{c.symbol ?? '—'}</td>
                   <td className="numeric">{c.decimals}</td>
                   <td>
                     <Pill
@@ -201,6 +203,12 @@ export default async function ExchangeRatesPage({ searchParams }: { searchParams
                   name="name"
                   required
                   requiredLabel={t('required_hint')}
+                />
+                <Field
+                  hint={t('rates.symbol_hint')}
+                  label={t('rates.symbol')}
+                  maxLength={4}
+                  name="symbol"
                 />
                 <Field
                   defaultValue={2}

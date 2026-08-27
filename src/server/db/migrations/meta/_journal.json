@@ -680,6 +680,13 @@
       "when": 1795200000000,
       "tag": "0172_phase01_user_appearance",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1795300000000,
+      "tag": "0173_phase01_currency_symbol",
+      "breakpoints": true
     }
   ]
 }

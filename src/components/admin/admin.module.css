@@ -3850,3 +3850,50 @@
   --w-paper: #2c2c29;
   --w-band: #272724;
 }
+
+/* ── Phones ───────────────────────────────────────────────────────────────
+   The window on a phone: the header block folds to two columns then one,
+   padding tightens, and every grid keeps scrolling inside its own wrap —
+   the page itself never scrolls sideways. */
+@media (max-width: 40rem) {
+  .sapBody {
+    padding: 0.5rem 0.55rem;
+  }
+
+  .sapFields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem 0.55rem;
+  }
+
+  .formGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .paletteChoices {
+    grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  }
+
+  .sapFoot,
+  .docFoot {
+    padding: 0.5rem 0.55rem;
+  }
+
+  .sapFootTotals,
+  .docFootTotals {
+    margin-inline-start: 0;
+  }
+
+  .sapFootTotal strong {
+    min-inline-size: 0;
+  }
+
+  .lineForm {
+    padding: 0.75rem 0.6rem;
+  }
+}
+
+@media (max-width: 26rem) {
+  .sapFields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -283,7 +283,12 @@ export async function ledgerCurrency(tx: Tx): Promise<string> {
 export async function createCurrency(
   tx: Tx,
   ctx: ActorContext,
-  input: { readonly code: string; readonly name: string; readonly decimals?: number },
+  input: {
+    readonly code: string;
+    readonly name: string;
+    readonly decimals?: number;
+    readonly symbol?: string | null;
+  },
 ): Promise<void> {
   await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, {
     branchCode: ctx.branchCode,
@@ -300,7 +305,14 @@ export async function createCurrency(
 
   await tx
     .insert(currencyTable)
-    .values({ code, name: input.name.trim(), decimals, isLedger: false, isActive: true });
+    .values({
+      code,
+      name: input.name.trim(),
+      decimals,
+      symbol: input.symbol?.trim() || null,
+      isLedger: false,
+      isActive: true,
+    });
 
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
@@ -308,7 +320,7 @@ export async function createCurrency(
     objectType: 'currency',
     objectId: code,
     branchCode: ctx.branchCode,
-    after: { code, name: input.name.trim(), decimals },
+    after: { code, name: input.name.trim(), decimals, symbol: input.symbol?.trim() || null },
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });

@@ -122,6 +122,8 @@ export const currency = pgTable(
     name: text('name').notNull(),
     /** Minor units the currency is quoted in. IQD is quoted whole. */
     decimals: smallint('decimals').notNull().default(2),
+    /** Display glyph — €, £ — optional; formatting still goes by code. */
+    symbol: text('symbol'),
     /** §1.1 — IQD, and only IQD. Enforced by a partial unique index. */
     isLedger: boolean('is_ledger').notNull().default(false),
     isActive: boolean('is_active').notNull().default(true),

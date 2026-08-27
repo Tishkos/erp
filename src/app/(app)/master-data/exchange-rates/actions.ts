@@ -41,6 +41,7 @@ export async function createCurrency(formData: FormData): Promise<void> {
         code: text(formData, 'code'),
         name: text(formData, 'name'),
         decimals: Number(text(formData, 'decimals') || '2'),
+        symbol: text(formData, 'symbol'),
       }),
     LIST,
   );

@@ -170,6 +170,8 @@ export interface Currency {
   readonly name: string;
   /** Minor units the currency is quoted in. IQD is quoted whole. */
   readonly decimals: number;
+  /** Display glyph, when one was given. Formatting still goes by code. */
+  readonly symbol?: string | null;
   /** True for IQD only. §1.1 — not configurable at runtime. */
   readonly isLedger: boolean;
   readonly isActive: boolean;
