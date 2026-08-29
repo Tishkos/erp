@@ -197,45 +197,6 @@ export default async function AccountRecordPage({
               ) : null}
             </dl>
 
-            {node.isGroup ? null : (
-              <section className="coa-balance-card" aria-labelledby="account-balance-title">
-                <header className="coa-balance-header">
-                  <h3 id="account-balance-title">{chart('balance_summary')}</h3>
-                  <bdi className="coa-currency-badge" dir="ltr">
-                    IQD · {year}
-                  </bdi>
-                </header>
-                <div className="coa-balance-grid">
-                  <div>
-                    <span>{chart('opening_balance')}</span>
-                    <strong>
-                      <bdi dir="ltr">{figure(opening)}</bdi>
-                    </strong>
-                  </div>
-                  <div>
-                    <span>{chart('total_debits')}</span>
-                    <strong>
-                      <bdi dir="ltr">{figure(debits)}</bdi>
-                    </strong>
-                  </div>
-                  <div>
-                    <span>{chart('total_credits')}</span>
-                    <strong>
-                      <bdi dir="ltr">{figure(credits)}</bdi>
-                    </strong>
-                  </div>
-                  <div>
-                    <span>{chart('closing_balance')}</span>
-                    <strong>
-                      <bdi dir="ltr">{figure(closing)}</bdi>
-                    </strong>
-                  </div>
-                </div>
-                <Link className="coa-detail-link" href={`/finance/gl-inquiry/${encodeURIComponent(code)}`}>
-                  {chart('open_ledger')}
-                </Link>
-              </section>
-            )}
           </section>
 
           {mayConfigure ? <AccountControls account={node} mayConfigure={mayConfigure} /> : null}
@@ -293,6 +254,46 @@ export default async function AccountRecordPage({
                   </table>
                 </div>
               )}
+            </section>
+          )}
+
+          {node.isGroup ? null : (
+            <section className="coa-panel coa-balance-card" aria-labelledby="account-balance-title">
+              <header className="coa-balance-header">
+                <h3 id="account-balance-title">{chart('balance_summary')}</h3>
+                <bdi className="coa-currency-badge" dir="ltr">
+                  IQD · {year}
+                </bdi>
+              </header>
+              <div className="coa-balance-grid">
+                <div>
+                  <span>{chart('opening_balance')}</span>
+                  <strong>
+                    <bdi dir="ltr">{figure(opening)}</bdi>
+                  </strong>
+                </div>
+                <div>
+                  <span>{chart('total_debits')}</span>
+                  <strong>
+                    <bdi dir="ltr">{figure(debits)}</bdi>
+                  </strong>
+                </div>
+                <div>
+                  <span>{chart('total_credits')}</span>
+                  <strong>
+                    <bdi dir="ltr">{figure(credits)}</bdi>
+                  </strong>
+                </div>
+                <div>
+                  <span>{chart('closing_balance')}</span>
+                  <strong>
+                    <bdi dir="ltr">{figure(closing)}</bdi>
+                  </strong>
+                </div>
+              </div>
+              <Link className="coa-detail-link" href={`/finance/gl-inquiry/${encodeURIComponent(code)}`}>
+                {chart('open_ledger')}
+              </Link>
             </section>
           )}
 
