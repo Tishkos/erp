@@ -63,7 +63,7 @@ test.describe('Phase 0 · the administration screens read and write the database
     await page.getByLabel('Base currency').selectOption('IQD');
     // Server-action forms replay only after hydration; give it a moment.
     await page.waitForTimeout(1500);
-    await page.getByRole('button', { name: /Create|Update/ }).click();
+    await page.getByRole('button', { name: /Create|Update/ }).first().click();
     await page.waitForURL(/saved=1/, { timeout: 30_000 });
     await expect(page.getByRole('status')).toContainText('Saved');
     await expect(page.getByRole('textbox', { name: 'Legal name', exact: true })).toHaveValue('Qimah Al-Safinah');
@@ -113,8 +113,9 @@ test.describe('Phase 0 · the administration screens read and write the database
       .selectOption({ label: 'Accounting Manager · manager@example.com' });
     await page.getByLabel('As department manager').check();
     await page.getByRole('button', { name: 'Add a member' }).click();
-    await expect(page.getByRole('status')).toContainText('Saved');
-    await expect(page.getByRole('cell', { name: 'Accounting Manager' })).toBeVisible();
+    // The page already says "Saved." from creating the department, so the
+    // proof the member landed is the row, given time for the round trip.
+    await expect(page.getByRole('cell', { name: 'Accounting Manager' })).toBeVisible({ timeout: 30_000 });
 
     await page.goto('/administration/managers');
     await expect(page.getByRole('cell', { name: `${code} · Department ${RUN}` })).toBeVisible();

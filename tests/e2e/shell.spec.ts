@@ -159,8 +159,9 @@ test.describe('Appendix A rule 1 · lists', () => {
   });
 
   test('lists the chart, in code order', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Chart of Accounts' })).toBeVisible();
-    const codes = await page.locator('table.list tbody tr td:first-child').allInnerTexts();
+    await expect(page.getByRole('heading', { name: 'Chart of Accounts', level: 1 })).toBeVisible();
+    // The first cell carries a fold mark before the code; the code is the link.
+    const codes = await page.locator('table[aria-labelledby="chart-title"] tbody tr td:first-child a').allInnerTexts();
     expect(codes.length).toBeGreaterThan(0);
     expect([...codes]).toEqual([...codes].sort());
   });
@@ -168,7 +169,7 @@ test.describe('Appendix A rule 1 · lists', () => {
   test('searches, and says plainly when nothing matches', async ({ page }) => {
     await page.getByRole('searchbox', { name: 'Search' }).fill('Liabilit');
     await page.locator('main form[role="search"] button').click();
-    await expect(page.locator('table.list tbody tr')).toHaveCount(1);
+    await expect(page.locator('table[aria-labelledby="chart-title"] tbody tr')).toHaveCount(1);
 
     await page.getByRole('searchbox', { name: 'Search' }).fill('zzzz-no-such-account');
     await page.locator('main form[role="search"] button').click();
@@ -201,7 +202,7 @@ test.describe('01.12 gate · export returns exactly the on-screen rows', () => {
     await page.getByRole('searchbox', { name: 'Search' }).fill('Liabilit');
     await page.locator('main form[role="search"] button').click();
     await page.waitForURL(/q=Liabilit/);
-    const onScreen = await page.locator('table.list tbody tr').count();
+    const onScreen = await page.locator('table[aria-labelledby="chart-title"] tbody tr').count();
 
     const cookies = await page.context().cookies();
     const response = await request.get('/master-data/chart-of-accounts/export?q=Liabilit', {
@@ -216,7 +217,7 @@ test.describe('01.12 gate · export returns exactly the on-screen rows', () => {
   });
 
   test('exports every row when the screen is unfiltered', async ({ page, request }) => {
-    const onScreen = await page.locator('table.list tbody tr').count();
+    const onScreen = await page.locator('table[aria-labelledby="chart-title"] tbody tr').count();
 
     const cookies = await page.context().cookies();
     const response = await request.get('/master-data/chart-of-accounts/export', {

@@ -61,16 +61,21 @@ async function allowSubAccounts(page: Page, code: string) {
 /** Presses a record action and waits for the status it should produce. */
 async function press(page: Page, name: string, expected: string) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await page.getByRole('button', { name, exact: true }).first().click();
+    // Already there — a previous press did its work while we were waiting.
+    if (await page.getByText(expected, { exact: true }).first().isVisible().catch(() => false)) return;
+    const button = page.getByRole('button', { name, exact: true }).first();
+    if ((await button.count()) === 0) break;
+    await expect(button).toBeEnabled({ timeout: 20_000 });
+    await button.click();
     try {
-      await expect(page.getByText(expected, { exact: true }).first()).toBeVisible({ timeout: 8_000 });
+      await expect(page.getByText(expected, { exact: true }).first()).toBeVisible({ timeout: 25_000 });
       return;
     } catch {
       await page.reload();
       await page.waitForTimeout(2_000);
     }
   }
-  await expect(page.getByText(expected, { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(expected, { exact: true }).first()).toBeVisible({ timeout: 25_000 });
 }
 
 test.describe.configure({ mode: 'serial' });

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { ArrowLeft, CheckCircle2, ChevronRight, Search, TriangleAlert } from 'lucide-react';
 import { PageHeader, Panel, Workspace } from '@/components/ui';
 import styles from './admin.module.css';
+import { Submit } from './submit';
 
 export { styles as admin };
 
@@ -369,24 +370,9 @@ export function Hidden({ name, value }: { readonly name: string; readonly value:
   return <input name={name} type="hidden" value={value} />;
 }
 
-export function Submit({
-  label,
-  tone = 'primary',
-  small,
-}: {
-  readonly label: string;
-  readonly tone?: 'primary' | 'secondary' | 'danger';
-  readonly small?: boolean;
-}) {
-  const cls = [styles.button, tone === 'primary' ? styles.primary : '', tone === 'danger' ? styles.danger : '', small ? styles.small : '']
-    .filter(Boolean)
-    .join(' ');
-  return (
-    <button className={cls} type="submit">
-      {label}
-    </button>
-  );
-}
+// The submit button lives in its own client file: it is disabled until the
+// page can act on a press, which needs an effect a server component cannot run.
+export { Submit } from './submit';
 
 export function SubmitRow({ children }: { readonly children: ReactNode }) {
   return <div className={styles.submitRow}>{children}</div>;

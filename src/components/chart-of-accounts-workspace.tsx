@@ -77,7 +77,7 @@ export function ChartOfAccountsWorkspace({ rows, query, total, search }: ChartOf
   const chart = useTranslations('chart');
   const status = useTranslations('status');
   const column = useTranslations('column');
-  const admin = useTranslations('admin');
+  const list = useTranslations('list');
   const locale = useLocale();
 
   const accounts = useMemo(() => rows.map(normaliseAccount), [rows]);
@@ -150,7 +150,9 @@ export function ChartOfAccountsWorkspace({ rows, query, total, search }: ChartOf
             {shown.length === 0 ? (
               <tr>
                 <td className={styles.sapEmptyRow} colSpan={5}>
-                  {admin('rows_shown', { count: 0 })}
+                  <strong>{list('no_rows')}</strong>
+                  <br />
+                  {list('no_rows_hint')}
                 </td>
               </tr>
             ) : null}
