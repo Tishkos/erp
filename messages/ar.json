@@ -247,7 +247,7 @@
     "customers": "العملاء",
     "suppliers": "الموردون",
     "profit_or_loss": "قائمة الأرباح والخسائر",
-    "financial_position": "قائمة المركز المالي"
+    "financial_position": "القائمة المالية"
   },
   "auth": {
     "email": "البريد الإلكتروني",
@@ -1309,7 +1309,8 @@
       "equity": "حقوق الملكية",
       "liabilities": "الالتزامات",
       "profit_or_loss_subtitle": "ما تحقق وما أُنفق بين التاريخين.",
-      "financial_position_subtitle": "ما تملكه الشركة وما عليها في التاريخ، والنتيجة ضمن حقوق الملكية."
+      "financial_position_subtitle": "ما تملكه الشركة وما عليها في التاريخ، والنتيجة ضمن حقوق الملكية.",
+      "statement_line": "البند"
     },
     "accounts": {
       "new": "حساب جديد",

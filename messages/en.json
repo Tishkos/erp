@@ -247,7 +247,7 @@
     "customers": "Customers",
     "suppliers": "Suppliers",
     "profit_or_loss": "Profit or Loss",
-    "financial_position": "Financial Position"
+    "financial_position": "Financial Statement"
   },
   "auth": {
     "email": "Email",
@@ -1309,7 +1309,8 @@
       "equity": "Equity",
       "liabilities": "Liabilities",
       "profit_or_loss_subtitle": "What was earned and spent between the two dates.",
-      "financial_position_subtitle": "What is owned and owed at the date, with the result under Equity."
+      "financial_position_subtitle": "What is owned and owed at the date, with the result under Equity.",
+      "statement_line": "Line"
     },
     "accounts": {
       "new": "New account",

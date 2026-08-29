@@ -1,9 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { Panel } from '@/components/ui';
 import { AdminPage, admin as s } from '@/components/admin';
-import { ReportFilter, currencyFrom } from '@/components/admin/report-filter';
+import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/report-filter';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -82,6 +81,7 @@ export default async function GeneralLedgerPage({ searchParams }: { searchParams
       credit: value < 0 ? money(balance.replace('-', '')) : '',
     };
   };
+  const href = (code: string) => `/finance/gl-inquiry/${encodeURIComponent(code)}`;
 
   return (
     <AdminPage
@@ -91,82 +91,70 @@ export default async function GeneralLedgerPage({ searchParams }: { searchParams
       title={t('reports.gl')}
       variant="sap"
     >
-      <ReportFilter
-        action="/finance/gl-inquiry"
-        asAt={asAt}
-        currency={currency}
-        level={level}
-        maxLevel={deepest}
-      />
-
-      <Panel flush title={t('reports.as_at', { date: formatBusinessDate(asAt, locale as Locale) })}>
-        <div className="table-wrap" style={{ border: 0 }}>
-          <table className="list">
-            <thead>
+      <ReportWindow
+        filter={<ReportFilter action="/finance/gl-inquiry" asAt={asAt} currency={currency} level={level} maxLevel={deepest} />}
+        meta={t('reports.as_at', { date: formatBusinessDate(asAt, locale as Locale) })}
+        title={t('reports.gl')}
+      >
+        <table className={`${s.sapTable} ${s.sapReportTable}`}>
+          <thead>
+            <tr>
+              <th scope="col">{column('account')}</th>
+              <th scope="col">{t('reports.account_name')}</th>
+              <th scope="col">{t('reports.account_type')}</th>
+              <th className={s.sapNum} scope="col">
+                {t('reports.debit_balance')}
+              </th>
+              <th className={s.sapNum} scope="col">
+                {t('reports.credit_balance')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
               <tr>
-                <th scope="col">{column('account')}</th>
-                <th scope="col">{t('reports.account_name')}</th>
-                <th scope="col">{t('reports.account_type')}</th>
-                <th className="numeric" scope="col">
-                  {t('reports.debit_balance')}
-                </th>
-                <th className="numeric" scope="col">
-                  {t('reports.credit_balance')}
-                </th>
+                <td className={s.sapEmptyRow} colSpan={5}>
+                  {t('reports.no_accounts')}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td className="muted" colSpan={5}>
-                    {t('reports.no_accounts')}
-                  </td>
-                </tr>
-              ) : (
-                rows.map((row) => {
-                  const { debit, credit } = sides(row.balance);
-                  const openable = !row.isGroup && posting.has(row.accountCode);
-                  return (
-                    <tr
-                      className={row.isGroup ? s.levelHeader : undefined}
-                      data-depth={row.depth}
-                      key={row.accountCode}
-                    >
-                      <td
-                        className={s.mono}
-                        style={{ paddingInlineStart: `${0.75 + (row.depth - 1) * 1.1}rem` }}
-                      >
-                        {openable ? (
-                          <Link
-                            className={s.sapLink}
-                            href={`/finance/gl-inquiry/${encodeURIComponent(row.accountCode)}`}
-                          >
-                            <bdi dir="ltr">{row.accountCode}</bdi>
-                          </Link>
-                        ) : (
+            ) : (
+              rows.map((row) => {
+                const { debit, credit } = sides(row.balance);
+                const openable = !row.isGroup && posting.has(row.accountCode);
+                return (
+                  <tr className={row.isGroup ? s.sapLevelRow : undefined} data-depth={row.depth} key={row.accountCode}>
+                    <td style={{ paddingInlineStart: `${0.45 + (row.depth - 1) * 1.1}rem` }}>
+                      {openable ? (
+                        <Link className={s.sapLink} href={href(row.accountCode)}>
                           <bdi dir="ltr">{row.accountCode}</bdi>
-                        )}
-                      </td>
-                      <td>
-                        {openable ? (
-                          <Link href={`/finance/gl-inquiry/${encodeURIComponent(row.accountCode)}`}>
-                            {row.accountName}
-                          </Link>
-                        ) : (
-                          row.accountName
-                        )}
-                      </td>
-                      <td>{t(`reports.type_${row.accountType}`)}</td>
-                      <td className="numeric">{debit}</td>
-                      <td className="numeric">{credit}</td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
+                        </Link>
+                      ) : (
+                        <bdi dir="ltr">{row.accountCode}</bdi>
+                      )}
+                    </td>
+                    <td>
+                      {openable ? (
+                        <Link className={s.sapPlainLink} href={href(row.accountCode)}>
+                          <bdi dir="auto">{row.accountName}</bdi>
+                        </Link>
+                      ) : (
+                        <bdi dir="auto">{row.accountName}</bdi>
+                      )}
+                    </td>
+                    <td>{t(`reports.type_${row.accountType}`)}</td>
+                    <td className={s.sapNum}>
+                      <bdi dir="ltr">{debit}</bdi>
+                    </td>
+                    <td className={s.sapNum}>
+                      <bdi dir="ltr">{credit}</bdi>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </ReportWindow>
     </AdminPage>
   );
 }

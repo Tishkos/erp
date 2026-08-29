@@ -1,9 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { Panel } from '@/components/ui';
 import { AdminPage, admin as s } from '@/components/admin';
-import { ReportFilter, currencyFrom } from '@/components/admin/report-filter';
+import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/report-filter';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
@@ -73,6 +72,7 @@ export default async function LedgerAccountPage({
     running += Number(debit) - Number(credit);
     return { ...line, debit, credit, running };
   });
+  const closing = running;
 
   return (
     <AdminPage
@@ -81,59 +81,77 @@ export default async function LedgerAccountPage({
       trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"
     >
-      <ReportFilter
-        action={`/finance/gl-inquiry/${encodeURIComponent(code)}`}
-        currency={currency}
-        from={from}
-        to={to}
-      />
-
-      <Panel flush title={t('reports.gl_account_title', { code: account.code, name: account.name })}>
-        <div className="table-wrap" style={{ border: 0 }}>
-          <table className="list">
-            <thead>
+      <ReportWindow
+        filter={<ReportFilter action={`/finance/gl-inquiry/${encodeURIComponent(code)}`} currency={currency} from={from} to={to} />}
+        foot={
+          <div className={s.sapFootTotals}>
+            <div className={s.sapFootTotal}>
+              <span>{t('reports.running_balance')}</span>
+              <strong>
+                <bdi dir="ltr">{money(closing.toFixed(4))}</bdi>
+              </strong>
+            </div>
+          </div>
+        }
+        meta={t('reports.for_the_period', {
+          from: formatBusinessDate(from, locale as Locale),
+          to: formatBusinessDate(to, locale as Locale),
+        })}
+        title={`${account.code} · ${account.name}`}
+      >
+        <table className={`${s.sapTable} ${s.sapReportTable}`}>
+          <thead>
+            <tr>
+              <th scope="col">{t('journals.posting_date')}</th>
+              <th scope="col">{t('reports.entry')}</th>
+              <th scope="col">{t('journals.description')}</th>
+              <th className={s.sapNum} scope="col">
+                {t('journals.debit')}
+              </th>
+              <th className={s.sapNum} scope="col">
+                {t('journals.credit')}
+              </th>
+              <th className={s.sapNum} scope="col">
+                {t('reports.running_balance')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
               <tr>
-                <th scope="col">{t('journals.posting_date')}</th>
-                <th scope="col">{t('reports.entry')}</th>
-                <th scope="col">{t('journals.description')}</th>
-                <th className="numeric" scope="col">
-                  {t('journals.debit')}
-                </th>
-                <th className="numeric" scope="col">
-                  {t('journals.credit')}
-                </th>
-                <th className="numeric" scope="col">
-                  {t('reports.running_balance')}
-                </th>
+                <td className={s.sapEmptyRow} colSpan={6}>
+                  {t('reports.nothing_posted')}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td className="muted" colSpan={6}>
-                    {t('reports.nothing_posted')}
+            ) : (
+              rows.map((line, index) => (
+                <tr key={`${line.entryNo}-${line.lineNo}-${index}`}>
+                  <td>
+                    <bdi dir="ltr">{formatBusinessDate(line.postingDate, locale as Locale)}</bdi>
+                  </td>
+                  <td>
+                    <Link className={s.sapLink} href={`/finance/journals/${encodeURIComponent(line.entryNo)}`}>
+                      <bdi dir="ltr">{line.entryNo}</bdi>
+                    </Link>
+                  </td>
+                  <td>
+                    <bdi dir="auto">{line.description ?? '—'}</bdi>
+                  </td>
+                  <td className={s.sapNum}>
+                    <bdi dir="ltr">{Number(line.debit) === 0 ? '' : money(line.debit)}</bdi>
+                  </td>
+                  <td className={s.sapNum}>
+                    <bdi dir="ltr">{Number(line.credit) === 0 ? '' : money(line.credit)}</bdi>
+                  </td>
+                  <td className={s.sapNum}>
+                    <bdi dir="ltr">{money(line.running.toFixed(4))}</bdi>
                   </td>
                 </tr>
-              ) : (
-                rows.map((line, index) => (
-                  <tr key={`${line.entryNo}-${line.lineNo}-${index}`}>
-                    <td>{formatBusinessDate(line.postingDate, locale as Locale)}</td>
-                    <td>
-                      <Link className={s.sapLink} href={`/finance/journals/${encodeURIComponent(line.entryNo)}`}>
-                        <bdi dir="ltr">{line.entryNo}</bdi>
-                      </Link>
-                    </td>
-                    <td>{line.description ?? '—'}</td>
-                    <td className="numeric">{Number(line.debit) === 0 ? '' : money(line.debit)}</td>
-                    <td className="numeric">{Number(line.credit) === 0 ? '' : money(line.credit)}</td>
-                    <td className={`numeric ${s.mono}`}>{money(line.running.toFixed(4))}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
+              ))
+            )}
+          </tbody>
+        </table>
+      </ReportWindow>
     </AdminPage>
   );
 }

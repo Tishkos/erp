@@ -1,9 +1,8 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { Panel } from '@/components/ui';
 import { AdminPage, admin as s } from '@/components/admin';
-import { ReportFilter, currencyFrom } from '@/components/admin/report-filter';
-import { StatementRows } from '@/components/admin/statement-rows';
+import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/report-filter';
+import { StatementSection } from '@/components/admin/statement-rows';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -53,77 +52,69 @@ export default async function ProfitOrLossPage({ searchParams }: { searchParams:
   const money = (amount: string) => formatMoney(amount, currency, locale as Locale);
   const income = pl.lines.filter((line) => !line.line.deduction);
   const expenses = pl.lines.filter((line) => line.line.deduction);
+  const loss = Number(pl.result) < 0;
 
   return (
     <AdminPage
       back={{ href: '/', label: t('dashboard_label') }}
       tabs={<SectionTabs route="/finance/profit-or-loss" />}
       subtitle={t('reports.profit_or_loss_subtitle')}
-      title={t('reports.profit_or_loss')}
+      title={page('profit_or_loss')}
       variant="sap"
     >
-      <ReportFilter
-        action="/finance/profit-or-loss"
-        currency={currency}
-        from={from}
-        level={level}
-        maxLevel={LEVELS}
-        to={to}
-      />
-
-      <Panel flush title={t('reports.profit_or_loss')}>
-        <div className="table-wrap" style={{ border: 0 }}>
-          <table className="list">
-            <thead>
+      <ReportWindow
+        filter={
+          <ReportFilter action="/finance/profit-or-loss" currency={currency} from={from} level={level} maxLevel={LEVELS} to={to} />
+        }
+        foot={
+          <div className={s.sapFootTotals}>
+            <div className={s.sapFootTotal}>
+              <span>{loss ? t('reports.loss') : t('reports.profit')}</span>
+              <strong>
+                <bdi dir="ltr">{money(pl.result)}</bdi>
+              </strong>
+            </div>
+          </div>
+        }
+        meta={t('reports.for_the_period', {
+          from: formatBusinessDate(from, locale as Locale),
+          to: formatBusinessDate(to, locale as Locale),
+        })}
+        title={t('reports.profit_or_loss')}
+      >
+        <table className={`${s.sapTable} ${s.sapReportTable}`}>
+          <thead>
+            <tr>
+              <th scope="col">{t('reports.statement_line')}</th>
+              <th className={s.sapNum} scope="col">
+                {t('reports.amount')} · {currency}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {pl.lines.length === 0 ? (
               <tr>
-                <th scope="col">
-                  {t('reports.for_the_period', {
-                    from: formatBusinessDate(from, locale as Locale),
-                    to: formatBusinessDate(to, locale as Locale),
-                  })}
-                </th>
-                <th className="numeric" scope="col">
-                  {t('reports.amount')}
-                </th>
+                <td className={s.sapEmptyRow} colSpan={2}>
+                  {t('reports.nothing_posted')}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {pl.lines.length === 0 ? (
-                <tr>
-                  <td className="muted" colSpan={2}>
-                    {t('reports.nothing_posted')}
-                  </td>
-                </tr>
-              ) : (
-                <>
-                  <tr>
-                    <th className={s.statementSection} scope="row">
-                      {t('reports.income')}
-                    </th>
-                    <td className={`numeric ${s.totalCell}`}>{money(pl.totalIncome)}</td>
-                  </tr>
-                  <StatementRows level={level} lines={income} money={money} />
-                  <tr>
-                    <th className={s.statementSection} scope="row">
-                      {t('reports.expenses')}
-                    </th>
-                    <td className={`numeric ${s.totalCell}`}>{money(pl.totalExpenses)}</td>
-                  </tr>
-                  <StatementRows level={level} lines={expenses} money={money} />
-                </>
-              )}
-            </tbody>
-            <tfoot>
-              <tr>
-                <th className={s.totalCell} scope="row">
-                  {Number(pl.result) < 0 ? t('reports.loss') : t('reports.profit')}
-                </th>
-                <td className={`numeric ${s.totalCell}`}>{money(pl.result)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </Panel>
+            ) : (
+              <>
+                <StatementSection level={level} lines={income} money={money} title={t('reports.income')} total={pl.totalIncome} />
+                <StatementSection level={level} lines={expenses} money={money} title={t('reports.expenses')} total={pl.totalExpenses} />
+              </>
+            )}
+          </tbody>
+          <tfoot>
+            <tr className={s.sapTotalRow}>
+              <td>{loss ? t('reports.loss') : t('reports.profit')}</td>
+              <td className={s.sapNum}>
+                <bdi dir="ltr">{money(pl.result)}</bdi>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </ReportWindow>
     </AdminPage>
   );
 }

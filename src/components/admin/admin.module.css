@@ -4073,3 +4073,87 @@
     display: none !important;
   }
 }
+
+/* ── Reports, in the same window ─────────────────────────────────────────
+   A report is drawn like a document: the parameter strip where the header
+   boxes would be, the ruled grid, and the foot for what it comes to. */
+.sapFilterBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.7rem;
+  padding: 0.65rem 0.85rem;
+  border-block-end: 1px solid var(--w-line);
+  background: var(--w-canvas);
+}
+
+.sapFilterField {
+  display: grid;
+  gap: 0.2rem;
+  min-inline-size: 8.5rem;
+}
+
+.sapDoc.sapDoc .sapFilterField input,
+.sapDoc.sapDoc .sapFilterField select {
+  min-block-size: 2rem;
+}
+
+.sapDoc.sapDoc .sapFilterBar button {
+  min-block-size: 2rem;
+}
+
+.sapReportWrap {
+  max-block-size: min(46rem, 70vh);
+  border: 0;
+}
+
+.sapTable.sapReportTable {
+  min-inline-size: 0;
+}
+
+.sapReportTable thead th {
+  inset-block-start: 0;
+  background: var(--w-head-strong);
+}
+
+.sapReportTable tbody tr:hover > td {
+  background: var(--w-selected);
+}
+
+/* A section of a statement, or a header account of the chart: bold on the
+   grey band, carrying the sum of what is beneath it. */
+.sapTable .sapSectionRow > td,
+.sapTable .sapLevelRow > td {
+  background: var(--w-head);
+  color: var(--w-label);
+  font-weight: 700;
+}
+
+.sapTable .sapLineRow > td:first-child {
+  padding-inline-start: 1.5rem;
+  font-weight: 650;
+}
+
+.sapTable .sapAccountRow > td {
+  color: var(--w-muted);
+}
+
+.sapTable .sapAccountRow > td:first-child {
+  padding-inline-start: 2.7rem;
+}
+
+.sapPlainLink {
+  color: inherit;
+  text-decoration: none;
+}
+
+.sapPlainLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.15rem;
+}
+
+@media print {
+  .sapFilterBar {
+    display: none !important;
+  }
+}

@@ -1,8 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { Panel } from '@/components/ui';
-import { AdminPage, Pill, admin as s } from '@/components/admin';
-import { ReportFilter, currencyFrom } from '@/components/admin/report-filter';
+import { AdminPage, admin as s } from '@/components/admin';
+import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/report-filter';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -68,82 +67,95 @@ export default async function TrialBalancePage({ searchParams }: { searchParams:
       title={t('reports.trial_balance')}
       variant="sap"
     >
-      <ReportFilter
-        action="/finance/trial-balance"
-        currency={currency}
-        from={from}
-        level={level}
-        maxLevel={deepest}
-        to={to}
-      />
-
-      <Panel
-        flush
-        title={t('reports.for_the_period', {
+      <ReportWindow
+        filter={
+          <ReportFilter action="/finance/trial-balance" currency={currency} from={from} level={level} maxLevel={deepest} to={to} />
+        }
+        foot={
+          <>
+            <div className={s.sapFootActions}>
+              {totals.balances ? (
+                <span className={s.sapBalanced}>{t('reports.balanced')}</span>
+              ) : (
+                <span className={s.sapWarn}>{t('reports.out_by', { amount: money(totals.difference) })}</span>
+              )}
+            </div>
+            <div className={s.sapFootTotals}>
+              <div className={s.sapFootTotal}>
+                <span>{t('journals.total_debit')}</span>
+                <strong>
+                  <bdi dir="ltr">{money(totals.debit)}</bdi>
+                </strong>
+              </div>
+              <div className={s.sapFootTotal}>
+                <span>{t('journals.total_credit')}</span>
+                <strong>
+                  <bdi dir="ltr">{money(totals.credit)}</bdi>
+                </strong>
+              </div>
+            </div>
+          </>
+        }
+        meta={t('reports.for_the_period', {
           from: formatBusinessDate(from, locale as Locale),
           to: formatBusinessDate(to, locale as Locale),
         })}
+        title={t('reports.trial_balance')}
       >
-        <div className="table-wrap" style={{ border: 0 }}>
-          <table className="list">
-            <thead>
+        <table className={`${s.sapTable} ${s.sapReportTable}`}>
+          <thead>
+            <tr>
+              <th scope="col">{column('account')}</th>
+              <th scope="col">{t('reports.account_name')}</th>
+              <th scope="col">{t('reports.account_type')}</th>
+              <th className={s.sapNum} scope="col">
+                {t('journals.debit')}
+              </th>
+              <th className={s.sapNum} scope="col">
+                {t('journals.credit')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.length === 0 ? (
               <tr>
-                <th scope="col">{column('account')}</th>
-                <th scope="col">{t('reports.account_name')}</th>
-                <th scope="col">{t('reports.account_type')}</th>
-                <th className="numeric" scope="col">
-                  {t('journals.debit')}
-                </th>
-                <th className="numeric" scope="col">
-                  {t('journals.credit')}
-                </th>
+                <td className={s.sapEmptyRow} colSpan={5}>
+                  {t('reports.nothing_posted')}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {shown.length === 0 ? (
-                <tr>
-                  <td className="muted" colSpan={5}>
-                    {t('reports.nothing_posted')}
+            ) : (
+              shown.map((row) => (
+                <tr className={row.isGroup ? s.sapLevelRow : undefined} data-depth={row.depth} key={row.code}>
+                  <td style={{ paddingInlineStart: `${0.45 + (row.depth - 1) * 1.1}rem` }}>
+                    <bdi dir="ltr">{row.code}</bdi>
+                  </td>
+                  <td>
+                    <bdi dir="auto">{row.name}</bdi>
+                  </td>
+                  <td>{t(`reports.type_${row.accountType}`)}</td>
+                  <td className={s.sapNum}>
+                    <bdi dir="ltr">{Number(row.debit) === 0 ? '' : money(row.debit)}</bdi>
+                  </td>
+                  <td className={s.sapNum}>
+                    <bdi dir="ltr">{Number(row.credit) === 0 ? '' : money(row.credit)}</bdi>
                   </td>
                 </tr>
-              ) : (
-                shown.map((row) => (
-                  <tr
-                    className={row.isGroup ? s.levelHeader : undefined}
-                    data-depth={row.depth}
-                    key={row.code}
-                  >
-                    <td className={s.mono} style={{ paddingInlineStart: `${0.75 + (row.depth - 1) * 1.1}rem` }}>
-                      {row.code}
-                    </td>
-                    <td>{row.name}</td>
-                    <td>{t(`reports.type_${row.accountType}`)}</td>
-                    <td className="numeric">{Number(row.debit) === 0 ? '' : money(row.debit)}</td>
-                    <td className="numeric">{Number(row.credit) === 0 ? '' : money(row.credit)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td className={s.totalCell} colSpan={3}>
-                  {t('reports.totals')}{' '}
-                  <Pill
-                    label={
-                      totals.balances
-                        ? t('reports.balanced')
-                        : t('reports.out_by', { amount: money(totals.difference) })
-                    }
-                    on={totals.balances}
-                  />
-                </td>
-                <td className={`numeric ${s.totalCell}`}>{money(totals.debit)}</td>
-                <td className={`numeric ${s.totalCell}`}>{money(totals.credit)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </Panel>
+              ))
+            )}
+          </tbody>
+          <tfoot>
+            <tr className={s.sapTotalRow}>
+              <td colSpan={3}>{t('reports.totals')}</td>
+              <td className={s.sapNum}>
+                <bdi dir="ltr">{money(totals.debit)}</bdi>
+              </td>
+              <td className={s.sapNum}>
+                <bdi dir="ltr">{money(totals.credit)}</bdi>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </ReportWindow>
     </AdminPage>
   );
 }
