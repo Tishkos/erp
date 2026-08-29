@@ -21,7 +21,6 @@ import {
   Handshake,
   Languages,
   LayoutDashboard,
-  KeyRound,
   LogOut,
   Mail,
   Menu,
@@ -703,10 +702,6 @@ export function ErpShell({
               <Link className="erp-user-panel__item" href="/profile" onClick={closeNavigation}>
                 <UserCog aria-hidden="true" />
                 <span>{shell('profile_settings')}</span>
-              </Link>
-              <Link className="erp-user-panel__item" href="/profile#password" onClick={closeNavigation}>
-                <KeyRound aria-hidden="true" />
-                <span>{shell('change_password')}</span>
               </Link>
               <button className="erp-user-panel__item" type="button" onClick={changeLocale}>
                 <Languages aria-hidden="true" />

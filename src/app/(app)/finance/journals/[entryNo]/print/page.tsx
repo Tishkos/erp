@@ -12,8 +12,8 @@ import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as companyService from '@/server/services/company';
 import * as journal from '@/server/services/journal';
-import styles from './print.module.css';
-import { PrintButton } from './print-button';
+import styles from '@/components/print/print.module.css';
+import { PrintButton } from '@/components/print/print-button';
 
 /**
  * The journal voucher, on paper — requested with the logo, in either language.

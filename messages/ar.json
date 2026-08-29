@@ -750,7 +750,11 @@
     },
     "postable_of": "{count} تقبل القيود",
     "open_ledger": "فتح في دفتر الأستاذ العام",
-    "no_journals_yet": "لم يُرحَّل شيء إلى هذا الحساب بعد."
+    "no_journals_yet": "لم يُرحَّل شيء إلى هذا الحساب بعد.",
+    "print": "طباعة",
+    "export": "تصدير",
+    "print_title": "كشف حساب",
+    "print_back": "العودة إلى الحساب"
   },
   "dashboard": {
     "welcome": "مرحبًا بك",

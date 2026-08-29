@@ -79,7 +79,11 @@ export async function RecordPage({
   };
 
   const when = (iso: string) => formatTimestamp(iso, locale as Locale);
-  const offered = actions.filter((action) => action.enabled);
+  // Print and export are not decisions on the document: they open a page or
+  // download a file, and the module that owns the record places them where
+  // they belong. Posting them here would only ask the workflow to "perform"
+  // something it has no effect for.
+  const offered = actions.filter((action) => action.enabled && action.key !== 'print' && action.key !== 'export');
 
   return (
     <article>
@@ -91,10 +95,15 @@ export async function RecordPage({
         </div>
       )}
 
-      <div className="page__header">
-        {hideTitle ? null : <h1 className="page__title">{header.documentNumber ?? header.documentId}</h1>}
-        <span className={`status status--${header.status}`}>{statusLabel(header.status)}</span>
-      </div>
+      {/* A page that carries the record's name in its own header carries its
+          status there too — the account's hero card, for one — so the whole
+          header is left to it rather than saying "Approved" twice. */}
+      {hideTitle ? null : (
+        <div className="page__header">
+          <h1 className="page__title">{header.documentNumber ?? header.documentId}</h1>
+          <span className={`status status--${header.status}`}>{statusLabel(header.status)}</span>
+        </div>
+      )}
 
       {/* Rule 3 — only actions valid for status and permission are offered. */}
       {offered.length > 0 ? (

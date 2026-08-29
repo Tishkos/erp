@@ -2627,25 +2627,10 @@ html[dir="rtl"] .coa-row--selected {
   font-weight: 500;
 }
 
-.coa-balance-card {
-  margin: 0 0.9rem 0.9rem;
-  padding: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
-}
-
-.coa-balance-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.8rem;
-  margin-block-end: 0.65rem;
-}
-
-.coa-balance-header h3 {
-  margin: 0;
-  font-size: 0.68rem;
+/* The last row of a panel: a link or the buttons that act on it. */
+.coa-panel-footer {
+  padding: 0.65rem 0.9rem;
+  border-block-start: 1px solid var(--border);
 }
 
 .coa-currency-badge {
@@ -2656,33 +2641,6 @@ html[dir="rtl"] .coa-row--selected {
   background: var(--accent-soft);
   font-size: 0.58rem;
   font-weight: 800;
-}
-
-.coa-balance-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.55rem;
-}
-
-.coa-balance-grid > div {
-  min-inline-size: 0;
-  padding: 0.55rem;
-  border-radius: 0.38rem;
-  background: var(--surface-raised);
-}
-
-.coa-balance-grid span {
-  display: block;
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: 0.56rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.coa-balance-grid strong {
-  color: var(--text);
-  font-size: 0.85rem;
 }
 
 .coa-unavailable-note {
@@ -3032,8 +2990,7 @@ html[dir="rtl"] .coa-directional-icon {
     margin-inline-start: auto;
   }
 
-  .coa-detail-grid,
-  .coa-balance-grid {
+  .coa-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -3091,8 +3048,7 @@ html[dir="rtl"] .coa-directional-icon {
     flex-direction: column;
   }
 
-  .coa-detail-grid,
-  .coa-balance-grid {
+  .coa-detail-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { Landmark, ReceiptText, Scale, TrendingUp, WalletCards, type LucideIcon } from 'lucide-react';
+import { Download, Landmark, Printer, ReceiptText, Scale, TrendingUp, WalletCards, type LucideIcon } from 'lucide-react';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
 import { visibleRoute } from '@/server/phase-gate';
 import { RecordPage } from '@/components/record-page';
@@ -22,11 +22,12 @@ import * as trialBalance from '@/server/services/trial-balance';
  * the account itself (by direction, 2026-08-29: the chart is only the tree;
  * everything about an account is shown when the account is opened).
  *
- * Left: who it is (the hero card), its facts, and the balance summary — the
- * opening balance at the start of the year, the year's debits and credits,
- * and the closing balance, all read from the posted journal lines. Right:
- * the most recent journals posted to it, the record's approvals and audit
- * timeline, and the account's own controls.
+ * Left: who it is (the hero card), its facts, the print and export of the
+ * account, and its controls. Right: the most recent journals posted to it,
+ * then the balance summary they add up to — the opening balance at the start
+ * of the year, the year's debits and credits, and the closing balance, all
+ * read from the posted journal lines — and the record's approvals and audit
+ * timeline.
  */
 export const dynamic = 'force-dynamic';
 
@@ -94,10 +95,12 @@ export default async function AccountRecordPage({
       parent,
       activity,
       mayConfigure: can(context.principal, 'configure', 'chart_of_account'),
+      mayPrint: can(context.principal, 'print', 'chart_of_account'),
+      mayExport: can(context.principal, 'export', 'chart_of_account'),
     };
   });
   if (!data) notFound();
-  const { node, parent, activity, mayConfigure } = data;
+  const { node, parent, activity, mayConfigure, mayPrint, mayExport } = data;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   const dec = (value: string) => parseDecimal(value, MONEY_SCALE);
@@ -196,7 +199,25 @@ export default async function AccountRecordPage({
                 </div>
               ) : null}
             </dl>
-
+            {/* Paper and file, offered only to those who may take them. Print
+                opens the statement in its own tab; export is a route handler
+                that streams the CSV, so a press is a download, not a form. */}
+            {mayPrint || mayExport ? (
+              <div className="coa-panel-footer coa-panel-actions">
+                {mayPrint ? (
+                  <Link className={s.sapIconButton} href={`${address}/print`} target="_blank" title={chart('print')}>
+                    <Printer aria-hidden="true" />
+                    <span>{chart('print')}</span>
+                  </Link>
+                ) : null}
+                {mayExport ? (
+                  <a className={s.sapIconButton} href={`${address}/export`} title={chart('export')}>
+                    <Download aria-hidden="true" />
+                    <span>{chart('export')}</span>
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
           </section>
 
           {mayConfigure ? <AccountControls account={node} mayConfigure={mayConfigure} /> : null}
@@ -258,42 +279,58 @@ export default async function AccountRecordPage({
           )}
 
           {node.isGroup ? null : (
-            <section className="coa-panel coa-balance-card" aria-labelledby="account-balance-title">
-              <header className="coa-balance-header">
-                <h3 id="account-balance-title">{chart('balance_summary')}</h3>
+            <section className="coa-panel coa-journals-panel" aria-labelledby="account-balance-title">
+              <header className="coa-panel-header">
+                <h2 id="account-balance-title">{chart('balance_summary')}</h2>
                 <bdi className="coa-currency-badge" dir="ltr">
                   IQD · {year}
                 </bdi>
               </header>
-              <div className="coa-balance-grid">
-                <div>
-                  <span>{chart('opening_balance')}</span>
-                  <strong>
-                    <bdi dir="ltr">{figure(opening)}</bdi>
-                  </strong>
-                </div>
-                <div>
-                  <span>{chart('total_debits')}</span>
-                  <strong>
-                    <bdi dir="ltr">{figure(debits)}</bdi>
-                  </strong>
-                </div>
-                <div>
-                  <span>{chart('total_credits')}</span>
-                  <strong>
-                    <bdi dir="ltr">{figure(credits)}</bdi>
-                  </strong>
-                </div>
-                <div>
-                  <span>{chart('closing_balance')}</span>
-                  <strong>
-                    <bdi dir="ltr">{figure(closing)}</bdi>
-                  </strong>
-                </div>
+              {/* The same table as the journals above it: four figures across
+                  one row, the year's position read left to right. */}
+              <div className={s.sapTableWrap}>
+                <table className={`${s.sapTable} ${s.sapReportTable}`}>
+                  <thead>
+                    <tr>
+                      <th className={s.sapNum} scope="col">
+                        {chart('opening_balance')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {chart('total_debits')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {chart('total_credits')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {chart('closing_balance')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className={s.sapNum}>
+                        <bdi dir="ltr">{figure(opening)}</bdi>
+                      </td>
+                      <td className={s.sapNum}>
+                        <bdi dir="ltr">{figure(debits)}</bdi>
+                      </td>
+                      <td className={s.sapNum}>
+                        <bdi dir="ltr">{figure(credits)}</bdi>
+                      </td>
+                      <td className={s.sapNum}>
+                        <strong>
+                          <bdi dir="ltr">{figure(closing)}</bdi>
+                        </strong>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-              <Link className="coa-detail-link" href={`/finance/gl-inquiry/${encodeURIComponent(code)}`}>
-                {chart('open_ledger')}
-              </Link>
+              <div className="coa-panel-footer">
+                <Link className={`${s.sapLink} coa-detail-link`} href={`/finance/gl-inquiry/${encodeURIComponent(code)}`}>
+                  {chart('open_ledger')}
+                </Link>
+              </div>
             </section>
           )}
 

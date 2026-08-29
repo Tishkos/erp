@@ -750,7 +750,11 @@
     },
     "postable_of": "{count} can take entries",
     "open_ledger": "Open in the General Ledger",
-    "no_journals_yet": "Nothing has been posted to this account yet."
+    "no_journals_yet": "Nothing has been posted to this account yet.",
+    "print": "Print",
+    "export": "Export",
+    "print_title": "Account Statement",
+    "print_back": "Back to the account"
   },
   "dashboard": {
     "welcome": "Welcome back",
