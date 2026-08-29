@@ -1,7 +1,7 @@
 'use server';
 
-import { redirect } from 'next/navigation';
-import { runAdmin, runAdminAndReturn, text, withQuery } from '@/server/admin-action';
+import { revalidatePath } from 'next/cache';
+import { runAdmin, runAdminAndReturn, text } from '@/server/admin-action';
 import * as coa from '@/server/services/chart-of-accounts';
 
 const LIST = '/master-data/chart-of-accounts';
@@ -13,8 +13,17 @@ const record = (code: string) => `${LIST}/${encodeURIComponent(code)}`;
  * The type is not asked for: an account under Assets is an asset, inherited
  * from the parent. Offering the choice would only create the chance to get it
  * wrong, and a mis-typed account is wrong on every statement afterwards.
+ *
+ * Nor is the currency: the ledger is kept in IQD (by direction, 2026-08-29),
+ * and USD is a way of reading the reports, not a property of an account.
+ *
+ * Returns rather than redirects, so the dialog that called it can show a
+ * refusal beside the fields with everything still typed, and move to the new
+ * account itself on success.
  */
-export async function createAccount(formData: FormData): Promise<void> {
+export async function createAccount(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string; code?: string }> {
   // Read the value, not the presence of the field: a <select> always submits
   // something, so a presence check made every account a header account — and
   // a header account can never take a posting, which is the one thing most of
@@ -26,13 +35,14 @@ export async function createAccount(formData: FormData): Promise<void> {
       parentId: text(formData, 'parentId'),
       isGroup,
       // A group summarises its children and holds no balance, so no currency.
-      ...(isGroup ? {} : { currencyRestriction: text(formData, 'currencyRestriction') }),
+      ...(isGroup ? {} : { currencyRestriction: 'IQD' }),
       statementLine: text(formData, 'statementLine') || null,
       description: text(formData, 'description'),
     }),
   );
-  if (!outcome.ok) redirect(withQuery(LIST, 'error', outcome.error!));
-  redirect(record(outcome.value!.code));
+  if (!outcome.ok) return { ok: false, error: outcome.error! };
+  revalidatePath(LIST);
+  return { ok: true, code: outcome.value!.code };
 }
 
 /** Phase 1 §5 — which line of which statement this account reports on. */

@@ -51,9 +51,10 @@ const superUser = principal([], { isSuperUser: true });
 
 describe('Appendix A · the approved menu tree', () => {
   it('has every top-level menu, in the approved order', () => {
-    // Appendix A's twenty-one, plus the Invoicing menu Phase 0 delivers.
-    expect(MENU).toHaveLength(22);
-    expect(MENU.map((s) => s.ordinal)).toEqual(Array.from({ length: 22 }, (_, i) => i + 1));
+    // Appendix A's twenty-one. (The Phase 0 invoicing sample was removed by
+    // direction, 2026-08-29.)
+    expect(MENU).toHaveLength(21);
+    expect(MENU.map((s) => s.ordinal)).toEqual(Array.from({ length: 21 }, (_, i) => i + 1));
   });
 
   it('names every required submenu of Finance — General Ledger', () => {
@@ -72,7 +73,9 @@ describe('Appendix A · the approved menu tree', () => {
       'soft_close',
       'year_end_close',
       'posting_mappings',
-      'financial_statements',
+      // Each statement on its own page (by direction, 2026-08-29).
+      'profit_or_loss',
+      'financial_position',
     ]);
   });
 
@@ -80,7 +83,6 @@ describe('Appendix A · the approved menu tree', () => {
     // Menu 20 — the one that must include the §5.2 toggle screen.
     const admin = MENU.find((s) => s.key === 'administration');
     expect(admin?.items.map((i) => i.key)).toContain('department_manager_toggles');
-    expect(admin?.items.map((i) => i.key)).toContain('data_scopes');
     expect(admin?.items.map((i) => i.key)).toContain('numbering');
     expect(admin?.items.map((i) => i.key)).toContain('audit_trail');
   });
@@ -107,7 +109,7 @@ describe('Appendix A · the approved menu tree', () => {
 
 describe('§25 · navigation reflects permission, and is not the control', () => {
   it('shows a Super User everything', () => {
-    expect(visibleMenu(superUser)).toHaveLength(22);
+    expect(visibleMenu(superUser)).toHaveLength(21);
   });
 
   it('shows a user only the sections they hold a grant in', () => {

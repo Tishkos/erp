@@ -2,15 +2,16 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
-import { AdminPage, Field, FilterForm, Select, Submit, admin as s } from '@/components/admin';
+import { AdminPage, admin as s } from '@/components/admin';
+import { ReportFilter, currencyFrom } from '@/components/admin/report-filter';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
+import { levelFrom, maxLevel, rollUp } from '@domain/report-levels';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
-import * as coa from '@/server/services/chart-of-accounts';
 import * as trialBalance from '@/server/services/trial-balance';
 
 /**
@@ -19,8 +20,12 @@ import * as trialBalance from '@/server/services/trial-balance';
  * "Posted Journal Entries appear automatically in the General Ledger. Finance
  *  can review account activity…"
  *
- * *Automatically* is the word that matters, and it is met by there being no
- * ledger table at all: the General Ledger is the posted journal lines, read
+ * By direction (2026-08-29): the ledger is a table of every account with its
+ * balance, debit or credit, and pressing an account opens the journals posted
+ * to it. Nothing is chosen from a list first.
+ *
+ * *Automatically* is met by there being no ledger table at all: the General
+ * Ledger is the posted journal lines, summed here per account and read there
  * one account at a time. Nothing copies anything anywhere, so nothing can be
  * copied wrongly or fail to be copied at all.
  */
@@ -29,9 +34,10 @@ export const dynamic = 'force-dynamic';
 export default async function GeneralLedgerPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/finance/gl-inquiry')) notFound();
 
-  const [t, page, locale, context, params] = await Promise.all([
+  const [t, page, column, locale, context, params] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
+    getTranslations('column'),
     getLocale(),
     requireContext(),
     searchParams,
@@ -40,29 +46,42 @@ export default async function GeneralLedgerPage({ searchParams }: { searchParams
     return <Denied object={page('gl_inquiry')} />;
   }
 
-  const year = new Date().getFullYear();
-  const from = typeof params.from === 'string' ? params.from : `${year}-01-01`;
-  const to = typeof params.to === 'string' ? params.to : `${year}-12-31`;
-  const account = typeof params.account === 'string' ? params.account : '';
+  const today = new Date().toISOString().slice(0, 10);
+  const asAt = typeof params.to === 'string' ? params.to : today;
+  const currency = currencyFrom(params.currency);
 
-  const { accounts, activity } = await withCurrentUser(async (tx) => ({
-    accounts: await coa.postableAccounts(tx),
-    activity: account
-      ? await trialBalance.accountActivity(tx, account, { from, to, allPermittedBranches: true })
-      : [],
+  const { balances, chart } = await withCurrentUser(async (tx) => ({
+    balances: await trialBalance.ledgerBalances(tx, { asAt, currency, allPermittedBranches: true }),
+    chart: await trialBalance.chartRows(tx),
   }));
+  const deepest = maxLevel(chart);
+  const level = levelFrom(params.level, deepest);
+  const money = (amount: string) => formatMoney(amount, currency, locale as Locale);
 
-  const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
-  const chosen = accounts.find((a) => a.code === account);
+  // At the deepest level every posting account is its own row, movement or
+  // not; above it the chart's headers carry the sums of what is beneath them.
+  const posting = new Map(balances.map((row) => [row.accountCode, row]));
+  const rows =
+    level >= deepest
+      ? balances.map((row) => ({ ...row, depth: deepest, isGroup: false }))
+      : rollUp(chart, balances, level).map((row) => ({
+          accountCode: row.code,
+          accountName: row.name,
+          accountType: row.accountType,
+          debit: row.debit,
+          credit: row.credit,
+          balance: (Number(row.debit) - Number(row.credit)).toFixed(4),
+          depth: row.depth,
+          isGroup: row.isGroup,
+        }));
 
-  // The running balance, in the order the entries were posted. Computed here
-  // rather than in SQL because it is a property of the *report* — the same
-  // rows read for a different period have a different running balance.
-  let running = 0;
-  const rows = activity.map((line) => {
-    running += Number(line.debitIqd) - Number(line.creditIqd);
-    return { ...line, running };
-  });
+  const sides = (balance: string) => {
+    const value = Number(balance);
+    return {
+      debit: value > 0 ? money(balance) : '',
+      credit: value < 0 ? money(balance.replace('-', '')) : '',
+    };
+  };
 
   return (
     <AdminPage
@@ -72,68 +91,77 @@ export default async function GeneralLedgerPage({ searchParams }: { searchParams
       title={t('reports.gl')}
       variant="sap"
     >
-      <Panel>
-        <FilterForm action="/finance/gl-inquiry">
-          <Select
-            defaultValue={account}
-            label={t('journals.account')}
-            name="account"
-            options={[
-              { value: '', label: t('reports.choose_account') },
-              ...accounts.map((a) => ({ value: a.code, label: `${a.code} · ${a.name}` })),
-            ]}
-          />
-          <Field defaultValue={from} label={t('reports.from')} name="from" required type="date" />
-          <Field defaultValue={to} label={t('reports.to')} name="to" required type="date" />
-          <Submit label={t('reports.run')} />
-        </FilterForm>
-      </Panel>
+      <ReportFilter
+        action="/finance/gl-inquiry"
+        asAt={asAt}
+        currency={currency}
+        level={level}
+        maxLevel={deepest}
+      />
 
-      <Panel flush title={chosen ? `${chosen.code} · ${chosen.name}` : t('reports.gl')}>
+      <Panel flush title={t('reports.as_at', { date: formatBusinessDate(asAt, locale as Locale) })}>
         <div className="table-wrap" style={{ border: 0 }}>
           <table className="list">
             <thead>
               <tr>
-                <th scope="col">{t('journals.posting_date')}</th>
-                <th scope="col">{t('reports.entry')}</th>
-                <th scope="col">{t('journals.description')}</th>
+                <th scope="col">{column('account')}</th>
+                <th scope="col">{t('reports.account_name')}</th>
+                <th scope="col">{t('reports.account_type')}</th>
                 <th className="numeric" scope="col">
-                  {t('journals.debit')}
+                  {t('reports.debit_balance')}
                 </th>
                 <th className="numeric" scope="col">
-                  {t('journals.credit')}
-                </th>
-                <th className="numeric" scope="col">
-                  {t('reports.running_balance')}
+                  {t('reports.credit_balance')}
                 </th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td className="muted" colSpan={6}>
-                    {account ? t('reports.nothing_posted') : t('reports.choose_account_first')}
+                  <td className="muted" colSpan={5}>
+                    {t('reports.no_accounts')}
                   </td>
                 </tr>
               ) : (
-                rows.map((line, index) => (
-                  <tr key={`${line.entryNo}-${line.lineNo}-${index}`}>
-                    <td>{formatBusinessDate(line.postingDate, locale as Locale)}</td>
-                    <td>
-                      <Link href={`/finance/journals/${encodeURIComponent(line.entryNo)}`}>
-                        {line.entryNo}
-                      </Link>
-                    </td>
-                    <td>{line.description ?? '—'}</td>
-                    <td className="numeric">
-                      {Number(line.debitIqd) === 0 ? '' : money(line.debitIqd)}
-                    </td>
-                    <td className="numeric">
-                      {Number(line.creditIqd) === 0 ? '' : money(line.creditIqd)}
-                    </td>
-                    <td className={`numeric ${s.mono}`}>{money(line.running.toFixed(4))}</td>
-                  </tr>
-                ))
+                rows.map((row) => {
+                  const { debit, credit } = sides(row.balance);
+                  const openable = !row.isGroup && posting.has(row.accountCode);
+                  return (
+                    <tr
+                      className={row.isGroup ? s.levelHeader : undefined}
+                      data-depth={row.depth}
+                      key={row.accountCode}
+                    >
+                      <td
+                        className={s.mono}
+                        style={{ paddingInlineStart: `${0.75 + (row.depth - 1) * 1.1}rem` }}
+                      >
+                        {openable ? (
+                          <Link
+                            className={s.sapLink}
+                            href={`/finance/gl-inquiry/${encodeURIComponent(row.accountCode)}`}
+                          >
+                            <bdi dir="ltr">{row.accountCode}</bdi>
+                          </Link>
+                        ) : (
+                          <bdi dir="ltr">{row.accountCode}</bdi>
+                        )}
+                      </td>
+                      <td>
+                        {openable ? (
+                          <Link href={`/finance/gl-inquiry/${encodeURIComponent(row.accountCode)}`}>
+                            {row.accountName}
+                          </Link>
+                        ) : (
+                          row.accountName
+                        )}
+                      </td>
+                      <td>{t(`reports.type_${row.accountType}`)}</td>
+                      <td className="numeric">{debit}</td>
+                      <td className="numeric">{credit}</td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

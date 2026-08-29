@@ -18,6 +18,15 @@
  * beginning up to it. Getting that wrong is the classic error — a balance
  * sheet filtered to one month shows a company that came into existence on the
  * first of it.
+ *
+ * ── Where the revenue goes on the balance sheet ─────────────────────────────
+ * Revenue and expense accounts are not balance-sheet lines, and a reader who
+ * looks for "Sales" among the liabilities is right not to find it. What they
+ * *do* find, under Equity, is the result those accounts add up to — every
+ * profit or loss since the beginning that a year-end close has not yet moved
+ * into retained earnings — and beneath it, at the deepest level, the revenue
+ * and expense accounts that make it. That is how the two sides agree, and how
+ * a person can see why.
  */
 import { sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
@@ -57,6 +66,10 @@ export interface ProfitOrLoss {
   readonly from: string;
   readonly to: string;
   readonly lines: readonly StatementLineResult[];
+  /** Revenue and other income added together. */
+  readonly totalIncome: string;
+  /** Every deduction added together. */
+  readonly totalExpenses: string;
   /** Revenue less every deduction. Negative is a loss. */
   readonly result: string;
 }
@@ -64,11 +77,20 @@ export interface ProfitOrLoss {
 export interface FinancialPosition {
   readonly asAt: string;
   readonly assets: readonly StatementLineResult[];
-  readonly equityAndLiabilities: readonly StatementLineResult[];
+  readonly equity: readonly StatementLineResult[];
+  readonly liabilities: readonly StatementLineResult[];
   readonly totalAssets: string;
+  readonly totalEquity: string;
+  readonly totalLiabilities: string;
   readonly totalEquityAndLiabilities: string;
-  /** The period's own result, which equity has not been credited with yet. */
+  /**
+   * The accumulated result — every profit or loss up to `asAt` that no
+   * year-end close has yet carried into retained earnings. Shown under Equity,
+   * and it is what makes the two sides agree.
+   */
   readonly resultForThePeriod: string;
+  /** The revenue and expense accounts behind that result, positive in their own direction. */
+  readonly resultAccounts: readonly StatementAccount[];
   readonly balances: boolean;
 }
 
@@ -144,6 +166,9 @@ function naturalAmount(movement: Movement): bigint {
 /** Four decimal places, the scale the money columns keep. */
 const decimal = (value: bigint): string => toDecimalString(value, MONEY_SCALE);
 
+const sum = (lines: readonly StatementLineResult[]) =>
+  lines.reduce((total, line) => total + parseDecimal(line.amount, MONEY_SCALE), 0n);
+
 /** Groups movements onto the lines of one statement section. */
 function assemble(movements: Movement[], section: StatementSection): StatementLineResult[] {
   const byLine = new Map<string, { total: bigint; accounts: StatementAccount[] }>();
@@ -175,6 +200,18 @@ function assemble(movements: Movement[], section: StatementSection): StatementLi
     .sort((a, b) => a.line.ordinal - b.line.ordinal);
 }
 
+/** The P&L lines, and the result they come to — shared by both statements. */
+function resultOf(lines: readonly StatementLineResult[]) {
+  let income = 0n;
+  let expenses = 0n;
+  for (const entry of lines) {
+    const amount = parseDecimal(entry.amount, MONEY_SCALE);
+    if (entry.line.deduction) expenses += amount;
+    else income += amount;
+  }
+  return { income, expenses, result: income - expenses };
+}
+
 /**
  * Statement of Profit or Loss, for the period between two dates.
  *
@@ -185,58 +222,74 @@ function assemble(movements: Movement[], section: StatementSection): StatementLi
 export async function profitOrLoss(tx: Tx, filter: StatementFilter): Promise<ProfitOrLoss> {
   const rows = await movements(tx, filter);
   const lines = assemble(rows, 'profit_or_loss');
+  const { income, expenses, result } = resultOf(lines);
 
-  let result = 0n;
-  for (const entry of lines) {
-    const amount = parseDecimal(entry.amount, MONEY_SCALE);
-    result += entry.line.deduction ? -amount : amount;
-  }
-
-  return { from: filter.from, to: filter.to, lines, result: decimal(result) };
+  return {
+    from: filter.from,
+    to: filter.to,
+    lines,
+    totalIncome: decimal(income),
+    totalExpenses: decimal(expenses),
+    result: decimal(result),
+  };
 }
 
 /**
  * Statement of Financial Position, as at one date.
  *
  * Everything posted from the beginning up to `asAt` — see the note at the top
- * about why this is not a period report. The period's own profit is shown as a
- * line of its own: until a year-end close moves it into retained earnings,
- * that figure is what makes the two sides agree, and hiding it would leave a
- * statement that silently does not balance.
+ * about why this is not a period report. The accumulated result is shown as a
+ * line of its own under Equity: until a year-end close moves it into retained
+ * earnings, that figure is what makes the two sides agree, and hiding it would
+ * leave a statement that silently does not balance.
+ *
+ * `yearStart` is accepted for callers that still pass it and ignored: the
+ * result that balances a sheet drawn from the beginning is the result since
+ * the beginning, and no year-end close exists yet to have moved any of it.
  */
 export async function financialPosition(
   tx: Tx,
   asAt: string,
   filter: Omit<StatementFilter, 'from' | 'to'> & { readonly yearStart?: string } = {},
 ): Promise<FinancialPosition> {
-  const fromTheBeginning: StatementFilter = { ...filter, from: '0001-01-01', to: asAt };
+  const { yearStart: _ignored, ...rest } = filter;
+  const fromTheBeginning: StatementFilter = { ...rest, from: '0001-01-01', to: asAt };
   const rows = await movements(tx, fromTheBeginning);
 
-  const assets = assemble(rows, 'financial_position').filter((l) =>
-    l.line.accountTypes.includes('asset'),
-  );
-  const equityAndLiabilities = assemble(rows, 'financial_position').filter(
-    (l) => !l.line.accountTypes.includes('asset'),
-  );
+  const position = assemble(rows, 'financial_position');
+  const assets = position.filter((l) => l.line.accountTypes.includes('asset'));
+  const equity = position.filter((l) => l.line.accountTypes.includes('equity'));
+  const liabilities = position.filter((l) => l.line.accountTypes.includes('liability'));
 
-  const sum = (lines: readonly StatementLineResult[]) =>
-    lines.reduce((total, line) => total + parseDecimal(line.amount, MONEY_SCALE), 0n);
-
-  // The result of the year so far, which equity does not yet carry.
-  const yearStart = filter.yearStart ?? `${asAt.slice(0, 4)}-01-01`;
-  const { result } = await profitOrLoss(tx, { ...filter, from: yearStart, to: asAt });
-  const resultForThePeriod = parseDecimal(result, MONEY_SCALE);
+  // The result since the beginning, from the same rows — one query, one truth.
+  const plLines = assemble(rows, 'profit_or_loss');
+  const { result } = resultOf(plLines);
+  const resultAccounts = plLines.flatMap((line) =>
+    line.accounts.map((account) => ({
+      ...account,
+      // Signed as it bears on the result: income adds, a deduction takes away.
+      amount: line.line.deduction
+        ? decimal(-parseDecimal(account.amount, MONEY_SCALE))
+        : account.amount,
+    })),
+  );
 
   const totalAssets = sum(assets);
-  const totalEquityAndLiabilities = sum(equityAndLiabilities) + resultForThePeriod;
+  const totalEquity = sum(equity) + result;
+  const totalLiabilities = sum(liabilities);
+  const totalEquityAndLiabilities = totalEquity + totalLiabilities;
 
   return {
     asAt,
     assets,
-    equityAndLiabilities,
+    equity,
+    liabilities,
     totalAssets: decimal(totalAssets),
+    totalEquity: decimal(totalEquity),
+    totalLiabilities: decimal(totalLiabilities),
     totalEquityAndLiabilities: decimal(totalEquityAndLiabilities),
-    resultForThePeriod: decimal(resultForThePeriod),
+    resultForThePeriod: decimal(result),
+    resultAccounts,
     balances: totalAssets === totalEquityAndLiabilities,
   };
 }

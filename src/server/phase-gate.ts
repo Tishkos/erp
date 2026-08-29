@@ -26,12 +26,10 @@ const PHASE_0: readonly string[] = [
   '/administration/managers',
   '/administration/roles',
   '/administration/permissions',
-  '/administration/data-scopes',
   '/administration/numbering',
   '/administration/audit',
   '/master-data/branches',
   '/master-data/departments',
-  '/accounting/invoicing',
 ];
 
 /**
@@ -49,7 +47,8 @@ const PHASE_1: readonly string[] = [
   '/finance/reversals',
   '/finance/gl-inquiry',
   '/finance/trial-balance',
-  '/finance/statements',
+  '/finance/profit-or-loss',
+  '/finance/financial-position',
   '/finance/periods',
   '/master-data/exchange-rates',
 ];

@@ -3960,3 +3960,116 @@
     padding: 0.4rem 0;
   }
 }
+
+/* ── The document, one window (2026-08-29) ───────────────────────────────
+   The paperwork and the audit log are two small doors in the title bar; the
+   grid is typed into and says whether it balances as it is typed. */
+.sapTitleActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.sapDoc.sapDoc .sapIconButton,
+.sapDoc.sapDoc a.sapIconButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-inline-size: 0;
+  min-block-size: 1.7rem;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 0.14rem;
+  background: var(--w-bg);
+  color: var(--w-label);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.sapDoc.sapDoc .sapIconButton:hover,
+.sapDoc.sapDoc a.sapIconButton:hover {
+  background: var(--w-selected);
+}
+
+.sapDoc .sapIconButton svg {
+  inline-size: 0.85rem;
+  block-size: 0.85rem;
+}
+
+.sapIconCount {
+  display: inline-grid;
+  min-inline-size: 1.15rem;
+  min-block-size: 1.15rem;
+  place-items: center;
+  padding-inline: 0.25rem;
+  border-radius: 999px;
+  background: var(--w-amber-b);
+  color: var(--w-accent-ink);
+  font-size: 0.65rem;
+}
+
+/* A refusal is shown on the row it concerns, under the account it named. */
+.sapRowError {
+  display: block;
+  margin-block-start: 0.2rem;
+  color: #7d201a;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: normal;
+}
+
+.sapTable tr[data-error] > td {
+  background: #fdecea;
+}
+
+/* The balance, live, under the grid. */
+.sapBalanceLine {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0.5rem 0 0;
+}
+
+.sapBalanced {
+  padding: 0.28rem 0.5rem;
+  border: 1px solid #86a28c;
+  border-radius: 0.12rem;
+  background: #e2f0df;
+  color: #235b32;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+/* A line entered in another currency says what was typed, under the IQD. */
+.sapEnteredNote {
+  display: block;
+  color: var(--w-muted);
+  font-size: 0.68rem;
+}
+
+/* The header boxes a draft may type into, drawn like the read-only ones. */
+.sapDoc.sapDoc .sapField > input {
+  min-block-size: 2rem;
+}
+
+/* ── Reporting levels ─────────────────────────────────────────────────────
+   A header row carries the sum of what is beneath it. */
+.levelHeader > td {
+  background: color-mix(in srgb, var(--surface-raised, #fff) 70%, var(--border, #ddd));
+  font-weight: 700;
+}
+
+.statementLine {
+  padding-inline-start: 1.25rem;
+  color: var(--text);
+  font-weight: 600;
+  text-align: start;
+}
+
+@media print {
+  .sapTitleActions,
+  .sapBalanceLine {
+    display: none !important;
+  }
+}

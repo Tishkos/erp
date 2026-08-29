@@ -11,7 +11,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { invoice, journalEntry } from './db/schema';
+import { journalEntry } from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -88,23 +88,10 @@ const signatureScanner: attachments.MalwareScanner = (content, fileName) => {
 /**
  * §21 — an attachment inherits its parent's access policy.
  *
- * For an invoice that is two questions: may this person view invoices at all,
- * and does row-level security let them see this one? The second is not a
+ * For a journal entry that is two questions: may this person see journals at
+ * all, and does row-level security let them see this one? The second is not a
  * judgement made here — the query runs in their scope, so a branch they
  * cannot see returns nothing and the answer is no.
- */
-const invoiceParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
-  if (!can(principal, 'view', 'invoice')) return false;
-  const [row] = await tx.select({ id: invoice.id }).from(invoice).where(eq(invoice.id, objectId)).limit(1);
-  return Boolean(row);
-};
-
-/**
- * §21, for a journal entry — Phase 1 requirement 2's "optional attachment".
- *
- * The same two questions as an invoice: may this person see journals at all,
- * and does row-level security show them this one. The second is answered by
- * the query returning nothing rather than by a rule written here twice.
  */
 const journalParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
   if (!can(principal, 'view', 'journal_entry')) return false;
@@ -124,7 +111,6 @@ export function registerAttachmentRuntime(): void {
   registered = true;
   attachments.registerStorage(fileStorage);
   attachments.registerScanner(signatureScanner);
-  attachments.registerParentAccessCheck('invoice', invoiceParentAccess);
   attachments.registerParentAccessCheck('journal_entry', journalParentAccess);
 }
 

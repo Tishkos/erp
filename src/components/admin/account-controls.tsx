@@ -1,17 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
-import {
-  ActionButton,
-  Field,
-  Form,
-  Grid,
-  NewRecordDialog,
-  ReasonForm,
-  Select,
-  Submit,
-  SubmitRow,
-  admin as s,
-} from './index';
+import { ActionButton, Form, Grid, ReasonForm, Select, Submit, SubmitRow, admin as s } from './index';
+import { NewAccountDialog } from './new-account-dialog';
 import { linesForType } from '@domain/financial-statements';
 import type { AccountNode } from '@domain/chart-of-accounts';
 import {
@@ -40,82 +30,53 @@ export interface PickerAccount {
  * and hides the more useful question, "where does it go?" — a person looking
  * for Head Office Cash at Bank needs to see it, and to be told plainly that it
  * holds no sub-accounts yet rather than to wonder why it is missing.
+ *
+ * No currency is asked for: the ledger is kept in IQD (by direction,
+ * 2026-08-29), and every posting account opened here holds it.
  */
-export async function NewAccountButton({
-  accounts,
-  currencies,
-  openOnLoad = false,
-}: {
-  readonly accounts: readonly PickerAccount[];
-  /** Active currencies from the master — the same list every other screen offers. */
-  readonly currencies: readonly { readonly code: string; readonly name: string }[];
-  readonly openOnLoad?: boolean;
-}) {
+export async function NewAccountButton({ accounts }: { readonly accounts: readonly PickerAccount[] }) {
   const t = await getTranslations('admin');
   const groups = accounts.filter((a) => a.isGroup && a.isActive);
 
   return (
-    <NewRecordDialog
-      buttonLabel={t('accounts.new')}
-      closeLabel={t('close')}
-      openOnLoad={openOnLoad}
-      title={t('accounts.new')}
-    >
-      <Form action={createAccount}>
-        <Grid>
-          <Select
-            defaultValue={groups[0]?.id ?? ''}
-            hint={t('accounts.parent_hint')}
-            label={t('accounts.parent')}
-            name="parentId"
-            options={accounts.map((account) => {
-              const eligible = account.isGroup && account.isActive;
-              return {
-                value: account.id,
-                // Shown so the shape of the chart is visible, but not
-                // choosable — otherwise a person picks a posting account and
-                // learns it was never allowed only after filling in the rest.
-                disabled: !eligible,
-                // Non-breaking spaces: a <select> collapses ordinary ones, and
-                // the indentation is the only thing that shows the depth.
-                label:
-                  '   '.repeat(Math.max(0, account.level)) +
-                  `${account.isGroup ? '[+]' : '·'} ${account.code} · ${account.name}` +
-                  (eligible ? '' : ` — ${t('accounts.parent_not_a_header')}`),
-              };
-            })}
-            required
-          />
-          <Field
-            label={t('accounts.name')}
-            name="name"
-            required
-            requiredLabel={t('required_hint')}
-          />
-          <Select
-            hint={t('accounts.kind_hint')}
-            label={t('accounts.kind')}
-            name="isGroup"
-            options={[
-              { value: 'posting', label: t('accounts.kind_posting') },
-              { value: 'group', label: t('accounts.kind_group') },
-            ]}
-          />
-          <Select
-            defaultValue="IQD"
-            hint={t('accounts.currency_hint')}
-            label={t('accounts.currency')}
-            name="currencyRestriction"
-            options={currencies.map((c) => ({ value: c.code, label: `${c.code} · ${c.name}` }))}
-          />
-          <Field label={t('accounts.description')} name="description" type="textarea" wide />
-        </Grid>
-        <SubmitRow>
-          <Submit label={t('create')} />
-        </SubmitRow>
-      </Form>
-      {groups.length === 0 ? <p className={s.sectionHint}>{t('accounts.no_parent')}</p> : null}
-    </NewRecordDialog>
+    <NewAccountDialog
+      create={createAccount}
+      defaultParent={groups[0]?.id ?? ''}
+      labels={{
+        button: t('accounts.new'),
+        title: t('accounts.new'),
+        close: t('close'),
+        parent: t('accounts.parent'),
+        parentHint: t('accounts.parent_hint'),
+        name: t('accounts.name'),
+        kind: t('accounts.kind'),
+        kindHint: t('accounts.kind_hint'),
+        kindPosting: t('accounts.kind_posting'),
+        kindGroup: t('accounts.kind_group'),
+        description: t('accounts.description'),
+        create: t('create'),
+        creating: t('accounts.creating'),
+        errorTitle: t('error_title'),
+        required: t('required_hint'),
+        noParent: groups.length === 0 ? t('accounts.no_parent') : null,
+      }}
+      parents={accounts.map((account) => {
+        const eligible = account.isGroup && account.isActive;
+        return {
+          value: account.id,
+          // Shown so the shape of the chart is visible, but not choosable —
+          // otherwise a person picks a posting account and learns it was
+          // never allowed only after filling in the rest.
+          disabled: !eligible,
+          // Non-breaking spaces: a <select> collapses ordinary ones, and the
+          // indentation is the only thing that shows the depth.
+          label:
+            '   '.repeat(Math.max(0, account.level)) +
+            `${account.isGroup ? '[+]' : '·'} ${account.code} · ${account.name}` +
+            (eligible ? '' : ` — ${t('accounts.parent_not_a_header')}`),
+        };
+      })}
+    />
   );
 }
 

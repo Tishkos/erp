@@ -1155,6 +1155,48 @@ rather than permits. Where that is not possible, the item is marked ⚠.
 
 ---
 
+## D32 — The ledger is kept in IQD; USD is a way of reading it
+
+**Ruled by direction, 2026-08-29.** Supersedes the part of D7 that asked for a
+currency to be chosen on every posting account.
+
+An account is not asked for a currency: every posting account opened from the
+Chart of Accounts holds IQD, and a journal line is entered in IQD. USD stays
+where §2.3 puts it — a report currency. Every report (General Ledger, Trial
+Balance, Profit or Loss, Financial Position) offers IQD or USD, and USD reads
+the same posted lines at the historical rate that applied when each one
+posted; nothing is converted at report time.
+
+An account that already carries a currency restriction keeps it and names the
+currency itself when it is chosen on a line; the rule in `assertCurrencyAllowed`
+is unchanged.
+
+Of the same date, and recorded here so the design is not re-argued screen by
+screen:
+
+- A journal opens the moment "New journal" is pressed, dated today, and its
+  header and lines are edited in place. There is no "Add line": the grid is
+  typed into, a row is saved as it is left, and the balance is summed on
+  screen as it is typed.
+- The journal is one window. The register beside it, the record history
+  beneath it and the attachments panel are gone; the attachments are a
+  paperclip in the title bar and the audit log is a button beside it, opening
+  the trail of that one transaction.
+- The General Ledger opens on every account with its balance; the account is
+  pressed, not chosen from a list.
+- Each financial statement is its own page, and every financial report has
+  reporting levels: level 1 the headers, level 2 the sub-headers, and so on
+  down to the accounts.
+- The Statement of Financial Position shows the accumulated result under
+  Equity, with the revenue and expense accounts behind it at the deepest
+  level — which is where the revenue is on a balance sheet.
+- Data Scopes is removed as a screen. A person's branches are still set on
+  their own record; the screen only listed what that record already showed.
+- The Phase 0 invoicing sample is removed. It was a demonstration of the
+  foundation, not a requirement.
+
+---
+
 ## Phases already built, with work deliberately left
 
 | Phase | What is not built | Why | Needs a decision? |

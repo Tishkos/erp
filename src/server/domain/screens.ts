@@ -58,7 +58,6 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   global_search: 'workspace',
 
   // 2 — CRM
-  invoicing: 'document',
   crm_dashboard: 'dashboard',
   logistics_dashboard: 'dashboard',
   money_transfer_dashboard: 'dashboard',
@@ -181,7 +180,8 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   soft_close: 'workspace',
   year_end_close: 'workspace',
   posting_mappings: 'settings',
-  financial_statements: 'report',
+  profit_or_loss: 'report',
+  financial_position: 'report',
 
   // 11 — Finance · Receivables
   customer_ledger: 'report',
@@ -294,7 +294,6 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   department_manager_toggles: 'settings',
   roles: 'document',
   permissions: 'settings',
-  data_scopes: 'settings',
   numbering: 'settings',
   audit_trail: 'report',
   system_parameters: 'settings',
@@ -375,19 +374,18 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/administration/managers',
   '/administration/roles',
   '/administration/permissions',
-  '/administration/data-scopes',
   '/administration/numbering',
   '/administration/audit',
   '/master-data/branches',
   '/master-data/departments',
-  '/accounting/invoicing',
   '/approvals',
   // Phase 1 — the accounting core.
   '/finance/journals',
   '/finance/reversals',
   '/finance/gl-inquiry',
   '/finance/trial-balance',
-  '/finance/statements',
+  '/finance/profit-or-loss',
+  '/finance/financial-position',
   '/finance/periods',
   '/master-data/exchange-rates',
 ]);

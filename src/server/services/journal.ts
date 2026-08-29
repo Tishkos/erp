@@ -246,7 +246,9 @@ export async function addLine(
   // control account — only by someone who may post.
   assertPostable(account, { source: 'manual', actorIsFinanceManager: canPost(ctx) });
 
-  const currency = input.currency ?? 'IQD';
+  // The currency follows the account: since 2026-08-29 the ledger is kept in
+  // IQD alone, and an account tied to another currency names it itself.
+  const currency = input.currency ?? account.currencyRestriction ?? 'IQD';
   assertCurrencyAllowed(account, currency);
 
   // §14.3 and Appendix C, Manual Standard Journal: "one branch". A line takes
@@ -311,6 +313,207 @@ export async function addLine(
   });
 
   return { lineNo: draft.lineNo };
+}
+
+/**
+ * Changes a line on a draft — the account, the amount, the side, the note or
+ * the department — in place.
+ *
+ * By direction (2026-08-29) the lines are typed straight into the grid, and a
+ * grid a person can move around in is a grid where a cell can be changed after
+ * it was left. Removing and re-adding the line would renumber the rest, which
+ * is not what happened; the line keeps its number and its figures are
+ * re-derived the same way `addLine` derived them, from the posting date.
+ */
+export async function updateLine(
+  tx: Tx,
+  ctx: ActorContext,
+  journalEntryId: string,
+  lineId: string,
+  input: AddLineInput,
+): Promise<{ lineNo: number }> {
+  assertRateNotSupplied(input as unknown as Record<string, unknown>);
+
+  const entry = await loadHeader(tx, journalEntryId);
+
+  await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, {
+    branchCode: entry.branchCode,
+    objectId: journalEntryId,
+    requestId: ctx.requestId ?? null,
+  });
+
+  if (entry.status !== 'draft') {
+    throw new Error(
+      `Journal ${entry.entryNo} is ${entry.status} and its lines can no longer be changed.`,
+    );
+  }
+
+  const [existing] = await tx
+    .select()
+    .from(journalLine)
+    .where(and(eq(journalLine.id, lineId), eq(journalLine.journalEntryId, journalEntryId)))
+    .limit(1);
+  if (!existing) {
+    throw new Error(`That line is not on journal ${entry.entryNo}.`);
+  }
+
+  const account = await coa.loadAccount(tx, input.accountId);
+  assertPostable(account, { source: 'manual', actorIsFinanceManager: canPost(ctx) });
+
+  const currency = input.currency ?? account.currencyRestriction ?? 'IQD';
+  assertCurrencyAllowed(account, currency);
+
+  const suppliedBranch = input.dimensions?.branch;
+  if (suppliedBranch && suppliedBranch !== entry.branchCode) {
+    throw new JournalBranchMismatchError(entry.branchCode, suppliedBranch);
+  }
+  const dimensions = { ...(input.dimensions ?? {}), branch: entry.branchCode };
+  await dimensionService.assertDimensionsValid(tx, account, DOCUMENT_TYPE, dimensions);
+
+  const debit = input.debit ? parseDecimal(input.debit, MONEY_SCALE) : 0n;
+  const credit = input.credit ? parseDecimal(input.credit, MONEY_SCALE) : 0n;
+  const amountTxn = debit > 0n ? debit : credit;
+  const converted = await rateService.convertOn(tx, amountTxn, currency, entry.postingDate);
+
+  const draft: JournalLineDraft = {
+    lineNo: existing.lineNo,
+    accountId: account.id,
+    accountCode: account.code,
+    debitTxn: debit,
+    creditTxn: credit,
+    currency,
+    debitIqd: debit > 0n ? converted.amountIqd : 0n,
+    creditIqd: credit > 0n ? converted.amountIqd : 0n,
+    debitUsd: debit > 0n ? converted.amountUsd : 0n,
+    creditUsd: credit > 0n ? converted.amountUsd : 0n,
+    dimensions,
+  };
+  assertLineWellFormed(draft);
+
+  await tx
+    .update(journalLine)
+    .set({
+      accountId: account.id,
+      debitTxn: toDecimalString(draft.debitTxn),
+      creditTxn: toDecimalString(draft.creditTxn),
+      currency,
+      debitIqd: toDecimalString(draft.debitIqd),
+      creditIqd: toDecimalString(draft.creditIqd),
+      debitUsd: toDecimalString(draft.debitUsd),
+      creditUsd: toDecimalString(draft.creditUsd),
+      txnRateId: converted.txnRateId,
+      usdRateId: converted.usdRateId,
+      departmentCode: dimensions.department ?? null,
+      lineDescription: input.description ?? null,
+    })
+    .where(eq(journalLine.id, lineId));
+
+  return { lineNo: existing.lineNo };
+}
+
+/**
+ * Changes the header of a draft — the two dates and the description.
+ *
+ * A journal now opens the moment "New journal" is pressed, dated today, so
+ * these are corrected on the document rather than asked for in a dialog
+ * first. The posting date decides the period and the rates, so moving it
+ * re-derives every line's IQD and USD figures at the new date; and it stays
+ * inside the year the entry was numbered in, because the number carries the
+ * year (§14.2) and a number that says one year over a date that says another
+ * is a document nobody can file.
+ */
+export async function updateHeader(
+  tx: Tx,
+  ctx: ActorContext,
+  journalEntryId: string,
+  input: {
+    readonly documentDate?: string | null;
+    readonly postingDate?: string | null;
+    readonly description?: string | null;
+  },
+): Promise<void> {
+  const entry = await loadHeader(tx, journalEntryId);
+
+  await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, {
+    branchCode: entry.branchCode,
+    objectId: journalEntryId,
+    requestId: ctx.requestId ?? null,
+  });
+
+  if (entry.status !== 'draft') {
+    throw new Error(`Journal ${entry.entryNo} is ${entry.status} and can no longer be changed.`);
+  }
+
+  const postingDate = input.postingDate?.trim() || entry.postingDate;
+  const documentDate = input.documentDate?.trim() || postingDate;
+  const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+  if (!isoDate.test(postingDate) || !isoDate.test(documentDate)) {
+    throw new JournalValidationError('Dates are written as YYYY-MM-DD.');
+  }
+  if (documentDate > postingDate) {
+    throw new JournalValidationError(
+      'The document date cannot be after the posting date: a paper cannot be written after the entry that records it.',
+    );
+  }
+  if (postingDate.slice(0, 4) !== entry.postingDate.slice(0, 4)) {
+    throw new JournalValidationError(
+      `${entry.entryNo} is numbered in ${entry.postingDate.slice(0, 4)}, so it posts in that year. For another year, open a new entry.`,
+    );
+  }
+
+  const period = await periodService.periodFor(tx, postingDate);
+  const description =
+    input.description === undefined ? entry.description : input.description?.trim() || null;
+
+  await tx
+    .update(journalEntry)
+    .set({ documentDate, postingDate, fiscalPeriodId: period.id, description })
+    .where(eq(journalEntry.id, journalEntryId));
+
+  // The rates follow the posting date, so every line is measured again.
+  if (postingDate !== entry.postingDate) {
+    const lines = await tx
+      .select()
+      .from(journalLine)
+      .where(eq(journalLine.journalEntryId, journalEntryId));
+    for (const line of lines) {
+      const debit = parseDecimal(line.debitTxn, MONEY_SCALE);
+      const credit = parseDecimal(line.creditTxn, MONEY_SCALE);
+      const converted = await rateService.convertOn(
+        tx,
+        debit > 0n ? debit : credit,
+        line.currency,
+        postingDate,
+      );
+      await tx
+        .update(journalLine)
+        .set({
+          debitIqd: toDecimalString(debit > 0n ? converted.amountIqd : 0n),
+          creditIqd: toDecimalString(credit > 0n ? converted.amountIqd : 0n),
+          debitUsd: toDecimalString(debit > 0n ? converted.amountUsd : 0n),
+          creditUsd: toDecimalString(credit > 0n ? converted.amountUsd : 0n),
+          txnRateId: converted.txnRateId,
+          usdRateId: converted.usdRateId,
+        })
+        .where(eq(journalLine.id, line.id));
+    }
+  }
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'journal_entry.updated',
+    objectType: PERMISSION_OBJECT,
+    objectId: journalEntryId,
+    branchCode: entry.branchCode,
+    before: {
+      documentDate: entry.documentDate,
+      postingDate: entry.postingDate,
+      description: entry.description,
+    },
+    after: { documentDate, postingDate, description },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
 }
 
 /**

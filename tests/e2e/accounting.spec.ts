@@ -154,51 +154,45 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     await page.goto('/finance/journals');
     await page.waitForLoadState('networkidle');
 
+    // One press: the entry opens at once, numbered and dated today. The
+    // button is disabled until the page can act on it, so a press is never
+    // dropped silently.
+    await expect(page.getByRole('button', { name: 'New journal' })).toBeEnabled({ timeout: 30_000 });
     await page.getByRole('button', { name: 'New journal' }).click();
-    await page.waitForTimeout(1200);
-    await page.getByRole('textbox', { name: 'Posting date', exact: true }).fill(TODAY);
-    await page.getByRole('textbox', { name: 'Description', exact: true }).fill(`Sale ${RUN}`);
-    await page.getByRole('button', { name: 'Create' }).click();
     await page.waitForURL(/\/finance\/journals\/JE-/, { timeout: 60_000 });
 
     // Requirement 2 — the number is the system's.
     entryNo = (await page.getByRole('heading', { level: 1 }).innerText()).trim();
     expect(entryNo).toMatch(/^JE-\d{4}-\d+$/);
     await expect(page.getByText('Draft', { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Posting date', exact: true })).toHaveValue(TODAY);
 
-    await expect(page.getByRole('button', { name: 'Add line' })).toBeVisible();
-    // A line is typed into the last row of the sheet: an account, and an amount
+    // The description is typed on the document and saved when the box is left.
+    await page.getByRole('textbox', { name: 'Description', exact: true }).fill(`Sale ${RUN}`);
+    await page.getByRole('textbox', { name: 'Description', exact: true }).press('Tab');
+
+    // A line is typed into the last row of the grid: an account, and an amount
     // in the debit cell or the credit cell. There is no "side" to choose —
-    // which column the figure goes in is the choice.
+    // which column the figure goes in is the choice — and no button: leaving
+    // the row saves it, and the next row is already there.
     for (const [account, side, amount] of [
       [cashAccount, 'Debit', '2400'],
       [salesAccount, 'Credit', '2400'],
     ] as const) {
-      // The add-line form is a server action; give the page a moment to bind
-      // it, then fill the cells in and check the line actually landed.
-      await page.waitForTimeout(2000);
-      const picker = page.getByRole('combobox', { name: 'Account' });
-      const value = await picker
-        .locator('option')
-        .filter({ hasText: account })
-        .first()
-        .getAttribute('value');
+      const picker = page.getByRole('combobox', { name: 'Account' }).last();
+      const value = await picker.locator('option').filter({ hasText: account }).first().getAttribute('value');
       await picker.selectOption(value!);
-      await page.getByRole('spinbutton', { name: side, exact: true }).fill(amount);
-      await page.getByRole('button', { name: 'Add line' }).click();
-      await expect(page.getByRole('cell', { name: new RegExp(account) }).first()).toBeVisible({
-        timeout: 15_000,
-      });
+      const cell = page.getByRole('spinbutton', { name: side, exact: true }).last();
+      await cell.fill(amount);
+      await cell.press('Enter');
+      await expect(picker).toHaveValue(value!);
     }
 
-    // §24's four-part tuple, on screen: what was typed, the IQD the ledger
-    // balances in, and the USD equivalent — the two derived columns used to be
-    // computed on every line and shown nowhere.
-    await expect(page.getByRole('columnheader', { name: /Ledger/ })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: /Reporting/ })).toBeVisible();
-
-    // Both totals agree, so it can be posted.
+    // The balance is summed on screen as it is typed: both sides agree, so
+    // it can be posted.
+    await expect(page.getByText('Balanced', { exact: true })).toBeVisible();
     await expect(page.locator('tfoot')).toContainText('2,400');
+    await expect(page.getByRole('combobox', { name: 'Account' })).toHaveCount(3);
     await page.waitForTimeout(1200);
     await page.getByRole('button', { name: 'Submit', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Saved');
@@ -206,14 +200,20 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     // A Finance Manager creates and posts directly (§14.4).
     await expect(page.getByText('Posted', { exact: true }).first()).toBeVisible();
     // And a posted entry stops offering anything that would change it.
-    await expect(page.getByRole('button', { name: 'Add line' })).toHaveCount(0);
+    await expect(page.getByRole('combobox', { name: 'Account' })).toHaveCount(0);
+    // The audit log is one press away from the entry.
+    await expect(page.getByRole('link', { name: 'Audit log' })).toBeVisible();
   });
 
   test('4 · it appears in the General Ledger and the Trial Balance', async ({ page }) => {
     await signIn(page, MANAGER);
 
-    await page.goto(`/finance/gl-inquiry?account=${cashAccount}&from=${YEAR}-01-01&to=${YEAR}-12-31`);
+    // The ledger opens on every account and its balance; the account is
+    // pressed, not chosen from a list.
+    await page.goto('/finance/gl-inquiry');
     await page.waitForLoadState('networkidle');
+    await page.getByRole('link', { name: cashAccount, exact: true }).click();
+    await page.waitForURL(new RegExp(`/finance/gl-inquiry/${cashAccount}`));
     await expect(page.getByRole('link', { name: entryNo })).toBeVisible();
 
     await page.goto(`/finance/trial-balance?from=${YEAR}-01-01&to=${YEAR}-12-31`);
@@ -225,17 +225,27 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
 
   test('5 · the financial statements are produced from the same postings', async ({ page }) => {
     await signIn(page, MANAGER);
-    await page.goto(`/finance/statements?from=${YEAR}-01-01&to=${YEAR}-12-31`);
+    // Each statement is its own page.
+    await page.goto(`/finance/profit-or-loss?from=${YEAR}-01-01&to=${YEAR}-12-31`);
     await page.waitForLoadState('networkidle');
-
     const pl = page.locator('section', { hasText: 'Statement of Profit or Loss' }).last();
     await expect(pl).toContainText('Revenue');
     await expect(pl).toContainText('Profit for the period');
 
+    await page.goto(`/finance/financial-position?to=${YEAR}-12-31`);
+    await page.waitForLoadState('networkidle');
     const sfp = page.locator('section', { hasText: 'Statement of Financial Position' }).last();
     await expect(sfp).toContainText('Total assets');
     await expect(sfp).toContainText('Total equity and liabilities');
+    // The revenue is on the balance sheet — under Equity, as the result.
+    await expect(sfp).toContainText('Result to date');
     await expect(sfp).toContainText('The two sides agree');
+
+    // Level 1 shows only the headers; the account is not on the page.
+    await page.goto(`/finance/financial-position?to=${YEAR}-12-31&level=1`);
+    await expect(page.locator('section', { hasText: 'Statement of Financial Position' }).last()).not.toContainText(
+      cashAccount,
+    );
   });
 
   test('6 · a posted entry is corrected by a linked reversal', async ({ page }) => {
@@ -249,14 +259,13 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     let reversalNo = '';
     for (let attempt = 0; attempt < 4 && !reversalNo; attempt += 1) {
       await page.waitForTimeout(2_500);
+      // The reason is typed beside the button, in the document's own foot.
       await page.getByRole('textbox', { name: 'Why it is being reversed' }).fill('posted twice');
       await page.getByRole('button', { name: 'Reverse', exact: true }).click();
       await page.waitForTimeout(3_000);
 
       await page.goto(`/finance/journals/${entryNo}`);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-      // Scoped to the document: the register beside it links every entry, so
-      // an unscoped "first JE- link" would find the top of the list instead.
       const link = page
         .locator('#journal-document a[href^="/finance/journals/JE-"]')
         .first();
@@ -289,7 +298,7 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     await page.waitForLoadState('networkidle');
     await expect(page.locator('tfoot')).toContainText('Debits equal credits');
 
-    await page.goto(`/finance/statements?from=${YEAR}-01-01&to=${YEAR}-12-31`);
+    await page.goto(`/finance/financial-position?to=${YEAR}-12-31`);
     await page.waitForLoadState('networkidle');
     await expect(
       page.locator('section', { hasText: 'Statement of Financial Position' }).last(),

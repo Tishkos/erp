@@ -227,7 +227,10 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('soft_close', 'accounting_period', '02', '/finance/periods'),
       page('year_end_close', 'year_end_close', '16'),
       page('posting_mappings', 'posting_mapping', '02', '/finance/posting-mappings'),
-      page('financial_statements', 'financial_statement', '02', '/finance/statements'),
+      // Each statement is its own screen (by direction, 2026-08-29): one report
+      // to a window, so a reader is never shown two answers to one question.
+      page('profit_or_loss', 'financial_statement', '02', '/finance/profit-or-loss'),
+      page('financial_position', 'financial_statement', '02', '/finance/financial-position'),
     ],
   },
   {
@@ -372,23 +375,14 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ],
   },
   {
-    // Phase 0's own document. The foundation is a set of rules until
-    // something goes through it, so the phase ships one document that does —
-    // numbered, routed for approval, and remembered.
-    key: 'sample_documenting',
-    ordinal: 20,
-    items: [page('invoicing', 'invoice', '00', '/accounting/invoicing')],
-  },
-  {
     key: 'administration',
-    ordinal: 21,
+    ordinal: 20,
     items: [
       page('company', 'company', '01', '/administration/company'),
       page('users', 'app_user', '01', '/administration/users'),
       page('department_manager_toggles', 'user_department_scope', '01', '/administration/managers'),
       page('roles', 'role', '01', '/administration/roles'),
       page('permissions', 'permission', '01', '/administration/permissions'),
-      page('data_scopes', 'data_scope', '01', '/administration/data-scopes'),
       page('numbering', 'number_series', '01', '/administration/numbering'),
       page('audit_trail', 'audit_event', '01', '/administration/audit'),
       page('system_parameters', 'system_parameter', '01', '/administration/parameters'),
@@ -398,7 +392,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
   },
   {
     key: 'integrations',
-    ordinal: 22,
+    ordinal: 21,
     items: [
       page('api_clients', 'api_client', '19'),
       page('imports', 'import_batch', '01', '/integrations/imports'),

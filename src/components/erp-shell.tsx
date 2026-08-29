@@ -111,9 +111,8 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
       'fixed_assets',
       'budgeting',
       'investments',
-      // Phase 0's invoice, then the master data the ledger will serve.
+      // Then the master data the ledger will serve.
       'master_data',
-      'sample_documenting',
       // Sales and Purchasing are the receivable and payable cycles — they
       // belong with the ledger, not with transport. Logistics keeps its own.
       'sales',

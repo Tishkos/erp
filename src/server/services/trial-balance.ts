@@ -16,6 +16,7 @@
  */
 import { sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
+import type { ChartRow } from '../domain/report-levels';
 
 export type ReportCurrency = 'IQD' | 'USD';
 
@@ -266,4 +267,71 @@ export async function duplicateSourceReferences(tx: Tx) {
   `);
 
   return result.rows as unknown as Array<Record<string, unknown>>;
+}
+
+/** The chart as the roll-up needs it — every account, its parent and its kind. */
+export async function chartRows(tx: Tx): Promise<ChartRow[]> {
+  const result = await tx.execute(sql`
+    select id, code, name, parent_id as "parentId", is_group as "isGroup",
+           account_type::text as "accountType"
+      from chart_of_account
+     order by code
+  `);
+  return result.rows as unknown as ChartRow[];
+}
+
+/**
+ * The General Ledger, read as a table of balances.
+ *
+ * By direction (2026-08-29): the ledger opens on every account with its
+ * balance, debit or credit, and an account is opened by pressing it — nobody
+ * chooses one from a list first. Every posting account that may take an
+ * entry is listed, with or without movement, so a reader can see the accounts
+ * that have nothing on them yet rather than wonder whether they exist.
+ *
+ * Everything posted from the beginning up to `asAt`: a balance is a position,
+ * not a period's movement.
+ */
+export interface LedgerBalanceRow extends TrialBalanceRow {
+  readonly isActive: boolean;
+}
+
+export async function ledgerBalances(
+  tx: Tx,
+  filter: { asAt: string; currency?: ReportCurrency; allPermittedBranches?: boolean; branchCode?: string | null },
+): Promise<LedgerBalanceRow[]> {
+  const usd = (filter.currency ?? 'IQD') === 'USD';
+  const debitColumn = usd ? sql`l.debit_usd` : sql`l.debit_iqd`;
+  const creditColumn = usd ? sql`l.credit_usd` : sql`l.credit_iqd`;
+
+  const result = await tx.execute(sql`
+    with posted as (
+      select l.account_id,
+             coalesce(sum(${debitColumn}), 0)  as debit,
+             coalesce(sum(${creditColumn}), 0) as credit
+        from journal_line l
+        join journal_entry e on e.id = l.journal_entry_id
+       where e.status in ('posted', 'reversed')
+         and e.posting_date <= ${filter.asAt}::date
+         and ${branchPredicate(filter)}
+       group by l.account_id
+    )
+    select a.code                              as "accountCode",
+           a.name                              as "accountName",
+           a.account_type::text                as "accountType",
+           a.is_active                         as "isActive",
+           coalesce(p.debit, 0)::text          as "debit",
+           coalesce(p.credit, 0)::text         as "credit",
+           (coalesce(p.debit, 0) - coalesce(p.credit, 0))::text as "balance"
+      from chart_of_account a
+      left join posted p on p.account_id = a.id
+     where a.is_group = false
+       and (
+         (a.is_active and a.approval_status = 'approved')
+         or coalesce(p.debit, 0) <> 0 or coalesce(p.credit, 0) <> 0
+       )
+     order by a.code
+  `);
+
+  return result.rows as unknown as LedgerBalanceRow[];
 }

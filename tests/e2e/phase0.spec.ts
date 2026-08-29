@@ -34,7 +34,7 @@ test.describe('Phase 0 · the administration screens read and write the database
   });
 
   test('every Phase 0 screen renders live, without the preview banner', async ({ page }) => {
-    // Eleven routes, each compiled on first visit by the dev server.
+    // Ten routes, each compiled on first visit by the dev server.
     test.setTimeout(240_000);
     for (const route of [
       '/administration/company',
@@ -42,7 +42,6 @@ test.describe('Phase 0 · the administration screens read and write the database
       '/administration/managers',
       '/administration/roles',
       '/administration/permissions',
-      '/administration/data-scopes',
       '/administration/numbering',
       '/administration/audit',
       '/master-data/branches',

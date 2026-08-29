@@ -1,6 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { runAdmin, runAdminAndReturn, text, withQuery } from '@/server/admin-action';
 import { registerAllRecords } from '@/server/records';
 import * as attachments from '@/server/services/attachments';
@@ -14,62 +15,93 @@ function ready(): void {
   registerAllRecords();
 }
 
+/** What the grid hears back: it happened, or why it did not. */
+export interface LineOutcome {
+  readonly ok: boolean;
+  readonly error?: string;
+  readonly lineNo?: number;
+}
+
 /**
- * "New journal" — the entry opens with its number already allocated.
+ * "New journal" — one press, and the entry is open with its number allocated,
+ * dated today (by direction, 2026-08-29: the document appears instantly; the
+ * dates and the description are corrected on it, not asked for first).
  *
  * §14.2 says the number is "generated automatically and never reused", and it
  * is allocated now rather than at posting so the accountant can refer to the
  * entry they are working on. An abandoned draft therefore leaves a gap in the
  * series, which is the honest cost of that choice and is reported as such.
  */
-export async function startJournal(formData: FormData): Promise<void> {
+export async function startJournal(): Promise<void> {
   ready();
-  const postingDate = text(formData, 'postingDate');
+  const today = new Date().toISOString().slice(0, 10);
   const outcome = await runAdmin((tx, ctx) =>
     journal.createDraft(tx, ctx, {
       branchCode: ctx.branchCode,
-      documentDate: text(formData, 'documentDate') || postingDate,
-      postingDate,
-      description: text(formData, 'description'),
+      documentDate: today,
+      postingDate: today,
+      description: null,
     }),
   );
   if (!outcome.ok) redirect(withQuery(LIST, 'error', outcome.error!));
   redirect(record(outcome.value!.entryNo));
 }
 
-export async function addJournalLine(formData: FormData): Promise<void> {
+/** The header of a draft — the dates and the description — changed in place. */
+export async function updateJournalHeader(formData: FormData): Promise<LineOutcome> {
   ready();
-  const entryNo = text(formData, 'entryNo');
-  // A debit cell and a credit cell, as on the sheet. Blank means nothing on
-  // that side; the domain refuses a line that fills both or neither, and says
-  // which, so there is nothing to re-check here.
+  const outcome = await runAdmin((tx, ctx) =>
+    journal.updateHeader(tx, ctx, text(formData, 'id'), {
+      documentDate: text(formData, 'documentDate') || null,
+      postingDate: text(formData, 'postingDate') || null,
+      description: text(formData, 'description'),
+    }),
+  );
+  if (outcome.ok) revalidatePath(record(text(formData, 'entryNo')));
+  return outcome.ok ? { ok: true } : { ok: false, error: outcome.error! };
+}
+
+/**
+ * One line of the grid, saved as it is left.
+ *
+ * A debit cell and a credit cell, as on the sheet. Blank means nothing on
+ * that side; the domain refuses a line that fills both or neither, and says
+ * which, so there is nothing to re-check here. With a `lineId` the line is
+ * changed in place; without one it is added.
+ *
+ * Returns rather than redirects: the grid stays where the person is typing
+ * and refreshes its figures itself.
+ */
+export async function saveJournalLine(formData: FormData): Promise<LineOutcome> {
+  ready();
+  const id = text(formData, 'id');
+  const lineId = text(formData, 'lineId');
   const debit = text(formData, 'debit');
   const credit = text(formData, 'credit');
-  await runAdminAndReturn(
-    (tx, ctx) =>
-      journal.addLine(tx, ctx, text(formData, 'id'), {
-        accountId: text(formData, 'accountId'),
-        ...(debit ? { debit } : {}),
-        ...(credit ? { credit } : {}),
-        // The line is entered in a currency, and the amount typed is in that
-        // currency. Omitting it made every line IQD regardless of what was
-        // chosen, which a dollar-only account then refused.
-        currency: text(formData, 'currency') || 'IQD',
-        description: text(formData, 'description'),
-        dimensions: { department: text(formData, 'departmentCode') || null },
-      }),
-    record(entryNo),
+  const input = {
+    accountId: text(formData, 'accountId'),
+    ...(debit ? { debit } : {}),
+    ...(credit ? { credit } : {}),
+    description: text(formData, 'description') || null,
+    dimensions: { department: text(formData, 'departmentCode') || null },
+  };
+  const outcome = await runAdmin((tx, ctx) =>
+    lineId ? journal.updateLine(tx, ctx, id, lineId, input) : journal.addLine(tx, ctx, id, input),
   );
+  if (outcome.ok) revalidatePath(record(text(formData, 'entryNo')));
+  return outcome.ok
+    ? { ok: true, lineNo: outcome.value!.lineNo }
+    : { ok: false, error: outcome.error! };
 }
 
 /** Taking one line off a draft. The rest renumber; the totals follow. */
-export async function removeJournalLine(formData: FormData): Promise<void> {
+export async function removeJournalLine(formData: FormData): Promise<LineOutcome> {
   ready();
-  const entryNo = text(formData, 'entryNo');
-  await runAdminAndReturn(
-    (tx, ctx) => journal.removeLine(tx, ctx, text(formData, 'id'), text(formData, 'lineId')),
-    record(entryNo),
+  const outcome = await runAdmin((tx, ctx) =>
+    journal.removeLine(tx, ctx, text(formData, 'id'), text(formData, 'lineId')),
   );
+  if (outcome.ok) revalidatePath(record(text(formData, 'entryNo')));
+  return outcome.ok ? { ok: true } : { ok: false, error: outcome.error! };
 }
 
 /**

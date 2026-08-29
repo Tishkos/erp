@@ -24,8 +24,7 @@
     "reports": "Reports & Analytics",
     "master_data": "Master Data",
     "administration": "Administration",
-    "integrations": "Integrations & Support",
-    "sample_documenting": "Sample documenting"
+    "integrations": "Integrations & Support"
   },
   "page": {
     "my_dashboard": "My Dashboard",
@@ -136,7 +135,6 @@
     "soft_close": "Accounting Periods",
     "year_end_close": "Year-End Close",
     "posting_mappings": "Posting Mappings",
-    "financial_statements": "Financial Statements",
     "customer_ledger": "Customer Ledger",
     "ar_open_items": "Open Items",
     "ar_receipts": "Receipts",
@@ -229,7 +227,6 @@
     "department_manager_toggles": "Department Managers",
     "roles": "Roles",
     "permissions": "Permissions",
-    "data_scopes": "Data Scopes",
     "numbering": "Numbering",
     "audit_trail": "Audit Trail",
     "system_parameters": "System Parameters",
@@ -249,7 +246,8 @@
     "money_transfer_dashboard": "Money Transfer Dashboard",
     "customers": "Customers",
     "suppliers": "Suppliers",
-    "invoicing": "Invoicing"
+    "profit_or_loss": "Profit or Loss",
+    "financial_position": "Financial Position"
   },
   "auth": {
     "email": "Email",
@@ -618,8 +616,8 @@
       "master_data": "The records every other module refers to",
       "administration": "Users, permissions and how the system behaves",
       "integrations": "Interfaces, imports and the health of both",
-      "invoicing": "Raise an invoice, send it for approval, and follow what happens to it.",
-      "sample_documenting": "One document, carried through the foundation: numbered, sent for approval, and remembered."
+      "profit_or_loss": "What was earned and spent between two dates, from the posted journals.",
+      "financial_position": "What is owned and owed on one date, from everything posted up to it."
     },
     "preview_notice_title": "Nothing will be saved",
     "preview_notice_body": "This screen shows the approved design over sample data. The action you chose makes no change to any record.",
@@ -1047,7 +1045,10 @@
       "title": "Department Managers",
       "subtitle": "Who finalises what. A manager approves documents raised in their own department without a second approval (§5.2).",
       "empty": "No department has a manager yet. Assign one from the department's page.",
-      "open_department": "Open department"
+      "open_department": "Open department",
+      "assign": "Assign a manager",
+      "assign_hint": "Choose the department and the person. They are added to the department if they were not already in it.",
+      "assign_button": "Make manager"
     },
     "roles": {
       "title": "Roles",
@@ -1086,11 +1087,6 @@
         "configure": "Lets the role edit settings of the section (names, assignments, defaults).",
         "administer": "Lets the role deactivate, reset and administer — the highest level for the section."
       }
-    },
-    "data_scopes": {
-      "title": "Data Scopes",
-      "subtitle": "Which branches each user may work in. A user sees only the rows of their permitted branches.",
-      "empty": "No user holds a branch scope yet."
     },
     "numbering": {
       "title": "Numbering",
@@ -1149,56 +1145,6 @@
     "clear_search": "Clear",
     "rows_shown": "{count, plural, =0 {No records} one {# record} other {# records}}",
     "code_auto_hint": "Left blank, it is made from the name — \"Accountant Branch\" becomes ACCOUNTANT_BRANCH. It cannot be changed later.",
-    "invoicing": {
-      "title": "Invoicing",
-      "subtitle": "Invoices raised here, and where each one has got to.",
-      "new": "New invoice",
-      "customer": "Customer",
-      "amount": "Amount",
-      "currency": "Currency",
-      "department": "Department",
-      "department_hint": "Its manager approves it.",
-      "description": "Description",
-      "document_date": "Invoice date",
-      "number": "Invoice number",
-      "raised_by": "Raised by",
-      "approver": "Approved by",
-      "actions": "Actions",
-      "route_hint": "Goes to the manager of its department.",
-      "submit": "Submit for approval",
-      "approve": "Approve",
-      "reject": "Reject",
-      "reject_reason": "Reason for rejection",
-      "cancel": "Cancel invoice",
-      "no_actions": "Nothing to do at this status.",
-      "approvals": "Approval history",
-      "no_approvals": "Not submitted yet.",
-      "no_department": "Add a department with a manager first.",
-      "reverse": "Reverse",
-      "returned": "Sent back",
-      "trail_raised": "Raised",
-      "trail_approved": "Approved",
-      "trail_rejected": "Sent back",
-      "trail_recalled": "Withdrawn",
-      "trail_delegated": "Passed on",
-      "hint_lines": "Add what is being charged for.",
-      "header": "Invoice",
-      "about": "Record",
-      "items": "Items",
-      "item": "Item",
-      "quantity": "Quantity",
-      "unit_price": "Unit price",
-      "line_total": "Line total",
-      "total": "Total",
-      "add_item": "Add item",
-      "remove_item": "Remove",
-      "no_items": "Nothing on it yet.",
-      "untitled": "No customer yet",
-      "discard": "Delete draft",
-      "discard_title": "Delete this draft?",
-      "discard_confirm": "{documentNo} and its items will be removed. This cannot be undone, and the number is not given to another invoice.",
-      "discard_yes": "Delete it"
-    },
     "attachments": {
       "title": "Attachments",
       "none": "No documents are attached yet.",
@@ -1210,7 +1156,6 @@
     },
     "journals": {
       "title": "Journal Entries",
-      "register": "Journal register",
       "subtitle": "Entries raised here, and where each one has got to.",
       "new": "New journal",
       "document_date": "Document date",
@@ -1232,7 +1177,6 @@
       "entered": "Entered",
       "department": "Department",
       "department_hint": "Which department the cost or income belongs to.",
-      "add_line": "Add line",
       "no_lines": "No lines yet.",
       "total": "Total",
       "total_debit": "Debits",
@@ -1259,7 +1203,6 @@
       "amount_txn": "Transaction currency",
       "amount_iqd": "Ledger — IQD",
       "amount_usd": "Reporting — USD",
-      "new_line": "New line",
       "mixed_currencies": "mixed",
       "rate_note": "The rate is the one in force on the posting date; it is set in Currencies and Rates, never here.",
       "entry_no": "Entry no.",
@@ -1273,7 +1216,14 @@
       "signature_prepared": "Prepared by",
       "signature_approved": "Approved by",
       "signature_received": "Received by",
-      "print_back": "Back to the entry"
+      "print_back": "Back to the entry",
+      "choose_account": "Choose an account…",
+      "saving": "saving…",
+      "balanced": "Balanced",
+      "difference": "Difference",
+      "audit_log": "Audit log",
+      "audit_subtitle": "Everything recorded about {entryNo}: who did what, and when.",
+      "back_to_entry": "Back to the entry"
     },
     "reversals": {
       "title": "Reversals",
@@ -1328,12 +1278,8 @@
       "trial_balance": "Trial Balance",
       "trial_balance_subtitle": "Every account with a movement, and the two totals that must agree.",
       "gl": "General Ledger",
-      "gl_subtitle": "One account, entry by entry, with a running balance.",
-      "choose_account": "Choose an account",
-      "choose_account_first": "Choose an account to see its entries.",
+      "gl_subtitle": "Every account and its balance. Press an account to see the journals posted to it.",
       "running_balance": "Balance",
-      "statements": "Financial statements",
-      "statements_subtitle": "Profit or Loss for the period, and Financial Position at the end of it.",
       "profit_or_loss": "Statement of Profit or Loss",
       "financial_position": "Statement of Financial Position",
       "for_the_period": "For the period {from} to {to}",
@@ -1346,16 +1292,30 @@
       "equity_and_liabilities": "Equity and liabilities",
       "total_assets": "Total assets",
       "total_equity_and_liabilities": "Total equity and liabilities",
-      "result_for_the_period": "Result for the period",
-      "sides_agree": "The two sides agree"
+      "result_for_the_period": "Result to date (not yet closed to retained earnings)",
+      "sides_agree": "The two sides agree",
+      "gl_account_title": "{code} · {name} — entry by entry",
+      "debit_balance": "Debit balance",
+      "credit_balance": "Credit balance",
+      "no_accounts": "There are no posting accounts yet.",
+      "as_at_label": "As at",
+      "currency": "Report currency",
+      "currency_hint": "IQD is the ledger. USD reads the same postings at the rate that applied when each one posted.",
+      "level": "Reporting level",
+      "level_hint": "Level 1 shows only the headers; each further level opens what is beneath them.",
+      "level_n": "Level {level}",
+      "income": "Income",
+      "expenses": "Expenses",
+      "equity": "Equity",
+      "liabilities": "Liabilities",
+      "profit_or_loss_subtitle": "What was earned and spent between the two dates.",
+      "financial_position_subtitle": "What is owned and owed at the date, with the result under Equity."
     },
     "accounts": {
       "new": "New account",
       "parent": "Under",
       "parent_hint": "Where it sits. Only a header account — marked [+] — can hold sub-accounts.",
       "name": "Name",
-      "currency": "Currency",
-      "currency_hint": "One currency per posting account. For the same account in another currency, open a second one.",
       "kind": "Kind",
       "kind_hint": "A header groups other accounts; a posting account takes entries.",
       "kind_posting": "Posting account",
@@ -1371,7 +1331,8 @@
       "sub_accounts": "Sub-accounts",
       "sub_accounts_hint": "This is a posting account, so nothing can hang beneath it. It can become a header — but only while it has never been posted to, because a header carries no balance of its own.",
       "allow_sub_accounts": "Let it hold sub-accounts",
-      "is_a_header": "This is a header account. Create an account under it from the Chart of Accounts."
+      "is_a_header": "This is a header account. Create an account under it from the Chart of Accounts.",
+      "creating": "Creating…"
     },
     "rates": {
       "title": "Accounting rates",
@@ -1467,17 +1428,6 @@
       "deactivated": "Number series closed",
       "reactivated": "Number series reopened"
     },
-    "invoice": {
-      "created": "Invoice created",
-      "updated": "Invoice edited",
-      "submitted": "Sent for approval",
-      "approved": "Approved",
-      "rejected": "Sent back by the approver",
-      "cancelled": "Cancelled",
-      "reversed": "Reversed",
-      "line_added": "Item added",
-      "line_removed": "Item removed"
-    },
     "attachment": {
       "uploaded": "Document attached",
       "disposed": "Document disposed of"
@@ -1500,7 +1450,10 @@
       "rejected": "Rejected",
       "reversed": "Reversed",
       "reversal_posted": "Reversal posted",
-      "recalled": "Recalled"
+      "recalled": "Recalled",
+      "updated": "Header changed",
+      "line_removed": "Line removed",
+      "discarded": "Draft deleted"
     },
     "chart_of_account": {
       "created": "Account created",

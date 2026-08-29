@@ -15,7 +15,6 @@ import type { Tx } from '../db/client';
 import {
   appUser,
   chartOfAccount,
-  invoice,
   workflowDecisionLog,
   workflowInstance,
   workflowStep,
@@ -170,21 +169,6 @@ export async function recordReference(
   documentTypeCode: string,
   documentId: string,
 ): Promise<{ readonly label: string; readonly href: string | null; readonly recordId: string }> {
-  if (documentTypeCode === 'invoice') {
-    const [row] = await tx
-      .select({ documentNo: invoice.documentNo, customerName: invoice.customerName })
-      .from(invoice)
-      .where(eq(invoice.id, documentId))
-      .limit(1);
-    if (row) {
-      return {
-        label: `${row.documentNo} — ${row.customerName}`,
-        href: `/accounting/invoicing/${encodeURIComponent(row.documentNo)}`,
-        recordId: documentId,
-      };
-    }
-  }
-
   if (documentTypeCode === 'chart_of_account') {
     const [account] = await tx
       .select({ code: chartOfAccount.code, name: chartOfAccount.name })
