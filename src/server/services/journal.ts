@@ -312,6 +312,25 @@ export async function addLine(
     lineDescription: input.description ?? null,
   });
 
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'journal_entry.line_added',
+    objectType: PERMISSION_OBJECT,
+    objectId: journalEntryId,
+    branchCode: entry.branchCode,
+    after: {
+      lineNo: draft.lineNo,
+      account: `${account.code} · ${account.name}`,
+      debitIqd: toDecimalString(draft.debitIqd),
+      creditIqd: toDecimalString(draft.creditIqd),
+      currency,
+      department: dimensions.department ?? null,
+      description: input.description ?? null,
+    },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+
   return { lineNo: draft.lineNo };
 }
 
@@ -407,6 +426,39 @@ export async function updateLine(
       lineDescription: input.description ?? null,
     })
     .where(eq(journalLine.id, lineId));
+
+  const [previousAccount] = await tx
+    .select({ code: chartOfAccount.code, name: chartOfAccount.name })
+    .from(chartOfAccount)
+    .where(eq(chartOfAccount.id, existing.accountId))
+    .limit(1);
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'journal_entry.line_changed',
+    objectType: PERMISSION_OBJECT,
+    objectId: journalEntryId,
+    branchCode: entry.branchCode,
+    before: {
+      lineNo: existing.lineNo,
+      account: previousAccount ? `${previousAccount.code} · ${previousAccount.name}` : null,
+      debitIqd: existing.debitIqd,
+      creditIqd: existing.creditIqd,
+      currency: existing.currency,
+      department: existing.departmentCode,
+      description: existing.lineDescription,
+    },
+    after: {
+      lineNo: existing.lineNo,
+      account: `${account.code} · ${account.name}`,
+      debitIqd: toDecimalString(draft.debitIqd),
+      creditIqd: toDecimalString(draft.creditIqd),
+      currency,
+      department: dimensions.department ?? null,
+      description: input.description ?? null,
+    },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
 
   return { lineNo: existing.lineNo };
 }
@@ -580,10 +632,16 @@ export async function removeLine(
     branchCode: entry.branchCode,
     before: {
       lineNo: line.lineNo,
-      accountId: line.accountId,
+      account: await tx
+        .select({ code: chartOfAccount.code, name: chartOfAccount.name })
+        .from(chartOfAccount)
+        .where(eq(chartOfAccount.id, line.accountId))
+        .limit(1)
+        .then(([a]) => (a ? `${a.code} · ${a.name}` : null)),
       debitIqd: line.debitIqd,
       creditIqd: line.creditIqd,
       currency: line.currency,
+      description: line.lineDescription,
     },
     outcome: 'success',
     requestId: ctx.requestId ?? null,

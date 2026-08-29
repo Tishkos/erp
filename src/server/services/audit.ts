@@ -101,3 +101,31 @@ export async function timelineFor(
   `);
   return result.rows as Array<Record<string, unknown>>;
 }
+
+/**
+ * The trail of one document, with the paperwork's events folded in.
+ *
+ * An attachment is its own audit object — it is uploaded, quarantined,
+ * disposed of in its own right — but a person reading a journal's history
+ * wants to see "a file was attached" among the journal's events, in order.
+ * The attachment's events name their parent (`after_value.parent`), so they
+ * are read back alongside.
+ */
+export async function timelineWithAttachments(
+  tx: Tx,
+  objectType: string,
+  objectId: string,
+  limit = 200,
+): Promise<Array<Record<string, unknown>>> {
+  const parent = `${objectType}:${objectId}`;
+  const result = await tx.execute(sql`
+    select id, occurred_at, actor_user_id, action, object_type, object_id, branch_code,
+           before_value, after_value, reason, outcome, related_object_id
+      from audit_event
+     where (object_type = ${objectType} and object_id = ${objectId})
+        or (object_type = 'attachment' and after_value->>'parent' = ${parent})
+     order by occurred_at desc, id desc
+     limit ${limit}
+  `);
+  return result.rows as Array<Record<string, unknown>>;
+}

@@ -183,8 +183,9 @@ export function JournalLinesGrid({
         style: 'currency',
         currency,
         currencyDisplay: 'code',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
+        // The dinar has no subunit in practice: IQD 2,000, never IQD 2,000.00.
+        minimumFractionDigits: currency === 'IQD' ? 0 : 2,
+        maximumFractionDigits: currency === 'IQD' ? 0 : 2,
       }),
     [locale, currency],
   );

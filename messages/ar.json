@@ -451,7 +451,20 @@
       "rejected": "رُفض",
       "cancelled": "أُلغي"
     },
-    "reason": "السبب"
+    "reason": "السبب",
+    "someone": "مستخدم سابق",
+    "by": "بواسطة {name}",
+    "relation": {
+      "parent": "تحت",
+      "child": "حساب فرعي",
+      "source": "المستند المصدر"
+    },
+    "decision": {
+      "approved": "اعتمده {name}",
+      "rejected": "رفضه {name}",
+      "recalled": "سحبه {name}",
+      "delegated": "أحاله {name}"
+    }
   },
   "action": {
     "edit": "تعديل",
@@ -1106,7 +1119,81 @@
     "audit": {
       "title": "سجل التدقيق",
       "subtitle": "من فعل ماذا ومتى وعلى أي سجل وهل نجح. إلحاقي فقط؛ لا يمكن تعديل شيء هنا.",
-      "search_placeholder": "ابحث بالإجراء أو السجل أو الشخص"
+      "search_placeholder": "ابحث بالإجراء أو السجل أو الشخص",
+      "outcome": {
+        "success": "تم",
+        "denied": "مرفوض",
+        "failure": "فشل"
+      },
+      "kinds": {
+        "chart_of_account": "حساب",
+        "journal_entry": "قيد يومية",
+        "app_user": "مستخدم",
+        "department": "قسم",
+        "branch": "فرع",
+        "company": "الشركة",
+        "role": "دور",
+        "number_series": "تسلسل ترقيم",
+        "attachment": "مرفق",
+        "fiscal_period": "فترة",
+        "exchange_rate": "سعر صرف",
+        "user_department_scope": "عضوية قسم",
+        "authentication": "تسجيل دخول",
+        "workflow_instance": "اعتماد"
+      },
+      "former_record": "سجل لم يعد موجودًا",
+      "former_user": "مستخدم سابق",
+      "fields": {
+        "entryNo": "رقم القيد",
+        "documentDate": "تاريخ المستند",
+        "postingDate": "تاريخ الترحيل",
+        "description": "الوصف",
+        "period": "الفترة",
+        "status": "الحالة",
+        "totalIqd": "الإجمالي (د.ع)",
+        "totalDebitIqd": "المدين (د.ع)",
+        "totalCreditIqd": "الدائن (د.ع)",
+        "reverses": "يعكس",
+        "reversedBy": "عُكس بواسطة",
+        "lineNo": "السطر",
+        "account": "الحساب",
+        "debitIqd": "مدين (د.ع)",
+        "creditIqd": "دائن (د.ع)",
+        "currency": "العملة",
+        "department": "القسم",
+        "fileName": "الملف",
+        "contentType": "النوع",
+        "sizeBytes": "الحجم (بايت)",
+        "version": "الإصدار",
+        "scanStatus": "الفحص",
+        "legalHold": "حجز قانوني",
+        "disposed": "أُتلف",
+        "code": "الرمز",
+        "name": "الاسم",
+        "parent": "تحت",
+        "isGroup": "حساب رئيسي",
+        "statementLine": "بند القائمة",
+        "isActive": "نشط",
+        "approvalStatus": "الاعتماد",
+        "controlAccount": "حساب رقابي",
+        "accountType": "النوع",
+        "awaitingStep": "بانتظار الخطوة",
+        "dimensions": "الأبعاد",
+        "inheritedFrom": "موروث من",
+        "accountId": "الحساب",
+        "displayName": "الاسم",
+        "email": "البريد",
+        "parentCode": "تحت",
+        "isFinance": "قسم مالي",
+        "active": "نشط",
+        "managerUserId": "المدير",
+        "userId": "المستخدم",
+        "departmentCode": "القسم",
+        "branchCode": "الفرع",
+        "isManager": "مدير",
+        "legalName": "الاسم القانوني",
+        "baseCurrency": "العملة الأساسية"
+      }
     },
     "approvals": {
       "title": "موافقاتي",
@@ -1442,7 +1529,7 @@
     },
     "journal_entry": {
       "created": "أُنشئ القيد",
-      "line_added": "أُضيف بند",
+      "line_added": "إضافة سطر",
       "submitted": "أُرسل للاعتماد",
       "posted": "رُحّل",
       "rejected": "رُفض",
@@ -1451,7 +1538,11 @@
       "recalled": "سُحب",
       "updated": "تعديل رأس القيد",
       "line_removed": "حذف سطر",
-      "discarded": "حذف المسودة"
+      "discarded": "حذف المسودة",
+      "submit": "تفويض الإرسال",
+      "approve": "تفويض الاعتماد",
+      "exported": "تصدير القيود",
+      "line_changed": "تعديل سطر"
     },
     "chart_of_account": {
       "created": "أُنشئ الحساب",
@@ -1461,7 +1552,11 @@
       "deactivated": "أُوقف الحساب",
       "statement_line_set": "حُدّد بند القائمة",
       "returned_to_draft": "أُعيد إلى المسودة",
-      "converted_to_group": "سُمح بالحسابات الفرعية"
+      "converted_to_group": "سُمح بالحسابات الفرعية",
+      "submit": "تفويض الإرسال",
+      "approve": "تفويض الاعتماد",
+      "exported": "تصدير الدليل",
+      "reject": "تفويض الرفض"
     },
     "fiscal_period": {
       "created": "فُتحت السنة المالية",

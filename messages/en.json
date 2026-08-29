@@ -451,7 +451,20 @@
       "rejected": "Rejected",
       "cancelled": "Cancelled"
     },
-    "reason": "Reason"
+    "reason": "Reason",
+    "someone": "a former user",
+    "by": "by {name}",
+    "relation": {
+      "parent": "Under",
+      "child": "Sub-account",
+      "source": "Source document"
+    },
+    "decision": {
+      "approved": "Approved by {name}",
+      "rejected": "Rejected by {name}",
+      "recalled": "Withdrawn by {name}",
+      "delegated": "Passed on by {name}"
+    }
   },
   "action": {
     "edit": "Edit",
@@ -1106,7 +1119,81 @@
     "audit": {
       "title": "Audit Trail",
       "subtitle": "Who did what, when, to which record, and whether it succeeded. Append-only; nothing here can be edited.",
-      "search_placeholder": "Search by action, record or person"
+      "search_placeholder": "Search by action, record or person",
+      "outcome": {
+        "success": "Done",
+        "denied": "Refused",
+        "failure": "Failed"
+      },
+      "kinds": {
+        "chart_of_account": "Account",
+        "journal_entry": "Journal entry",
+        "app_user": "User",
+        "department": "Department",
+        "branch": "Branch",
+        "company": "Company",
+        "role": "Role",
+        "number_series": "Number series",
+        "attachment": "Attachment",
+        "fiscal_period": "Period",
+        "exchange_rate": "Exchange rate",
+        "user_department_scope": "Department membership",
+        "authentication": "Sign-in",
+        "workflow_instance": "Approval"
+      },
+      "former_record": "a record that no longer exists",
+      "former_user": "a former user",
+      "fields": {
+        "entryNo": "entry no.",
+        "documentDate": "document date",
+        "postingDate": "posting date",
+        "description": "description",
+        "period": "period",
+        "status": "status",
+        "totalIqd": "total (IQD)",
+        "totalDebitIqd": "debits (IQD)",
+        "totalCreditIqd": "credits (IQD)",
+        "reverses": "reverses",
+        "reversedBy": "reversed by",
+        "lineNo": "line",
+        "account": "account",
+        "debitIqd": "debit (IQD)",
+        "creditIqd": "credit (IQD)",
+        "currency": "currency",
+        "department": "department",
+        "fileName": "file",
+        "contentType": "type",
+        "sizeBytes": "size (bytes)",
+        "version": "version",
+        "scanStatus": "scan",
+        "legalHold": "legal hold",
+        "disposed": "disposed",
+        "code": "code",
+        "name": "name",
+        "parent": "under",
+        "isGroup": "header account",
+        "statementLine": "statement line",
+        "isActive": "active",
+        "approvalStatus": "approval",
+        "controlAccount": "control account",
+        "accountType": "type",
+        "awaitingStep": "awaiting step",
+        "dimensions": "dimensions",
+        "inheritedFrom": "inherited from",
+        "accountId": "account",
+        "displayName": "name",
+        "email": "email",
+        "parentCode": "under",
+        "isFinance": "finance department",
+        "active": "active",
+        "managerUserId": "manager",
+        "userId": "user",
+        "departmentCode": "department",
+        "branchCode": "branch",
+        "isManager": "manager",
+        "legalName": "legal name",
+        "baseCurrency": "base currency"
+      }
     },
     "approvals": {
       "title": "My Approvals",
@@ -1451,7 +1538,11 @@
       "recalled": "Recalled",
       "updated": "Header changed",
       "line_removed": "Line removed",
-      "discarded": "Draft deleted"
+      "discarded": "Draft deleted",
+      "submit": "Submission authorised",
+      "approve": "Approval authorised",
+      "exported": "Journals exported",
+      "line_changed": "Line changed"
     },
     "chart_of_account": {
       "created": "Account created",
@@ -1461,7 +1552,11 @@
       "deactivated": "Account deactivated",
       "statement_line_set": "Statement line set",
       "returned_to_draft": "Returned to draft",
-      "converted_to_group": "Allowed sub-accounts"
+      "converted_to_group": "Allowed sub-accounts",
+      "submit": "Submission authorised",
+      "approve": "Approval authorised",
+      "exported": "Chart exported",
+      "reject": "Rejection authorised"
     },
     "fiscal_period": {
       "created": "Fiscal year opened",
