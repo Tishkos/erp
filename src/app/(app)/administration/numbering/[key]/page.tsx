@@ -17,7 +17,7 @@ import {
   SubmitRow,
   admin as s,
 } from '@/components/admin';
-import { RecordHistory } from '@/components/admin/history';
+import { AuditLogButton, RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatTimestamp, type Locale } from '@/i18n/config';
@@ -66,6 +66,7 @@ export default async function SeriesPage({
 
   return (
     <AdminPage
+      actions={<AuditLogButton label={t('history')} />}
       back={{ href: '/administration/numbering', label: t('back') }}
       title={row.key}
       trail={[{ href: '/', label: t('dashboard_label') }]}

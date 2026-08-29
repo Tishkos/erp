@@ -16,7 +16,7 @@ import {
   SubmitRow,
   admin as s,
 } from '@/components/admin';
-import { RecordHistory } from '@/components/admin/history';
+import { AuditLogButton, RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatTimestamp, type Locale } from '@/i18n/config';
@@ -69,6 +69,7 @@ export default async function BranchPage({
 
   return (
     <AdminPage
+      actions={<AuditLogButton label={t('history')} />}
       back={{ href: '/master-data/branches', label: t('back') }}
       title={`${row.code} · ${row.name}`}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -164,7 +165,13 @@ export default async function BranchPage({
             </Panel>
           ) : null}
 
-          <RecordHistory objectId={row.code} objectType={branches.PERMISSION_OBJECT} />
+          {/* Who was given this branch, and who was made to start in it, is
+              written on the person; the branch's log shows it too. */}
+          <RecordHistory
+            objectId={row.code}
+            objectType={branches.PERMISSION_OBJECT}
+            related={[{ objectType: 'app_user', field: 'branchCode', value: row.code }]}
+          />
         </div>
       </div>
     </AdminPage>

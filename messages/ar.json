@@ -950,7 +950,7 @@
     "reason": "السبب",
     "reason_placeholder": "لماذا — يُحفظ هذا في سجل التدقيق",
     "details": "التفاصيل",
-    "history": "سجل السجل",
+    "history": "سجل التدقيق",
     "history_empty": "لم يُسجَّل شيء لهذا السجل بعد.",
     "created_by": "أنشأه",
     "created_at": "تاريخ الإنشاء",
@@ -1150,6 +1150,7 @@
       },
       "former_record": "سجل لم يعد موجودًا",
       "former_user": "مستخدم سابق",
+      "person": "الشخص",
       "fields": {
         "entryNo": "رقم القيد",
         "documentDate": "تاريخ المستند",

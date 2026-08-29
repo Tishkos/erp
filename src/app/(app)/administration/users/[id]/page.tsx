@@ -17,7 +17,7 @@ import {
   SubmitRow,
   admin as s,
 } from '@/components/admin';
-import { RecordHistory } from '@/components/admin/history';
+import { AuditLogButton, RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatTimestamp, type Locale } from '@/i18n/config';
@@ -111,6 +111,7 @@ export default async function UserPage({
 
   return (
     <AdminPage
+      actions={<AuditLogButton label={t('history')} />}
       back={{ href: '/administration/users', label: t('back') }}
       title={user.displayName}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -322,7 +323,17 @@ export default async function UserPage({
         </div>
       </div>
 
-      <RecordHistory objectId={user.id} objectType={users.PERMISSION_OBJECT} />
+      {/* What happened to this person is written under three objects: the
+          user record, their sign-in credentials (`user`), and each department
+          membership (`<id>:<code>`). One log, all of it. */}
+      <RecordHistory
+        objectId={user.id}
+        objectType={users.PERMISSION_OBJECT}
+        related={[
+          { objectType: 'user', objectId: user.id },
+          { objectType: 'user_department_scope', objectId: `${user.id}:%` },
+        ]}
+      />
     </AdminPage>
   );
 }

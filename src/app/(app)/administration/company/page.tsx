@@ -13,7 +13,7 @@ import {
   admin as s,
 } from '@/components/admin';
 import { SectionTabs } from '@/components/admin/section-tabs';
-import { RecordHistory } from '@/components/admin/history';
+import { AuditLogButton, RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { CURRENCIES } from '@domain/currencies';
@@ -56,7 +56,14 @@ export default async function CompanyPage({ searchParams }: { searchParams: Sear
   });
 
   return (
-    <AdminPage tabs={<SectionTabs route="/administration/company" />} back={{ href: '/', label: t('dashboard_label') }} subtitle={t('company.subtitle')} title={t('company.title')} variant="sap">
+    <AdminPage
+      actions={current ? <AuditLogButton label={t('history')} /> : null}
+      back={{ href: '/', label: t('dashboard_label') }}
+      subtitle={t('company.subtitle')}
+      tabs={<SectionTabs route="/administration/company" />}
+      title={t('company.title')}
+      variant="sap"
+    >
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
       {current ? null : <p className={s.sectionHint}>{t('company.not_set')}</p>}
 

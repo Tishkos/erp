@@ -102,6 +102,11 @@ export async function timelineFor(
   return result.rows as Array<Record<string, unknown>>;
 }
 
+/** Another audit object whose events belong on a record's log. */
+export type RelatedObjects =
+  | { readonly objectType: string; readonly objectId: string }
+  | { readonly objectType: string; readonly field: string; readonly value: string };
+
 /**
  * The trail of one document, with the paperwork's events folded in.
  *
@@ -116,14 +121,30 @@ export async function timelineWithAttachments(
   objectType: string,
   objectId: string,
   limit = 200,
+  /**
+   * Other objects whose events belong on this record's log. A department's
+   * memberships are their own audit objects (`user_department_scope`,
+   * `<user>:<code>`), but a person reading the department wants "Employee
+   * added · made manager" among its events, not an empty log. `objectId` is
+   * a LIKE pattern, so `%:FIN` finds every membership of FIN. Where the link
+   * is in the event's after-image instead — a person granted the department
+   * (`app_user`, `after.departmentCode`) — name the field.
+   */
+  related: readonly RelatedObjects[] = [],
 ): Promise<Array<Record<string, unknown>>> {
   const parent = `${objectType}:${objectId}`;
+  const also = related.map((r) =>
+    'field' in r
+      ? sql`or (object_type = ${r.objectType} and after_value->>${r.field} = ${r.value})`
+      : sql`or (object_type = ${r.objectType} and object_id like ${r.objectId})`,
+  );
   const result = await tx.execute(sql`
     select id, occurred_at, actor_user_id, action, object_type, object_id, branch_code,
            before_value, after_value, reason, outcome, related_object_id
       from audit_event
      where (object_type = ${objectType} and object_id = ${objectId})
         or (object_type = 'attachment' and after_value->>'parent' = ${parent})
+        ${sql.join(also, sql` `)}
      order by occurred_at desc, id desc
      limit ${limit}
   `);

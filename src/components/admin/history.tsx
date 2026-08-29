@@ -4,7 +4,23 @@ import { inArray } from 'drizzle-orm';
 import { appUser } from '@/server/db/schema';
 import { withCurrentUser } from '@/server/session';
 import * as audit from '@/server/services/audit';
-import { Timeline, type TimelineEntry } from './index';
+import Link from 'next/link';
+import { History } from 'lucide-react';
+import { Timeline, type TimelineEntry, admin } from './index';
+
+/**
+ * The way into a record's audit log from the top of its page (by direction,
+ * 2026-08-29: the log is reached from the record, not from the company-wide
+ * trail). It lands on the `RecordHistory` panel below.
+ */
+export function AuditLogButton({ label }: { readonly label: string }) {
+  return (
+    <Link className={admin.button} href="#audit-log">
+      <History aria-hidden="true" />
+      <span>{label}</span>
+    </Link>
+  );
+}
 
 /**
  * Record history — Phase 0 requirement 10.
@@ -23,9 +39,12 @@ import { Timeline, type TimelineEntry } from './index';
 export async function RecordHistory({
   objectType,
   objectId,
+  related = [],
 }: {
   readonly objectType: string;
   readonly objectId: string;
+  /** Other audit objects whose events belong on this log — see `timelineWithAttachments`. */
+  readonly related?: readonly audit.RelatedObjects[];
 }) {
   const [t, action, locale] = await Promise.all([
     getTranslations('admin'),
@@ -46,18 +65,35 @@ export async function RecordHistory({
       : key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase();
 
   const entries = await withCurrentUser(async (tx) => {
-    const rows = await audit.timelineWithAttachments(tx, objectType, objectId);
-    const actorIds = [...new Set(rows.map((r) => r.actor_user_id).filter(Boolean))] as string[];
+    const rows = await audit.timelineWithAttachments(tx, objectType, objectId, 200, related);
+    // A folded-in event about a person — "department access granted" on the
+    // department's own log — names that person, or the reader takes the actor
+    // for the subject. The subject is the event's user, or the user half of a
+    // `<user>:<code>` membership id.
+    const subjectOf = (row: Record<string, unknown>): string | null => {
+      const type = String(row.object_type);
+      const id = String(row.object_id);
+      if (type === objectType && id === objectId) return null;
+      if (type === 'app_user' || type === 'user') return id;
+      if (type === 'user_department_scope') return id.split(':')[0] ?? null;
+      return null;
+    };
+    const actorIds = rows.map((r) => r.actor_user_id).filter(Boolean) as string[];
+    const subjectIds = rows.map(subjectOf).filter(Boolean) as string[];
+    const ids = [...new Set([...actorIds, ...subjectIds])].filter((id) => id !== objectId);
     const names = new Map<string, string>();
-    if (actorIds.length > 0) {
+    if (ids.length > 0) {
       const people = await tx
         .select({ id: appUser.id, displayName: appUser.displayName })
         .from(appUser)
-        .where(inArray(appUser.id, actorIds));
+        .where(inArray(appUser.id, ids));
       for (const person of people) names.set(person.id, person.displayName);
     }
-    return rows.map(
-      (row): TimelineEntry => ({
+    return rows.map((row): TimelineEntry => {
+      const subject = subjectOf(row);
+      const change = describeChange(row.before_value, row.after_value, field, locale as Locale);
+      const who = subject && subject !== objectId ? `${t('audit.person')}: ${names.get(subject) ?? t('audit.former_user')}` : null;
+      return {
         id: String(row.id),
         when: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'medium' }).format(
           new Date(String(row.occurred_at)),
@@ -66,16 +102,18 @@ export async function RecordHistory({
         actor: row.actor_user_id ? (names.get(String(row.actor_user_id)) ?? t('audit.former_user')) : null,
         outcome: String(row.outcome),
         reason: row.reason ? String(row.reason) : null,
-        detail: describeChange(row.before_value, row.after_value, field, locale as Locale),
-      }),
-    );
+        detail: [who, change].filter(Boolean).join(' · ') || null,
+      };
+    });
   });
 
   return (
     <Timeline
       emptyLabel={t('history_empty')}
       entries={entries}
-      labelledBy={`record-history-${objectType}-${objectId}`}
+      // One stable anchor, so a page can offer "Audit log" as a button that
+      // lands here.
+      labelledBy="audit-log"
       title={t('history')}
     />
   );

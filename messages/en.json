@@ -950,7 +950,7 @@
     "reason": "Reason",
     "reason_placeholder": "Why — this is kept in the audit trail",
     "details": "Details",
-    "history": "Record history",
+    "history": "Audit log",
     "history_empty": "Nothing has been recorded for this record yet.",
     "created_by": "Created by",
     "created_at": "Created",
@@ -1150,6 +1150,7 @@
       },
       "former_record": "a record that no longer exists",
       "former_user": "a former user",
+      "person": "person",
       "fields": {
         "entryNo": "entry no.",
         "documentDate": "document date",

@@ -12,7 +12,7 @@ import {
   SubmitRow,
 } from '@/components/admin';
 import { GrantMatrix } from '@/components/admin/grant-matrix';
-import { RecordHistory } from '@/components/admin/history';
+import { AuditLogButton, RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
@@ -58,6 +58,7 @@ export default async function RolePage({
 
   return (
     <AdminPage
+      actions={<AuditLogButton label={t('history')} />}
       back={{ href: '/administration/roles', label: t('back') }}
       subtitle={row.description ?? undefined}
       title={`${row.name} (${row.code})`}

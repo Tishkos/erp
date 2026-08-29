@@ -19,7 +19,7 @@ import {
   SubmitRow,
   admin as s,
 } from '@/components/admin';
-import { RecordHistory } from '@/components/admin/history';
+import { AuditLogButton, RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
@@ -85,6 +85,7 @@ export default async function DepartmentPage({
 
   return (
     <AdminPage
+      actions={<AuditLogButton label={t('history')} />}
       back={{ href: '/master-data/departments', label: t('back') }}
       title={`${row.code} · ${row.name}`}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -265,7 +266,17 @@ export default async function DepartmentPage({
             </Panel>
           ) : null}
 
-          <RecordHistory objectId={row.code} objectType={departments.PERMISSION_OBJECT} />
+          {/* Memberships are their own audit objects (`<user>:<code>`); a person
+              reading the department wants them here — who was added, who was
+              made manager, by whom — not an empty log. */}
+          <RecordHistory
+            objectId={row.code}
+            objectType={departments.PERMISSION_OBJECT}
+            related={[
+              { objectType: 'user_department_scope', objectId: `%:${row.code}` },
+              { objectType: 'app_user', field: 'departmentCode', value: row.code },
+            ]}
+          />
         </div>
       </div>
     </AdminPage>
