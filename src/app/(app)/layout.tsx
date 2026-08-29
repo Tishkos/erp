@@ -47,7 +47,7 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
     : fallback;
 
   return (
-    <div data-accent={accent} data-palette={palette}>
+    <div className="erp-root" data-accent={accent} data-palette={palette}>
       <AppShell>{children}</AppShell>
     </div>
   );

@@ -4199,7 +4199,10 @@ html:has([data-palette]) body {
 /* The whole authenticated shell — including the gap above the footer — is
    painted in the window's canvas. The body is painted by the theme, and in
    the dark theme it showed through that gap as a black band (2026-08-29). */
-[data-palette] {
+/* Scoped to the shell wrapper only: the palette swatches on the company page
+   carry a data-palette of their own, and this rule stretched each of them to
+   a full viewport. */
+.erp-root {
   min-block-size: 100vh;
   background: var(--w-canvas);
 }
