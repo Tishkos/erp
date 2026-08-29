@@ -4157,3 +4157,45 @@
     display: none !important;
   }
 }
+
+/* ── The chart of accounts, as a tree in the register grid ───────────────── */
+.sapTreeCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.sapDoc.sapDoc .sapTreeToggle {
+  display: inline-grid;
+  min-inline-size: 1.1rem;
+  inline-size: 1.1rem;
+  min-block-size: 1.1rem;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #765b0b;
+  font-size: 0.8rem;
+  box-shadow: none;
+}
+
+.sapDoc.sapDoc .sapTreeToggle:hover {
+  background: var(--w-selected);
+}
+
+.sapRegister .sapEntryBar {
+  margin: 0;
+  padding: 0.45rem 0.7rem;
+  border-block-end: 1px solid var(--w-line);
+  background: var(--w-bg);
+}
+
+/* The record framework's panels, inside the window. */
+.sapDoc :global(.page__header) {
+  margin-block-end: 0.7rem;
+}
+
+.sapDoc :global(.facts) dt {
+  color: var(--w-label);
+  font-size: 0.72rem;
+}

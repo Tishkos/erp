@@ -1045,10 +1045,7 @@
       "title": "Department Managers",
       "subtitle": "Who finalises what. A manager approves documents raised in their own department without a second approval (§5.2).",
       "empty": "No department has a manager yet. Assign one from the department's page.",
-      "open_department": "Open department",
-      "assign": "Assign a manager",
-      "assign_hint": "Choose the department and the person. They are added to the department if they were not already in it.",
-      "assign_button": "Make manager"
+      "open_department": "Open department"
     },
     "roles": {
       "title": "Roles",

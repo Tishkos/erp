@@ -17,10 +17,13 @@ import { performRecordAction } from '@/server/record-action';
 export async function RecordPage({
   view,
   returnTo,
+  hideTitle = false,
 }: {
   view: RecordView;
   /** Where to come back to after an action. The record's own address. */
   readonly returnTo?: string;
+  /** The page already carries the record's name in its own header. */
+  readonly hideTitle?: boolean;
 }) {
   const t = await getTranslations('record');
   const statusLabel = await getTranslations('status');
@@ -41,7 +44,9 @@ export async function RecordPage({
       )}
 
       <div className="page__header">
-        <h1 className="page__title">{header.documentNumber ?? header.documentId}</h1>
+        {hideTitle ? null : (
+          <h1 className="page__title">{header.documentNumber ?? header.documentId}</h1>
+        )}
         <span className={`status status--${header.status}`}>{statusLabel(header.status)}</span>
       </div>
 

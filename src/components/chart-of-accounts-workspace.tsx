@@ -2,25 +2,17 @@
 
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
-import {
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Download,
-  Eye,
-  FileText,
-  Folder,
-  PanelRightOpen,
-  Search as SearchIcon,
-} from 'lucide-react';
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useMemo, useState } from 'react';
+import styles from '@/components/admin/admin.module.css';
 
 /**
- * The Chart of Accounts — one table, and nothing beside it.
+ * The Chart of Accounts — the tree of accounts, in the same ruled grid the
+ * journal register uses, and nothing beside it.
  *
  * By direction (2026-08-29): no context row, no filters, no type tiles, no
- * details pane, no recent journals. The chart is the tree of accounts; an
- * account's details are inside the account, opened by pressing it.
+ * details pane, no recent journals. An account's details are inside the
+ * account, opened by pressing it. A header folds and unfolds with the small
+ * mark before its code; the rest is the chart.
  */
 
 const ACCOUNT_TYPES = ['asset', 'liability', 'equity', 'revenue', 'expense'] as const;
@@ -46,6 +38,7 @@ interface AccountRow {
   readonly accountType: string;
   readonly status: string;
   readonly isGroup: boolean;
+  readonly isActive: boolean;
   readonly level: number;
 }
 
@@ -75,20 +68,16 @@ function normaliseAccount(row: Record<string, unknown>, index: number): AccountR
     accountType: textValue(row.account_type),
     status: textValue(row.status),
     isGroup: booleanValue(row.is_group),
+    isActive: booleanValue(row.is_active),
     level: levelValue(row.level),
   };
 }
 
-function safeStatusClass(status: string): string {
-  const safe = status.toLowerCase().replace(/[^a-z0-9_-]/g, '');
-  return safe || 'unknown';
-}
-
 export function ChartOfAccountsWorkspace({ rows, query, total, search }: ChartOfAccountsWorkspaceProps) {
   const chart = useTranslations('chart');
-  const list = useTranslations('list');
   const status = useTranslations('status');
   const column = useTranslations('column');
+  const admin = useTranslations('admin');
   const locale = useLocale();
 
   const accounts = useMemo(() => rows.map(normaliseAccount), [rows]);
@@ -96,7 +85,7 @@ export function ChartOfAccountsWorkspace({ rows, query, total, search }: ChartOf
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
 
   // A collapsed header hides everything beneath it, at any depth.
-  const shownAccounts = useMemo(() => {
+  const shown = useMemo(() => {
     const visible: AccountRow[] = [];
     const ancestors: AccountRow[] = [];
     for (const account of accounts) {
@@ -114,14 +103,13 @@ export function ChartOfAccountsWorkspace({ rows, query, total, search }: ChartOf
   const firstShown = accounts.length === 0 ? 0 : (currentPage - 1) * query.pageSize + 1;
   const lastShown = accounts.length === 0 ? 0 : firstShown + accounts.length - 1;
 
-  const toggleCollapsed = (key: string) => {
+  const toggle = (key: string) =>
     setCollapsed((current) => {
       const next = new Set(current);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
-  };
 
   const pageHref = (page: number) => {
     const params = new URLSearchParams();
@@ -130,186 +118,122 @@ export function ChartOfAccountsWorkspace({ rows, query, total, search }: ChartOf
     const suffix = params.toString();
     return `/master-data/chart-of-accounts${suffix ? `?${suffix}` : ''}`;
   };
-
-  const exportHref = search
-    ? `/master-data/chart-of-accounts/export?q=${encodeURIComponent(search)}`
-    : '/master-data/chart-of-accounts/export';
-
-  const pageLinks = [...new Set([1, currentPage - 1, currentPage, currentPage + 1, pageCount])]
-    .filter((page) => page >= 1 && page <= pageCount)
-    .sort((first, second) => first - second);
+  const href = (code: string) => `/master-data/chart-of-accounts/${encodeURIComponent(code)}`;
 
   return (
-    <div className="coa-workspace">
-      <header className="coa-page-header">
-        <div className="coa-page-heading">
-          <h1 className="coa-title">{chart('title')}</h1>
-          <p className="coa-subtitle">{chart('subtitle')}</p>
-        </div>
-        <div className="coa-header-actions">
-          <form className="coa-search" method="get" role="search">
-            <input
-              aria-label={list('search')}
-              className="coa-search-input"
-              defaultValue={search}
-              name="q"
-              placeholder={chart('search_placeholder')}
-              type="search"
-            />
-            <button className="coa-search-submit" type="submit">
-              <SearchIcon aria-hidden="true" />
-              <span className="coa-sr-only">{list('search')}</span>
-            </button>
-          </form>
-          <Link className="coa-button coa-button--secondary" href={exportHref}>
-            <Download aria-hidden="true" />
-            {list('export')}
-          </Link>
-        </div>
-      </header>
+    <>
+      <div className={styles.sapEntryBar}>
+        <button className={`${styles.button} ${styles.small}`} onClick={() => setCollapsed(new Set())} type="button">
+          {chart('expand_all')}
+        </button>
+        <button
+          className={`${styles.button} ${styles.small}`}
+          onClick={() => setCollapsed(new Set(accounts.filter((a) => a.isGroup).map((a) => a.key)))}
+          type="button"
+        >
+          {chart('collapse_all')}
+        </button>
+      </div>
 
-      <section className="coa-panel coa-accounts-panel" aria-labelledby="coa-accounts-title">
-        <header className="coa-panel-header">
-          <div className="coa-panel-heading-row">
-            <h2 id="coa-accounts-title">{chart('accounts')}</h2>
-            <span className="coa-count-badge">{list('row_count', { count: total ?? accounts.length })}</span>
-          </div>
-          <div className="coa-panel-actions">
-            <button className="coa-compact-button" onClick={() => setCollapsed(new Set())} type="button">
-              <Eye aria-hidden="true" />
-              {chart('expand_all')}
-            </button>
-            <button
-              className="coa-compact-button"
-              onClick={() => setCollapsed(new Set(accounts.filter((a) => a.isGroup).map((a) => a.key)))}
-              type="button"
-            >
-              <PanelRightOpen aria-hidden="true" />
-              {chart('collapse_all')}
-            </button>
-          </div>
-        </header>
-
-        <div className="table-wrap coa-table-wrap">
-          <table className="list coa-table">
-            <thead>
+      <div className={`${styles.sapTableWrap} ${styles.sapRegisterTableWrap}`}>
+        <table aria-labelledby="chart-title" className={`${styles.sapTable} ${styles.sapRegisterTable}`}>
+          <thead>
+            <tr>
+              <th scope="col">{column('code')}</th>
+              <th scope="col">{column('name')}</th>
+              <th scope="col">{column('account_type')}</th>
+              <th scope="col">{column('is_group')}</th>
+              <th scope="col">{column('status')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.length === 0 ? (
               <tr>
-                <th scope="col">{column('code')}</th>
-                <th scope="col">{column('name')}</th>
-                <th scope="col">{column('account_type')}</th>
-                <th scope="col">{column('status')}</th>
+                <td className={styles.sapEmptyRow} colSpan={5}>
+                  {admin('rows_shown', { count: 0 })}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {shownAccounts.map((account) => (
-                <tr key={account.key}>
-                  <td>
-                    <div className="coa-account-code" style={{ '--coa-level': account.level } as CSSProperties}>
+            ) : null}
+            {shown.map((account) => {
+              const folded = collapsed.has(account.key);
+              return (
+                <tr className={account.isGroup ? styles.sapLevelRow : undefined} key={account.key}>
+                  <td style={{ paddingInlineStart: `${0.45 + account.level * 1.1}rem` }}>
+                    <span className={styles.sapTreeCell}>
                       {account.isGroup ? (
                         <button
-                          aria-expanded={!collapsed.has(account.key)}
+                          aria-expanded={!folded}
                           aria-label={
-                            collapsed.has(account.key)
+                            folded
                               ? chart('expand_account', { account: account.name || account.code })
                               : chart('collapse_account', { account: account.name || account.code })
                           }
-                          className="coa-tree-toggle"
-                          onClick={() => toggleCollapsed(account.key)}
+                          className={styles.sapTreeToggle}
+                          onClick={() => toggle(account.key)}
                           type="button"
                         >
-                          {collapsed.has(account.key) ? (
-                            <ChevronRight aria-hidden="true" className="coa-directional-icon" />
-                          ) : (
-                            <ChevronDown aria-hidden="true" />
-                          )}
+                          {folded ? '▸' : '▾'}
                         </button>
                       ) : (
-                        <span aria-hidden="true" className="coa-tree-spacer" />
+                        <span aria-hidden="true" className={styles.sapTreeToggle} />
                       )}
-                      {account.isGroup ? (
-                        <Folder aria-hidden="true" className="coa-account-kind-icon" />
-                      ) : (
-                        <FileText aria-hidden="true" className="coa-account-kind-icon" />
-                      )}
-                      <Link
-                        className="coa-account-link"
-                        href={`/master-data/chart-of-accounts/${encodeURIComponent(account.code)}`}
-                      >
+                      <Link className={styles.sapLink} href={href(account.code)}>
                         <bdi dir="ltr">{account.code || '—'}</bdi>
                       </Link>
-                    </div>
+                    </span>
                   </td>
                   <td>
-                    <Link
-                      className="coa-account-name"
-                      href={`/master-data/chart-of-accounts/${encodeURIComponent(account.code)}`}
-                    >
-                      {account.name || '—'}
+                    <Link className={styles.sapPlainLink} href={href(account.code)}>
+                      <bdi dir="auto">{account.name || '—'}</bdi>
                     </Link>
                   </td>
                   <td>{isAccountType(account.accountType) ? chart(`account_types.${account.accountType}`) : '—'}</td>
+                  <td>{chart(account.isGroup ? 'group_account' : 'posting_account')}</td>
                   <td>
                     {account.status ? (
-                      <span className={`status status--${safeStatusClass(account.status)}`}>{status(account.status)}</span>
+                      <span
+                        className={`status status--${account.status} ${styles.sapRegisterStatus}`}
+                        data-status={account.status}
+                      >
+                        {status(account.status)}
+                      </span>
                     ) : (
                       '—'
                     )}
+                    {account.status === 'approved' && !account.isActive ? (
+                      <span className={styles.sapNote}> · {chart('inactive')}</span>
+                    ) : null}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {shownAccounts.length === 0 ? (
-            <div className="coa-table-empty" role="status">
-              <SearchIcon aria-hidden="true" />
-              <strong>{list('no_rows')}</strong>
-              <span>{list('no_rows_hint')}</span>
-            </div>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className={styles.sapFoot}>
+        <div className={styles.sapFootActions}>
+          {currentPage > 1 ? (
+            <Link className={styles.button} href={pageHref(currentPage - 1)}>
+              {chart('pagination.previous')}
+            </Link>
+          ) : null}
+          {currentPage < pageCount ? (
+            <Link className={styles.button} href={pageHref(currentPage + 1)}>
+              {chart('pagination.next')}
+            </Link>
           ) : null}
         </div>
-
-        <footer className="coa-table-footer">
-          <p>{chart('showing_accounts', { first: firstShown, last: lastShown, total: total ?? accounts.length })}</p>
-          <nav aria-label={chart('pagination.label')} className="coa-pagination">
-            {currentPage > 1 ? (
-              <Link aria-label={chart('pagination.previous')} className="coa-page-button" href={pageHref(currentPage - 1)}>
-                <ChevronLeft aria-hidden="true" className="coa-directional-icon" />
-              </Link>
-            ) : (
-              <span aria-hidden="true" className="coa-page-button coa-page-button--disabled">
-                <ChevronLeft className="coa-directional-icon" />
-              </span>
-            )}
-            {pageLinks.map((page, index) => (
-              <span className="coa-page-slot" key={page}>
-                {index > 0 && pageLinks[index - 1]! < page - 1 ? (
-                  <span aria-hidden="true" className="coa-page-ellipsis">
-                    …
-                  </span>
-                ) : null}
-                {page === currentPage ? (
-                  <span aria-current="page" className="coa-page-button coa-page-button--current">
-                    <bdi dir="ltr">{number.format(page)}</bdi>
-                  </span>
-                ) : (
-                  <Link aria-label={chart('pagination.page', { page })} className="coa-page-button" href={pageHref(page)}>
-                    <bdi dir="ltr">{number.format(page)}</bdi>
-                  </Link>
-                )}
-              </span>
-            ))}
-            {currentPage < pageCount ? (
-              <Link aria-label={chart('pagination.next')} className="coa-page-button" href={pageHref(currentPage + 1)}>
-                <ChevronRight aria-hidden="true" className="coa-directional-icon" />
-              </Link>
-            ) : (
-              <span aria-hidden="true" className="coa-page-button coa-page-button--disabled">
-                <ChevronRight className="coa-directional-icon" />
-              </span>
-            )}
-          </nav>
-        </footer>
-      </section>
-    </div>
+        <div className={styles.sapFootTotals}>
+          <span className={styles.sapNote}>
+            {chart('showing_accounts', {
+              first: number.format(firstShown),
+              last: number.format(lastShown),
+              total: number.format(total ?? accounts.length),
+            })}
+          </span>
+        </div>
+      </div>
+    </>
   );
 }

@@ -1,36 +1,15 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
-import {
-  ActionButton,
-  AdminPage,
-  Flash,
-  Form,
-  Inline,
-  LinkButton,
-  ListToolbar,
-  Pill,
-  Select,
-  Submit,
-  admin as s,
-  matches,
-} from '@/components/admin';
+import { AdminPage, LinkButton, ListToolbar, Pill, matches } from '@/components/admin';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as departments from '@/server/services/departments';
-import * as users from '@/server/services/users';
-import { assignManager, removeManager } from './actions';
 
-/**
- * Department Manager toggles — Phase 0 requirement 6, who finalises what.
- *
- * The list of departments and who manages each, and — for somebody who may
- * configure the toggle — the form that assigns one, here, rather than only
- * from inside the department's own page.
- */
+/** Department Manager toggles — Phase 0 requirement 6, who finalises what. */
 export const dynamic = 'force-dynamic';
 
 export default async function ManagersPage({ searchParams }: { searchParams: SearchParams }) {
@@ -44,25 +23,23 @@ export default async function ManagersPage({ searchParams }: { searchParams: Sea
   if (!can(context.principal, 'view', 'user_department_scope')) {
     return <Denied object={page('department_manager_toggles')} />;
   }
-  const mayAssign = can(context.principal, 'configure', 'user_department_scope');
 
-  const { rows, people } = await withCurrentUser(async (tx) => {
+  const rows = await withCurrentUser(async (tx) => {
     const all = await departments.listAll(tx);
     const result = [];
     for (const d of all) {
       const members = await departments.members(tx, d.code);
       result.push({ department: d, managers: members.filter((m) => m.isManager), memberCount: members.length });
     }
-    return {
-      rows: result,
-      people: mayAssign ? (await users.listAll(tx)).filter((p) => p.isActive) : [],
-    };
+    return result;
   });
 
   const shown = rows.filter((r) =>
-    matches({ ...r.department, managers: r.managers.map((m) => m.displayName).join(' ') }, outcome.q),
+    matches(
+      { ...r.department, managers: r.managers.map((m) => m.displayName).join(' ') },
+      outcome.q,
+    ),
   );
-  const activeDepartments = rows.filter((r) => r.department.active);
 
   return (
     <AdminPage
@@ -73,34 +50,6 @@ export default async function ManagersPage({ searchParams }: { searchParams: Sea
       title={t('managers.title')}
       variant="sap"
     >
-      <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
-
-      {mayAssign && activeDepartments.length > 0 && people.length > 0 ? (
-        <Panel title={t('managers.assign')}>
-          <p className={s.sectionHint}>{t('managers.assign_hint')}</p>
-          <Form action={assignManager}>
-            <Inline>
-              <Select
-                label={column('department')}
-                name="departmentCode"
-                options={activeDepartments.map((r) => ({
-                  value: r.department.code,
-                  label: `${r.department.code} · ${r.department.name}`,
-                }))}
-                required
-              />
-              <Select
-                label={column('manager')}
-                name="userId"
-                options={people.map((p) => ({ value: p.id, label: `${p.displayName} · ${p.email}` }))}
-                required
-              />
-              <Submit label={t('managers.assign_button')} />
-            </Inline>
-          </Form>
-        </Panel>
-      ) : null}
-
       <Panel flush>
         <ListToolbar
           clearHref="/administration/managers"
@@ -123,7 +72,6 @@ export default async function ManagersPage({ searchParams }: { searchParams: Sea
                 <th scope="col">{column('manager')}</th>
                 <th scope="col">{t('departments.members')}</th>
                 <th scope="col">{column('active')}</th>
-                {mayAssign ? <th scope="col" /> : null}
               </tr>
             </thead>
             <tbody>
@@ -147,18 +95,6 @@ export default async function ManagersPage({ searchParams }: { searchParams: Sea
                   <td>
                     <Pill label={department.active ? t('active') : t('inactive')} on={department.active} />
                   </td>
-                  {mayAssign ? (
-                    <td>
-                      {managers.map((m) => (
-                        <ActionButton
-                          action={removeManager}
-                          hidden={{ departmentCode: department.code, userId: m.userId }}
-                          key={m.userId}
-                          label={t('departments.remove_manager')}
-                        />
-                      ))}
-                    </td>
-                  ) : null}
                 </tr>
               ))}
             </tbody>
