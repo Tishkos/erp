@@ -68,6 +68,8 @@ export interface AccountNode {
   readonly controlAccount: ControlAccountKind | null;
   /** ISO code when the account may only hold one currency; null means unrestricted. */
   readonly currencyRestriction: string | null;
+  /** What the account is for, in the accountant's own words. */
+  readonly description?: string | null;
   /**
    * Phase 1 §5 — the statement line this account reports on, or null to take
    * its type's default. Carried on the node so no reader has to know the

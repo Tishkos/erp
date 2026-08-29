@@ -4199,3 +4199,37 @@
   color: var(--w-label);
   font-size: 0.72rem;
 }
+
+/* Controls that act on the whole grid sit at its end, not its start. */
+.sapBarEnd {
+  justify-content: flex-end;
+}
+
+/* The account's own cards, inside the window: the hero, the facts grid and
+   the balance summary keep their modern shape and take the window's colours. */
+.sapDoc :global(.coa-detail-hero) {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.9rem 0.2rem 0.6rem;
+}
+.sapDoc :global(.coa-detail-hero) > div {
+  flex: 1;
+  min-inline-size: 0;
+}
+.sapDoc :global(.coa-detail-icon) {
+  color: var(--w-accent-ink, #3a2600);
+  background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
+  border: 1px solid var(--w-amber-line);
+}
+.sapDoc :global(.coa-detail-grid) dt {
+  color: var(--w-label);
+}
+.sapDoc :global(.coa-balance-grid) strong {
+  font-variant-numeric: tabular-nums;
+}
+.sapDoc :global(.coa-journal-empty) {
+  padding: 1.2rem;
+  color: var(--w-muted);
+  font-size: 0.78rem;
+}

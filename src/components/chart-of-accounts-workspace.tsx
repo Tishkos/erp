@@ -122,7 +122,7 @@ export function ChartOfAccountsWorkspace({ rows, query, total, search }: ChartOf
 
   return (
     <>
-      <div className={styles.sapEntryBar}>
+      <div className={`${styles.sapEntryBar} ${styles.sapBarEnd}`}>
         <button className={`${styles.button} ${styles.small}`} onClick={() => setCollapsed(new Set())} type="button">
           {chart('expand_all')}
         </button>

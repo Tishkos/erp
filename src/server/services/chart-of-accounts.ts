@@ -143,6 +143,7 @@ function toNode(
     controlAccount: row.controlAccount,
     currencyRestriction: row.currencyRestriction,
     statementLine: row.statementLine,
+    description: row.description,
     requiredDimensions,
     isSystem: row.isSystem,
     level: row.level,
@@ -864,4 +865,54 @@ export async function postableAccounts(tx: Tx): Promise<AccountNode[]> {
     .orderBy(asc(chartOfAccount.code));
 
   return rows.map((row) => toNode(row));
+}
+
+/**
+ * Changes what an account is called, and what it is for.
+ *
+ * "Edit" on an account (by direction, 2026-08-29): the name and the
+ * description are the only things about an account that are typed rather
+ * than derived — the code comes from the sequence, the type from the parent,
+ * the currency from the ledger — so they are the only things to edit. Written
+ * to the trail with before and after, because a renamed account reads
+ * differently on every statement that follows.
+ */
+export async function updateDetails(
+  tx: Tx,
+  ctx: ActorContext,
+  accountId: string,
+  input: { readonly name: string; readonly description?: string | null },
+): Promise<void> {
+  await authz.authorize(ctx.principal, 'configure', PERMISSION_OBJECT, {
+    branchCode: ctx.branchCode,
+    objectId: accountId,
+    requestId: ctx.requestId ?? null,
+  });
+
+  const account = await loadAccount(tx, accountId);
+  const name = input.name.trim();
+  if (!name) throw new AccountPlacementError('An account needs a name.');
+  const [row] = await tx
+    .select({ description: chartOfAccount.description })
+    .from(chartOfAccount)
+    .where(eq(chartOfAccount.id, accountId))
+    .limit(1);
+  const description = input.description?.trim() || null;
+
+  await tx
+    .update(chartOfAccount)
+    .set({ name, description, updatedAt: new Date() })
+    .where(eq(chartOfAccount.id, accountId));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'chart_of_account.updated',
+    objectType: PERMISSION_OBJECT,
+    objectId: accountId,
+    branchCode: ctx.branchCode,
+    before: { name: account.name, description: row?.description ?? null },
+    after: { code: account.code, name, description },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
 }

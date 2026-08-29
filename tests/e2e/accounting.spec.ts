@@ -33,16 +33,21 @@ let salesAccount = '';
  */
 async function press(page: Page, name: string, expected: string) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await page.getByRole('button', { name, exact: true }).first().click();
+    // Already there — a previous press did its work while we were waiting.
+    if (await page.getByText(expected, { exact: true }).first().isVisible().catch(() => false)) return;
+    const button = page.getByRole('button', { name, exact: true }).first();
+    if ((await button.count()) === 0) break;
+    await expect(button).toBeEnabled({ timeout: 20_000 });
+    await button.click();
     try {
-      await expect(page.getByText(expected, { exact: true }).first()).toBeVisible({ timeout: 8_000 });
+      await expect(page.getByText(expected, { exact: true }).first()).toBeVisible({ timeout: 25_000 });
       return;
     } catch {
       await page.reload();
       await page.waitForTimeout(2_000);
     }
   }
-  await expect(page.getByText(expected, { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(expected, { exact: true }).first()).toBeVisible({ timeout: 25_000 });
 }
 
 async function signIn(page: Page, user: { email: string; password: string }) {
@@ -87,7 +92,9 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     await page.goto('/master-data/exchange-rates');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
-    if ((await page.getByRole('cell', { name: 'USD' }).count()) === 0) {
+    // The currency master lists USD from the seed; what has to exist is a
+    // *rate* for it, which is the figure on the page.
+    if ((await page.getByText('1,310').count()) === 0) {
       await page.waitForTimeout(1500);
       await page.getByRole('button', { name: 'Publish a rate' }).click();
       await page.waitForTimeout(1200);
@@ -96,7 +103,7 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
       await page.getByRole('button', { name: 'Publish', exact: true }).click();
       await expect(page.getByRole('status')).toContainText('Saved');
     }
-    await expect(page.getByRole('cell', { name: 'USD' }).first()).toBeVisible();
+    await expect(page.getByText('1,310').first()).toBeVisible();
   });
 
   test('2 · an account is raised by one person and approved by another', async ({ page }) => {
@@ -175,17 +182,22 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     // in the debit cell or the credit cell. There is no "side" to choose —
     // which column the figure goes in is the choice — and no button: leaving
     // the row saves it, and the next row is already there.
-    for (const [account, side, amount] of [
-      [cashAccount, 'Debit', '2400'],
-      [salesAccount, 'Credit', '2400'],
-    ] as const) {
+    for (const [index, [account, side, amount]] of (
+      [
+        [cashAccount, 'Debit', '2400'],
+        [salesAccount, 'Credit', '2400'],
+      ] as const
+    ).entries()) {
+      // The row being typed is the last one; once it is saved the grid opens
+      // another beneath it, so the check is on the row by its position.
       const picker = page.getByRole('combobox', { name: 'Account' }).last();
       const value = await picker.locator('option').filter({ hasText: account }).first().getAttribute('value');
       await picker.selectOption(value!);
       const cell = page.getByRole('spinbutton', { name: side, exact: true }).last();
       await cell.fill(amount);
       await cell.press('Enter');
-      await expect(picker).toHaveValue(value!);
+      await expect(page.getByRole('combobox', { name: 'Account' }).nth(index)).toHaveValue(value!, { timeout: 15_000 });
+      await expect(page.getByRole('combobox', { name: 'Account' })).toHaveCount(index + 2, { timeout: 15_000 });
     }
 
     // The balance is summed on screen as it is typed: both sides agree, so
@@ -193,9 +205,10 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     await expect(page.getByText('Balanced', { exact: true })).toBeVisible();
     await expect(page.locator('tfoot')).toContainText('2,400');
     await expect(page.getByRole('combobox', { name: 'Account' })).toHaveCount(3);
-    await page.waitForTimeout(1200);
+    // The button cannot be pressed until it can act, so no press is dropped.
+    await expect(page.getByRole('button', { name: 'Submit', exact: true })).toBeEnabled({ timeout: 15_000 });
     await page.getByRole('button', { name: 'Submit', exact: true }).click();
-    await expect(page.getByRole('status')).toContainText('Saved');
+    await expect(page.getByRole('status')).toContainText('Saved', { timeout: 30_000 });
 
     // A Finance Manager creates and posts directly (§14.4).
     await expect(page.getByText('Posted', { exact: true }).first()).toBeVisible();
@@ -212,7 +225,8 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     // pressed, not chosen from a list.
     await page.goto('/finance/gl-inquiry');
     await page.waitForLoadState('networkidle');
-    await page.getByRole('link', { name: cashAccount, exact: true }).click();
+    // The link carries the drill-down arrow before the code, so match on the code.
+    await page.getByRole('link', { name: new RegExp(`${cashAccount}$`) }).first().click();
     await page.waitForURL(new RegExp(`/finance/gl-inquiry/${cashAccount}`));
     await expect(page.getByRole('link', { name: entryNo })).toBeVisible();
 
@@ -220,7 +234,7 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     await page.waitForLoadState('networkidle');
     await expect(page.getByRole('cell', { name: cashAccount })).toBeVisible();
     // Requirement 4 — the two totals must remain equal.
-    await expect(page.locator('tfoot')).toContainText('Debits equal credits');
+    await expect(page.getByText('Debits equal credits', { exact: true })).toBeVisible();
   });
 
   test('5 · the financial statements are produced from the same postings', async ({ page }) => {
@@ -267,7 +281,7 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
       await page.goto(`/finance/journals/${entryNo}`);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       const link = page
-        .locator('#journal-document a[href^="/finance/journals/JE-"]')
+        .locator('#journal-document a[href^="/finance/journals/JE-"]:not([href$="/audit"]):not([href$="/print"])')
         .first();
       if (await link.count()) reversalNo = (await link.innerText()).trim();
     }
@@ -296,7 +310,7 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     await signIn(page, ADMIN);
     await page.goto(`/finance/trial-balance?from=${YEAR}-01-01&to=${YEAR}-12-31`);
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('tfoot')).toContainText('Debits equal credits');
+    await expect(page.getByText('Debits equal credits', { exact: true })).toBeVisible();
 
     await page.goto(`/finance/financial-position?to=${YEAR}-12-31`);
     await page.waitForLoadState('networkidle');

@@ -51,3 +51,12 @@ export async function setDepartmentManager(formData: FormData): Promise<void> {
     record(code),
   );
 }
+
+/** Takes a member out of the department. */
+export async function removeDepartmentMember(formData: FormData): Promise<void> {
+  const code = text(formData, 'code');
+  await runAdminAndReturn(
+    (tx, ctx) => departments.removeMember(tx, ctx, code, text(formData, 'userId')),
+    record(code),
+  );
+}

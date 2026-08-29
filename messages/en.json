@@ -748,7 +748,9 @@
       "preview_import": "Preview Import",
       "preview_account": "Preview Account"
     },
-    "postable_of": "{count} can take entries"
+    "postable_of": "{count} can take entries",
+    "open_ledger": "Open in the General Ledger",
+    "no_journals_yet": "Nothing has been posted to this account yet."
   },
   "dashboard": {
     "welcome": "Welcome back",
@@ -1017,7 +1019,8 @@
       "remove_manager": "Remove as manager",
       "add_member": "Add a member",
       "add_member_hint": "Scopes the person to this department. Tick the box to make them its manager.",
-      "as_manager": "As department manager"
+      "as_manager": "As department manager",
+      "remove_member": "Remove from department"
     },
     "users": {
       "title": "Users",
@@ -1417,7 +1420,8 @@
       "sub_accounts_hint": "This is a posting account, so nothing can hang beneath it. It can become a header — but only while it has never been posted to, because a header carries no balance of its own.",
       "allow_sub_accounts": "Let it hold sub-accounts",
       "is_a_header": "This is a header account. Create an account under it from the Chart of Accounts.",
-      "creating": "Creating…"
+      "creating": "Creating…",
+      "edit": "Edit account"
     },
     "rates": {
       "title": "Accounting rates",
@@ -1488,7 +1492,8 @@
       "deactivated": "Department closed",
       "reactivated": "Department reopened",
       "manager_assigned": "Department manager assigned",
-      "manager_removed": "Department manager removed"
+      "manager_removed": "Department manager removed",
+      "member_removed": "Member removed from department"
     },
     "app_user": {
       "created": "User created",
@@ -1556,7 +1561,8 @@
       "submit": "Submission authorised",
       "approve": "Approval authorised",
       "exported": "Chart exported",
-      "reject": "Rejection authorised"
+      "reject": "Rejection authorised",
+      "updated": "Account renamed or described"
     },
     "fiscal_period": {
       "created": "Fiscal year opened",

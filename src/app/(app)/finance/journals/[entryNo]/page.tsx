@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { History, Printer } from 'lucide-react';
-import { ActionButton, AdminPage, Flash, ReasonForm, admin as s } from '@/components/admin';
+import { AdminPage, Flash, ReasonForm, admin as s } from '@/components/admin';
+import { ActionReadyButton } from '@/components/admin/action-ready-button';
 import { Attachments } from '@/components/admin/attachments';
 import { AttachmentsButton } from '@/components/admin/icon-dialog';
 import { JournalHeaderForm } from '@/components/admin/journal-header-form';
@@ -380,11 +381,11 @@ export default async function JournalPage({
           <div className={s.sapFoot}>
             <div className={s.sapFootActions}>
               {maySubmit ? (
-                <ActionButton action={submitJournal} hidden={hidden} label={t('journals.submit')} small={false} tone="primary" />
+                <ActionReadyButton action={submitJournal} hidden={hidden} label={t('journals.submit')} tone="primary" />
               ) : null}
               {mayDecide ? (
                 <>
-                  <ActionButton action={approveJournal} hidden={hidden} label={t('journals.approve')} small={false} tone="primary" />
+                  <ActionReadyButton action={approveJournal} hidden={hidden} label={t('journals.approve')} tone="primary" />
                   <ReasonForm
                     action={rejectJournal}
                     hidden={hidden}

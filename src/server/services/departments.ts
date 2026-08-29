@@ -156,6 +156,58 @@ export async function setActive(
 }
 
 /**
+ * Who may change a department's membership: an administrator who holds the
+ * toggle, or the department's own manager (by direction, 2026-08-29 — a
+ * manager runs their department, and that includes who is in it). The
+ * manager's standing is read from the scope table, the same place §5.2's
+ * approval routing reads it.
+ */
+async function permitMembership(tx: Tx, ctx: ActorContext, code: string): Promise<void> {
+  if (await isManagerOf(tx, ctx.principal.userId, code)) return;
+  await permit(ctx, 'configure', 'user_department_scope', code);
+}
+
+/** Is this person the manager of the department? For the screen that offers the controls. */
+export async function isManagerOf(tx: Tx, userId: string, code: string): Promise<boolean> {
+  const [scope] = await tx
+    .select({ isManager: userDepartmentScope.isManager })
+    .from(userDepartmentScope)
+    .where(and(eq(userDepartmentScope.userId, userId), eq(userDepartmentScope.departmentCode, code)));
+  return Boolean(scope?.isManager);
+}
+
+/**
+ * Takes somebody out of a department.
+ *
+ * If they were its manager, the department is left without one and says so;
+ * the person keeps their account and their other departments.
+ */
+export async function removeMember(tx: Tx, ctx: ActorContext, code: string, userId: string): Promise<void> {
+  await permitMembership(tx, ctx, code);
+  const dept = await get(tx, code);
+  const [user] = await tx
+    .select({ id: appUser.id, displayName: appUser.displayName })
+    .from(appUser)
+    .where(eq(appUser.id, userId));
+  if (!user) throw new AdminValidationError('userId', 'is not a known user');
+
+  await tx
+    .delete(userDepartmentScope)
+    .where(and(eq(userDepartmentScope.userId, userId), eq(userDepartmentScope.departmentCode, code)));
+  if (dept.managerUserId === userId) {
+    await tx.update(department).set({ managerUserId: null }).where(eq(department.code, code));
+  }
+
+  await recordChange(tx, ctx, {
+    action: 'department.member_removed',
+    objectType: 'user_department_scope',
+    objectId: `${userId}:${code}`,
+    before: { departmentCode: code, userId, displayName: user.displayName },
+    after: null,
+  });
+}
+
+/**
  * Makes — or unmakes — someone the Department Manager (§5.2).
  *
  * The person is scoped to the department if they were not already. Clearing
@@ -169,7 +221,7 @@ export async function setManager(
   userId: string,
   isManager: boolean,
 ) {
-  await permit(ctx, 'configure', 'user_department_scope', `${userId}:${code}`);
+  await permitMembership(tx, ctx, code);
   const dept = await get(tx, code);
   const [user] = await tx.select({ id: appUser.id, displayName: appUser.displayName }).from(appUser).where(eq(appUser.id, userId));
   if (!user) throw new AdminValidationError('userId', 'is not a known user');

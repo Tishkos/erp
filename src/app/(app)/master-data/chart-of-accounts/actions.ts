@@ -78,3 +78,16 @@ export async function allowSubAccounts(formData: FormData): Promise<void> {
     record(code),
   );
 }
+
+/** The name and the description — the two things about an account that are typed. */
+export async function updateAccount(formData: FormData): Promise<void> {
+  const code = text(formData, 'code');
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      coa.updateDetails(tx, ctx, text(formData, 'id'), {
+        name: text(formData, 'name'),
+        description: text(formData, 'description'),
+      }),
+    record(code),
+  );
+}

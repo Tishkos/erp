@@ -113,6 +113,10 @@ export function registerAllRecords(): void {
     object: 'chart_of_account',
     loadHeader: loadAccountHeader,
     loadRelated: loadAccountChildren,
+    // An account is edited on its own page — the name and description panel
+    // beneath the record — so the framework's generic Edit, which has no
+    // screen to open, is not offered.
+    actionOverrides: async () => ({ edit: { available: false, reasonKey: 'action.disabled.not_editable' } }),
     // No `loadJournals`: an account is a master record, not a document that
     // posts. The record page says so in words rather than hiding the section.
   });

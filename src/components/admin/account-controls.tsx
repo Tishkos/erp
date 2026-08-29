@@ -1,6 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
-import { ActionButton, Form, Grid, ReasonForm, Select, Submit, SubmitRow, admin as s } from './index';
+import { ActionButton, Field, Form, Grid, ReasonForm, Select, Submit, SubmitRow, admin as s } from './index';
 import { NewAccountDialog } from './new-account-dialog';
 import { linesForType } from '@domain/financial-statements';
 import type { AccountNode } from '@domain/chart-of-accounts';
@@ -9,6 +9,7 @@ import {
   createAccount,
   deactivateAccount,
   setStatementLine,
+  updateAccount,
 } from '@/app/(app)/master-data/chart-of-accounts/actions';
 
 /** One row of the parent picker: where it sits, and whether it can hold children. */
@@ -98,6 +99,20 @@ export async function AccountControls({
 
   return (
     <div className={s.assignGrid}>
+      {/* What may be typed on an account: its name and what it is for. */}
+      <Panel title={t('accounts.edit')}>
+        <Form action={updateAccount}>
+          <input name="id" type="hidden" value={account.id} />
+          <input name="code" type="hidden" value={account.code} />
+          <Grid>
+            <Field defaultValue={account.name} label={t('accounts.name')} name="name" required requiredLabel={t('required_hint')} />
+            <Field defaultValue={account.description ?? ''} label={t('accounts.description')} name="description" type="textarea" wide />
+          </Grid>
+          <SubmitRow>
+            <Submit label={t('save')} />
+          </SubmitRow>
+        </Form>
+      </Panel>
       {!account.isGroup ? (
         <>
           <Panel title={t('accounts.statement_line')}>

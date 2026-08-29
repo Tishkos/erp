@@ -27,7 +27,7 @@ import { AdminNotFoundError } from '@/server/services/administration';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as departments from '@/server/services/departments';
 import * as users from '@/server/services/users';
-import { setDepartmentActive, setDepartmentManager, updateDepartment } from '../actions';
+import { removeDepartmentMember, setDepartmentActive, setDepartmentManager, updateDepartment } from '../actions';
 
 /**
  * One department — Phase 0 requirement 3, in the two-column record layout:
@@ -56,14 +56,19 @@ export default async function DepartmentPage({
     return <Denied object={page('departments')} />;
   }
   const mayEdit = can(principal, 'configure', departments.PERMISSION_OBJECT);
-  const mayAssign = can(principal, 'configure', 'user_department_scope');
   const mayAdminister = can(principal, 'administer', departments.PERMISSION_OBJECT);
 
   const data = await withCurrentUser(async (tx) => {
     try {
       const row = await departments.get(tx, code);
+      // The toggle-holder, or the department's own manager, may change who
+      // is in it (by direction, 2026-08-29).
+      const mayAssign =
+        can(principal, 'configure', 'user_department_scope') ||
+        (await departments.isManagerOf(tx, principal.userId, code));
       return {
         row,
+        mayAssign,
         all: await departments.listAll(tx),
         members: await departments.members(tx, code),
         people: mayAssign ? await users.listAll(tx) : [],
@@ -74,7 +79,7 @@ export default async function DepartmentPage({
     }
   });
   if (!data) notFound();
-  const { row, all, members, people } = data;
+  const { row, all, members, people, mayAssign } = data;
   const managers = members.filter((m) => m.isManager);
   const nonMembers = people.filter((p) => p.isActive && !members.some((m) => m.userId === p.id));
 
@@ -209,20 +214,28 @@ export default async function DepartmentPage({
                         </td>
                         {mayAssign ? (
                           <td>
-                            {m.isManager ? (
+                            <span style={{ display: 'inline-flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                              {m.isManager ? (
+                                <ActionButton
+                                  action={setDepartmentManager}
+                                  hidden={{ code: row.code, userId: m.userId }}
+                                  label={t('departments.remove_manager')}
+                                />
+                              ) : (
+                                <ActionButton
+                                  action={setDepartmentManager}
+                                  hidden={{ code: row.code, userId: m.userId, isManager: '1' }}
+                                  label={t('departments.make_manager')}
+                                  tone="primary"
+                                />
+                              )}
                               <ActionButton
-                                action={setDepartmentManager}
+                                action={removeDepartmentMember}
                                 hidden={{ code: row.code, userId: m.userId }}
-                                label={t('departments.remove_manager')}
+                                label={t('departments.remove_member')}
+                                tone="danger"
                               />
-                            ) : (
-                              <ActionButton
-                                action={setDepartmentManager}
-                                hidden={{ code: row.code, userId: m.userId, isManager: '1' }}
-                                label={t('departments.make_manager')}
-                                tone="primary"
-                              />
-                            )}
+                            </span>
                           </td>
                         ) : null}
                       </tr>
