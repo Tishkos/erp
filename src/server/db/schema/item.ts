@@ -33,6 +33,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { appUser, branch } from './platform';
+import { businessPartner } from './organisation';
 import { chartOfAccount } from './accounting';
 
 // ---------------------------------------------------------------------------
@@ -153,6 +154,54 @@ export const itemUom = pgTable(
     // resolve to a piece.
     uniqueIndex('item_uom_barcode_uniq').on(t.barcode).where(sql`${t.barcode} is not null`),
     check('item_uom_conversion_positive', sql`${t.conversionNumerator} > 0 and ${t.conversionDenominator} > 0`),
+  ],
+);
+
+/**
+ * Which suppliers an item can be bought from — Phase 2 requirement 4.
+ *
+ * *"Each item can be linked to one or more suppliers, with one supplier
+ *  identified as the default supplier."*
+ *
+ * A link table rather than a column on the item, because "one or more" is not
+ * something a column can hold, and because the supplier's own code for the
+ * item belongs to the *pairing*: the same item has a different code at every
+ * supplier who sells it.
+ *
+ * `item.supplier_item_code` predates this and stays. It is the code of the one
+ * supplier an item was first set up against, and Phase 05 reads it; a link row
+ * that names the same supplier carries the same string. Nothing is migrated
+ * automatically — guessing which supplier an unattributed code belonged to is
+ * exactly the kind of invention a master data file should not contain.
+ *
+ * "One default" is a partial unique index, not a rule in a service. Two rows
+ * claiming to be the default is a state the purchase order cannot resolve, so
+ * it is a state the database does not permit.
+ */
+export const itemSupplier = pgTable(
+  'item_supplier',
+  {
+    itemId: uuid('item_id')
+      .notNull()
+      .references(() => item.id, { onDelete: 'cascade' }),
+    supplierId: uuid('supplier_id')
+      .notNull()
+      .references(() => businessPartner.id),
+
+    /** §8.3 — the supplier's code, retrieved from here rather than typed. */
+    supplierItemCode: text('supplier_item_code'),
+
+    /** The supplier a purchase proposes first. At most one per item. */
+    isDefault: boolean('is_default').notNull().default(false),
+
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.itemId, t.supplierId] }),
+    // At most one default per item — see the note above.
+    uniqueIndex('item_supplier_default_uniq').on(t.itemId).where(sql`${t.isDefault}`),
+    index('item_supplier_supplier_idx').on(t.supplierId),
   ],
 );
 

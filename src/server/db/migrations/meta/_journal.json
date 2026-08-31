@@ -687,6 +687,13 @@
       "when": 1795300000000,
       "tag": "0173_phase01_currency_symbol",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1795400000000,
+      "tag": "0174_phase02_item_supplier",
+      "breakpoints": true
     }
   ]
 }
