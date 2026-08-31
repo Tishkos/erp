@@ -1619,7 +1619,12 @@
       "add_supplier": "Add a supplier",
       "link_supplier": "Link supplier",
       "unlink": "Unlink",
-      "deactivate_title": "Deactivate this item"
+      "deactivate_title": "Deactivate this item",
+      "on_hand": "On hand",
+      "stock_title": "Stock on hand",
+      "no_stock": "None on hand. Nothing has been received into stock for this item yet.",
+      "stock_hint": "Counted from stock movements — receipts add, deliveries and issues take away — so it always agrees with what actually moved.",
+      "reserved": "{quantity} reserved"
     },
     "partners": {
       "subtitle_customer": "Who we sell to. One record per company, whatever else they are to us.",

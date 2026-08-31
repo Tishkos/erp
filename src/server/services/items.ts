@@ -28,6 +28,7 @@ import {
   chartOfAccount,
   item,
   itemSupplier,
+  itemUom,
   unitOfMeasure,
 } from '../db/schema';
 import {
@@ -76,6 +77,16 @@ export async function listAll(tx: Tx) {
       supplierCount: sql<number>`(
         select count(*) from item_supplier s where s.item_id = ${item.id}
       )::int`,
+      // What is actually on the shelf, added up across every warehouse.
+      //
+      // Read from `stock_position`, which is a view over the stock movements
+      // rather than a number kept on the item. That is the whole point: a
+      // quantity stored on the master is a second opinion, and the day it
+      // disagrees with the movements there is no way to tell which is right.
+      // Summed from the movements it cannot disagree with them.
+      onHand: sql<string>`coalesce((
+        select sum(p.on_hand) from stock_position p where p.item_code = ${item.code}
+      ), 0)::text`,
     })
     .from(item)
     .orderBy(asc(item.code));
@@ -132,7 +143,39 @@ export async function detail(tx: Tx, code: string) {
     salesAccount: sales ? `${sales.code} · ${sales.name}` : null,
     purchaseAccount: purchase ? `${purchase.code} · ${purchase.name}` : null,
     suppliers: await suppliersOf(tx, row.id),
+    stock: await stockOf(tx, row.code),
   };
+}
+
+export interface StockLine {
+  readonly warehouseCode: string;
+  readonly warehouseName: string | null;
+  /** Scaled at QUANTITY_SCALE, like every quantity in the system. */
+  readonly onHand: string;
+  readonly reserved: string;
+}
+
+/**
+ * Where this item physically is, warehouse by warehouse.
+ *
+ * Nothing here is stored against the item: it is the movements — receipts,
+ * issues, transfers, counts — summed by the `stock_position` view. An item
+ * with no movements has a real position of zero rather than no position, so a
+ * reader asking "how many do we have?" is never answered with a blank.
+ */
+export async function stockOf(tx: Tx, itemCode: string): Promise<StockLine[]> {
+  const result = await tx.execute(sql`
+    select p.warehouse_code as "warehouseCode",
+           w.name           as "warehouseName",
+           p.on_hand::text  as "onHand",
+           p.reserved::text as "reserved"
+      from stock_position p
+      left join warehouse w on w.code = p.warehouse_code
+     where p.item_code = ${itemCode}
+       and (p.on_hand <> 0 or p.reserved <> 0)
+     order by p.warehouse_code
+  `);
+  return result.rows as unknown as StockLine[];
 }
 
 /** The categories already in use, so a second item can reuse one by picking it. */
@@ -225,6 +268,51 @@ async function valuesFor(tx: Tx, input: ItemInput) {
   };
 }
 
+/**
+ * Registers the base unit among the item's units.
+ *
+ * An item's conversions are all stated *relative to its base*, so the base has
+ * to be one of them — converting to itself at one. The database says so with a
+ * deferred constraint that fires at COMMIT, which is why forgetting it surfaced
+ * as "that could not be saved" at the end rather than as a complaint about the
+ * field: by the time the check runs, the statement that caused it is long past.
+ *
+ * Phase 2 asks only for a base unit, so this is the single row every item gets.
+ * When the module that edits conversions arrives it will add the others around
+ * this one.
+ */
+async function registerBaseUnit(tx: Tx, itemId: string, baseUomCode: string) {
+  const rows = await tx
+    .select({ uomCode: itemUom.uomCode })
+    .from(itemUom)
+    .where(eq(itemUom.itemId, itemId));
+
+  if (rows.some((row) => row.uomCode === baseUomCode)) return;
+
+  // Changing the base while other units hang off it would silently restate
+  // every one of their conversions, so it is refused rather than guessed at.
+  if (rows.length > 1) {
+    throw new AdminValidationError(
+      'baseUomCode',
+      'cannot change while the item has other units — their conversions are stated relative to the base',
+    );
+  }
+  if (rows[0]) {
+    await tx
+      .delete(itemUom)
+      .where(and(eq(itemUom.itemId, itemId), eq(itemUom.uomCode, rows[0].uomCode)));
+  }
+
+  await tx.insert(itemUom).values({
+    itemId,
+    uomCode: baseUomCode,
+    conversionNumerator: 1n,
+    conversionDenominator: 1n,
+    isPurchaseDefault: true,
+    isSalesDefault: true,
+  });
+}
+
 export async function create(tx: Tx, ctx: ActorContext, input: ItemInput & { readonly code?: string }) {
   await permit(ctx, 'create', PERMISSION_OBJECT);
 
@@ -245,6 +333,9 @@ export async function create(tx: Tx, ctx: ActorContext, input: ItemInput & { rea
     .values({ code, ...values, createdBy: ctx.principal.userId })
     .returning({ id: item.id });
 
+  // In the same transaction: the deferred check runs at COMMIT and needs it.
+  await registerBaseUnit(tx, created!.id, values.baseUomCode);
+
   await recordChange(tx, ctx, {
     action: 'item.created',
     objectType: PERMISSION_OBJECT,
@@ -260,6 +351,9 @@ export async function update(tx: Tx, ctx: ActorContext, code: string, input: Ite
   const values = await valuesFor(tx, input);
 
   await tx.update(item).set({ ...values, updatedAt: new Date() }).where(eq(item.code, code));
+  if (values.baseUomCode !== before.baseUomCode) {
+    await registerBaseUnit(tx, before.id, values.baseUomCode);
+  }
   await recordChange(tx, ctx, {
     action: 'item.updated',
     objectType: PERMISSION_OBJECT,

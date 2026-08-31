@@ -25,6 +25,7 @@ import { can } from '@domain/permissions';
 import { AdminNotFoundError } from '@/server/services/administration';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
+import { formatQuantity } from '@domain/uom';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as items from '@/server/services/items';
 import * as uom from '@/server/services/units-of-measure';
@@ -155,6 +156,37 @@ export default async function ItemPage({
               </li>
             </ul>
           </Panel>
+
+          {/* What is actually on the shelf. Not stored on the item — summed
+              from the stock movements, so it cannot disagree with them. */}
+          {row.isStock ? (
+            <Panel title={t('items.stock_title')}>
+              {row.stock.length === 0 ? (
+                <p className="muted">{t('items.no_stock')}</p>
+              ) : (
+                <ul className={s.profileFacts}>
+                  {row.stock.map((line) => (
+                    <li key={line.warehouseCode}>
+                      <span>
+                        {line.warehouseCode}
+                        {line.warehouseName ? ` · ${line.warehouseName}` : ''}
+                      </span>
+                      <span>
+                        <bdi dir="ltr">{formatQuantity(BigInt(line.onHand))}</bdi> {row.baseUomCode}
+                        {BigInt(line.reserved) > 0n ? (
+                          <span className="muted">
+                            {' '}
+                            ({t('items.reserved', { quantity: formatQuantity(BigInt(line.reserved)) })})
+                          </span>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className={s.sectionHint}>{t('items.stock_hint')}</p>
+            </Panel>
+          ) : null}
 
           {mayAdminister ? (
             <Panel title={row.active ? t('items.deactivate_title') : t('reactivate')}>

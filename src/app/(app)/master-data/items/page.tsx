@@ -23,6 +23,7 @@ import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
+import { formatQuantity } from '@domain/uom';
 import * as items from '@/server/services/items';
 import * as uom from '@/server/services/units-of-measure';
 import { createItem } from './actions';
@@ -150,6 +151,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
                 <th scope="col">{t('items.category')}</th>
                 <th scope="col">{t('items.kind')}</th>
                 <th scope="col">{t('items.base_uom')}</th>
+                <th scope="col">{t('items.on_hand')}</th>
                 <th scope="col">{t('items.suppliers')}</th>
                 <th scope="col">{column('active')}</th>
               </tr>
@@ -157,7 +159,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
             <tbody>
               {shown.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>{t('items.none')}</td>
+                  <td colSpan={8}>{t('items.none')}</td>
                 </tr>
               ) : null}
               {shown.map((row) => (
@@ -169,6 +171,15 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
                   <td>{row.category ?? t('none')}</td>
                   <td>{row.isStock ? t('items.kind_stock') : t('items.kind_service')}</td>
                   <td>{row.baseUomCode}</td>
+                  {/* A service has no stock, so a figure here would be a lie
+                      rather than a zero. */}
+                  <td>
+                    {row.isStock ? (
+                      <bdi dir="ltr">{formatQuantity(BigInt(row.onHand))}</bdi>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td>{row.supplierCount}</td>
                   <td>
                     <Pill label={row.active ? t('active') : t('inactive')} on={row.active} />
