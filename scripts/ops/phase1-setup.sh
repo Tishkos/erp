@@ -96,7 +96,7 @@ SELECT y.id,
 -- Dated 1900-01-01 to match the IQD rate, so a back-dated entry is valued too
 -- rather than being refused for a reason that reads like a bug.
 INSERT INTO exchange_rate (currency_code, rate_type, iqd_per_unit, effective_from, source, entered_by)
-SELECT 'USD', 'accounting', ${USD_RATE}, '1900-01-01', 'Opening rate — set at Phase 1 setup',
+SELECT 'USD', 'accounting', ${USD_RATE}, '1900-01-01', 'Opening rate — set at system setup',
        (SELECT id FROM app_user WHERE email = 'admin@qs-groups.com')
  WHERE NOT EXISTS (
    SELECT 1 FROM exchange_rate

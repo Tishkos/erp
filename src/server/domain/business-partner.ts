@@ -74,7 +74,7 @@ export class PartnerNotUsableError extends Error {
   ) {
     super(
       `Business partner ${partnerCode} is ${status.replace('_', ' ')} and cannot be used on a new ` +
-        'transaction without an authorised override (§6).',
+        'transaction without an authorised override.',
     );
     this.name = 'PartnerNotUsableError';
   }
@@ -152,7 +152,7 @@ export class DuplicatePartnerError extends Error {
       `This looks like an existing partner: ${matches
         .map((m) => `${m.partnerCode} ${m.legalName} (matched on ${m.matchedOn.join(', ')})`)
         .join('; ')}. ` +
-        'Use the existing record, or confirm this is genuinely a different party (§4.4).',
+        'Use the existing record, or confirm this is genuinely a different party.',
     );
     this.name = 'DuplicatePartnerError';
   }

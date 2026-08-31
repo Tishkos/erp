@@ -283,14 +283,14 @@ export function assertPostable(account: AccountNode, context: PostingContext): v
   if (account.approvalStatus !== 'approved') {
     throw new AccountPostingError(
       account.code,
-      `it is still '${account.approvalStatus}'. An account accepts entries only once the Accounting Manager has approved it (§5.2).`,
+      `it is still '${account.approvalStatus}'. An account accepts entries only once the Accounting Manager has approved it.`,
     );
   }
 
   if (!account.isActive) {
     throw new AccountPostingError(
       account.code,
-      'the account is inactive. An inactive account keeps its history but accepts no new entries (§3.3).',
+      'the account is inactive. An inactive account keeps its history but accepts no new entries.',
     );
   }
 
@@ -304,7 +304,7 @@ export function assertPostable(account: AccountNode, context: PostingContext): v
   if (account.controlAccount && context.source === 'manual' && !context.actorIsFinanceManager) {
     throw new AccountPostingError(
       account.code,
-      `it is the ${account.controlAccount} control account. Direct manual posting requires Finance Manager approval (§14.3); ` +
+      `it is the ${account.controlAccount} control account. Direct manual posting requires Finance Manager approval; ` +
         'ordinarily it is posted by the source document, not by hand.',
     );
   }

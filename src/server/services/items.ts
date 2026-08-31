@@ -153,7 +153,7 @@ function assertTracking(isStock: boolean, value: string | null | undefined): Ite
   if (!(ITEM_TRACKING as readonly string[]).includes(tracking)) {
     throw new AdminValidationError(
       'tracking',
-      'must be serial, batch or both — a stock item cannot be untracked (§9.3)',
+      'must be serial, batch or both — a stock item cannot be untracked',
     );
   }
   return tracking as ItemTracking;

@@ -71,7 +71,7 @@ export class JournalBranchMismatchError extends Error {
     // §25 — the field, the reason, the corrective action.
     super(
       `This journal is in branch ${journalBranch}, so its lines cannot be in ${lineBranch}. ` +
-        'One Journal Entry contains one branch only (§14.3). ' +
+        'One Journal Entry contains one branch only. ' +
         `Raise a separate journal in ${lineBranch}, or leave the line's branch unset to inherit ${journalBranch}.`,
     );
     this.name = 'JournalBranchMismatchError';

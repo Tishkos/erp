@@ -375,7 +375,7 @@ export class ControlAccountInUseError extends Error {
   constructor(accountCode: string, mappings: number) {
     super(
       `${accountCode} is the account ${mappings} accounting mapping(s) post to as a control account (§14.3). ` +
-        'Removing the designation would leave those mappings posting to an account §14.3 no longer protects. ' +
+        'Removing the designation would leave those mappings posting to an account no longer protected. ' +
         'Repoint the mappings first.',
     );
     this.name = 'ControlAccountInUseError';
