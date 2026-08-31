@@ -1,18 +1,23 @@
-import { notFound } from 'next/navigation';
-import { PartnerList } from '@/components/admin/partner-list';
-import type { SearchParams } from '@/components/admin/params';
-import { visibleRoute } from '@/server/phase-gate';
+import { redirect } from 'next/navigation';
 
 /**
- * Every business partner, whichever role they hold.
+ * There is no combined Business Partners list any more.
  *
- * The combined view. A partner is created from Customers or from Suppliers,
- * because creating one means giving them a role; this is where they are read
- * together.
+ * There was one, and it was a trap: it showed every partner but offered no way
+ * to add one, because adding a partner means giving them a role and this
+ * screen did not know which. Someone who opened it to create a customer found
+ * a list and no button.
+ *
+ * A partner is created as a **customer** or as a **supplier**, on the screen
+ * that names the role — and adding a company that already exists in the other
+ * role grants it the second role rather than making a second record (§6, §3.1).
+ * So the two role screens are the whole story, and this address forwards to
+ * one of them rather than standing as a third, emptier way in.
+ *
+ * The record page below this path stays: `/master-data/business-partners/CODE`
+ * is where both screens open a partner, because there is one record behind
+ * both of them.
  */
-export const dynamic = 'force-dynamic';
-
-export default async function BusinessPartnersPage({ searchParams }: { searchParams: SearchParams }) {
-  if (!visibleRoute('/master-data/business-partners')) notFound();
-  return <PartnerList searchParams={searchParams} />;
+export default function BusinessPartnersIndex() {
+  redirect('/master-data/customers');
 }

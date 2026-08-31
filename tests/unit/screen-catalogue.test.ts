@@ -81,12 +81,20 @@ describe('the screen catalogue covers the approved tree', () => {
   // Balance Sheet, Changes in Equity and Cash Flow Statement each on its own
   // screen (2026-08-31), which is grouping refined, not function added.
   //
-  // Plus two more for Phase 2 (2026-08-31): Cash Accounts beside Bank
-  // Accounts, because the questions each kind asks are different; and Payment
-  // Methods, which Phase 2 requires and Appendix A did not list at all.
-  it('classifies all 225 items in the Appendix A tree', () => {
-    expect(allMenuItems()).toHaveLength(225);
-    expect(Object.keys(SCREENS)).toHaveLength(225);
+  // Plus two for Phase 2: Cash Accounts beside Bank Accounts, because the
+  // questions each kind asks are different; and Payment Methods, which the
+  // phase requires and Appendix A did not list at all.
+  //
+  // Less five, by direction (2026-08-31): no screen appears under two
+  // headings. Appendix A listed the partners under CRM *and* Master Data,
+  // units of measure under Inventory *and* Master Data, the audit trail under
+  // Documents *and* Administration, and the error queue under Integrations
+  // *and* Administration — five aliases, each of which read as a second screen
+  // until you opened both and found one page. No function was removed: every
+  // one of them is still reachable, once.
+  it('classifies all 220 items in the Appendix A tree', () => {
+    expect(allMenuItems()).toHaveLength(220);
+    expect(Object.keys(SCREENS)).toHaveLength(220);
   });
 
   it('uses only declared archetypes', () => {
@@ -103,7 +111,7 @@ describe('the screen catalogue covers the approved tree', () => {
       (sum, item) => sum + screenCount(archetypeOf(item.key)!),
       0,
     );
-    expect(total).toBe(335);
+    expect(total).toBe(327);
   });
 });
 
@@ -131,20 +139,20 @@ describe('every screen has one address', () => {
   });
 
   /**
-   * Five routes are reached from two places in the tree. Three are deliberate:
-   * Business Partners, Units of Measure and Exchange Rates each belong to a
-   * module menu *and* to Master Data, which is why the tree carries both a
-   * plain key and an 'md_' one for the same page.
+   * No route is reached from two places — by direction, 2026-08-31.
    *
-   * Two are not so clearly deliberate, and are pinned here rather than waved
-   * through — see the note in the phase log. Background Jobs and the Error
-   * Queue share /administration/jobs while classifying as different archetypes
-   * (workspace and inbox), so one of the two functions cannot be rendered at
-   * that address; Document Audit and the Audit Trail share /administration/audit.
-   * Pinning the list means a *new* collision fails this test instead of quietly
-   * hiding a screen.
+   * The tree used to alias five. Some were deliberate (Business Partners and
+   * Units of Measure sat under a module menu *and* under Master Data) and some
+   * were accidents that hid a screen: Background Jobs and the Error Queue
+   * shared /administration/jobs while classifying as different archetypes, so
+   * one of the two could never be rendered at that address.
+   *
+   * Either way a reader met the same page twice under different names, which
+   * is indistinguishable from two screens until you open both. Each now sits
+   * under the heading whose work it belongs to, and this test holds the line:
+   * an alias reintroduced fails here rather than quietly duplicating a screen.
    */
-  it('shares a route only where the tree deliberately aliases one', () => {
+  it('reaches every screen from exactly one place in the tree', () => {
     const byRoute = new Map<string, string[]>();
     for (const section of MENU) {
       for (const item of section.items) {
@@ -155,13 +163,8 @@ describe('every screen has one address', () => {
     const shared = Object.fromEntries(
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
-    expect(shared).toEqual({
-      '/master-data/business-partners': ['business_partners', 'md_business_partners'],
-      '/master-data/uom': ['md_uom', 'uom'],
-      '/administration/audit': ['audit_trail', 'document_audit'],
-      '/administration/jobs': ['background_jobs', 'error_queue'],
-    });
-    expect(screenRoutes().size).toBe(225 - Object.keys(shared).length);
+    expect(shared).toEqual({});
+    expect(screenRoutes().size).toBe(220);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -190,7 +193,6 @@ describe('every screen has one address', () => {
       '/inventory/availability',
       '/master-data/bank-accounts',
       '/master-data/branches',
-      '/master-data/business-partners',
       '/master-data/cash-accounts',
       '/master-data/chart-of-accounts',
       // Phase 2 — the accounting master data.
@@ -232,7 +234,7 @@ describe('the build tracker reports what each phase owes the frontend', () => {
   it('attributes every screen to the phase that delivers it', () => {
     const byPhase = screensByPhase();
     const counted = [...byPhase.values()].reduce((sum, screens) => sum + screens.length, 0);
-    expect(counted).toBe(225);
+    expect(counted).toBe(220);
     for (const phase of byPhase.keys()) expect(phase).toMatch(/^\d\d$/);
   });
 });

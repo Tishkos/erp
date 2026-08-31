@@ -164,7 +164,7 @@ export async function RecordScreen({
 
       <PresentationBanner
         badge={screen('preview_badge')}
-        note={`${screen('preview_note')} ${screen('preview_phase', { phase: item.phase })}`}
+        note={screen('preview_note')}
       />
 
       <div className={styles.layout}>

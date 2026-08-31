@@ -15,10 +15,24 @@
  * server-side check in `permissions.ts` is the control; hiding an item the user
  * cannot use is courtesy, and removing this file would weaken nothing.
  *
- * Menus 6–21 include pages whose modules arrive in later phases. They are
- * listed now, with `phase`, so the tree is complete against Appendix A from the
- * start and a module's arrival is a route being filled in rather than a menu
- * being renegotiated.
+ * Menus 6–21 include pages whose modules arrive later. They are listed now,
+ * with `phase`, so the tree is complete against Appendix A from the start and
+ * a module's arrival is a route being filled in rather than a menu being
+ * renegotiated. `phase` is a build record and is never shown to a user.
+ *
+ * ── One screen, one home (by direction, 2026-08-31) ────────────────────────
+ * No route appears under two headings. Appendix A listed several twice — the
+ * partners under CRM *and* Master Data, units of measure under Inventory *and*
+ * Master Data, the audit trail under Documents *and* Administration — which
+ * reads as two different screens until you open both and find the same page.
+ *
+ * Each now sits under the heading whose work it belongs to: Customers under
+ * Sales, Suppliers under Purchasing, Items and Units of Measure under
+ * Inventory, Bank and Cash Accounts under Treasury. Master Data keeps the
+ * reference data no single module owns — the chart, currencies, branches,
+ * departments, cost centres and the payment terms and methods every module
+ * quotes. Appendix A permits exactly this: grouping refined for usability
+ * without removing a required function.
  */
 import { can, type Principal, type PermissionVerb } from './permissions';
 
@@ -78,7 +92,6 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('opportunities', 'opportunity', '08'),
       page('activities', 'crm_activity', '08'),
       page('contacts', 'contact', '08'),
-      page('business_partners', 'business_partner', '03', '/master-data/business-partners'),
       page('pipeline', 'opportunity', '08'),
       page('crm_reports', 'crm_report', '08'),
       page('crm_settings', 'crm_settings', '08'),
@@ -138,7 +151,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('inventory_returns', 'inventory_return', '04'),
       page('damaged_goods', 'damage_report', '04'),
       page('serial_batch_tracking', 'serial_batch', '04'),
-      page('uom', 'uom', '03', '/master-data/uom'),
+      page('items', 'item', '02', '/master-data/items'),
+      page('uom', 'uom', '02', '/master-data/uom'),
       page('stock_reconciliation', 'stock_reconciliation', '04'),
       page('fifo_valuation', 'fifo_valuation', '04'),
       page('inventory_reports', 'inventory_report', '04'),
@@ -337,7 +351,6 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('tasks', 'task', '17'),
       page('notes', 'note', '17'),
       page('retention', 'retention_policy', '17'),
-      page('document_audit', 'audit_event', '01.4', '/administration/audit'),
     ],
   },
   {
@@ -367,11 +380,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('branches', 'branch', '01', '/master-data/branches'),
       page('departments', 'department', '01', '/master-data/departments'),
       page('cost_centres', 'cost_centre', '02', '/master-data/cost-centres'),
-      page('md_business_partners', 'business_partner', '02', '/master-data/business-partners'),
-      page('items', 'item', '02', '/master-data/items'),
       page('supplier_item_codes', 'supplier_item_code', '03'),
       page('barcodes', 'barcode', '03'),
-      page('md_uom', 'uom', '02', '/master-data/uom'),
       page('price_lists', 'price_list', '03'),
       page('warehouses', 'warehouse', '03', '/master-data/warehouses'),
       page('banks', 'bank', '03', '/master-data/banks'),
@@ -403,7 +413,6 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('imports', 'import_batch', '01', '/integrations/imports'),
       page('bank_import', 'bank_import', '07'),
       page('interface_monitor', 'interface_monitor', '19'),
-      page('error_queue', 'job', '01', '/administration/jobs'),
       page('release_notes', 'release_note', '19'),
       page('data_quality', 'data_quality', '19'),
       page('change_requests', 'change_request', '19'),

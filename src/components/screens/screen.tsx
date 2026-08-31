@@ -865,7 +865,7 @@ export async function ScreenView({ screen }: { readonly screen: ScreenRoute }) {
       {screen.wired ? null : (
         <PresentationBanner
           badge={screenLabels('preview_badge')}
-          note={`${screenLabels('preview_note')} ${screenLabels('preview_phase', { phase: item.phase })}`}
+          note={screenLabels('preview_note')}
         />
       )}
 

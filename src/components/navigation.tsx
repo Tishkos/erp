@@ -13,7 +13,7 @@ import type { MenuSection } from '@domain/menu';
  * is not access control"*, and every page and API re-checks the permission
  * regardless of what the sidebar showed.
  *
- * Items whose module has not been built yet are rendered as text with the phase
+ * Items whose module has not been built yet are rendered as plain text
  * that delivers them, rather than as links to a blank page. Appendix A's tree is
  * mandatory at functional level, so removing them until their module lands
  * would misrepresent the approved scope; a dead link would look like a fault.
@@ -41,12 +41,11 @@ export function Navigation({ sections }: { sections: readonly MenuSection[] }) {
                     {page(item.key)}
                   </Link>
                 ) : (
-                  <span
-                    className="nav__link nav__link--pending"
-                    title={phase('arrives_in', { phase: item.phase })}
-                  >
+                  // Not a link, and not labelled with a phase number: a
+                  // person reading the menu needs to know the page is not
+                  // ready, not which sprint it belongs to.
+                  <span className="nav__link nav__link--pending" title={phase('not_built')}>
                     {page(item.key)}
-                    <span className="nav__pending-mark">{item.phase}</span>
                   </span>
                 )}
               </li>

@@ -42,24 +42,22 @@ import { createPartnerInRole } from '@/app/(app)/master-data/business-partners/a
 const ROUTES = {
   customer: '/master-data/customers',
   supplier: '/master-data/suppliers',
-  all: '/master-data/business-partners',
 } as const;
 
-const PAGE_KEY = {
-  customer: 'customers',
-  supplier: 'suppliers',
-  all: 'md_business_partners',
-} as const;
+const PAGE_KEY = { customer: 'customers', supplier: 'suppliers' } as const;
+
+/** Both screens open a partner at the same address: one record, one page. */
+const RECORD = '/master-data/business-partners';
 
 export async function PartnerList({
   role,
   searchParams,
 }: {
-  /** Absent means every partner, whichever role they hold. */
-  readonly role?: partners.PartnerRole;
+  /** Which role this screen is about. A partner is always created in one. */
+  readonly role: partners.PartnerRole;
   readonly searchParams: SearchParams;
 }) {
-  const key = role ?? 'all';
+  const key = role;
   const [t, page, column, context, outcome] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
@@ -71,8 +69,7 @@ export async function PartnerList({
   if (!can(principal, 'view', partners.PERMISSION_OBJECT)) {
     return <Denied object={page(PAGE_KEY[key])} />;
   }
-  // A combined list is a place to read from; a partner is created in a role.
-  const mayCreate = role !== undefined && can(principal, 'create', partners.PERMISSION_OBJECT);
+  const mayCreate = can(principal, 'create', partners.PERMISSION_OBJECT);
   const route = ROUTES[key];
 
   const { rows, paymentTerms } = await withCurrentUser(async (tx) => ({
@@ -181,7 +178,7 @@ export async function PartnerList({
               {shown.map((row) => (
                 <tr key={row.code}>
                   <td>
-                    <Link href={`${ROUTES.all}/${encodeURIComponent(row.code)}`}>{row.code}</Link>
+                    <Link href={`${RECORD}/${encodeURIComponent(row.code)}`}>{row.code}</Link>
                   </td>
                   <td>
                     {row.legalName}

@@ -510,13 +510,11 @@
   },
   "phase": {
     "not_built": "Not yet built",
-    "arrives_in": "This screen arrives in Phase {phase}.",
-    "explanation": "The menu follows the approved Appendix A tree, so pages appear here before their module is delivered."
+    "explanation": "The menu shows the whole system. A page that is not ready yet is greyed out."
   },
   "screen": {
     "preview_badge": "Preview",
     "preview_note": "This screen shows the approved design over sample data.",
-    "preview_phase": "Phase {phase} delivers the live screen.",
     "context": "Screen context",
     "company": "Company",
     "branch": "Branch",
@@ -638,8 +636,7 @@
     "preview_notice_body": "This screen shows the approved design over sample data. The action you chose makes no change to any record.",
     "preview_action": "Preview only",
     "planned_title": "This screen is not available yet.",
-    "planned_body": "It is part of the approved system tree and is not built yet. Nothing here is invented: there are no sample figures, and nothing can be entered until the phase that delivers it.",
-    "planned_phase": "Phase",
+    "planned_body": "It is part of the system and is not ready yet. Nothing here is invented: there are no sample figures, and nothing can be entered until it is ready.",
     "planned_shape": "What it will be",
     "planned_live_in_section": "Live now in this section",
     "planned_back": "Dashboard"
@@ -903,7 +900,7 @@
     "my_profile": "My profile",
     "change_password": "Change password",
     "footer_copyright": "© {year} Qimah Al-Safinah",
-    "footer_version": "Version: {version}",
+    "footer_phase": "Phase 2",
     "system_healthy": "System is healthy",
     "system_degraded": "System is degraded",
     "search": "Search",
@@ -1006,7 +1003,7 @@
       "no_manager": "No manager",
       "default_warehouse": "Default warehouse",
       "default_cash_account": "Default cash account",
-      "created_note": "Creating a branch also creates its main warehouse, a cash GL account and its default cash account (§4.1).",
+      "created_note": "Creating a branch also creates its main warehouse, a cash account in the chart of accounts, and the branch cash account itself.",
       "deactivate_title": "Deactivate this branch",
       "users_scoped": "Users scoped to this branch"
     },
@@ -1065,7 +1062,7 @@
     },
     "managers": {
       "title": "Department Managers",
-      "subtitle": "Who finalises what. A manager approves documents raised in their own department without a second approval (§5.2).",
+      "subtitle": "Who finalises what. A manager approves documents raised in their own department without a second approval.",
       "empty": "No department has a manager yet. Assign one from the department's page.",
       "open_department": "Open department"
     },
@@ -1238,7 +1235,7 @@
     "search_placeholder": "Search this list",
     "clear_search": "Clear",
     "rows_shown": "{count, plural, =0 {No records} one {# record} other {# records}}",
-    "code_auto_hint": "Left blank, it is made from the name — \"Accountant Branch\" becomes ACCOUNTANT_BRANCH. It cannot be changed later.",
+    "code_auto_hint": "Left blank, it is made from the name. It cannot be changed later.",
     "attachments": {
       "title": "Attachments",
       "none": "No documents are attached yet.",
@@ -1554,7 +1551,7 @@
       "currency": "Currency",
       "currency_hint": "Three letters. The account can only hold this currency.",
       "approval_limit": "Approval limit",
-      "approval_limit_hint": "The ceiling a payment from this account may reach. Enforced from Phase 07.",
+      "approval_limit_hint": "The ceiling a payment from this account may reach.",
       "deactivate_title": "Deactivate this account"
     },
     "bank_accounts": {
@@ -1568,7 +1565,7 @@
       "iban": "IBAN",
       "swift": "SWIFT",
       "statement_format": "Statement format",
-      "statement_format_hint": "How its statements arrive, for the Phase 07 import."
+      "statement_format_hint": "How its statements arrive, so they can be imported."
     },
     "cash_accounts": {
       "subtitle": "The company’s cash floats, who holds each one, and the G/L account it is carried in.",
@@ -1595,7 +1592,7 @@
       "new_category_hint": "Typed here, this wins over the list above.",
       "base_uom": "Base unit",
       "tracking": "Tracking",
-      "tracking_hint": "A stock item must track serial numbers, batch numbers or both (§9.3). Ignored for a service.",
+      "tracking_hint": "A stock item must track serial numbers, batch numbers or both. Ignored for a service.",
       "tracking_serial": "Serial numbers",
       "tracking_batch": "Batch numbers",
       "tracking_serial_and_batch": "Serial and batch numbers",
@@ -1646,7 +1643,7 @@
       "no_terms": "No terms set",
       "terms_hint": "When their invoices fall due.",
       "credit_limit": "Credit limit",
-      "credit_limit_hint": "What they may owe at once. Enforced from Phase 06.",
+      "credit_limit_hint": "What they may owe at once.",
       "credit_terms_days": "Credit days",
       "roles": "Roles",
       "role_customer": "Customer",
