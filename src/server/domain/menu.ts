@@ -227,10 +227,13 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('soft_close', 'accounting_period', '02', '/finance/periods'),
       page('year_end_close', 'year_end_close', '16'),
       page('posting_mappings', 'posting_mapping', '02', '/finance/posting-mappings'),
-      // Each statement is its own screen (by direction, 2026-08-29): one report
-      // to a window, so a reader is never shown two answers to one question.
-      page('profit_or_loss', 'financial_statement', '02', '/finance/profit-or-loss'),
-      page('financial_position', 'financial_statement', '02', '/finance/financial-position'),
+      // Each statement is its own screen (by direction, 2026-08-29, extended
+      // 2026-08-31 to all four): one report to a window, so a reader is never
+      // shown two answers to one question.
+      page('income_statement', 'financial_statement', '02', '/finance/income-statement'),
+      page('balance_sheet', 'financial_statement', '02', '/finance/balance-sheet'),
+      page('changes_in_equity', 'financial_statement', '02', '/finance/changes-in-equity'),
+      page('cash_flow', 'financial_statement', '02', '/finance/cash-flow'),
     ],
   },
   {

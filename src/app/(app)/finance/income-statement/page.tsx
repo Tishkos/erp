@@ -14,8 +14,8 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as statements from '@/server/services/financial-statements';
 
 /**
- * The Statement of Profit or Loss — Phase 1 requirement 5, on a page of its
- * own (by direction, 2026-08-29).
+ * The Income Statement — Phase 1 requirement 5, on a page of its own (by
+ * direction, 2026-08-29; named as the sponsor names it, 2026-08-31).
  *
  * Drawn from the posted journal lines and nothing else, for the period
  * between the two dates. Three levels: the two sections and what they come
@@ -26,8 +26,8 @@ export const dynamic = 'force-dynamic';
 /** Section, line, account. */
 const LEVELS = 3;
 
-export default async function ProfitOrLossPage({ searchParams }: { searchParams: SearchParams }) {
-  if (!visibleRoute('/finance/profit-or-loss')) notFound();
+export default async function IncomeStatementPage({ searchParams }: { searchParams: SearchParams }) {
+  if (!visibleRoute('/finance/income-statement')) notFound();
 
   const [t, page, locale, context, params] = await Promise.all([
     getTranslations('admin'),
@@ -37,7 +37,7 @@ export default async function ProfitOrLossPage({ searchParams }: { searchParams:
     searchParams,
   ]);
   if (!can(context.principal, 'view', 'financial_statement')) {
-    return <Denied object={page('profit_or_loss')} />;
+    return <Denied object={page('income_statement')} />;
   }
 
   const year = new Date().getFullYear();
@@ -57,14 +57,14 @@ export default async function ProfitOrLossPage({ searchParams }: { searchParams:
   return (
     <AdminPage
       back={{ href: '/', label: t('dashboard_label') }}
-      tabs={<SectionTabs route="/finance/profit-or-loss" />}
-      subtitle={t('reports.profit_or_loss_subtitle')}
-      title={page('profit_or_loss')}
+      tabs={<SectionTabs route="/finance/income-statement" />}
+      subtitle={t('reports.income_statement_subtitle')}
+      title={page('income_statement')}
       variant="sap"
     >
       <ReportWindow
         filter={
-          <ReportFilter action="/finance/profit-or-loss" currency={currency} from={from} level={level} maxLevel={LEVELS} to={to} />
+          <ReportFilter action="/finance/income-statement" currency={currency} from={from} level={level} maxLevel={LEVELS} to={to} />
         }
         foot={
           <div className={s.sapFootTotals}>
@@ -80,7 +80,7 @@ export default async function ProfitOrLossPage({ searchParams }: { searchParams:
           from: formatBusinessDate(from, locale as Locale),
           to: formatBusinessDate(to, locale as Locale),
         })}
-        title={t('reports.profit_or_loss')}
+        title={t('reports.income_statement')}
       >
         <table className={`${s.sapTable} ${s.sapReportTable}`}>
           <thead>

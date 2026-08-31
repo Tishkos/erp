@@ -19,9 +19,10 @@ import * as trialBalance from '@/server/services/trial-balance';
  * "Posted Journal Entries appear automatically in the General Ledger. Finance
  *  can review account activity…"
  *
- * By direction (2026-08-29): the ledger is a table of every account with its
- * balance, debit or credit, and pressing an account opens the journals posted
- * to it. Nothing is chosen from a list first.
+ * By direction (2026-08-29, refined 2026-08-31): the ledger is a table of
+ * every account with its balance — one figure, marked debit or credit, not a
+ * debit column and a credit column — and pressing an account opens the
+ * journals posted to it. Nothing is chosen from a list first.
  *
  * *Automatically* is met by there being no ledger table at all: the General
  * Ledger is the posted journal lines, summed here per account and read there
@@ -74,11 +75,16 @@ export default async function GeneralLedgerPage({ searchParams }: { searchParams
           isGroup: row.isGroup,
         }));
 
-  const sides = (balance: string) => {
+  // One column, not two. By direction (2026-08-31) the ledger shows the
+  // account's *balance* — the figure itself, marked as the side it falls on —
+  // rather than a debit column and a credit column of which one is always
+  // blank. The sign is carried by the marker, so no minus sign is printed.
+  const balanceOf = (balance: string) => {
     const value = Number(balance);
     return {
-      debit: value > 0 ? money(balance) : '',
-      credit: value < 0 ? money(balance.replace('-', '')) : '',
+      amount: money(value < 0 ? balance.replace('-', '') : balance),
+      side: value < 0 ? t('reports.cr') : t('reports.dr'),
+      zero: value === 0,
     };
   };
   const href = (code: string) => `/finance/gl-inquiry/${encodeURIComponent(code)}`;
@@ -103,23 +109,20 @@ export default async function GeneralLedgerPage({ searchParams }: { searchParams
               <th scope="col">{t('reports.account_name')}</th>
               <th scope="col">{t('reports.account_type')}</th>
               <th className={s.sapNum} scope="col">
-                {t('reports.debit_balance')}
-              </th>
-              <th className={s.sapNum} scope="col">
-                {t('reports.credit_balance')}
+                {t('reports.balance')}
               </th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td className={s.sapEmptyRow} colSpan={5}>
+                <td className={s.sapEmptyRow} colSpan={4}>
                   {t('reports.no_accounts')}
                 </td>
               </tr>
             ) : (
               rows.map((row) => {
-                const { debit, credit } = sides(row.balance);
+                const { amount, side, zero } = balanceOf(row.balance);
                 const openable = !row.isGroup && posting.has(row.accountCode);
                 return (
                   <tr className={row.isGroup ? s.sapLevelRow : undefined} data-depth={row.depth} key={row.accountCode}>
@@ -143,10 +146,8 @@ export default async function GeneralLedgerPage({ searchParams }: { searchParams
                     </td>
                     <td>{t(`reports.type_${row.accountType}`)}</td>
                     <td className={s.sapNum}>
-                      <bdi dir="ltr">{debit}</bdi>
-                    </td>
-                    <td className={s.sapNum}>
-                      <bdi dir="ltr">{credit}</bdi>
+                      <bdi dir="ltr">{amount}</bdi>
+                      {zero ? null : <span className={s.sapNote}> {side}</span>}
                     </td>
                   </tr>
                 );

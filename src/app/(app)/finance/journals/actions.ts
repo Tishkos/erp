@@ -82,7 +82,8 @@ export async function saveJournalLine(formData: FormData): Promise<LineOutcome> 
     accountId: text(formData, 'accountId'),
     ...(debit ? { debit } : {}),
     ...(credit ? { credit } : {}),
-    description: text(formData, 'description') || null,
+    // No per-line note: the journal's own description says what the entry is
+    // for (by direction, 2026-08-31), and the grid no longer collects one.
     dimensions: { department: text(formData, 'departmentCode') || null },
   };
   const outcome = await runAdmin((tx, ctx) =>

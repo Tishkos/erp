@@ -14,6 +14,11 @@ import styles from './admin.module.css';
  * summed from what is on screen as it is typed, so the entry says whether it
  * balances *now* rather than after a round trip.
  *
+ * There is no note column either (by direction, 2026-08-31). The journal
+ * carries a description of its own, and a second free-text field on every line
+ * asked the same question twice — so the grid holds only what the posting
+ * needs: the account, the department, and the side the amount falls on.
+ *
  * The server is still the authority: every save runs the same domain rules,
  * and a refusal is shown on the row it concerns. The IQD and USD reporting
  * figures are the server's too — they come back on the refresh that follows
@@ -36,7 +41,6 @@ export interface GridLine {
   readonly id: string;
   readonly lineNo: number;
   readonly accountId: string;
-  readonly description: string;
   readonly departmentCode: string;
   readonly debit: string;
   readonly credit: string;
@@ -45,7 +49,6 @@ export interface GridLine {
 
 export interface GridLabels {
   readonly account: string;
-  readonly note: string;
   readonly department: string;
   readonly debit: string;
   readonly credit: string;
@@ -63,7 +66,6 @@ interface Row {
   readonly lineId: string | null;
   readonly key: string;
   accountId: string;
-  description: string;
   departmentCode: string;
   debit: string;
   credit: string;
@@ -87,7 +89,6 @@ const fromLine = (line: GridLine): Row => ({
   lineId: line.id,
   key: line.id,
   accountId: line.accountId,
-  description: line.description,
   departmentCode: line.departmentCode,
   debit: Number(line.debit) === 0 ? '' : trimZeros(line.debit),
   credit: Number(line.credit) === 0 ? '' : trimZeros(line.credit),
@@ -101,7 +102,6 @@ const blank = (departmentCode: string): Row => ({
   lineId: null,
   key: `new-${(blankCounter += 1)}`,
   accountId: '',
-  description: '',
   departmentCode,
   debit: '',
   credit: '',
@@ -213,7 +213,6 @@ export function JournalLinesGrid({
     form.set('entryNo', entryNo);
     if (row.lineId) form.set('lineId', row.lineId);
     form.set('accountId', row.accountId);
-    form.set('description', row.description);
     form.set('departmentCode', row.departmentCode);
     form.set('debit', row.debit.trim());
     form.set('credit', row.credit.trim());
@@ -278,7 +277,6 @@ export function JournalLinesGrid({
             <tr>
               <th scope="col">#</th>
               <th scope="col">{labels.account}</th>
-              <th scope="col">{labels.note}</th>
               <th scope="col">{labels.department}</th>
               <th className={styles.sapNum} scope="col">
                 {labels.debit}
@@ -323,15 +321,6 @@ export function JournalLinesGrid({
                       {row.error}
                     </span>
                   ) : null}
-                </td>
-                <td>
-                  <input
-                    aria-label={labels.note}
-                    autoComplete="off"
-                    onChange={(event) => patch(row.key, { description: event.target.value })}
-                    type="text"
-                    value={row.description}
-                  />
                 </td>
                 <td>
                   <select
@@ -393,7 +382,7 @@ export function JournalLinesGrid({
             ))}
             {Array.from({ length: FILLER_ROWS }, (_, i) => (
               <tr aria-hidden="true" className={styles.sapFiller} key={`filler-${i}`}>
-                {Array.from({ length: 7 }, (_, cell) => (
+                {Array.from({ length: 6 }, (_, cell) => (
                   <td key={cell} />
                 ))}
               </tr>
@@ -401,7 +390,7 @@ export function JournalLinesGrid({
           </tbody>
           <tfoot>
             <tr className={styles.sapTotalRow}>
-              <td colSpan={4}>
+              <td colSpan={3}>
                 {labels.total}
                 {pending ? <span className={styles.sapNote}> · {labels.saving}</span> : null}
               </td>

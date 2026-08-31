@@ -180,8 +180,10 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   soft_close: 'workspace',
   year_end_close: 'workspace',
   posting_mappings: 'settings',
-  profit_or_loss: 'report',
-  financial_position: 'report',
+  income_statement: 'report',
+  balance_sheet: 'report',
+  changes_in_equity: 'report',
+  cash_flow: 'report',
 
   // 11 — Finance · Receivables
   customer_ledger: 'report',
@@ -384,8 +386,10 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/finance/reversals',
   '/finance/gl-inquiry',
   '/finance/trial-balance',
-  '/finance/profit-or-loss',
-  '/finance/financial-position',
+  '/finance/income-statement',
+  '/finance/balance-sheet',
+  '/finance/changes-in-equity',
+  '/finance/cash-flow',
   '/finance/periods',
   '/master-data/exchange-rates',
 ]);

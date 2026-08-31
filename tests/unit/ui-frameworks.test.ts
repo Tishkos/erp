@@ -73,9 +73,12 @@ describe('Appendix A · the approved menu tree', () => {
       'soft_close',
       'year_end_close',
       'posting_mappings',
-      // Each statement on its own page (by direction, 2026-08-29).
-      'profit_or_loss',
-      'financial_position',
+      // Each statement on its own page — all four of them (by direction,
+      // 2026-08-29, extended 2026-08-31).
+      'income_statement',
+      'balance_sheet',
+      'changes_in_equity',
+      'cash_flow',
     ]);
   });
 

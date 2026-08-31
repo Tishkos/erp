@@ -281,7 +281,6 @@ export default async function JournalPage({
                 journalId={header.id}
                 labels={{
                   account: t('journals.account'),
-                  note: t('journals.line_description'),
                   department: t('journals.department'),
                   debit: t('journals.debit'),
                   credit: t('journals.credit'),
@@ -297,7 +296,6 @@ export default async function JournalPage({
                   id: line.id,
                   lineNo: line.lineNo,
                   accountId: line.accountId,
-                  description: line.description ?? '',
                   departmentCode: line.departmentCode ?? '',
                   debit: line.debitTxn,
                   credit: line.creditTxn,
@@ -314,7 +312,6 @@ export default async function JournalPage({
                     <tr>
                       <th scope="col">#</th>
                       <th scope="col">{t('journals.account')}</th>
-                      <th scope="col">{t('journals.line_description')}</th>
                       <th scope="col">{t('journals.department')}</th>
                       <th className={s.sapNum} scope="col">
                         {t('journals.debit')}
@@ -327,7 +324,7 @@ export default async function JournalPage({
                   <tbody>
                     {lines.length === 0 ? (
                       <tr>
-                        <td colSpan={6}>{t('journals.no_lines')}</td>
+                        <td colSpan={5}>{t('journals.no_lines')}</td>
                       </tr>
                     ) : null}
                     {lines.map((line) => (
@@ -337,9 +334,6 @@ export default async function JournalPage({
                         </td>
                         <td className={s.sapAccountCell}>
                           <bdi dir="ltr">{line.accountCode}</bdi> · <bdi dir="auto">{line.accountName}</bdi>
-                        </td>
-                        <td>
-                          <bdi dir="auto">{line.description ?? ''}</bdi>
                         </td>
                         <td>
                           <bdi dir="ltr">{line.departmentCode ?? ''}</bdi>
@@ -363,7 +357,7 @@ export default async function JournalPage({
                   </tbody>
                   <tfoot>
                     <tr className={s.sapTotalRow}>
-                      <td colSpan={4}>{t('journals.total')}</td>
+                      <td colSpan={3}>{t('journals.total')}</td>
                       <td className={s.sapNum}>
                         <bdi dir="ltr">{totalDebit}</bdi>
                       </td>

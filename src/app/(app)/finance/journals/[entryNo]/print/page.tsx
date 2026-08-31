@@ -154,7 +154,6 @@ export default async function JournalPrintPage({
             <tr>
               <th>#</th>
               <th>{t('journals.account')}</th>
-              <th>{t('journals.line_description')}</th>
               <th>{t('journals.currency')}</th>
               <th className={styles.num}>{t('journals.debit')}</th>
               <th className={styles.num}>{t('journals.credit')}</th>
@@ -173,7 +172,6 @@ export default async function JournalPrintPage({
                 <td>
                   {line.accountCode} · {line.accountName}
                 </td>
-                <td>{line.description ?? ''}</td>
                 <td>{line.currency}</td>
                 <td className={styles.num}>
                   {zero(line.debitTxn) ? '' : entered(line.debitTxn, line.currency)}
@@ -188,12 +186,12 @@ export default async function JournalPrintPage({
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={6}>{t('journals.total')}</td>
+              <td colSpan={5}>{t('journals.total')}</td>
               <td className={styles.num}>{money(header.totalDebitIqd)}</td>
               <td className={styles.num}>{money(header.totalCreditIqd)}</td>
             </tr>
             <tr>
-              <td colSpan={6}>{t('journals.amount_usd')}</td>
+              <td colSpan={5}>{t('journals.amount_usd')}</td>
               <td className={styles.num}>{formatMoney(sum((l) => l.debitUsd), 'USD', lang)}</td>
               <td className={styles.num}>{formatMoney(sum((l) => l.creditUsd), 'USD', lang)}</td>
             </tr>

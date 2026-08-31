@@ -76,10 +76,13 @@ describe('the screen catalogue covers the approved tree', () => {
   });
 
   // 222 in Appendix A, less the invoicing sample and Data Scopes (removed by
-  // direction, 2026-08-29), plus the second statement page.
-  it('classifies all 221 items in the Appendix A tree', () => {
-    expect(allMenuItems()).toHaveLength(221);
-    expect(Object.keys(SCREENS)).toHaveLength(221);
+  // direction, 2026-08-29), plus the four statement pages — Appendix A named
+  // one "Financial Statements"; the sponsor asked for Income Statement,
+  // Balance Sheet, Changes in Equity and Cash Flow Statement each on its own
+  // screen (2026-08-31), which is grouping refined, not function added.
+  it('classifies all 223 items in the Appendix A tree', () => {
+    expect(allMenuItems()).toHaveLength(223);
+    expect(Object.keys(SCREENS)).toHaveLength(223);
   });
 
   it('uses only declared archetypes', () => {
@@ -96,7 +99,7 @@ describe('the screen catalogue covers the approved tree', () => {
       (sum, item) => sum + screenCount(archetypeOf(item.key)!),
       0,
     );
-    expect(total).toBe(329);
+    expect(total).toBe(331);
   });
 });
 
@@ -154,7 +157,7 @@ describe('every screen has one address', () => {
       '/administration/audit': ['audit_trail', 'document_audit'],
       '/administration/jobs': ['background_jobs', 'error_queue'],
     });
-    expect(screenRoutes().size).toBe(221 - Object.keys(shared).length);
+    expect(screenRoutes().size).toBe(223 - Object.keys(shared).length);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -171,11 +174,13 @@ describe('every screen has one address', () => {
       '/approvals',
       '/documents',
       // Phase 1 — the accounting core.
-      '/finance/financial-position',
+      '/finance/balance-sheet',
+      '/finance/cash-flow',
+      '/finance/changes-in-equity',
       '/finance/gl-inquiry',
+      '/finance/income-statement',
       '/finance/journals',
       '/finance/periods',
-      '/finance/profit-or-loss',
       '/finance/reversals',
       '/finance/trial-balance',
       '/inventory/availability',
@@ -212,7 +217,7 @@ describe('the build tracker reports what each phase owes the frontend', () => {
   it('attributes every screen to the phase that delivers it', () => {
     const byPhase = screensByPhase();
     const counted = [...byPhase.values()].reduce((sum, screens) => sum + screens.length, 0);
-    expect(counted).toBe(221);
+    expect(counted).toBe(223);
     for (const phase of byPhase.keys()) expect(phase).toMatch(/^\d\d$/);
   });
 });

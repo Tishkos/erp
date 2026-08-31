@@ -240,15 +240,15 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
   test('5 · the financial statements are produced from the same postings', async ({ page }) => {
     await signIn(page, MANAGER);
     // Each statement is its own page.
-    await page.goto(`/finance/profit-or-loss?from=${YEAR}-01-01&to=${YEAR}-12-31`);
+    await page.goto(`/finance/income-statement?from=${YEAR}-01-01&to=${YEAR}-12-31`);
     await page.waitForLoadState('networkidle');
-    const pl = page.locator('section', { hasText: 'Statement of Profit or Loss' }).last();
+    const pl = page.locator('section', { hasText: 'Income Statement' }).last();
     await expect(pl).toContainText('Revenue');
     await expect(pl).toContainText('Profit for the period');
 
-    await page.goto(`/finance/financial-position?to=${YEAR}-12-31`);
+    await page.goto(`/finance/balance-sheet?to=${YEAR}-12-31`);
     await page.waitForLoadState('networkidle');
-    const sfp = page.locator('section', { hasText: 'Statement of Financial Position' }).last();
+    const sfp = page.locator('section', { hasText: 'Balance Sheet' }).last();
     await expect(sfp).toContainText('Total assets');
     await expect(sfp).toContainText('Total equity and liabilities');
     // The revenue is on the balance sheet — under Equity, as the result.
@@ -256,8 +256,8 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     await expect(sfp).toContainText('The two sides agree');
 
     // Level 1 shows only the headers; the account is not on the page.
-    await page.goto(`/finance/financial-position?to=${YEAR}-12-31&level=1`);
-    await expect(page.locator('section', { hasText: 'Statement of Financial Position' }).last()).not.toContainText(
+    await page.goto(`/finance/balance-sheet?to=${YEAR}-12-31&level=1`);
+    await expect(page.locator('section', { hasText: 'Balance Sheet' }).last()).not.toContainText(
       cashAccount,
     );
   });
@@ -312,7 +312,7 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     await page.waitForLoadState('networkidle');
     await expect(page.getByText('Debits equal credits', { exact: true })).toBeVisible();
 
-    await page.goto(`/finance/financial-position?to=${YEAR}-12-31`);
+    await page.goto(`/finance/balance-sheet?to=${YEAR}-12-31`);
     await page.waitForLoadState('networkidle');
     await expect(
       page.locator('section', { hasText: 'Statement of Financial Position' }).last(),

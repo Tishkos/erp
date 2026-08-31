@@ -47,8 +47,10 @@ const PHASE_1: readonly string[] = [
   '/finance/reversals',
   '/finance/gl-inquiry',
   '/finance/trial-balance',
-  '/finance/profit-or-loss',
-  '/finance/financial-position',
+  '/finance/income-statement',
+  '/finance/balance-sheet',
+  '/finance/changes-in-equity',
+  '/finance/cash-flow',
   '/finance/periods',
   '/master-data/exchange-rates',
 ];

@@ -14,8 +14,9 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as statements from '@/server/services/financial-statements';
 
 /**
- * The Financial Statement — the Statement of Financial Position, Phase 1
- * requirement 5, on a page of its own (by direction, 2026-08-29).
+ * The Balance Sheet — the Statement of Financial Position, Phase 1
+ * requirement 5, on a page of its own (by direction, 2026-08-29; named as the
+ * sponsor names it, 2026-08-31).
  *
  * As at one date, counting everything posted up to it. Under Equity sits the
  * accumulated result — every profit or loss no year-end close has yet moved
@@ -27,8 +28,8 @@ export const dynamic = 'force-dynamic';
 /** Section, line, account. */
 const LEVELS = 3;
 
-export default async function FinancialPositionPage({ searchParams }: { searchParams: SearchParams }) {
-  if (!visibleRoute('/finance/financial-position')) notFound();
+export default async function BalanceSheetPage({ searchParams }: { searchParams: SearchParams }) {
+  if (!visibleRoute('/finance/balance-sheet')) notFound();
 
   const [t, page, locale, context, params] = await Promise.all([
     getTranslations('admin'),
@@ -38,7 +39,7 @@ export default async function FinancialPositionPage({ searchParams }: { searchPa
     searchParams,
   ]);
   if (!can(context.principal, 'view', 'financial_statement')) {
-    return <Denied object={page('financial_position')} />;
+    return <Denied object={page('balance_sheet')} />;
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -54,13 +55,13 @@ export default async function FinancialPositionPage({ searchParams }: { searchPa
   return (
     <AdminPage
       back={{ href: '/', label: t('dashboard_label') }}
-      tabs={<SectionTabs route="/finance/financial-position" />}
-      subtitle={t('reports.financial_position_subtitle')}
-      title={page('financial_position')}
+      tabs={<SectionTabs route="/finance/balance-sheet" />}
+      subtitle={t('reports.balance_sheet_subtitle')}
+      title={page('balance_sheet')}
       variant="sap"
     >
       <ReportWindow
-        filter={<ReportFilter action="/finance/financial-position" asAt={asAt} currency={currency} level={level} maxLevel={LEVELS} />}
+        filter={<ReportFilter action="/finance/balance-sheet" asAt={asAt} currency={currency} level={level} maxLevel={LEVELS} />}
         foot={
           <>
             <div className={s.sapFootActions}>
@@ -87,7 +88,7 @@ export default async function FinancialPositionPage({ searchParams }: { searchPa
           </>
         }
         meta={t('reports.as_at', { date: formatBusinessDate(asAt, locale as Locale) })}
-        title={t('reports.financial_position')}
+        title={t('reports.balance_sheet')}
       >
         <table className={`${s.sapTable} ${s.sapReportTable}`}>
           <thead>
