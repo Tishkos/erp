@@ -886,6 +886,8 @@
     "module": {
       "dashboard": "الرئيسية",
       "accounting": "المحاسبة",
+      "sales": "المبيعات",
+      "purchasing": "المشتريات",
       "logistics": "اللوجستيات",
       "money_transfer": "التحويلات",
       "crm": "CRM",

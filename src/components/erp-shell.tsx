@@ -26,6 +26,8 @@ import {
   Menu,
   Palette,
   Settings,
+  ShoppingBag,
+  ShoppingCart,
   Truck,
   UserCog,
   Users,
@@ -41,6 +43,8 @@ import { switchBranch } from '@/app/(app)/actions';
 type ModuleKey =
   | 'dashboard'
   | 'accounting'
+  | 'sales'
+  | 'purchasing'
   | 'logistics'
   | 'money_transfer'
   | 'crm'
@@ -110,14 +114,18 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
       'fixed_assets',
       'budgeting',
       'investments',
-      // Then the master data the ledger will serve.
+      // And the reference data no single module owns — the chart, currencies,
+      // branches, departments, cost centres, payment terms and methods.
       'master_data',
-      // Sales and Purchasing are the receivable and payable cycles — they
-      // belong with the ledger, not with transport. Logistics keeps its own.
-      'sales',
-      'purchasing',
     ],
   },
+  // Selling and buying are their own work, with their own screens and their
+  // own people. They used to sit inside Accounting because they end in a
+  // receivable and a payable — but that is where their *postings* go, not
+  // where the work happens, and a salesperson opening Accounting to reach
+  // Customers had to read past the general ledger to find them.
+  { key: 'sales', icon: ShoppingCart, sectionKeys: ['sales'] },
+  { key: 'purchasing', icon: ShoppingBag, sectionKeys: ['purchasing'] },
   { key: 'logistics', icon: Truck, sectionKeys: ['logistics'] },
   { key: 'money_transfer', icon: ArrowLeftRight, sectionKeys: ['money_transfer'] },
   { key: 'crm', icon: Handshake, sectionKeys: ['crm'] },

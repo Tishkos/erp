@@ -886,6 +886,8 @@
     "module": {
       "dashboard": "Dashboard",
       "accounting": "Accounting",
+      "sales": "Sales",
+      "purchasing": "Purchasing",
       "logistics": "Logistics",
       "money_transfer": "Money Transfer",
       "crm": "CRM",
