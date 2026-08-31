@@ -30,6 +30,7 @@ import { can } from '@domain/permissions';
 import { AdminNotFoundError } from '@/server/services/administration';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as accounts from '@/server/services/bank-cash-accounts';
+import * as rates from '@/server/services/exchange-rates';
 import * as users from '@/server/services/users';
 import {
   createAccount,
@@ -79,11 +80,15 @@ export async function AccountList({
   const mayCreate = can(principal, 'create', accounts.PERMISSION_OBJECT);
   const route = ROUTES[kind];
 
-  const { rows, places, gl, people } = await withCurrentUser(async (tx) => ({
+  const { rows, places, gl, people, moneys } = await withCurrentUser(async (tx) => ({
     rows: await accounts.listOfKind(tx, kind),
     places: mayCreate ? await accounts.listBranches(tx) : [],
     gl: mayCreate ? await accounts.availableGlAccounts(tx) : [],
     people: mayCreate && kind === 'cash' ? await users.listAll(tx) : [],
+    // The currencies Finance has configured. An account's currency is one of
+    // them or it is nothing: a typed code is a code nothing else in the system
+    // knows, and the first payment in it would have no rate to be read at.
+    moneys: mayCreate ? await rates.currencies(tx) : [],
   }));
   const shown = rows.filter((row) => matches(row, outcome.q));
 
@@ -119,12 +124,15 @@ export async function AccountList({
                   options={gl.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
                   required
                 />
-                <Field
+                <Select
                   defaultValue="IQD"
                   hint={t('accounts_shared.currency_hint')}
                   label={t('accounts_shared.currency')}
-                  maxLength={3}
                   name="currency"
+                  options={moneys
+                    .filter((c) => c.isActive)
+                    .map((c) => ({ value: c.code, label: `${c.code} · ${c.name}` }))}
+                  required
                 />
                 {kind === 'bank' ? (
                   <>
@@ -257,6 +265,7 @@ export async function AccountRecord({
         places: mayEdit ? await accounts.listBranches(tx) : [],
         gl: mayEdit ? await accounts.availableGlAccounts(tx, row.glAccountId) : [],
         people: mayEdit ? await users.listAll(tx) : [],
+        moneys: mayEdit ? await rates.currencies(tx) : [],
       };
     } catch (error) {
       if (error instanceof AdminNotFoundError) return null;
@@ -264,7 +273,7 @@ export async function AccountRecord({
     }
   });
   if (!data) notFound();
-  const { row, places, gl, people } = data;
+  const { row, places, gl, people, moneys } = data;
   // The address is the truth about which list this belongs on; a cash account
   // reached through the bank route is the wrong page for it.
   if (row.accountType !== kind) notFound();
@@ -415,12 +424,18 @@ export async function AccountRecord({
                     ]}
                     required
                   />
-                  <Field
+                  <Select
                     defaultValue={row.currency}
                     hint={t('accounts_shared.currency_hint')}
                     label={t('accounts_shared.currency')}
-                    maxLength={3}
                     name="currency"
+                    options={moneys
+                      // Whatever it already holds stays offered, even if the
+                      // currency was since retired — otherwise saving any other
+                      // field would silently change the account's currency.
+                      .filter((c) => c.isActive || c.code === row.currency)
+                      .map((c) => ({ value: c.code, label: `${c.code} · ${c.name}` }))}
+                    required
                   />
                   {kind === 'bank' ? (
                     <>

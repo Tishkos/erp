@@ -1475,7 +1475,14 @@
       "decimals_hint": "Digits after the point when amounts are shown.",
       "add_currency": "Add currency",
       "symbol": "Symbol",
-      "symbol_hint": "Optional — €, £, ₺. Shown in lists; amounts still format by code."
+      "symbol_hint": "Optional — €, £, ₺. Shown in lists; amounts still format by code.",
+      "in_force_hint": "What each currency is measured at today, {date} — the most recent rate that had taken effect. This is the figure a journal posted now would use.",
+      "none_in_force": "No rate has taken effect yet.",
+      "also_published": "Also published",
+      "also_published_hint": "On record and not cancelled, but not what applies today.",
+      "not_yet": "Takes effect later",
+      "superseded_by_later": "A later rate applies now",
+      "add_currency_note": "A currency has to exist here before a rate can be published for it, or an account held in it."
     },
     "cost_centres": {
       "subtitle": "Where cost is gathered, independently of who reports to whom.",
