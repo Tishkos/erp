@@ -55,7 +55,28 @@ const PHASE_1: readonly string[] = [
   '/master-data/exchange-rates',
 ];
 
-const VISIBLE: ReadonlySet<string> = new Set([...PHASE_0, ...PHASE_1]);
+/**
+ * Phase 2 — the accounting master data. Accepted 2026-08-31.
+ *
+ * The records the next phases select from rather than retype: cost centres,
+ * customers and suppliers, items and the units they are measured in, the
+ * company's own bank and cash accounts, and the payment terms and methods
+ * every receipt and payment will name.
+ */
+const PHASE_2: readonly string[] = [
+  '/master-data/cost-centres',
+  '/master-data/customers',
+  '/master-data/suppliers',
+  '/master-data/business-partners',
+  '/master-data/items',
+  '/master-data/uom',
+  '/master-data/bank-accounts',
+  '/master-data/cash-accounts',
+  '/master-data/payment-terms',
+  '/master-data/payment-methods',
+];
+
+const VISIBLE: ReadonlySet<string> = new Set([...PHASE_0, ...PHASE_1, ...PHASE_2]);
 
 /**
  * The phase the system is at, as the footer says it.
@@ -65,7 +86,7 @@ const VISIBLE: ReadonlySet<string> = new Set([...PHASE_0, ...PHASE_1]);
  * label that has to be remembered separately is a label that will be wrong.
  */
 export function currentPhase(): string {
-  return `Phase ${[PHASE_0, PHASE_1].length - 1}`;
+  return `Phase ${[PHASE_0, PHASE_1, PHASE_2].length - 1}`;
 }
 
 export function futurePhasesShown(): boolean {

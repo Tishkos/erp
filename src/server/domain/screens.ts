@@ -208,6 +208,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
 
   // 13 — Treasury
   bank_cash_accounts: 'document',
+  cash_accounts: 'document',
   treasury_receipts: 'document',
   treasury_payments: 'document',
   bank_transfers: 'document',
@@ -289,6 +290,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   warehouses: 'document',
   banks: 'document',
   payment_terms: 'document',
+  payment_methods: 'document',
 
   // 20 — Administration
   company: 'settings',
@@ -387,6 +389,17 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/finance/gl-inquiry',
   '/finance/trial-balance',
   '/finance/income-statement',
+  // Phase 2 — the accounting master data.
+  '/master-data/cost-centres',
+  '/master-data/customers',
+  '/master-data/suppliers',
+  '/master-data/business-partners',
+  '/master-data/items',
+  '/master-data/uom',
+  '/master-data/bank-accounts',
+  '/master-data/cash-accounts',
+  '/master-data/payment-terms',
+  '/master-data/payment-methods',
   '/finance/balance-sheet',
   '/finance/changes-in-equity',
   '/finance/cash-flow',

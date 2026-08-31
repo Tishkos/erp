@@ -80,9 +80,13 @@ describe('the screen catalogue covers the approved tree', () => {
   // one "Financial Statements"; the sponsor asked for Income Statement,
   // Balance Sheet, Changes in Equity and Cash Flow Statement each on its own
   // screen (2026-08-31), which is grouping refined, not function added.
-  it('classifies all 223 items in the Appendix A tree', () => {
-    expect(allMenuItems()).toHaveLength(223);
-    expect(Object.keys(SCREENS)).toHaveLength(223);
+  //
+  // Plus two more for Phase 2 (2026-08-31): Cash Accounts beside Bank
+  // Accounts, because the questions each kind asks are different; and Payment
+  // Methods, which Phase 2 requires and Appendix A did not list at all.
+  it('classifies all 225 items in the Appendix A tree', () => {
+    expect(allMenuItems()).toHaveLength(225);
+    expect(Object.keys(SCREENS)).toHaveLength(225);
   });
 
   it('uses only declared archetypes', () => {
@@ -99,7 +103,7 @@ describe('the screen catalogue covers the approved tree', () => {
       (sum, item) => sum + screenCount(archetypeOf(item.key)!),
       0,
     );
-    expect(total).toBe(331);
+    expect(total).toBe(335);
   });
 });
 
@@ -157,7 +161,7 @@ describe('every screen has one address', () => {
       '/administration/audit': ['audit_trail', 'document_audit'],
       '/administration/jobs': ['background_jobs', 'error_queue'],
     });
-    expect(screenRoutes().size).toBe(223 - Object.keys(shared).length);
+    expect(screenRoutes().size).toBe(225 - Object.keys(shared).length);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -184,10 +188,21 @@ describe('every screen has one address', () => {
       '/finance/reversals',
       '/finance/trial-balance',
       '/inventory/availability',
+      '/master-data/bank-accounts',
       '/master-data/branches',
+      '/master-data/business-partners',
+      '/master-data/cash-accounts',
       '/master-data/chart-of-accounts',
+      // Phase 2 — the accounting master data.
+      '/master-data/cost-centres',
+      '/master-data/customers',
       '/master-data/departments',
       '/master-data/exchange-rates',
+      '/master-data/items',
+      '/master-data/payment-methods',
+      '/master-data/payment-terms',
+      '/master-data/suppliers',
+      '/master-data/uom',
     ]);
   });
 });
@@ -217,7 +232,7 @@ describe('the build tracker reports what each phase owes the frontend', () => {
   it('attributes every screen to the phase that delivers it', () => {
     const byPhase = screensByPhase();
     const counted = [...byPhase.values()].reduce((sum, screens) => sum + screens.length, 0);
-    expect(counted).toBe(223);
+    expect(counted).toBe(225);
     for (const phase of byPhase.keys()) expect(phase).toMatch(/^\d\d$/);
   });
 });
