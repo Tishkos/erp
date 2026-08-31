@@ -21,6 +21,12 @@
 #   * .env and ecosystem.config.cjs live on the server and are not in git, so
 #     `git archive` cannot clobber them. That is why the upload is an archive
 #     of tracked files and not an rsync of the working directory.
+#   * An archive only *adds*. A file deleted or renamed since the last deploy
+#     survives on the server, and under the App Router a leftover page.tsx is
+#     a live route — one still naming message keys the rename took away, so it
+#     fails at request time rather than at build time. The wholly-tracked
+#     trees are cleared before the extract for that reason. Only those: .env,
+#     ecosystem.config.cjs, node_modules, .next and var/ must outlive it.
 #
 # The box hosts thirteen other sites. Everything here is scoped to qs-erp.
 #
@@ -82,6 +88,10 @@ tar -czf "/root/erp-backups/app-before-\$STAMP.tgz" \
 echo "backups in /root/erp-backups"
 
 cd "\$APP"
+# Every file in these comes from git, so anything the archive does not carry
+# is a file this release deleted. Clearing them first is what makes the
+# extract a replacement rather than a merge — see the note at the top.
+rm -rf src messages tests scripts
 tar -xzf "$TARBALL" -C "\$APP"
 rm -f "$TARBALL"
 
