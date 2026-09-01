@@ -164,12 +164,6 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
                           <bdi dir="ltr">{row.code}</bdi> · <bdi dir="auto">{row.name}</bdi>
                         </>
                       )}
-                      {/* A section taken away from what stands above it says so
-                          once, on its heading, rather than with a minus sign on
-                          every figure beneath. */}
-                      {row.kind === 'section' && row.deducted ? (
-                        <span className={s.sapNote}> ({t('reports.deducted')})</span>
-                      ) : null}
                     </td>
                     <td className={s.sapNum}>
                       <bdi dir="ltr">

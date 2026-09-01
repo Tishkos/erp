@@ -4236,61 +4236,92 @@
 
 /* ── The face of a financial statement ────────────────────────────────────
    Drawn the way the sponsor's template draws it (2026-09-01): a clean page of
-   figures with rules, not a grid of shaded bands. A statement is read down its
-   subtotals — the margin, what trading left, the result — so those are what
-   the page emphasises and everything else recedes.
+   figures, ruled where a sum ends, with no grid around every cell and no
+   shaded bands. A statement is read *down* — revenue, what it cost, the
+   margin, what was left — and a border on every cell fights that by inviting
+   the eye across instead.
 
-   Only inside `.sapStatement`, so the ledger and trial-balance grids keep the
-   banded look that suits a table someone scans across. */
-.sapStatement.sapTable > tbody > tr > td {
-  padding-block: 0.3rem;
+   The base `.sapTable` rules give a spreadsheet grid, which is right for the
+   ledger and the trial balance: those are tables somebody scans across, cell
+   by cell. A statement is a document. So everything below is scoped to
+   `.sapStatement` and leaves the grids alone.
+
+   The class is doubled where it has to beat an equally specific base rule. */
+.sapStatement.sapStatement {
+  border-collapse: collapse;
+  background: transparent;
+  font-size: 0.82rem;
 }
 
-/* A section heading: the name in small caps and its total, no shaded band. */
-.sapStatement.sapTable .sapSectionRow > td {
+/* No cell borders and no banding: the only rules on the page are the ones
+   drawn deliberately, under a figure that is a sum of what stands above it. */
+.sapStatement.sapStatement > tbody > tr > td {
+  block-size: auto;
+  padding: 0.32rem 0.6rem;
+  border: 0;
+  background: transparent;
+}
+
+.sapStatement.sapStatement > tbody > tr:hover > td {
+  background: var(--w-selected);
+}
+
+/* One quiet line under the column headings, and nothing else up there. */
+.sapStatement.sapStatement thead th {
+  border: 0;
+  border-block-end: 1px solid var(--w-text);
+  background: transparent;
+  color: var(--w-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* A section heading — Revenue, Cost of sales — carrying its own total. */
+.sapStatement.sapStatement .sapSectionRow > td {
   background: transparent;
   color: var(--w-text);
   font-weight: 700;
-  letter-spacing: 0.02em;
-  padding-block-start: 0.85rem;
+  padding-block-start: 0.9rem;
 }
 
-/* A header account inside a section, and a posting account below it — the
-   difference is weight and indentation, both of which say depth without a
-   border drawing attention to itself. */
-.sapStatement.sapTable .sapLineRow > td {
+/* A header account inside a section, then the posting accounts under it.
+   Depth is said by indentation and weight, which the page sets inline. */
+.sapStatement.sapStatement .sapLineRow > td {
   font-weight: 550;
 }
 
-.sapStatement.sapTable .sapLineRow > td:first-child,
-.sapStatement.sapTable .sapAccountRow > td:first-child {
+.sapStatement.sapStatement .sapLineRow > td:first-child,
+.sapStatement.sapStatement .sapAccountRow > td:first-child {
   padding-inline-start: unset;
 }
 
-.sapStatement.sapTable .sapAccountRow > td {
+.sapStatement.sapStatement .sapAccountRow > td {
   color: var(--w-muted);
 }
 
-/* A computed figure: ruled above, the way an accountant rules a page before
-   writing the sum. The result is ruled twice — the convention that says this
-   is where the sum ends, not decoration. */
-.sapStatement.sapTable tr[data-rule] > td {
+/* A computed figure: ruled above, the way a page is ruled before the sum is
+   written under it. */
+.sapStatement.sapStatement tr[data-rule] > td {
+  position: static;
   background: transparent;
   font-weight: 700;
-  padding-block: 0.45rem;
+  padding-block: 0.5rem;
 }
 
-.sapStatement.sapTable tr[data-rule='single'] > td {
+.sapStatement.sapStatement tr[data-rule='single'] > td {
   border-block-start: 1px solid var(--w-text);
 }
 
-.sapStatement.sapTable tr[data-rule='double'] > td {
+/* Two rules, close together — the convention that says the sum ends here. */
+.sapStatement.sapStatement tr[data-rule='double'] > td {
   border-block-start: 1px solid var(--w-text);
-  box-shadow: inset 0 3px 0 -2px var(--w-text);
+  box-shadow: inset 0 4px 0 -3px var(--w-text);
 }
 
-/* The figures line up under one another, which is most of what makes a column
-   of numbers readable. */
-.sapStatement.sapTable td.sapNum {
+/* Figures sit under one another, which is most of what makes a column of
+   numbers readable at a glance. */
+.sapStatement.sapStatement td.sapNum,
+.sapStatement.sapStatement th.sapNum {
   font-variant-numeric: tabular-nums;
 }
