@@ -107,7 +107,7 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
         })}
         title={t('reports.income_statement')}
       >
-        <table className={`${s.sapTable} ${s.sapReportTable}`}>
+        <table className={`${s.sapTable} ${s.sapReportTable} ${s.sapStatement}`}>
           <thead>
             <tr>
               <th scope="col">{t('reports.statement_line')}</th>
@@ -152,7 +152,11 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
                     data-rule={row.rule === 'none' ? undefined : row.rule}
                     key={row.key}
                   >
-                    <td style={{ paddingInlineStart: `${0.45 + row.depth * 1.1}rem` }}>
+                    <td
+                      style={{
+                        paddingInlineStart: `${0.45 + (row.kind === 'subtotal' ? 1 : row.depth) * 1.1}rem`,
+                      }}
+                    >
                       {label ? (
                         <strong>{label}</strong>
                       ) : (
