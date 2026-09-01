@@ -5,7 +5,7 @@ import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/rep
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
-import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
+import { formatBusinessDate, formatMoney, formatStatementAmount, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { levelFrom } from '@domain/report-levels';
 import { visibleRoute } from '@/server/phase-gate';
@@ -57,6 +57,9 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
   // ceiling is however deep this company's chart actually goes.
   const maxLevel = pl.depth + 1;
   const level = levelFrom(params.level, maxLevel);
+  // On the face of the statement: no currency on every row, brackets for a
+  // negative. The foot keeps the full form, where the currency is the point.
+  const figure = (amount: string) => formatStatementAmount(amount, currency, locale as Locale);
   const money = (amount: string) => formatMoney(amount, currency, locale as Locale);
   const loss = Number(pl.result) < 0;
 
@@ -127,8 +130,8 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
                 const label =
                   row.labelKey === 'result'
                     ? loss
-                      ? t('reports.loss')
-                      : t('reports.profit')
+                      ? t('reports.net_loss')
+                      : t('reports.net_profit')
                     : row.labelKey
                       ? t(`reports.line_${row.labelKey}`)
                       : null;
@@ -166,7 +169,7 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
                     </td>
                     <td className={s.sapNum}>
                       <bdi dir="ltr">
-                        {row.kind === 'subtotal' ? <strong>{money(row.amount)}</strong> : money(row.amount)}
+                        {row.kind === 'subtotal' ? <strong>{figure(row.amount)}</strong> : figure(row.amount)}
                       </bdi>
                     </td>
                   </tr>

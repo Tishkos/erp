@@ -1061,19 +1061,34 @@ export async function incomeStatement(
   // Running the business, and what trading left after it.
   draw('operating_expenses', true);
   const operatingIncome = grossProfit - at('operating_expenses');
-  subtotal('operating_income', operatingIncome, 'single');
+
+  // ── Two subtotals that earn their place only sometimes ───────────────────
+  // Operating income and income before tax separate trading from everything
+  // that is not trading. Where a company has nothing below the operating line
+  // — no other income, no finance costs, no tax — there is nothing to
+  // separate: both figures equal the result, and printing them would be the
+  // same number three times under three headings.
+  //
+  // So they appear where they say something and stay silent where they do
+  // not. A simple statement then reads exactly as it was specified — revenue,
+  // cost, gross profit, expenses, result — and a company with borrowings and
+  // tax still gets the full form.
+  //
+  // Asked of the sections rather than of the totals, because the totals are
+  // only known once a section has been drawn, and these lines have to be
+  // written *before* the sections they introduce.
+  const has = (line: string) => (bySection.get(line)?.length ?? 0) > 0;
+  if (has('other_income') || has('finance_costs') || has('tax_expense')) {
+    subtotal('operating_income', operatingIncome, 'single');
+  }
 
   // Below the operating line: income and costs that are not trading.
   draw('other_income', false);
   draw('finance_costs', true);
   const incomeBeforeTax = operatingIncome + at('other_income') - at('finance_costs');
 
-  // Only worth a line of its own where something sits below it.
-  const hasBelowTheLine =
-    (bySection.get('other_income')?.length ?? 0) > 0 ||
-    (bySection.get('finance_costs')?.length ?? 0) > 0 ||
-    (bySection.get('tax_expense')?.length ?? 0) > 0;
-  if (hasBelowTheLine) subtotal('income_before_tax', incomeBeforeTax, 'single');
+  // Before the tax line, not after it: this is the figure tax is charged on.
+  if (has('tax_expense')) subtotal('income_before_tax', incomeBeforeTax, 'single');
 
   draw('tax_expense', true);
   const result = incomeBeforeTax - at('tax_expense');

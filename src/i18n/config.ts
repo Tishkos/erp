@@ -70,6 +70,34 @@ export function formatMoney(
   }).format(value);
 }
 
+/**
+ * A figure on the face of a financial statement.
+ *
+ * Two conventions the currency formatter does not follow, and a statement
+ * must (2026-09-01, from the sponsor's template):
+ *
+ *   *The currency is named once*, in the column heading — not repeated down
+ *   every row. A column of "IQD 1,200,000" reads as a list of separate prices;
+ *   a column of "1,200,000" reads as a statement.
+ *
+ *   *A negative is written in brackets*, not with a minus sign. (5,000) is how
+ *   an accountant writes a figure that is taken away, and a leading minus is
+ *   easily lost against a rule or the edge of a column.
+ */
+export function formatStatementAmount(
+  amount: string | number,
+  currency: string,
+  locale: Locale = DEFAULT_LOCALE,
+): string {
+  const value = typeof amount === 'string' ? Number(amount) : amount;
+  const decimals = DECIMALS[currency] ?? 2;
+  const figure = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(Math.abs(value));
+  return value < 0 ? `(${figure})` : figure;
+}
+
 /** What each currency the company trades in shows after the point. */
 const DECIMALS: Readonly<Record<string, number>> = {
   IQD: 0,
