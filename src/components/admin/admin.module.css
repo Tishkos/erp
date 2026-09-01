@@ -4233,3 +4233,22 @@
   color: var(--w-muted);
   font-size: 0.78rem;
 }
+
+/* ── The Income Statement's ruled subtotals ───────────────────────────────
+   A statement is read down its subtotals: the margin, what trading left, the
+   result. Each is ruled above its figure the way an accountant rules a page,
+   and the result is ruled twice — the convention that says "this is the end
+   of the sum", not decoration. */
+.sapTable tr[data-rule='single'] > td {
+  border-block-start: 1px solid var(--w-title-line);
+}
+
+.sapTable tr[data-rule='double'] > td {
+  border-block-start: 3px double var(--w-title-line);
+}
+
+/* A subtotal is not a band like a section heading — it is a line of its own,
+   so the figure beside it is what the eye lands on. */
+.sapTable .sapSectionRow[data-rule] > td {
+  background: transparent;
+}

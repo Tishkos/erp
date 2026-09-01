@@ -1424,7 +1424,17 @@
       "cash_not_configured": "No account reports on Cash and cash equivalents yet. Open an account in the Chart of Accounts, assign it that statement line, and this statement reads from every journal that touches it.",
       "no_cash_moved": "No cash moved in this period.",
       "inflow_hint": "Money in is positive; money out is negative.",
-      "statement_line": "Line"
+      "statement_line": "Line",
+      "line_revenue": "Revenue",
+      "line_cost_of_sales": "Cost of sales",
+      "line_operating_expenses": "Operating expenses",
+      "line_other_income": "Other income",
+      "line_finance_costs": "Finance costs",
+      "line_tax_expense": "Tax",
+      "line_gross_profit": "Gross profit",
+      "line_operating_income": "Operating income",
+      "line_income_before_tax": "Income before tax",
+      "gross_profit": "Gross profit"
     },
     "accounts": {
       "new": "New account",
@@ -1448,7 +1458,8 @@
       "allow_sub_accounts": "Let it hold sub-accounts",
       "is_a_header": "This is a header account. Create an account under it from the Chart of Accounts.",
       "creating": "Creating…",
-      "edit": "Edit account"
+      "edit": "Edit account",
+      "statement_line_create_hint": "Which section of the Income Statement or Balance Sheet this account reports in. Left unset it falls to its type’s usual line, which is rarely what a detailed chart wants."
     },
     "rates": {
       "title": "Accounting rates",

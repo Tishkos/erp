@@ -40,6 +40,8 @@ import {
   type StatementLine,
   type StatementSection,
 } from '../domain/financial-statements';
+import type { ChartRow } from '../domain/report-levels';
+import { chartRows } from './trial-balance';
 
 export interface StatementFilter {
   readonly from: string;
@@ -781,5 +783,316 @@ export async function cashFlow(tx: Tx, filter: StatementFilter): Promise<CashFlo
     configured,
     cashAccounts: closing.accounts,
     reconciles: opening.total + netMovement === closing.total,
+  };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// The Income Statement, as it is presented
+//
+// By direction (2026-09-01), with a template: the statement is not a list of
+// sections each ending in a total. It is a *running* document — revenue, what
+// it cost, then the margin; expenses, then what was left; then the things
+// below the operating line, then the result — and the subtotals in between are
+// the reason anyone reads it.
+//
+//   Revenue                       ← the section's total, on its heading
+//     Product Revenue             ← a header in the chart, its children summed
+//       Solar Revenue             ← a posting account
+//       Batteries Revenue
+//     Logistics Revenue
+//   Cost of Sales
+//     Solar COGS
+//                        ─────────
+//   Gross profit                  ← computed, ruled
+//
+//   Operating expenses
+//     Administrative expenses
+//       Rent
+//                        ─────────
+//   Operating income              ← computed, ruled
+//   ...
+//                        ═════════
+//   Net profit                    ← computed, double-ruled
+//
+// ── Where the shape comes from ─────────────────────────────────────────────
+// Two different things decide where an account appears, and keeping them apart
+// is what makes this configurable without a second tree to maintain:
+//
+//   *Which section* it falls in is the account's statement line — the field
+//   set when the account is created. Revenue, cost of sales, operating
+//   expenses, other income, finance costs, tax.
+//
+//   *Where inside that section* is the account's place in the chart. "Solar
+//   Revenue" sits under "Product Revenue" because that is its parent, and the
+//   statement reads the same hierarchy the Chart of Accounts screen shows.
+//
+// So a company gets the statement it wants by building its chart and mapping
+// the leaves — no separate report layout to keep in step with the accounts.
+//
+// ── Rolled up within the section, never across it ──────────────────────────
+// A header's figure is the sum of its descendants *that belong to the section
+// being drawn*. That matters: the "Expense" root holds both cost of sales and
+// operating expenses, and rolling it up blindly would print one number under
+// two headings, each time wrong. An ancestor appears only where it has
+// children in that section, carrying only what those children hold.
+//
+// The type roots themselves are skipped. The section heading already says
+// "Revenue"; the root account named Revenue directly beneath it would be the
+// same word twice with the same figure.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** A line of the statement, in the order it is printed. */
+export interface IncomeRow {
+  /**
+   * `section`  — a statement line and its total.
+   * `group`    — a header account within a section.
+   * `account`  — a posting account.
+   * `subtotal` — a computed figure: the margin, the result.
+   */
+  readonly kind: 'section' | 'group' | 'account' | 'subtotal';
+  /** Unique within the statement. */
+  readonly key: string;
+  /** For `section` and `subtotal`: the message key naming it. */
+  readonly labelKey: string | null;
+  /** For `group` and `account`: what the chart calls it. */
+  readonly code: string | null;
+  readonly name: string | null;
+  /** 0 for a section or a subtotal; each step down the chart adds one. */
+  readonly depth: number;
+  readonly amount: string;
+  /** Subtotals are ruled above; the result is ruled twice. */
+  readonly rule: 'none' | 'single' | 'double';
+  /** True where the figure is taken away from what is above it. */
+  readonly deducted: boolean;
+}
+
+export interface IncomeStatement {
+  readonly from: string;
+  readonly to: string;
+  readonly rows: readonly IncomeRow[];
+  readonly revenue: string;
+  readonly costOfSales: string;
+  readonly grossProfit: string;
+  readonly operatingExpenses: string;
+  readonly operatingIncome: string;
+  readonly otherIncome: string;
+  readonly financeCosts: string;
+  readonly incomeBeforeTax: string;
+  readonly tax: string;
+  readonly result: string;
+  /** The deepest the chart goes in this statement — the level picker's ceiling. */
+  readonly depth: number;
+}
+
+/**
+ * The sections, in the order the statement prints them, and how each one bears
+ * on the result.
+ *
+ * This is the whole layout, as data. A section is drawn where it has anything
+ * in it, and the subtotals that follow it are computed from what came before.
+ */
+const SECTIONS: readonly {
+  readonly line: string;
+  readonly deducted: boolean;
+}[] = [
+  { line: 'revenue', deducted: false },
+  { line: 'cost_of_sales', deducted: true },
+  { line: 'operating_expenses', deducted: true },
+  { line: 'other_income', deducted: false },
+  { line: 'finance_costs', deducted: true },
+  { line: 'tax_expense', deducted: true },
+];
+
+interface SectionAccount {
+  readonly code: string;
+  readonly name: string;
+  readonly amount: bigint;
+}
+
+/**
+ * The rows for one section: its accounts arranged as the chart arranges them,
+ * with every header carrying the sum of what is beneath it *in this section*.
+ */
+function sectionRows(
+  chart: readonly ChartRow[],
+  accounts: readonly SectionAccount[],
+  line: string,
+): { rows: IncomeRow[]; total: bigint; depth: number } {
+  const byId = new Map(chart.map((row) => [row.id, row]));
+  const byCode = new Map(chart.map((row) => [row.code, row]));
+  const children = new Map<string | null, ChartRow[]>();
+  for (const row of chart) {
+    children.set(row.parentId, [...(children.get(row.parentId) ?? []), row]);
+  }
+
+  // Every account's figure lands on itself and on each of its ancestors, so a
+  // header knows what it holds without anybody adding it up by hand.
+  const totals = new Map<string, bigint>();
+  const held = new Set<string>();
+  let total = 0n;
+  for (const account of accounts) {
+    const node = byCode.get(account.code);
+    if (!node) continue;
+    total += account.amount;
+    let cursor: ChartRow | undefined = node;
+    while (cursor) {
+      totals.set(cursor.id, (totals.get(cursor.id) ?? 0n) + account.amount);
+      held.add(cursor.id);
+      cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined;
+    }
+  }
+
+  const rows: IncomeRow[] = [];
+  let deepest = 0;
+
+  // The type roots are skipped: the section heading above already names them.
+  const walk = (parentId: string | null, depth: number) => {
+    const siblings = [...(children.get(parentId) ?? [])]
+      .filter((row) => held.has(row.id))
+      .sort((a, b) => a.code.localeCompare(b.code, 'en'));
+
+    for (const row of siblings) {
+      const amount = totals.get(row.id) ?? 0n;
+      const kids = (children.get(row.id) ?? []).filter((kid) => held.has(kid.id));
+      // A header with nothing beneath it *in this section* reads as an
+      // account, because here that is all it is.
+      const isGroup = row.isGroup && kids.length > 0;
+      rows.push({
+        kind: isGroup ? 'group' : 'account',
+        key: `${line}:${row.code}`,
+        labelKey: null,
+        code: row.code,
+        name: row.name,
+        depth,
+        amount: decimal(amount),
+        rule: 'none',
+        deducted: false,
+      });
+      deepest = Math.max(deepest, depth);
+      if (isGroup) walk(row.id, depth + 1);
+    }
+  };
+
+  // Start below the roots — an account whose parent is null is a type root.
+  for (const root of chart.filter((row) => row.parentId === null)) {
+    if (held.has(root.id)) walk(root.id, 1);
+  }
+
+  return { rows, total, depth: deepest };
+}
+
+/**
+ * Statement of Profit or Loss, in the form it is presented.
+ *
+ * Read from the posted journal lines, like everything else here. The figures
+ * are the same ones `profitOrLoss` returns — this arranges them.
+ */
+export async function incomeStatement(
+  tx: Tx,
+  filter: StatementFilter,
+): Promise<IncomeStatement> {
+  const [rows, chart] = await Promise.all([movements(tx, filter), chartRows(tx)]);
+
+  // Each account, positive in its own normal direction, filed under the
+  // statement line it reports on.
+  const bySection = new Map<string, SectionAccount[]>();
+  for (const movement of rows) {
+    const line = lineFor(movement.accountType, movement.statementLine);
+    if (line.section !== 'profit_or_loss') continue;
+    const amount = naturalAmount(movement);
+    // An account that moved and came back has nothing to say on a statement
+    // of results; it stays in the Trial Balance, which is about movement.
+    if (amount === 0n) continue;
+    bySection.set(line.code, [
+      ...(bySection.get(line.code) ?? []),
+      { code: movement.accountCode, name: movement.accountName, amount },
+    ]);
+  }
+
+  const out: IncomeRow[] = [];
+  const totals = new Map<string, bigint>();
+  let depth = 0;
+
+  const draw = (line: string, deducted: boolean) => {
+    const accounts = bySection.get(line) ?? [];
+    if (accounts.length === 0) {
+      totals.set(line, 0n);
+      return;
+    }
+    const built = sectionRows(chart, accounts, line);
+    totals.set(line, built.total);
+    depth = Math.max(depth, built.depth);
+    out.push({
+      kind: 'section',
+      key: `section:${line}`,
+      labelKey: line,
+      code: null,
+      name: null,
+      depth: 0,
+      amount: decimal(built.total),
+      rule: 'none',
+      deducted,
+    });
+    out.push(...built.rows);
+  };
+
+  const subtotal = (labelKey: string, amount: bigint, rule: 'single' | 'double') => {
+    out.push({
+      kind: 'subtotal',
+      key: `subtotal:${labelKey}`,
+      labelKey,
+      code: null,
+      name: null,
+      depth: 0,
+      amount: decimal(amount),
+      rule,
+      deducted: false,
+    });
+  };
+
+  const at = (line: string) => totals.get(line) ?? 0n;
+
+  // Trading: what was sold, what it cost, and the margin between them.
+  draw('revenue', false);
+  draw('cost_of_sales', true);
+  const grossProfit = at('revenue') - at('cost_of_sales');
+  subtotal('gross_profit', grossProfit, 'single');
+
+  // Running the business, and what trading left after it.
+  draw('operating_expenses', true);
+  const operatingIncome = grossProfit - at('operating_expenses');
+  subtotal('operating_income', operatingIncome, 'single');
+
+  // Below the operating line: income and costs that are not trading.
+  draw('other_income', false);
+  draw('finance_costs', true);
+  const incomeBeforeTax = operatingIncome + at('other_income') - at('finance_costs');
+
+  // Only worth a line of its own where something sits below it.
+  const hasBelowTheLine =
+    (bySection.get('other_income')?.length ?? 0) > 0 ||
+    (bySection.get('finance_costs')?.length ?? 0) > 0 ||
+    (bySection.get('tax_expense')?.length ?? 0) > 0;
+  if (hasBelowTheLine) subtotal('income_before_tax', incomeBeforeTax, 'single');
+
+  draw('tax_expense', true);
+  const result = incomeBeforeTax - at('tax_expense');
+  subtotal('result', result, 'double');
+
+  return {
+    from: filter.from,
+    to: filter.to,
+    rows: out,
+    revenue: decimal(at('revenue')),
+    costOfSales: decimal(at('cost_of_sales')),
+    grossProfit: decimal(grossProfit),
+    operatingExpenses: decimal(at('operating_expenses')),
+    operatingIncome: decimal(operatingIncome),
+    otherIncome: decimal(at('other_income')),
+    financeCosts: decimal(at('finance_costs')),
+    incomeBeforeTax: decimal(incomeBeforeTax),
+    tax: decimal(at('tax_expense')),
+    result: decimal(result),
+    depth: Math.max(1, depth),
   };
 }

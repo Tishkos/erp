@@ -23,6 +23,15 @@ export interface PickerOption {
   readonly value: string;
   readonly label: string;
   readonly disabled: boolean;
+  /** What a child of this account would be — asset, revenue, expense… */
+  readonly accountType: string;
+}
+
+/** A statement line this account type may report on. */
+export interface LineOption {
+  readonly value: string;
+  readonly label: string;
+  readonly accountType: string;
 }
 
 export interface NewAccountLabels {
@@ -37,6 +46,9 @@ export interface NewAccountLabels {
   readonly kindPosting: string;
   readonly kindGroup: string;
   readonly description: string;
+  readonly statementLine: string;
+  readonly statementLineHint: string;
+  readonly statementLineDefault: string;
   readonly create: string;
   readonly creating: string;
   readonly errorTitle: string;
@@ -47,11 +59,13 @@ export interface NewAccountLabels {
 export function NewAccountDialog({
   parents,
   defaultParent,
+  lines,
   labels,
   create,
 }: {
   readonly parents: readonly PickerOption[];
   readonly defaultParent: string;
+  readonly lines: readonly LineOption[];
   readonly labels: NewAccountLabels;
   readonly create: (formData: FormData) => Promise<{ ok: boolean; error?: string; code?: string }>;
 }) {
@@ -61,6 +75,14 @@ export function NewAccountDialog({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   useEffect(() => setReady(true), []);
+
+  // The statement line an account may report on follows its type, and its type
+  // follows its parent — so the choice narrows as the parent is picked rather
+  // than offering revenue lines to an account being opened under Expenses.
+  const [parentId, setParentId] = useState(defaultParent);
+  const [kind, setKind] = useState('posting');
+  const accountType = parents.find((option) => option.value === parentId)?.accountType ?? '';
+  const available = lines.filter((line) => line.accountType === accountType);
 
   return (
     <>
@@ -127,10 +149,11 @@ export function NewAccountDialog({
                 </label>
                 <select
                   className={styles.select}
-                  defaultValue={defaultParent}
                   id="new-account-parent"
                   name="parentId"
+                  onChange={(event) => setParentId(event.target.value)}
                   required
+                  value={parentId}
                 >
                   {parents.map((option) => (
                     <option disabled={option.disabled} key={option.value} value={option.value}>
@@ -160,12 +183,47 @@ export function NewAccountDialog({
                 <label className={styles.label} htmlFor="new-account-kind">
                   {labels.kind}
                 </label>
-                <select className={styles.select} defaultValue="posting" id="new-account-kind" name="isGroup">
+                <select
+                  className={styles.select}
+                  id="new-account-kind"
+                  name="isGroup"
+                  onChange={(event) => setKind(event.target.value)}
+                  value={kind}
+                >
                   <option value="posting">{labels.kindPosting}</option>
                   <option value="group">{labels.kindGroup}</option>
                 </select>
                 <span className={styles.hint}>{labels.kindHint}</span>
               </div>
+
+              {/* Where this account lands on the statement — asked here,
+                  because an account created without it falls to its type's
+                  default and quietly reports in the wrong section until
+                  somebody notices the total. A header carries no line: it
+                  shows the sum of the accounts beneath it, wherever they
+                  report. */}
+              {kind === 'posting' && available.length > 0 ? (
+                <div className={styles.field}>
+                  <label className={styles.label} htmlFor="new-account-statement-line">
+                    {labels.statementLine}
+                  </label>
+                  <select
+                    className={styles.select}
+                    defaultValue=""
+                    id="new-account-statement-line"
+                    key={accountType}
+                    name="statementLine"
+                  >
+                    <option value="">{labels.statementLineDefault}</option>
+                    {available.map((line) => (
+                      <option key={line.value} value={line.value}>
+                        {line.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className={styles.hint}>{labels.statementLineHint}</span>
+                </div>
+              ) : null}
               <div className={`${styles.field} ${styles.fieldWide}`}>
                 <label className={styles.label} htmlFor="new-account-description">
                   {labels.description}

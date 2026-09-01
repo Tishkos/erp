@@ -2,7 +2,6 @@ import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, admin as s } from '@/components/admin';
 import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/report-filter';
-import { StatementSection } from '@/components/admin/statement-rows';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -14,17 +13,22 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as statements from '@/server/services/financial-statements';
 
 /**
- * The Income Statement — Phase 1 requirement 5, on a page of its own (by
- * direction, 2026-08-29; named as the sponsor names it, 2026-08-31).
+ * The Income Statement — Phase 1 requirement 5, in the form the sponsor
+ * presents it (by direction, 2026-09-01, with a template).
  *
- * Drawn from the posted journal lines and nothing else, for the period
- * between the two dates. Three levels: the two sections and what they come
- * to, the statement lines, and the accounts behind each line.
+ * It is a running document, not a stack of sections: revenue, what it cost,
+ * and the margin between them; then the cost of running the business and what
+ * trading left after it; then what sits below the operating line, and the
+ * result. The subtotals in between are the reason anyone reads it, so they are
+ * ruled and set apart rather than left to be worked out.
+ *
+ * Every section carries its own total on its heading, with the chart's own
+ * hierarchy beneath it — Product Revenue above Solar Revenue because that is
+ * how the Chart of Accounts holds them. Nothing here is a second layout to
+ * keep in step with the accounts: the shape *is* the chart, and which section
+ * an account falls in is the statement line chosen when it was created.
  */
 export const dynamic = 'force-dynamic';
-
-/** Section, line, account. */
-const LEVELS = 3;
 
 export default async function IncomeStatementPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/finance/income-statement')) notFound();
@@ -44,15 +48,20 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
   const from = typeof params.from === 'string' ? params.from : `${year}-01-01`;
   const to = typeof params.to === 'string' ? params.to : `${year}-12-31`;
   const currency = currencyFrom(params.currency);
-  const level = levelFrom(params.level, LEVELS);
 
   const pl = await withCurrentUser((tx) =>
-    statements.profitOrLoss(tx, { from, to, currency, allPermittedBranches: true }),
+    statements.incomeStatement(tx, { from, to, currency, allPermittedBranches: true }),
   );
+
+  // The section headings are level 1; each step down the chart adds one. The
+  // ceiling is however deep this company's chart actually goes.
+  const maxLevel = pl.depth + 1;
+  const level = levelFrom(params.level, maxLevel);
   const money = (amount: string) => formatMoney(amount, currency, locale as Locale);
-  const income = pl.lines.filter((line) => !line.line.deduction);
-  const expenses = pl.lines.filter((line) => line.line.deduction);
   const loss = Number(pl.result) < 0;
+
+  // A section heading is always shown; its accounts unfold with the level.
+  const shown = pl.rows.filter((row) => row.kind === 'subtotal' || row.depth < level);
 
   return (
     <AdminPage
@@ -64,10 +73,23 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
     >
       <ReportWindow
         filter={
-          <ReportFilter action="/finance/income-statement" currency={currency} from={from} level={level} maxLevel={LEVELS} to={to} />
+          <ReportFilter
+            action="/finance/income-statement"
+            currency={currency}
+            from={from}
+            level={level}
+            maxLevel={maxLevel}
+            to={to}
+          />
         }
         foot={
           <div className={s.sapFootTotals}>
+            <div className={s.sapFootTotal}>
+              <span>{t('reports.gross_profit')}</span>
+              <strong>
+                <bdi dir="ltr">{money(pl.grossProfit)}</bdi>
+              </strong>
+            </div>
             <div className={s.sapFootTotal}>
               <span>{loss ? t('reports.loss') : t('reports.profit')}</span>
               <strong>
@@ -92,27 +114,66 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
             </tr>
           </thead>
           <tbody>
-            {pl.lines.length === 0 ? (
+            {pl.rows.length === 0 ? (
               <tr>
                 <td className={s.sapEmptyRow} colSpan={2}>
                   {t('reports.nothing_posted')}
                 </td>
               </tr>
             ) : (
-              <>
-                <StatementSection level={level} lines={income} money={money} title={t('reports.income')} total={pl.totalIncome} />
-                <StatementSection level={level} lines={expenses} money={money} title={t('reports.expenses')} total={pl.totalExpenses} />
-              </>
+              shown.map((row) => {
+                // Sections and subtotals are named by the catalogue; accounts
+                // and headers are named by the chart.
+                const label =
+                  row.labelKey === 'result'
+                    ? loss
+                      ? t('reports.loss')
+                      : t('reports.profit')
+                    : row.labelKey
+                      ? t(`reports.line_${row.labelKey}`)
+                      : null;
+
+                return (
+                  <tr
+                    className={
+                      row.kind === 'subtotal'
+                        ? row.rule === 'double'
+                          ? s.sapTotalRow
+                          : s.sapSectionRow
+                        : row.kind === 'section'
+                          ? s.sapSectionRow
+                          : row.kind === 'group'
+                            ? s.sapLineRow
+                            : s.sapAccountRow
+                    }
+                    data-rule={row.rule === 'none' ? undefined : row.rule}
+                    key={row.key}
+                  >
+                    <td style={{ paddingInlineStart: `${0.45 + row.depth * 1.1}rem` }}>
+                      {label ? (
+                        <strong>{label}</strong>
+                      ) : (
+                        <>
+                          <bdi dir="ltr">{row.code}</bdi> · <bdi dir="auto">{row.name}</bdi>
+                        </>
+                      )}
+                      {/* A section taken away from what stands above it says so
+                          once, on its heading, rather than with a minus sign on
+                          every figure beneath. */}
+                      {row.kind === 'section' && row.deducted ? (
+                        <span className={s.sapNote}> ({t('reports.deducted')})</span>
+                      ) : null}
+                    </td>
+                    <td className={s.sapNum}>
+                      <bdi dir="ltr">
+                        {row.kind === 'subtotal' ? <strong>{money(row.amount)}</strong> : money(row.amount)}
+                      </bdi>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
-          <tfoot>
-            <tr className={s.sapTotalRow}>
-              <td>{loss ? t('reports.loss') : t('reports.profit')}</td>
-              <td className={s.sapNum}>
-                <bdi dir="ltr">{money(pl.result)}</bdi>
-              </td>
-            </tr>
-          </tfoot>
         </table>
       </ReportWindow>
     </AdminPage>

@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
 import { ActionButton, Field, Form, Grid, ReasonForm, Select, Submit, SubmitRow, admin as s } from './index';
 import { NewAccountDialog } from './new-account-dialog';
+import { ACCOUNT_TYPES } from '@domain/accounts';
 import { linesForType } from '@domain/financial-statements';
 import type { AccountNode } from '@domain/chart-of-accounts';
 import {
@@ -36,8 +37,21 @@ export interface PickerAccount {
  * 2026-08-29), and every posting account opened here holds it.
  */
 export async function NewAccountButton({ accounts }: { readonly accounts: readonly PickerAccount[] }) {
-  const t = await getTranslations('admin');
+  const [t, line] = await Promise.all([
+    getTranslations('admin'),
+    getTranslations('statement_line'),
+  ]);
   const groups = accounts.filter((a) => a.isGroup && a.isActive);
+
+  // Every line, tagged with the type it belongs to; the dialog shows the ones
+  // that match whichever parent is chosen.
+  const lines = ACCOUNT_TYPES.flatMap((accountType) =>
+    linesForType(accountType).map((option) => ({
+      value: option.code,
+      label: line(option.code),
+      accountType,
+    })),
+  );
 
   return (
     <NewAccountDialog
@@ -55,16 +69,23 @@ export async function NewAccountButton({ accounts }: { readonly accounts: readon
         kindPosting: t('accounts.kind_posting'),
         kindGroup: t('accounts.kind_group'),
         description: t('accounts.description'),
+        statementLine: t('accounts.statement_line'),
+        statementLineHint: t('accounts.statement_line_create_hint'),
+        statementLineDefault: t('accounts.statement_line_default'),
         create: t('create'),
         creating: t('accounts.creating'),
         errorTitle: t('error_title'),
         required: t('required_hint'),
         noParent: groups.length === 0 ? t('accounts.no_parent') : null,
       }}
+      lines={lines}
       parents={accounts.map((account) => {
         const eligible = account.isGroup && account.isActive;
         return {
           value: account.id,
+          // A child takes its parent's type, so the parent decides which
+          // statement lines the new account may report on.
+          accountType: account.accountType,
           // Shown so the shape of the chart is visible, but not choosable —
           // otherwise a person picks a posting account and learns it was
           // never allowed only after filling in the rest.
