@@ -1436,7 +1436,8 @@
       "line_income_before_tax": "الربح قبل الضريبة",
       "gross_profit": "مجمل الربح",
       "net_profit": "صافي الربح",
-      "net_loss": "صافي الخسارة"
+      "net_loss": "صافي الخسارة",
+      "stated_in": "بالـ{currency}"
     },
     "accounts": {
       "new": "حساب جديد",

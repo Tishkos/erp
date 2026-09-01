@@ -1436,7 +1436,8 @@
       "line_income_before_tax": "Income before tax",
       "gross_profit": "Gross profit",
       "net_profit": "Net profit",
-      "net_loss": "Net loss"
+      "net_loss": "Net loss",
+      "stated_in": "in {currency}"
     },
     "accounts": {
       "new": "New account",
