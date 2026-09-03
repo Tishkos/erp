@@ -2,8 +2,7 @@ import { getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
 import { ActionButton, Field, Form, Grid, ReasonForm, Select, Submit, SubmitRow, admin as s } from './index';
 import { NewAccountDialog } from './new-account-dialog';
-import { ACCOUNT_TYPES } from '@domain/accounts';
-import { linesForType } from '@domain/financial-statements';
+import { STATEMENT_LINES, linesForType } from '@domain/financial-statements';
 import type { AccountNode } from '@domain/chart-of-accounts';
 import {
   allowSubAccounts,
@@ -37,21 +36,24 @@ export interface PickerAccount {
  * 2026-08-29), and every posting account opened here holds it.
  */
 export async function NewAccountButton({ accounts }: { readonly accounts: readonly PickerAccount[] }) {
-  const [t, line] = await Promise.all([
+  const [t, line, page] = await Promise.all([
     getTranslations('admin'),
     getTranslations('statement_line'),
+    getTranslations('page'),
   ]);
   const groups = accounts.filter((a) => a.isGroup && a.isActive);
 
-  // Every line, tagged with the type it belongs to; the dialog shows the ones
-  // that match whichever parent is chosen.
-  const lines = ACCOUNT_TYPES.flatMap((accountType) =>
-    linesForType(accountType).map((option) => ({
-      value: option.code,
-      label: line(option.code),
-      accountType,
-    })),
-  );
+  // Every line, on every statement, whichever parent is chosen — the same
+  // rule as the parent picker above: showing only the eligible ones answers
+  // "what may this account report on?" and hides the more useful question,
+  // "where does everything report?". The dialog disables what the chosen
+  // parent's type cannot take rather than removing it.
+  const lines = STATEMENT_LINES.map((option) => ({
+    value: option.code,
+    label: line(option.code),
+    section: option.section,
+    accountTypes: option.accountTypes,
+  }));
 
   return (
     <NewAccountDialog
@@ -72,6 +74,9 @@ export async function NewAccountButton({ accounts }: { readonly accounts: readon
         statementLine: t('accounts.statement_line'),
         statementLineHint: t('accounts.statement_line_create_hint'),
         statementLineDefault: t('accounts.statement_line_default'),
+        balanceSheet: page('balance_sheet'),
+        incomeStatement: page('income_statement'),
+        headerNoLine: t('accounts.header_no_line'),
         create: t('create'),
         creating: t('accounts.creating'),
         errorTitle: t('error_title'),
@@ -172,9 +177,16 @@ export async function AccountControls({
           </Panel>
         </>
       ) : (
-        <Panel title={t('accounts.sub_accounts')}>
-          <p className={s.sectionHint}>{t('accounts.is_a_header')}</p>
-        </Panel>
+        <>
+          {/* A header has no line to set, and the person looking for one is
+              owed the reason: it reports wherever its accounts do. */}
+          <Panel title={t('accounts.statement_line')}>
+            <p className={s.sectionHint}>{t('accounts.header_no_line')}</p>
+          </Panel>
+          <Panel title={t('accounts.sub_accounts')}>
+            <p className={s.sectionHint}>{t('accounts.is_a_header')}</p>
+          </Panel>
+        </>
       )}
 
       {account.isActive ? (

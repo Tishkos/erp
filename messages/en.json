@@ -1462,7 +1462,8 @@
       "is_a_header": "This is a header account. Create an account under it from the Chart of Accounts.",
       "creating": "Creating…",
       "edit": "Edit account",
-      "statement_line_create_hint": "Which section of the Income Statement or Balance Sheet this account reports in. Left unset it falls to its type’s usual line, which is rarely what a detailed chart wants."
+      "statement_line_create_hint": "Which section of the Income Statement or Balance Sheet this account reports in. The account takes its type from the root it is opened under — Assets, Liabilities, Equity, Revenue or Expense — and the lines that type cannot carry are greyed. Left unset it falls to its type’s usual line, which is rarely what a detailed chart wants.",
+      "header_no_line": "A header carries no statement line of its own. It appears on a statement wherever the accounts beneath it report, and its figure is the sum of theirs."
     },
     "rates": {
       "title": "Accounting rates",

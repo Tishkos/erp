@@ -27,11 +27,12 @@ export interface PickerOption {
   readonly accountType: string;
 }
 
-/** A statement line this account type may report on. */
+/** A statement line: which statement it sits on, and which types may take it. */
 export interface LineOption {
   readonly value: string;
   readonly label: string;
-  readonly accountType: string;
+  readonly section: 'financial_position' | 'profit_or_loss';
+  readonly accountTypes: readonly string[];
 }
 
 export interface NewAccountLabels {
@@ -49,6 +50,9 @@ export interface NewAccountLabels {
   readonly statementLine: string;
   readonly statementLineHint: string;
   readonly statementLineDefault: string;
+  readonly balanceSheet: string;
+  readonly incomeStatement: string;
+  readonly headerNoLine: string;
   readonly create: string;
   readonly creating: string;
   readonly errorTitle: string;
@@ -82,7 +86,8 @@ export function NewAccountDialog({
   const [parentId, setParentId] = useState(defaultParent);
   const [kind, setKind] = useState('posting');
   const accountType = parents.find((option) => option.value === parentId)?.accountType ?? '';
-  const available = lines.filter((line) => line.accountType === accountType);
+  const balanceSheetLines = lines.filter((line) => line.section === 'financial_position');
+  const incomeStatementLines = lines.filter((line) => line.section === 'profit_or_loss');
 
   return (
     <>
@@ -196,13 +201,15 @@ export function NewAccountDialog({
                 <span className={styles.hint}>{labels.kindHint}</span>
               </div>
 
-              {/* Where this account lands on the statement — asked here,
+              {/* Where this account lands on the statements — asked here,
                   because an account created without it falls to its type's
                   default and quietly reports in the wrong section until
-                  somebody notices the total. A header carries no line: it
-                  shows the sum of the accounts beneath it, wherever they
-                  report. */}
-              {kind === 'posting' && available.length > 0 ? (
+                  somebody notices the total. Every line is listed, on both
+                  statements, with the ones this parent's type cannot take
+                  greyed rather than removed — the whole mapping stays
+                  visible, and "why is Operating expenses not offered under
+                  Assets?" answers itself on sight. */}
+              {kind === 'posting' ? (
                 <div className={styles.field}>
                   <label className={styles.label} htmlFor="new-account-statement-line">
                     {labels.statementLine}
@@ -215,15 +222,37 @@ export function NewAccountDialog({
                     name="statementLine"
                   >
                     <option value="">{labels.statementLineDefault}</option>
-                    {available.map((line) => (
-                      <option key={line.value} value={line.value}>
-                        {line.label}
-                      </option>
-                    ))}
+                    <optgroup label={labels.balanceSheet}>
+                      {balanceSheetLines.map((line) => (
+                        <option
+                          disabled={!line.accountTypes.includes(accountType)}
+                          key={line.value}
+                          value={line.value}
+                        >
+                          {line.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label={labels.incomeStatement}>
+                      {incomeStatementLines.map((line) => (
+                        <option
+                          disabled={!line.accountTypes.includes(accountType)}
+                          key={line.value}
+                          value={line.value}
+                        >
+                          {line.label}
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
                   <span className={styles.hint}>{labels.statementLineHint}</span>
                 </div>
-              ) : null}
+              ) : (
+                <div className={styles.field}>
+                  <span className={styles.label}>{labels.statementLine}</span>
+                  <span className={styles.hint}>{labels.headerNoLine}</span>
+                </div>
+              )}
               <div className={`${styles.field} ${styles.fieldWide}`}>
                 <label className={styles.label} htmlFor="new-account-description">
                   {labels.description}
