@@ -152,7 +152,7 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Sea
                     key={section.category}
                     level={level}
                     lines={section.lines.map((entry) => ({
-                      title: line(entry.line.code),
+                      title: line.has(entry.line.code) ? line(entry.line.code) : entry.line.name,
                       amount: entry.amount,
                       accounts: entry.accounts,
                     }))}

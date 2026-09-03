@@ -35,13 +35,17 @@ import type { Tx } from '../db/client';
 import { NORMAL_BALANCE, type AccountType } from '../domain/accounts';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 import {
-  STATEMENT_LINES,
-  lineFor,
+  CASH_FLOW_CATEGORIES,
+  type CashFlowCategory,
+  type IncomeRole,
+  LineCatalogue,
   type StatementLine,
+  type StatementLineNode,
   type StatementSection,
 } from '../domain/financial-statements';
-import type { ChartRow } from '../domain/report-levels';
-import { chartRows } from './trial-balance';
+import * as statementLines from './statement-lines';
+
+export { CASH_FLOW_CATEGORIES, type CashFlowCategory };
 
 export interface StatementFilter {
   readonly from: string;
@@ -62,6 +66,8 @@ export interface StatementAccount {
 
 export interface StatementLineResult {
   readonly line: StatementLine;
+  /** Steps below the side heading — headers and their lines indent by it. */
+  readonly depth: number;
   readonly amount: string;
   readonly accounts: readonly StatementAccount[];
 }
@@ -178,38 +184,92 @@ function naturalAmount(movement: Movement): bigint {
 /** Four decimal places, the scale the money columns keep. */
 const decimal = (value: bigint): string => toDecimalString(value, MONEY_SCALE);
 
+/** Headers repeat what their lines hold, so a total counts the lines alone. */
 const sum = (lines: readonly StatementLineResult[]) =>
-  lines.reduce((total, line) => total + parseDecimal(line.amount, MONEY_SCALE), 0n);
+  lines
+    .filter((entry) => !entry.line.isHeader)
+    .reduce((total, line) => total + parseDecimal(line.amount, MONEY_SCALE), 0n);
 
-/** Groups movements onto the lines of one statement section. */
-function assemble(movements: Movement[], section: StatementSection): StatementLineResult[] {
+/** The accounts of one section, grouped onto the line each reports on. */
+function bucket(
+  catalogue: LineCatalogue,
+  movements: Movement[],
+  section: StatementSection,
+): Map<string, { total: bigint; accounts: StatementAccount[] }> {
   const byLine = new Map<string, { total: bigint; accounts: StatementAccount[] }>();
 
   for (const movement of movements) {
-    const line = lineFor(movement.accountType, movement.statementLine);
+    const line = catalogue.lineFor(movement.accountType, movement.statementLine);
     if (line.section !== section) continue;
     const amount = naturalAmount(movement);
     // An account that moved and came back — a posting and its reversal — has
     // nothing to say on a statement of balances, so it is not listed. It stays
     // in the Trial Balance and the General Ledger, which are about movement.
     if (amount === 0n) continue;
-    const bucket = byLine.get(line.code) ?? { total: 0n, accounts: [] };
-    bucket.total += amount;
-    bucket.accounts.push({
+    const entry = byLine.get(line.code) ?? { total: 0n, accounts: [] };
+    entry.total += amount;
+    entry.accounts.push({
       accountCode: movement.accountCode,
       accountName: movement.accountName,
       accountType: movement.accountType,
       amount: decimal(amount),
     });
-    byLine.set(line.code, bucket);
+    byLine.set(line.code, entry);
   }
 
-  return STATEMENT_LINES.filter((line) => line.section === section && byLine.has(line.code))
+  return byLine;
+}
+
+/** Groups movements onto the lines of one statement section, flat, in mapping order. */
+function assemble(
+  catalogue: LineCatalogue,
+  movements: Movement[],
+  section: StatementSection,
+): StatementLineResult[] {
+  const byLine = bucket(catalogue, movements, section);
+  return catalogue
+    .ordered()
+    .filter((line) => line.section === section && !line.isHeader && byLine.has(line.code))
     .map((line) => {
-      const bucket = byLine.get(line.code)!;
-      return { line, amount: decimal(bucket.total), accounts: bucket.accounts };
-    })
-    .sort((a, b) => a.line.ordinal - b.line.ordinal);
+      const entry = byLine.get(line.code)!;
+      return { line, depth: 0, amount: decimal(entry.total), accounts: entry.accounts };
+    });
+}
+
+/**
+ * One side of the Balance Sheet, drawn as the mapping draws it: the side's
+ * headers and lines in Finance's own order and nesting, each header carrying
+ * the sum of the lines beneath it. A branch with nothing in it is not drawn.
+ */
+function sideRows(
+  catalogue: LineCatalogue,
+  byLine: ReadonlyMap<string, { total: bigint; accounts: StatementAccount[] }>,
+  side: 'asset' | 'equity' | 'liability',
+): StatementLineResult[] {
+  const out: StatementLineResult[] = [];
+
+  const totalOf = (node: StatementLineNode): bigint => {
+    const own = node.line.isHeader ? 0n : (byLine.get(node.line.code)?.total ?? 0n);
+    return node.children.reduce((total, child) => total + totalOf(child), own);
+  };
+  const holds = (node: StatementLineNode): boolean =>
+    (!node.line.isHeader && byLine.has(node.line.code)) || node.children.some(holds);
+
+  const walk = (nodes: readonly StatementLineNode[], depth: number) => {
+    for (const node of nodes) {
+      if (!holds(node)) continue;
+      out.push({
+        line: node.line,
+        depth,
+        amount: decimal(totalOf(node)),
+        accounts: node.line.isHeader ? [] : (byLine.get(node.line.code)?.accounts ?? []),
+      });
+      walk(node.children, depth + 1);
+    }
+  };
+
+  walk(catalogue.sideTree(side), 0);
+  return out;
 }
 
 /** The P&L lines, and the result they come to — shared by both statements. */
@@ -232,8 +292,8 @@ function resultOf(lines: readonly StatementLineResult[]) {
  * line, not of this function — see `domain/financial-statements.ts`.
  */
 export async function profitOrLoss(tx: Tx, filter: StatementFilter): Promise<ProfitOrLoss> {
-  const rows = await movements(tx, filter);
-  const lines = assemble(rows, 'profit_or_loss');
+  const [rows, catalogue] = await Promise.all([movements(tx, filter), statementLines.catalogue(tx)]);
+  const lines = assemble(catalogue, rows, 'profit_or_loss');
   const { income, expenses, result } = resultOf(lines);
 
   return {
@@ -266,15 +326,18 @@ export async function financialPosition(
 ): Promise<FinancialPosition> {
   const { yearStart: _ignored, ...rest } = filter;
   const fromTheBeginning: StatementFilter = { ...rest, from: '0001-01-01', to: asAt };
-  const rows = await movements(tx, fromTheBeginning);
+  const [rows, catalogue] = await Promise.all([
+    movements(tx, fromTheBeginning),
+    statementLines.catalogue(tx),
+  ]);
 
-  const position = assemble(rows, 'financial_position');
-  const assets = position.filter((l) => l.line.accountTypes.includes('asset'));
-  const equity = position.filter((l) => l.line.accountTypes.includes('equity'));
-  const liabilities = position.filter((l) => l.line.accountTypes.includes('liability'));
+  const position = bucket(catalogue, rows, 'financial_position');
+  const assets = sideRows(catalogue, position, 'asset');
+  const equity = sideRows(catalogue, position, 'equity');
+  const liabilities = sideRows(catalogue, position, 'liability');
 
   // The result since the beginning, from the same rows — one query, one truth.
-  const plLines = assemble(rows, 'profit_or_loss');
+  const plLines = assemble(catalogue, rows, 'profit_or_loss');
   const { result } = resultOf(plLines);
   const resultAccounts = plLines.flatMap((line) =>
     line.accounts.map((account) => ({
@@ -341,6 +404,8 @@ export interface MovementAccount {
 export interface EquityRow {
   /** A statement line's code, or `result` for the accumulated profit or loss. */
   readonly code: string;
+  /** What the mapping calls the line; pages fall back to it when no translation exists. */
+  readonly name: string;
   /** `result` is not an equity account — it is what the P&L accounts come to. */
   readonly kind: 'line' | 'result';
   readonly opening: string;
@@ -373,7 +438,11 @@ interface Paired {
  * per account. An account that appears in only one of them still gets a row,
  * with zero for the side it is missing from.
  */
-function pairUp(before: readonly Movement[], during: readonly Movement[]): Map<string, Paired> {
+function pairUp(
+  catalogue: LineCatalogue,
+  before: readonly Movement[],
+  during: readonly Movement[],
+): Map<string, Paired> {
   const byCode = new Map<string, Paired>();
   const put = (movement: Movement, column: 'opening' | 'movement', sign: bigint) => {
     const existing =
@@ -391,7 +460,7 @@ function pairUp(before: readonly Movement[], during: readonly Movement[]): Map<s
   // Revenue and expense accounts are signed as they bear on the result: income
   // adds to it, a deduction takes away. Equity accounts keep their own sign.
   const signOf = (movement: Movement) =>
-    lineFor(movement.accountType, movement.statementLine).deduction ? -1n : 1n;
+    catalogue.lineFor(movement.accountType, movement.statementLine).deduction ? -1n : 1n;
   for (const movement of before) put(movement, 'opening', signOf(movement));
   for (const movement of during) put(movement, 'movement', signOf(movement));
   return byCode;
@@ -419,31 +488,32 @@ const accountRows = (paired: Map<string, Paired>, codes: readonly string[]): Mov
  * under Equity, which is what makes the two statements agree.
  */
 export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<ChangesInEquity> {
-  const [before, during] = await Promise.all([
+  const [before, during, catalogue] = await Promise.all([
     movements(tx, { ...filter, from: BEGINNING, to: dayBefore(filter.from) }),
     movements(tx, filter),
+    statementLines.catalogue(tx),
   ]);
-  const paired = pairUp(before, during);
+  const paired = pairUp(catalogue, before, during);
 
   // The equity accounts, grouped onto the lines they report on.
   const byLine = new Map<string, string[]>();
   for (const [code, entry] of paired) {
     if (entry.accountType !== 'equity') continue;
     if (entry.opening === 0n && entry.movement === 0n) continue;
-    const line = lineFor(entry.accountType, entry.statementLine);
+    const line = catalogue.lineFor(entry.accountType, entry.statementLine);
     byLine.set(line.code, [...(byLine.get(line.code) ?? []), code]);
   }
 
-  const lineRows: EquityRow[] = STATEMENT_LINES.filter(
-    (line) => line.section === 'financial_position' && byLine.has(line.code),
-  )
-    .sort((a, b) => a.ordinal - b.ordinal)
+  const lineRows: EquityRow[] = catalogue
+    .ordered()
+    .filter((line) => line.section === 'financial_position' && !line.isHeader && byLine.has(line.code))
     .map((line) => {
       const accounts = accountRows(paired, byLine.get(line.code)!);
       const opening = accounts.reduce((total, a) => total + parseDecimal(a.opening, MONEY_SCALE), 0n);
       const movement = accounts.reduce((total, a) => total + parseDecimal(a.movement, MONEY_SCALE), 0n);
       return {
         code: line.code,
+        name: line.name,
         kind: 'line' as const,
         opening: decimal(opening),
         movement: decimal(movement),
@@ -467,6 +537,7 @@ export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<
       ? [
           {
             code: 'result',
+            name: 'Result',
             kind: 'result' as const,
             opening: decimal(openingResult),
             movement: decimal(periodResult),
@@ -519,37 +590,15 @@ export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<
 // opening and closing cash balances — and the page says whether they do.
 // ───────────────────────────────────────────────────────────────────────────
 
-export const CASH_LINE = 'cash_and_equivalents';
+// Where a cash movement belongs is read from the account on the other side of
+// the entry: the *category* of the statement line that account reports on.
+// The categories live on the mapping — Finance sets them on the Cash Flow
+// Mapping screen — and a cash line itself carries none, because cash moving
+// between two cash accounts is not a cash flow.
 
-export type CashFlowCategory = 'operating' | 'investing' | 'financing';
-
-/**
- * Where a cash movement belongs, read from the account on the other side.
- *
- * Trading, and everything that settles it, is operating. What was spent on or
- * received for long-lived assets is investing. What the owners and the lenders
- * put in or took out is financing. `cash_and_equivalents` is absent on purpose:
- * cash moving between two cash accounts is not a cash flow.
- */
-const CATEGORY_OF: Readonly<Record<string, CashFlowCategory>> = Object.freeze({
-  non_current_assets: 'investing',
-  current_assets: 'operating',
-  equity: 'financing',
-  non_current_liabilities: 'financing',
-  current_liabilities: 'operating',
-  revenue: 'operating',
-  cost_of_sales: 'operating',
-  other_income: 'operating',
-  operating_expenses: 'operating',
-  finance_costs: 'operating',
-  tax_expense: 'operating',
-});
-
-export const CASH_FLOW_CATEGORIES: readonly CashFlowCategory[] = Object.freeze([
-  'operating',
-  'investing',
-  'financing',
-]);
+/** The codes of the lines whose accounts ARE cash, per the mapping. */
+const cashCodes = (catalogue: LineCatalogue): string[] =>
+  catalogue.lines.filter((line) => line.isCash).map((line) => line.code);
 
 export interface CashFlowSection {
   readonly category: CashFlowCategory;
@@ -582,13 +631,17 @@ interface EntryLine {
   readonly credit: bigint;
 }
 
-const isCash = (line: { accountType: AccountType; statementLine: string | null }) =>
-  lineFor(line.accountType, line.statementLine).code === CASH_LINE;
+const isCash = (
+  catalogue: LineCatalogue,
+  line: { accountType: AccountType; statementLine: string | null },
+) => catalogue.lineFor(line.accountType, line.statementLine).isCash;
 
 /** Has anybody said which accounts are cash? */
-async function cashLineAssigned(tx: Tx): Promise<boolean> {
+async function cashLineAssigned(tx: Tx, codes: readonly string[]): Promise<boolean> {
+  if (codes.length === 0) return false;
+  const list = sql.join(codes.map((code) => sql`${code}`), sql`, `);
   const result = await tx.execute(sql`
-    select 1 from chart_of_account where statement_line = ${CASH_LINE} limit 1
+    select 1 from chart_of_account where statement_line in (${list}) limit 1
   `);
   return result.rows.length > 0;
 }
@@ -600,7 +653,13 @@ async function cashLineAssigned(tx: Tx): Promise<boolean> {
  * — which accounts sat opposite the cash — and summing across journals first
  * would destroy exactly the information it needs.
  */
-async function entryMovements(tx: Tx, filter: StatementFilter): Promise<EntryLine[]> {
+async function entryMovements(
+  tx: Tx,
+  filter: StatementFilter,
+  codes: readonly string[],
+): Promise<EntryLine[]> {
+  if (codes.length === 0) return [];
+  const cashList = sql.join(codes.map((code) => sql`${code}`), sql`, `);
   const debitColumn = debitOf(filter);
   const creditColumn = creditOf(filter);
   const branch = branchOf(filter);
@@ -624,7 +683,7 @@ async function entryMovements(tx: Tx, filter: StatementFilter): Promise<EntryLin
            from journal_line cash
            join chart_of_account ca on ca.id = cash.account_id
           where cash.journal_entry_id = l.journal_entry_id
-            and ca.statement_line = ${CASH_LINE}
+            and ca.statement_line in (${cashList})
        )
      group by l.journal_entry_id, a.code, a.name, a.account_type, a.statement_line
      order by l.journal_entry_id, a.code
@@ -644,11 +703,14 @@ async function entryMovements(tx: Tx, filter: StatementFilter): Promise<EntryLin
 const abs = (value: bigint) => (value < 0n ? -value : value);
 
 /** The cash held, and by which account, in a set of movements. */
-function cashHeld(rows: readonly Movement[]): { total: bigint; accounts: StatementAccount[] } {
+function cashHeld(
+  catalogue: LineCatalogue,
+  rows: readonly Movement[],
+): { total: bigint; accounts: StatementAccount[] } {
   let total = 0n;
   const accounts: StatementAccount[] = [];
   for (const movement of rows) {
-    if (!isCash(movement)) continue;
+    if (!isCash(catalogue, movement)) continue;
     const amount = naturalAmount(movement);
     total += amount;
     accounts.push({
@@ -672,15 +734,17 @@ function cashHeld(rows: readonly Movement[]): { total: bigint; accounts: Stateme
  * sections still add to the movement exactly.
  */
 export async function cashFlow(tx: Tx, filter: StatementFilter): Promise<CashFlow> {
+  const catalogue = await statementLines.catalogue(tx);
+  const cash = cashCodes(catalogue);
   const [configured, before, upToTheEnd, entries] = await Promise.all([
-    cashLineAssigned(tx),
+    cashLineAssigned(tx, cash),
     movements(tx, { ...filter, from: BEGINNING, to: dayBefore(filter.from) }),
     movements(tx, { ...filter, from: BEGINNING }),
-    entryMovements(tx, filter),
+    entryMovements(tx, filter, cash),
   ]);
 
-  const opening = cashHeld(before);
-  const closing = cashHeld(upToTheEnd);
+  const opening = cashHeld(catalogue, before);
+  const closing = cashHeld(catalogue, upToTheEnd);
 
   // entryId → its lines.
   const byEntry = new Map<string, EntryLine[]>();
@@ -706,10 +770,10 @@ export async function cashFlow(tx: Tx, filter: StatementFilter): Promise<CashFlo
   };
 
   for (const lines of byEntry.values()) {
-    const cash = lines.filter(isCash);
-    const others = lines.filter((line) => !isCash(line));
+    const cashSide = lines.filter((line) => isCash(catalogue, line));
+    const others = lines.filter((line) => !isCash(catalogue, line));
     // Positive when the entry brought cash in.
-    const delta = cash.reduce((total, line) => total + line.debit - line.credit, 0n);
+    const delta = cashSide.reduce((total, line) => total + line.debit - line.credit, 0n);
     if (delta === 0n || others.length === 0) continue;
 
     const weights = others.map((line) => abs(line.debit - line.credit));
@@ -725,13 +789,13 @@ export async function cashFlow(tx: Tx, filter: StatementFilter): Promise<CashFlo
       if (index === largest) return;
       const share = (delta * weights[index]!) / weight;
       assigned += share;
-      const line = lineFor(account.accountType, account.statementLine);
-      const category = CATEGORY_OF[line.code];
+      const line = catalogue.lineFor(account.accountType, account.statementLine);
+      const category = line.cashFlowCategory;
       if (category && share !== 0n) attribute(category, line, account, share);
     });
     const rest = delta - assigned;
-    const line = lineFor(others[largest]!.accountType, others[largest]!.statementLine);
-    const category = CATEGORY_OF[line.code];
+    const line = catalogue.lineFor(others[largest]!.accountType, others[largest]!.statementLine);
+    const category = line.cashFlowCategory;
     if (category && rest !== 0n) attribute(category, line, others[largest]!, rest);
   }
 
@@ -756,6 +820,7 @@ export async function cashFlow(tx: Tx, filter: StatementFilter): Promise<CashFlo
       .sort((a, b) => a.line.ordinal - b.line.ordinal)
       .map((entry) => ({
         line: entry.line,
+        depth: 0,
         amount: decimal(entry.amount),
         accounts: entry.accounts.sort((a, b) => a.accountCode.localeCompare(b.accountCode, 'en')),
       }));
@@ -786,78 +851,59 @@ export async function cashFlow(tx: Tx, filter: StatementFilter): Promise<CashFlo
   };
 }
 
+
 // ───────────────────────────────────────────────────────────────────────────
 // The Income Statement, as it is presented
 //
-// By direction (2026-09-01), with a template: the statement is not a list of
-// sections each ending in a total. It is a *running* document — revenue, what
-// it cost, then the margin; expenses, then what was left; then the things
-// below the operating line, then the result — and the subtotals in between are
-// the reason anyone reads it.
+// By direction (2026-09-03): the layout belongs to Finance. The Income
+// Statement Mapping screen holds the headers and lines in the order they
+// print, and this function draws exactly that — each top-level branch as a
+// section carrying its total, the lines beneath it indented as the mapping
+// nests them, and the accounts connected to each line listed under it.
 //
-//   Revenue                       ← the section's total, on its heading
-//     Product Revenue             ← a header in the chart, its children summed
-//       Solar Revenue             ← a posting account
-//       Batteries Revenue
-//     Logistics Revenue
+//   Revenue                       ← a mapping line (or header), its total
+//     R000006 · Solar Revenue     ← an account connected to the line
+//     R000012 · Logistics Revenue
 //   Cost of Sales
-//     Solar COGS
+//     X000005 · Solar COGS
 //                        ─────────
 //   Gross profit                  ← computed, ruled
-//
-//   Operating expenses
-//     Administrative expenses
-//       Rent
-//                        ─────────
-//   Operating income              ← computed, ruled
 //   ...
 //                        ═════════
 //   Net profit                    ← computed, double-ruled
 //
-// ── Where the shape comes from ─────────────────────────────────────────────
-// Two different things decide where an account appears, and keeping them apart
-// is what makes this configurable without a second tree to maintain:
+// ── The layout is Finance's; the arithmetic is not ─────────────────────────
+// Every line names the role it plays — revenue, cost of sales, other income,
+// operating expenses, finance costs, tax — and the running subtotals are
+// computed from the roles, wherever the lines sit on the page. Gross profit
+// is revenue less cost of sales however the statement is arranged; a layout
+// that could redefine it would make two companies' statements incomparable.
 //
-//   *Which section* it falls in is the account's statement line — the field
-//   set when the account is created. Revenue, cost of sales, operating
-//   expenses, other income, finance costs, tax.
-//
-//   *Where inside that section* is the account's place in the chart. "Solar
-//   Revenue" sits under "Product Revenue" because that is its parent, and the
-//   statement reads the same hierarchy the Chart of Accounts screen shows.
-//
-// So a company gets the statement it wants by building its chart and mapping
-// the leaves — no separate report layout to keep in step with the accounts.
-//
-// ── Rolled up within the section, never across it ──────────────────────────
-// A header's figure is the sum of its descendants *that belong to the section
-// being drawn*. That matters: the "Expense" root holds both cost of sales and
-// operating expenses, and rolling it up blindly would print one number under
-// two headings, each time wrong. An ancestor appears only where it has
-// children in that section, carrying only what those children hold.
-//
-// The type roots themselves are skipped. The section heading already says
-// "Revenue"; the root account named Revenue directly beneath it would be the
-// same word twice with the same figure.
+// Each subtotal is ruled in after the last section that feeds it: gross
+// profit after the last branch holding revenue or cost-of-sales content, the
+// operating result after the operating expenses, and the result — double-
+// ruled — at the end. A subtotal that would repeat the figure above it under
+// another name stays silent, exactly as before.
 // ───────────────────────────────────────────────────────────────────────────
 
 /** A line of the statement, in the order it is printed. */
 export interface IncomeRow {
   /**
-   * `section`  — a statement line and its total.
-   * `group`    — a header account within a section.
-   * `account`  — a posting account.
+   * `section`  — a top-level branch of the mapping and its total.
+   * `group`    — a nested header or line of the mapping.
+   * `account`  — a posting account connected to the line above it.
    * `subtotal` — a computed figure: the margin, the result.
    */
   readonly kind: 'section' | 'group' | 'account' | 'subtotal';
   /** Unique within the statement. */
   readonly key: string;
-  /** For `section` and `subtotal`: the message key naming it. */
+  /** For `subtotal`: the message key naming it. */
   readonly labelKey: string | null;
-  /** For `group` and `account`: what the chart calls it. */
+  /** The mapping line's code, or the account's. */
   readonly code: string | null;
+  /** The mapping line's name, or the account's. */
   readonly name: string | null;
-  /** 0 for a section or a subtotal; each step down the chart adds one. */
+  /** 0 for a section or a subtotal; each step into the mapping adds one. */
   readonly depth: number;
   readonly amount: string;
   /** Subtotals are ruled above; the result is ruled twice. */
@@ -880,109 +926,12 @@ export interface IncomeStatement {
   readonly incomeBeforeTax: string;
   readonly tax: string;
   readonly result: string;
-  /** The deepest the chart goes in this statement — the level picker's ceiling. */
+  /** The deepest the mapping goes in this statement — the level picker's ceiling. */
   readonly depth: number;
 }
 
 /**
- * The sections, in the order the statement prints them, and how each one bears
- * on the result.
- *
- * This is the whole layout, as data. A section is drawn where it has anything
- * in it, and the subtotals that follow it are computed from what came before.
- */
-const SECTIONS: readonly {
-  readonly line: string;
-  readonly deducted: boolean;
-}[] = [
-  { line: 'revenue', deducted: false },
-  { line: 'cost_of_sales', deducted: true },
-  { line: 'operating_expenses', deducted: true },
-  { line: 'other_income', deducted: false },
-  { line: 'finance_costs', deducted: true },
-  { line: 'tax_expense', deducted: true },
-];
-
-interface SectionAccount {
-  readonly code: string;
-  readonly name: string;
-  readonly amount: bigint;
-}
-
-/**
- * The rows for one section: its accounts arranged as the chart arranges them,
- * with every header carrying the sum of what is beneath it *in this section*.
- */
-function sectionRows(
-  chart: readonly ChartRow[],
-  accounts: readonly SectionAccount[],
-  line: string,
-): { rows: IncomeRow[]; total: bigint; depth: number } {
-  const byId = new Map(chart.map((row) => [row.id, row]));
-  const byCode = new Map(chart.map((row) => [row.code, row]));
-  const children = new Map<string | null, ChartRow[]>();
-  for (const row of chart) {
-    children.set(row.parentId, [...(children.get(row.parentId) ?? []), row]);
-  }
-
-  // Every account's figure lands on itself and on each of its ancestors, so a
-  // header knows what it holds without anybody adding it up by hand.
-  const totals = new Map<string, bigint>();
-  const held = new Set<string>();
-  let total = 0n;
-  for (const account of accounts) {
-    const node = byCode.get(account.code);
-    if (!node) continue;
-    total += account.amount;
-    let cursor: ChartRow | undefined = node;
-    while (cursor) {
-      totals.set(cursor.id, (totals.get(cursor.id) ?? 0n) + account.amount);
-      held.add(cursor.id);
-      cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined;
-    }
-  }
-
-  const rows: IncomeRow[] = [];
-  let deepest = 0;
-
-  // The type roots are skipped: the section heading above already names them.
-  const walk = (parentId: string | null, depth: number) => {
-    const siblings = [...(children.get(parentId) ?? [])]
-      .filter((row) => held.has(row.id))
-      .sort((a, b) => a.code.localeCompare(b.code, 'en'));
-
-    for (const row of siblings) {
-      const amount = totals.get(row.id) ?? 0n;
-      const kids = (children.get(row.id) ?? []).filter((kid) => held.has(kid.id));
-      // A header with nothing beneath it *in this section* reads as an
-      // account, because here that is all it is.
-      const isGroup = row.isGroup && kids.length > 0;
-      rows.push({
-        kind: isGroup ? 'group' : 'account',
-        key: `${line}:${row.code}`,
-        labelKey: null,
-        code: row.code,
-        name: row.name,
-        depth,
-        amount: decimal(amount),
-        rule: 'none',
-        deducted: false,
-      });
-      deepest = Math.max(deepest, depth);
-      if (isGroup) walk(row.id, depth + 1);
-    }
-  };
-
-  // Start below the roots — an account whose parent is null is a type root.
-  for (const root of chart.filter((row) => row.parentId === null)) {
-    if (held.has(root.id)) walk(root.id, 1);
-  }
-
-  return { rows, total, depth: deepest };
-}
-
-/**
- * Statement of Profit or Loss, in the form it is presented.
+ * Statement of Profit or Loss, in the form Finance mapped it.
  *
  * Read from the posted journal lines, like everything else here. The figures
  * are the same ones `profitOrLoss` returns — this arranges them.
@@ -991,49 +940,87 @@ export async function incomeStatement(
   tx: Tx,
   filter: StatementFilter,
 ): Promise<IncomeStatement> {
-  const [rows, chart] = await Promise.all([movements(tx, filter), chartRows(tx)]);
+  const [rows, catalogue] = await Promise.all([movements(tx, filter), statementLines.catalogue(tx)]);
 
-  // Each account, positive in its own normal direction, filed under the
-  // statement line it reports on.
-  const bySection = new Map<string, SectionAccount[]>();
-  for (const movement of rows) {
-    const line = lineFor(movement.accountType, movement.statementLine);
-    if (line.section !== 'profit_or_loss') continue;
-    const amount = naturalAmount(movement);
-    // An account that moved and came back has nothing to say on a statement
-    // of results; it stays in the Trial Balance, which is about movement.
-    if (amount === 0n) continue;
-    bySection.set(line.code, [
-      ...(bySection.get(line.code) ?? []),
-      { code: movement.accountCode, name: movement.accountName, amount },
-    ]);
+  // Each line's accounts and total, and each role's total for the subtotals.
+  const byLine = bucket(catalogue, rows, 'profit_or_loss');
+  const roleTotals = new Map<IncomeRole, bigint>();
+  for (const line of catalogue.lines) {
+    if (line.section !== 'profit_or_loss' || line.isHeader) continue;
+    const entry = byLine.get(line.code);
+    if (!entry || !line.role) continue;
+    roleTotals.set(line.role, (roleTotals.get(line.role) ?? 0n) + entry.total);
   }
+  const at = (role: IncomeRole) => roleTotals.get(role) ?? 0n;
+  const has = (role: IncomeRole) => roleTotals.has(role);
+
+  // What a branch of the mapping holds, and how its figure reads. A branch of
+  // one bearing prints positive with its "deducted" mark; a branch that mixes
+  // income and deductions prints the net, because any other single number
+  // about it would be wrong.
+  const holds = (node: StatementLineNode): boolean =>
+    (!node.line.isHeader && byLine.has(node.line.code)) || node.children.some(holds);
+  const bearings = (node: StatementLineNode): { added: bigint; deducted: bigint } => {
+    const own = !node.line.isHeader ? (byLine.get(node.line.code)?.total ?? 0n) : 0n;
+    let added = node.line.deduction ? 0n : own;
+    let taken = node.line.deduction ? own : 0n;
+    for (const child of node.children) {
+      const inner = bearings(child);
+      added += inner.added;
+      taken += inner.deducted;
+    }
+    return { added, deducted: taken };
+  };
+  const figureOf = (node: StatementLineNode): { amount: bigint; deducted: boolean } => {
+    const { added, deducted: taken } = bearings(node);
+    if (added !== 0n && taken !== 0n) return { amount: added - taken, deducted: false };
+    if (taken !== 0n || (added === 0n && node.line.deduction)) return { amount: taken, deducted: true };
+    return { amount: added, deducted: false };
+  };
+  const rolesOf = (node: StatementLineNode, into = new Set<IncomeRole>()): Set<IncomeRole> => {
+    if (!node.line.isHeader && node.line.role && byLine.has(node.line.code)) into.add(node.line.role);
+    for (const child of node.children) rolesOf(child, into);
+    return into;
+  };
 
   const out: IncomeRow[] = [];
-  const totals = new Map<string, bigint>();
   let depth = 0;
 
-  const draw = (line: string, deducted: boolean) => {
-    const accounts = bySection.get(line) ?? [];
-    if (accounts.length === 0) {
-      totals.set(line, 0n);
-      return;
-    }
-    const built = sectionRows(chart, accounts, line);
-    totals.set(line, built.total);
-    depth = Math.max(depth, built.depth);
+  const emit = (node: StatementLineNode, level: number) => {
+    if (!holds(node)) return;
+    const figure = figureOf(node);
     out.push({
-      kind: 'section',
-      key: `section:${line}`,
-      labelKey: line,
-      code: null,
-      name: null,
-      depth: 0,
-      amount: decimal(built.total),
+      kind: level === 0 ? 'section' : 'group',
+      key: `line:${node.line.code}`,
+      labelKey: null,
+      code: node.line.code,
+      name: node.line.name,
+      depth: level,
+      amount: decimal(figure.amount),
       rule: 'none',
-      deducted,
+      deducted: figure.deducted,
     });
-    out.push(...built.rows);
+    depth = Math.max(depth, level);
+    if (!node.line.isHeader) {
+      const accounts = [...(byLine.get(node.line.code)?.accounts ?? [])].sort((a, b) =>
+        a.accountCode.localeCompare(b.accountCode, 'en'),
+      );
+      for (const account of accounts) {
+        out.push({
+          kind: 'account',
+          key: `account:${node.line.code}:${account.accountCode}`,
+          labelKey: null,
+          code: account.accountCode,
+          name: account.accountName,
+          depth: level + 1,
+          amount: account.amount,
+          rule: 'none',
+          deducted: false,
+        });
+        depth = Math.max(depth, level + 1);
+      }
+    }
+    for (const child of node.children) emit(child, level + 1);
   };
 
   const subtotal = (labelKey: string, amount: bigint, rule: 'single' | 'double') => {
@@ -1050,48 +1037,41 @@ export async function incomeStatement(
     });
   };
 
-  const at = (line: string) => totals.get(line) ?? 0n;
-
-  // Trading: what was sold, what it cost, and the margin between them.
-  draw('revenue', false);
-  draw('cost_of_sales', true);
   const grossProfit = at('revenue') - at('cost_of_sales');
-  subtotal('gross_profit', grossProfit, 'single');
-
-  // Running the business, and what trading left after it.
-  draw('operating_expenses', true);
   const operatingIncome = grossProfit - at('operating_expenses');
-
-  // ── Two subtotals that earn their place only sometimes ───────────────────
-  // Operating income and income before tax separate trading from everything
-  // that is not trading. Where a company has nothing below the operating line
-  // — no other income, no finance costs, no tax — there is nothing to
-  // separate: both figures equal the result, and printing them would be the
-  // same number three times under three headings.
-  //
-  // So they appear where they say something and stay silent where they do
-  // not. A simple statement then reads exactly as it was specified — revenue,
-  // cost, gross profit, expenses, result — and a company with borrowings and
-  // tax still gets the full form.
-  //
-  // Asked of the sections rather than of the totals, because the totals are
-  // only known once a section has been drawn, and these lines have to be
-  // written *before* the sections they introduce.
-  const has = (line: string) => (bySection.get(line)?.length ?? 0) > 0;
-  if (has('other_income') || has('finance_costs') || has('tax_expense')) {
-    subtotal('operating_income', operatingIncome, 'single');
-  }
-
-  // Below the operating line: income and costs that are not trading.
-  draw('other_income', false);
-  draw('finance_costs', true);
   const incomeBeforeTax = operatingIncome + at('other_income') - at('finance_costs');
-
-  // Before the tax line, not after it: this is the figure tax is charged on.
-  if (has('tax_expense')) subtotal('income_before_tax', incomeBeforeTax, 'single');
-
-  draw('tax_expense', true);
   const result = incomeBeforeTax - at('tax_expense');
+
+  // Each subtotal lands after the last branch that feeds it — and never
+  // before an earlier subtotal, so the running story stays in order.
+  const top = catalogue.treeFor('income_statement').filter(holds);
+  const topRoles = top.map((node) => rolesOf(node));
+  const lastWith = (...roles: IncomeRole[]): number => {
+    let index = -1;
+    topRoles.forEach((present, i) => {
+      if (roles.some((role) => present.has(role))) index = i;
+    });
+    return index;
+  };
+  const grossAfter = lastWith('revenue', 'cost_of_sales');
+  const belowTheLine = has('other_income') || has('finance_costs') || has('tax_expense');
+  const operatingAfter = Math.max(grossAfter, lastWith('operating_expenses'));
+  const beforeTaxAfter = Math.max(operatingAfter, lastWith('other_income', 'finance_costs'));
+
+  // The two optional subtotals appear only where they separate something —
+  // see 6c5f175: the same number three times under three headings is worse
+  // than not printing it.
+  const place = (index: number) => {
+    if (index === grossAfter) subtotal('gross_profit', grossProfit, 'single');
+    if (index === operatingAfter && belowTheLine) subtotal('operating_income', operatingIncome, 'single');
+    if (index === beforeTaxAfter && has('tax_expense')) subtotal('income_before_tax', incomeBeforeTax, 'single');
+  };
+
+  place(-1); // Where a figure has nothing feeding it, it still opens the page.
+  top.forEach((node, index) => {
+    emit(node, 0);
+    place(index);
+  });
   subtotal('result', result, 'double');
 
   return {

@@ -65,6 +65,7 @@ const PHASE_1: readonly string[] = [
  */
 const PHASE_2: readonly string[] = [
   '/master-data/cost-centres',
+  '/master-data/statement-mapping',
   '/master-data/customers',
   '/master-data/suppliers',
   '/master-data/business-partners',

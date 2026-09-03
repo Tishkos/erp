@@ -92,9 +92,11 @@ describe('the screen catalogue covers the approved tree', () => {
   // *and* Administration — five aliases, each of which read as a second screen
   // until you opened both and found one page. No function was removed: every
   // one of them is still reachable, once.
-  it('classifies all 220 items in the Appendix A tree', () => {
-    expect(allMenuItems()).toHaveLength(220);
-    expect(Object.keys(SCREENS)).toHaveLength(220);
+  // Plus one more, by direction (2026-09-03): the Statement Mapping, where
+  // Finance defines the headers and lines of its own reports.
+  it('classifies all 221 items in the approved tree', () => {
+    expect(allMenuItems()).toHaveLength(221);
+    expect(Object.keys(SCREENS)).toHaveLength(221);
   });
 
   it('uses only declared archetypes', () => {
@@ -111,7 +113,7 @@ describe('the screen catalogue covers the approved tree', () => {
       (sum, item) => sum + screenCount(archetypeOf(item.key)!),
       0,
     );
-    expect(total).toBe(327);
+    expect(total).toBe(328);
   });
 });
 
@@ -164,7 +166,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(220);
+    expect(screenRoutes().size).toBe(221);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -203,6 +205,7 @@ describe('every screen has one address', () => {
       '/master-data/items',
       '/master-data/payment-methods',
       '/master-data/payment-terms',
+      '/master-data/statement-mapping',
       '/master-data/suppliers',
       '/master-data/uom',
     ]);
@@ -234,7 +237,7 @@ describe('the build tracker reports what each phase owes the frontend', () => {
   it('attributes every screen to the phase that delivers it', () => {
     const byPhase = screensByPhase();
     const counted = [...byPhase.values()].reduce((sum, screens) => sum + screens.length, 0);
-    expect(counted).toBe(220);
+    expect(counted).toBe(221);
     for (const phase of byPhase.keys()) expect(phase).toMatch(/^\d\d$/);
   });
 });

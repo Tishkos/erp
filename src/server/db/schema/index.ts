@@ -40,6 +40,7 @@ export * from './ui';
 export * from './inventory';
 export * from './transfer';
 export * from './opening-stock';
+export * from './statement-mapping';
 export * from './stock-count';
 export * from './purchase-order';
 export * from './goods-receipt';

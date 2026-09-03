@@ -251,7 +251,8 @@
     "changes_in_equity": "Changes in Equity",
     "cash_flow": "Cash Flow Statement",
     "cash_accounts": "Cash Accounts",
-    "payment_methods": "Payment Methods"
+    "payment_methods": "Payment Methods",
+    "statement_mapping": "Statement Mapping"
   },
   "auth": {
     "email": "Email",
@@ -1688,7 +1689,42 @@
       "status_inactive": "Inactive",
       "deactivate_title": "Deactivate this partner"
     },
-    "actions": "Actions"
+    "actions": "Actions",
+    "mapping": {
+      "subtitle": "The shape of the financial statements — Finance's own headers and lines, and where each one reports.",
+      "layout_hint": "The statement prints exactly this, top to bottom: headers carry the sum of the lines beneath them, and accounts are connected to lines when they are opened on the Chart of Accounts.",
+      "line": "Line",
+      "role": "Role",
+      "role_none": "None — this is a header",
+      "role_hint": "Which of the six classical roles the line plays. The subtotals — gross profit, operating income, net profit — are computed from the roles, so they stay right whatever the layout looks like. A header carries no role.",
+      "side": "Side",
+      "side_hint": "Which side of the Balance Sheet the line (or header) prints on.",
+      "statement": "Statement",
+      "accounts": "Accounts",
+      "actions": "Actions",
+      "system": "system line",
+      "up": "Up",
+      "down": "Down",
+      "remove": "Remove",
+      "new_title": "New header or line",
+      "new_hint_income": "A header groups lines; a line takes accounts. New accounts connect to lines from the Chart of Accounts screen.",
+      "new_hint_balance": "A header groups lines on one side of the statement; a line takes accounts. New accounts connect to lines from the Chart of Accounts screen.",
+      "name": "Name",
+      "kind": "Kind",
+      "kind_line": "Line — takes accounts",
+      "kind_header": "Header — groups lines",
+      "parent": "Under",
+      "parent_top": "Top level",
+      "rename_title": "Rename",
+      "rename_hint": "The new name prints on the statement from the next time it is drawn. System lines may be renamed too.",
+      "cash_hint": "Where each line's movements land on the Cash Flow Statement. The category is read from the account on the other side of each cash entry — so classifying the lines here classifies the whole statement. Lines marked as cash are the cash itself and take no category.",
+      "category": "Cash flow section",
+      "is_cash": "Cash and equivalents",
+      "mark_cash": "Mark as cash",
+      "unmark_cash": "Not cash",
+      "equity_hint": "The Statement of Changes in Equity reads the equity side of the Balance Sheet mapping — these lines, in this order. Edit them on the Balance Sheet tab; this view shows what the statement will use.",
+      "equity_note": "The last row is the accumulated result no year-end close has yet carried into retained earnings. It is computed from the revenue and expense accounts, not mapped, which is what keeps this statement agreeing with the Balance Sheet."
+    }
   },
   "profile": {
     "title": "My profile",

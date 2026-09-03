@@ -34,9 +34,10 @@ export const dynamic = 'force-dynamic';
 export default async function IncomeStatementPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/finance/income-statement')) notFound();
 
-  const [t, page, locale, context, params] = await Promise.all([
+  const [t, page, lineT, locale, context, params] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
+    getTranslations('statement_line'),
     getLocale(),
     requireContext(),
     searchParams,
@@ -132,7 +133,11 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
                       : t('reports.net_profit')
                     : row.labelKey
                       ? t(`reports.line_${row.labelKey}`)
-                      : null;
+                      : row.kind === 'account'
+                        ? null
+                        : row.code && lineT.has(row.code)
+                          ? lineT(row.code)
+                          : row.name;
 
                 return (
                   <tr

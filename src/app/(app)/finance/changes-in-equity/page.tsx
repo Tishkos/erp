@@ -129,7 +129,7 @@ export default async function ChangesInEquityPage({ searchParams }: { searchPara
                   money={money}
                   movement={money(row.movement)}
                   opening={money(row.opening)}
-                  title={row.kind === 'result' ? t('reports.equity_result') : line(row.code)}
+                  title={row.kind === 'result' ? t('reports.equity_result') : line.has(row.code) ? line(row.code) : row.name}
                 />
               ))
             )}

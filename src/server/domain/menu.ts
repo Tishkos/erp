@@ -376,6 +376,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ordinal: 19,
     items: [
       page('chart_of_accounts', 'chart_of_account', '02', '/master-data/chart-of-accounts'),
+      page('statement_mapping', 'financial_statement', '02', '/master-data/statement-mapping'),
       page('currencies_rates', 'exchange_rate', '02', '/master-data/exchange-rates'),
       page('branches', 'branch', '01', '/master-data/branches'),
       page('departments', 'department', '01', '/master-data/departments'),

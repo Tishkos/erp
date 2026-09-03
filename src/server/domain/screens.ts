@@ -273,6 +273,9 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
 
   // 19 — Master Data
   chart_of_accounts: 'document',
+  // The Statement Mapping — by direction 2026-09-03: Finance owns the shape
+  // of its reports, so the layout is a settings screen beside the chart.
+  statement_mapping: 'settings',
   currencies_rates: 'document',
   branches: 'document',
   departments: 'document',
@@ -384,6 +387,7 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/finance/income-statement',
   // Phase 2 — the accounting master data.
   '/master-data/cost-centres',
+  '/master-data/statement-mapping',
   '/master-data/customers',
   '/master-data/suppliers',
   '/master-data/items',

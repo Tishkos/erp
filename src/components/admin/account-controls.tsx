@@ -2,7 +2,7 @@ import { getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
 import { ActionButton, Field, Form, Grid, ReasonForm, Select, Submit, SubmitRow, admin as s } from './index';
 import { NewAccountDialog } from './new-account-dialog';
-import { STATEMENT_LINES, linesForType } from '@domain/financial-statements';
+import type { StatementFace } from '@domain/financial-statements';
 import type { AccountNode } from '@domain/chart-of-accounts';
 import {
   allowSubAccounts,
@@ -11,6 +11,16 @@ import {
   setStatementLine,
   updateAccount,
 } from '@/app/(app)/master-data/chart-of-accounts/actions';
+
+/** One line of the mapping, as the pages hand it to these controls. */
+export interface MappingLine {
+  readonly code: string;
+  readonly name: string;
+  readonly statement: StatementFace;
+  readonly isHeader: boolean;
+  readonly depth: number;
+  readonly accountTypes: readonly string[];
+}
 
 /** One row of the parent picker: where it sits, and whether it can hold children. */
 export interface PickerAccount {
@@ -35,7 +45,13 @@ export interface PickerAccount {
  * No currency is asked for: the ledger is kept in IQD (by direction,
  * 2026-08-29), and every posting account opened here holds it.
  */
-export async function NewAccountButton({ accounts }: { readonly accounts: readonly PickerAccount[] }) {
+export async function NewAccountButton({
+  accounts,
+  mapping,
+}: {
+  readonly accounts: readonly PickerAccount[];
+  readonly mapping: readonly MappingLine[];
+}) {
   const [t, line, page] = await Promise.all([
     getTranslations('admin'),
     getTranslations('statement_line'),
@@ -43,16 +59,22 @@ export async function NewAccountButton({ accounts }: { readonly accounts: readon
   ]);
   const groups = accounts.filter((a) => a.isGroup && a.isActive);
 
-  // Every line, on every statement, whichever parent is chosen — the same
-  // rule as the parent picker above: showing only the eligible ones answers
-  // "what may this account report on?" and hides the more useful question,
-  // "where does everything report?". The dialog disables what the chosen
-  // parent's type cannot take rather than removing it.
-  const lines = STATEMENT_LINES.map((option) => ({
+  // Every line of the mapping, on both statements, whichever parent is chosen
+  // — the same rule as the parent picker above: showing only the eligible
+  // ones answers "what may this account take?" and hides the more useful
+  // question, "where does everything report?". The dialog disables what the
+  // chosen parent's type cannot carry rather than removing it, and headers
+  // are shown for shape but never chosen — accounts connect to lines.
+  const lines = mapping.map((option) => ({
     value: option.code,
-    label: line(option.code),
-    section: option.section,
+    // The seeded lines keep their translated names; Finance's own lines are
+    // printed as Finance named them.
+    label:
+      '   '.repeat(Math.max(0, option.depth)) +
+      (line.has(option.code) ? line(option.code) : option.name),
+    section: option.statement === 'income_statement' ? ('profit_or_loss' as const) : ('financial_position' as const),
     accountTypes: option.accountTypes,
+    isHeader: option.isHeader,
   }));
 
   return (
@@ -113,15 +135,19 @@ export async function NewAccountButton({ accounts }: { readonly accounts: readon
  */
 export async function AccountControls({
   account,
+  mapping,
   mayConfigure,
 }: {
   readonly account: AccountNode;
+  readonly mapping: readonly MappingLine[];
   readonly mayConfigure: boolean;
 }) {
   const [t, line] = await Promise.all([getTranslations('admin'), getTranslations('statement_line')]);
   if (!mayConfigure) return null;
 
-  const options = linesForType(account.accountType);
+  const options = mapping.filter(
+    (entry) => !entry.isHeader && entry.accountTypes.includes(account.accountType),
+  );
 
   return (
     <div className={s.assignGrid}>
@@ -153,7 +179,10 @@ export async function AccountControls({
                   name="statementLine"
                   options={[
                     { value: '', label: t('accounts.statement_line_default') },
-                    ...options.map((option) => ({ value: option.code, label: line(option.code) })),
+                    ...options.map((option) => ({
+                      value: option.code,
+                      label: line.has(option.code) ? line(option.code) : option.name,
+                    })),
                   ]}
                 />
               </Grid>

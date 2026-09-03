@@ -45,10 +45,11 @@ export async function StatementSection({
             <StatementLine
               accounts={level >= 3 ? entry.accounts : []}
               amount={money(entry.amount)}
+              depth={entry.depth}
               key={entry.line.code}
               money={money}
               note={entry.line.deduction ? t('reports.deducted') : null}
-              title={line(entry.line.code)}
+              title={line.has(entry.line.code) ? line(entry.line.code) : entry.line.name}
             />
           ))
         : null}
@@ -72,17 +73,20 @@ function StatementLine({
   amount,
   accounts,
   money,
+  depth = 0,
 }: {
   readonly title: string;
   readonly note: string | null;
   readonly amount: string;
   readonly accounts: readonly { readonly accountCode: string; readonly accountName: string; readonly amount: string }[];
   readonly money: (amount: string) => string;
+  /** Steps below the side heading — the mapping's own nesting. */
+  readonly depth?: number;
 }) {
   return (
     <>
       <tr className={s.sapLineRow}>
-        <td>
+        <td style={depth > 0 ? { paddingInlineStart: `${0.6 + depth * 1.25}rem` } : undefined}>
           {title}
           {note ? <span className={s.sapNote}> ({note})</span> : null}
         </td>

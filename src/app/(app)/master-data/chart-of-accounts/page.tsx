@@ -12,6 +12,7 @@ import { PermissionDeniedError, can } from '@domain/permissions';
 import { NewAccountButton } from '@/components/admin/account-controls';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import * as coa from '@/server/services/chart-of-accounts';
+import * as statementLines from '@/server/services/statement-lines';
 
 /**
  * Chart of Accounts list — Phase 01.12's first screen on the list framework,
@@ -58,8 +59,11 @@ export default async function ChartOfAccountsPage({ searchParams }: { searchPara
 
   // Phase 1 §1 — raising an account. The picker shows the whole chart so a
   // person can see where the new one will sit, and offers only the headers.
-  const accounts = await withCurrentUser(async (tx, context) =>
-    can(context.principal, 'create', 'chart_of_account') ? await coa.pickerTree(tx) : [],
+  // The statement-line picker shows Finance's own mapping the same way.
+  const { accounts, mapping } = await withCurrentUser(async (tx, context) =>
+    can(context.principal, 'create', 'chart_of_account')
+      ? { accounts: await coa.pickerTree(tx), mapping: await statementLines.pickerLines(tx) }
+      : { accounts: [], mapping: [] },
   );
   const exportHref = search
     ? `/master-data/chart-of-accounts/export?q=${encodeURIComponent(search)}`
@@ -71,7 +75,7 @@ export default async function ChartOfAccountsPage({ searchParams }: { searchPara
       actions={
         <>
           <LinkButton href={exportHref} label={list('export')} />
-          {accounts.length > 0 ? <NewAccountButton accounts={accounts} /> : null}
+          {accounts.length > 0 ? <NewAccountButton accounts={accounts} mapping={mapping} /> : null}
         </>
       }
       back={{ href: '/', label: t('dashboard_label') }}

@@ -30,9 +30,12 @@ export interface PickerOption {
 /** A statement line: which statement it sits on, and which types may take it. */
 export interface LineOption {
   readonly value: string;
+  /** Already indented to the mapping's own nesting. */
   readonly label: string;
   readonly section: 'financial_position' | 'profit_or_loss';
   readonly accountTypes: readonly string[];
+  /** Shown for the shape of the report, never choosable — accounts connect to lines. */
+  readonly isHeader: boolean;
 }
 
 export interface NewAccountLabels {
@@ -225,7 +228,7 @@ export function NewAccountDialog({
                     <optgroup label={labels.balanceSheet}>
                       {balanceSheetLines.map((line) => (
                         <option
-                          disabled={!line.accountTypes.includes(accountType)}
+                          disabled={line.isHeader || !line.accountTypes.includes(accountType)}
                           key={line.value}
                           value={line.value}
                         >
@@ -236,7 +239,7 @@ export function NewAccountDialog({
                     <optgroup label={labels.incomeStatement}>
                       {incomeStatementLines.map((line) => (
                         <option
-                          disabled={!line.accountTypes.includes(accountType)}
+                          disabled={line.isHeader || !line.accountTypes.includes(accountType)}
                           key={line.value}
                           value={line.value}
                         >

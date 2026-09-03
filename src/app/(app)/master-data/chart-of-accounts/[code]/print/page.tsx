@@ -162,7 +162,13 @@ export default async function AccountPrintPage({
           </div>
           <div>
             <dt>{t('accounts.statement_line')}</dt>
-            <dd>{node.statementLine ? line(node.statementLine) : t('accounts.statement_line_default')}</dd>
+            <dd>
+              {node.statementLine
+                ? line.has(node.statementLine)
+                  ? line(node.statementLine)
+                  : node.statementLine.replace(/_/g, ' ')
+                : t('accounts.statement_line_default')}
+            </dd>
           </div>
           <div>
             <dt>{chart('balance_summary')}</dt>

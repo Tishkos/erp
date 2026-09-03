@@ -26,7 +26,7 @@ import {
 } from '../domain/chart-of-accounts';
 import { AccountPlacementError } from '../domain/chart-of-accounts';
 import type { AccountType } from '../domain/accounts';
-import { assertLineAllowed } from '../domain/financial-statements';
+import * as statementLines from './statement-lines';
 import { accountRequiredDimension, chartOfAccount } from '../db/schema';
 import type { Principal } from '../domain/permissions';
 import type { Tx } from '../db/client';
@@ -224,7 +224,7 @@ export async function createAccount(
       // Phase 1 §5 — checked here rather than trusted, because the database
       // check would refuse it later with a message about a constraint.
       statementLine: input.statementLine?.trim()
-        ? assertLineAllowed(accountType, input.statementLine.trim()).code
+        ? (await statementLines.catalogue(tx)).assertLineAllowed(accountType, input.statementLine.trim()).code
         : null,
       description: input.description ?? null,
       createdBy: ctx.principal.userId,
@@ -663,7 +663,9 @@ export async function setStatementLine(
     requestId: ctx.requestId ?? null,
   });
 
-  const chosen = line?.trim() ? assertLineAllowed(account.accountType, line.trim()).code : null;
+  const chosen = line?.trim()
+    ? (await statementLines.catalogue(tx)).assertLineAllowed(account.accountType, line.trim()).code
+    : null;
 
   await tx
     .update(chartOfAccount)

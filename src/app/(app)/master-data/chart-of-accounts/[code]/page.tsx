@@ -16,6 +16,7 @@ import { MONEY_SCALE, parseDecimal, toDecimalString } from '@domain/money';
 import type { AccountType } from '@domain/accounts';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as trialBalance from '@/server/services/trial-balance';
+import * as statementLines from '@/server/services/statement-lines';
 
 /**
  * One account — its details, its balance and the journals posted to it, on
@@ -94,13 +95,14 @@ export default async function AccountRecordPage({
       node,
       parent,
       activity,
+      mapping: await statementLines.pickerLines(tx),
       mayConfigure: can(context.principal, 'configure', 'chart_of_account'),
       mayPrint: can(context.principal, 'print', 'chart_of_account'),
       mayExport: can(context.principal, 'export', 'chart_of_account'),
     };
   });
   if (!data) notFound();
-  const { node, parent, activity, mayConfigure, mayPrint, mayExport } = data;
+  const { node, parent, activity, mapping, mayConfigure, mayPrint, mayExport } = data;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   const dec = (value: string) => parseDecimal(value, MONEY_SCALE);
@@ -190,7 +192,13 @@ export default async function AccountRecordPage({
               </div>
               <div>
                 <dt>{t('accounts.statement_line')}</dt>
-                <dd>{node.statementLine ? line(node.statementLine) : t('accounts.statement_line_default')}</dd>
+                <dd>
+                  {node.statementLine
+                    ? line.has(node.statementLine)
+                      ? line(node.statementLine)
+                      : (mapping.find((entry) => entry.code === node.statementLine)?.name ?? node.statementLine)
+                    : t('accounts.statement_line_default')}
+                </dd>
               </div>
               {node.controlAccount ? (
                 <div>
@@ -220,7 +228,7 @@ export default async function AccountRecordPage({
             ) : null}
           </section>
 
-          {mayConfigure ? <AccountControls account={node} mayConfigure={mayConfigure} /> : null}
+          {mayConfigure ? <AccountControls account={node} mapping={mapping} mayConfigure={mayConfigure} /> : null}
         </div>
 
         <div className={s.profileStack}>
