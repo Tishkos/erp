@@ -621,6 +621,11 @@ export async function resetTestData(): Promise<void> {
       end $$;
     `);
 
+    // Finance-owned statement lines can be removed once the accounts that
+    // referenced either of their two mappings are gone. The system defaults
+    // remain as the clean starting layout for every test.
+    await client.query('delete from financial_statement_line where not is_system');
+
     // Keep the allocations that gave the five roots their codes; drop the rest.
     // The append-only trigger refuses this even to the owner — which is the
     // guarantee tests assert elsewhere — so it is lifted for the length of the

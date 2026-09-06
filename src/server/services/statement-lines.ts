@@ -13,7 +13,7 @@
  * The twelve seeded lines carry the type defaults and the subtotal anchors,
  * so they move and rename but never leave.
  */
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, or, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { chartOfAccount, financialStatementLine } from '../db/schema';
 import {
@@ -64,15 +64,23 @@ export async function pickerLines(tx: Tx) {
 
 /** How many accounts report on each line, for the mapping screens. */
 export async function accountCounts(tx: Tx): Promise<ReadonlyMap<string, number>> {
-  const rows = await tx
-    .select({
-      line: chartOfAccount.statementLine,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(chartOfAccount)
-    .where(sql`${chartOfAccount.statementLine} is not null`)
-    .groupBy(chartOfAccount.statementLine);
-  return new Map(rows.filter((r) => r.line).map((r) => [r.line!, r.count]));
+  const [primary, balanceSheet] = await Promise.all([
+    tx
+      .select({ line: chartOfAccount.statementLine, count: sql<number>`count(*)::int` })
+      .from(chartOfAccount)
+      .where(sql`${chartOfAccount.statementLine} is not null`)
+      .groupBy(chartOfAccount.statementLine),
+    tx
+      .select({ line: chartOfAccount.balanceSheetLine, count: sql<number>`count(*)::int` })
+      .from(chartOfAccount)
+      .where(sql`${chartOfAccount.balanceSheetLine} is not null`)
+      .groupBy(chartOfAccount.balanceSheetLine),
+  ]);
+  const counts = new Map<string, number>();
+  for (const row of [...primary, ...balanceSheet]) {
+    if (row.line) counts.set(row.line, (counts.get(row.line) ?? 0) + row.count);
+  }
+  return counts;
 }
 
 // ---------------------------------------------------------------------------
@@ -372,7 +380,12 @@ export async function remove(tx: Tx, ctx: ActorContext, id: string) {
   const [account] = await tx
     .select({ code: chartOfAccount.code })
     .from(chartOfAccount)
-    .where(eq(chartOfAccount.statementLine, line.code))
+    .where(
+      or(
+        eq(chartOfAccount.statementLine, line.code),
+        eq(chartOfAccount.balanceSheetLine, line.code),
+      ),
+    )
     .limit(1);
   if (account) {
     throw new StatementLineError(

@@ -10,13 +10,10 @@ import { boolean, index, integer, pgTable, text, uniqueIndex, uuid, type AnyPgCo
  * and Balance Sheet mapping screens edit it, and the statements are drawn
  * from it.
  *
- * One mapping, four statements. An account reports in exactly one place —
- * on a line of the Income Statement or of the Balance Sheet — and the other
- * two statements read that same answer: the Cash Flow Statement classifies
- * each line as operating, investing or financing; the Statement of Changes
- * in Equity is the equity side of the Balance Sheet. Four separate mapping
- * tables would let the reports disagree with each other, which is the
- * "future problem" this design exists to prevent.
+ * The Income Statement and Balance Sheet have independent account mappings.
+ * Revenue and expense accounts may explain the period result on the first and
+ * also be presented within equity on the second. Cash Flow classifies primary
+ * lines, while Changes in Equity reads the Balance Sheet equity mapping.
  *
  * The twelve original lines are seeded with `is_system` set: they carry the
  * type defaults and the running subtotals (gross profit needs to know what

@@ -8,7 +8,7 @@ import {
   allowSubAccounts,
   createAccount,
   deactivateAccount,
-  setStatementLine,
+  setStatementLines,
   updateAccount,
 } from '@/app/(app)/master-data/chart-of-accounts/actions';
 
@@ -52,10 +52,9 @@ export async function NewAccountButton({
   readonly accounts: readonly PickerAccount[];
   readonly mapping: readonly MappingLine[];
 }) {
-  const [t, line, page] = await Promise.all([
+  const [t, line] = await Promise.all([
     getTranslations('admin'),
     getTranslations('statement_line'),
-    getTranslations('page'),
   ]);
   const groups = accounts.filter((a) => a.isGroup && a.isActive);
 
@@ -93,11 +92,13 @@ export async function NewAccountButton({
         kindPosting: t('accounts.kind_posting'),
         kindGroup: t('accounts.kind_group'),
         description: t('accounts.description'),
-        statementLine: t('accounts.statement_line'),
+        statementMappings: t('accounts.statement_mappings'),
+        incomeStatementLine: t('accounts.income_statement_line'),
+        balanceSheetLine: t('accounts.balance_sheet_line'),
         statementLineHint: t('accounts.statement_line_create_hint'),
+        balanceSheetLineHint: t('accounts.balance_sheet_line_hint'),
+        balanceSheetLineUnmapped: t('accounts.balance_sheet_line_unmapped'),
         statementLineDefault: t('accounts.statement_line_default'),
-        balanceSheet: page('balance_sheet'),
-        incomeStatement: page('income_statement'),
         headerNoLine: t('accounts.header_no_line'),
         create: t('create'),
         creating: t('accounts.creating'),
@@ -130,7 +131,7 @@ export async function NewAccountButton({
 }
 
 /**
- * On one account: the statement line it reports on, whether it may hold
+ * On one account: its independent statement mappings, whether it may hold
  * sub-accounts, and taking it out of use.
  */
 export async function AccountControls({
@@ -145,9 +146,22 @@ export async function AccountControls({
   const [t, line] = await Promise.all([getTranslations('admin'), getTranslations('statement_line')]);
   if (!mayConfigure) return null;
 
-  const options = mapping.filter(
-    (entry) => !entry.isHeader && entry.accountTypes.includes(account.accountType),
+  const isProfitOrLoss = account.accountType === 'revenue' || account.accountType === 'expense';
+  const primaryStatement = isProfitOrLoss ? 'income_statement' : 'balance_sheet';
+  const primaryOptions = mapping.filter(
+    (entry) =>
+      entry.statement === primaryStatement &&
+      !entry.isHeader &&
+      entry.accountTypes.includes(account.accountType),
   );
+  const balanceSheetOptions = isProfitOrLoss
+    ? mapping.filter(
+        (entry) =>
+          entry.statement === 'balance_sheet' &&
+          !entry.isHeader &&
+          entry.accountTypes.includes(account.accountType),
+      )
+    : [];
 
   return (
     <div className={s.assignGrid}>
@@ -167,24 +181,43 @@ export async function AccountControls({
       </Panel>
       {!account.isGroup ? (
         <>
-          <Panel title={t('accounts.statement_line')}>
+          <Panel title={t('accounts.statement_mappings')}>
             <p className={s.sectionHint}>{t('accounts.statement_line_hint')}</p>
-            <Form action={setStatementLine}>
+            <Form action={setStatementLines}>
               <input name="id" type="hidden" value={account.id} />
               <input name="code" type="hidden" value={account.code} />
               <Grid>
                 <Select
                   defaultValue={account.statementLine ?? ''}
-                  label={t('accounts.statement_line')}
+                  label={
+                    isProfitOrLoss
+                      ? t('accounts.income_statement_line')
+                      : t('accounts.balance_sheet_line')
+                  }
                   name="statementLine"
                   options={[
                     { value: '', label: t('accounts.statement_line_default') },
-                    ...options.map((option) => ({
+                    ...primaryOptions.map((option) => ({
                       value: option.code,
                       label: line.has(option.code) ? line(option.code) : option.name,
                     })),
                   ]}
                 />
+                {isProfitOrLoss ? (
+                  <Select
+                    defaultValue={account.balanceSheetLine ?? ''}
+                    hint={t('accounts.balance_sheet_line_hint')}
+                    label={t('accounts.balance_sheet_line')}
+                    name="balanceSheetLine"
+                    options={[
+                      { value: '', label: t('accounts.balance_sheet_line_unmapped') },
+                      ...balanceSheetOptions.map((option) => ({
+                        value: option.code,
+                        label: line.has(option.code) ? line(option.code) : option.name,
+                      })),
+                    ]}
+                  />
+                ) : null}
               </Grid>
               <SubmitRow>
                 <Submit label={t('save')} />
@@ -209,7 +242,7 @@ export async function AccountControls({
         <>
           {/* A header has no line to set, and the person looking for one is
               owed the reason: it reports wherever its accounts do. */}
-          <Panel title={t('accounts.statement_line')}>
+          <Panel title={t('accounts.statement_mappings')}>
             <p className={s.sectionHint}>{t('accounts.header_no_line')}</p>
           </Panel>
           <Panel title={t('accounts.sub_accounts')}>

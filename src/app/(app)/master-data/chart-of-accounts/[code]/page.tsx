@@ -122,6 +122,13 @@ export default async function AccountRecordPage({
   const recent = [...activity].reverse().slice(0, RECENT);
   const Icon = ICONS[node.accountType] ?? Landmark;
   const address = `/master-data/chart-of-accounts/${encodeURIComponent(code)}`;
+  const isProfitOrLoss = node.accountType === 'revenue' || node.accountType === 'expense';
+  const mappingLabel = (code: string | null, fallback: string) =>
+    code
+      ? line.has(code)
+        ? line(code)
+        : (mapping.find((entry) => entry.code === code)?.name ?? code)
+      : fallback;
 
   return (
     <AdminPage
@@ -191,15 +198,24 @@ export default async function AccountRecordPage({
                 <dd>{chart(node.isActive ? 'active' : 'inactive')}</dd>
               </div>
               <div>
-                <dt>{t('accounts.statement_line')}</dt>
-                <dd>
-                  {node.statementLine
-                    ? line.has(node.statementLine)
-                      ? line(node.statementLine)
-                      : (mapping.find((entry) => entry.code === node.statementLine)?.name ?? node.statementLine)
-                    : t('accounts.statement_line_default')}
-                </dd>
+                <dt>
+                  {isProfitOrLoss
+                    ? t('accounts.income_statement_line')
+                    : t('accounts.balance_sheet_line')}
+                </dt>
+                <dd>{mappingLabel(node.statementLine, t('accounts.statement_line_default'))}</dd>
               </div>
+              {isProfitOrLoss ? (
+                <div>
+                  <dt>{t('accounts.balance_sheet_line')}</dt>
+                  <dd>
+                    {mappingLabel(
+                      node.balanceSheetLine,
+                      t('accounts.balance_sheet_line_unmapped'),
+                    )}
+                  </dd>
+                </div>
+              ) : null}
               {node.controlAccount ? (
                 <div>
                   <dt>{column('control_account')}</dt>

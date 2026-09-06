@@ -50,11 +50,13 @@ export interface NewAccountLabels {
   readonly kindPosting: string;
   readonly kindGroup: string;
   readonly description: string;
-  readonly statementLine: string;
+  readonly statementMappings: string;
+  readonly incomeStatementLine: string;
+  readonly balanceSheetLine: string;
   readonly statementLineHint: string;
+  readonly balanceSheetLineHint: string;
+  readonly balanceSheetLineUnmapped: string;
   readonly statementLineDefault: string;
-  readonly balanceSheet: string;
-  readonly incomeStatement: string;
   readonly headerNoLine: string;
   readonly create: string;
   readonly creating: string;
@@ -91,6 +93,8 @@ export function NewAccountDialog({
   const accountType = parents.find((option) => option.value === parentId)?.accountType ?? '';
   const balanceSheetLines = lines.filter((line) => line.section === 'financial_position');
   const incomeStatementLines = lines.filter((line) => line.section === 'profit_or_loss');
+  const isProfitOrLoss = accountType === 'revenue' || accountType === 'expense';
+  const primaryLines = isProfitOrLoss ? incomeStatementLines : balanceSheetLines;
 
   return (
     <>
@@ -204,29 +208,24 @@ export function NewAccountDialog({
                 <span className={styles.hint}>{labels.kindHint}</span>
               </div>
 
-              {/* Where this account lands on the statements — asked here,
-                  because an account created without it falls to its type's
-                  default and quietly reports in the wrong section until
-                  somebody notices the total. Every line is listed, on both
-                  statements, with the ones this parent's type cannot take
-                  greyed rather than removed — the whole mapping stays
-                  visible, and "why is Operating expenses not offered under
-                  Assets?" answers itself on sight. */}
+              {/* The two reports have independent mappings. Revenue and
+                  expense accounts choose their Income Statement line and may
+                  also choose an equity line on the Balance Sheet. */}
               {kind === 'posting' ? (
-                <div className={styles.field}>
-                  <label className={styles.label} htmlFor="new-account-statement-line">
-                    {labels.statementLine}
-                  </label>
-                  <select
-                    className={styles.select}
-                    defaultValue=""
-                    id="new-account-statement-line"
-                    key={accountType}
-                    name="statementLine"
-                  >
-                    <option value="">{labels.statementLineDefault}</option>
-                    <optgroup label={labels.balanceSheet}>
-                      {balanceSheetLines.map((line) => (
+                <>
+                  <div className={styles.field}>
+                    <label className={styles.label} htmlFor="new-account-statement-line">
+                      {isProfitOrLoss ? labels.incomeStatementLine : labels.balanceSheetLine}
+                    </label>
+                    <select
+                      className={styles.select}
+                      defaultValue=""
+                      id="new-account-statement-line"
+                      key={`primary-${accountType}`}
+                      name="statementLine"
+                    >
+                      <option value="">{labels.statementLineDefault}</option>
+                      {primaryLines.map((line) => (
                         <option
                           disabled={line.isHeader || !line.accountTypes.includes(accountType)}
                           key={line.value}
@@ -235,24 +234,39 @@ export function NewAccountDialog({
                           {line.label}
                         </option>
                       ))}
-                    </optgroup>
-                    <optgroup label={labels.incomeStatement}>
-                      {incomeStatementLines.map((line) => (
-                        <option
-                          disabled={line.isHeader || !line.accountTypes.includes(accountType)}
-                          key={line.value}
-                          value={line.value}
-                        >
-                          {line.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
-                  <span className={styles.hint}>{labels.statementLineHint}</span>
-                </div>
+                    </select>
+                    <span className={styles.hint}>{labels.statementLineHint}</span>
+                  </div>
+                  {isProfitOrLoss ? (
+                    <div className={styles.field}>
+                      <label className={styles.label} htmlFor="new-account-balance-sheet-line">
+                        {labels.balanceSheetLine}
+                      </label>
+                      <select
+                        className={styles.select}
+                        defaultValue=""
+                        id="new-account-balance-sheet-line"
+                        key={`balance-${accountType}`}
+                        name="balanceSheetLine"
+                      >
+                        <option value="">{labels.balanceSheetLineUnmapped}</option>
+                        {balanceSheetLines.map((line) => (
+                          <option
+                            disabled={line.isHeader || !line.accountTypes.includes(accountType)}
+                            key={line.value}
+                            value={line.value}
+                          >
+                            {line.label}
+                          </option>
+                        ))}
+                      </select>
+                      <span className={styles.hint}>{labels.balanceSheetLineHint}</span>
+                    </div>
+                  ) : null}
+                </>
               ) : (
                 <div className={styles.field}>
-                  <span className={styles.label}>{labels.statementLine}</span>
+                  <span className={styles.label}>{labels.statementMappings}</span>
                   <span className={styles.hint}>{labels.headerNoLine}</span>
                 </div>
               )}

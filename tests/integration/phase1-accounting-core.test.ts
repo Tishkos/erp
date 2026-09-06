@@ -159,6 +159,26 @@ describe('1 · the Chart of Accounts', () => {
     );
   });
 
+  it('stores separate Income Statement and Balance Sheet mappings when revenue is created', async () => {
+    await ownerPool.query(`
+      insert into financial_statement_line
+        (code, name, statement, ordinal, role, side, cash_flow_category)
+      values
+        ('product_revenue', 'Product Revenue', 'income_statement', 11, 'revenue', null, 'operating'),
+        ('balance_sheet_revenue', 'Revenue', 'balance_sheet', 41, null, 'equity', 'financing')
+    `);
+
+    const accountId = await account('R000001', {
+      name: 'Product sales',
+      statementLine: 'product_revenue',
+      balanceSheetLine: 'balance_sheet_revenue',
+    });
+    const created = await withScope(scopeOf(manager), (tx) => coa.loadAccount(tx, accountId));
+
+    expect(created.statementLine).toBe('product_revenue');
+    expect(created.balanceSheetLine).toBe('balance_sheet_revenue');
+  });
+
   it('distinguishes a header account from one that can be posted to', async () => {
     const header = await account('A000001', { name: 'Receivables', isGroup: true });
     const posting = await account('A000001', { name: 'Petty Cash' });
@@ -573,11 +593,55 @@ describe('5 · the financial statements', () => {
     expect(current!.accounts.map((a) => a.accountName)).toContain('Trade Receivables');
   });
 
+  it('shows mapped revenue on its selected Balance Sheet equity line without double-counting it', async () => {
+    await ownerPool.query(`
+      insert into financial_statement_line
+        (code, name, statement, ordinal, role, side, cash_flow_category)
+      values ('balance_sheet_revenue', 'Revenue', 'balance_sheet', 41, null, 'equity', 'financing')
+    `);
+    await withScope(scopeOf(manager), (tx) =>
+      coa.setStatementLines(tx, manager, salesRevenue, {
+        statementLine: 'revenue',
+        balanceSheetLine: 'balance_sheet_revenue',
+      }),
+    );
+
+    const sfp = await withScope(scopeOf(manager), (tx) =>
+      statements.financialPosition(tx, TO, { branchCode: BRANCH }),
+    );
+    const revenue = sfp.equity.find((line) => line.line.code === 'balance_sheet_revenue');
+
+    expect(Number(revenue!.amount)).toBe(4000);
+    expect(revenue!.accounts.map((account) => account.accountName)).toContain('Sales');
+    expect(Number(sfp.unmappedResult)).toBe(-1500);
+    expect(Number(sfp.resultForThePeriod)).toBe(2500);
+    expect(Number(sfp.totalEquityAndLiabilities)).toBe(12500);
+    expect(sfp.balances).toBe(true);
+
+    const equity = await withScope(scopeOf(manager), (tx) =>
+      statements.changesInEquity(tx, { from: FROM, to: TO, branchCode: BRANCH }),
+    );
+    const mappedRevenue = equity.rows.find((row) => row.code === 'balance_sheet_revenue');
+    expect(Number(mappedRevenue!.movement)).toBe(4000);
+    expect(mappedRevenue!.accounts.map((account) => account.accountName)).toContain('Sales');
+    expect(Number(equity.resultForThePeriod)).toBe(2500);
+    expect(Number(equity.closing)).toBe(12500);
+  });
+
   it('refuses to put a revenue account on an asset line', async () => {
     await expect(
       ownerPool.query(`update chart_of_account set statement_line = 'current_assets' where id = $1`, [
         salesRevenue,
       ]),
+    ).rejects.toThrow();
+  });
+
+  it('refuses an invalid second Balance Sheet mapping at the database boundary', async () => {
+    await expect(
+      ownerPool.query(
+        `update chart_of_account set balance_sheet_line = 'current_assets' where id = $1`,
+        [salesRevenue],
+      ),
     ).rejects.toThrow();
   });
 

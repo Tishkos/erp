@@ -60,7 +60,7 @@ export interface StatementAccount {
   readonly accountCode: string;
   readonly accountName: string;
   readonly accountType: AccountType;
-  /** Positive in the account's own normal direction. */
+  /** Signed as this account contributes to the statement line. */
   readonly amount: string;
 }
 
@@ -99,6 +99,8 @@ export interface FinancialPosition {
    * and it is what makes the two sides agree.
    */
   readonly resultForThePeriod: string;
+  /** The part of the result not presented on a configured Balance Sheet line. */
+  readonly unmappedResult: string;
   /** The revenue and expense accounts behind that result, positive in their own direction. */
   readonly resultAccounts: readonly StatementAccount[];
   readonly balances: boolean;
@@ -109,6 +111,7 @@ interface Movement {
   accountName: string;
   accountType: AccountType;
   statementLine: string | null;
+  balanceSheetLine: string | null;
   debit: bigint;
   credit: bigint;
 }
@@ -144,6 +147,7 @@ async function movements(tx: Tx, filter: StatementFilter): Promise<Movement[]> {
            a.name                                  as "accountName",
            a.account_type::text                    as "accountType",
            a.statement_line                        as "statementLine",
+           a.balance_sheet_line                     as "balanceSheetLine",
            coalesce(sum(${debitColumn}), 0)::text  as "debit",
            coalesce(sum(${creditColumn}), 0)::text as "credit"
       from journal_line l
@@ -152,7 +156,7 @@ async function movements(tx: Tx, filter: StatementFilter): Promise<Movement[]> {
      where e.status in ('posted', 'reversed')
        and e.posting_date between ${filter.from}::date and ${filter.to}::date
        and ${branch}
-     group by a.code, a.name, a.account_type, a.statement_line
+     group by a.code, a.name, a.account_type, a.statement_line, a.balance_sheet_line
     having coalesce(sum(${debitColumn}), 0) <> 0 or coalesce(sum(${creditColumn}), 0) <> 0
      order by a.code
   `);
@@ -162,6 +166,7 @@ async function movements(tx: Tx, filter: StatementFilter): Promise<Movement[]> {
     accountName: row.accountName!,
     accountType: row.accountType as AccountType,
     statementLine: row.statementLine ?? null,
+    balanceSheetLine: row.balanceSheetLine ?? null,
     debit: parseDecimal(String(row.debit), MONEY_SCALE),
     credit: parseDecimal(String(row.credit), MONEY_SCALE),
   }));
@@ -199,9 +204,29 @@ function bucket(
   const byLine = new Map<string, { total: bigint; accounts: StatementAccount[] }>();
 
   for (const movement of movements) {
-    const line = catalogue.lineFor(movement.accountType, movement.statementLine);
-    if (line.section !== section) continue;
-    const amount = naturalAmount(movement);
+    const profitOrLossAccount =
+      movement.accountType === 'revenue' || movement.accountType === 'expense';
+    const line =
+      section === 'profit_or_loss'
+        ? catalogue.lineForStatement(
+            movement.accountType,
+            'income_statement',
+            movement.statementLine,
+          )
+        : catalogue.lineForStatement(
+            movement.accountType,
+            'balance_sheet',
+            profitOrLossAccount ? movement.balanceSheetLine : movement.statementLine,
+          );
+    if (!line) continue;
+    let amount = naturalAmount(movement);
+    if (section === 'financial_position' && profitOrLossAccount) {
+      // A revenue balance adds to equity; an expense balance reduces it. The
+      // Income Statement role remains the authority for that bearing.
+      if (catalogue.lineFor(movement.accountType, movement.statementLine).deduction) {
+        amount = -amount;
+      }
+    }
     // An account that moved and came back — a posting and its reversal — has
     // nothing to say on a statement of balances, so it is not listed. It stays
     // in the Trial Balance and the General Ledger, which are about movement.
@@ -336,10 +361,23 @@ export async function financialPosition(
   const equity = sideRows(catalogue, position, 'equity');
   const liabilities = sideRows(catalogue, position, 'liability');
 
-  // The result since the beginning, from the same rows — one query, one truth.
+  // The complete result still comes from the Income Statement mapping. Any
+  // P&L account with its own Balance Sheet mapping is already inside `equity`,
+  // so only the remainder is shown in the computed result row.
   const plLines = assemble(catalogue, rows, 'profit_or_loss');
   const { result } = resultOf(plLines);
-  const resultAccounts = plLines.flatMap((line) =>
+  const residualRows = rows.filter(
+    (movement) =>
+      (movement.accountType === 'revenue' || movement.accountType === 'expense') &&
+      !catalogue.lineForStatement(
+        movement.accountType,
+        'balance_sheet',
+        movement.balanceSheetLine,
+      ),
+  );
+  const residualLines = assemble(catalogue, residualRows, 'profit_or_loss');
+  const { result: unmappedResult } = resultOf(residualLines);
+  const resultAccounts = residualLines.flatMap((line) =>
     line.accounts.map((account) => ({
       ...account,
       // Signed as it bears on the result: income adds, a deduction takes away.
@@ -350,7 +388,7 @@ export async function financialPosition(
   );
 
   const totalAssets = sum(assets);
-  const totalEquity = sum(equity) + result;
+  const totalEquity = sum(equity) + unmappedResult;
   const totalLiabilities = sum(liabilities);
   const totalEquityAndLiabilities = totalEquity + totalLiabilities;
 
@@ -364,6 +402,7 @@ export async function financialPosition(
     totalLiabilities: decimal(totalLiabilities),
     totalEquityAndLiabilities: decimal(totalEquityAndLiabilities),
     resultForThePeriod: decimal(result),
+    unmappedResult: decimal(unmappedResult),
     resultAccounts,
     balances: totalAssets === totalEquityAndLiabilities,
   };
@@ -429,6 +468,7 @@ interface Paired {
   readonly accountName: string;
   readonly accountType: AccountType;
   readonly statementLine: string | null;
+  readonly balanceSheetLine: string | null;
   opening: bigint;
   movement: bigint;
 }
@@ -451,6 +491,7 @@ function pairUp(
         accountName: movement.accountName,
         accountType: movement.accountType,
         statementLine: movement.statementLine,
+        balanceSheetLine: movement.balanceSheetLine,
         opening: 0n,
         movement: 0n,
       };
@@ -495,12 +536,22 @@ export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<
   ]);
   const paired = pairUp(catalogue, before, during);
 
-  // The equity accounts, grouped onto the lines they report on.
+  // Native equity accounts and P&L accounts with an explicit Balance Sheet
+  // presentation are grouped onto the same configurable equity lines.
   const byLine = new Map<string, string[]>();
   for (const [code, entry] of paired) {
-    if (entry.accountType !== 'equity') continue;
     if (entry.opening === 0n && entry.movement === 0n) continue;
-    const line = catalogue.lineFor(entry.accountType, entry.statementLine);
+    const line =
+      entry.accountType === 'equity'
+        ? catalogue.lineFor(entry.accountType, entry.statementLine)
+        : entry.accountType === 'revenue' || entry.accountType === 'expense'
+          ? catalogue.lineForStatement(
+              entry.accountType,
+              'balance_sheet',
+              entry.balanceSheetLine,
+            )
+          : undefined;
+    if (!line) continue;
     byLine.set(line.code, [...(byLine.get(line.code) ?? []), code]);
   }
 
@@ -522,14 +573,27 @@ export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<
       };
     });
 
-  // The result: the revenue and expense accounts, already signed by `pairUp`.
+  // P&L accounts without a Balance Sheet line remain in the computed result.
   const resultCodes = [...paired]
     .filter(([, entry]) => entry.accountType === 'revenue' || entry.accountType === 'expense')
+    .filter(([, entry]) =>
+      !catalogue.lineForStatement(
+        entry.accountType,
+        'balance_sheet',
+        entry.balanceSheetLine,
+      ),
+    )
     .filter(([, entry]) => entry.opening !== 0n || entry.movement !== 0n)
     .map(([code]) => code);
   const resultAccounts = accountRows(paired, resultCodes);
   const openingResult = resultAccounts.reduce((t, a) => t + parseDecimal(a.opening, MONEY_SCALE), 0n);
-  const periodResult = resultAccounts.reduce((t, a) => t + parseDecimal(a.movement, MONEY_SCALE), 0n);
+  const residualPeriodResult = resultAccounts.reduce(
+    (t, a) => t + parseDecimal(a.movement, MONEY_SCALE),
+    0n,
+  );
+  const periodResult = [...paired]
+    .filter(([, entry]) => entry.accountType === 'revenue' || entry.accountType === 'expense')
+    .reduce((total, [, entry]) => total + entry.movement, 0n);
 
   const rows: EquityRow[] = [
     ...lineRows,
@@ -540,8 +604,8 @@ export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<
             name: 'Result',
             kind: 'result' as const,
             opening: decimal(openingResult),
-            movement: decimal(periodResult),
-            closing: decimal(openingResult + periodResult),
+            movement: decimal(residualPeriodResult),
+            closing: decimal(openingResult + residualPeriodResult),
             accounts: resultAccounts,
           },
         ]

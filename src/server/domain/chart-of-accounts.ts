@@ -71,11 +71,17 @@ export interface AccountNode {
   /** What the account is for, in the accountant's own words. */
   readonly description?: string | null;
   /**
-   * Phase 1 §5 — the statement line this account reports on, or null to take
-   * its type's default. Carried on the node so no reader has to know the
-   * column exists.
+   * Phase 1 §5 — the account's primary statement line, or null to take its
+   * type's default. Revenue and expense use the Income Statement; the other
+   * types use the Balance Sheet.
    */
   readonly statementLine: string | null;
+  /**
+   * For a revenue or expense account, the optional equity line on which it is
+   * also presented on the Balance Sheet. Null leaves it inside the computed
+   * result row rather than making it disappear.
+   */
+  readonly balanceSheetLine: string | null;
   /** Dimensions a posting to this account must supply (§4.2). */
   readonly requiredDimensions: readonly DimensionType[];
   /** One of the five roots. Renameable, never deletable. */

@@ -32,11 +32,10 @@ import { createLine, deleteLine, moveLine, renameLine, setLineCash, setLineCateg
  * Changes in Equity reads. Accounts are connected to these lines when the
  * accounts are opened — this screen is where the lines themselves are made.
  *
- * One mapping, four statements: an account reports in exactly one place, the
- * Cash Flow Statement classifies each line, and Changes in Equity is the
- * equity side of the Balance Sheet. That is why the last two tabs edit
- * attributes of the same rows rather than a second tree — four separate
- * mappings would let the four reports disagree with each other.
+ * The Income Statement and Balance Sheet keep independent account mappings,
+ * so a revenue or expense account can explain the period result on the first
+ * and be presented within equity on the second. Cash Flow classifies primary
+ * lines, while Changes in Equity reads the Balance Sheet equity mapping.
  */
 export const dynamic = 'force-dynamic';
 

@@ -39,6 +39,7 @@ function account(overrides: Partial<AccountNode> = {}): AccountNode {
     approvalStatus: 'approved',
     controlAccount: null,
     statementLine: null,
+    balanceSheetLine: null,
     currencyRestriction: null,
     requiredDimensions: [],
     isSystem: false,

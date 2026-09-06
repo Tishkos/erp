@@ -68,14 +68,25 @@ export const chartOfAccount = pgTable(
     approvalStatus: documentStatus('approval_status').notNull().default('draft'),
 
     /**
-     * Phase 1 §5 — the line of the Statement of Profit or Loss or Statement
-     * of Financial Position this account reports on.
+     * Phase 1 §5 — the account's primary statement line. Revenue and expense
+     * use the Income Statement; the other account types use the Balance Sheet.
      *
      * Null falls to the account type's default line, so a statement is
      * complete before anybody has assigned anything and grows more precise as
      * Finance works through the chart.
      */
     statementLine: text('statement_line'),
+
+    /**
+     * Optional second presentation for a revenue or expense account on the
+     * equity side of the Balance Sheet. The primary `statementLine` remains
+     * its Income Statement classification; keeping the two columns separate
+     * prevents one report choice from overwriting the other.
+     *
+     * The database migration adds the foreign key and a trigger that accepts
+     * only non-header equity lines for profit-and-loss accounts.
+     */
+    balanceSheetLine: text('balance_sheet_line'),
 
     /**
      * §14.3 — direct manual posting to a control account requires Finance

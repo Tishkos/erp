@@ -118,13 +118,27 @@ export interface CreateAccountInput {
   readonly requiredDimensions?: readonly DimensionType[];
   readonly description?: string | null;
   /**
-   * Phase 1 §5 — the line of the Statement of Profit or Loss or Statement of
-   * Financial Position this account reports on.
+   * Phase 1 §5 — the account's primary line: Income Statement for revenue and
+   * expense; Balance Sheet for assets, liabilities and equity.
    *
    * Optional, and it stays optional: an account with no line assigned reports
    * on its type's default, so a statement is complete from the first day.
    */
   readonly statementLine?: string | null;
+  /** Optional Balance Sheet equity presentation for revenue and expense accounts. */
+  readonly balanceSheetLine?: string | null;
+}
+
+function assertBalanceSheetPresentationAllowed(
+  accountType: AccountType,
+  line: string | null | undefined,
+): void {
+  if (!line?.trim()) return;
+  if (accountType !== 'revenue' && accountType !== 'expense') {
+    throw new AccountPlacementError(
+      'a second Balance Sheet mapping is only used for revenue and expense accounts; assets, liabilities and equity already map there directly',
+    );
+  }
 }
 
 function toNode(
@@ -143,6 +157,7 @@ function toNode(
     controlAccount: row.controlAccount,
     currencyRestriction: row.currencyRestriction,
     statementLine: row.statementLine,
+    balanceSheetLine: row.balanceSheetLine,
     description: row.description,
     requiredDimensions,
     isSystem: row.isSystem,
@@ -197,6 +212,12 @@ export async function createAccount(
   const currency = input.currencyRestriction?.trim().toUpperCase() || null;
   if (!isGroup && !currency) throw new AccountCurrencyRequiredError();
   if (isGroup && currency) throw new GroupAccountCurrencyError();
+  if (isGroup && (input.statementLine?.trim() || input.balanceSheetLine?.trim())) {
+    throw new AccountPlacementError(
+      'a header carries no statement mapping of its own; its posting accounts are mapped instead',
+    );
+  }
+  assertBalanceSheetPresentationAllowed(accountType, input.balanceSheetLine);
 
   const { documentNo: code } = await allocateDocumentNumber(
     tx,
@@ -208,6 +229,14 @@ export async function createAccount(
   // Checked here for a readable message, and again by the database trigger,
   // which is what actually holds the tree together.
   assertValidPlacement({ code, accountType, parent });
+
+  const catalogue = await statementLines.catalogue(tx);
+  const primaryLine = input.statementLine?.trim()
+    ? catalogue.assertLineAllowed(accountType, input.statementLine.trim()).code
+    : null;
+  const balanceSheetLine = input.balanceSheetLine?.trim()
+    ? catalogue.assertLineAllowed(accountType, input.balanceSheetLine.trim(), 'balance_sheet').code
+    : null;
 
   const [created] = await tx
     .insert(chartOfAccount)
@@ -223,9 +252,8 @@ export async function createAccount(
       currencyRestriction: currency,
       // Phase 1 §5 — checked here rather than trusted, because the database
       // check would refuse it later with a message about a constraint.
-      statementLine: input.statementLine?.trim()
-        ? (await statementLines.catalogue(tx)).assertLineAllowed(accountType, input.statementLine.trim()).code
-        : null,
+      statementLine: primaryLine,
+      balanceSheetLine,
       description: input.description ?? null,
       createdBy: ctx.principal.userId,
     })
@@ -262,6 +290,8 @@ export async function createAccount(
       parent: parent.code,
       isGroup: created!.isGroup,
       controlAccount: created!.controlAccount,
+      statementLine: created!.statementLine,
+      balanceSheetLine: created!.balanceSheetLine,
     },
     outcome: 'success',
     requestId: ctx.requestId ?? null,
@@ -649,11 +679,14 @@ export async function returnToDraft(
  * moving it should not mean opening a second account. The move changes how
  * every statement reads from that moment, so it is written to the trail.
  */
-export async function setStatementLine(
+export async function setStatementLines(
   tx: Tx,
   ctx: ActorContext,
   accountId: string,
-  line: string | null,
+  input: {
+    readonly statementLine: string | null;
+    readonly balanceSheetLine: string | null;
+  },
 ): Promise<void> {
   const account = await loadAccount(tx, accountId);
 
@@ -663,13 +696,18 @@ export async function setStatementLine(
     requestId: ctx.requestId ?? null,
   });
 
-  const chosen = line?.trim()
-    ? (await statementLines.catalogue(tx)).assertLineAllowed(account.accountType, line.trim()).code
+  const catalogue = await statementLines.catalogue(tx);
+  assertBalanceSheetPresentationAllowed(account.accountType, input.balanceSheetLine);
+  const statementLine = input.statementLine?.trim()
+    ? catalogue.assertLineAllowed(account.accountType, input.statementLine.trim()).code
+    : null;
+  const balanceSheetLine = input.balanceSheetLine?.trim()
+    ? catalogue.assertLineAllowed(account.accountType, input.balanceSheetLine.trim(), 'balance_sheet').code
     : null;
 
   await tx
     .update(chartOfAccount)
-    .set({ statementLine: chosen })
+    .set({ statementLine, balanceSheetLine })
     .where(eq(chartOfAccount.id, accountId));
 
   await audit.record(tx, {
@@ -678,7 +716,11 @@ export async function setStatementLine(
     objectType: PERMISSION_OBJECT,
     objectId: accountId,
     branchCode: ctx.branchCode,
-    after: { code: account.code, statementLine: chosen },
+    before: {
+      statementLine: account.statementLine,
+      balanceSheetLine: account.balanceSheetLine,
+    },
+    after: { code: account.code, statementLine, balanceSheetLine },
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });
@@ -744,7 +786,7 @@ export async function convertToGroup(
 
   await tx
     .update(chartOfAccount)
-    .set({ isGroup: true, currencyRestriction: null, statementLine: null })
+    .set({ isGroup: true, currencyRestriction: null, statementLine: null, balanceSheetLine: null })
     .where(eq(chartOfAccount.id, accountId));
 
   await audit.record(tx, {

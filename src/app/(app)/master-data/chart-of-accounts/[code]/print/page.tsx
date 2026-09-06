@@ -12,6 +12,7 @@ import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as companyService from '@/server/services/company';
 import * as coa from '@/server/services/chart-of-accounts';
+import * as statementLines from '@/server/services/statement-lines';
 import * as trialBalance from '@/server/services/trial-balance';
 import styles from '@/components/print/print.module.css';
 import { PrintButton } from '@/components/print/print-button';
@@ -69,10 +70,24 @@ export default async function AccountPrintPage({
       .from(appUser)
       .where(eq(appUser.id, context.principal.userId))
       .limit(1);
-    return { node, parent, activity, company: await companyService.current(tx), me: me?.displayName ?? '' };
+    return {
+      node,
+      parent,
+      activity,
+      company: await companyService.current(tx),
+      mapping: await statementLines.pickerLines(tx),
+      me: me?.displayName ?? '',
+    };
   });
   if (!data) notFound();
-  const { node, parent, activity, company, me } = data;
+  const { node, parent, activity, company, mapping, me } = data;
+  const isProfitOrLoss = node.accountType === 'revenue' || node.accountType === 'expense';
+  const mappingLabel = (code: string | null, fallback: string) =>
+    code
+      ? line.has(code)
+        ? line(code)
+        : (mapping.find((entry) => entry.code === code)?.name ?? code.replace(/_/g, ' '))
+      : fallback;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', lang);
   const dec = (value: string) => parseDecimal(value, MONEY_SCALE);
@@ -161,15 +176,24 @@ export default async function AccountPrintPage({
             <dd>{chart(node.isActive ? 'active' : 'inactive')}</dd>
           </div>
           <div>
-            <dt>{t('accounts.statement_line')}</dt>
-            <dd>
-              {node.statementLine
-                ? line.has(node.statementLine)
-                  ? line(node.statementLine)
-                  : node.statementLine.replace(/_/g, ' ')
-                : t('accounts.statement_line_default')}
-            </dd>
+            <dt>
+              {isProfitOrLoss
+                ? t('accounts.income_statement_line')
+                : t('accounts.balance_sheet_line')}
+            </dt>
+            <dd>{mappingLabel(node.statementLine, t('accounts.statement_line_default'))}</dd>
           </div>
+          {isProfitOrLoss ? (
+            <div>
+              <dt>{t('accounts.balance_sheet_line')}</dt>
+              <dd>
+                {mappingLabel(
+                  node.balanceSheetLine,
+                  t('accounts.balance_sheet_line_unmapped'),
+                )}
+              </dd>
+            </div>
+          ) : null}
           <div>
             <dt>{chart('balance_summary')}</dt>
             <dd>IQD · {year}</dd>

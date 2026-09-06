@@ -37,6 +37,7 @@ export async function createAccount(
       // A group summarises its children and holds no balance, so no currency.
       ...(isGroup ? {} : { currencyRestriction: 'IQD' }),
       statementLine: text(formData, 'statementLine') || null,
+      balanceSheetLine: text(formData, 'balanceSheetLine') || null,
       description: text(formData, 'description'),
     }),
   );
@@ -46,11 +47,14 @@ export async function createAccount(
 }
 
 /** Phase 1 §5 — which line of which statement this account reports on. */
-export async function setStatementLine(formData: FormData): Promise<void> {
+export async function setStatementLines(formData: FormData): Promise<void> {
   const code = text(formData, 'code');
   await runAdminAndReturn(
     (tx, ctx) =>
-      coa.setStatementLine(tx, ctx, text(formData, 'id'), text(formData, 'statementLine') || null),
+      coa.setStatementLines(tx, ctx, text(formData, 'id'), {
+        statementLine: text(formData, 'statementLine') || null,
+        balanceSheetLine: text(formData, 'balanceSheetLine') || null,
+      }),
     record(code),
   );
 }

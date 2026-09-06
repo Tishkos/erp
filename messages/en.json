@@ -1451,7 +1451,12 @@
       "kind_group": "Header account",
       "description": "Description",
       "statement_line": "Financial statement line",
-      "statement_line_hint": "Where this account appears on the statements. Left unset, it falls to its type default.",
+      "statement_mappings": "Financial statement mappings",
+      "income_statement_line": "Income Statement line",
+      "balance_sheet_line": "Balance Sheet line",
+      "balance_sheet_line_hint": "Revenue and expense accounts can also be presented on an Equity line of the Balance Sheet. This does not replace their Income Statement mapping.",
+      "balance_sheet_line_unmapped": "Computed result for the period",
+      "statement_line_hint": "Choose where this account appears on each financial statement.",
       "statement_line_default": "Default for its type",
       "deactivate": "Deactivate",
       "deactivate_hint": "It stays in the system and on old entries; it simply stops accepting new ones.",
@@ -1463,7 +1468,7 @@
       "is_a_header": "This is a header account. Create an account under it from the Chart of Accounts.",
       "creating": "Creating…",
       "edit": "Edit account",
-      "statement_line_create_hint": "Which section of the Income Statement or Balance Sheet this account reports in. The account takes its type from the root it is opened under — Assets, Liabilities, Equity, Revenue or Expense — and the lines that type cannot carry are greyed. Left unset it falls to its type’s usual line, which is rarely what a detailed chart wants.",
+      "statement_line_create_hint": "Choose the account's line on its primary statement. Revenue and expense accounts also get a separate Balance Sheet mapping so they can appear under the required Equity line.",
       "header_no_line": "A header carries no statement line of its own. It appears on a statement wherever the accounts beneath it report, and its figure is the sum of theirs."
     },
     "rates": {
@@ -1723,7 +1728,7 @@
       "mark_cash": "Mark as cash",
       "unmark_cash": "Not cash",
       "equity_hint": "The Statement of Changes in Equity reads the equity side of the Balance Sheet mapping — these lines, in this order. Edit them on the Balance Sheet tab; this view shows what the statement will use.",
-      "equity_note": "The last row is the accumulated result no year-end close has yet carried into retained earnings. It is computed from the revenue and expense accounts, not mapped, which is what keeps this statement agreeing with the Balance Sheet."
+      "equity_note": "Revenue and expense accounts mapped to Balance Sheet equity appear on those lines. Any account left unmapped remains in the computed result row, so the statement still agrees with the Balance Sheet."
     }
   },
   "profile": {

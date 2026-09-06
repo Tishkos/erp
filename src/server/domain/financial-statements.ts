@@ -19,11 +19,12 @@
  * between two runs; a statement assembled from the mapping table is the same
  * statement every time, because the table is the single answer.
  *
- * One mapping, four statements. An account reports in exactly one place — on
- * a line of the Income Statement or of the Balance Sheet. The Cash Flow
- * Statement classifies each line as operating, investing or financing; the
- * Statement of Changes in Equity is the equity side of the Balance Sheet.
- * That derivation is what keeps the four reports agreeing with each other.
+ * The Income Statement and Balance Sheet are separate account mappings. A
+ * revenue or expense account therefore has two useful answers: where it
+ * explains the period result on the Income Statement, and where that result
+ * is presented inside Balance Sheet equity. The Cash Flow Statement still
+ * classifies the account's primary line, while Changes in Equity reads its
+ * Balance Sheet mapping.
  *
  * Every account still lands somewhere without anybody assigning it: an
  * unassigned account falls to its type's default line — one of the seeded
@@ -140,6 +141,15 @@ export const DEFAULT_LINE: Readonly<Record<AccountType, string>> = Object.freeze
   expense: 'operating_expenses',
 });
 
+/** The statement on which an account type has its ordinary, default line. */
+export const PRIMARY_STATEMENT: Readonly<Record<AccountType, StatementFace>> = Object.freeze({
+  asset: 'balance_sheet',
+  liability: 'balance_sheet',
+  equity: 'balance_sheet',
+  revenue: 'income_statement',
+  expense: 'income_statement',
+});
+
 export class StatementLineError extends Error {
   readonly code = 'STATEMENT_LINE_INVALID';
   constructor(detail: string) {
@@ -167,7 +177,18 @@ function toLine(row: StatementLineRow): StatementLine {
     isSystem: row.isSystem,
     section: statement === 'income_statement' ? 'profit_or_loss' : 'financial_position',
     deduction: role !== null && DEDUCTING_ROLES.has(role),
-    accountTypes: row.isHeader ? [] : role !== null ? ROLE_ACCOUNT_TYPES[role] : side !== null ? [side] : [],
+    accountTypes: row.isHeader
+      ? []
+      : role !== null
+        ? ROLE_ACCOUNT_TYPES[role]
+        : side === 'equity'
+          // Profit and loss accounts may also be presented on a configured
+          // Balance Sheet equity line. Their Income Statement mapping remains
+          // separate and continues to determine the P&L subtotals.
+          ? ['equity', 'revenue', 'expense']
+          : side !== null
+            ? [side]
+            : [],
   };
 }
 
@@ -203,10 +224,34 @@ export class LineCatalogue {
     return this.ordered().filter((line) => line.accountTypes.includes(accountType));
   }
 
-  /** The line an account reports on: the one assigned, or its type's default. */
+  /** The line an account reports on its primary statement. */
   lineFor(accountType: AccountType, assigned?: string | null): StatementLine {
+    const line = this.lineForStatement(accountType, PRIMARY_STATEMENT[accountType], assigned);
+    if (line) return line;
+    throw new StatementLineError(`A ${accountType} account has no primary financial statement line.`);
+  }
+
+  /**
+   * The account's line on one statement.
+   *
+   * Revenue and expense accounts have no automatic Balance Sheet line. Until
+   * Finance maps one, their net amount remains in the computed result row under
+   * equity. Once mapped, the account is presented on that equity line instead.
+   */
+  lineForStatement(
+    accountType: AccountType,
+    statement: StatementFace,
+    assigned?: string | null,
+  ): StatementLine | undefined {
     const chosen = assigned ? this.byCodeMap.get(assigned) : undefined;
-    if (chosen && chosen.accountTypes.includes(accountType)) return chosen;
+    if (
+      chosen &&
+      chosen.statement === statement &&
+      chosen.accountTypes.includes(accountType)
+    ) {
+      return chosen;
+    }
+    if (PRIMARY_STATEMENT[accountType] !== statement) return undefined;
     const fallback = this.byCodeMap.get(DEFAULT_LINE[accountType]);
     if (!fallback) {
       throw new StatementLineError(
@@ -216,8 +261,12 @@ export class LineCatalogue {
     return fallback;
   }
 
-  /** Refuses a line that does not exist, a header, or a line this type cannot sit on. */
-  assertLineAllowed(accountType: AccountType, code: string): StatementLine {
+  /** Refuses a line that does not exist, is on the wrong statement, or cannot take this type. */
+  assertLineAllowed(
+    accountType: AccountType,
+    code: string,
+    statement: StatementFace = PRIMARY_STATEMENT[accountType],
+  ): StatementLine {
     const line = this.byCodeMap.get(code);
     if (!line) {
       throw new StatementLineError(`'${code}' is not a financial statement line.`);
@@ -225,6 +274,11 @@ export class LineCatalogue {
     if (line.isHeader) {
       throw new StatementLineError(
         `'${line.name}' is a header — accounts report on its lines, not on the header itself.`,
+      );
+    }
+    if (line.statement !== statement) {
+      throw new StatementLineError(
+        `'${line.name}' belongs to the ${line.statement === 'income_statement' ? 'Income Statement' : 'Balance Sheet'}, not the ${statement === 'income_statement' ? 'Income Statement' : 'Balance Sheet'}.`,
       );
     }
     if (!line.accountTypes.includes(accountType)) {

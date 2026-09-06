@@ -102,11 +102,15 @@ export default async function BalanceSheetPage({ searchParams }: { searchParams:
           <tbody>
             <StatementSection level={level} lines={sfp.assets} money={money} title={t('reports.assets')} total={sfp.totalAssets} />
             <StatementSection
-              extra={{
-                title: t('reports.result_for_the_period'),
-                amount: sfp.resultForThePeriod,
-                accounts: sfp.resultAccounts,
-              }}
+              {...(sfp.resultAccounts.length > 0
+                ? {
+                    extra: {
+                      title: t('reports.result_for_the_period'),
+                      amount: sfp.unmappedResult,
+                      accounts: sfp.resultAccounts,
+                    },
+                  }
+                : {})}
               level={level}
               lines={sfp.equity}
               money={money}
