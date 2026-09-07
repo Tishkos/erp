@@ -27,16 +27,32 @@ export interface PickerOption {
   readonly accountType: string;
 }
 
-/** A statement line: which statement it sits on, and which types may take it. */
+export type StatementFace =
+  | 'income_statement'
+  | 'balance_sheet'
+  | 'cash_flow'
+  | 'changes_in_equity';
+
+/** One line of one report's layout, as the pickers show it. */
 export interface LineOption {
   readonly value: string;
   /** Already indented to the mapping's own nesting. */
   readonly label: string;
-  readonly section: 'financial_position' | 'profit_or_loss';
-  readonly accountTypes: readonly string[];
-  /** Shown for the shape of the report, never choosable — accounts connect to lines. */
+  readonly statement: StatementFace;
+  /** Shown for the shape of the report, never choosable — accounts map to lines. */
   readonly isHeader: boolean;
 }
+
+/** The four reports, in the order the account window asks about them. */
+export const MAPPING_FIELDS: readonly {
+  readonly statement: StatementFace;
+  readonly field: string;
+}[] = [
+  { statement: 'income_statement', field: 'incomeStatementLine' },
+  { statement: 'balance_sheet', field: 'balanceSheetLine' },
+  { statement: 'cash_flow', field: 'cashFlowLine' },
+  { statement: 'changes_in_equity', field: 'changesInEquityLine' },
+];
 
 export interface NewAccountLabels {
   readonly button: string;
@@ -51,11 +67,10 @@ export interface NewAccountLabels {
   readonly kindGroup: string;
   readonly description: string;
   readonly statementMappings: string;
-  readonly incomeStatementLine: string;
-  readonly balanceSheetLine: string;
-  readonly statementLineHint: string;
-  readonly balanceSheetLineHint: string;
-  readonly balanceSheetLineUnmapped: string;
+  readonly statementMappingsHint: string;
+  /** What each report is called, and the hint under its picker. */
+  readonly mappingTitles: Readonly<Record<StatementFace, string>>;
+  readonly mappingHints: Readonly<Record<StatementFace, string>>;
   readonly statementLineDefault: string;
   readonly headerNoLine: string;
   readonly create: string;
@@ -91,10 +106,8 @@ export function NewAccountDialog({
   const [parentId, setParentId] = useState(defaultParent);
   const [kind, setKind] = useState('posting');
   const accountType = parents.find((option) => option.value === parentId)?.accountType ?? '';
-  const balanceSheetLines = lines.filter((line) => line.section === 'financial_position');
-  const incomeStatementLines = lines.filter((line) => line.section === 'profit_or_loss');
-  const isProfitOrLoss = accountType === 'revenue' || accountType === 'expense';
-  const primaryLines = isProfitOrLoss ? incomeStatementLines : balanceSheetLines;
+  const linesOf = (statement: StatementFace) =>
+    lines.filter((line) => line.statement === statement);
 
   return (
     <>
@@ -208,61 +221,41 @@ export function NewAccountDialog({
                 <span className={styles.hint}>{labels.kindHint}</span>
               </div>
 
-              {/* The two reports have independent mappings. Revenue and
-                  expense accounts choose their Income Statement line and may
-                  also choose an equity line on the Balance Sheet. */}
+              {/* Four reports, four independent answers, all asked here.
+                  A revenue account is mapped onto a Revenue line of the
+                  Income Statement *and* onto an Equity line of the Balance
+                  Sheet: one field could hold only the first of those, and
+                  working the rest out from it is what made the four reports
+                  disagree. Every one may be left alone — an account nobody
+                  maps still reports where its type says it does. */}
               {kind === 'posting' ? (
                 <>
-                  <div className={styles.field}>
-                    <label className={styles.label} htmlFor="new-account-statement-line">
-                      {isProfitOrLoss ? labels.incomeStatementLine : labels.balanceSheetLine}
-                    </label>
-                    <select
-                      className={styles.select}
-                      defaultValue=""
-                      id="new-account-statement-line"
-                      key={`primary-${accountType}`}
-                      name="statementLine"
-                    >
-                      <option value="">{labels.statementLineDefault}</option>
-                      {primaryLines.map((line) => (
-                        <option
-                          disabled={line.isHeader || !line.accountTypes.includes(accountType)}
-                          key={line.value}
-                          value={line.value}
-                        >
-                          {line.label}
-                        </option>
-                      ))}
-                    </select>
-                    <span className={styles.hint}>{labels.statementLineHint}</span>
+                  <div className={`${styles.field} ${styles.fieldWide}`}>
+                    <span className={styles.label}>{labels.statementMappings}</span>
+                    <span className={styles.hint}>{labels.statementMappingsHint}</span>
                   </div>
-                  {isProfitOrLoss ? (
-                    <div className={styles.field}>
-                      <label className={styles.label} htmlFor="new-account-balance-sheet-line">
-                        {labels.balanceSheetLine}
+                  {MAPPING_FIELDS.map(({ statement, field }) => (
+                    <div className={styles.field} key={statement}>
+                      <label className={styles.label} htmlFor={`new-account-${field}`}>
+                        {labels.mappingTitles[statement]}
                       </label>
                       <select
                         className={styles.select}
                         defaultValue=""
-                        id="new-account-balance-sheet-line"
-                        key={`balance-${accountType}`}
-                        name="balanceSheetLine"
+                        id={`new-account-${field}`}
+                        key={`${field}-${accountType}`}
+                        name={field}
                       >
-                        <option value="">{labels.balanceSheetLineUnmapped}</option>
-                        {balanceSheetLines.map((line) => (
-                          <option
-                            disabled={line.isHeader || !line.accountTypes.includes(accountType)}
-                            key={line.value}
-                            value={line.value}
-                          >
+                        <option value="">{labels.statementLineDefault}</option>
+                        {linesOf(statement).map((line) => (
+                          <option disabled={line.isHeader} key={line.value} value={line.value}>
                             {line.label}
                           </option>
                         ))}
                       </select>
-                      <span className={styles.hint}>{labels.balanceSheetLineHint}</span>
+                      <span className={styles.hint}>{labels.mappingHints[statement]}</span>
                     </div>
-                  ) : null}
+                  ))}
                 </>
               ) : (
                 <div className={styles.field}>

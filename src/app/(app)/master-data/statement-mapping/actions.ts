@@ -20,9 +20,13 @@ export async function createLine(formData: FormData): Promise<void> {
         statement: text(formData, 'statement') as StatementFace,
         name: text(formData, 'name'),
         isHeader: text(formData, 'kind') === 'header',
+        // The Cash Flow Statement's third kind: the line that *is* the cash
+        // whose movement the statement explains.
+        isCash: text(formData, 'kind') === 'cash',
         parentId: text(formData, 'parentId') || null,
         role: text(formData, 'role') || null,
         side: text(formData, 'side') || null,
+        cashFlowCategory: text(formData, 'cashFlowCategory') || null,
       }),
     target,
   );

@@ -39,6 +39,7 @@ import {
   type CashFlowCategory,
   type IncomeRole,
   LineCatalogue,
+  type StatementFace,
   type StatementLine,
   type StatementLineNode,
   type StatementSection,
@@ -110,8 +111,10 @@ interface Movement {
   accountCode: string;
   accountName: string;
   accountType: AccountType;
-  statementLine: string | null;
-  balanceSheetLine: string | null;
+  income_statement: string | null;
+  balance_sheet: string | null;
+  cash_flow: string | null;
+  changes_in_equity: string | null;
   debit: bigint;
   credit: bigint;
 }
@@ -146,8 +149,10 @@ async function movements(tx: Tx, filter: StatementFilter): Promise<Movement[]> {
     select a.code                                  as "accountCode",
            a.name                                  as "accountName",
            a.account_type::text                    as "accountType",
-           a.statement_line                        as "statementLine",
-           a.balance_sheet_line                     as "balanceSheetLine",
+           a.income_statement_line                 as "incomeStatementLine",
+           a.balance_sheet_line                    as "balanceSheetLine",
+           a.cash_flow_line                        as "cashFlowLine",
+           a.changes_in_equity_line                as "changesInEquityLine",
            coalesce(sum(${debitColumn}), 0)::text  as "debit",
            coalesce(sum(${creditColumn}), 0)::text as "credit"
       from journal_line l
@@ -156,7 +161,9 @@ async function movements(tx: Tx, filter: StatementFilter): Promise<Movement[]> {
      where e.status in ('posted', 'reversed')
        and e.posting_date between ${filter.from}::date and ${filter.to}::date
        and ${branch}
-     group by a.code, a.name, a.account_type, a.statement_line, a.balance_sheet_line
+     group by a.code, a.name, a.account_type,
+              a.income_statement_line, a.balance_sheet_line,
+              a.cash_flow_line, a.changes_in_equity_line
     having coalesce(sum(${debitColumn}), 0) <> 0 or coalesce(sum(${creditColumn}), 0) <> 0
      order by a.code
   `);
@@ -165,8 +172,10 @@ async function movements(tx: Tx, filter: StatementFilter): Promise<Movement[]> {
     accountCode: row.accountCode!,
     accountName: row.accountName!,
     accountType: row.accountType as AccountType,
-    statementLine: row.statementLine ?? null,
-    balanceSheetLine: row.balanceSheetLine ?? null,
+    income_statement: row.incomeStatementLine ?? null,
+    balance_sheet: row.balanceSheetLine ?? null,
+    cash_flow: row.cashFlowLine ?? null,
+    changes_in_equity: row.changesInEquityLine ?? null,
     debit: parseDecimal(String(row.debit), MONEY_SCALE),
     credit: parseDecimal(String(row.credit), MONEY_SCALE),
   }));
@@ -186,6 +195,26 @@ function naturalAmount(movement: Movement): bigint {
     : movement.credit - movement.debit;
 }
 
+/**
+ * Where one account prints on one report.
+ *
+ * Every statement below asks this and nothing else. The account carries four
+ * independent answers and this picks the one the report in hand is asking
+ * about — or its type's default there, or nothing, when the account does not
+ * belong on that report at all.
+ */
+const lineOf = (
+  catalogue: LineCatalogue,
+  account: {
+    readonly accountType: AccountType;
+    readonly income_statement: string | null;
+    readonly balance_sheet: string | null;
+    readonly cash_flow: string | null;
+    readonly changes_in_equity: string | null;
+  },
+  statement: StatementFace,
+): StatementLine | undefined => catalogue.lineFor(account.accountType, statement, account[statement]);
+
 /** Four decimal places, the scale the money columns keep. */
 const decimal = (value: bigint): string => toDecimalString(value, MONEY_SCALE);
 
@@ -195,38 +224,29 @@ const sum = (lines: readonly StatementLineResult[]) =>
     .filter((entry) => !entry.line.isHeader)
     .reduce((total, line) => total + parseDecimal(line.amount, MONEY_SCALE), 0n);
 
-/** The accounts of one section, grouped onto the line each reports on. */
+/** The accounts of one report, grouped onto the line each of them maps to. */
 function bucket(
   catalogue: LineCatalogue,
   movements: Movement[],
-  section: StatementSection,
+  statement: StatementFace,
 ): Map<string, { total: bigint; accounts: StatementAccount[] }> {
   const byLine = new Map<string, { total: bigint; accounts: StatementAccount[] }>();
 
   for (const movement of movements) {
+    const line = lineOf(catalogue, movement, statement);
+    if (!line) continue;
+
+    let amount = naturalAmount(movement);
     const profitOrLossAccount =
       movement.accountType === 'revenue' || movement.accountType === 'expense';
-    const line =
-      section === 'profit_or_loss'
-        ? catalogue.lineForStatement(
-            movement.accountType,
-            'income_statement',
-            movement.statementLine,
-          )
-        : catalogue.lineForStatement(
-            movement.accountType,
-            'balance_sheet',
-            profitOrLossAccount ? movement.balanceSheetLine : movement.statementLine,
-          );
-    if (!line) continue;
-    let amount = naturalAmount(movement);
-    if (section === 'financial_position' && profitOrLossAccount) {
-      // A revenue balance adds to equity; an expense balance reduces it. The
-      // Income Statement role remains the authority for that bearing.
-      if (catalogue.lineFor(movement.accountType, movement.statementLine).deduction) {
-        amount = -amount;
-      }
+    if (statement !== 'income_statement' && profitOrLossAccount) {
+      // Away from the Income Statement, a revenue balance adds to equity and
+      // an expense balance reduces it. Which way round is a property of the
+      // account's *income* line, because that is where its bearing on the
+      // result is stated.
+      if (lineOf(catalogue, movement, 'income_statement')?.deduction) amount = -amount;
     }
+
     // An account that moved and came back — a posting and its reversal — has
     // nothing to say on a statement of balances, so it is not listed. It stays
     // in the Trial Balance and the General Ledger, which are about movement.
@@ -245,16 +265,16 @@ function bucket(
   return byLine;
 }
 
-/** Groups movements onto the lines of one statement section, flat, in mapping order. */
+/** Groups movements onto one report's lines, flat, in the mapping's own order. */
 function assemble(
   catalogue: LineCatalogue,
   movements: Movement[],
-  section: StatementSection,
+  statement: StatementFace,
 ): StatementLineResult[] {
-  const byLine = bucket(catalogue, movements, section);
+  const byLine = bucket(catalogue, movements, statement);
   return catalogue
-    .ordered()
-    .filter((line) => line.section === section && !line.isHeader && byLine.has(line.code))
+    .linesOf(statement)
+    .filter((line) => !line.isHeader && byLine.has(line.code))
     .map((line) => {
       const entry = byLine.get(line.code)!;
       return { line, depth: 0, amount: decimal(entry.total), accounts: entry.accounts };
@@ -318,7 +338,7 @@ function resultOf(lines: readonly StatementLineResult[]) {
  */
 export async function profitOrLoss(tx: Tx, filter: StatementFilter): Promise<ProfitOrLoss> {
   const [rows, catalogue] = await Promise.all([movements(tx, filter), statementLines.catalogue(tx)]);
-  const lines = assemble(catalogue, rows, 'profit_or_loss');
+  const lines = assemble(catalogue, rows, 'income_statement');
   const { income, expenses, result } = resultOf(lines);
 
   return {
@@ -356,7 +376,7 @@ export async function financialPosition(
     statementLines.catalogue(tx),
   ]);
 
-  const position = bucket(catalogue, rows, 'financial_position');
+  const position = bucket(catalogue, rows, 'balance_sheet');
   const assets = sideRows(catalogue, position, 'asset');
   const equity = sideRows(catalogue, position, 'equity');
   const liabilities = sideRows(catalogue, position, 'liability');
@@ -364,18 +384,14 @@ export async function financialPosition(
   // The complete result still comes from the Income Statement mapping. Any
   // P&L account with its own Balance Sheet mapping is already inside `equity`,
   // so only the remainder is shown in the computed result row.
-  const plLines = assemble(catalogue, rows, 'profit_or_loss');
+  const plLines = assemble(catalogue, rows, 'income_statement');
   const { result } = resultOf(plLines);
   const residualRows = rows.filter(
     (movement) =>
       (movement.accountType === 'revenue' || movement.accountType === 'expense') &&
-      !catalogue.lineForStatement(
-        movement.accountType,
-        'balance_sheet',
-        movement.balanceSheetLine,
-      ),
+      !lineOf(catalogue, movement, 'balance_sheet'),
   );
-  const residualLines = assemble(catalogue, residualRows, 'profit_or_loss');
+  const residualLines = assemble(catalogue, residualRows, 'income_statement');
   const { result: unmappedResult } = resultOf(residualLines);
   const resultAccounts = residualLines.flatMap((line) =>
     line.accounts.map((account) => ({
@@ -467,8 +483,10 @@ export interface ChangesInEquity {
 interface Paired {
   readonly accountName: string;
   readonly accountType: AccountType;
-  readonly statementLine: string | null;
-  readonly balanceSheetLine: string | null;
+  readonly income_statement: string | null;
+  readonly balance_sheet: string | null;
+  readonly cash_flow: string | null;
+  readonly changes_in_equity: string | null;
   opening: bigint;
   movement: bigint;
 }
@@ -490,8 +508,10 @@ function pairUp(
       {
         accountName: movement.accountName,
         accountType: movement.accountType,
-        statementLine: movement.statementLine,
-        balanceSheetLine: movement.balanceSheetLine,
+        income_statement: movement.income_statement,
+        balance_sheet: movement.balance_sheet,
+        cash_flow: movement.cash_flow,
+        changes_in_equity: movement.changes_in_equity,
         opening: 0n,
         movement: 0n,
       };
@@ -501,7 +521,7 @@ function pairUp(
   // Revenue and expense accounts are signed as they bear on the result: income
   // adds to it, a deduction takes away. Equity accounts keep their own sign.
   const signOf = (movement: Movement) =>
-    catalogue.lineFor(movement.accountType, movement.statementLine).deduction ? -1n : 1n;
+    lineOf(catalogue, movement, 'income_statement')?.deduction ? -1n : 1n;
   for (const movement of before) put(movement, 'opening', signOf(movement));
   for (const movement of during) put(movement, 'movement', signOf(movement));
   return byCode;
@@ -536,28 +556,21 @@ export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<
   ]);
   const paired = pairUp(catalogue, before, during);
 
-  // Native equity accounts and P&L accounts with an explicit Balance Sheet
-  // presentation are grouped onto the same configurable equity lines.
+  // This statement has a mapping of its own: the rows are the lines Finance
+  // built for it, carrying the accounts mapped to them. An equity account
+  // that nobody has moved falls to the seeded line, so the statement is never
+  // silently missing a piece of equity the Balance Sheet is showing.
   const byLine = new Map<string, string[]>();
   for (const [code, entry] of paired) {
     if (entry.opening === 0n && entry.movement === 0n) continue;
-    const line =
-      entry.accountType === 'equity'
-        ? catalogue.lineFor(entry.accountType, entry.statementLine)
-        : entry.accountType === 'revenue' || entry.accountType === 'expense'
-          ? catalogue.lineForStatement(
-              entry.accountType,
-              'balance_sheet',
-              entry.balanceSheetLine,
-            )
-          : undefined;
+    const line = lineOf(catalogue, entry, 'changes_in_equity');
     if (!line) continue;
     byLine.set(line.code, [...(byLine.get(line.code) ?? []), code]);
   }
 
   const lineRows: EquityRow[] = catalogue
-    .ordered()
-    .filter((line) => line.section === 'financial_position' && !line.isHeader && byLine.has(line.code))
+    .linesOf('changes_in_equity')
+    .filter((line) => !line.isHeader && byLine.has(line.code))
     .map((line) => {
       const accounts = accountRows(paired, byLine.get(line.code)!);
       const opening = accounts.reduce((total, a) => total + parseDecimal(a.opening, MONEY_SCALE), 0n);
@@ -573,16 +586,12 @@ export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<
       };
     });
 
-  // P&L accounts without a Balance Sheet line remain in the computed result.
+  // A revenue or expense account nobody has mapped here stays inside the
+  // computed result, which is what keeps this statement's closing equity
+  // equal to the Balance Sheet's.
   const resultCodes = [...paired]
     .filter(([, entry]) => entry.accountType === 'revenue' || entry.accountType === 'expense')
-    .filter(([, entry]) =>
-      !catalogue.lineForStatement(
-        entry.accountType,
-        'balance_sheet',
-        entry.balanceSheetLine,
-      ),
-    )
+    .filter(([, entry]) => !lineOf(catalogue, entry, 'changes_in_equity'))
     .filter(([, entry]) => entry.opening !== 0n || entry.movement !== 0n)
     .map(([code]) => code);
   const resultAccounts = accountRows(paired, resultCodes);
@@ -690,22 +699,35 @@ interface EntryLine {
   readonly accountCode: string;
   readonly accountName: string;
   readonly accountType: AccountType;
-  readonly statementLine: string | null;
+  readonly cash_flow: string | null;
   readonly debit: bigint;
   readonly credit: bigint;
 }
 
+/**
+ * Which accounts are the cash this statement explains.
+ *
+ * Said out loud on the Cash Flow mapping, and nowhere else: an account is
+ * mapped to a line marked as cash, or it is not cash. Nothing is guessed from
+ * an account's name or from where it sits on another report.
+ */
 const isCash = (
   catalogue: LineCatalogue,
-  line: { accountType: AccountType; statementLine: string | null },
-) => catalogue.lineFor(line.accountType, line.statementLine).isCash;
+  account: { accountType: AccountType; cash_flow: string | null },
+) => catalogue.lineFor(account.accountType, 'cash_flow', account.cash_flow)?.isCash ?? false;
+
+/** The line an account's cash movements are attributed to. */
+const cashFlowLineOf = (
+  catalogue: LineCatalogue,
+  account: { accountType: AccountType; cash_flow: string | null },
+) => catalogue.lineFor(account.accountType, 'cash_flow', account.cash_flow);
 
 /** Has anybody said which accounts are cash? */
 async function cashLineAssigned(tx: Tx, codes: readonly string[]): Promise<boolean> {
   if (codes.length === 0) return false;
   const list = sql.join(codes.map((code) => sql`${code}`), sql`, `);
   const result = await tx.execute(sql`
-    select 1 from chart_of_account where statement_line in (${list}) limit 1
+    select 1 from chart_of_account where cash_flow_line in (${list}) limit 1
   `);
   return result.rows.length > 0;
 }
@@ -733,7 +755,7 @@ async function entryMovements(
            a.code                                  as "accountCode",
            a.name                                  as "accountName",
            a.account_type::text                    as "accountType",
-           a.statement_line                        as "statementLine",
+           a.cash_flow_line                        as "cashFlowLine",
            coalesce(sum(${debitColumn}), 0)::text  as "debit",
            coalesce(sum(${creditColumn}), 0)::text as "credit"
       from journal_line l
@@ -747,9 +769,9 @@ async function entryMovements(
            from journal_line cash
            join chart_of_account ca on ca.id = cash.account_id
           where cash.journal_entry_id = l.journal_entry_id
-            and ca.statement_line in (${cashList})
+            and ca.cash_flow_line in (${cashList})
        )
-     group by l.journal_entry_id, a.code, a.name, a.account_type, a.statement_line
+     group by l.journal_entry_id, a.code, a.name, a.account_type, a.cash_flow_line
      order by l.journal_entry_id, a.code
   `);
 
@@ -758,7 +780,7 @@ async function entryMovements(
     accountCode: row.accountCode!,
     accountName: row.accountName!,
     accountType: row.accountType as AccountType,
-    statementLine: row.statementLine ?? null,
+    cash_flow: row.cashFlowLine ?? null,
     debit: parseDecimal(String(row.debit), MONEY_SCALE),
     credit: parseDecimal(String(row.credit), MONEY_SCALE),
   }));
@@ -853,14 +875,14 @@ export async function cashFlow(tx: Tx, filter: StatementFilter): Promise<CashFlo
       if (index === largest) return;
       const share = (delta * weights[index]!) / weight;
       assigned += share;
-      const line = catalogue.lineFor(account.accountType, account.statementLine);
-      const category = line.cashFlowCategory;
-      if (category && share !== 0n) attribute(category, line, account, share);
+      const line = cashFlowLineOf(catalogue, account);
+      const category = line?.cashFlowCategory;
+      if (line && category && share !== 0n) attribute(category, line, account, share);
     });
     const rest = delta - assigned;
-    const line = catalogue.lineFor(others[largest]!.accountType, others[largest]!.statementLine);
-    const category = line.cashFlowCategory;
-    if (category && rest !== 0n) attribute(category, line, others[largest]!, rest);
+    const line = cashFlowLineOf(catalogue, others[largest]!);
+    const category = line?.cashFlowCategory;
+    if (line && category && rest !== 0n) attribute(category, line, others[largest]!, rest);
   }
 
   const sections: CashFlowSection[] = CASH_FLOW_CATEGORIES.map((category) => {
@@ -1007,10 +1029,10 @@ export async function incomeStatement(
   const [rows, catalogue] = await Promise.all([movements(tx, filter), statementLines.catalogue(tx)]);
 
   // Each line's accounts and total, and each role's total for the subtotals.
-  const byLine = bucket(catalogue, rows, 'profit_or_loss');
+  const byLine = bucket(catalogue, rows, 'income_statement');
   const roleTotals = new Map<IncomeRole, bigint>();
   for (const line of catalogue.lines) {
-    if (line.section !== 'profit_or_loss' || line.isHeader) continue;
+    if (line.statement !== 'income_statement' || line.isHeader) continue;
     const entry = byLine.get(line.code);
     if (!entry || !line.role) continue;
     roleTotals.set(line.role, (roleTotals.get(line.role) ?? 0n) + entry.total);

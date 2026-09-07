@@ -11,6 +11,7 @@ import { appUser } from '@/server/db/schema';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as companyService from '@/server/services/company';
+import { MAPPING_STATEMENTS } from '@/components/admin/account-controls';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as statementLines from '@/server/services/statement-lines';
 import * as trialBalance from '@/server/services/trial-balance';
@@ -44,12 +45,13 @@ export default async function AccountPrintPage({
 
   const lang: Locale = sp.lang === 'ar' ? 'ar' : 'en';
   const dir = lang === 'ar' ? 'rtl' : 'ltr';
-  const [t, chart, column, status, line] = await Promise.all([
+  const [t, chart, column, status, line, page] = await Promise.all([
     getTranslations({ locale: lang, namespace: 'admin' }),
     getTranslations({ locale: lang, namespace: 'chart' }),
     getTranslations({ locale: lang, namespace: 'column' }),
     getTranslations({ locale: lang, namespace: 'status' }),
     getTranslations({ locale: lang, namespace: 'statement_line' }),
+    getTranslations({ locale: lang, namespace: 'page' }),
   ]);
 
   const year = new Date().getFullYear();
@@ -81,7 +83,6 @@ export default async function AccountPrintPage({
   });
   if (!data) notFound();
   const { node, parent, activity, company, mapping, me } = data;
-  const isProfitOrLoss = node.accountType === 'revenue' || node.accountType === 'expense';
   const mappingLabel = (code: string | null, fallback: string) =>
     code
       ? line.has(code)
@@ -175,25 +176,14 @@ export default async function AccountPrintPage({
             <dt>{column('is_active')}</dt>
             <dd>{chart(node.isActive ? 'active' : 'inactive')}</dd>
           </div>
-          <div>
-            <dt>
-              {isProfitOrLoss
-                ? t('accounts.income_statement_line')
-                : t('accounts.balance_sheet_line')}
-            </dt>
-            <dd>{mappingLabel(node.statementLine, t('accounts.statement_line_default'))}</dd>
-          </div>
-          {isProfitOrLoss ? (
-            <div>
-              <dt>{t('accounts.balance_sheet_line')}</dt>
+          {MAPPING_STATEMENTS.map((entry) => (
+            <div key={entry.statement}>
+              <dt>{page(entry.page)}</dt>
               <dd>
-                {mappingLabel(
-                  node.balanceSheetLine,
-                  t('accounts.balance_sheet_line_unmapped'),
-                )}
+                {mappingLabel(node.mapping[entry.statement], t('accounts.statement_line_default'))}
               </dd>
             </div>
-          ) : null}
+          ))}
           <div>
             <dt>{chart('balance_summary')}</dt>
             <dd>IQD · {year}</dd>

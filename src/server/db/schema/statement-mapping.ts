@@ -6,21 +6,21 @@ import { boolean, index, integer, pgTable, text, uniqueIndex, uuid, type AnyPgCo
  * By direction (2026-09-03): the fixed catalogue of twelve lines was half a
  * mapping. Finance defines the shape of its own reports — the headers, the
  * lines, their order — and the accounts are connected to those lines when
- * they are opened. This table *is* the report layout: the Income Statement
- * and Balance Sheet mapping screens edit it, and the statements are drawn
- * from it.
+ * they are opened. This table *is* the report layout, one hierarchy for each
+ * of the four statements, and every statement is drawn from it.
  *
- * The Income Statement and Balance Sheet have independent account mappings.
- * Revenue and expense accounts may explain the period result on the first and
- * also be presented within equity on the second. Cash Flow classifies primary
- * lines, while Changes in Equity reads the Balance Sheet equity mapping.
+ * All four mappings are independent, because an account has a different
+ * answer on each report and no answer can be worked out from another. A
+ * revenue account explains the period on the Income Statement, is presented
+ * inside Equity on the Balance Sheet, carries an operating line of the Cash
+ * Flow Statement, and belongs to the result on Changes in Equity. Deriving
+ * any of those from the first is what made the reports disagree.
  *
- * The twelve original lines are seeded with `is_system` set: they carry the
- * type defaults and the running subtotals (gross profit needs to know what
- * "cost of sales" is), so they may be renamed, moved and reordered but never
- * deleted. Everything else is Finance's to create and remove — removal only
- * while no account reports on the line, which the foreign key from
- * `chart_of_account.statement_line` also enforces from below.
+ * The seeded lines carry `is_system`: the type defaults name them, so they
+ * may be renamed, moved and reordered but never deleted. Everything else is
+ * Finance's to create and remove — removal only while no account reports on
+ * the line, which the foreign keys from `chart_of_account` enforce from
+ * below.
  */
 export const financialStatementLine = pgTable(
   'financial_statement_line',
@@ -30,8 +30,10 @@ export const financialStatementLine = pgTable(
     code: text('code').notNull(),
     /** What the statement prints. Seeded lines fall back to the translated name. */
     name: text('name').notNull(),
-    /** Which statement face this line belongs to. */
-    statement: text('statement', { enum: ['income_statement', 'balance_sheet'] }).notNull(),
+    /** Which of the four reports this line belongs to. */
+    statement: text('statement', {
+      enum: ['income_statement', 'balance_sheet', 'cash_flow', 'changes_in_equity'],
+    }).notNull(),
     /** A header within the same statement; null at the top level. */
     parentId: uuid('parent_id').references((): AnyPgColumn => financialStatementLine.id),
     /** A header groups lines and takes no accounts. */

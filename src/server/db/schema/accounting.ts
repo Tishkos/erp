@@ -68,25 +68,30 @@ export const chartOfAccount = pgTable(
     approvalStatus: documentStatus('approval_status').notNull().default('draft'),
 
     /**
-     * Phase 1 §5 — the account's primary statement line. Revenue and expense
-     * use the Income Statement; the other account types use the Balance Sheet.
-     *
-     * Null falls to the account type's default line, so a statement is
-     * complete before anybody has assigned anything and grows more precise as
-     * Finance works through the chart.
+     * Superseded 2026-09-03 by the four columns below, and no longer read or
+     * written. It keeps its rows for one release so the version being replaced
+     * goes on working while the new one builds; a later migration drops it.
      */
     statementLine: text('statement_line'),
 
     /**
-     * Optional second presentation for a revenue or expense account on the
-     * equity side of the Balance Sheet. The primary `statementLine` remains
-     * its Income Statement classification; keeping the two columns separate
-     * prevents one report choice from overwriting the other.
+     * Phase 1 §5, opened to Finance by direction (2026-09-03) — where this
+     * account reports on each of the four statements, one independent answer
+     * per report.
      *
-     * The database migration adds the foreign key and a trigger that accepts
-     * only non-header equity lines for profit-and-loss accounts.
+     * Independent is the point. A revenue account explains the period on the
+     * Income Statement *and* is presented inside Equity on the Balance Sheet;
+     * one column could only hold one of those, and deriving the second from
+     * the first is what made the reports argue with each other.
+     *
+     * Null is not "missing" — it means the account reports where its type
+     * says it does, so every statement is complete from the first day and
+     * grows more precise as Finance works through the chart.
      */
+    incomeStatementLine: text('income_statement_line'),
     balanceSheetLine: text('balance_sheet_line'),
+    cashFlowLine: text('cash_flow_line'),
+    changesInEquityLine: text('changes_in_equity_line'),
 
     /**
      * §14.3 — direct manual posting to a control account requires Finance

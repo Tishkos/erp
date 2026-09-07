@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { runAdmin, runAdminAndReturn, text } from '@/server/admin-action';
+import type { AccountMappingInput } from '@domain/financial-statements';
 import * as coa from '@/server/services/chart-of-accounts';
 
 const LIST = '/master-data/chart-of-accounts';
@@ -36,8 +37,7 @@ export async function createAccount(
       isGroup,
       // A group summarises its children and holds no balance, so no currency.
       ...(isGroup ? {} : { currencyRestriction: 'IQD' }),
-      statementLine: text(formData, 'statementLine') || null,
-      balanceSheetLine: text(formData, 'balanceSheetLine') || null,
+      mapping: mappingFrom(formData),
       description: text(formData, 'description'),
     }),
   );
@@ -46,15 +46,25 @@ export async function createAccount(
   return { ok: true, code: outcome.value!.code };
 }
 
-/** Phase 1 §5 — which line of which statement this account reports on. */
+/**
+ * Phase 1 §5 — where this account reports on each of the four statements.
+ *
+ * All four are read and all four are written, every time: leaving one out
+ * would mean the form could only ever add a mapping and never clear one.
+ */
+function mappingFrom(formData: FormData): AccountMappingInput {
+  return {
+    income_statement: text(formData, 'incomeStatementLine') || null,
+    balance_sheet: text(formData, 'balanceSheetLine') || null,
+    cash_flow: text(formData, 'cashFlowLine') || null,
+    changes_in_equity: text(formData, 'changesInEquityLine') || null,
+  };
+}
+
 export async function setStatementLines(formData: FormData): Promise<void> {
   const code = text(formData, 'code');
   await runAdminAndReturn(
-    (tx, ctx) =>
-      coa.setStatementLines(tx, ctx, text(formData, 'id'), {
-        statementLine: text(formData, 'statementLine') || null,
-        balanceSheetLine: text(formData, 'balanceSheetLine') || null,
-      }),
+    (tx, ctx) => coa.setStatementLines(tx, ctx, text(formData, 'id'), mappingFrom(formData)),
     record(code),
   );
 }

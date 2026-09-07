@@ -48,6 +48,7 @@ export type ControlAccountKind = (typeof CONTROL_ACCOUNT_KINDS)[number];
  */
 export { DIMENSION_TYPES, type DimensionType } from './dimensions';
 import type { DimensionType } from './dimensions';
+import type { AccountMapping } from './financial-statements';
 
 /** An account as the tree sees it. */
 export interface AccountNode {
@@ -71,17 +72,12 @@ export interface AccountNode {
   /** What the account is for, in the accountant's own words. */
   readonly description?: string | null;
   /**
-   * Phase 1 §5 — the account's primary statement line, or null to take its
-   * type's default. Revenue and expense use the Income Statement; the other
-   * types use the Balance Sheet.
+   * Phase 1 §5 — where the account reports on each of the four statements,
+   * one independent answer per report. Null on any of them means "wherever
+   * this account's type reports by default", which is why a statement is
+   * complete before anybody has mapped anything.
    */
-  readonly statementLine: string | null;
-  /**
-   * For a revenue or expense account, the optional equity line on which it is
-   * also presented on the Balance Sheet. Null leaves it inside the computed
-   * result row rather than making it disappear.
-   */
-  readonly balanceSheetLine: string | null;
+  readonly mapping: AccountMapping;
   /** Dimensions a posting to this account must supply (§4.2). */
   readonly requiredDimensions: readonly DimensionType[];
   /** One of the five roots. Renameable, never deletable. */

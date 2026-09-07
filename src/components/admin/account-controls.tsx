@@ -12,15 +12,30 @@ import {
   updateAccount,
 } from '@/app/(app)/master-data/chart-of-accounts/actions';
 
-/** One line of the mapping, as the pages hand it to these controls. */
+/** One line of one report's layout, as the pages hand it to these controls. */
 export interface MappingLine {
   readonly code: string;
   readonly name: string;
   readonly statement: StatementFace;
   readonly isHeader: boolean;
   readonly depth: number;
-  readonly accountTypes: readonly string[];
 }
+
+/**
+ * The four reports, in the order both the dialog and the record ask about
+ * them, with the message keys naming each one.
+ */
+export const MAPPING_STATEMENTS: readonly {
+  readonly statement: StatementFace;
+  readonly field: string;
+  readonly page: string;
+  readonly hint: string;
+}[] = [
+  { statement: 'income_statement', field: 'incomeStatementLine', page: 'income_statement', hint: 'accounts.mapping_hint_income_statement' },
+  { statement: 'balance_sheet', field: 'balanceSheetLine', page: 'balance_sheet', hint: 'accounts.mapping_hint_balance_sheet' },
+  { statement: 'cash_flow', field: 'cashFlowLine', page: 'cash_flow', hint: 'accounts.mapping_hint_cash_flow' },
+  { statement: 'changes_in_equity', field: 'changesInEquityLine', page: 'changes_in_equity', hint: 'accounts.mapping_hint_changes_in_equity' },
+];
 
 /** One row of the parent picker: where it sits, and whether it can hold children. */
 export interface PickerAccount {
@@ -52,18 +67,22 @@ export async function NewAccountButton({
   readonly accounts: readonly PickerAccount[];
   readonly mapping: readonly MappingLine[];
 }) {
-  const [t, line] = await Promise.all([
+  const [t, line, page] = await Promise.all([
     getTranslations('admin'),
     getTranslations('statement_line'),
+    getTranslations('page'),
   ]);
   const groups = accounts.filter((a) => a.isGroup && a.isActive);
+  const titles = Object.fromEntries(
+    MAPPING_STATEMENTS.map((entry) => [entry.statement, page(entry.page)]),
+  ) as Record<StatementFace, string>;
+  const hints = Object.fromEntries(
+    MAPPING_STATEMENTS.map((entry) => [entry.statement, t(entry.hint)]),
+  ) as Record<StatementFace, string>;
 
-  // Every line of the mapping, on both statements, whichever parent is chosen
-  // — the same rule as the parent picker above: showing only the eligible
-  // ones answers "what may this account take?" and hides the more useful
-  // question, "where does everything report?". The dialog disables what the
-  // chosen parent's type cannot carry rather than removing it, and headers
-  // are shown for shape but never chosen — accounts connect to lines.
+  // Every line of every report, indented as its own layout nests it. Headers
+  // are shown so the shape of the report is visible and disabled because a
+  // header prints the sum of its lines — accounts map to the lines beneath.
   const lines = mapping.map((option) => ({
     value: option.code,
     // The seeded lines keep their translated names; Finance's own lines are
@@ -71,8 +90,7 @@ export async function NewAccountButton({
     label:
       '   '.repeat(Math.max(0, option.depth)) +
       (line.has(option.code) ? line(option.code) : option.name),
-    section: option.statement === 'income_statement' ? ('profit_or_loss' as const) : ('financial_position' as const),
-    accountTypes: option.accountTypes,
+    statement: option.statement,
     isHeader: option.isHeader,
   }));
 
@@ -93,11 +111,9 @@ export async function NewAccountButton({
         kindGroup: t('accounts.kind_group'),
         description: t('accounts.description'),
         statementMappings: t('accounts.statement_mappings'),
-        incomeStatementLine: t('accounts.income_statement_line'),
-        balanceSheetLine: t('accounts.balance_sheet_line'),
-        statementLineHint: t('accounts.statement_line_create_hint'),
-        balanceSheetLineHint: t('accounts.balance_sheet_line_hint'),
-        balanceSheetLineUnmapped: t('accounts.balance_sheet_line_unmapped'),
+        statementMappingsHint: t('accounts.statement_mappings_hint'),
+        mappingTitles: titles,
+        mappingHints: hints,
         statementLineDefault: t('accounts.statement_line_default'),
         headerNoLine: t('accounts.header_no_line'),
         create: t('create'),
@@ -143,25 +159,28 @@ export async function AccountControls({
   readonly mapping: readonly MappingLine[];
   readonly mayConfigure: boolean;
 }) {
-  const [t, line] = await Promise.all([getTranslations('admin'), getTranslations('statement_line')]);
+  const [t, line, page] = await Promise.all([
+    getTranslations('admin'),
+    getTranslations('statement_line'),
+    getTranslations('page'),
+  ]);
   if (!mayConfigure) return null;
 
-  const isProfitOrLoss = account.accountType === 'revenue' || account.accountType === 'expense';
-  const primaryStatement = isProfitOrLoss ? 'income_statement' : 'balance_sheet';
-  const primaryOptions = mapping.filter(
-    (entry) =>
-      entry.statement === primaryStatement &&
-      !entry.isHeader &&
-      entry.accountTypes.includes(account.accountType),
-  );
-  const balanceSheetOptions = isProfitOrLoss
-    ? mapping.filter(
-        (entry) =>
-          entry.statement === 'balance_sheet' &&
-          !entry.isHeader &&
-          entry.accountTypes.includes(account.accountType),
-      )
-    : [];
+  // Every report's lines are offered, whatever the account's type: which line
+  // suits which account is Finance's judgement, and this screen exists so
+  // they can make it. Headers are left out — they print the sum of the lines
+  // beneath them, so an account maps to a line instead.
+  const optionsFor = (statement: StatementFace) => [
+    { value: '', label: t('accounts.statement_line_default') },
+    ...mapping
+      .filter((entry) => entry.statement === statement && !entry.isHeader)
+      .map((entry) => ({
+        value: entry.code,
+        label:
+          '   '.repeat(Math.max(0, entry.depth)) +
+          (line.has(entry.code) ? line(entry.code) : entry.name),
+      })),
+  ];
 
   return (
     <div className={s.assignGrid}>
@@ -182,42 +201,21 @@ export async function AccountControls({
       {!account.isGroup ? (
         <>
           <Panel title={t('accounts.statement_mappings')}>
-            <p className={s.sectionHint}>{t('accounts.statement_line_hint')}</p>
+            <p className={s.sectionHint}>{t('accounts.statement_mappings_hint')}</p>
             <Form action={setStatementLines}>
               <input name="id" type="hidden" value={account.id} />
               <input name="code" type="hidden" value={account.code} />
               <Grid>
-                <Select
-                  defaultValue={account.statementLine ?? ''}
-                  label={
-                    isProfitOrLoss
-                      ? t('accounts.income_statement_line')
-                      : t('accounts.balance_sheet_line')
-                  }
-                  name="statementLine"
-                  options={[
-                    { value: '', label: t('accounts.statement_line_default') },
-                    ...primaryOptions.map((option) => ({
-                      value: option.code,
-                      label: line.has(option.code) ? line(option.code) : option.name,
-                    })),
-                  ]}
-                />
-                {isProfitOrLoss ? (
+                {MAPPING_STATEMENTS.map((entry) => (
                   <Select
-                    defaultValue={account.balanceSheetLine ?? ''}
-                    hint={t('accounts.balance_sheet_line_hint')}
-                    label={t('accounts.balance_sheet_line')}
-                    name="balanceSheetLine"
-                    options={[
-                      { value: '', label: t('accounts.balance_sheet_line_unmapped') },
-                      ...balanceSheetOptions.map((option) => ({
-                        value: option.code,
-                        label: line.has(option.code) ? line(option.code) : option.name,
-                      })),
-                    ]}
+                    defaultValue={account.mapping[entry.statement] ?? ''}
+                    hint={t(entry.hint)}
+                    key={entry.statement}
+                    label={page(entry.page)}
+                    name={entry.field}
+                    options={optionsFor(entry.statement)}
                   />
-                ) : null}
+                ))}
               </Grid>
               <SubmitRow>
                 <Submit label={t('save')} />

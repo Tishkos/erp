@@ -141,11 +141,20 @@ beforeEach(async () => {
     }),
   );
 
-  cash = await account('A000001', { name: 'Cash on Hand', statementLine: 'cash_and_equivalents' });
+  cash = await account('A000001', {
+    name: 'Cash on Hand',
+    mapping: { balance_sheet: 'cash_and_equivalents', cash_flow: 'cash_flow_cash' },
+  });
   receivables = await account('A000001', { name: 'Trade Receivables' });
   capital = await account('E000001', { name: 'Share Capital' });
-  salesRevenue = await account('R000001', { name: 'Sales', statementLine: 'revenue' });
-  salaries = await account('X000001', { name: 'Salaries', statementLine: 'operating_expenses' });
+  salesRevenue = await account('R000001', {
+    name: 'Sales',
+    mapping: { income_statement: 'revenue' },
+  });
+  salaries = await account('X000001', {
+    name: 'Salaries',
+    mapping: { income_statement: 'operating_expenses' },
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -159,7 +168,7 @@ describe('1 · the Chart of Accounts', () => {
     );
   });
 
-  it('stores separate Income Statement and Balance Sheet mappings when revenue is created', async () => {
+  it('stores an independent mapping per statement when revenue is created', async () => {
     await ownerPool.query(`
       insert into financial_statement_line
         (code, name, statement, ordinal, role, side, cash_flow_category)
@@ -170,13 +179,16 @@ describe('1 · the Chart of Accounts', () => {
 
     const accountId = await account('R000001', {
       name: 'Product sales',
-      statementLine: 'product_revenue',
-      balanceSheetLine: 'balance_sheet_revenue',
+      mapping: {
+        income_statement: 'product_revenue',
+        balance_sheet: 'balance_sheet_revenue',
+      },
     });
     const created = await withScope(scopeOf(manager), (tx) => coa.loadAccount(tx, accountId));
 
-    expect(created.statementLine).toBe('product_revenue');
-    expect(created.balanceSheetLine).toBe('balance_sheet_revenue');
+    // One account, two reports, two answers — neither overwriting the other.
+    expect(created.mapping.income_statement).toBe('product_revenue');
+    expect(created.mapping.balance_sheet).toBe('balance_sheet_revenue');
   });
 
   it('distinguishes a header account from one that can be posted to', async () => {
@@ -593,16 +605,23 @@ describe('5 · the financial statements', () => {
     expect(current!.accounts.map((a) => a.accountName)).toContain('Trade Receivables');
   });
 
-  it('shows mapped revenue on its selected Balance Sheet equity line without double-counting it', async () => {
+  it('presents one revenue account on each report, on the line chosen for it', async () => {
+    // The example that drove the direction: Sales explains the period on the
+    // Income Statement *and* is presented inside Equity on the Balance Sheet,
+    // and appears as its own row on Changes in Equity. Three lines, three
+    // choices, one account — and no figure counted twice.
     await ownerPool.query(`
       insert into financial_statement_line
         (code, name, statement, ordinal, role, side, cash_flow_category)
-      values ('balance_sheet_revenue', 'Revenue', 'balance_sheet', 41, null, 'equity', 'financing')
+      values
+        ('balance_sheet_revenue', 'Revenue', 'balance_sheet', 41, null, 'equity', 'financing'),
+        ('equity_trading', 'Trading result', 'changes_in_equity', 20, null, null, null)
     `);
     await withScope(scopeOf(manager), (tx) =>
       coa.setStatementLines(tx, manager, salesRevenue, {
-        statementLine: 'revenue',
-        balanceSheetLine: 'balance_sheet_revenue',
+        income_statement: 'revenue',
+        balance_sheet: 'balance_sheet_revenue',
+        changes_in_equity: 'equity_trading',
       }),
     );
 
@@ -610,9 +629,11 @@ describe('5 · the financial statements', () => {
       statements.financialPosition(tx, TO, { branchCode: BRANCH }),
     );
     const revenue = sfp.equity.find((line) => line.line.code === 'balance_sheet_revenue');
-
     expect(Number(revenue!.amount)).toBe(4000);
     expect(revenue!.accounts.map((account) => account.accountName)).toContain('Sales');
+
+    // Salaries was mapped nowhere on the Balance Sheet, so it is still carried
+    // by the computed result — which is what keeps the two sides agreeing.
     expect(Number(sfp.unmappedResult)).toBe(-1500);
     expect(Number(sfp.resultForThePeriod)).toBe(2500);
     expect(Number(sfp.totalEquityAndLiabilities)).toBe(12500);
@@ -621,25 +642,55 @@ describe('5 · the financial statements', () => {
     const equity = await withScope(scopeOf(manager), (tx) =>
       statements.changesInEquity(tx, { from: FROM, to: TO, branchCode: BRANCH }),
     );
-    const mappedRevenue = equity.rows.find((row) => row.code === 'balance_sheet_revenue');
-    expect(Number(mappedRevenue!.movement)).toBe(4000);
-    expect(mappedRevenue!.accounts.map((account) => account.accountName)).toContain('Sales');
+    const trading = equity.rows.find((row) => row.code === 'equity_trading');
+    expect(Number(trading!.movement)).toBe(4000);
+    expect(trading!.accounts.map((account) => account.accountName)).toContain('Sales');
     expect(Number(equity.resultForThePeriod)).toBe(2500);
     expect(Number(equity.closing)).toBe(12500);
   });
 
-  it('refuses to put a revenue account on an asset line', async () => {
-    await expect(
-      ownerPool.query(`update chart_of_account set statement_line = 'current_assets' where id = $1`, [
-        salesRevenue,
-      ]),
-    ).rejects.toThrow();
-  });
-
-  it('refuses an invalid second Balance Sheet mapping at the database boundary', async () => {
+  it('does not argue with Finance about which line suits which account', async () => {
+    // By direction (2026-09-03) mapping is a mapping, not an accounting
+    // opinion: an unusual choice is the chart owner's to make.
     await expect(
       ownerPool.query(
         `update chart_of_account set balance_sheet_line = 'current_assets' where id = $1`,
+        [salesRevenue],
+      ),
+    ).resolves.toBeDefined();
+    // Put it back where the rest of this file expects to find it.
+    await ownerPool.query(
+      `update chart_of_account set balance_sheet_line = null where id = $1`,
+      [salesRevenue],
+    );
+  });
+
+  it('refuses a mapping that could not mean anything', async () => {
+    // A line belonging to another report...
+    await expect(
+      ownerPool.query(
+        `update chart_of_account set income_statement_line = 'current_assets' where id = $1`,
+        [salesRevenue],
+      ),
+    ).rejects.toThrow();
+
+    // ...a line that does not exist...
+    await expect(
+      ownerPool.query(
+        `update chart_of_account set cash_flow_line = 'no_such_line' where id = $1`,
+        [salesRevenue],
+      ),
+    ).rejects.toThrow();
+
+    // ...and a header, which prints the sum of its lines and takes no accounts.
+    await ownerPool.query(`
+      insert into financial_statement_line (code, name, statement, ordinal, role, side, is_header)
+      values ('is_header_only', 'A header', 'income_statement', 99, null, null, true)
+      on conflict (code) do nothing
+    `);
+    await expect(
+      ownerPool.query(
+        `update chart_of_account set income_statement_line = 'is_header_only' where id = $1`,
         [salesRevenue],
       ),
     ).rejects.toThrow();

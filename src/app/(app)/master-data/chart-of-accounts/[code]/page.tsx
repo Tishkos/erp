@@ -9,7 +9,7 @@ import { registerAllRecords } from '@/server/records';
 import { RecordNotFoundError, view } from '@/server/services/record';
 import { PermissionDeniedError, can } from '@domain/permissions';
 import { withCurrentUser } from '@/server/session';
-import { AccountControls } from '@/components/admin/account-controls';
+import { AccountControls, MAPPING_STATEMENTS } from '@/components/admin/account-controls';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '@domain/money';
@@ -53,7 +53,7 @@ export default async function AccountRecordPage({
   if (!visibleRoute('/master-data/chart-of-accounts')) notFound();
   registerAllRecords();
 
-  const [{ code: raw }, outcome, t, chart, column, status, line, locale] = await Promise.all([
+  const [{ code: raw }, outcome, t, chart, column, status, line, page, locale] = await Promise.all([
     params,
     outcomeOf(searchParams),
     getTranslations('admin'),
@@ -61,6 +61,7 @@ export default async function AccountRecordPage({
     getTranslations('column'),
     getTranslations('status'),
     getTranslations('statement_line'),
+    getTranslations('page'),
     getLocale(),
   ]);
   const code = decodeURIComponent(raw);
@@ -122,7 +123,6 @@ export default async function AccountRecordPage({
   const recent = [...activity].reverse().slice(0, RECENT);
   const Icon = ICONS[node.accountType] ?? Landmark;
   const address = `/master-data/chart-of-accounts/${encodeURIComponent(code)}`;
-  const isProfitOrLoss = node.accountType === 'revenue' || node.accountType === 'expense';
   const mappingLabel = (code: string | null, fallback: string) =>
     code
       ? line.has(code)
@@ -197,25 +197,18 @@ export default async function AccountRecordPage({
                 <dt>{column('is_active')}</dt>
                 <dd>{chart(node.isActive ? 'active' : 'inactive')}</dd>
               </div>
-              <div>
-                <dt>
-                  {isProfitOrLoss
-                    ? t('accounts.income_statement_line')
-                    : t('accounts.balance_sheet_line')}
-                </dt>
-                <dd>{mappingLabel(node.statementLine, t('accounts.statement_line_default'))}</dd>
-              </div>
-              {isProfitOrLoss ? (
-                <div>
-                  <dt>{t('accounts.balance_sheet_line')}</dt>
+              {/* One row per report: where this account prints on each. */}
+              {MAPPING_STATEMENTS.map((entry) => (
+                <div key={entry.statement}>
+                  <dt>{page(entry.page)}</dt>
                   <dd>
                     {mappingLabel(
-                      node.balanceSheetLine,
-                      t('accounts.balance_sheet_line_unmapped'),
+                      node.mapping[entry.statement],
+                      t('accounts.statement_line_default'),
                     )}
                   </dd>
                 </div>
-              ) : null}
+              ))}
               {node.controlAccount ? (
                 <div>
                   <dt>{column('control_account')}</dt>

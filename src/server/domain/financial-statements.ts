@@ -8,34 +8,52 @@
  * the two are not the same thing. Half a dozen receivable accounts appear on
  * one line called Trade receivables, and which line an account belongs on is
  * a decision Finance makes about that account — not something a report can
- * work out from the account's name.
+ * work out from the account's name, or from its type.
  *
  * The lines used to be a closed list in this file. They are now rows of
- * `financial_statement_line`, edited on the Statement Mapping screens:
- * Finance creates the headers and lines of its own reports, and this module
- * holds what is still the code's to say — the vocabulary (roles, sides,
- * categories), the derivations from it, and the catalogue the services build
- * from the table's rows. A statement assembled from free text would differ
- * between two runs; a statement assembled from the mapping table is the same
- * statement every time, because the table is the single answer.
+ * `financial_statement_line`, edited on the Statement Mapping screens: one
+ * hierarchy per report, built by the people who read the reports. This module
+ * holds what is still the code's to say — the vocabulary each report needs
+ * (roles, sides, cash-flow activities), and the catalogue that answers, for
+ * one account and one report, "where does this print?".
  *
- * The Income Statement and Balance Sheet are separate account mappings. A
- * revenue or expense account therefore has two useful answers: where it
- * explains the period result on the Income Statement, and where that result
- * is presented inside Balance Sheet equity. The Cash Flow Statement still
- * classifies the account's primary line, while Changes in Equity reads its
- * Balance Sheet mapping.
+ * ── Four reports, four independent answers ─────────────────────────────────
+ * An account is mapped once per statement, and no mapping is derived from
+ * another. A revenue account explains the period on the Income Statement,
+ * is presented inside Equity on the Balance Sheet, lands in an operating line
+ * of the Cash Flow Statement, and belongs to the result on Changes in Equity.
+ * One field could hold only the first of those, and guessing the rest from it
+ * is what made the four reports argue with each other.
  *
- * Every account still lands somewhere without anybody assigning it: an
- * unassigned account falls to its type's default line — one of the seeded
- * system lines, which is why those cannot be deleted.
+ * ── Mapping is a mapping ───────────────────────────────────────────────────
+ * Any posting account may be mapped to any posting line of any report. The
+ * code does not refuse a mapping because the account type looks wrong to it:
+ * the person building the chart knows what the line is for, and the whole
+ * purpose of a mapping screen is that they decide. What the code still says
+ * is what a *line* means for the arithmetic — a cost-of-sales line deducts, an
+ * asset line prints on the asset side — so the subtotals and the two halves of
+ * the Balance Sheet keep meaning what they say whatever layout is built.
+ *
+ * ── Nothing has to be mapped ───────────────────────────────────────────────
+ * An unmapped account falls to its type's default line for that report, so
+ * every statement is complete on the first day and grows more precise as
+ * Finance works through the chart. Revenue and expense accounts have no
+ * default on the Balance Sheet or on Changes in Equity: until they are mapped
+ * they are carried by those statements' computed result row, which is what
+ * makes the two agree.
  */
 import type { AccountType } from './accounts';
 
 export const STATEMENT_SECTIONS = ['financial_position', 'profit_or_loss'] as const;
 export type StatementSection = (typeof STATEMENT_SECTIONS)[number];
 
-export const STATEMENT_FACES = ['income_statement', 'balance_sheet'] as const;
+/** The four reports, each with a layout and an account mapping of its own. */
+export const STATEMENT_FACES = [
+  'income_statement',
+  'balance_sheet',
+  'cash_flow',
+  'changes_in_equity',
+] as const;
 export type StatementFace = (typeof STATEMENT_FACES)[number];
 
 /**
@@ -68,20 +86,10 @@ const DEDUCTING_ROLES: ReadonlySet<IncomeRole> = new Set([
   'tax_expense',
 ]);
 
-/** The account types a role's accounts must be. */
-const ROLE_ACCOUNT_TYPES: Readonly<Record<IncomeRole, readonly AccountType[]>> = Object.freeze({
-  revenue: ['revenue'],
-  other_income: ['revenue'],
-  cost_of_sales: ['expense'],
-  operating_expenses: ['expense'],
-  finance_costs: ['expense'],
-  tax_expense: ['expense'],
-});
-
 export interface StatementLine {
   readonly id: string;
   readonly code: string;
-  /** What the statement prints; seeded lines prefer their translated name. */
+  /** What the statement prints. Seeded lines prefer their translated name. */
   readonly name: string;
   readonly statement: StatementFace;
   readonly parentId: string | null;
@@ -91,15 +99,14 @@ export interface StatementLine {
   readonly role: IncomeRole | null;
   readonly side: BalanceSide | null;
   readonly cashFlowCategory: CashFlowCategory | null;
+  /** On the Cash Flow Statement: the accounts here ARE the cash it explains. */
   readonly isCash: boolean;
   readonly isSystem: boolean;
 
   // ── Derived, so the statements ask one object one question ───────────────
-  readonly section: StatementSection;
+  readonly section: StatementSection | null;
   /** Subtracted rather than added on the face of the statement. */
   readonly deduction: boolean;
-  /** The account types that may be assigned to it. Empty for a header. */
-  readonly accountTypes: readonly AccountType[];
 }
 
 /** One node of a statement's layout: a line, with its children beneath it. */
@@ -125,23 +132,56 @@ export interface StatementLineRow {
 }
 
 /**
- * Where an account goes when nobody has said.
+ * An account's four mappings, as the chart stores them.
+ *
+ * Every report has a key, and null is a real answer — "wherever this type
+ * reports by default" — so a form that clears one can say so.
+ */
+export type AccountMapping = Readonly<Record<StatementFace, string | null>>;
+
+/** The same, as a form or a caller may supply it: any subset, any of them null. */
+export type AccountMappingInput = Readonly<Partial<Record<StatementFace, string | null>>>;
+
+/**
+ * Where an account goes on each report when nobody has said.
  *
  * Current rather than non-current, and operating rather than anything more
- * specific: the safe assumption is the ordinary one, and an account that has
- * been put on the wrong line is easier to notice than one that has vanished
- * from the statement altogether. These name seeded system lines, which is
- * why the system lines cannot be deleted.
+ * specific: the safe assumption is the ordinary one, and an account on the
+ * wrong line is easier to notice than one that has vanished from the
+ * statement altogether. Every code here names a seeded system line, which is
+ * why those cannot be deleted.
+ *
+ * The gaps are deliberate. A revenue account has no default on the Balance
+ * Sheet or on Changes in Equity: unmapped, it is carried by those statements'
+ * computed result row instead, and that is what keeps them agreeing with each
+ * other. An asset account has no default on the Income Statement because it
+ * has no business on one.
  */
-export const DEFAULT_LINE: Readonly<Record<AccountType, string>> = Object.freeze({
-  asset: 'current_assets',
-  liability: 'current_liabilities',
-  equity: 'equity',
-  revenue: 'revenue',
-  expense: 'operating_expenses',
+export const DEFAULT_LINES: Readonly<
+  Record<StatementFace, Readonly<Partial<Record<AccountType, string>>>>
+> = Object.freeze({
+  income_statement: Object.freeze({
+    revenue: 'revenue',
+    expense: 'operating_expenses',
+  }),
+  balance_sheet: Object.freeze({
+    asset: 'current_assets',
+    liability: 'current_liabilities',
+    equity: 'equity',
+  }),
+  cash_flow: Object.freeze({
+    asset: 'cash_flow_operating',
+    liability: 'cash_flow_operating',
+    equity: 'cash_flow_financing',
+    revenue: 'cash_flow_operating',
+    expense: 'cash_flow_operating',
+  }),
+  changes_in_equity: Object.freeze({
+    equity: 'equity_movements',
+  }),
 });
 
-/** The statement on which an account type has its ordinary, default line. */
+/** The report an account type has its ordinary home on. */
 export const PRIMARY_STATEMENT: Readonly<Record<AccountType, StatementFace>> = Object.freeze({
   asset: 'balance_sheet',
   liability: 'balance_sheet',
@@ -161,7 +201,6 @@ export class StatementLineError extends Error {
 function toLine(row: StatementLineRow): StatementLine {
   const statement = row.statement as StatementFace;
   const role = (row.role as IncomeRole | null) ?? null;
-  const side = (row.side as BalanceSide | null) ?? null;
   return {
     id: row.id,
     code: row.code,
@@ -171,24 +210,17 @@ function toLine(row: StatementLineRow): StatementLine {
     isHeader: row.isHeader,
     ordinal: row.ordinal,
     role,
-    side,
+    side: (row.side as BalanceSide | null) ?? null,
     cashFlowCategory: (row.cashFlowCategory as CashFlowCategory | null) ?? null,
     isCash: row.isCash,
     isSystem: row.isSystem,
-    section: statement === 'income_statement' ? 'profit_or_loss' : 'financial_position',
+    section:
+      statement === 'income_statement'
+        ? 'profit_or_loss'
+        : statement === 'balance_sheet'
+          ? 'financial_position'
+          : null,
     deduction: role !== null && DEDUCTING_ROLES.has(role),
-    accountTypes: row.isHeader
-      ? []
-      : role !== null
-        ? ROLE_ACCOUNT_TYPES[role]
-        : side === 'equity'
-          // Profit and loss accounts may also be presented on a configured
-          // Balance Sheet equity line. Their Income Statement mapping remains
-          // separate and continues to determine the P&L subtotals.
-          ? ['equity', 'revenue', 'expense']
-          : side !== null
-            ? [side]
-            : [],
   };
 }
 
@@ -219,71 +251,59 @@ export class LineCatalogue {
     return this.byIdMap.get(id);
   }
 
-  /** The posting lines (never headers) an account of this type may report on. */
-  linesForType(accountType: AccountType): readonly StatementLine[] {
-    return this.ordered().filter((line) => line.accountTypes.includes(accountType));
-  }
-
-  /** The line an account reports on its primary statement. */
-  lineFor(accountType: AccountType, assigned?: string | null): StatementLine {
-    const line = this.lineForStatement(accountType, PRIMARY_STATEMENT[accountType], assigned);
-    if (line) return line;
-    throw new StatementLineError(`A ${accountType} account has no primary financial statement line.`);
+  /** Every line a report can print, headers included, in print order. */
+  linesOf(statement: StatementFace): readonly StatementLine[] {
+    return this.flattened(statement).map((entry) => entry.line);
   }
 
   /**
-   * The account's line on one statement.
+   * Where one account prints on one report — the line it was mapped to, or
+   * its type's default there, or nowhere.
    *
-   * Revenue and expense accounts have no automatic Balance Sheet line. Until
-   * Finance maps one, their net amount remains in the computed result row under
-   * equity. Once mapped, the account is presented on that equity line instead.
+   * "Nowhere" is a real answer and not a failure: an asset account is not on
+   * the Income Statement, and an unmapped revenue account is not on a Balance
+   * Sheet line either — it is inside the computed result instead.
    */
-  lineForStatement(
+  lineFor(
     accountType: AccountType,
     statement: StatementFace,
-    assigned?: string | null,
+    mapped?: string | null,
   ): StatementLine | undefined {
-    const chosen = assigned ? this.byCodeMap.get(assigned) : undefined;
-    if (
-      chosen &&
-      chosen.statement === statement &&
-      chosen.accountTypes.includes(accountType)
-    ) {
-      return chosen;
-    }
-    if (PRIMARY_STATEMENT[accountType] !== statement) return undefined;
-    const fallback = this.byCodeMap.get(DEFAULT_LINE[accountType]);
-    if (!fallback) {
+    const chosen = mapped ? this.byCodeMap.get(mapped) : undefined;
+    if (chosen && chosen.statement === statement && !chosen.isHeader) return chosen;
+
+    const fallback = DEFAULT_LINES[statement][accountType];
+    if (!fallback) return undefined;
+    const line = this.byCodeMap.get(fallback);
+    if (!line) {
       throw new StatementLineError(
-        `The default line '${DEFAULT_LINE[accountType]}' is missing from the mapping — the seeded lines must not be deleted.`,
+        `The default line '${fallback}' is missing from the mapping — the seeded lines must not be deleted.`,
       );
     }
-    return fallback;
+    return line;
   }
 
-  /** Refuses a line that does not exist, is on the wrong statement, or cannot take this type. */
-  assertLineAllowed(
-    accountType: AccountType,
-    code: string,
-    statement: StatementFace = PRIMARY_STATEMENT[accountType],
-  ): StatementLine {
+  /**
+   * Refuses a mapping that cannot mean anything: a line that is not there, a
+   * line belonging to another report, or a header — which prints the sum of
+   * the lines beneath it and takes no accounts of its own.
+   *
+   * It does *not* refuse a mapping because the account type looks wrong. That
+   * is Finance's judgement, and the reason this screen exists.
+   */
+  assertLineAllowed(code: string, statement: StatementFace): StatementLine {
     const line = this.byCodeMap.get(code);
     if (!line) {
       throw new StatementLineError(`'${code}' is not a financial statement line.`);
     }
-    if (line.isHeader) {
-      throw new StatementLineError(
-        `'${line.name}' is a header — accounts report on its lines, not on the header itself.`,
-      );
-    }
     if (line.statement !== statement) {
       throw new StatementLineError(
-        `'${line.name}' belongs to the ${line.statement === 'income_statement' ? 'Income Statement' : 'Balance Sheet'}, not the ${statement === 'income_statement' ? 'Income Statement' : 'Balance Sheet'}.`,
+        `'${line.name}' belongs to another report, so it cannot be this account's ${TITLES[statement]} line.`,
       );
     }
-    if (!line.accountTypes.includes(accountType)) {
+    if (line.isHeader) {
       throw new StatementLineError(
-        `A ${accountType} account cannot report on '${line.name}' — that line carries ${line.accountTypes.join(' and ')} accounts.`,
+        `'${line.name}' is a header — accounts map to the lines beneath it, not to the header itself.`,
       );
     }
     return line;
@@ -318,17 +338,16 @@ export class LineCatalogue {
     return out;
   }
 
-  /** Every line and header in print order, statement by statement, depth-first. */
+  /** Every line and header of every report, in print order, depth-first. */
   ordered(): readonly StatementLine[] {
-    const out: StatementLine[] = [];
-    const walk = (nodes: readonly StatementLineNode[]) => {
-      for (const node of nodes) {
-        out.push(node.line);
-        walk(node.children);
-      }
-    };
-    walk(this.treeFor('balance_sheet'));
-    walk(this.treeFor('income_statement'));
-    return out;
+    return STATEMENT_FACES.flatMap((statement) => this.linesOf(statement));
   }
 }
+
+/** What each report is called when a message has to name one. */
+export const TITLES: Readonly<Record<StatementFace, string>> = Object.freeze({
+  income_statement: 'Income Statement',
+  balance_sheet: 'Balance Sheet',
+  cash_flow: 'Cash Flow Statement',
+  changes_in_equity: 'Changes in Equity',
+});

@@ -26,6 +26,13 @@ import {
 } from '../domain/chart-of-accounts';
 import { AccountPlacementError } from '../domain/chart-of-accounts';
 import type { AccountType } from '../domain/accounts';
+import {
+  STATEMENT_FACES,
+  type AccountMapping,
+  type AccountMappingInput,
+  type LineCatalogue,
+  type StatementFace,
+} from '../domain/financial-statements';
 import * as statementLines from './statement-lines';
 import { accountRequiredDimension, chartOfAccount } from '../db/schema';
 import type { Principal } from '../domain/permissions';
@@ -118,27 +125,50 @@ export interface CreateAccountInput {
   readonly requiredDimensions?: readonly DimensionType[];
   readonly description?: string | null;
   /**
-   * Phase 1 §5 — the account's primary line: Income Statement for revenue and
-   * expense; Balance Sheet for assets, liabilities and equity.
+   * Phase 1 §5, opened to Finance by direction (2026-09-03) — where the
+   * account reports on each of the four statements, one answer per report.
    *
-   * Optional, and it stays optional: an account with no line assigned reports
-   * on its type's default, so a statement is complete from the first day.
+   * Every one is optional and stays optional: an account with nothing chosen
+   * reports where its type says it does, so a statement is complete from the
+   * first day and grows more precise as Finance works through the chart.
    */
-  readonly statementLine?: string | null;
-  /** Optional Balance Sheet equity presentation for revenue and expense accounts. */
-  readonly balanceSheetLine?: string | null;
+  readonly mapping?: AccountMappingInput;
 }
 
-function assertBalanceSheetPresentationAllowed(
-  accountType: AccountType,
-  line: string | null | undefined,
-): void {
-  if (!line?.trim()) return;
-  if (accountType !== 'revenue' && accountType !== 'expense') {
-    throw new AccountPlacementError(
-      'a second Balance Sheet mapping is only used for revenue and expense accounts; assets, liabilities and equity already map there directly',
-    );
+/** The four choices, read from whatever the caller passed. */
+function mappingOf(input: { readonly mapping?: AccountMappingInput }): AccountMappingInput {
+  return input.mapping ?? {};
+}
+
+/**
+ * The four mappings, each checked against the report it claims to be on.
+ *
+ * A header account carries none: it prints the sum of the accounts beneath
+ * it, so a mapping of its own would put the same money on the statement
+ * twice. Beyond that the service does not second-guess the choice — which
+ * line suits which account is Finance's judgement, and the mapping screens
+ * exist so they can make it.
+ */
+function resolveMapping(
+  catalogue: LineCatalogue,
+  mapping: AccountMappingInput,
+  isGroup: boolean,
+): AccountMapping {
+  const resolved = {} as Record<StatementFace, string | null>;
+  for (const statement of STATEMENT_FACES) {
+    const chosen = mapping[statement]?.trim();
+    if (!chosen) {
+      resolved[statement] = null;
+      continue;
+    }
+    if (isGroup) {
+      throw new AccountPlacementError(
+        'a header account carries no statement mapping of its own; it prints the sum of the accounts beneath it',
+      );
+    }
+    resolved[statement] = catalogue.assertLineAllowed(chosen, statement).code;
   }
+  return resolved;
 }
 
 function toNode(
@@ -156,8 +186,12 @@ function toNode(
     approvalStatus: row.approvalStatus,
     controlAccount: row.controlAccount,
     currencyRestriction: row.currencyRestriction,
-    statementLine: row.statementLine,
-    balanceSheetLine: row.balanceSheetLine,
+    mapping: {
+      income_statement: row.incomeStatementLine,
+      balance_sheet: row.balanceSheetLine,
+      cash_flow: row.cashFlowLine,
+      changes_in_equity: row.changesInEquityLine,
+    },
     description: row.description,
     requiredDimensions,
     isSystem: row.isSystem,
@@ -212,12 +246,6 @@ export async function createAccount(
   const currency = input.currencyRestriction?.trim().toUpperCase() || null;
   if (!isGroup && !currency) throw new AccountCurrencyRequiredError();
   if (isGroup && currency) throw new GroupAccountCurrencyError();
-  if (isGroup && (input.statementLine?.trim() || input.balanceSheetLine?.trim())) {
-    throw new AccountPlacementError(
-      'a header carries no statement mapping of its own; its posting accounts are mapped instead',
-    );
-  }
-  assertBalanceSheetPresentationAllowed(accountType, input.balanceSheetLine);
 
   const { documentNo: code } = await allocateDocumentNumber(
     tx,
@@ -231,12 +259,7 @@ export async function createAccount(
   assertValidPlacement({ code, accountType, parent });
 
   const catalogue = await statementLines.catalogue(tx);
-  const primaryLine = input.statementLine?.trim()
-    ? catalogue.assertLineAllowed(accountType, input.statementLine.trim()).code
-    : null;
-  const balanceSheetLine = input.balanceSheetLine?.trim()
-    ? catalogue.assertLineAllowed(accountType, input.balanceSheetLine.trim(), 'balance_sheet').code
-    : null;
+  const mapping = resolveMapping(catalogue, mappingOf(input), isGroup);
 
   const [created] = await tx
     .insert(chartOfAccount)
@@ -251,9 +274,11 @@ export async function createAccount(
       controlAccount: input.controlAccount ?? null,
       currencyRestriction: currency,
       // Phase 1 §5 — checked here rather than trusted, because the database
-      // check would refuse it later with a message about a constraint.
-      statementLine: primaryLine,
-      balanceSheetLine,
+      // trigger would refuse it later with a message about a constraint.
+      incomeStatementLine: mapping.income_statement,
+      balanceSheetLine: mapping.balance_sheet,
+      cashFlowLine: mapping.cash_flow,
+      changesInEquityLine: mapping.changes_in_equity,
       description: input.description ?? null,
       createdBy: ctx.principal.userId,
     })
@@ -290,8 +315,7 @@ export async function createAccount(
       parent: parent.code,
       isGroup: created!.isGroup,
       controlAccount: created!.controlAccount,
-      statementLine: created!.statementLine,
-      balanceSheetLine: created!.balanceSheetLine,
+      mapping,
     },
     outcome: 'success',
     requestId: ctx.requestId ?? null,
@@ -683,10 +707,7 @@ export async function setStatementLines(
   tx: Tx,
   ctx: ActorContext,
   accountId: string,
-  input: {
-    readonly statementLine: string | null;
-    readonly balanceSheetLine: string | null;
-  },
+  mapping: AccountMappingInput,
 ): Promise<void> {
   const account = await loadAccount(tx, accountId);
 
@@ -697,17 +718,16 @@ export async function setStatementLines(
   });
 
   const catalogue = await statementLines.catalogue(tx);
-  assertBalanceSheetPresentationAllowed(account.accountType, input.balanceSheetLine);
-  const statementLine = input.statementLine?.trim()
-    ? catalogue.assertLineAllowed(account.accountType, input.statementLine.trim()).code
-    : null;
-  const balanceSheetLine = input.balanceSheetLine?.trim()
-    ? catalogue.assertLineAllowed(account.accountType, input.balanceSheetLine.trim(), 'balance_sheet').code
-    : null;
+  const resolved = resolveMapping(catalogue, mapping, account.isGroup);
 
   await tx
     .update(chartOfAccount)
-    .set({ statementLine, balanceSheetLine })
+    .set({
+      incomeStatementLine: resolved.income_statement,
+      balanceSheetLine: resolved.balance_sheet,
+      cashFlowLine: resolved.cash_flow,
+      changesInEquityLine: resolved.changes_in_equity,
+    })
     .where(eq(chartOfAccount.id, accountId));
 
   await audit.record(tx, {
@@ -716,11 +736,8 @@ export async function setStatementLines(
     objectType: PERMISSION_OBJECT,
     objectId: accountId,
     branchCode: ctx.branchCode,
-    before: {
-      statementLine: account.statementLine,
-      balanceSheetLine: account.balanceSheetLine,
-    },
-    after: { code: account.code, statementLine, balanceSheetLine },
+    before: account.mapping,
+    after: { code: account.code, ...resolved },
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });
@@ -786,7 +803,14 @@ export async function convertToGroup(
 
   await tx
     .update(chartOfAccount)
-    .set({ isGroup: true, currencyRestriction: null, statementLine: null, balanceSheetLine: null })
+    .set({
+      isGroup: true,
+      currencyRestriction: null,
+      incomeStatementLine: null,
+      balanceSheetLine: null,
+      cashFlowLine: null,
+      changesInEquityLine: null,
+    })
     .where(eq(chartOfAccount.id, accountId));
 
   await audit.record(tx, {
