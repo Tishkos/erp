@@ -36,10 +36,9 @@ const LEVELS = 3;
 export default async function CashFlowPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/finance/cash-flow')) notFound();
 
-  const [t, page, line, locale, context, params] = await Promise.all([
+  const [t, page, locale, context, params] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
-    getTranslations('statement_line'),
     getLocale(),
     requireContext(),
     searchParams,
@@ -152,7 +151,7 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Sea
                     key={section.category}
                     level={level}
                     lines={section.lines.map((entry) => ({
-                      title: line.has(entry.line.code) ? line(entry.line.code) : entry.line.name,
+                      title: entry.line.name,
                       amount: entry.amount,
                       accounts: entry.accounts,
                     }))}

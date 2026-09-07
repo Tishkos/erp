@@ -45,12 +45,11 @@ export default async function AccountPrintPage({
 
   const lang: Locale = sp.lang === 'ar' ? 'ar' : 'en';
   const dir = lang === 'ar' ? 'rtl' : 'ltr';
-  const [t, chart, column, status, line, page] = await Promise.all([
+  const [t, chart, column, status, page] = await Promise.all([
     getTranslations({ locale: lang, namespace: 'admin' }),
     getTranslations({ locale: lang, namespace: 'chart' }),
     getTranslations({ locale: lang, namespace: 'column' }),
     getTranslations({ locale: lang, namespace: 'status' }),
-    getTranslations({ locale: lang, namespace: 'statement_line' }),
     getTranslations({ locale: lang, namespace: 'page' }),
   ]);
 
@@ -84,11 +83,7 @@ export default async function AccountPrintPage({
   if (!data) notFound();
   const { node, parent, activity, company, mapping, me } = data;
   const mappingLabel = (code: string | null, fallback: string) =>
-    code
-      ? line.has(code)
-        ? line(code)
-        : (mapping.find((entry) => entry.code === code)?.name ?? code.replace(/_/g, ' '))
-      : fallback;
+    code ? (mapping.find((entry) => entry.code === code)?.name ?? code.replace(/_/g, ' ')) : fallback;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', lang);
   const dec = (value: string) => parseDecimal(value, MONEY_SCALE);

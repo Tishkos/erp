@@ -53,14 +53,13 @@ export default async function AccountRecordPage({
   if (!visibleRoute('/master-data/chart-of-accounts')) notFound();
   registerAllRecords();
 
-  const [{ code: raw }, outcome, t, chart, column, status, line, page, locale] = await Promise.all([
+  const [{ code: raw }, outcome, t, chart, column, status, page, locale] = await Promise.all([
     params,
     outcomeOf(searchParams),
     getTranslations('admin'),
     getTranslations('chart'),
     getTranslations('column'),
     getTranslations('status'),
-    getTranslations('statement_line'),
     getTranslations('page'),
     getLocale(),
   ]);
@@ -124,11 +123,7 @@ export default async function AccountRecordPage({
   const Icon = ICONS[node.accountType] ?? Landmark;
   const address = `/master-data/chart-of-accounts/${encodeURIComponent(code)}`;
   const mappingLabel = (code: string | null, fallback: string) =>
-    code
-      ? line.has(code)
-        ? line(code)
-        : (mapping.find((entry) => entry.code === code)?.name ?? code)
-      : fallback;
+    code ? (mapping.find((entry) => entry.code === code)?.name ?? code) : fallback;
 
   return (
     <AdminPage

@@ -72,7 +72,9 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
     counts: await statementLines.accountCounts(tx),
   }));
 
-  const label = (code: string, name: string) => (lineT.has(code) ? lineT(code) : name);
+  // The name is whatever the mapping holds — renaming a line on this very
+  // screen has to change what every screen shows, including this one.
+  const label = (_code: string, name: string) => name;
   const sideName = (side: string) =>
     side === 'asset' ? t('reports.assets') : side === 'equity' ? t('reports.equity') : t('reports.liabilities');
 

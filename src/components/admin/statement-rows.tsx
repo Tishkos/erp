@@ -30,7 +30,7 @@ export async function StatementSection({
     readonly accounts: readonly { readonly accountCode: string; readonly accountName: string; readonly amount: string }[];
   };
 }) {
-  const [t, line] = await Promise.all([getTranslations('admin'), getTranslations('statement_line')]);
+  const [t] = await Promise.all([getTranslations('admin'), getTranslations('statement_line')]);
 
   return (
     <>
@@ -49,7 +49,7 @@ export async function StatementSection({
               key={entry.line.code}
               money={money}
               note={entry.line.deduction ? t('reports.deducted') : null}
-              title={line.has(entry.line.code) ? line(entry.line.code) : entry.line.name}
+              title={entry.line.name}
             />
           ))
         : null}

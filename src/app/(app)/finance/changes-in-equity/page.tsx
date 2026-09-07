@@ -33,10 +33,9 @@ const LEVELS = 2;
 export default async function ChangesInEquityPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/finance/changes-in-equity')) notFound();
 
-  const [t, page, line, locale, context, params] = await Promise.all([
+  const [t, page, locale, context, params] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
-    getTranslations('statement_line'),
     getLocale(),
     requireContext(),
     searchParams,
@@ -129,7 +128,7 @@ export default async function ChangesInEquityPage({ searchParams }: { searchPara
                   money={money}
                   movement={money(row.movement)}
                   opening={money(row.opening)}
-                  title={row.kind === 'result' ? t('reports.equity_result') : line.has(row.code) ? line(row.code) : row.name}
+                  title={row.kind === 'result' ? t('reports.equity_result') : row.name}
                 />
               ))
             )}

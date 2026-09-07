@@ -67,9 +67,8 @@ export async function NewAccountButton({
   readonly accounts: readonly PickerAccount[];
   readonly mapping: readonly MappingLine[];
 }) {
-  const [t, line, page] = await Promise.all([
+  const [t, page] = await Promise.all([
     getTranslations('admin'),
-    getTranslations('statement_line'),
     getTranslations('page'),
   ]);
   const groups = accounts.filter((a) => a.isGroup && a.isActive);
@@ -87,9 +86,7 @@ export async function NewAccountButton({
     value: option.code,
     // The seeded lines keep their translated names; Finance's own lines are
     // printed as Finance named them.
-    label:
-      '   '.repeat(Math.max(0, option.depth)) +
-      (line.has(option.code) ? line(option.code) : option.name),
+    label: '   '.repeat(Math.max(0, option.depth)) + option.name,
     statement: option.statement,
     isHeader: option.isHeader,
   }));
@@ -159,9 +156,8 @@ export async function AccountControls({
   readonly mapping: readonly MappingLine[];
   readonly mayConfigure: boolean;
 }) {
-  const [t, line, page] = await Promise.all([
+  const [t, page] = await Promise.all([
     getTranslations('admin'),
-    getTranslations('statement_line'),
     getTranslations('page'),
   ]);
   if (!mayConfigure) return null;
@@ -176,9 +172,7 @@ export async function AccountControls({
       .filter((entry) => entry.statement === statement && !entry.isHeader)
       .map((entry) => ({
         value: entry.code,
-        label:
-          '   '.repeat(Math.max(0, entry.depth)) +
-          (line.has(entry.code) ? line(entry.code) : entry.name),
+        label: '   '.repeat(Math.max(0, entry.depth)) + entry.name,
       })),
   ];
 
