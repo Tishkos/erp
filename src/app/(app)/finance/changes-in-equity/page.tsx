@@ -128,6 +128,7 @@ export default async function ChangesInEquityPage({ searchParams }: { searchPara
                   money={money}
                   movement={money(row.movement)}
                   opening={money(row.opening)}
+                  depth={row.depth}
                   title={row.kind === 'result' ? t('reports.equity_result') : row.name}
                 />
               ))
@@ -161,6 +162,7 @@ function Row({
   closing,
   accounts,
   money,
+  depth = 0,
 }: {
   readonly title: string;
   readonly opening: string;
@@ -174,11 +176,15 @@ function Row({
     readonly closing: string;
   }[];
   readonly money: (amount: string) => string;
+  /** Steps into the mapping — a header and the lines under it indent by it. */
+  readonly depth?: number;
 }) {
   return (
     <>
       <tr className={s.sapLineRow}>
-        <td>{title}</td>
+        <td style={depth > 0 ? { paddingInlineStart: `${0.6 + depth * 1.25}rem` } : undefined}>
+          {title}
+        </td>
         <td className={s.sapNum}>
           <bdi dir="ltr">{opening}</bdi>
         </td>

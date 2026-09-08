@@ -282,6 +282,37 @@ function assemble(
 }
 
 /**
+ * The branches of one report's layout that have something to print, in the
+ * mapping's own order, each with its depth.
+ *
+ * The rule is the same on all four statements: a header is a grouping title,
+ * so it appears exactly where something beneath it does, and it carries the
+ * sum of what is beneath it *in the part being drawn*. That last part
+ * matters — a header may hold lines on both sides of the Balance Sheet, or in
+ * two sections of the Cash Flow Statement, and printing its whole total under
+ * each heading would be the same money counted twice.
+ */
+function heldBranches(
+  nodes: readonly StatementLineNode[],
+  holds: (code: string) => boolean,
+  depth = 0,
+): { node: StatementLineNode; depth: number }[] {
+  const out: { node: StatementLineNode; depth: number }[] = [];
+  for (const node of nodes) {
+    const children = heldBranches(node.children, holds, depth + 1);
+    if (children.length === 0 && !(!node.line.isHeader && holds(node.line.code))) continue;
+    out.push({ node, depth });
+    out.push(...children);
+  }
+  return out;
+}
+
+/** Every line code in one branch, the branch's own line included. */
+function branchCodes(node: StatementLineNode): string[] {
+  return [node.line.code, ...node.children.flatMap(branchCodes)];
+}
+
+/**
  * One side of the Balance Sheet, drawn as the mapping draws it: the side's
  * headers and lines in Finance's own order and nesting, each header carrying
  * the sum of the lines beneath it. A branch with nothing in it is not drawn.
@@ -291,30 +322,16 @@ function sideRows(
   byLine: ReadonlyMap<string, { total: bigint; accounts: StatementAccount[] }>,
   side: 'asset' | 'equity' | 'liability',
 ): StatementLineResult[] {
-  const out: StatementLineResult[] = [];
-
-  const totalOf = (node: StatementLineNode): bigint => {
-    const own = node.line.isHeader ? 0n : (byLine.get(node.line.code)?.total ?? 0n);
-    return node.children.reduce((total, child) => total + totalOf(child), own);
-  };
-  const holds = (node: StatementLineNode): boolean =>
-    (!node.line.isHeader && byLine.has(node.line.code)) || node.children.some(holds);
-
-  const walk = (nodes: readonly StatementLineNode[], depth: number) => {
-    for (const node of nodes) {
-      if (!holds(node)) continue;
-      out.push({
-        line: node.line,
-        depth,
-        amount: decimal(totalOf(node)),
-        accounts: node.line.isHeader ? [] : (byLine.get(node.line.code)?.accounts ?? []),
-      });
-      walk(node.children, depth + 1);
-    }
-  };
-
-  walk(catalogue.sideTree(side), 0);
-  return out;
+  return heldBranches(catalogue.sideTree(side), (code) => byLine.has(code)).map(
+    ({ node, depth }) => ({
+      line: node.line,
+      depth,
+      amount: decimal(
+        branchCodes(node).reduce((total, code) => total + (byLine.get(code)?.total ?? 0n), 0n),
+      ),
+      accounts: node.line.isHeader ? [] : (byLine.get(node.line.code)?.accounts ?? []),
+    }),
+  );
 }
 
 /** The P&L lines, and the result they come to — shared by both statements. */
@@ -461,8 +478,14 @@ export interface EquityRow {
   readonly code: string;
   /** What the mapping calls the line; pages fall back to it when no translation exists. */
   readonly name: string;
-  /** `result` is not an equity account — it is what the P&L accounts come to. */
-  readonly kind: 'line' | 'result';
+  /**
+   * `header` is a grouping title carrying the sum of the lines beneath it;
+   * `result` is not an equity account at all — it is what the revenue and
+   * expense accounts nobody mapped here come to.
+   */
+  readonly kind: 'line' | 'header' | 'result';
+  /** Steps into the mapping — a header and its lines indent by it. */
+  readonly depth: number;
   readonly opening: string;
   readonly movement: string;
   readonly closing: string;
@@ -568,23 +591,31 @@ export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<
     byLine.set(line.code, [...(byLine.get(line.code) ?? []), code]);
   }
 
-  const lineRows: EquityRow[] = catalogue
-    .linesOf('changes_in_equity')
-    .filter((line) => !line.isHeader && byLine.has(line.code))
-    .map((line) => {
-      const accounts = accountRows(paired, byLine.get(line.code)!);
-      const opening = accounts.reduce((total, a) => total + parseDecimal(a.opening, MONEY_SCALE), 0n);
-      const movement = accounts.reduce((total, a) => total + parseDecimal(a.movement, MONEY_SCALE), 0n);
-      return {
-        code: line.code,
-        name: line.name,
-        kind: 'line' as const,
-        opening: decimal(opening),
-        movement: decimal(movement),
-        closing: decimal(opening + movement),
-        accounts,
-      };
-    });
+  // The statement's own layout, headers and all: a title appears wherever
+  // something beneath it does, carrying the sum of what its lines hold.
+  const lineRows: EquityRow[] = heldBranches(
+    catalogue.treeFor('changes_in_equity'),
+    (code) => byLine.has(code),
+  ).map(({ node, depth }) => {
+    const accounts = node.line.isHeader ? [] : accountRows(paired, byLine.get(node.line.code) ?? []);
+    const codes = branchCodes(node);
+    const sumOf = (column: 'opening' | 'movement') =>
+      codes
+        .flatMap((code) => byLine.get(code) ?? [])
+        .reduce((total, account) => total + (paired.get(account)?.[column] ?? 0n), 0n);
+    const opening = sumOf('opening');
+    const movement = sumOf('movement');
+    return {
+      code: node.line.code,
+      name: node.line.name,
+      kind: node.line.isHeader ? ('header' as const) : ('line' as const),
+      depth,
+      opening: decimal(opening),
+      movement: decimal(movement),
+      closing: decimal(opening + movement),
+      accounts,
+    };
+  });
 
   // A revenue or expense account nobody has mapped here stays inside the
   // computed result, which is what keeps this statement's closing equity
@@ -612,6 +643,7 @@ export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<
             code: 'result',
             name: 'Result',
             kind: 'result' as const,
+            depth: 0,
             opening: decimal(openingResult),
             movement: decimal(residualPeriodResult),
             closing: decimal(openingResult + residualPeriodResult),
@@ -621,8 +653,9 @@ export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<
       : []),
   ];
 
-  const opening = rows.reduce((t, row) => t + parseDecimal(row.opening, MONEY_SCALE), 0n);
-  const movement = rows.reduce((t, row) => t + parseDecimal(row.movement, MONEY_SCALE), 0n);
+  const counted = rows.filter((row) => row.kind !== 'header');
+  const opening = counted.reduce((t, row) => t + parseDecimal(row.opening, MONEY_SCALE), 0n);
+  const movement = counted.reduce((t, row) => t + parseDecimal(row.movement, MONEY_SCALE), 0n);
 
   return {
     from: filter.from,
@@ -886,35 +919,45 @@ export async function cashFlow(tx: Tx, filter: StatementFilter): Promise<CashFlo
   }
 
   const sections: CashFlowSection[] = CASH_FLOW_CATEGORIES.map((category) => {
-    const mine = [...buckets.values()].filter((bucket) => bucket.category === category);
-    const byLine = new Map<
-      string,
-      { line: StatementLine; amount: bigint; accounts: StatementAccount[] }
-    >();
-    for (const bucket of mine) {
-      const existing = byLine.get(bucket.line.code) ?? { line: bucket.line, amount: 0n, accounts: [] };
-      existing.amount += bucket.amount;
-      existing.accounts.push({
+    const byLine = new Map<string, { total: bigint; accounts: StatementAccount[] }>();
+    for (const bucket of buckets.values()) {
+      if (bucket.category !== category) continue;
+      const entry = byLine.get(bucket.line.code) ?? { total: 0n, accounts: [] };
+      entry.total += bucket.amount;
+      entry.accounts.push({
         accountCode: bucket.account.accountCode,
         accountName: bucket.account.accountName,
         accountType: bucket.account.accountType,
         amount: decimal(bucket.amount),
       });
-      byLine.set(bucket.line.code, existing);
+      byLine.set(bucket.line.code, entry);
     }
-    const lines = [...byLine.values()]
-      .sort((a, b) => a.line.ordinal - b.line.ordinal)
-      .map((entry) => ({
-        line: entry.line,
-        depth: 0,
-        amount: decimal(entry.amount),
-        accounts: entry.accounts.sort((a, b) => a.accountCode.localeCompare(b.accountCode, 'en')),
-      }));
+
+    // The activity's own branch of the layout — headers included, each
+    // carrying the sum of what this activity holds beneath it.
+    const lines = heldBranches(catalogue.treeFor('cash_flow'), (code) => byLine.has(code)).map(
+      ({ node, depth }) => ({
+        line: node.line,
+        depth,
+        amount: decimal(
+          branchCodes(node).reduce((total, code) => total + (byLine.get(code)?.total ?? 0n), 0n),
+        ),
+        accounts: node.line.isHeader
+          ? []
+          : [...(byLine.get(node.line.code)?.accounts ?? [])].sort((a, b) =>
+              a.accountCode.localeCompare(b.accountCode, 'en'),
+            ),
+      }),
+    );
+
     return {
       category,
       lines,
+      // Headers repeat what their lines hold, so only the lines are added up.
       total: decimal(
-        lines.reduce((total, line) => total + parseDecimal(line.amount, MONEY_SCALE), 0n),
+        lines
+          .filter((entry) => !entry.line.isHeader)
+          .reduce((total, entry) => total + parseDecimal(entry.amount, MONEY_SCALE), 0n),
       ),
     };
   });

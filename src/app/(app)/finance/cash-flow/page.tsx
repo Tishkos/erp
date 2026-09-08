@@ -154,6 +154,7 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Sea
                       title: entry.line.name,
                       amount: entry.amount,
                       accounts: entry.accounts,
+                      depth: entry.depth,
                     }))}
                     money={money}
                     title={t(`reports.cash_${section.category}`)}
@@ -206,6 +207,8 @@ function Section({
       readonly accountName: string;
       readonly amount: string;
     }[];
+    /** Steps into the mapping — a header and its lines indent by it. */
+    readonly depth: number;
   }[];
   readonly level: number;
   readonly money: (amount: string) => string;
@@ -222,7 +225,15 @@ function Section({
         ? lines.map((entry) => (
             <Fragment key={entry.title}>
               <tr className={s.sapLineRow}>
-                <td>{entry.title}</td>
+                <td
+                  style={
+                    entry.depth > 0
+                      ? { paddingInlineStart: `${0.6 + entry.depth * 1.25}rem` }
+                      : undefined
+                  }
+                >
+                  {entry.title}
+                </td>
                 <td className={s.sapNum}>
                   <bdi dir="ltr">{money(entry.amount)}</bdi>
                 </td>
