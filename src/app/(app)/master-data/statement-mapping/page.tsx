@@ -1,18 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import {
-  ActionButton,
-  AdminPage,
-  Field,
-  Flash,
-  Form,
-  LinkButton,
-  Select,
-  Submit,
-  SubmitRow,
-  admin as s,
-} from '@/components/admin';
-import { Panel } from '@/components/ui';
+import { ActionButton, AdminPage, Flash, LinkButton, admin as s } from '@/components/admin';
+import { StatementLineDialog } from '@/components/admin/statement-line-dialog';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -26,21 +15,13 @@ import {
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as statementLines from '@/server/services/statement-lines';
-import {
-  createLine,
-  deleteLine,
-  moveLine,
-  renameLine,
-  setLineCash,
-  setLineCategory,
-  setLineKind,
-} from './actions';
+import { createLine, deleteLine, moveLine, updateLine } from './actions';
 
 /**
  * The Statement Mapping — by direction, 2026-09-03.
  *
- * Finance owns the shape of its reports. Four layouts, one per tab: each is
- * a hierarchy of headers and lines, in the order the report prints them, and
+ * Finance owns the shape of its reports. Four layouts, one per tab: each is a
+ * hierarchy of headers and lines, in the order the report prints them, and
  * each is built here. Accounts are mapped to these lines on the account
  * itself — this screen is where the lines exist.
  *
@@ -49,11 +30,24 @@ import {
  * tab adds beyond a name is the one thing its report's arithmetic needs: the
  * role an income line plays, the side a balance-sheet line prints on, the
  * activity a cash-flow line belongs to.
+ *
+ * ── The screen is the layout, and nothing else ─────────────────────────────
+ * Every change is made where the thing being changed is: New line at the top
+ * right, as on every other register, and Up, Down, Edit and Remove on the row
+ * itself. The forms that used to sit in panels beneath the table asked a
+ * person to find, in a dropdown, the row they were already looking at.
  */
 export const dynamic = 'force-dynamic';
 
 const TABS = ['income-statement', 'balance-sheet', 'cash-flow', 'changes-in-equity'] as const;
 type Tab = (typeof TABS)[number];
+
+const STATEMENT_OF: Readonly<Record<Tab, StatementFace>> = {
+  'income-statement': 'income_statement',
+  'balance-sheet': 'balance_sheet',
+  'cash-flow': 'cash_flow',
+  'changes-in-equity': 'changes_in_equity',
+};
 
 export default async function StatementMappingPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/master-data/statement-mapping')) notFound();
@@ -80,41 +74,12 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
     counts: await statementLines.accountCounts(tx),
   }));
 
-  // The name is whatever the mapping holds — renaming a line on this very
-  // screen has to change what every screen shows, including this one.
-  const label = (_code: string, name: string) => name;
-  const sideName = (side: string) =>
-    side === 'asset' ? t('reports.assets') : side === 'equity' ? t('reports.equity') : t('reports.liabilities');
-
-  const STATEMENT_OF: Record<Tab, StatementFace> = {
-    'income-statement': 'income_statement',
-    'balance-sheet': 'balance_sheet',
-    'cash-flow': 'cash_flow',
-    'changes-in-equity': 'changes_in_equity',
-  };
   const statement = STATEMENT_OF[tab];
   const flat = catalogue.flattened(statement);
   const headers = flat.filter((entry) => entry.line.isHeader);
 
-  /** The one column each report adds beyond the line's own name. */
-  const attributeHead: Record<Tab, string> = {
-    'income-statement': t('mapping.role'),
-    'balance-sheet': t('mapping.side'),
-    'cash-flow': t('mapping.activity'),
-    'changes-in-equity': t('mapping.accounts'),
-  };
-  const layoutHint: Record<Tab, string> = {
-    'income-statement': t('mapping.layout_hint'),
-    'balance-sheet': t('mapping.layout_hint'),
-    'cash-flow': t('mapping.cash_flow_hint'),
-    'changes-in-equity': t('mapping.equity_layout_hint'),
-  };
-  const newHint: Record<Tab, string> = {
-    'income-statement': t('mapping.new_hint_income'),
-    'balance-sheet': t('mapping.new_hint_balance'),
-    'cash-flow': t('mapping.new_hint_cash_flow'),
-    'changes-in-equity': t('mapping.new_hint_changes_in_equity'),
-  };
+  const sideName = (side: string) =>
+    side === 'asset' ? t('reports.assets') : side === 'equity' ? t('reports.equity') : t('reports.liabilities');
 
   const tabTitle: Record<Tab, string> = {
     'income-statement': page('income_statement'),
@@ -122,9 +87,62 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
     'cash-flow': page('cash_flow'),
     'changes-in-equity': page('changes_in_equity'),
   };
+  const attributeHead: Record<Tab, string> = {
+    'income-statement': t('mapping.role'),
+    'balance-sheet': t('mapping.side'),
+    'cash-flow': t('mapping.activity'),
+    'changes-in-equity': t('mapping.accounts'),
+  };
+
+  // The dialog asks the same questions of a new line and of one being edited,
+  // so both are handed the same choices to answer them from.
+  const choices = {
+    roles: INCOME_ROLES.map((role) => ({ value: role, label: lineT(role) })),
+    sides: BALANCE_SIDES.map((side) => ({ value: side, label: sideName(side) })),
+    activities: CASH_FLOW_CATEGORIES.map((category) => ({
+      value: category,
+      label: t(`reports.cash_${category}`),
+    })),
+  };
+  const dialogLabels = (open: string, title: string) => ({
+    open,
+    title,
+    close: t('close'),
+    name: t('mapping.name'),
+    kind: t('mapping.kind'),
+    kindLine: t('mapping.kind_line'),
+    kindHeader: t('mapping.kind_header'),
+    parent: t('mapping.parent'),
+    parentTop: t('mapping.parent_top'),
+    role: t('mapping.role'),
+    side: t('mapping.side'),
+    activity: t('mapping.activity'),
+    cash: t('mapping.is_cash'),
+    save: t('save'),
+    required: t('required_hint'),
+    systemLine: t('mapping.system'),
+  });
 
   return (
     <AdminPage
+      actions={
+        mayConfigure ? (
+          <StatementLineDialog
+            action={createLine}
+            activities={choices.activities}
+            hidden={{ statement, tab }}
+            labels={dialogLabels(t('mapping.new_line'), t('mapping.new_title'))}
+            mode="new"
+            parents={headers.map((entry) => ({
+              value: entry.line.id,
+              label: '   '.repeat(entry.depth) + entry.line.name,
+            }))}
+            roles={choices.roles}
+            sides={choices.sides}
+            statement={statement}
+          />
+        ) : null
+      }
       back={{ href: '/', label: t('dashboard_label') }}
       tabs={<SectionTabs route="/master-data/statement-mapping" />}
       subtitle={t('mapping.subtitle')}
@@ -154,7 +172,6 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
           <div style={{ padding: '0.75rem' }}>
             <Flash error={error} errorTitle={t('error_title')} saved={saved} savedLabel={t('saved')} />
 
-            <p className={s.sectionHint}>{layoutHint[tab]}</p>
             <table className={s.sapTable}>
               <thead>
                 <tr>
@@ -170,7 +187,7 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
                 {flat.map(({ line, depth }) => (
                   <tr className={line.isHeader ? s.sapLineRow : s.sapAccountRow} key={line.id}>
                     <td style={{ paddingInlineStart: `${0.6 + depth * 1.25}rem` }}>
-                      {line.isHeader ? <strong>{label(line.code, line.name)}</strong> : label(line.code, line.name)}
+                      {line.isHeader ? <strong>{line.name}</strong> : line.name}
                       {line.isSystem ? <span className={s.sapNote}> · {t('mapping.system')}</span> : null}
                     </td>
                     <td>
@@ -187,7 +204,9 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
                     <td className={s.sapNum}>{line.isHeader ? '—' : (counts.get(line.code) ?? 0)}</td>
                     {mayConfigure ? (
                       <td>
-                        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                        <div
+                          style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}
+                        >
                           <ActionButton
                             action={moveLine}
                             hidden={{ id: line.id, direction: 'up', tab }}
@@ -198,41 +217,27 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
                             hidden={{ id: line.id, direction: 'down', tab }}
                             label={t('mapping.down')}
                           />
-                          {/* Only the Cash Flow Statement has a pool of cash to
-                              name, and only its own lines can be it. */}
-                          {tab === 'cash-flow' && !line.isHeader ? (
-                            line.isCash ? (
-                              <ActionButton
-                                action={setLineCash}
-                                hidden={{ id: line.id, tab }}
-                                label={t('mapping.unmark_cash')}
-                              />
-                            ) : (
-                              <ActionButton
-                                action={setLineCash}
-                                hidden={{ id: line.id, tab, isCash: 'on' }}
-                                label={t('mapping.mark_cash')}
-                              />
-                            )
-                          ) : null}
-                          {tab === 'cash-flow' && !line.isHeader && !line.isCash ? (
-                            <form action={setLineCategory} style={{ display: 'flex', gap: '0.35rem' }}>
-                              <input name="id" type="hidden" value={line.id} />
-                              <input name="tab" type="hidden" value={tab} />
-                              <select
-                                className={s.select}
-                                defaultValue={line.cashFlowCategory ?? 'operating'}
-                                name="category"
-                              >
-                                {CASH_FLOW_CATEGORIES.map((category) => (
-                                  <option key={category} value={category}>
-                                    {t(`reports.cash_${category}`)}
-                                  </option>
-                                ))}
-                              </select>
-                              <Submit label={t('save')} small />
-                            </form>
-                          ) : null}
+                          <StatementLineDialog
+                            action={updateLine}
+                            activities={choices.activities}
+                            hidden={{ id: line.id, tab }}
+                            initial={{
+                              name: line.name,
+                              kind: line.isHeader ? 'header' : 'line',
+                              ...(line.role ? { role: line.role } : {}),
+                              ...(line.side ? { side: line.side } : {}),
+                              ...(line.cashFlowCategory
+                                ? { cashFlowCategory: line.cashFlowCategory }
+                                : {}),
+                              isCash: line.isCash,
+                            }}
+                            isSystem={line.isSystem}
+                            labels={dialogLabels(t('mapping.edit'), t('mapping.edit_title'))}
+                            mode="edit"
+                            roles={choices.roles}
+                            sides={choices.sides}
+                            statement={statement}
+                          />
                           {!line.isSystem ? (
                             <ActionButton
                               action={deleteLine}
@@ -248,151 +253,6 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
                 ))}
               </tbody>
             </table>
-
-            {mayConfigure ? (
-              <div className={s.assignGrid} style={{ marginTop: '1rem' }}>
-                <Panel title={t('mapping.new_title')}>
-                  <p className={s.sectionHint}>{newHint[tab]}</p>
-                  <Form action={createLine}>
-                    <input name="statement" type="hidden" value={statement} />
-                    <input name="tab" type="hidden" value={tab} />
-                    <div className={s.grid}>
-                      <Field label={t('mapping.name')} name="name" required requiredLabel={t('required_hint')} />
-                      <Select
-                        label={t('mapping.kind')}
-                        name="kind"
-                        options={[
-                          { value: 'line', label: t('mapping.kind_line') },
-                          { value: 'header', label: t('mapping.kind_header') },
-                          ...(tab === 'cash-flow' ? [{ value: 'cash', label: t('mapping.kind_cash') }] : []),
-                        ]}
-                      />
-                      <Select
-                        emptyLabel={t('mapping.parent_top')}
-                        label={t('mapping.parent')}
-                        name="parentId"
-                        options={headers.map((entry) => ({
-                          value: entry.line.id,
-                          label: '   '.repeat(entry.depth) + label(entry.line.code, entry.line.name),
-                        }))}
-                      />
-                      {tab === 'income-statement' ? (
-                        <Select
-                          hint={t('mapping.role_hint')}
-                          label={t('mapping.role')}
-                          name="role"
-                          options={INCOME_ROLES.map((role) => ({ value: role, label: lineT(role) }))}
-                          required
-                        />
-                      ) : null}
-                      {tab === 'balance-sheet' ? (
-                        <Select
-                          hint={t('mapping.side_hint')}
-                          label={t('mapping.side')}
-                          name="side"
-                          options={BALANCE_SIDES.map((side) => ({ value: side, label: sideName(side) }))}
-                          required
-                        />
-                      ) : null}
-                      {tab === 'cash-flow' ? (
-                        <Select
-                          hint={t('mapping.cash_hint')}
-                          label={t('mapping.activity')}
-                          name="cashFlowCategory"
-                          options={CASH_FLOW_CATEGORIES.map((category) => ({
-                            value: category,
-                            label: t(`reports.cash_${category}`),
-                          }))}
-                        />
-                      ) : null}
-                    </div>
-                    <SubmitRow>
-                      <Submit label={t('create')} />
-                    </SubmitRow>
-                  </Form>
-                </Panel>
-
-                <Panel title={t('mapping.kind_title')}>
-                  <p className={s.sectionHint}>{t('mapping.kind_change_hint')}</p>
-                  <Form action={setLineKind}>
-                    <input name="tab" type="hidden" value={tab} />
-                    <div className={s.grid}>
-                      <Select
-                        label={t('mapping.line')}
-                        name="id"
-                        options={flat
-                          .filter((entry) => !entry.line.isSystem)
-                          .map((entry) => ({
-                            value: entry.line.id,
-                            label:
-                              '\u00a0\u00a0\u00a0'.repeat(entry.depth) +
-                              label(entry.line.code, entry.line.name),
-                          }))}
-                        required
-                      />
-                      <Select
-                        label={t('mapping.kind')}
-                        name="kind"
-                        options={[
-                          { value: 'line', label: t('mapping.kind_line') },
-                          { value: 'header', label: t('mapping.kind_header') },
-                        ]}
-                      />
-                      {tab === 'income-statement' ? (
-                        <Select
-                          hint={t('mapping.role_hint')}
-                          label={t('mapping.role')}
-                          name="role"
-                          options={INCOME_ROLES.map((role) => ({ value: role, label: lineT(role) }))}
-                          required
-                        />
-                      ) : null}
-                      {tab === 'cash-flow' ? (
-                        <Select
-                          label={t('mapping.activity')}
-                          name="cashFlowCategory"
-                          options={CASH_FLOW_CATEGORIES.map((category) => ({
-                            value: category,
-                            label: t(`reports.cash_${category}`),
-                          }))}
-                        />
-                      ) : null}
-                    </div>
-                    <SubmitRow>
-                      <Submit label={t('save')} />
-                    </SubmitRow>
-                  </Form>
-                </Panel>
-
-                <Panel title={t('mapping.rename_title')}>
-                  <p className={s.sectionHint}>{t('mapping.rename_hint')}</p>
-                  <Form action={renameLine}>
-                    <input name="tab" type="hidden" value={tab} />
-                    <div className={s.grid}>
-                      <Select
-                        label={t('mapping.line')}
-                        name="id"
-                        options={flat.map((entry) => ({
-                          value: entry.line.id,
-                          label: '   '.repeat(entry.depth) + label(entry.line.code, entry.line.name),
-                        }))}
-                        required
-                      />
-                      <Field label={t('mapping.name')} name="name" required requiredLabel={t('required_hint')} />
-                    </div>
-                    <SubmitRow>
-                      <Submit label={t('save')} />
-                    </SubmitRow>
-                  </Form>
-                </Panel>
-              </div>
-            ) : null}
-
-            {tab === 'changes-in-equity' ? (
-              <p className={s.sectionHint} style={{ marginTop: '0.75rem' }}>
-                {t('mapping.equity_note')}
-              </p>
-            ) : null}
           </div>
         </div>
       </section>

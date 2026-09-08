@@ -29,12 +29,11 @@ export const MAPPING_STATEMENTS: readonly {
   readonly statement: StatementFace;
   readonly field: string;
   readonly page: string;
-  readonly hint: string;
 }[] = [
-  { statement: 'income_statement', field: 'incomeStatementLine', page: 'income_statement', hint: 'accounts.mapping_hint_income_statement' },
-  { statement: 'balance_sheet', field: 'balanceSheetLine', page: 'balance_sheet', hint: 'accounts.mapping_hint_balance_sheet' },
-  { statement: 'cash_flow', field: 'cashFlowLine', page: 'cash_flow', hint: 'accounts.mapping_hint_cash_flow' },
-  { statement: 'changes_in_equity', field: 'changesInEquityLine', page: 'changes_in_equity', hint: 'accounts.mapping_hint_changes_in_equity' },
+  { statement: 'income_statement', field: 'incomeStatementLine', page: 'income_statement' },
+  { statement: 'balance_sheet', field: 'balanceSheetLine', page: 'balance_sheet' },
+  { statement: 'cash_flow', field: 'cashFlowLine', page: 'cash_flow' },
+  { statement: 'changes_in_equity', field: 'changesInEquityLine', page: 'changes_in_equity' },
 ];
 
 /** One row of the parent picker: where it sits, and whether it can hold children. */
@@ -75,9 +74,6 @@ export async function NewAccountButton({
   const titles = Object.fromEntries(
     MAPPING_STATEMENTS.map((entry) => [entry.statement, page(entry.page)]),
   ) as Record<StatementFace, string>;
-  const hints = Object.fromEntries(
-    MAPPING_STATEMENTS.map((entry) => [entry.statement, t(entry.hint)]),
-  ) as Record<StatementFace, string>;
 
   // Every line of every report, indented as its own layout nests it. Headers
   // are shown so the shape of the report is visible and disabled because a
@@ -108,9 +104,7 @@ export async function NewAccountButton({
         kindGroup: t('accounts.kind_group'),
         description: t('accounts.description'),
         statementMappings: t('accounts.statement_mappings'),
-        statementMappingsHint: t('accounts.statement_mappings_hint'),
         mappingTitles: titles,
-        mappingHints: hints,
         statementLineDefault: t('accounts.statement_line_default'),
         headerNoLine: t('accounts.header_no_line'),
         create: t('create'),
@@ -195,7 +189,6 @@ export async function AccountControls({
       {!account.isGroup ? (
         <>
           <Panel title={t('accounts.statement_mappings')}>
-            <p className={s.sectionHint}>{t('accounts.statement_mappings_hint')}</p>
             <Form action={setStatementLines}>
               <input name="id" type="hidden" value={account.id} />
               <input name="code" type="hidden" value={account.code} />
@@ -203,7 +196,6 @@ export async function AccountControls({
                 {MAPPING_STATEMENTS.map((entry) => (
                   <Select
                     defaultValue={account.mapping[entry.statement] ?? ''}
-                    hint={t(entry.hint)}
                     key={entry.statement}
                     label={page(entry.page)}
                     name={entry.field}

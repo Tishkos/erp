@@ -67,10 +67,8 @@ export interface NewAccountLabels {
   readonly kindGroup: string;
   readonly description: string;
   readonly statementMappings: string;
-  readonly statementMappingsHint: string;
-  /** What each report is called, and the hint under its picker. */
+  /** What each report is called. */
   readonly mappingTitles: Readonly<Record<StatementFace, string>>;
-  readonly mappingHints: Readonly<Record<StatementFace, string>>;
   readonly statementLineDefault: string;
   readonly headerNoLine: string;
   readonly create: string;
@@ -232,7 +230,6 @@ export function NewAccountDialog({
                 <>
                   <div className={`${styles.field} ${styles.fieldWide}`}>
                     <span className={styles.label}>{labels.statementMappings}</span>
-                    <span className={styles.hint}>{labels.statementMappingsHint}</span>
                   </div>
                   {MAPPING_FIELDS.map(({ statement, field }) => (
                     <div className={styles.field} key={statement}>
@@ -253,7 +250,6 @@ export function NewAccountDialog({
                           </option>
                         ))}
                       </select>
-                      <span className={styles.hint}>{labels.mappingHints[statement]}</span>
                     </div>
                   ))}
                 </>

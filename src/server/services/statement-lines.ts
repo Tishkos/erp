@@ -433,6 +433,98 @@ export async function setKind(
   });
 }
 
+export interface UpdateLineInput {
+  readonly name: string;
+  readonly isHeader: boolean;
+  readonly role?: string | null;
+  readonly side?: string | null;
+  readonly cashFlowCategory?: string | null;
+  readonly isCash?: boolean;
+}
+
+/**
+ * Everything one line's own dialog can change, in one audited act: its name,
+ * whether it is a grouping title or a line accounts map to, and the one thing
+ * its report needs to know about it.
+ *
+ * A header is a title that prints the sum of what sits beneath it; a line is
+ * what accounts are mapped to. Choosing the wrong one when the line was made
+ * used to mean deleting it and typing it again, which is expensive for a
+ * mistake this easy to make.
+ */
+export async function update(tx: Tx, ctx: ActorContext, id: string, input: UpdateLineInput) {
+  await permit(ctx, 'configure', PERMISSION_OBJECT);
+  const line = await load(tx, id);
+  const statement = line.statement as StatementFace;
+  const name = requireText(input.name, 'name');
+
+  // A seeded line stays a line: the type defaults name it, and a default that
+  // resolved to a grouping title would put accounts somewhere that prints the
+  // sum of everything else.
+  if (line.isSystem && input.isHeader) {
+    throw new StatementLineError(
+      `'${line.name}' is a system line — the type defaults name it, so it stays a line. Add a header of your own beside it.`,
+    );
+  }
+  const isHeader = line.isSystem ? false : input.isHeader;
+
+  if (isHeader !== line.isHeader) {
+    if (isHeader) {
+      const [account] = await tx
+        .select({ code: chartOfAccount.code })
+        .from(chartOfAccount)
+        .where(or(...Object.values(MAPPING_COLUMNS).map((column) => eq(column, line.code))))
+        .limit(1);
+      if (account) {
+        throw new StatementLineError(
+          `Account ${account.code} reports on '${line.name}', so it cannot become a header. Move the account to another line first.`,
+        );
+      }
+    } else {
+      const [child] = await tx
+        .select({ id: financialStatementLine.id })
+        .from(financialStatementLine)
+        .where(eq(financialStatementLine.parentId, id))
+        .limit(1);
+      if (child) {
+        throw new StatementLineError(
+          `'${line.name}' still has lines beneath it, so it is a header. Move or remove those first.`,
+        );
+      }
+    }
+  }
+
+  const vocabulary = vocabularyFor({
+    statement,
+    name,
+    isHeader,
+    role: input.role ?? line.role,
+    side: input.side ?? line.side,
+    cashFlowCategory: input.cashFlowCategory ?? line.cashFlowCategory,
+    isCash: input.isCash ?? false,
+  });
+
+  await tx
+    .update(financialStatementLine)
+    .set({ name, isHeader, ...vocabulary })
+    .where(eq(financialStatementLine.id, id));
+
+  await recordChange(tx, ctx, {
+    action: 'statement_line.updated',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    before: {
+      name: line.name,
+      isHeader: line.isHeader,
+      role: line.role,
+      side: line.side,
+      cashFlowCategory: line.cashFlowCategory,
+      isCash: line.isCash,
+    },
+    after: { name, isHeader, ...vocabulary },
+  });
+}
+
 /** Which of the three activities a Cash Flow line belongs to. */
 export async function setCashFlowCategory(
   tx: Tx,
