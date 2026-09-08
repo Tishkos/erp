@@ -347,6 +347,92 @@ export async function move(tx: Tx, ctx: ActorContext, id: string, direction: 'up
   });
 }
 
+/**
+ * Turns a header into a line, or a line into a header.
+ *
+ * The two are not interchangeable — a header is a grouping title that prints
+ * the sum of what sits under it, a line is what accounts are mapped to — and
+ * choosing the wrong one when the line was created used to mean deleting it
+ * and typing it again. It is one change now, because getting it wrong is easy
+ * and should not be expensive.
+ */
+export async function setKind(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  input: { readonly isHeader: boolean; readonly role?: string | null; readonly cashFlowCategory?: string | null },
+) {
+  await permit(ctx, 'configure', PERMISSION_OBJECT);
+  const line = await load(tx, id);
+  const statement = line.statement as StatementFace;
+
+  if (line.isSystem) {
+    throw new StatementLineError(
+      `'${line.name}' is a system line — the type defaults name it, so it stays a line. Add your own beside it.`,
+    );
+  }
+  if (line.isHeader === input.isHeader) return;
+
+  if (input.isHeader) {
+    // A line with accounts on it cannot become a title: they would have
+    // nowhere to report.
+    const [account] = await tx
+      .select({ code: chartOfAccount.code })
+      .from(chartOfAccount)
+      .where(or(...Object.values(MAPPING_COLUMNS).map((column) => eq(column, line.code))))
+      .limit(1);
+    if (account) {
+      throw new StatementLineError(
+        `Account ${account.code} reports on '${line.name}', so it cannot become a header. Move the account to another line first.`,
+      );
+    }
+  } else {
+    // A header with lines under it cannot become one of them.
+    const [child] = await tx
+      .select({ id: financialStatementLine.id })
+      .from(financialStatementLine)
+      .where(eq(financialStatementLine.parentId, id))
+      .limit(1);
+    if (child) {
+      throw new StatementLineError(
+        `'${line.name}' still has lines beneath it, so it is a header. Move or remove those first.`,
+      );
+    }
+  }
+
+  // Becoming a line means taking on the vocabulary its report needs; becoming
+  // a header means giving it up, because a title carries no figure of its own.
+  const vocabulary = input.isHeader
+    ? { role: null, cashFlowCategory: null, isCash: false }
+    : vocabularyFor({
+        statement,
+        name: line.name,
+        isHeader: false,
+        role: input.role ?? line.role,
+        side: line.side,
+        cashFlowCategory: input.cashFlowCategory ?? line.cashFlowCategory,
+        isCash: false,
+      });
+
+  await tx
+    .update(financialStatementLine)
+    .set({
+      isHeader: input.isHeader,
+      role: vocabulary.role,
+      cashFlowCategory: vocabulary.cashFlowCategory,
+      isCash: vocabulary.isCash,
+    })
+    .where(eq(financialStatementLine.id, id));
+
+  await recordChange(tx, ctx, {
+    action: 'statement_line.kind_set',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    before: { isHeader: line.isHeader, role: line.role, cashFlowCategory: line.cashFlowCategory },
+    after: { isHeader: input.isHeader, ...vocabulary },
+  });
+}
+
 /** Which of the three activities a Cash Flow line belongs to. */
 export async function setCashFlowCategory(
   tx: Tx,

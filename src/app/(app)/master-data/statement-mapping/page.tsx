@@ -26,7 +26,15 @@ import {
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as statementLines from '@/server/services/statement-lines';
-import { createLine, deleteLine, moveLine, renameLine, setLineCash, setLineCategory } from './actions';
+import {
+  createLine,
+  deleteLine,
+  moveLine,
+  renameLine,
+  setLineCash,
+  setLineCategory,
+  setLineKind,
+} from './actions';
 
 /**
  * The Statement Mapping — by direction, 2026-09-03.
@@ -270,11 +278,11 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
                       />
                       {tab === 'income-statement' ? (
                         <Select
-                          emptyLabel={t('mapping.role_none')}
                           hint={t('mapping.role_hint')}
                           label={t('mapping.role')}
                           name="role"
                           options={INCOME_ROLES.map((role) => ({ value: role, label: lineT(role) }))}
+                          required
                         />
                       ) : null}
                       {tab === 'balance-sheet' ? (
@@ -300,6 +308,58 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
                     </div>
                     <SubmitRow>
                       <Submit label={t('create')} />
+                    </SubmitRow>
+                  </Form>
+                </Panel>
+
+                <Panel title={t('mapping.kind_title')}>
+                  <p className={s.sectionHint}>{t('mapping.kind_change_hint')}</p>
+                  <Form action={setLineKind}>
+                    <input name="tab" type="hidden" value={tab} />
+                    <div className={s.grid}>
+                      <Select
+                        label={t('mapping.line')}
+                        name="id"
+                        options={flat
+                          .filter((entry) => !entry.line.isSystem)
+                          .map((entry) => ({
+                            value: entry.line.id,
+                            label:
+                              '\u00a0\u00a0\u00a0'.repeat(entry.depth) +
+                              label(entry.line.code, entry.line.name),
+                          }))}
+                        required
+                      />
+                      <Select
+                        label={t('mapping.kind')}
+                        name="kind"
+                        options={[
+                          { value: 'line', label: t('mapping.kind_line') },
+                          { value: 'header', label: t('mapping.kind_header') },
+                        ]}
+                      />
+                      {tab === 'income-statement' ? (
+                        <Select
+                          hint={t('mapping.role_hint')}
+                          label={t('mapping.role')}
+                          name="role"
+                          options={INCOME_ROLES.map((role) => ({ value: role, label: lineT(role) }))}
+                          required
+                        />
+                      ) : null}
+                      {tab === 'cash-flow' ? (
+                        <Select
+                          label={t('mapping.activity')}
+                          name="cashFlowCategory"
+                          options={CASH_FLOW_CATEGORIES.map((category) => ({
+                            value: category,
+                            label: t(`reports.cash_${category}`),
+                          }))}
+                        />
+                      ) : null}
+                    </div>
+                    <SubmitRow>
+                      <Submit label={t('save')} />
                     </SubmitRow>
                   </Form>
                 </Panel>

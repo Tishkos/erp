@@ -78,3 +78,17 @@ export async function setLineCash(formData: FormData): Promise<void> {
     target,
   );
 }
+
+/** Turn a line into a header, or a header into a line. */
+export async function setLineKind(formData: FormData): Promise<void> {
+  const target = back(formData);
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      statementLines.setKind(tx, ctx, text(formData, 'id'), {
+        isHeader: text(formData, 'kind') === 'header',
+        role: text(formData, 'role') || null,
+        cashFlowCategory: text(formData, 'cashFlowCategory') || null,
+      }),
+    target,
+  );
+}

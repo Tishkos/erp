@@ -1463,7 +1463,7 @@
       "creating": "Creating…",
       "edit": "Edit account",
       "header_no_line": "A header account carries no mapping of its own. It appears on each statement wherever the accounts beneath it report, and its figure is the sum of theirs.",
-      "statement_mappings_hint": "Where this account reports on each of the four statements — one independent choice per report. A revenue account is normally mapped to a Revenue line of the Income Statement and to an Equity line of the Balance Sheet; that is two answers, not one, which is why each report is asked separately. Anything left on its default reports where its account type reports.",
+      "statement_mappings_hint": "Where this account reports on each of the four statements — one independent choice per report. A revenue account is normally mapped to a Revenue line of the Income Statement and to an Equity line of the Balance Sheet; that is two answers, not one, which is why each report is asked separately. Grouping titles are listed so the shape of the report is visible but cannot be chosen — map to a line beneath one. Anything left on its default reports where its account type reports.",
       "mapping_hint_income_statement": "The line of the Income Statement this account is reported under.",
       "mapping_hint_balance_sheet": "The line of the Balance Sheet this account is presented on. A revenue or expense account left on its default is carried in the computed result under Equity instead.",
       "mapping_hint_cash_flow": "The line of the Cash Flow Statement this account's movements are attributed to. Map it to a line marked as cash to make the account part of the cash the statement explains.",
@@ -1698,7 +1698,6 @@
       "layout_hint": "The statement prints exactly this, top to bottom: headers carry the sum of the lines beneath them, and accounts are connected to lines when they are opened on the Chart of Accounts.",
       "line": "Line",
       "role": "Role",
-      "role_none": "None — this is a header",
       "role_hint": "Which of the six classical roles the line plays. The subtotals — gross profit, operating income, net profit — are computed from the roles, so they stay right whatever the layout looks like. A header carries no role.",
       "side": "Side",
       "side_hint": "Which side of the Balance Sheet the line (or header) prints on.",
@@ -1715,7 +1714,7 @@
       "name": "Name",
       "kind": "Kind",
       "kind_line": "Line — takes accounts",
-      "kind_header": "Header — groups lines",
+      "kind_header": "Header — a grouping title only, takes no accounts",
       "parent": "Under",
       "parent_top": "Top level",
       "rename_title": "Rename",
@@ -1732,7 +1731,9 @@
       "kind_cash": "Cash and equivalents",
       "activity": "Activity",
       "new_hint_cash_flow": "A header groups lines; a line receives the movements of the accounts mapped to it. Mark a line as cash to make the accounts on it the pool the statement explains.",
-      "new_hint_changes_in_equity": "A header groups lines; a line receives the accounts mapped to it, with their opening balance, the period's movement and the closing balance."
+      "new_hint_changes_in_equity": "A header groups lines; a line receives the accounts mapped to it, with their opening balance, the period's movement and the closing balance.",
+      "kind_title": "Line or header",
+      "kind_change_hint": "Turn a line into a grouping title, or a title into a line accounts can be mapped to. A line that accounts already report on cannot become a title, and a title with lines beneath it cannot become one."
     }
   },
   "profile": {
