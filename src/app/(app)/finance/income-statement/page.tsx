@@ -6,7 +6,7 @@ import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { StatementTable } from '@/components/admin/statement-table';
-import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
+import { formatBusinessDate, formatStatementAmount, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { levelFrom } from '@domain/report-levels';
 import { visibleRoute } from '@/server/phase-gate';
@@ -60,7 +60,7 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
   // ceiling is however deep this company's chart actually goes.
   const maxLevel = pl.depth + 1;
   const level = levelFrom(params.level, maxLevel);
-  const money = (amount: string) => formatMoney(amount, currency, locale as Locale);
+  const money = (amount: string) => formatStatementAmount(amount, currency, locale as Locale);
   const loss = Number(pl.result) < 0;
 
   // A section heading is always shown; its accounts unfold with the level.
@@ -143,7 +143,6 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
                     : ('line' as const),
             cells: [money(row.amount)],
             rule: row.rule,
-            note: row.deducted ? t('reports.deducted') : null,
           }))}
         />
       </ReportWindow>

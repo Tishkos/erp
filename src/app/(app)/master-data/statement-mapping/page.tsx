@@ -16,7 +16,7 @@ import {
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as statementLines from '@/server/services/statement-lines';
-import { createLine, deleteLine, updateLine } from './actions';
+import { createLine, deleteLine, moveLine, updateLine } from './actions';
 
 /**
  * The Statement Mapping — by direction, 2026-09-03.
@@ -223,6 +223,18 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
                 accounts: line.isHeader ? '—' : String(counts.get(line.code) ?? 0),
                 actions: mayConfigure ? (
                   <>
+                    {/* Arrows rather than the words Up and Down: the order of
+                        a statement is set often and the row is already busy. */}
+                    <ActionButton
+                      action={moveLine}
+                      hidden={{ id: line.id, direction: 'up', tab }}
+                      label={'▲'}
+                    />
+                    <ActionButton
+                      action={moveLine}
+                      hidden={{ id: line.id, direction: 'down', tab }}
+                      label={'▼'}
+                    />
                     <StatementLineDialog
                       action={updateLine}
                       activities={choices.activities}

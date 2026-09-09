@@ -7,7 +7,7 @@ import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { StatementTable } from '@/components/admin/statement-table';
-import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
+import { formatBusinessDate, formatStatementAmount, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { levelFrom } from '@domain/report-levels';
 import { visibleRoute } from '@/server/phase-gate';
@@ -57,7 +57,7 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Sea
   const flow = await withCurrentUser((tx) =>
     statements.cashFlow(tx, { from, to, currency, allPermittedBranches: true }),
   );
-  const money = (amount: string) => formatMoney(amount, currency, locale as Locale);
+  const money = (amount: string) => formatStatementAmount(amount, currency, locale as Locale);
   const moved = flow.sections.some((section) => section.lines.length > 0);
 
   return (

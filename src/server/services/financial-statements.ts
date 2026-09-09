@@ -1134,7 +1134,9 @@ export async function incomeStatement(
       code: node.line.code,
       name: node.line.name,
       depth: level,
-      amount: decimal(figure.amount),
+      // Signed as it bears on the result, so the page can print a deduction
+      // in brackets without being told separately that it is one.
+      amount: decimal(figure.deducted ? -figure.amount : figure.amount),
       rule: 'none',
       deducted: figure.deducted,
     });
@@ -1152,9 +1154,12 @@ export async function incomeStatement(
           code: account.accountCode,
           name: account.accountName,
           depth: level + 1,
-          amount: account.amount,
+          // An account under a line that is taken away is taken away too.
+          amount: figure.deducted
+            ? decimal(-parseDecimal(account.amount, MONEY_SCALE))
+            : account.amount,
           rule: 'none',
-          deducted: false,
+          deducted: figure.deducted,
         });
         depth = Math.max(depth, level + 1);
       }

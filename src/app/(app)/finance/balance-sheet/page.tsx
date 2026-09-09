@@ -6,7 +6,7 @@ import { StatementTable } from '@/components/admin/statement-table';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
-import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
+import { formatBusinessDate, formatStatementAmount, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { levelFrom } from '@domain/report-levels';
 import { visibleRoute } from '@/server/phase-gate';
@@ -51,7 +51,7 @@ export default async function BalanceSheetPage({ searchParams }: { searchParams:
   const sfp = await withCurrentUser((tx) =>
     statements.financialPosition(tx, asAt, { currency, allPermittedBranches: true }),
   );
-  const money = (amount: string) => formatMoney(amount, currency, locale as Locale);
+  const money = (amount: string) => formatStatementAmount(amount, currency, locale as Locale);
 
   /**
    * One side of the sheet: its heading, the branch of the mapping beneath it,
@@ -75,7 +75,6 @@ export default async function BalanceSheetPage({ searchParams }: { searchParams:
         depth: entry.depth + 1,
         tone: entry.line.isHeader ? ('header' as const) : ('line' as const),
         cells: [money(entry.amount)],
-        note: entry.line.deduction ? t('reports.deducted') : null,
       },
       ...(level >= 3
         ? entry.accounts.map((account) => ({

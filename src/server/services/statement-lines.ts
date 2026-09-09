@@ -462,6 +462,56 @@ export async function update(tx: Tx, ctx: ActorContext, id: string, input: Updat
   });
 }
 
+/**
+ * Swaps a line with its neighbour above or below, among the ones it is
+ * printed beside — same report, same header, and at the top of the Balance
+ * Sheet the same side.
+ *
+ * The order of a statement is not alphabetical and not the order things were
+ * created in: revenue is read before cost of sales because that is how the
+ * statement is read. Only the person building it knows that order.
+ */
+export async function move(tx: Tx, ctx: ActorContext, id: string, direction: 'up' | 'down') {
+  await permit(ctx, 'configure', PERMISSION_OBJECT);
+  const line = await load(tx, id);
+
+  const siblings = (
+    await tx
+      .select()
+      .from(financialStatementLine)
+      .where(
+        and(
+          eq(financialStatementLine.statement, line.statement),
+          line.parentId
+            ? eq(financialStatementLine.parentId, line.parentId)
+            : sql`${financialStatementLine.parentId} is null`,
+        ),
+      )
+      .orderBy(asc(financialStatementLine.ordinal), asc(financialStatementLine.code))
+  ).filter((row) => line.parentId !== null || line.statement !== 'balance_sheet' || row.side === line.side);
+
+  const index = siblings.findIndex((row) => row.id === id);
+  const other = direction === 'up' ? siblings[index - 1] : siblings[index + 1];
+  if (!other) return; // Already at the edge; nothing to swap with.
+
+  await tx
+    .update(financialStatementLine)
+    .set({ ordinal: other.ordinal })
+    .where(eq(financialStatementLine.id, line.id));
+  await tx
+    .update(financialStatementLine)
+    .set({ ordinal: line.ordinal })
+    .where(eq(financialStatementLine.id, other.id));
+
+  await recordChange(tx, ctx, {
+    action: 'statement_line.moved',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    before: { ordinal: line.ordinal },
+    after: { ordinal: other.ordinal, swappedWith: other.code },
+  });
+}
+
 /** Which of the three activities a Cash Flow line belongs to. */
 export async function setCashFlowCategory(
   tx: Tx,
