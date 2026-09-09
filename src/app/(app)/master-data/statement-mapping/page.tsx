@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { ActionButton, AdminPage, Flash, LinkButton, admin as s } from '@/components/admin';
 import { StatementLineDialog } from '@/components/admin/statement-line-dialog';
+import { StatementMappingTree } from '@/components/admin/statement-mapping-tree';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -15,7 +16,7 @@ import {
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as statementLines from '@/server/services/statement-lines';
-import { createLine, deleteLine, moveLine, updateLine } from './actions';
+import { createLine, deleteLine, updateLine } from './actions';
 
 /**
  * The Statement Mapping — by direction, 2026-09-03.
@@ -52,10 +53,12 @@ const STATEMENT_OF: Readonly<Record<Tab, StatementFace>> = {
 export default async function StatementMappingPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/master-data/statement-mapping')) notFound();
 
-  const [t, page, lineT, context, params] = await Promise.all([
+  const [t, page, lineT, chart, list, context, params] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('statement_line'),
+    getTranslations('chart'),
+    getTranslations('list'),
     requireContext(),
     searchParams,
   ]);
@@ -180,85 +183,66 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
           <div style={{ padding: '0.75rem' }}>
             <Flash error={error} errorTitle={t('error_title')} saved={saved} savedLabel={t('saved')} />
 
-            <table className={s.sapTable}>
-              <thead>
-                <tr>
-                  <th scope="col">{t('mapping.line')}</th>
-                  <th scope="col">{attributeHead[tab]}</th>
-                  <th className={s.sapNum} scope="col">
-                    {t('mapping.accounts')}
-                  </th>
-                  {mayConfigure ? <th scope="col">{t('mapping.actions')}</th> : null}
-                </tr>
-              </thead>
-              <tbody>
-                {flat.map(({ line, depth }) => (
-                  <tr className={line.isHeader ? s.sapLineRow : s.sapAccountRow} key={line.id}>
-                    <td style={{ paddingInlineStart: `${0.6 + depth * 1.25}rem` }}>
-                      {line.isHeader ? <strong>{line.name}</strong> : line.name}
-                    </td>
-                    <td>
-                      {line.role
-                        ? lineT(line.role)
-                        : line.side
-                          ? sideName(line.side)
-                          : line.isCash
-                            ? t('mapping.is_cash')
-                            : line.cashFlowCategory
-                              ? t(`reports.cash_${line.cashFlowCategory}`)
-                              : '—'}
-                    </td>
-                    <td className={s.sapNum}>{line.isHeader ? '—' : (counts.get(line.code) ?? 0)}</td>
-                    {mayConfigure ? (
-                      <td>
-                        <div
-                          style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}
-                        >
-                          <ActionButton
-                            action={moveLine}
-                            hidden={{ id: line.id, direction: 'up', tab }}
-                            label={t('mapping.up')}
-                          />
-                          <ActionButton
-                            action={moveLine}
-                            hidden={{ id: line.id, direction: 'down', tab }}
-                            label={t('mapping.down')}
-                          />
-                          <StatementLineDialog
-                            action={updateLine}
-                            activities={choices.activities}
-                            hidden={{ id: line.id, tab }}
-                            initial={{
-                              name: line.name,
-                              kind: line.isHeader ? 'header' : 'line',
-                              ...(line.role ? { role: line.role } : {}),
-                              ...(line.side ? { side: line.side } : {}),
-                              ...(line.cashFlowCategory
-                                ? { cashFlowCategory: line.cashFlowCategory }
-                                : {}),
-                              ...(line.parentId ? { parentId: line.parentId } : {}),
-                              isCash: line.isCash,
-                            }}
-                            labels={dialogLabels(t('mapping.edit'), t('mapping.edit_title'))}
-                            mode="edit"
-                            parents={headerChoices(line.id)}
-                            roles={choices.roles}
-                            sides={choices.sides}
-                            statement={statement}
-                          />
-                          <ActionButton
-                            action={deleteLine}
-                            hidden={{ id: line.id, tab }}
-                            label={t('mapping.remove')}
-                            tone="danger"
-                          />
-                        </div>
-                      </td>
-                    ) : null}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <StatementMappingTree
+              labels={{
+                line: t('mapping.line'),
+                attribute: attributeHead[tab],
+                accounts: t('mapping.accounts'),
+                actions: t('mapping.actions'),
+                expandAll: chart('expand_all'),
+                collapseAll: chart('collapse_all'),
+                expand: t('mapping.expand'),
+                collapse: t('mapping.collapse'),
+                empty: list('no_rows'),
+              }}
+              rows={flat.map(({ line, depth }) => ({
+                key: line.id,
+                name: line.name,
+                depth,
+                isHeader: line.isHeader,
+                attribute: line.role
+                  ? lineT(line.role)
+                  : line.side
+                    ? sideName(line.side)
+                    : line.isCash
+                      ? t('mapping.is_cash')
+                      : line.cashFlowCategory
+                        ? t(`reports.cash_${line.cashFlowCategory}`)
+                        : '—',
+                accounts: line.isHeader ? '—' : String(counts.get(line.code) ?? 0),
+                actions: mayConfigure ? (
+                  <>
+                    <StatementLineDialog
+                      action={updateLine}
+                      activities={choices.activities}
+                      hidden={{ id: line.id, tab }}
+                      initial={{
+                        name: line.name,
+                        kind: line.isHeader ? 'header' : 'line',
+                        ...(line.role ? { role: line.role } : {}),
+                        ...(line.side ? { side: line.side } : {}),
+                        ...(line.cashFlowCategory ? { cashFlowCategory: line.cashFlowCategory } : {}),
+                        ...(line.parentId ? { parentId: line.parentId } : {}),
+                        isCash: line.isCash,
+                      }}
+                      labels={dialogLabels(t('mapping.edit'), t('mapping.edit_title'))}
+                      mode="edit"
+                      parents={headerChoices(line.id)}
+                      roles={choices.roles}
+                      sides={choices.sides}
+                      statement={statement}
+                    />
+                    <ActionButton
+                      action={deleteLine}
+                      hidden={{ id: line.id, tab }}
+                      label={t('mapping.remove')}
+                      tone="danger"
+                    />
+                  </>
+                ) : null,
+              }))}
+              showActions={mayConfigure}
+            />
           </div>
         </div>
       </section>

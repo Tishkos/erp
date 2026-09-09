@@ -1711,7 +1711,9 @@
       "kind_header": "Header — groups lines",
       "parent": "Under",
       "parent_top": "Top level",
-      "is_cash": "Cash and equivalents"
+      "is_cash": "Cash and equivalents",
+      "expand": "Expand",
+      "collapse": "Collapse"
     }
   },
   "profile": {

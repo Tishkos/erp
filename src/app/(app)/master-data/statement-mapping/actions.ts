@@ -49,15 +49,6 @@ export async function updateLine(formData: FormData): Promise<void> {
   );
 }
 
-export async function moveLine(formData: FormData): Promise<void> {
-  const target = back(formData);
-  const direction = text(formData, 'direction') === 'up' ? 'up' : 'down';
-  await runAdminAndReturn(
-    (tx, ctx) => statementLines.move(tx, ctx, text(formData, 'id'), direction),
-    target,
-  );
-}
-
 export async function deleteLine(formData: FormData): Promise<void> {
   const target = back(formData);
   await runAdminAndReturn(
