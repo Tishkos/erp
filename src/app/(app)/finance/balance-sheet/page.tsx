@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, admin as s } from '@/components/admin';
 import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/report-filter';
-import { StatementSection } from '@/components/admin/statement-rows';
+import { StatementTable } from '@/components/admin/statement-table';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -31,9 +31,10 @@ const LEVELS = 3;
 export default async function BalanceSheetPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/finance/balance-sheet')) notFound();
 
-  const [t, page, locale, context, params] = await Promise.all([
+  const [t, page, chart, locale, context, params] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
+    getTranslations('chart'),
     getLocale(),
     requireContext(),
     searchParams,
@@ -51,6 +52,62 @@ export default async function BalanceSheetPage({ searchParams }: { searchParams:
     statements.financialPosition(tx, asAt, { currency, allPermittedBranches: true }),
   );
   const money = (amount: string) => formatMoney(amount, currency, locale as Locale);
+
+  /**
+   * One side of the sheet: its heading, the branch of the mapping beneath it,
+   * and — under Equity — the result no year-end close has carried away yet.
+   */
+  const side = (
+    title: string,
+    total: string,
+    lines: readonly statements.StatementLineResult[],
+    extra?: {
+      readonly label: string;
+      readonly amount: string;
+      readonly accounts: readonly { readonly accountCode: string; readonly accountName: string; readonly amount: string }[];
+    },
+  ) => [
+    { key: `side:${title}`, label: title, depth: 0, tone: 'header' as const, cells: [money(total)] },
+    ...lines.flatMap((entry) => [
+      {
+        key: `line:${entry.line.code}`,
+        label: entry.line.name,
+        depth: entry.depth + 1,
+        tone: entry.line.isHeader ? ('header' as const) : ('line' as const),
+        cells: [money(entry.amount)],
+        note: entry.line.deduction ? t('reports.deducted') : null,
+      },
+      ...(level >= 3
+        ? entry.accounts.map((account) => ({
+            key: `account:${entry.line.code}:${account.accountCode}`,
+            label: `${account.accountCode} \u00b7 ${account.accountName}`,
+            depth: entry.depth + 2,
+            tone: 'account' as const,
+            cells: [money(account.amount)],
+          }))
+        : []),
+    ]),
+    ...(extra
+      ? [
+          {
+            key: `extra:${title}`,
+            label: extra.label,
+            depth: 1,
+            tone: 'line' as const,
+            cells: [money(extra.amount)],
+          },
+          ...(level >= 3
+            ? extra.accounts.map((account) => ({
+                key: `extra:${title}:${account.accountCode}`,
+                label: `${account.accountCode} \u00b7 ${account.accountName}`,
+                depth: 2,
+                tone: 'account' as const,
+                cells: [money(account.amount)],
+              }))
+            : []),
+        ]
+      : []),
+  ];
 
   return (
     <AdminPage
@@ -90,50 +147,27 @@ export default async function BalanceSheetPage({ searchParams }: { searchParams:
         meta={t('reports.as_at', { date: formatBusinessDate(asAt, locale as Locale) })}
         title={t('reports.balance_sheet')}
       >
-        <table className={`${s.sapTable} ${s.sapReportTable}`}>
-          <thead>
-            <tr>
-              <th scope="col">{t('reports.statement_line')}</th>
-              <th className={s.sapNum} scope="col">
-                {t('reports.amount')} · {currency}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <StatementSection level={level} lines={sfp.assets} money={money} title={t('reports.assets')} total={sfp.totalAssets} />
-            <StatementSection
-              {...(sfp.resultAccounts.length > 0
-                ? {
-                    extra: {
-                      title: t('reports.result_for_the_period'),
-                      amount: sfp.unmappedResult,
-                      accounts: sfp.resultAccounts,
-                    },
-                  }
-                : {})}
-              level={level}
-              lines={sfp.equity}
-              money={money}
-              title={t('reports.equity')}
-              total={sfp.totalEquity}
-            />
-            <StatementSection level={level} lines={sfp.liabilities} money={money} title={t('reports.liabilities')} total={sfp.totalLiabilities} />
-          </tbody>
-          <tfoot>
-            <tr className={s.sapTotalRow}>
-              <td>{t('reports.total_assets')}</td>
-              <td className={s.sapNum}>
-                <bdi dir="ltr">{money(sfp.totalAssets)}</bdi>
-              </td>
-            </tr>
-            <tr className={s.sapTotalRow}>
-              <td>{t('reports.total_equity_and_liabilities')}</td>
-              <td className={s.sapNum}>
-                <bdi dir="ltr">{money(sfp.totalEquityAndLiabilities)}</bdi>
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+        <StatementTable
+          columns={[t('reports.statement_line'), `${t('reports.amount')} \u00b7 ${currency}`]}
+          labels={{
+            expandAll: chart('expand_all'),
+            collapseAll: chart('collapse_all'),
+            expand: t('mapping.expand'),
+            collapse: t('mapping.collapse'),
+            empty: t('reports.nothing_posted'),
+          }}
+          rows={[
+            // Each side is a heading of its own, then the mapping's headers
+            // and lines beneath it, then the accounts on each line.
+            ...side(t('reports.assets'), sfp.totalAssets, sfp.assets),
+            ...side(t('reports.equity'), sfp.totalEquity, sfp.equity, {
+              label: t('reports.result_for_the_period'),
+              amount: sfp.unmappedResult,
+              accounts: sfp.resultAccounts,
+            }),
+            ...side(t('reports.liabilities'), sfp.totalLiabilities, sfp.liabilities),
+          ]}
+        />
       </ReportWindow>
     </AdminPage>
   );

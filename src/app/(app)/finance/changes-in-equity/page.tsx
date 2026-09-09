@@ -5,6 +5,7 @@ import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/rep
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
+import { StatementTable } from '@/components/admin/statement-table';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { levelFrom } from '@domain/report-levels';
@@ -33,9 +34,10 @@ const LEVELS = 2;
 export default async function ChangesInEquityPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/finance/changes-in-equity')) notFound();
 
-  const [t, page, locale, context, params] = await Promise.all([
+  const [t, page, chart, locale, context, params] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
+    getTranslations('chart'),
     getLocale(),
     requireContext(),
     searchParams,
@@ -97,120 +99,42 @@ export default async function ChangesInEquityPage({ searchParams }: { searchPara
         })}
         title={t('reports.changes_in_equity')}
       >
-        <table className={`${s.sapTable} ${s.sapReportTable}`}>
-          <thead>
-            <tr>
-              <th scope="col">{t('reports.statement_line')}</th>
-              <th className={s.sapNum} scope="col">
-                {t('reports.opening_balance')} · {currency}
-              </th>
-              <th className={s.sapNum} scope="col">
-                {t('reports.movement')} · {currency}
-              </th>
-              <th className={s.sapNum} scope="col">
-                {t('reports.closing_balance')} · {currency}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {equity.rows.length === 0 ? (
-              <tr>
-                <td className={s.sapEmptyRow} colSpan={4}>
-                  {t('reports.nothing_in_equity')}
-                </td>
-              </tr>
-            ) : (
-              equity.rows.map((row) => (
-                <Row
-                  accounts={level >= 2 ? row.accounts : []}
-                  closing={money(row.closing)}
-                  key={row.code}
-                  money={money}
-                  movement={money(row.movement)}
-                  opening={money(row.opening)}
-                  depth={row.depth}
-                  title={row.kind === 'result' ? t('reports.equity_result') : row.name}
-                />
-              ))
-            )}
-          </tbody>
-          <tfoot>
-            <tr className={s.sapTotalRow}>
-              <td>{t('reports.total_equity')}</td>
-              <td className={s.sapNum}>
-                <bdi dir="ltr">{money(equity.opening)}</bdi>
-              </td>
-              <td className={s.sapNum}>
-                <bdi dir="ltr">{money(equity.movement)}</bdi>
-              </td>
-              <td className={s.sapNum}>
-                <bdi dir="ltr">{money(equity.closing)}</bdi>
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+        <StatementTable
+          columns={[
+            t('reports.statement_line'),
+            `${t('reports.opening_balance')} \u00b7 ${currency}`,
+            `${t('reports.movement')} \u00b7 ${currency}`,
+            `${t('reports.closing_balance')} \u00b7 ${currency}`,
+          ]}
+          labels={{
+            expandAll: chart('expand_all'),
+            collapseAll: chart('collapse_all'),
+            expand: t('mapping.expand'),
+            collapse: t('mapping.collapse'),
+            empty: t('reports.nothing_posted'),
+          }}
+          rows={equity.rows.flatMap((row) => [
+            {
+              key: `row:${row.code}`,
+              label: row.kind === 'result' ? t('reports.equity_result') : row.name,
+              depth: row.depth,
+              tone: row.kind === 'header' ? ('header' as const) : ('line' as const),
+              cells: [money(row.opening), money(row.movement), money(row.closing)],
+            },
+            ...(level >= 2
+              ? row.accounts.map((account) => ({
+                  key: `account:${row.code}:${account.accountCode}`,
+                  label: `${account.accountCode} \u00b7 ${account.accountName}`,
+                  depth: row.depth + 1,
+                  tone: 'account' as const,
+                  cells: [money(account.opening), money(account.movement), money(account.closing)],
+                }))
+              : []),
+          ])}
+        />
       </ReportWindow>
     </AdminPage>
   );
 }
 
 /** One equity line, with — at the deeper level — the accounts behind it. */
-function Row({
-  title,
-  opening,
-  movement,
-  closing,
-  accounts,
-  money,
-  depth = 0,
-}: {
-  readonly title: string;
-  readonly opening: string;
-  readonly movement: string;
-  readonly closing: string;
-  readonly accounts: readonly {
-    readonly accountCode: string;
-    readonly accountName: string;
-    readonly opening: string;
-    readonly movement: string;
-    readonly closing: string;
-  }[];
-  readonly money: (amount: string) => string;
-  /** Steps into the mapping — a header and the lines under it indent by it. */
-  readonly depth?: number;
-}) {
-  return (
-    <>
-      <tr className={s.sapLineRow}>
-        <td style={depth > 0 ? { paddingInlineStart: `${0.6 + depth * 1.25}rem` } : undefined}>
-          {title}
-        </td>
-        <td className={s.sapNum}>
-          <bdi dir="ltr">{opening}</bdi>
-        </td>
-        <td className={s.sapNum}>
-          <bdi dir="ltr">{movement}</bdi>
-        </td>
-        <td className={s.sapNum}>
-          <bdi dir="ltr">{closing}</bdi>
-        </td>
-      </tr>
-      {accounts.map((account) => (
-        <tr className={s.sapAccountRow} key={account.accountCode}>
-          <td>
-            <bdi dir="ltr">{account.accountCode}</bdi> · <bdi dir="auto">{account.accountName}</bdi>
-          </td>
-          <td className={s.sapNum}>
-            <bdi dir="ltr">{money(account.opening)}</bdi>
-          </td>
-          <td className={s.sapNum}>
-            <bdi dir="ltr">{money(account.movement)}</bdi>
-          </td>
-          <td className={s.sapNum}>
-            <bdi dir="ltr">{money(account.closing)}</bdi>
-          </td>
-        </tr>
-      ))}
-    </>
-  );
-}

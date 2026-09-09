@@ -1,12 +1,12 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { Fragment } from 'react';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, admin as s } from '@/components/admin';
 import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/report-filter';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
+import { StatementTable } from '@/components/admin/statement-table';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { levelFrom } from '@domain/report-levels';
@@ -36,9 +36,10 @@ const LEVELS = 3;
 export default async function CashFlowPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/finance/cash-flow')) notFound();
 
-  const [t, page, locale, context, params] = await Promise.all([
+  const [t, page, chart, locale, context, params] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
+    getTranslations('chart'),
     getLocale(),
     requireContext(),
     searchParams,
@@ -110,77 +111,62 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Sea
         })}
         title={t('reports.cash_flow')}
       >
-        <table className={`${s.sapTable} ${s.sapReportTable}`}>
-          <thead>
-            <tr>
-              <th scope="col">{t('reports.statement_line')}</th>
-              <th className={s.sapNum} scope="col">
-                {t('reports.amount')} · {currency}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {/* Which accounts are cash is a decision Finance makes in the
-                Chart of Accounts. Until it has been made there is nothing to
-                report, and saying why is more use than an empty table. */}
-            {!flow.configured ? (
-              <tr>
-                <td className={s.sapEmptyRow} colSpan={2}>
-                  {t('reports.cash_not_configured')}{' '}
-                  <Link className={s.sapLink} href="/master-data/chart-of-accounts">
-                    {page('chart_of_accounts')}
-                  </Link>
-                </td>
-              </tr>
-            ) : !moved ? (
-              <tr>
-                <td className={s.sapEmptyRow} colSpan={2}>
-                  {t('reports.no_cash_moved')}
-                </td>
-              </tr>
-            ) : (
-              <>
-                <tr className={s.sapLineRow}>
-                  <td>{t('reports.opening_cash')}</td>
-                  <td className={s.sapNum}>
-                    <bdi dir="ltr">{money(flow.openingCash)}</bdi>
-                  </td>
-                </tr>
-                {flow.sections.map((section) => (
-                  <Section
-                    key={section.category}
-                    level={level}
-                    lines={section.lines.map((entry) => ({
-                      title: entry.line.name,
-                      amount: entry.amount,
-                      accounts: entry.accounts,
-                      depth: entry.depth,
-                    }))}
-                    money={money}
-                    title={t(`reports.cash_${section.category}`)}
-                    total={section.total}
-                  />
-                ))}
-              </>
-            )}
-          </tbody>
-          {flow.configured && moved ? (
-            <tfoot>
-              <tr className={s.sapTotalRow}>
-                <td>{t('reports.net_movement')}</td>
-                <td className={s.sapNum}>
-                  <bdi dir="ltr">{money(flow.netMovement)}</bdi>
-                </td>
-              </tr>
-              <tr className={s.sapTotalRow}>
-                <td>{t('reports.closing_cash')}</td>
-                <td className={s.sapNum}>
-                  <bdi dir="ltr">{money(flow.closingCash)}</bdi>
-                </td>
-              </tr>
-            </tfoot>
-          ) : null}
-        </table>
+            <StatementTable
+              columns={[t('reports.statement_line'), `${t('reports.amount')} \u00b7 ${currency}`]}
+          labels={{
+            expandAll: chart('expand_all'),
+            collapseAll: chart('collapse_all'),
+            expand: t('mapping.expand'),
+            collapse: t('mapping.collapse'),
+            empty: t('reports.nothing_posted'),
+          }}
+              rows={[
+                {
+                  key: 'opening',
+                  label: t('reports.opening_cash'),
+                  depth: 0,
+                  tone: 'subtotal' as const,
+                  cells: [money(flow.openingCash)],
+                },
+                ...flow.sections.flatMap((section) => [
+                  {
+                    key: `section:${section.category}`,
+                    label: t(`reports.cash_${section.category}`),
+                    depth: 0,
+                    tone: 'header' as const,
+                    cells: [money(section.total)],
+                  },
+                  ...(level >= 2
+                    ? section.lines.flatMap((entry) => [
+                        {
+                          key: `line:${section.category}:${entry.line.code}`,
+                          label: entry.line.name,
+                          depth: entry.depth + 1,
+                          tone: entry.line.isHeader ? ('header' as const) : ('line' as const),
+                          cells: [money(entry.amount)],
+                        },
+                        ...(level >= 3
+                          ? entry.accounts.map((account) => ({
+                              key: `account:${section.category}:${entry.line.code}:${account.accountCode}`,
+                              label: `${account.accountCode} \u00b7 ${account.accountName}`,
+                              depth: entry.depth + 2,
+                              tone: 'account' as const,
+                              cells: [money(account.amount)],
+                            }))
+                          : []),
+                      ])
+                    : []),
+                ]),
+                {
+                  key: 'closing',
+                  label: t('reports.closing_cash'),
+                  depth: 0,
+                  tone: 'subtotal' as const,
+                  cells: [money(flow.closingCash)],
+                  rule: 'double' as const,
+                },
+              ]}
+            />
       </ReportWindow>
     </AdminPage>
   );
@@ -190,70 +176,3 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Sea
  * One activity — its heading with what the activity came to, then, unfolded to
  * the chosen level, the lines and the accounts behind them.
  */
-function Section({
-  title,
-  total,
-  lines,
-  level,
-  money,
-}: {
-  readonly title: string;
-  readonly total: string;
-  readonly lines: readonly {
-    readonly title: string;
-    readonly amount: string;
-    readonly accounts: readonly {
-      readonly accountCode: string;
-      readonly accountName: string;
-      readonly amount: string;
-    }[];
-    /** Steps into the mapping — a header and its lines indent by it. */
-    readonly depth: number;
-  }[];
-  readonly level: number;
-  readonly money: (amount: string) => string;
-}) {
-  return (
-    <>
-      <tr className={s.sapSectionRow}>
-        <td>{title}</td>
-        <td className={s.sapNum}>
-          <bdi dir="ltr">{money(total)}</bdi>
-        </td>
-      </tr>
-      {level >= 2
-        ? lines.map((entry) => (
-            <Fragment key={entry.title}>
-              <tr className={s.sapLineRow}>
-                <td
-                  style={
-                    entry.depth > 0
-                      ? { paddingInlineStart: `${0.6 + entry.depth * 1.25}rem` }
-                      : undefined
-                  }
-                >
-                  {entry.title}
-                </td>
-                <td className={s.sapNum}>
-                  <bdi dir="ltr">{money(entry.amount)}</bdi>
-                </td>
-              </tr>
-              {level >= 3
-                ? entry.accounts.map((account) => (
-                    <tr className={s.sapAccountRow} key={account.accountCode}>
-                      <td>
-                        <bdi dir="ltr">{account.accountCode}</bdi> ·{' '}
-                        <bdi dir="auto">{account.accountName}</bdi>
-                      </td>
-                      <td className={s.sapNum}>
-                        <bdi dir="ltr">{money(account.amount)}</bdi>
-                      </td>
-                    </tr>
-                  ))
-                : null}
-            </Fragment>
-          ))
-        : null}
-    </>
-  );
-}

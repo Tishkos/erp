@@ -5,6 +5,7 @@ import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/rep
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
+import { StatementTable } from '@/components/admin/statement-table';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { levelFrom } from '@domain/report-levels';
@@ -34,9 +35,10 @@ export const dynamic = 'force-dynamic';
 export default async function IncomeStatementPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/finance/income-statement')) notFound();
 
-  const [t, page, locale, context, params] = await Promise.all([
+  const [t, page, chart, locale, context, params] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
+    getTranslations('chart'),
     getLocale(),
     requireContext(),
     searchParams,
@@ -105,67 +107,43 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
         })}
         title={t('reports.income_statement')}
       >
-        <table className={`${s.sapTable} ${s.sapReportTable}`}>
-          <thead>
-            <tr>
-              <th scope="col">{t('reports.statement_line')}</th>
-              <th className={s.sapNum} scope="col">
-                {t('reports.amount')} · {currency}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {pl.rows.length === 0 ? (
-              <tr>
-                <td className={s.sapEmptyRow} colSpan={2}>
-                  {t('reports.nothing_posted')}
-                </td>
-              </tr>
-            ) : (
-              shown.map((row) => {
-                // Sections and subtotals are named by the catalogue; headers
-                // and posting accounts are named by the chart.
-                const label =
-                  row.labelKey === 'result'
-                    ? loss
-                      ? t('reports.net_loss')
-                      : t('reports.net_profit')
-                    : row.labelKey
-                      ? t(`reports.line_${row.labelKey}`)
-                      : row.kind === 'account'
-                        ? null
-                        : row.name;
-
-                return (
-                  <tr
-                    className={
-                      row.kind === 'subtotal'
-                        ? s.sapSectionRow
-                        : row.kind === 'section'
-                          ? s.sapSectionRow
-                          : row.kind === 'group'
-                            ? s.sapLineRow
-                            : s.sapAccountRow
-                    }
-                    data-rule={row.rule === 'none' ? undefined : row.rule}
-                    key={row.key}
-                  >
-                    <td style={{ paddingInlineStart: `${0.6 + row.depth * 1.25}rem` }}>
-                      {label ?? (
-                        <>
-                          <bdi dir="ltr">{row.code}</bdi> · <bdi dir="auto">{row.name}</bdi>
-                        </>
-                      )}
-                    </td>
-                    <td className={s.sapNum}>
-                      <bdi dir="ltr">{money(row.amount)}</bdi>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+        <StatementTable
+          columns={[t('reports.statement_line'), `${t('reports.amount')} \u00b7 ${currency}`]}
+          labels={{
+            expandAll: chart('expand_all'),
+            collapseAll: chart('collapse_all'),
+            expand: t('mapping.expand'),
+            collapse: t('mapping.collapse'),
+            empty: t('reports.nothing_posted'),
+          }}
+          rows={shown.map((row) => ({
+            key: row.key,
+            // A subtotal is named by the catalogue; a line and a header by the
+            // mapping; an account by the chart.
+            label:
+              row.labelKey === 'result'
+                ? loss
+                  ? t('reports.net_loss')
+                  : t('reports.net_profit')
+                : row.labelKey
+                  ? t(`reports.line_${row.labelKey}`)
+                  : row.kind === 'account'
+                    ? `${row.code} \u00b7 ${row.name}`
+                    : (row.name ?? ''),
+            depth: row.depth,
+            tone:
+              row.kind === 'subtotal'
+                ? ('subtotal' as const)
+                : row.kind === 'account'
+                  ? ('account' as const)
+                  : row.kind === 'section'
+                    ? ('header' as const)
+                    : ('line' as const),
+            cells: [money(row.amount)],
+            rule: row.rule,
+            note: row.deducted ? t('reports.deducted') : null,
+          }))}
+        />
       </ReportWindow>
     </AdminPage>
   );

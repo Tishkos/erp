@@ -4123,6 +4123,14 @@
 /* A section of a statement, or a header account of the chart: bold on the
    grey band, carrying the sum of what is beneath it. */
 .sapTable .sapSectionRow > td,
+/* A grouping title on a financial statement: the head's grey, a shade lighter,
+   so a header is read as a band across the page and the lines under it as the
+   detail. The ink is the ordinary one — a header is a row of the same report. */
+.sapTable .sapStatementHeader > td {
+  background: var(--w-head-strong);
+  font-weight: 700;
+}
+
 /* The statement mapping's headers. Bold, and otherwise the same ink as every
    other row — a grouping title is a line of the report, not another kind of
    thing, and colouring it differently is what made the layout read as two
