@@ -78,7 +78,7 @@ export function StatementMappingTree({
   return (
     <>
       {/* On every tab, so the four read the same before anything is grouped. */}
-      <div className={`${styles.sapEntryBar} ${styles.sapBarEnd}`}>
+      <div className={`${styles.sapEntryBar} ${styles.sapBarEnd} ${styles.sapFoldBar}`}>
         <button
           className={`${styles.button} ${styles.small}`}
           onClick={() => setCollapsed(new Set())}

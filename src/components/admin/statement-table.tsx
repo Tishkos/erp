@@ -97,7 +97,7 @@ export function StatementTable({
   return (
     <>
       {foldable.size > 0 ? (
-        <div className={`${styles.sapEntryBar} ${styles.sapBarEnd}`}>
+        <div className={`${styles.sapEntryBar} ${styles.sapBarEnd} ${styles.sapFoldBar}`}>
           <button
             className={`${styles.button} ${styles.small}`}
             onClick={() => setCollapsed(new Set())}

@@ -68,13 +68,6 @@ export const chartOfAccount = pgTable(
     approvalStatus: documentStatus('approval_status').notNull().default('draft'),
 
     /**
-     * Superseded 2026-09-03 by the four columns below, and no longer read or
-     * written. It keeps its rows for one release so the version being replaced
-     * goes on working while the new one builds; a later migration drops it.
-     */
-    statementLine: text('statement_line'),
-
-    /**
      * Phase 1 §5, opened to Finance by direction (2026-09-03) — where this
      * account reports on each of the four statements, one independent answer
      * per report.

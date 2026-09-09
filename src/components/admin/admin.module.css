@@ -1906,6 +1906,12 @@
   gap: 0.5rem 0.8rem;
   margin-block-start: 0.65rem;
 }
+/* The fold controls above a statement or a mapping. Pressed right up against
+   the table they read as part of its heading rather than as something to
+   press, so they keep the same air below them as above. */
+.sapFoldBar {
+  margin-block-end: 0.65rem;
+}
 .sapNote {
   color: var(--w-muted);
   font-size: 0.74rem;
