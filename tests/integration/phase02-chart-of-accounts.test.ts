@@ -786,3 +786,78 @@ describe('D7 · one currency per account', () => {
     expect(iqd.parentId).toBe(usd.parentId);
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('02.1 · a code already in use is skipped, not thrown', () => {
+  it('raises the account anyway when the counter is behind the chart', async () => {
+    // The five roots hold the first number of their own counter — A000001 is
+    // both the Assets folder and the first number the asset counter issued.
+    // That is fine while the counter keeps climbing, and not fine if it is
+    // ever restarted by a rebuild or a restore: the next account then asks for
+    // a code the root already holds.
+    //
+    // This is the state erp.qs-groups.com was found in on 2026-09-09 — the
+    // equity counter back at the start and no allocation recorded for the root
+    // — so the first equity account anyone tried to create came back as
+    // E000001 and died on a unique constraint. Retrying worked, because the
+    // failed attempt had moved the counter on, which is the worst shape for a
+    // bug: it reads as a glitch rather than as something wrong.
+    const { rows: seq } = await ownerPool.query(
+      `select doc_sequence_name('ACCOUNT_CODE_EQUITY', '') as name`,
+    );
+    const sequence = seq[0].name as string;
+
+    // The allocation register is append-only and the trigger refuses a delete
+    // even to the owner — which is why losing these rows takes a restore or an
+    // ops script rather than an ordinary mistake. Lifted here for one
+    // statement, on one connection, and put straight back.
+    const wipeAllocations = async () => {
+      const client = await ownerPool.connect();
+      try {
+        await client.query(`set session_replication_role = replica`);
+        await client.query(
+          `delete from doc_number_allocation where sequence_key = 'ACCOUNT_CODE_EQUITY'`,
+        );
+      } finally {
+        await client.query(`set session_replication_role = origin`);
+        client.release();
+      }
+    };
+
+    try {
+      await wipeAllocations();
+      await ownerPool.query(`alter sequence ${sequence} restart with 1`);
+
+      const officer = await contextFor(await createUser('accounting_officer'));
+      const { rows: root } = await ownerPool.query(
+        `select id from chart_of_account where code = 'E000001'`,
+      );
+
+      const account = await withScope(
+        { userId: officer.principal.userId, branchCode: BAGHDAD },
+        (tx) =>
+          coa.createAccount(tx, officer, {
+            name: 'Share Capital',
+            currencyRestriction: 'IQD',
+            parentId: root[0].id,
+          }),
+      );
+
+      // E000001 belongs to the Equity folder, so the account takes the next
+      // free number instead of failing.
+      expect(account.code).toBe('E000002');
+    } finally {
+      // Put back what this test broke. `resetTestData` keeps the allocations
+      // that gave the five roots their codes but cannot re-create one, so
+      // without this every later test that counts allocations sees a hole.
+      await ownerPool.query(
+        `insert into doc_number_allocation (sequence_key, scope_key, serial, document_no)
+         values ('ACCOUNT_CODE_EQUITY', '', 1, 'E000001')
+         on conflict do nothing`,
+      );
+      // And leave the counter ahead of the chart, or every equity account
+      // raised after this test would meet the same collision.
+      await ownerPool.query(`select setval('${sequence}', 1000)`);
+    }
+  });
+});

@@ -228,6 +228,33 @@ export async function loadAccount(tx: Tx, id: string): Promise<AccountNode> {
  * to get it wrong. The code is allocated from that type's counter through the
  * shared numbering service, so the next account under Assets is A000002.
  */
+/**
+ * The next code for this account type that nothing already holds.
+ *
+ * Bounded: if a hundred consecutive numbers are all taken, the counter is not
+ * merely behind and a person should look at it rather than the loop spinning.
+ */
+async function allocateFreeCode(tx: Tx, accountType: AccountType, userId: string): Promise<string> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const { documentNo } = await allocateDocumentNumber(
+      tx,
+      SEQUENCE_KEY_BY_TYPE[accountType],
+      {},
+      userId,
+    );
+    const [taken] = await tx
+      .select({ code: chartOfAccount.code })
+      .from(chartOfAccount)
+      .where(eq(chartOfAccount.code, documentNo))
+      .limit(1);
+    if (!taken) return documentNo;
+  }
+  throw new Error(
+    `The ${accountType} account counter is a hundred numbers behind the chart. ` +
+      `Set it past the highest code in use before raising another account.`,
+  );
+}
+
 export async function createAccount(
   tx: Tx,
   ctx: ActorContext,
@@ -247,12 +274,24 @@ export async function createAccount(
   if (!isGroup && !currency) throw new AccountCurrencyRequiredError();
   if (isGroup && currency) throw new GroupAccountCurrencyError();
 
-  const { documentNo: code } = await allocateDocumentNumber(
-    tx,
-    SEQUENCE_KEY_BY_TYPE[accountType],
-    {},
-    ctx.principal.userId,
-  );
+  // A code already in use is skipped rather than thrown at the person raising
+  // the account.
+  //
+  // The five roots were seeded with the first number of their own counter, so
+  // A000001 is both the Assets folder and the first number the asset counter
+  // ever issued. That is fine while the counter keeps climbing. It is not fine
+  // if the counter is ever restarted — a rebuilt database, a restore, a reset
+  // during setup — because the next account then asks for a code the root
+  // already holds and the insert dies on a unique constraint.
+  //
+  // That happened on 2026-09-09: the first equity account anyone tried to
+  // create came back as E000001 and failed. Retrying worked, because the
+  // failed attempt had moved the counter on — which is the worst shape for a
+  // bug, since it looks like a glitch rather than something wrong.
+  //
+  // The skipped number is recorded as an allocation with no document, which is
+  // exactly what §24's sequence-gap report exists to explain.
+  const code = await allocateFreeCode(tx, accountType, ctx.principal.userId);
 
   // Checked here for a readable message, and again by the database trigger,
   // which is what actually holds the tree together.
