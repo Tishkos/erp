@@ -15,8 +15,9 @@
  * the Balance Sheet and the three sections of the Cash Flow Statement keep
  * meaning what they say whatever layout is built on top of them.
  *
- * The seeded lines carry `isSystem`: the type defaults name them, so they
- * move and rename freely but never leave.
+ * The seeded lines are the layout an install starts from, not one it is stuck
+ * with: they rename, regroup, reorder and remove like any other. `isSystem`
+ * records where a line came from and grants it no privileges.
  */
 import { and, asc, eq, or, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
@@ -169,6 +170,100 @@ function vocabularyFor(input: CreateLineInput): {
   }
 }
 
+/**
+ * The header a line is to sit under, checked before it is moved there.
+ *
+ * `moving` is the line being placed, when there is one: a line cannot be put
+ * under itself or under anything already beneath it, because a branch that
+ * contains itself is a walk that never ends.
+ */
+async function resolveParent(
+  tx: Tx,
+  parentId: string | null | undefined,
+  statement: StatementFace,
+  side: BalanceSide | null,
+  moving?: { readonly id: string; readonly name: string },
+): Promise<string | null> {
+  if (!parentId) return null;
+
+  const [parent] = await tx
+    .select()
+    .from(financialStatementLine)
+    .where(eq(financialStatementLine.id, parentId))
+    .limit(1);
+  if (!parent || !parent.isHeader) {
+    throw new StatementLineError('A line sits under a header. Choose one, or leave it at the top level.');
+  }
+  if (parent.statement !== statement) {
+    throw new StatementLineError(
+      `'${parent.name}' is on the ${TITLES[parent.statement as StatementFace]} — a line sits under a header of its own report.`,
+    );
+  }
+  if (statement === 'balance_sheet' && parent.side !== side) {
+    throw new StatementLineError(
+      `'${parent.name}' is on the ${parent.side} side — a ${side} line cannot sit under it.`,
+    );
+  }
+
+  // Walk up from the parent: how deep it already is, and whether the line
+  // being moved is somewhere above it.
+  let depth = 1;
+  let cursor = parent;
+  while (cursor.parentId) {
+    if (moving && cursor.parentId === moving.id) {
+      throw new StatementLineError(
+        `'${parent.name}' already sits beneath '${moving.name}', so '${moving.name}' cannot be put under it.`,
+      );
+    }
+    depth += 1;
+    const [next] = await tx
+      .select()
+      .from(financialStatementLine)
+      .where(eq(financialStatementLine.id, cursor.parentId))
+      .limit(1);
+    if (!next) break;
+    cursor = next;
+  }
+  if (moving && parent.id === moving.id) {
+    throw new StatementLineError(`'${moving.name}' cannot sit under itself.`);
+  }
+
+  // What is being moved brings its own lines with it.
+  let height = 0;
+  if (moving) {
+    const below = await tx
+      .select({ id: financialStatementLine.id, parentId: financialStatementLine.parentId })
+      .from(financialStatementLine)
+      .where(eq(financialStatementLine.statement, statement));
+    const heightOf = (id: string): number => {
+      const children = below.filter((row) => row.parentId === id);
+      return children.length === 0 ? 0 : 1 + Math.max(...children.map((child) => heightOf(child.id)));
+    };
+    height = heightOf(moving.id);
+  }
+  if (depth + height >= MAX_DEPTH) {
+    throw new StatementLineError(`The layout nests at most ${MAX_DEPTH} levels deep.`);
+  }
+
+  return parent.id;
+}
+
+/** Last among the siblings it is joining. */
+async function nextOrdinal(tx: Tx, statement: StatementFace, parentId: string | null): Promise<number> {
+  const [last] = await tx
+    .select({ max: sql<number>`coalesce(max(${financialStatementLine.ordinal}), 0)::int` })
+    .from(financialStatementLine)
+    .where(
+      and(
+        eq(financialStatementLine.statement, statement),
+        parentId
+          ? eq(financialStatementLine.parentId, parentId)
+          : sql`${financialStatementLine.parentId} is null`,
+      ),
+    );
+  return (last?.max ?? 0) + 10;
+}
+
 export async function create(tx: Tx, ctx: ActorContext, input: CreateLineInput) {
   await permit(ctx, 'configure', PERMISSION_OBJECT);
 
@@ -178,45 +273,7 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateLineInput) 
   }
   const { role, side, cashFlowCategory, isCash } = vocabularyFor(input);
 
-  // The parent must be a header of the same statement — and, on the Balance
-  // Sheet, of the same side, because a branch lives on one side of it.
-  let parentId: string | null = null;
-  if (input.parentId) {
-    const [parent] = await tx
-      .select()
-      .from(financialStatementLine)
-      .where(eq(financialStatementLine.id, input.parentId))
-      .limit(1);
-    if (!parent || !parent.isHeader) {
-      throw new StatementLineError('The parent of a line is a header of the same statement.');
-    }
-    if (parent.statement !== input.statement) {
-      throw new StatementLineError(
-        `'${parent.name}' is on the ${TITLES[parent.statement as StatementFace]} — a line sits under a header of its own report.`,
-      );
-    }
-    if (input.statement === 'balance_sheet' && parent.side !== side) {
-      throw new StatementLineError(
-        `'${parent.name}' is on the ${parent.side} side — a ${side} line cannot sit under it.`,
-      );
-    }
-    let depth = 1;
-    let cursor = parent;
-    while (cursor.parentId) {
-      depth += 1;
-      const [next] = await tx
-        .select()
-        .from(financialStatementLine)
-        .where(eq(financialStatementLine.id, cursor.parentId))
-        .limit(1);
-      if (!next) break;
-      cursor = next;
-    }
-    if (depth >= MAX_DEPTH) {
-      throw new StatementLineError(`The layout nests at most ${MAX_DEPTH} levels deep.`);
-    }
-    parentId = parent.id;
-  }
+  const parentId = await resolveParent(tx, input.parentId, input.statement, side);
 
   const code = await uniqueCode(codeFromName(name, 'lower'), async (candidate) => {
     const [row] = await tx
@@ -227,17 +284,7 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateLineInput) 
   });
 
   // Last among its siblings; the person reorders from there.
-  const [last] = await tx
-    .select({ max: sql<number>`coalesce(max(${financialStatementLine.ordinal}), 0)::int` })
-    .from(financialStatementLine)
-    .where(
-      and(
-        eq(financialStatementLine.statement, input.statement),
-        parentId
-          ? eq(financialStatementLine.parentId, parentId)
-          : sql`${financialStatementLine.parentId} is null`,
-      ),
-    );
+  const ordinal = await nextOrdinal(tx, input.statement, parentId);
 
   const [created] = await tx
     .insert(financialStatementLine)
@@ -247,7 +294,7 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateLineInput) 
       statement: input.statement,
       parentId,
       isHeader: input.isHeader,
-      ordinal: (last?.max ?? 0) + 10,
+      ordinal,
       role,
       side,
       cashFlowCategory,
@@ -347,95 +394,11 @@ export async function move(tx: Tx, ctx: ActorContext, id: string, direction: 'up
   });
 }
 
-/**
- * Turns a header into a line, or a line into a header.
- *
- * The two are not interchangeable — a header is a grouping title that prints
- * the sum of what sits under it, a line is what accounts are mapped to — and
- * choosing the wrong one when the line was created used to mean deleting it
- * and typing it again. It is one change now, because getting it wrong is easy
- * and should not be expensive.
- */
-export async function setKind(
-  tx: Tx,
-  ctx: ActorContext,
-  id: string,
-  input: { readonly isHeader: boolean; readonly role?: string | null; readonly cashFlowCategory?: string | null },
-) {
-  await permit(ctx, 'configure', PERMISSION_OBJECT);
-  const line = await load(tx, id);
-  const statement = line.statement as StatementFace;
-
-  if (line.isSystem) {
-    throw new StatementLineError(
-      `'${line.name}' is a system line — the type defaults name it, so it stays a line. Add your own beside it.`,
-    );
-  }
-  if (line.isHeader === input.isHeader) return;
-
-  if (input.isHeader) {
-    // A line with accounts on it cannot become a title: they would have
-    // nowhere to report.
-    const [account] = await tx
-      .select({ code: chartOfAccount.code })
-      .from(chartOfAccount)
-      .where(or(...Object.values(MAPPING_COLUMNS).map((column) => eq(column, line.code))))
-      .limit(1);
-    if (account) {
-      throw new StatementLineError(
-        `Account ${account.code} reports on '${line.name}', so it cannot become a header. Move the account to another line first.`,
-      );
-    }
-  } else {
-    // A header with lines under it cannot become one of them.
-    const [child] = await tx
-      .select({ id: financialStatementLine.id })
-      .from(financialStatementLine)
-      .where(eq(financialStatementLine.parentId, id))
-      .limit(1);
-    if (child) {
-      throw new StatementLineError(
-        `'${line.name}' still has lines beneath it, so it is a header. Move or remove those first.`,
-      );
-    }
-  }
-
-  // Becoming a line means taking on the vocabulary its report needs; becoming
-  // a header means giving it up, because a title carries no figure of its own.
-  const vocabulary = input.isHeader
-    ? { role: null, cashFlowCategory: null, isCash: false }
-    : vocabularyFor({
-        statement,
-        name: line.name,
-        isHeader: false,
-        role: input.role ?? line.role,
-        side: line.side,
-        cashFlowCategory: input.cashFlowCategory ?? line.cashFlowCategory,
-        isCash: false,
-      });
-
-  await tx
-    .update(financialStatementLine)
-    .set({
-      isHeader: input.isHeader,
-      role: vocabulary.role,
-      cashFlowCategory: vocabulary.cashFlowCategory,
-      isCash: vocabulary.isCash,
-    })
-    .where(eq(financialStatementLine.id, id));
-
-  await recordChange(tx, ctx, {
-    action: 'statement_line.kind_set',
-    objectType: PERMISSION_OBJECT,
-    objectId: id,
-    before: { isHeader: line.isHeader, role: line.role, cashFlowCategory: line.cashFlowCategory },
-    after: { isHeader: input.isHeader, ...vocabulary },
-  });
-}
-
 export interface UpdateLineInput {
   readonly name: string;
   readonly isHeader: boolean;
+  /** The header it is to sit under, or null for the top level. */
+  readonly parentId?: string | null;
   readonly role?: string | null;
   readonly side?: string | null;
   readonly cashFlowCategory?: string | null;
@@ -444,29 +407,25 @@ export interface UpdateLineInput {
 
 /**
  * Everything one line's own dialog can change, in one audited act: its name,
- * whether it is a grouping title or a line accounts map to, and the one thing
- * its report needs to know about it.
+ * whether it is a grouping title or a line accounts map to, the header it
+ * sits under, and the one thing its report needs to know about it.
  *
- * A header is a title that prints the sum of what sits beneath it; a line is
- * what accounts are mapped to. Choosing the wrong one when the line was made
- * used to mean deleting it and typing it again, which is expensive for a
- * mistake this easy to make.
+ * The seeded lines are not special here. They are the layout every install
+ * starts from, not a layout it is stuck with: rename them, group them under a
+ * header of your own, reorder them, remove the ones this company does not
+ * use. An account that relied on one as its default falls to the next line of
+ * the same kind — see `lineFor` — so nothing is stranded by the change.
+ *
+ * What is still refused is a change that would break the thing being edited:
+ * a line accounts report on cannot become a title, a title with lines beneath
+ * it cannot become one of them, and nothing can be moved inside itself.
  */
 export async function update(tx: Tx, ctx: ActorContext, id: string, input: UpdateLineInput) {
   await permit(ctx, 'configure', PERMISSION_OBJECT);
   const line = await load(tx, id);
   const statement = line.statement as StatementFace;
   const name = requireText(input.name, 'name');
-
-  // A seeded line stays a line: the type defaults name it, and a default that
-  // resolved to a grouping title would put accounts somewhere that prints the
-  // sum of everything else.
-  if (line.isSystem && input.isHeader) {
-    throw new StatementLineError(
-      `'${line.name}' is a system line — the type defaults name it, so it stays a line. Add a header of your own beside it.`,
-    );
-  }
-  const isHeader = line.isSystem ? false : input.isHeader;
+  const isHeader = input.isHeader;
 
   if (isHeader !== line.isHeader) {
     if (isHeader) {
@@ -504,9 +463,24 @@ export async function update(tx: Tx, ctx: ActorContext, id: string, input: Updat
     isCash: input.isCash ?? false,
   });
 
+  // `parentId` is only acted on when the form sent one, so a caller that does
+  // not ask about it leaves the line where it is.
+  const asked = input.parentId !== undefined;
+  const parentId = asked
+    ? await resolveParent(tx, input.parentId, statement, vocabulary.side, { id, name: line.name })
+    : line.parentId;
+  const moved = asked && parentId !== line.parentId;
+
   await tx
     .update(financialStatementLine)
-    .set({ name, isHeader, ...vocabulary })
+    .set({
+      name,
+      isHeader,
+      ...vocabulary,
+      parentId,
+      // Joining a new set of siblings means joining the end of them.
+      ...(moved ? { ordinal: await nextOrdinal(tx, statement, parentId) } : {}),
+    })
     .where(eq(financialStatementLine.id, id));
 
   await recordChange(tx, ctx, {
@@ -516,12 +490,13 @@ export async function update(tx: Tx, ctx: ActorContext, id: string, input: Updat
     before: {
       name: line.name,
       isHeader: line.isHeader,
+      parentId: line.parentId,
       role: line.role,
       side: line.side,
       cashFlowCategory: line.cashFlowCategory,
       isCash: line.isCash,
     },
-    after: { name, isHeader, ...vocabulary },
+    after: { name, isHeader, parentId, ...vocabulary },
   });
 }
 
@@ -589,20 +564,17 @@ export async function setCash(tx: Tx, ctx: ActorContext, id: string, isCash: boo
 }
 
 /**
- * Removes a line nobody uses. The seeded lines never go (they anchor the type
- * defaults and the subtotals); a header goes only once it is empty; a line
- * goes only once no account maps to it on any report — the foreign keys from
- * the chart enforce the same from below.
+ * Removes a line nobody is using: a header once it is empty, a line once no
+ * account maps to it on any report — the foreign keys from the chart enforce
+ * the same from below.
+ *
+ * Including the seeded ones. They are where an install starts, not what it is
+ * stuck with, and an account that had been relying on one as its default
+ * falls to the next line of the same kind rather than disappearing.
  */
 export async function remove(tx: Tx, ctx: ActorContext, id: string) {
   await permit(ctx, 'configure', PERMISSION_OBJECT);
   const line = await load(tx, id);
-
-  if (line.isSystem) {
-    throw new StatementLineError(
-      `'${line.name}' is a system line — it anchors the type defaults and the subtotals. Rename or move it instead.`,
-    );
-  }
 
   const [child] = await tx
     .select({ id: financialStatementLine.id })

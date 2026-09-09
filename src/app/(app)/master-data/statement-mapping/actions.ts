@@ -42,6 +42,7 @@ export async function updateLine(formData: FormData): Promise<void> {
     (tx, ctx) =>
       statementLines.update(tx, ctx, text(formData, 'id'), {
         name: text(formData, 'name'),
+        parentId: text(formData, 'parentId') || null,
         ...vocabularyOf(formData),
       }),
     target,

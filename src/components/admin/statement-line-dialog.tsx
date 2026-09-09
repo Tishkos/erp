@@ -39,7 +39,6 @@ export interface LineDialogLabels {
   readonly cash: string;
   readonly save: string;
   readonly required: string;
-  readonly systemLine: string;
 }
 
 export function StatementLineDialog({
@@ -52,14 +51,17 @@ export function StatementLineDialog({
   sides,
   activities,
   initial,
-  isSystem = false,
   mode,
 }: {
   readonly action: (formData: FormData) => Promise<void>;
   readonly hidden: Readonly<Record<string, string>>;
   readonly labels: LineDialogLabels;
   readonly statement: 'income_statement' | 'balance_sheet' | 'cash_flow' | 'changes_in_equity';
-  /** Headers this line may sit under. Offered when opening a new line only. */
+  /**
+   * Headers this line may sit under. When editing, the line itself and
+   * everything already beneath it are left out — a branch cannot contain
+   * itself.
+   */
   readonly parents?: readonly Choice[];
   readonly roles: readonly Choice[];
   readonly sides: readonly Choice[];
@@ -71,9 +73,8 @@ export function StatementLineDialog({
     readonly side?: string;
     readonly cashFlowCategory?: string;
     readonly isCash?: boolean;
+    readonly parentId?: string;
   };
-  /** A seeded line: it may be renamed and moved, but it stays a line. */
-  readonly isSystem?: boolean;
   readonly mode: 'new' | 'edit';
 }) {
   // Every row carries a dialog of its own, so the fields inside are named
@@ -150,7 +151,6 @@ export function StatementLineDialog({
                 </label>
                 <select
                   className={styles.select}
-                  disabled={isSystem}
                   id={field('kind')}
                   name="kind"
                   onChange={(event) => setKind(event.target.value as Kind)}
@@ -159,18 +159,19 @@ export function StatementLineDialog({
                   <option value="line">{labels.kindLine}</option>
                   <option value="header">{labels.kindHeader}</option>
                 </select>
-                {isSystem ? <span className={styles.hint}>{labels.systemLine}</span> : null}
-                {/* A disabled select submits nothing, and a seeded line is
-                    always a line, so the value is carried alongside it. */}
-                {isSystem ? <input name="kind" type="hidden" value="line" /> : null}
               </div>
 
-              {mode === 'new' && parents ? (
+              {parents ? (
                 <div className={styles.field}>
                   <label className={styles.label} htmlFor={field('parent')}>
                     {labels.parent}
                   </label>
-                  <select className={styles.select} defaultValue="" id={field('parent')} name="parentId">
+                  <select
+                    className={styles.select}
+                    defaultValue={initial?.parentId ?? ''}
+                    id={field('parent')}
+                    name="parentId"
+                  >
                     <option value="">{labels.parentTop}</option>
                     {parents.map((parent) => (
                       <option key={parent.value} value={parent.value}>

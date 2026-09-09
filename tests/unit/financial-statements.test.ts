@@ -123,3 +123,71 @@ describe('four independent financial statement mappings', () => {
     );
   });
 });
+
+describe('the layout belongs to Finance, including the lines it started with', () => {
+  const rows: StatementLineRow[] = [
+    {
+      id: 'is-header',
+      code: 'expenses_header',
+      name: 'Expenses',
+      statement: 'income_statement',
+      parentId: null,
+      isHeader: true,
+      ordinal: 40,
+      role: null,
+      side: null,
+      cashFlowCategory: null,
+      isCash: false,
+      isSystem: false,
+    },
+    {
+      id: 'is-admin',
+      code: 'administrative_expenses',
+      name: 'Administrative Expenses',
+      statement: 'income_statement',
+      parentId: 'is-header',
+      isHeader: false,
+      ordinal: 10,
+      role: 'operating_expenses',
+      side: null,
+      cashFlowCategory: null,
+      isCash: false,
+      isSystem: false,
+    },
+  ];
+  const catalogue = new LineCatalogue(rows);
+
+  it('nests a line under the header it was given', () => {
+    const tree = catalogue.treeFor('income_statement');
+    expect(tree).toHaveLength(1);
+    expect(tree[0]!.line.code).toBe('expenses_header');
+    expect(tree[0]!.children.map((child) => child.line.code)).toEqual(['administrative_expenses']);
+    expect(catalogue.flattened('income_statement').map((entry) => entry.depth)).toEqual([0, 1]);
+  });
+
+  it('finds another line of the same kind when the seeded one has been removed', () => {
+    // 'operating_expenses' is what an unmapped expense account prefers, and
+    // this layout does not have it: Finance removed it and built its own.
+    expect(catalogue.byCode('operating_expenses')).toBeUndefined();
+    expect(catalogue.lineFor('expense', 'income_statement', null)?.code).toBe(
+      'administrative_expenses',
+    );
+  });
+
+  it('never falls to a header, which prints the sum of its lines', () => {
+    expect(catalogue.lineFor('expense', 'income_statement', 'expenses_header')?.code).toBe(
+      'administrative_expenses',
+    );
+  });
+
+  it('reports nothing where the report has no line of that kind at all', () => {
+    expect(catalogue.lineFor('revenue', 'income_statement', null)).toBeUndefined();
+    expect(catalogue.lineFor('asset', 'balance_sheet', null)).toBeUndefined();
+  });
+
+  it('knows what sits beneath a line, so nothing is moved inside itself', () => {
+    expect([...catalogue.descendantIds('is-header')]).toEqual(['is-admin']);
+    expect([...catalogue.descendantIds('is-admin')]).toEqual([]);
+    expect(catalogue.heightOf('is-header')).toBe(1);
+  });
+});

@@ -120,8 +120,19 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
     cash: t('mapping.is_cash'),
     save: t('save'),
     required: t('required_hint'),
-    systemLine: t('mapping.system'),
   });
+
+  // Where a line may be moved to: any header of this report except itself and
+  // whatever already sits beneath it.
+  const headerChoices = (exclude?: string) => {
+    const barred = exclude ? new Set([exclude, ...catalogue.descendantIds(exclude)]) : new Set<string>();
+    return headers
+      .filter((entry) => !barred.has(entry.line.id))
+      .map((entry) => ({
+        value: entry.line.id,
+        label: '\u00a0\u00a0\u00a0'.repeat(entry.depth) + entry.line.name,
+      }));
+  };
 
   return (
     <AdminPage
@@ -133,10 +144,7 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
             hidden={{ statement, tab }}
             labels={dialogLabels(t('mapping.new_line'), t('mapping.new_title'))}
             mode="new"
-            parents={headers.map((entry) => ({
-              value: entry.line.id,
-              label: '   '.repeat(entry.depth) + entry.line.name,
-            }))}
+            parents={headerChoices()}
             roles={choices.roles}
             sides={choices.sides}
             statement={statement}
@@ -188,7 +196,6 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
                   <tr className={line.isHeader ? s.sapLineRow : s.sapAccountRow} key={line.id}>
                     <td style={{ paddingInlineStart: `${0.6 + depth * 1.25}rem` }}>
                       {line.isHeader ? <strong>{line.name}</strong> : line.name}
-                      {line.isSystem ? <span className={s.sapNote}> · {t('mapping.system')}</span> : null}
                     </td>
                     <td>
                       {line.role
@@ -229,23 +236,22 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
                               ...(line.cashFlowCategory
                                 ? { cashFlowCategory: line.cashFlowCategory }
                                 : {}),
+                              ...(line.parentId ? { parentId: line.parentId } : {}),
                               isCash: line.isCash,
                             }}
-                            isSystem={line.isSystem}
                             labels={dialogLabels(t('mapping.edit'), t('mapping.edit_title'))}
                             mode="edit"
+                            parents={headerChoices(line.id)}
                             roles={choices.roles}
                             sides={choices.sides}
                             statement={statement}
                           />
-                          {!line.isSystem ? (
-                            <ActionButton
-                              action={deleteLine}
-                              hidden={{ id: line.id, tab }}
-                              label={t('mapping.remove')}
-                              tone="danger"
-                            />
-                          ) : null}
+                          <ActionButton
+                            action={deleteLine}
+                            hidden={{ id: line.id, tab }}
+                            label={t('mapping.remove')}
+                            tone="danger"
+                          />
                         </div>
                       </td>
                     ) : null}

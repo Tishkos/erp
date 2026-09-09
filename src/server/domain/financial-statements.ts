@@ -148,8 +148,14 @@ export type AccountMappingInput = Readonly<Partial<Record<StatementFace, string 
  * Current rather than non-current, and operating rather than anything more
  * specific: the safe assumption is the ordinary one, and an account on the
  * wrong line is easier to notice than one that has vanished from the
- * statement altogether. Every code here names a seeded system line, which is
- * why those cannot be deleted.
+ * statement altogether.
+ *
+ * These are *preferences*, not requirements. Every line belongs to Finance,
+ * including the seeded ones, so any of them may be renamed, moved under a
+ * header, or removed. When the preferred line is gone the fallback below
+ * finds another of the same kind, and only when a report has no line of that
+ * kind at all does an unmapped account stop printing on it — which by then is
+ * plainly what was meant.
  *
  * The gaps are deliberate. A revenue account has no default on the Balance
  * Sheet or on Changes in Equity: unmapped, it is carried by those statements'
@@ -178,6 +184,42 @@ export const DEFAULT_LINES: Readonly<
   }),
   changes_in_equity: Object.freeze({
     equity: 'equity_movements',
+  }),
+});
+
+/**
+ * Failing the preferred line, the kind of line an account type may fall to.
+ *
+ * Read in the report's own print order, so "the first one that fits" is the
+ * one nearest the top of the statement — which is where a reader looks for
+ * anything that was not filed more precisely.
+ */
+const FALLBACK_KIND: Readonly<
+  Record<StatementFace, Readonly<Partial<Record<AccountType, (line: StatementLine) => boolean>>>>
+> = Object.freeze({
+  income_statement: Object.freeze({
+    revenue: (line: StatementLine) => line.role === 'revenue' || line.role === 'other_income',
+    expense: (line: StatementLine) =>
+      line.role === 'operating_expenses' ||
+      line.role === 'cost_of_sales' ||
+      line.role === 'finance_costs' ||
+      line.role === 'tax_expense',
+  }),
+  balance_sheet: Object.freeze({
+    asset: (line: StatementLine) => line.side === 'asset',
+    liability: (line: StatementLine) => line.side === 'liability',
+    equity: (line: StatementLine) => line.side === 'equity',
+  }),
+  cash_flow: Object.freeze({
+    // Anything but the cash itself: an account is not its own explanation.
+    asset: (line: StatementLine) => !line.isCash,
+    liability: (line: StatementLine) => !line.isCash,
+    equity: (line: StatementLine) => !line.isCash,
+    revenue: (line: StatementLine) => !line.isCash,
+    expense: (line: StatementLine) => !line.isCash,
+  }),
+  changes_in_equity: Object.freeze({
+    equity: () => true,
   }),
 });
 
@@ -272,15 +314,17 @@ export class LineCatalogue {
     const chosen = mapped ? this.byCodeMap.get(mapped) : undefined;
     if (chosen && chosen.statement === statement && !chosen.isHeader) return chosen;
 
-    const fallback = DEFAULT_LINES[statement][accountType];
-    if (!fallback) return undefined;
-    const line = this.byCodeMap.get(fallback);
-    if (!line) {
-      throw new StatementLineError(
-        `The default line '${fallback}' is missing from the mapping — the seeded lines must not be deleted.`,
-      );
+    // The line this type prefers, while it is still there…
+    const preferred = DEFAULT_LINES[statement][accountType];
+    if (preferred) {
+      const line = this.byCodeMap.get(preferred);
+      if (line && !line.isHeader) return line;
     }
-    return line;
+
+    // …and, once Finance has removed it, the first line of the same kind.
+    const fits = FALLBACK_KIND[statement][accountType];
+    if (!fits) return undefined;
+    return this.linesOf(statement).find((line) => !line.isHeader && fits(line));
   }
 
   /**
@@ -307,6 +351,31 @@ export class LineCatalogue {
       );
     }
     return line;
+  }
+
+  /**
+   * Every line beneath this one, however deep.
+   *
+   * A line cannot be moved under its own descendant — that makes a branch
+   * that contains itself, which no walk of the tree ever leaves.
+   */
+  descendantIds(id: string): ReadonlySet<string> {
+    const out = new Set<string>();
+    const walk = (parentId: string) => {
+      for (const line of this.lines) {
+        if (line.parentId !== parentId || out.has(line.id)) continue;
+        out.add(line.id);
+        walk(line.id);
+      }
+    };
+    walk(id);
+    return out;
+  }
+
+  /** How many levels sit beneath this line — a leaf is 0. */
+  heightOf(id: string): number {
+    const children = this.lines.filter((line) => line.parentId === id);
+    return children.length === 0 ? 0 : 1 + Math.max(...children.map((child) => this.heightOf(child.id)));
   }
 
   /** One statement's layout, as a tree in print order. */
