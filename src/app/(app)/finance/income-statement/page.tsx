@@ -131,12 +131,14 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
                     ? `${row.code} \u00b7 ${row.name}`
                     : (row.name ?? ''),
             depth: row.depth,
+            // Banded where something sits beneath it: the statement's own
+            // top-level headings, and every grouping title inside them.
             tone:
               row.kind === 'subtotal'
                 ? ('subtotal' as const)
                 : row.kind === 'account'
                   ? ('account' as const)
-                  : row.kind === 'section'
+                  : row.kind === 'section' || row.isHeader
                     ? ('header' as const)
                     : ('line' as const),
             cells: [money(row.amount)],

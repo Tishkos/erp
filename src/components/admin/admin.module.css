@@ -4129,12 +4129,24 @@
 /* A section of a statement, or a header account of the chart: bold on the
    grey band, carrying the sum of what is beneath it. */
 .sapTable .sapSectionRow > td,
-/* A grouping title on a financial statement: the head's grey, a shade lighter,
-   so a header is read as a band across the page and the lines under it as the
-   detail. The ink is the ordinary one — a header is a row of the same report. */
+/* A grouping title on a financial statement: a band across the page, with the
+   detail beneath it. The ink is the ordinary one — a header is a row of the
+   same report — and the shade tells you how deep you are: the outermost
+   heading is the strongest, and each level inside it is lighter, so a folder
+   inside a folder is read as one without counting the indent. */
 .sapTable .sapStatementHeader > td {
   background: var(--w-head-strong);
   font-weight: 700;
+}
+.sapTable .sapStatementHeader[data-depth='1'] > td {
+  background: var(--w-head);
+}
+.sapTable .sapStatementHeader[data-depth='2'] > td {
+  background: var(--w-band);
+}
+.sapTable .sapStatementHeader[data-depth='3'] > td,
+.sapTable .sapStatementHeader[data-depth='4'] > td {
+  background: color-mix(in srgb, var(--w-band) 55%, transparent);
 }
 
 /* The statement mapping's headers. Bold, and otherwise the same ink as every

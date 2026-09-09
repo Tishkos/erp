@@ -139,6 +139,9 @@ export function StatementTable({
             return (
               <tr
                 className={toneClass[row.tone]}
+                // A grouping title is shaded by how deep it sits: the
+                // outermost strongest, each one inside it lighter.
+                data-depth={row.tone === 'header' ? Math.min(row.depth, 4) : undefined}
                 data-rule={row.rule && row.rule !== 'none' ? row.rule : undefined}
                 key={row.key}
               >

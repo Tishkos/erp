@@ -1026,6 +1026,14 @@ export interface IncomeRow {
   readonly kind: 'section' | 'group' | 'account' | 'subtotal';
   /** Unique within the statement. */
   readonly key: string;
+  /**
+   * A grouping title, carrying the sum of the lines beneath it.
+   *
+   * `kind` cannot answer this: it says how deep a row sits, so a nested
+   * header and a nested line are both `group`, and the statement had no way
+   * to draw one as a heading and the other as detail.
+   */
+  readonly isHeader: boolean;
   /** For `subtotal`: the message key naming it. */
   readonly labelKey: string | null;
   /** The mapping line's code, or the account's. */
@@ -1120,6 +1128,7 @@ export async function incomeStatement(
     const figure = figureOf(node);
     out.push({
       kind: level === 0 ? 'section' : 'group',
+      isHeader: node.line.isHeader,
       key: `line:${node.line.code}`,
       labelKey: null,
       code: node.line.code,
@@ -1137,6 +1146,7 @@ export async function incomeStatement(
       for (const account of accounts) {
         out.push({
           kind: 'account',
+          isHeader: false,
           key: `account:${node.line.code}:${account.accountCode}`,
           labelKey: null,
           code: account.accountCode,
@@ -1155,6 +1165,7 @@ export async function incomeStatement(
   const subtotal = (labelKey: string, amount: bigint, rule: 'single' | 'double') => {
     out.push({
       kind: 'subtotal',
+      isHeader: false,
       key: `subtotal:${labelKey}`,
       labelKey,
       code: null,
