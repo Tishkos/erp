@@ -67,15 +67,23 @@ export async function catalogue(tx: Tx): Promise<LineCatalogue> {
 /** The mapping as the account pickers show it: all four reports, in print order. */
 export async function pickerLines(tx: Tx) {
   const lines = await catalogue(tx);
-  return STATEMENT_FACES.flatMap((statement) =>
-    lines.flattened(statement).map(({ line, depth }) => ({
-      code: line.code,
-      name: line.name,
-      statement: line.statement,
-      isHeader: line.isHeader,
-      depth,
-    })),
-  );
+  return STATEMENT_FACES.flatMap((statement) => {
+    // "Expenses › Administrative Expenses" — a dropdown is a flat list, so
+    // the option has to say where in the report it sits.
+    const trail: string[] = [];
+    return lines.flattened(statement).map(({ line, depth }) => {
+      trail.length = depth;
+      trail[depth] = line.name;
+      return {
+        code: line.code,
+        name: line.name,
+        path: trail.slice(0, depth + 1).join(' › '),
+        statement: line.statement,
+        isHeader: line.isHeader,
+        depth,
+      };
+    });
+  });
 }
 
 export type MappingLine = Awaited<ReturnType<typeof pickerLines>>[number];

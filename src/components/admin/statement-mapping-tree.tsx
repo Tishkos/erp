@@ -77,24 +77,23 @@ export function StatementMappingTree({
 
   return (
     <>
-      {headers.length > 0 ? (
-        <div className={`${styles.sapEntryBar} ${styles.sapBarEnd}`}>
-          <button
-            className={`${styles.button} ${styles.small}`}
-            onClick={() => setCollapsed(new Set())}
-            type="button"
-          >
-            {labels.expandAll}
-          </button>
-          <button
-            className={`${styles.button} ${styles.small}`}
-            onClick={() => setCollapsed(new Set(headers.map((row) => row.key)))}
-            type="button"
-          >
-            {labels.collapseAll}
-          </button>
-        </div>
-      ) : null}
+      {/* On every tab, so the four read the same before anything is grouped. */}
+      <div className={`${styles.sapEntryBar} ${styles.sapBarEnd}`}>
+        <button
+          className={`${styles.button} ${styles.small}`}
+          onClick={() => setCollapsed(new Set())}
+          type="button"
+        >
+          {labels.expandAll}
+        </button>
+        <button
+          className={`${styles.button} ${styles.small}`}
+          onClick={() => setCollapsed(new Set(headers.map((row) => row.key)))}
+          type="button"
+        >
+          {labels.collapseAll}
+        </button>
+      </div>
 
       <div className={`${styles.sapTableWrap} ${styles.sapRegisterTableWrap}`}>
         <table className={`${styles.sapTable} ${styles.sapRegisterTable}`}>
@@ -119,7 +118,7 @@ export function StatementMappingTree({
             {shown.map((row) => {
               const folded = collapsed.has(row.key);
               return (
-                <tr className={row.isHeader ? styles.sapLevelRow : undefined} key={row.key}>
+                <tr className={row.isHeader ? styles.sapMappingHeader : undefined} key={row.key}>
                   <td style={{ paddingInlineStart: `${0.45 + row.depth * 1.1}rem` }}>
                     <span className={styles.sapTreeCell}>
                       {row.isHeader ? (

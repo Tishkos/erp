@@ -19,6 +19,8 @@ export interface MappingLine {
   readonly statement: StatementFace;
   readonly isHeader: boolean;
   readonly depth: number;
+  /** Where it sits on its report — "Expenses › Administrative Expenses". */
+  readonly path: string;
 }
 
 /**
@@ -82,7 +84,7 @@ export async function NewAccountButton({
     value: option.code,
     // The seeded lines keep their translated names; Finance's own lines are
     // printed as Finance named them.
-    label: '   '.repeat(Math.max(0, option.depth)) + option.name,
+    label: option.path,
     statement: option.statement,
     isHeader: option.isHeader,
   }));
@@ -114,25 +116,33 @@ export async function NewAccountButton({
         noParent: groups.length === 0 ? t('accounts.no_parent') : null,
       }}
       lines={lines}
-      parents={accounts.map((account) => {
-        const eligible = account.isGroup && account.isActive;
-        return {
-          value: account.id,
-          // A child takes its parent's type, so the parent decides which
-          // statement lines the new account may report on.
-          accountType: account.accountType,
-          // Shown so the shape of the chart is visible, but not choosable —
-          // otherwise a person picks a posting account and learns it was
-          // never allowed only after filling in the rest.
-          disabled: !eligible,
-          // Non-breaking spaces: a <select> collapses ordinary ones, and the
-          // indentation is the only thing that shows the depth.
-          label:
-            '   '.repeat(Math.max(0, account.level)) +
-            `${account.isGroup ? '[+]' : '·'} ${account.code} · ${account.name}` +
-            (eligible ? '' : ` — ${t('accounts.parent_not_a_header')}`),
-        };
-      })}
+      parents={(() => {
+        // The account's place in the chart, as a path: "Assets › Bank SA451",
+        // so an option says where it sits rather than leaving a reader to
+        // count the indent. The code stays on the option itself, which is
+        // what a person searches by.
+        const trail: string[] = [];
+        return accounts.map((account) => {
+          const level = Math.max(0, account.level);
+          trail.length = level;
+          trail[level] = account.name;
+          const path = trail.slice(0, level + 1).join(' › ');
+          const eligible = account.isGroup && account.isActive;
+          return {
+            value: account.id,
+            // A child takes its parent's type, so the parent decides which
+            // statement lines the new account may report on.
+            accountType: account.accountType,
+            // Shown so the shape of the chart is visible, but not choosable —
+            // otherwise a person picks a posting account and learns it was
+            // never allowed only after filling in the rest.
+            disabled: !eligible,
+            label:
+              `${account.isGroup ? '[+]' : '·'} ${path} · ${account.code}` +
+              (eligible ? '' : ` — ${t('accounts.parent_not_a_header')}`),
+          };
+        });
+      })()}
     />
   );
 }
@@ -166,7 +176,7 @@ export async function AccountControls({
       .filter((entry) => entry.statement === statement && !entry.isHeader)
       .map((entry) => ({
         value: entry.code,
-        label: '   '.repeat(Math.max(0, entry.depth)) + entry.name,
+        label: entry.path,
       })),
   ];
 

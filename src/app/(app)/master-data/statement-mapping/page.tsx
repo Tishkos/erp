@@ -125,6 +125,17 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
     required: t('required_hint'),
   });
 
+  // Every line's place in the layout, read as a path — "Expenses › Payroll"
+  // rather than an indent a reader has to count. A dropdown is a flat list,
+  // so the option itself has to say where it sits.
+  const pathOf = new Map<string, string>();
+  const trail: string[] = [];
+  for (const { line, depth } of flat) {
+    trail.length = depth;
+    trail[depth] = line.name;
+    pathOf.set(line.id, trail.slice(0, depth + 1).join(' › '));
+  }
+
   // Where a line may be moved to: any header of this report except itself and
   // whatever already sits beneath it.
   const headerChoices = (exclude?: string) => {
@@ -133,7 +144,7 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
       .filter((entry) => !barred.has(entry.line.id))
       .map((entry) => ({
         value: entry.line.id,
-        label: '\u00a0\u00a0\u00a0'.repeat(entry.depth) + entry.line.name,
+        label: pathOf.get(entry.line.id) ?? entry.line.name,
       }));
   };
 
