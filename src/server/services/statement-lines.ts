@@ -642,6 +642,23 @@ export async function remove(tx: Tx, ctx: ActorContext, id: string) {
   await permit(ctx, 'configure', PERMISSION_OBJECT);
   const line = await load(tx, id);
 
+  // The Statement of Changes in Equity is a roll-forward, and these two lines
+  // are the money in it that no account carries: the equity the period opened
+  // with, and the profit or loss it made. Remove one and the statement stops
+  // agreeing with the Equity section of the Balance Sheet — quietly, because
+  // every line still shows a figure and the total still adds up. That happened
+  // (2026-09-09: "Total Income" was deleted by accident), which is why it is
+  // refused rather than warned about.
+  //
+  // Renaming and reordering them is untouched. It is only their removal that
+  // takes a figure out of the statement with nothing to put in its place.
+  if (line.computes) {
+    throw new StatementLineError(
+      `'${line.name}' is worked out from the ledger, and the statement needs it to reach the same ` +
+        `equity the Balance Sheet shows. It can be renamed and moved, but not removed.`,
+    );
+  }
+
   const [child] = await tx
     .select({ id: financialStatementLine.id })
     .from(financialStatementLine)

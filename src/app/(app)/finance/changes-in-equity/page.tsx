@@ -8,7 +8,6 @@ import { SectionTabs } from '@/components/admin/section-tabs';
 import { StatementTable } from '@/components/admin/statement-table';
 import { formatBusinessDate, formatStatementAmount, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
-import { levelFrom } from '@domain/report-levels';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as statements from '@/server/services/financial-statements';
@@ -31,9 +30,6 @@ import * as statements from '@/server/services/financial-statements';
  */
 export const dynamic = 'force-dynamic';
 
-/** Statement line, then the accounts behind it. */
-const LEVELS = 2;
-
 export default async function ChangesInEquityPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/finance/changes-in-equity')) notFound();
 
@@ -53,7 +49,6 @@ export default async function ChangesInEquityPage({ searchParams }: { searchPara
   const from = typeof params.from === 'string' ? params.from : `${year}-01-01`;
   const to = typeof params.to === 'string' ? params.to : `${year}-12-31`;
   const currency = currencyFrom(params.currency);
-  const level = levelFrom(params.level, LEVELS);
 
   const equity = await withCurrentUser((tx) =>
     statements.changesInEquity(tx, { from, to, currency, allPermittedBranches: true }),
@@ -75,8 +70,6 @@ export default async function ChangesInEquityPage({ searchParams }: { searchPara
             action="/finance/changes-in-equity"
             currency={currency}
             from={from}
-            level={level}
-            maxLevel={LEVELS}
             to={to}
           />
         }
@@ -111,25 +104,14 @@ export default async function ChangesInEquityPage({ searchParams }: { searchPara
             collapse: t('mapping.collapse'),
             empty: t('reports.nothing_posted'),
           }}
-          rows={equity.rows.flatMap((row) => [
-            {
-              key: `row:${row.code}`,
-              label: row.name,
-              depth: row.depth,
-              tone: row.kind === 'header' ? ('header' as const) : ('line' as const),
-              rule: row.rule,
-              cells: [money(row.amount)],
-            },
-            ...(level >= 2
-              ? row.accounts.map((account) => ({
-                  key: `account:${row.code}:${account.accountCode}`,
-                  label: `${account.accountCode} · ${account.accountName}`,
-                  depth: row.depth + 1,
-                  tone: 'account' as const,
-                  cells: [money(account.movement)],
-                }))
-              : []),
-          ])}
+          rows={equity.rows.map((row) => ({
+            key: `row:${row.code}`,
+            label: row.name,
+            depth: row.depth,
+            tone: row.kind === 'header' ? ('header' as const) : ('line' as const),
+            rule: row.rule,
+            cells: [money(row.amount)],
+          }))}
         />
       </ReportWindow>
     </AdminPage>

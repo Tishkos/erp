@@ -439,6 +439,12 @@ export async function financialPosition(
 // ───────────────────────────────────────────────────────────────────────────
 // Statement of Changes in Equity
 //
+// By direction (2026-09-09): a line here is one row with one number. "Total
+// Income" is the figure the Income Statement reached, not the accounts that
+// made it — those are read on the Income Statement, which is where they say
+// something. This statement answers what happened to equity, and listing the
+// accounts inside every line buries that answer.
+//
 // The third statement, on a page of its own (by direction, 2026-08-31). It
 // answers one question the other two cannot: equity was this at the start of
 // the period and that at the end — what happened in between.
@@ -486,7 +492,6 @@ export interface EquityRow {
   readonly amount: string;
   /** A computed total is ruled above; the one that closes the statement twice. */
   readonly rule: 'none' | 'single' | 'double';
-  readonly accounts: readonly MovementAccount[];
 }
 
 export interface ChangesInEquity {
@@ -635,11 +640,6 @@ export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<
       (total, child) => total + totalOf(child),
       node.line.isHeader || node.line.isSubtotal ? 0n : figureOf(node.line),
     );
-  const holds = (node: StatementLineNode): boolean =>
-    node.line.computes !== null ||
-    (!node.line.isHeader && !node.line.isSubtotal && byLine.has(node.line.code)) ||
-    node.children.some(holds);
-
   // The totals in print order, so the one that closes the statement is ruled
   // twice and any before it once.
   const totals = catalogue.linesOf('changes_in_equity').filter((line) => line.isSubtotal);
@@ -659,12 +659,16 @@ export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<
         depth: 0,
         amount: decimal(running),
         rule: line.code === lastTotal ? 'double' : 'single',
-        accounts: [],
       });
       return;
     }
 
-    if (!holds(node)) return;
+    // Every line prints, whether or not anything has landed on it yet. On the
+    // other statements an empty line is noise; here the layout *is* the
+    // statement — "Subtract:" with nothing under it still tells the reader
+    // that nothing was taken out, and a reader who cannot find the line
+    // reasonably concludes the report is broken. (2026-09-09: with no account
+    // yet mapped to Dividends, the whole Subtract: section disappeared.)
 
     // A header repeats what its lines hold, so only the lines are counted.
     if (!line.isHeader) running += figureOf(line);
@@ -676,12 +680,6 @@ export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<
       depth,
       amount: decimal(line.isHeader ? totalOf(node) : figureOf(line)),
       rule: 'none',
-      accounts:
-        line.computes === 'result'
-          ? accountRows(paired, resultCodes)
-          : line.isHeader || line.computes
-            ? []
-            : accountRows(paired, byLine.get(line.code) ?? []),
     });
 
     for (const child of node.children) emit(child, depth + 1);

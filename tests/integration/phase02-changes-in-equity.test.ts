@@ -231,6 +231,18 @@ describe('02 · the Statement of Changes in Equity rolls forward', () => {
     expect(amountOf(rows, 'equity_closing')).toBe(amountOf(rows, 'equity_opening') + between);
   });
 
+  it('gives each line one row and one number, with no accounts beneath it', async () => {
+    await aYearOfTrading();
+    const { rows } = await equity();
+
+    // "Total Income" is the figure the Income Statement reached — 1,800,000 —
+    // not the revenue and cost accounts that made it. Those are read there.
+    expect(amountOf(rows, 'equity_total_income')).toBe(1_800_000);
+    expect(rows.every((row) => !('accounts' in row))).toBe(true);
+    // Eight rows for eight lines: nothing is expanded into anything.
+    expect(rows).toHaveLength(8);
+  });
+
   it('prints the sections in the order Mr Issa set out', async () => {
     await aYearOfTrading();
     const { rows } = await equity();
@@ -242,9 +254,30 @@ describe('02 · the Statement of Changes in Equity rolls forward', () => {
       'Additional Paid-In Capital',
       'Subtract:',
       'Dividends',
+      'Retained Earnings',
       'Equity at the End of the Period',
     ]);
     expect(rows[rows.length - 1]?.rule).toBe('double');
+  });
+
+  it('prints the whole layout on empty books, so no section goes missing', async () => {
+    // Nothing posted, nothing mapped. The eight lines are still the statement,
+    // and "Subtract:" with nothing under it says nothing was taken out — which
+    // is an answer. A reader who cannot find the line concludes the report is
+    // broken instead.
+    const { rows } = await equity();
+
+    expect(rows.map((row) => row.name)).toEqual([
+      'Equity at the beginning of the period',
+      'Add:',
+      'Total Income',
+      'Additional Paid-In Capital',
+      'Subtract:',
+      'Dividends',
+      'Retained Earnings',
+      'Equity at the End of the Period',
+    ]);
+    expect(rows.every((row) => Number(row.amount) === 0)).toBe(true);
   });
 
   it('shows a header carrying the sum of the lines beneath it, counted once', async () => {
@@ -280,6 +313,54 @@ describe('02 · the Statement of Changes in Equity rolls forward', () => {
     const { rows, closing } = await equity();
     expect(amountOf(rows, 'equity_total_income')).toBe(-250_000);
     expect(Number(closing)).toBe(750_000);
+  });
+
+  it('refuses to remove a line the statement needs to reach the right equity', async () => {
+    const idOf = async (code: string) => {
+      const { rows } = await ownerPool.query(
+        `select id from financial_statement_line where code = $1`,
+        [code],
+      );
+      return rows[0].id as string;
+    };
+    const remove = (id: string) =>
+      withScope(scope(manager), (tx) => lines.remove(tx, manager, id));
+
+    // Deleting "Total Income" takes the period's profit out of the statement
+    // and the closing figure quietly stops agreeing with the Balance Sheet —
+    // every line still shows something and the total still adds up, which is
+    // what makes it worth refusing rather than warning about. It happened.
+    await expect(remove(await idOf('equity_total_income'))).rejects.toThrow(/renamed and moved/);
+    await expect(remove(await idOf('equity_opening'))).rejects.toThrow(/renamed and moved/);
+
+    // Renaming and moving them is untouched — it is only removal that takes a
+    // figure out of the statement with nothing to put in its place.
+    const totalIncome = await idOf('equity_total_income');
+    await withScope(scope(manager), (tx) =>
+      lines.update(tx, manager, totalIncome, { name: 'Profit for the year', isHeader: false }),
+    );
+    const { rows: renamed } = await ownerPool.query(
+      `select name, computes from financial_statement_line where id = $1`,
+      [totalIncome],
+    );
+    expect(renamed[0].name).toBe('Profit for the year');
+    expect(renamed[0].computes).toBe('result');
+    // Put it back: resetTestData keeps the seeded lines, so a rename here
+    // would follow the suite into every test after this one.
+    await ownerPool.query(`update financial_statement_line set name = $2 where id = $1`, [
+      totalIncome,
+      'Total Income',
+    ]);
+
+    // And an ordinary line Finance made is still theirs to remove.
+    const mine = await withScope(scope(manager), (tx) =>
+      lines.create(tx, manager, {
+        statement: 'changes_in_equity',
+        name: 'Something of my own',
+        isHeader: false,
+      }),
+    );
+    await expect(remove(mine.id)).resolves.toBeUndefined();
   });
 
   it('does not offer the computed lines in the account picker', async () => {

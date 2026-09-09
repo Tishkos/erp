@@ -644,9 +644,10 @@ describe('5 · the financial statements', () => {
     const equity = await withScope(scopeOf(manager), (tx) =>
       statements.changesInEquity(tx, { from: FROM, to: TO, branchCode: BRANCH }),
     );
+    // One row, one number: this statement says what happened to equity, and
+    // the accounts behind a figure are read on the statement that explains it.
     const trading = equity.rows.find((row) => row.code === 'equity_trading');
     expect(Number(trading!.amount)).toBe(4000);
-    expect(trading!.accounts.map((account) => account.accountName)).toContain('Sales');
     expect(Number(equity.resultForThePeriod)).toBe(2500);
     expect(Number(equity.closing)).toBe(12500);
   });
