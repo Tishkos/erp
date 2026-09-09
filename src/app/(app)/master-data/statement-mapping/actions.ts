@@ -15,7 +15,7 @@ const back = (form: FormData) => {
 /** The answers one report asks for, read from whichever fields it showed. */
 const vocabularyOf = (formData: FormData) => ({
   isHeader: text(formData, 'kind') === 'header',
-  role: text(formData, 'role') || null,
+  isSubtotal: text(formData, 'kind') === 'subtotal',
   side: text(formData, 'side') || null,
   cashFlowCategory: text(formData, 'cashFlowCategory') || null,
   isCash: text(formData, 'isCash') === 'yes',

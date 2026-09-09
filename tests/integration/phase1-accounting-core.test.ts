@@ -171,10 +171,10 @@ describe('1 · the Chart of Accounts', () => {
   it('stores an independent mapping per statement when revenue is created', async () => {
     await ownerPool.query(`
       insert into financial_statement_line
-        (code, name, statement, ordinal, role, side, cash_flow_category)
+        (code, name, statement, ordinal, side, cash_flow_category)
       values
-        ('product_revenue', 'Product Revenue', 'income_statement', 11, 'revenue', null, 'operating'),
-        ('balance_sheet_revenue', 'Revenue', 'balance_sheet', 41, null, 'equity', 'financing')
+        ('product_revenue', 'Product Revenue', 'income_statement', 11, null, null),
+        ('balance_sheet_revenue', 'Revenue', 'balance_sheet', 41, 'equity', null)
     `);
 
     const accountId = await account('R000001', {
@@ -612,10 +612,10 @@ describe('5 · the financial statements', () => {
     // choices, one account — and no figure counted twice.
     await ownerPool.query(`
       insert into financial_statement_line
-        (code, name, statement, ordinal, role, side, cash_flow_category)
+        (code, name, statement, ordinal, side, cash_flow_category)
       values
-        ('balance_sheet_revenue', 'Revenue', 'balance_sheet', 41, null, 'equity', 'financing'),
-        ('equity_trading', 'Trading result', 'changes_in_equity', 20, null, null, null)
+        ('balance_sheet_revenue', 'Revenue', 'balance_sheet', 41, 'equity', null),
+        ('equity_trading', 'Trading result', 'changes_in_equity', 20, null, null)
     `);
     await withScope(scopeOf(manager), (tx) =>
       coa.setStatementLines(tx, manager, salesRevenue, {
@@ -684,8 +684,8 @@ describe('5 · the financial statements', () => {
 
     // ...and a header, which prints the sum of its lines and takes no accounts.
     await ownerPool.query(`
-      insert into financial_statement_line (code, name, statement, ordinal, role, side, is_header)
-      values ('is_header_only', 'A header', 'income_statement', 99, null, null, true)
+      insert into financial_statement_line (code, name, statement, ordinal, side, is_header)
+      values ('is_header_only', 'A header', 'income_statement', 99, null, true)
       on conflict (code) do nothing
     `);
     await expect(

@@ -17,10 +17,17 @@ import styles from './admin.module.css';
  */
 export function Submit({
   label,
+  name,
   tone = 'primary',
   small,
 }: {
   readonly label: string;
+  /**
+   * What the button is called, when its face does not say so. An arrow reads
+   * as "black up-pointing triangle" to a screen reader and as nothing at all
+   * on hover, so a button wearing one is given its name here.
+   */
+  readonly name?: string | undefined;
   readonly tone?: 'primary' | 'secondary' | 'danger';
   readonly small?: boolean;
 }) {
@@ -37,7 +44,12 @@ export function Submit({
     .filter(Boolean)
     .join(' ');
   return (
-    <button className={cls} disabled={!ready || pending} type="submit">
+    <button
+      className={cls}
+      disabled={!ready || pending}
+      type="submit"
+      {...(name ? { 'aria-label': name, title: name } : {})}
+    >
       {label}
     </button>
   );

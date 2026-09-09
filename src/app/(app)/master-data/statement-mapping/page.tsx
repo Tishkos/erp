@@ -10,7 +10,6 @@ import { can } from '@domain/permissions';
 import {
   BALANCE_SIDES,
   CASH_FLOW_CATEGORIES,
-  INCOME_ROLES,
   type StatementFace,
 } from '@domain/financial-statements';
 import { visibleRoute } from '@/server/phase-gate';
@@ -91,16 +90,27 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
     'changes-in-equity': page('changes_in_equity'),
   };
   const attributeHead: Record<Tab, string> = {
-    'income-statement': t('mapping.role'),
+    'income-statement': t('mapping.kind'),
     'balance-sheet': t('mapping.side'),
     'cash-flow': t('mapping.activity'),
-    'changes-in-equity': t('mapping.accounts'),
+    'changes-in-equity': t('mapping.kind'),
   };
+
+  /**
+   * What the row is, in one word. The dialog spells out what each kind does,
+   * because that is where the choice is made; a column of the table is read
+   * down, so it carries the name and nothing else.
+   */
+  const kindOf = (line: { isHeader: boolean; isSubtotal: boolean }) =>
+    line.isHeader
+      ? t('mapping.kind_header_short')
+      : line.isSubtotal
+        ? t('mapping.kind_subtotal_short')
+        : t('mapping.kind_line_short');
 
   // The dialog asks the same questions of a new line and of one being edited,
   // so both are handed the same choices to answer them from.
   const choices = {
-    roles: INCOME_ROLES.map((role) => ({ value: role, label: lineT(role) })),
     sides: BALANCE_SIDES.map((side) => ({ value: side, label: sideName(side) })),
     activities: CASH_FLOW_CATEGORIES.map((category) => ({
       value: category,
@@ -115,9 +125,9 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
     kind: t('mapping.kind'),
     kindLine: t('mapping.kind_line'),
     kindHeader: t('mapping.kind_header'),
+    kindSubtotal: t('mapping.kind_subtotal'),
     parent: t('mapping.parent'),
     parentTop: t('mapping.parent_top'),
-    role: t('mapping.role'),
     side: t('mapping.side'),
     activity: t('mapping.activity'),
     cash: t('mapping.is_cash'),
@@ -159,7 +169,6 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
             labels={dialogLabels(t('mapping.new_line'), t('mapping.new_title'))}
             mode="new"
             parents={headerChoices()}
-            roles={choices.roles}
             sides={choices.sides}
             statement={statement}
           />
@@ -211,29 +220,31 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
                 name: line.name,
                 depth,
                 isHeader: line.isHeader,
-                attribute: line.role
-                  ? lineT(line.role)
-                  : line.side
-                    ? sideName(line.side)
-                    : line.isCash
-                      ? t('mapping.is_cash')
-                      : line.cashFlowCategory
-                        ? t(`reports.cash_${line.cashFlowCategory}`)
-                        : '—',
-                accounts: line.isHeader ? '—' : String(counts.get(line.code) ?? 0),
+                attribute: line.side
+                  ? sideName(line.side)
+                  : line.isCash
+                    ? t('mapping.is_cash')
+                    : line.cashFlowCategory
+                      ? t(`reports.cash_${line.cashFlowCategory}`)
+                      : kindOf(line),
+                accounts: line.isHeader || line.isSubtotal ? '—' : String(counts.get(line.code) ?? 0),
                 actions: mayConfigure ? (
                   <>
                     {/* Arrows rather than the words Up and Down: the order of
-                        a statement is set often and the row is already busy. */}
+                        a statement is set often and the row is already busy.
+                        The words are still there for anyone hovering or
+                        listening. */}
                     <ActionButton
                       action={moveLine}
                       hidden={{ id: line.id, direction: 'up', tab }}
                       label={'▲'}
+                      name={`${t('mapping.up')} — ${line.name}`}
                     />
                     <ActionButton
                       action={moveLine}
                       hidden={{ id: line.id, direction: 'down', tab }}
                       label={'▼'}
+                      name={`${t('mapping.down')} — ${line.name}`}
                     />
                     <StatementLineDialog
                       action={updateLine}
@@ -241,8 +252,7 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
                       hidden={{ id: line.id, tab }}
                       initial={{
                         name: line.name,
-                        kind: line.isHeader ? 'header' : 'line',
-                        ...(line.role ? { role: line.role } : {}),
+                        kind: line.isHeader ? 'header' : line.isSubtotal ? 'subtotal' : 'line',
                         ...(line.side ? { side: line.side } : {}),
                         ...(line.cashFlowCategory ? { cashFlowCategory: line.cashFlowCategory } : {}),
                         ...(line.parentId ? { parentId: line.parentId } : {}),
@@ -251,7 +261,6 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
                       labels={dialogLabels(t('mapping.edit'), t('mapping.edit_title'))}
                       mode="edit"
                       parents={headerChoices(line.id)}
-                      roles={choices.roles}
                       sides={choices.sides}
                       statement={statement}
                     />

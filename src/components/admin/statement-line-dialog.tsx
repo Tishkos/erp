@@ -16,7 +16,7 @@ import styles from './admin.module.css';
  * The form posts to a server action directly, so it works before the page has
  * finished hydrating and the dialog closes by the navigation that follows.
  */
-export type Kind = 'line' | 'header';
+export type Kind = 'line' | 'header' | 'subtotal';
 
 export interface Choice {
   readonly value: string;
@@ -31,9 +31,9 @@ export interface LineDialogLabels {
   readonly kind: string;
   readonly kindLine: string;
   readonly kindHeader: string;
+  readonly kindSubtotal: string;
   readonly parent: string;
   readonly parentTop: string;
-  readonly role: string;
   readonly side: string;
   readonly activity: string;
   readonly cash: string;
@@ -47,7 +47,6 @@ export function StatementLineDialog({
   labels,
   statement,
   parents,
-  roles,
   sides,
   activities,
   initial,
@@ -63,13 +62,11 @@ export function StatementLineDialog({
    * itself.
    */
   readonly parents?: readonly Choice[];
-  readonly roles: readonly Choice[];
   readonly sides: readonly Choice[];
   readonly activities: readonly Choice[];
   readonly initial?: {
     readonly name?: string;
     readonly kind?: Kind;
-    readonly role?: string;
     readonly side?: string;
     readonly cashFlowCategory?: string;
     readonly isCash?: boolean;
@@ -86,8 +83,8 @@ export function StatementLineDialog({
   const [kind, setKind] = useState<Kind>(initial?.kind ?? 'line');
   const [isCash, setIsCash] = useState(initial?.isCash ?? false);
 
-  // A grouping title carries no figure of its own, so the questions its
-  // report would ask about a line do not apply to it.
+  // A grouping title groups and a computed total adds up; neither carries
+  // accounts, so neither is asked what its figures mean.
   const asksVocabulary = kind === 'line';
 
   return (
@@ -158,6 +155,7 @@ export function StatementLineDialog({
                 >
                   <option value="line">{labels.kindLine}</option>
                   <option value="header">{labels.kindHeader}</option>
+                  <option value="subtotal">{labels.kindSubtotal}</option>
                 </select>
               </div>
 
@@ -182,28 +180,7 @@ export function StatementLineDialog({
                 </div>
               ) : null}
 
-              {statement === 'income_statement' && asksVocabulary ? (
-                <div className={styles.field}>
-                  <label className={styles.label} htmlFor={field('role')}>
-                    {labels.role}
-                  </label>
-                  <select
-                    className={styles.select}
-                    defaultValue={initial?.role ?? roles[0]?.value ?? ''}
-                    id={field('role')}
-                    name="role"
-                    required
-                  >
-                    {roles.map((role) => (
-                      <option key={role.value} value={role.value}>
-                        {role.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-
-              {statement === 'balance_sheet' ? (
+              {statement === 'balance_sheet' && kind !== 'subtotal' ? (
                 <div className={styles.field}>
                   <label className={styles.label} htmlFor={field('side')}>
                     {labels.side}

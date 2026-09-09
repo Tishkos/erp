@@ -88,12 +88,6 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
         foot={
           <div className={s.sapFootTotals}>
             <div className={s.sapFootTotal}>
-              <span>{t('reports.line_gross_profit')}</span>
-              <strong>
-                <bdi dir="ltr">{money(pl.grossProfit)}</bdi>
-              </strong>
-            </div>
-            <div className={s.sapFootTotal}>
               <span>{loss ? t('reports.net_loss') : t('reports.net_profit')}</span>
               <strong>
                 <bdi dir="ltr">{money(pl.result)}</bdi>
@@ -118,18 +112,8 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
           }}
           rows={shown.map((row) => ({
             key: row.key,
-            // A subtotal is named by the catalogue; a line and a header by the
-            // mapping; an account by the chart.
-            label:
-              row.labelKey === 'result'
-                ? loss
-                  ? t('reports.net_loss')
-                  : t('reports.net_profit')
-                : row.labelKey
-                  ? t(`reports.line_${row.labelKey}`)
-                  : row.kind === 'account'
-                    ? `${row.code} \u00b7 ${row.name}`
-                    : (row.name ?? ''),
+            // Everything is named by the layout now, an account by the chart.
+            label: row.kind === 'account' ? `${row.code} \u00b7 ${row.name}` : (row.name ?? ''),
             depth: row.depth,
             // Banded where something sits beneath it: the statement's own
             // top-level headings, and every grouping title inside them.

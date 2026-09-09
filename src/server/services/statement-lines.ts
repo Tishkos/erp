@@ -9,11 +9,13 @@
  * screens can make, each one authorised on the statements' own permission
  * object and written to the audit trail.
  *
- * What Finance cannot do here is make a report lie about its own arithmetic:
- * an income line always names the role it plays, a balance-sheet line its
- * side, a cash-flow line its activity — so the subtotals, the two halves of
- * the Balance Sheet and the three sections of the Cash Flow Statement keep
- * meaning what they say whatever layout is built on top of them.
+ * What Finance cannot do here is make a report lie about its own arithmetic.
+ * A balance-sheet line names its side and a cash-flow line its activity, so
+ * the two halves of the Balance Sheet and the three sections of the Cash Flow
+ * Statement keep meaning what they say whatever layout is built on top of
+ * them. The Income Statement asks nothing: which way a figure goes is read
+ * from the account's own type, and its subtotals are lines of the layout,
+ * carrying the running total of everything printed above them.
  *
  * The seeded lines are the layout an install starts from, not one it is stuck
  * with: they rename, regroup, reorder and remove like any other. `isSystem`
@@ -25,14 +27,12 @@ import { chartOfAccount, financialStatementLine } from '../db/schema';
 import {
   BALANCE_SIDES,
   CASH_FLOW_CATEGORIES,
-  INCOME_ROLES,
   LineCatalogue,
   STATEMENT_FACES,
   StatementLineError,
   TITLES,
   type BalanceSide,
   type CashFlowCategory,
-  type IncomeRole,
   type StatementFace,
   type StatementLineRow,
 } from '../domain/financial-statements';
@@ -114,10 +114,10 @@ export interface CreateLineInput {
   readonly statement: StatementFace;
   readonly name: string;
   readonly isHeader: boolean;
+  /** A computed total: the running sum of everything above it. */
+  readonly isSubtotal?: boolean;
   /** A header of the same statement to sit under; top level when null. */
   readonly parentId?: string | null;
-  /** Income-statement lines: the role the line plays. Headers carry none. */
-  readonly role?: string | null;
   /** Balance-sheet headers and lines: which side of the statement. */
   readonly side?: string | null;
   /** Cash-flow lines: which of the three activities, or the cash itself. */
@@ -130,26 +130,22 @@ export interface CreateLineInput {
  * refusal is a sentence rather than a constraint name.
  */
 function vocabularyFor(input: CreateLineInput): {
-  role: IncomeRole | null;
   side: BalanceSide | null;
   cashFlowCategory: CashFlowCategory | null;
   isCash: boolean;
 } {
-  const blank = { role: null, side: null, cashFlowCategory: null, isCash: false } as const;
+  const blank = { side: null, cashFlowCategory: null, isCash: false } as const;
+  // A title groups and a total adds up; neither carries a figure of its own,
+  // so neither is asked anything further.
+  const carriesAccounts = !input.isHeader && !input.isSubtotal;
 
   switch (input.statement) {
-    case 'income_statement': {
-      // A header holds the sum of its lines, and each of those names its own
-      // role — so the header needs none.
-      if (input.isHeader) return { ...blank };
-      if (!input.role || !(INCOME_ROLES as readonly string[]).includes(input.role)) {
-        throw new StatementLineError(
-          'An Income Statement line names the role it plays — revenue, cost of sales, other income, operating expenses, finance costs or tax — so the subtotals keep computing.',
-        );
-      }
-      return { ...blank, role: input.role as IncomeRole };
-    }
+    case 'income_statement':
+      // Nothing to ask. Which way a figure goes is known from the accounts
+      // mapped to the line, so the line itself has nothing to declare.
+      return { ...blank };
     case 'balance_sheet': {
+      if (input.isSubtotal) return { ...blank };
       // Headers too: a branch of the Balance Sheet lives on one side of it.
       if (!input.side || !(BALANCE_SIDES as readonly string[]).includes(input.side)) {
         throw new StatementLineError(
@@ -159,7 +155,7 @@ function vocabularyFor(input: CreateLineInput): {
       return { ...blank, side: input.side as BalanceSide };
     }
     case 'cash_flow': {
-      if (input.isHeader) return { ...blank };
+      if (!carriesAccounts) return { ...blank };
       if (input.isCash) return { ...blank, isCash: true };
       if (
         !input.cashFlowCategory ||
@@ -257,9 +253,30 @@ async function resolveParent(
 }
 
 /** Last among the siblings it is joining. */
-async function nextOrdinal(tx: Tx, statement: StatementFace, parentId: string | null): Promise<number> {
-  const [last] = await tx
-    .select({ max: sql<number>`coalesce(max(${financialStatementLine.ordinal}), 0)::int` })
+/**
+ * Where a new line goes among its siblings.
+ *
+ * At the end — but *above* the totals that close the statement. A computed
+ * total carries the running sum of everything printed above it, so a line
+ * added below one is money the report shows on its own line and then leaves
+ * out of the result. Nobody adding "Other Revenue" expects it to be excluded
+ * from Net Income until they remember to move it, so it is placed correctly
+ * to begin with.
+ *
+ * A total added deliberately still goes last, which is where a total belongs.
+ */
+async function nextOrdinal(
+  tx: Tx,
+  statement: StatementFace,
+  parentId: string | null,
+  isSubtotal: boolean,
+): Promise<number> {
+  const siblings = await tx
+    .select({
+      id: financialStatementLine.id,
+      ordinal: financialStatementLine.ordinal,
+      isSubtotal: financialStatementLine.isSubtotal,
+    })
     .from(financialStatementLine)
     .where(
       and(
@@ -268,8 +285,35 @@ async function nextOrdinal(tx: Tx, statement: StatementFace, parentId: string | 
           ? eq(financialStatementLine.parentId, parentId)
           : sql`${financialStatementLine.parentId} is null`,
       ),
-    );
-  return (last?.max ?? 0) + 10;
+    )
+    .orderBy(financialStatementLine.ordinal);
+
+  const last = siblings[siblings.length - 1]?.ordinal ?? 0;
+
+  // The run of totals at the foot of the statement, if there is one.
+  let cut = siblings.length;
+  while (cut > 0 && siblings[cut - 1]!.isSubtotal) cut -= 1;
+  const closing = siblings.slice(cut);
+
+  if (isSubtotal || closing.length === 0) return last + 10;
+
+  const above = siblings[cut - 1]?.ordinal ?? closing[0]!.ordinal - 20;
+  const ordinal = above + 10;
+
+  // Room is usually there — the seeded layout leaves gaps of ten and the
+  // result sits at 9000 — but if it is not, the closing totals move down
+  // rather than the new line being dropped below them.
+  if (ordinal >= closing[0]!.ordinal) {
+    let next = ordinal;
+    for (const total of closing) {
+      next += 10;
+      await tx
+        .update(financialStatementLine)
+        .set({ ordinal: next })
+        .where(eq(financialStatementLine.id, total.id));
+    }
+  }
+  return ordinal;
 }
 
 export async function create(tx: Tx, ctx: ActorContext, input: CreateLineInput) {
@@ -279,7 +323,8 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateLineInput) 
   if (!(STATEMENT_FACES as readonly string[]).includes(input.statement)) {
     throw new StatementLineError(`'${String(input.statement)}' is not one of the four statements.`);
   }
-  const { role, side, cashFlowCategory, isCash } = vocabularyFor(input);
+  const { side, cashFlowCategory, isCash } = vocabularyFor(input);
+  const isSubtotal = input.isSubtotal ?? false;
 
   const parentId = await resolveParent(tx, input.parentId, input.statement, side);
 
@@ -292,7 +337,7 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateLineInput) 
   });
 
   // Last among its siblings; the person reorders from there.
-  const ordinal = await nextOrdinal(tx, input.statement, parentId);
+  const ordinal = await nextOrdinal(tx, input.statement, parentId, isSubtotal);
 
   const [created] = await tx
     .insert(financialStatementLine)
@@ -302,8 +347,8 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateLineInput) 
       statement: input.statement,
       parentId,
       isHeader: input.isHeader,
+      isSubtotal,
       ordinal,
-      role,
       side,
       cashFlowCategory,
       isCash,
@@ -319,7 +364,7 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateLineInput) 
       name,
       statement: input.statement,
       isHeader: input.isHeader,
-      role,
+      isSubtotal,
       side,
       cashFlowCategory,
       isCash,
@@ -359,6 +404,8 @@ export async function rename(tx: Tx, ctx: ActorContext, id: string, name: string
 export interface UpdateLineInput {
   readonly name: string;
   readonly isHeader: boolean;
+  /** A computed total: the running sum of everything above it. */
+  readonly isSubtotal?: boolean;
   /** The header it is to sit under, or null for the top level. */
   readonly parentId?: string | null;
   readonly role?: string | null;
@@ -388,8 +435,9 @@ export async function update(tx: Tx, ctx: ActorContext, id: string, input: Updat
   const statement = line.statement as StatementFace;
   const name = requireText(input.name, 'name');
   const isHeader = input.isHeader;
+  const isSubtotal = input.isSubtotal ?? false;
 
-  if (isHeader !== line.isHeader) {
+  if ((isHeader || isSubtotal) !== (line.isHeader || line.isSubtotal)) {
     if (isHeader) {
       const [account] = await tx
         .select({ code: chartOfAccount.code })
@@ -419,7 +467,7 @@ export async function update(tx: Tx, ctx: ActorContext, id: string, input: Updat
     statement,
     name,
     isHeader,
-    role: input.role ?? line.role,
+    isSubtotal,
     side: input.side ?? line.side,
     cashFlowCategory: input.cashFlowCategory ?? line.cashFlowCategory,
     isCash: input.isCash ?? false,
@@ -438,10 +486,11 @@ export async function update(tx: Tx, ctx: ActorContext, id: string, input: Updat
     .set({
       name,
       isHeader,
+      isSubtotal,
       ...vocabulary,
       parentId,
       // Joining a new set of siblings means joining the end of them.
-      ...(moved ? { ordinal: await nextOrdinal(tx, statement, parentId) } : {}),
+      ...(moved ? { ordinal: await nextOrdinal(tx, statement, parentId, isSubtotal) } : {}),
     })
     .where(eq(financialStatementLine.id, id));
 
@@ -452,13 +501,13 @@ export async function update(tx: Tx, ctx: ActorContext, id: string, input: Updat
     before: {
       name: line.name,
       isHeader: line.isHeader,
+      isSubtotal: line.isSubtotal,
       parentId: line.parentId,
-      role: line.role,
       side: line.side,
       cashFlowCategory: line.cashFlowCategory,
       isCash: line.isCash,
     },
-    after: { name, isHeader, parentId, ...vocabulary },
+    after: { name, isHeader, isSubtotal, parentId, ...vocabulary },
   });
 }
 
@@ -526,8 +575,8 @@ export async function setCashFlowCategory(
       `'${line.name}' is a line of the ${TITLES[line.statement as StatementFace]}; the three activities belong to the Cash Flow Statement.`,
     );
   }
-  if (line.isHeader) {
-    throw new StatementLineError('A header holds no movements of its own — classify its lines.');
+  if (line.isHeader || line.isSubtotal) {
+    throw new StatementLineError('A header or a total holds no movements of its own — classify its lines.');
   }
   if (!(CASH_FLOW_CATEGORIES as readonly string[]).includes(category)) {
     throw new StatementLineError(`'${String(category)}' is not one of the three activities.`);
@@ -556,7 +605,7 @@ export async function setCashFlowCategory(
 export async function setCash(tx: Tx, ctx: ActorContext, id: string, isCash: boolean) {
   await permit(ctx, 'configure', PERMISSION_OBJECT);
   const line = await load(tx, id);
-  if (line.statement !== 'cash_flow' || line.isHeader) {
+  if (line.statement !== 'cash_flow' || line.isHeader || line.isSubtotal) {
     throw new StatementLineError('Only a line of the Cash Flow Statement can hold the cash it explains.');
   }
   if (line.isCash === isCash) return;

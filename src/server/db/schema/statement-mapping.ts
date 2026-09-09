@@ -41,14 +41,16 @@ export const financialStatementLine = pgTable(
     /** Order among siblings, top to bottom. */
     ordinal: integer('ordinal').notNull(),
     /**
-     * Income-statement lines only: how the line bears on the result and on
-     * the running subtotals. Gross profit is revenue less cost of sales
-     * *whatever* the layout looks like, so every line says which of the six
-     * classical roles it plays.
+     * A computed total: the running sum of every line above it on its report.
+     *
+     * "Gross Profit" and "Net Income (Loss)" are lines like any other — they
+     * are placed, named, moved and removed by Finance — and what makes them
+     * different is only that their figure is worked out rather than mapped.
+     * Which way each account pushes that figure is known from the account
+     * itself: revenue is credit-normal and adds, expense is debit-normal and
+     * takes away, so no line has to be told.
      */
-    role: text('role', {
-      enum: ['revenue', 'cost_of_sales', 'other_income', 'operating_expenses', 'finance_costs', 'tax_expense'],
-    }),
+    isSubtotal: boolean('is_subtotal').notNull().default(false),
     /** Balance-sheet lines only: which side of the statement. */
     side: text('side', { enum: ['asset', 'equity', 'liability'] }),
     /**

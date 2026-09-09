@@ -403,12 +403,15 @@ export function LinkButton({
 export function ActionButton({
   action,
   label,
+  name,
   hidden,
   tone = 'secondary',
   small = true,
 }: {
   readonly action: (formData: FormData) => Promise<void>;
   readonly label: string;
+  /** What to call the button when `label` is a glyph rather than a word. */
+  readonly name?: string | undefined;
   readonly hidden: Readonly<Record<string, string>>;
   readonly tone?: 'primary' | 'secondary' | 'danger';
   readonly small?: boolean;
@@ -418,7 +421,7 @@ export function ActionButton({
       {Object.entries(hidden).map(([name, value]) => (
         <Hidden key={name} name={name} value={value} />
       ))}
-      <Submit label={label} small={small} tone={tone} />
+      <Submit label={label} small={small} tone={tone} {...(name ? { name } : {})} />
     </form>
   );
 }

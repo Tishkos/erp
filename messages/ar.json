@@ -1691,7 +1691,6 @@
     "mapping": {
       "subtitle": "بنود كل قائمة.",
       "line": "البند",
-      "role": "الدور",
       "side": "الجانب",
       "activity": "النشاط",
       "statement": "القائمة",
@@ -1713,7 +1712,11 @@
       "parent_top": "المستوى الأعلى",
       "is_cash": "النقد وما يعادله",
       "expand": "توسيع",
-      "collapse": "طيّ"
+      "collapse": "طيّ",
+      "kind_subtotal": "مجموع — يجمع البنود التي فوقه",
+      "kind_line_short": "بند",
+      "kind_header_short": "عنوان",
+      "kind_subtotal_short": "إجمالي"
     }
   },
   "profile": {

@@ -99,12 +99,22 @@ export function StatementMappingTree({
         <table className={`${styles.sapTable} ${styles.sapRegisterTable}`}>
           <thead>
             <tr>
-              <th scope="col">{labels.line}</th>
+              {/* The names take the slack. Without this the three narrow
+                  columns sit against the left edge and the buttons against
+                  the right with a wide blank between them, and a deeply
+                  nested name is squeezed for room it has no need to lack. */}
+              <th scope="col" style={{ width: '100%' }}>
+                {labels.line}
+              </th>
               <th scope="col">{labels.attribute}</th>
               <th className={styles.sapNum} scope="col">
                 {labels.accounts}
               </th>
-              {showActions ? <th scope="col">{labels.actions}</th> : null}
+              {showActions ? (
+                <th scope="col" style={{ textAlign: 'end', whiteSpace: 'nowrap' }}>
+                  {labels.actions}
+                </th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -141,8 +151,16 @@ export function StatementMappingTree({
                   <td className={styles.sapNum}>{row.accounts}</td>
                   {showActions ? (
                     <td>
+                      {/* Pushed to the right edge: the controls belong at the
+                          end of the row, away from the names being read. */}
                       <div
-                        style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}
+                        style={{
+                          display: 'flex',
+                          gap: '0.35rem',
+                          flexWrap: 'nowrap',
+                          alignItems: 'center',
+                          justifyContent: 'flex-end',
+                        }}
                       >
                         {row.actions}
                       </div>

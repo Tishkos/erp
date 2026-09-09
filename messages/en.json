@@ -1691,7 +1691,6 @@
     "mapping": {
       "subtitle": "The lines each report prints.",
       "line": "Line",
-      "role": "Role",
       "side": "Side",
       "activity": "Activity",
       "statement": "Report",
@@ -1713,7 +1712,11 @@
       "parent_top": "Top level",
       "is_cash": "Cash and equivalents",
       "expand": "Expand",
-      "collapse": "Collapse"
+      "collapse": "Collapse",
+      "kind_subtotal": "Total — adds up the lines above it",
+      "kind_line_short": "Line",
+      "kind_header_short": "Header",
+      "kind_subtotal_short": "Total"
     }
   },
   "profile": {

@@ -13,8 +13,8 @@ const rows: StatementLineRow[] = [
     statement: 'income_statement',
     parentId: null,
     isHeader: false,
+    isSubtotal: false,
     ordinal: 10,
-    role: 'revenue',
     side: null,
     cashFlowCategory: 'operating',
     isCash: false,
@@ -27,8 +27,8 @@ const rows: StatementLineRow[] = [
     statement: 'income_statement',
     parentId: null,
     isHeader: false,
+    isSubtotal: false,
     ordinal: 20,
-    role: 'revenue',
     side: null,
     cashFlowCategory: 'operating',
     isCash: false,
@@ -41,8 +41,8 @@ const rows: StatementLineRow[] = [
     statement: 'balance_sheet',
     parentId: null,
     isHeader: false,
+    isSubtotal: false,
     ordinal: 10,
-    role: null,
     side: 'equity',
     cashFlowCategory: 'financing',
     isCash: false,
@@ -55,8 +55,8 @@ const rows: StatementLineRow[] = [
     statement: 'balance_sheet',
     parentId: null,
     isHeader: false,
+    isSubtotal: false,
     ordinal: 20,
-    role: null,
     side: 'equity',
     cashFlowCategory: 'financing',
     isCash: false,
@@ -69,8 +69,8 @@ const rows: StatementLineRow[] = [
     statement: 'balance_sheet',
     parentId: null,
     isHeader: false,
+    isSubtotal: false,
     ordinal: 30,
-    role: null,
     side: 'asset',
     cashFlowCategory: 'operating',
     isCash: false,
@@ -133,8 +133,8 @@ describe('the layout belongs to Finance, including the lines it started with', (
       statement: 'income_statement',
       parentId: null,
       isHeader: true,
+      isSubtotal: false,
       ordinal: 40,
-      role: null,
       side: null,
       cashFlowCategory: null,
       isCash: false,
@@ -147,8 +147,8 @@ describe('the layout belongs to Finance, including the lines it started with', (
       statement: 'income_statement',
       parentId: 'is-header',
       isHeader: false,
+      isSubtotal: false,
       ordinal: 10,
-      role: 'operating_expenses',
       side: null,
       cashFlowCategory: null,
       isCash: false,
@@ -180,8 +180,22 @@ describe('the layout belongs to Finance, including the lines it started with', (
     );
   });
 
-  it('reports nothing where the report has no line of that kind at all', () => {
-    expect(catalogue.lineFor('revenue', 'income_statement', null)).toBeUndefined();
+  it('falls to the first line of the report, whatever the account type', () => {
+    // Roles are gone: which way a figure goes is known from the account, so an
+    // account that lands on an unexpected line is misplaced but never
+    // mis-signed. Placement is the chart owner's to fix, not the code's to
+    // guess.
+    expect(catalogue.lineFor('revenue', 'income_statement', null)?.code).toBe(
+      'administrative_expenses',
+    );
+    expect(catalogue.lineFor('expense', 'income_statement', null)?.code).toBe(
+      'administrative_expenses',
+    );
+  });
+
+  it('still reports nothing where the Balance Sheet has no line of that side', () => {
+    // A side is not something an account can say — it is where on the sheet
+    // the line prints — so it remains a property of the line.
     expect(catalogue.lineFor('asset', 'balance_sheet', null)).toBeUndefined();
   });
 

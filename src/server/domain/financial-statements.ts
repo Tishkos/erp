@@ -56,35 +56,11 @@ export const STATEMENT_FACES = [
 ] as const;
 export type StatementFace = (typeof STATEMENT_FACES)[number];
 
-/**
- * The six classical roles an income-statement line can play. The layout is
- * Finance's; the arithmetic is not — gross profit is revenue less cost of
- * sales whatever the page looks like, so every line names the role it plays
- * and the subtotals are computed from the roles.
- */
-export const INCOME_ROLES = [
-  'revenue',
-  'cost_of_sales',
-  'other_income',
-  'operating_expenses',
-  'finance_costs',
-  'tax_expense',
-] as const;
-export type IncomeRole = (typeof INCOME_ROLES)[number];
-
 export const BALANCE_SIDES = ['asset', 'equity', 'liability'] as const;
 export type BalanceSide = (typeof BALANCE_SIDES)[number];
 
 export const CASH_FLOW_CATEGORIES = ['operating', 'investing', 'financing'] as const;
 export type CashFlowCategory = (typeof CASH_FLOW_CATEGORIES)[number];
-
-/** Roles whose figures are taken away on the face of the statement. */
-const DEDUCTING_ROLES: ReadonlySet<IncomeRole> = new Set([
-  'cost_of_sales',
-  'operating_expenses',
-  'finance_costs',
-  'tax_expense',
-]);
 
 export interface StatementLine {
   readonly id: string;
@@ -96,17 +72,22 @@ export interface StatementLine {
   readonly isHeader: boolean;
   /** Where it sits among its siblings, top to bottom. */
   readonly ordinal: number;
-  readonly role: IncomeRole | null;
   readonly side: BalanceSide | null;
   readonly cashFlowCategory: CashFlowCategory | null;
   /** On the Cash Flow Statement: the accounts here ARE the cash it explains. */
   readonly isCash: boolean;
+  /**
+   * A computed total — the running sum of everything above it on its report.
+   *
+   * "Gross Profit" and "Net Income (Loss)" are lines Finance places, names and
+   * moves like any other; the only difference is that their figure is worked
+   * out rather than mapped. Nothing reports on one.
+   */
+  readonly isSubtotal: boolean;
   readonly isSystem: boolean;
 
   // ── Derived, so the statements ask one object one question ───────────────
   readonly section: StatementSection | null;
-  /** Subtracted rather than added on the face of the statement. */
-  readonly deduction: boolean;
 }
 
 /** One node of a statement's layout: a line, with its children beneath it. */
@@ -124,10 +105,10 @@ export interface StatementLineRow {
   readonly parentId: string | null;
   readonly isHeader: boolean;
   readonly ordinal: number;
-  readonly role: string | null;
   readonly side: string | null;
   readonly cashFlowCategory: string | null;
   readonly isCash: boolean;
+  readonly isSubtotal: boolean;
   readonly isSystem: boolean;
 }
 
@@ -192,18 +173,16 @@ export const DEFAULT_LINES: Readonly<
  *
  * Read in the report's own print order, so "the first one that fits" is the
  * one nearest the top of the statement — which is where a reader looks for
- * anything that was not filed more precisely.
+ * anything that was not filed more precisely. A misplaced account is still
+ * signed correctly, because the sign comes from the account and not from the
+ * line it landed on.
  */
 const FALLBACK_KIND: Readonly<
   Record<StatementFace, Readonly<Partial<Record<AccountType, (line: StatementLine) => boolean>>>>
 > = Object.freeze({
   income_statement: Object.freeze({
-    revenue: (line: StatementLine) => line.role === 'revenue' || line.role === 'other_income',
-    expense: (line: StatementLine) =>
-      line.role === 'operating_expenses' ||
-      line.role === 'cost_of_sales' ||
-      line.role === 'finance_costs' ||
-      line.role === 'tax_expense',
+    revenue: () => true,
+    expense: () => true,
   }),
   balance_sheet: Object.freeze({
     asset: (line: StatementLine) => line.side === 'asset',
@@ -242,7 +221,6 @@ export class StatementLineError extends Error {
 
 function toLine(row: StatementLineRow): StatementLine {
   const statement = row.statement as StatementFace;
-  const role = (row.role as IncomeRole | null) ?? null;
   return {
     id: row.id,
     code: row.code,
@@ -251,10 +229,10 @@ function toLine(row: StatementLineRow): StatementLine {
     parentId: row.parentId,
     isHeader: row.isHeader,
     ordinal: row.ordinal,
-    role,
     side: (row.side as BalanceSide | null) ?? null,
     cashFlowCategory: (row.cashFlowCategory as CashFlowCategory | null) ?? null,
     isCash: row.isCash,
+    isSubtotal: row.isSubtotal,
     isSystem: row.isSystem,
     section:
       statement === 'income_statement'
@@ -262,9 +240,24 @@ function toLine(row: StatementLineRow): StatementLine {
         : statement === 'balance_sheet'
           ? 'financial_position'
           : null,
-    deduction: role !== null && DEDUCTING_ROLES.has(role),
   };
 }
+
+/**
+ * Which way one account pushes a figure it is mapped onto.
+ *
+ * Nobody has to say. A revenue account is credit-normal, so what it holds
+ * adds; an expense account is debit-normal, so what it holds takes away. That
+ * is the whole of the sign convention, and it is why a line needs no `role`:
+ * the accounts on it already answer the only question the arithmetic asks.
+ */
+export const ADDS_TO_RESULT: Readonly<Record<AccountType, boolean>> = Object.freeze({
+  revenue: true,
+  expense: false,
+  asset: true,
+  liability: true,
+  equity: true,
+});
 
 /**
  * The mapping, loaded once per request and asked everything after that.
@@ -312,19 +305,23 @@ export class LineCatalogue {
     mapped?: string | null,
   ): StatementLine | undefined {
     const chosen = mapped ? this.byCodeMap.get(mapped) : undefined;
-    if (chosen && chosen.statement === statement && !chosen.isHeader) return chosen;
+    if (chosen && chosen.statement === statement && !chosen.isHeader && !chosen.isSubtotal) {
+      return chosen;
+    }
 
     // The line this type prefers, while it is still there…
     const preferred = DEFAULT_LINES[statement][accountType];
     if (preferred) {
       const line = this.byCodeMap.get(preferred);
-      if (line && !line.isHeader) return line;
+      if (line && !line.isHeader && !line.isSubtotal) return line;
     }
 
     // …and, once Finance has removed it, the first line of the same kind.
     const fits = FALLBACK_KIND[statement][accountType];
     if (!fits) return undefined;
-    return this.linesOf(statement).find((line) => !line.isHeader && fits(line));
+    return this.linesOf(statement).find(
+      (line) => !line.isHeader && !line.isSubtotal && fits(line),
+    );
   }
 
   /**
@@ -348,6 +345,11 @@ export class LineCatalogue {
     if (line.isHeader) {
       throw new StatementLineError(
         `'${line.name}' is a header — accounts map to the lines beneath it, not to the header itself.`,
+      );
+    }
+    if (line.isSubtotal) {
+      throw new StatementLineError(
+        `'${line.name}' is a computed total — it adds up the lines above it, so nothing reports on it.`,
       );
     }
     return line;
