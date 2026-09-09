@@ -101,12 +101,14 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
    * because that is where the choice is made; a column of the table is read
    * down, so it carries the name and nothing else.
    */
-  const kindOf = (line: { isHeader: boolean; isSubtotal: boolean }) =>
+  const kindOf = (line: { isHeader: boolean; isSubtotal: boolean; computes: string | null }) =>
     line.isHeader
       ? t('mapping.kind_header_short')
       : line.isSubtotal
         ? t('mapping.kind_subtotal_short')
-        : t('mapping.kind_line_short');
+        : line.computes
+          ? t('mapping.kind_computed_short')
+          : t('mapping.kind_line_short');
 
   // The dialog asks the same questions of a new line and of one being edited,
   // so both are handed the same choices to answer them from.
@@ -126,6 +128,7 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
     kindLine: t('mapping.kind_line'),
     kindHeader: t('mapping.kind_header'),
     kindSubtotal: t('mapping.kind_subtotal'),
+    kindComputed: t('mapping.kind_computed'),
     parent: t('mapping.parent'),
     parentTop: t('mapping.parent_top'),
     side: t('mapping.side'),
@@ -227,7 +230,10 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
                     : line.cashFlowCategory
                       ? t(`reports.cash_${line.cashFlowCategory}`)
                       : kindOf(line),
-                accounts: line.isHeader || line.isSubtotal ? '—' : String(counts.get(line.code) ?? 0),
+                accounts:
+                  line.isHeader || line.isSubtotal || line.computes
+                    ? '—'
+                    : String(counts.get(line.code) ?? 0),
                 actions: mayConfigure ? (
                   <>
                     {/* Arrows rather than the words Up and Down: the order of
@@ -253,6 +259,7 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
                       initial={{
                         name: line.name,
                         kind: line.isHeader ? 'header' : line.isSubtotal ? 'subtotal' : 'line',
+                        computes: line.computes,
                         ...(line.side ? { side: line.side } : {}),
                         ...(line.cashFlowCategory ? { cashFlowCategory: line.cashFlowCategory } : {}),
                         ...(line.parentId ? { parentId: line.parentId } : {}),

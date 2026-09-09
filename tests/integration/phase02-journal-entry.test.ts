@@ -607,12 +607,17 @@ describe('02.6 · approval posts, and posting locks (§14.4)', () => {
       `select action, actor_user_id from audit_event where object_id = $1 order by id`,
       [entry.id],
     );
+    // Two lines were added between drafting and submitting, and the trail
+    // says so — a reader of the record is entitled to see the entry take
+    // shape, not just that it appeared and was posted.
     expect(rows.map((r) => r.action)).toEqual([
       'journal_entry.created',
+      'journal_entry.line_added',
+      'journal_entry.line_added',
       'journal_entry.submitted',
       'journal_entry.posted',
     ]);
-    expect(rows[2].actor_user_id).toBe(manager.principal.userId);
+    expect(rows[rows.length - 1].actor_user_id).toBe(manager.principal.userId);
   });
 });
 

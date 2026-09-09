@@ -343,11 +343,13 @@ function resultOf(lines: readonly StatementLineResult[]) {
 }
 
 /**
- * Statement of Profit or Loss, for the period between two dates.
+ * Statement of Profit or Loss, for the period between two dates — the flat
+ * view: every line that holds something, with no layout and no subtotals.
  *
- * Revenue and other income add; cost of sales, operating expenses, finance
- * costs and tax subtract. Which of those a line does is a property of the
- * line, not of this function — see `domain/financial-statements.ts`.
+ * Each figure is already signed as it bears on the result, by the type of the
+ * account behind it: revenue adds, an expense takes away. Nothing is asked of
+ * the line. The Income Statement people read is `incomeStatement`, which
+ * draws the same money in the shape Finance laid out.
  */
 export async function profitOrLoss(tx: Tx, filter: StatementFilter): Promise<ProfitOrLoss> {
   const [rows, catalogue] = await Promise.all([movements(tx, filter), statementLines.catalogue(tx)]);
@@ -467,21 +469,23 @@ export interface MovementAccount {
 }
 
 export interface EquityRow {
-  /** A statement line's code, or `result` for the accumulated profit or loss. */
+  /** The statement line's code. */
   readonly code: string;
-  /** What the mapping calls the line; pages fall back to it when no translation exists. */
+  /** What the mapping calls the line. */
   readonly name: string;
   /**
-   * `header` is a grouping title carrying the sum of the lines beneath it;
-   * `result` is not an equity account at all — it is what the revenue and
-   * expense accounts nobody mapped here come to.
+   * `header`  — a grouping title: "Add:", "Subtract:".
+   * `opening` — the equity the period began with.
+   * `result`  — the profit or loss the period made.
+   * `total`   — a computed running total; the last one closes the statement.
    */
-  readonly kind: 'line' | 'header' | 'result';
+  readonly kind: 'line' | 'header' | 'opening' | 'result' | 'total';
   /** Steps into the mapping — a header and its lines indent by it. */
   readonly depth: number;
-  readonly opening: string;
-  readonly movement: string;
-  readonly closing: string;
+  /** The one figure the statement prints. A loss or a distribution is negative. */
+  readonly amount: string;
+  /** A computed total is ruled above; the one that closes the statement twice. */
+  readonly rule: 'none' | 'single' | 'double';
   readonly accounts: readonly MovementAccount[];
 }
 
@@ -489,10 +493,13 @@ export interface ChangesInEquity {
   readonly from: string;
   readonly to: string;
   readonly rows: readonly EquityRow[];
+  /** Equity the day before the period. */
   readonly opening: string;
+  /** Everything that happened to it. */
   readonly movement: string;
+  /** Equity at the end — the Equity section of a Balance Sheet drawn at `to`. */
   readonly closing: string;
-  /** The profit or loss of the period alone — the reason most of the movement exists. */
+  /** The profit or loss of the period alone. */
   readonly resultForThePeriod: string;
 }
 
@@ -571,10 +578,9 @@ export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<
   ]);
   const paired = pairUp(catalogue, before, during);
 
-  // This statement has a mapping of its own: the rows are the lines Finance
-  // built for it, carrying the accounts mapped to them. An equity account
-  // that nobody has moved falls to the seeded line, so the statement is never
-  // silently missing a piece of equity the Balance Sheet is showing.
+  // Which line each account reports on. An equity account nobody has mapped
+  // still falls to one, so the statement is never silently missing a piece of
+  // the equity the Balance Sheet is showing.
   const byLine = new Map<string, string[]>();
   for (const [code, entry] of paired) {
     if (entry.opening === 0n && entry.movement === 0n) continue;
@@ -583,79 +589,113 @@ export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<
     byLine.set(line.code, [...(byLine.get(line.code) ?? []), code]);
   }
 
-  // The statement's own layout, headers and all: a title appears wherever
-  // something beneath it does, carrying the sum of what its lines hold.
-  const lineRows: EquityRow[] = heldBranches(
-    catalogue.treeFor('changes_in_equity'),
-    (code) => byLine.has(code),
-  ).map(({ node, depth }) => {
-    const accounts = node.line.isHeader ? [] : accountRows(paired, byLine.get(node.line.code) ?? []);
-    const codes = branchCodes(node);
-    const sumOf = (column: 'opening' | 'movement') =>
-      codes
-        .flatMap((code) => byLine.get(code) ?? [])
-        .reduce((total, account) => total + (paired.get(account)?.[column] ?? 0n), 0n);
-    const opening = sumOf('opening');
-    const movement = sumOf('movement');
-    return {
-      code: node.line.code,
-      name: node.line.name,
-      kind: node.line.isHeader ? ('header' as const) : ('line' as const),
-      depth,
-      opening: decimal(opening),
-      movement: decimal(movement),
-      closing: decimal(opening + movement),
-      accounts,
-    };
-  });
+  const isResultAccount = (entry: Paired) =>
+    entry.accountType === 'revenue' || entry.accountType === 'expense';
 
-  // A revenue or expense account nobody has mapped here stays inside the
-  // computed result, which is what keeps this statement's closing equity
-  // equal to the Balance Sheet's.
+  // Equity the day before the period: the equity accounts, plus the profit of
+  // earlier periods that no year-end close has moved into retained earnings.
+  // What a Balance Sheet drawn that day would show under Equity.
+  //
+  // Equity accounts and result accounts only. `paired` holds every account
+  // that moved, assets and liabilities included, and the other side of a
+  // capital injection is cash — counting that too would open the statement
+  // at twice the equity there is.
+  const openingEquity = [...paired.values()]
+    .filter((entry) => entry.accountType === 'equity' || isResultAccount(entry))
+    .reduce((total, entry) => total + entry.opening, 0n);
+
+  // The profit or loss of the period, less anything a line of this statement
+  // already accounts for. Mapping revenue to a line of its own moves it out
+  // of "Total Income" and onto that line rather than counting it twice.
   const resultCodes = [...paired]
-    .filter(([, entry]) => entry.accountType === 'revenue' || entry.accountType === 'expense')
+    .filter(([, entry]) => isResultAccount(entry))
     .filter(([, entry]) => !lineOf(catalogue, entry, 'changes_in_equity'))
     .filter(([, entry]) => entry.opening !== 0n || entry.movement !== 0n)
     .map(([code]) => code);
-  const resultAccounts = accountRows(paired, resultCodes);
-  const openingResult = resultAccounts.reduce((t, a) => t + parseDecimal(a.opening, MONEY_SCALE), 0n);
-  const residualPeriodResult = resultAccounts.reduce(
-    (t, a) => t + parseDecimal(a.movement, MONEY_SCALE),
+  const periodResidual = resultCodes.reduce(
+    (total, code) => total + (paired.get(code)?.movement ?? 0n),
     0n,
   );
-  const periodResult = [...paired]
-    .filter(([, entry]) => entry.accountType === 'revenue' || entry.accountType === 'expense')
-    .reduce((total, [, entry]) => total + entry.movement, 0n);
+  const periodResult = [...paired.values()]
+    .filter(isResultAccount)
+    .reduce((total, entry) => total + entry.movement, 0n);
 
-  const rows: EquityRow[] = [
-    ...lineRows,
-    ...(resultAccounts.length > 0
-      ? [
-          {
-            code: 'result',
-            name: 'Result',
-            kind: 'result' as const,
-            depth: 0,
-            opening: decimal(openingResult),
-            movement: decimal(residualPeriodResult),
-            closing: decimal(openingResult + residualPeriodResult),
-            accounts: resultAccounts,
-          },
-        ]
-      : []),
-  ];
+  // What a branch of the layout holds: its own accounts and everything under
+  // it. A header has none of its own, only what its lines hold.
+  const movementOf = (code: string) =>
+    (byLine.get(code) ?? []).reduce((total, account) => total + (paired.get(account)?.movement ?? 0n), 0n);
+  const figureOf = (line: StatementLine): bigint =>
+    line.computes === 'opening'
+      ? openingEquity
+      : line.computes === 'result'
+        ? periodResidual
+        : movementOf(line.code);
+  const totalOf = (node: StatementLineNode): bigint =>
+    node.children.reduce(
+      (total, child) => total + totalOf(child),
+      node.line.isHeader || node.line.isSubtotal ? 0n : figureOf(node.line),
+    );
+  const holds = (node: StatementLineNode): boolean =>
+    node.line.computes !== null ||
+    (!node.line.isHeader && !node.line.isSubtotal && byLine.has(node.line.code)) ||
+    node.children.some(holds);
 
-  const counted = rows.filter((row) => row.kind !== 'header');
-  const opening = counted.reduce((t, row) => t + parseDecimal(row.opening, MONEY_SCALE), 0n);
-  const movement = counted.reduce((t, row) => t + parseDecimal(row.movement, MONEY_SCALE), 0n);
+  // The totals in print order, so the one that closes the statement is ruled
+  // twice and any before it once.
+  const totals = catalogue.linesOf('changes_in_equity').filter((line) => line.isSubtotal);
+  const lastTotal = totals[totals.length - 1]?.code;
+
+  const rows: EquityRow[] = [];
+  let running = 0n;
+
+  const emit = (node: StatementLineNode, depth: number) => {
+    const line = node.line;
+
+    if (line.isSubtotal) {
+      rows.push({
+        code: line.code,
+        name: line.name,
+        kind: 'total',
+        depth: 0,
+        amount: decimal(running),
+        rule: line.code === lastTotal ? 'double' : 'single',
+        accounts: [],
+      });
+      return;
+    }
+
+    if (!holds(node)) return;
+
+    // A header repeats what its lines hold, so only the lines are counted.
+    if (!line.isHeader) running += figureOf(line);
+
+    rows.push({
+      code: line.code,
+      name: line.name,
+      kind: line.isHeader ? 'header' : line.computes === 'opening' ? 'opening' : line.computes === 'result' ? 'result' : 'line',
+      depth,
+      amount: decimal(line.isHeader ? totalOf(node) : figureOf(line)),
+      rule: 'none',
+      accounts:
+        line.computes === 'result'
+          ? accountRows(paired, resultCodes)
+          : line.isHeader || line.computes
+            ? []
+            : accountRows(paired, byLine.get(line.code) ?? []),
+    });
+
+    for (const child of node.children) emit(child, depth + 1);
+  };
+
+  for (const node of catalogue.treeFor('changes_in_equity')) emit(node, 0);
 
   return {
     from: filter.from,
     to: filter.to,
     rows,
-    opening: decimal(opening),
-    movement: decimal(movement),
-    closing: decimal(opening + movement),
+    opening: decimal(openingEquity),
+    movement: decimal(running - openingEquity),
+    closing: decimal(running),
     resultForThePeriod: decimal(periodResult),
   };
 }

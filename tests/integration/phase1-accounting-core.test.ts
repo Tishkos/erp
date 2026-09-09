@@ -572,8 +572,10 @@ describe('5 · the financial statements', () => {
 
     const revenue = pl.lines.find((l) => l.line.code === 'revenue');
     const expenses = pl.lines.find((l) => l.line.code === 'operating_expenses');
+    // Signed as it bears on the result: revenue adds, an expense takes away.
+    // The line is not asked which it does — the account answers it.
     expect(Number(revenue!.amount)).toBe(4000);
-    expect(Number(expenses!.amount)).toBe(1500);
+    expect(Number(expenses!.amount)).toBe(-1500);
     // 4,000 earned less 1,500 spent.
     expect(Number(pl.result)).toBe(2500);
   });
@@ -643,7 +645,7 @@ describe('5 · the financial statements', () => {
       statements.changesInEquity(tx, { from: FROM, to: TO, branchCode: BRANCH }),
     );
     const trading = equity.rows.find((row) => row.code === 'equity_trading');
-    expect(Number(trading!.movement)).toBe(4000);
+    expect(Number(trading!.amount)).toBe(4000);
     expect(trading!.accounts.map((account) => account.accountName)).toContain('Sales');
     expect(Number(equity.resultForThePeriod)).toBe(2500);
     expect(Number(equity.closing)).toBe(12500);

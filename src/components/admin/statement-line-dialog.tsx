@@ -32,6 +32,7 @@ export interface LineDialogLabels {
   readonly kindLine: string;
   readonly kindHeader: string;
   readonly kindSubtotal: string;
+  readonly kindComputed: string;
   readonly parent: string;
   readonly parentTop: string;
   readonly side: string;
@@ -67,6 +68,8 @@ export function StatementLineDialog({
   readonly initial?: {
     readonly name?: string;
     readonly kind?: Kind;
+    /** Set when the line's figure comes from the ledger rather than accounts. */
+    readonly computes?: string | null;
     readonly side?: string;
     readonly cashFlowCategory?: string;
     readonly isCash?: boolean;
@@ -85,7 +88,8 @@ export function StatementLineDialog({
 
   // A grouping title groups and a computed total adds up; neither carries
   // accounts, so neither is asked what its figures mean.
-  const asksVocabulary = kind === 'line';
+  const computed = Boolean(initial?.computes);
+  const asksVocabulary = kind === 'line' && !computed;
 
   return (
     <>
@@ -146,16 +150,26 @@ export function StatementLineDialog({
                 <label className={styles.label} htmlFor={field('kind')}>
                   {labels.kind}
                 </label>
+                {/* "Equity at the beginning of the period" and "Total Income"
+                    are worked out from the ledger. They rename and move like
+                    any other line, but there is nothing to turn them into. */}
                 <select
                   className={styles.select}
+                  disabled={computed}
                   id={field('kind')}
                   name="kind"
                   onChange={(event) => setKind(event.target.value as Kind)}
                   value={kind}
                 >
-                  <option value="line">{labels.kindLine}</option>
-                  <option value="header">{labels.kindHeader}</option>
-                  <option value="subtotal">{labels.kindSubtotal}</option>
+                  {computed ? (
+                    <option value="line">{labels.kindComputed}</option>
+                  ) : (
+                    <>
+                      <option value="line">{labels.kindLine}</option>
+                      <option value="header">{labels.kindHeader}</option>
+                      <option value="subtotal">{labels.kindSubtotal}</option>
+                    </>
+                  )}
                 </select>
               </div>
 

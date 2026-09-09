@@ -18,6 +18,7 @@ export interface MappingLine {
   readonly name: string;
   readonly statement: StatementFace;
   readonly isHeader: boolean;
+  readonly takesAccounts: boolean;
   readonly depth: number;
   /** Where it sits on its report — "Expenses › Administrative Expenses". */
   readonly path: string;
@@ -78,8 +79,10 @@ export async function NewAccountButton({
   ) as Record<StatementFace, string>;
 
   // Every line of every report, indented as its own layout nests it. Headers
-  // are shown so the shape of the report is visible and disabled because a
-  // header prints the sum of its lines — accounts map to the lines beneath.
+  // are shown so the shape of the report is visible, and disabled along with
+  // every other line nothing can report on: a header prints the sum of its
+  // lines, and a total, the opening equity and the result for the period are
+  // worked out from the ledger.
   const lines = mapping.map((option) => ({
     value: option.code,
     // The seeded lines keep their translated names; Finance's own lines are
@@ -87,6 +90,7 @@ export async function NewAccountButton({
     label: option.path,
     statement: option.statement,
     isHeader: option.isHeader,
+    takesAccounts: option.takesAccounts,
   }));
 
   return (
@@ -168,12 +172,13 @@ export async function AccountControls({
 
   // Every report's lines are offered, whatever the account's type: which line
   // suits which account is Finance's judgement, and this screen exists so
-  // they can make it. Headers are left out — they print the sum of the lines
-  // beneath them, so an account maps to a line instead.
+  // they can make it. Left out are the lines nothing can report on: a header,
+  // which prints the sum of the lines beneath it, and a figure the ledger
+  // works out — a total, the opening equity, the result for the period.
   const optionsFor = (statement: StatementFace) => [
     { value: '', label: t('accounts.statement_line_default') },
     ...mapping
-      .filter((entry) => entry.statement === statement && !entry.isHeader)
+      .filter((entry) => entry.statement === statement && entry.takesAccounts)
       .map((entry) => ({
         value: entry.code,
         label: entry.path,

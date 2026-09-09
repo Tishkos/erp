@@ -30,6 +30,7 @@ import {
   LineCatalogue,
   STATEMENT_FACES,
   StatementLineError,
+  takesAccounts,
   TITLES,
   type BalanceSide,
   type CashFlowCategory,
@@ -80,6 +81,10 @@ export async function pickerLines(tx: Tx) {
         path: trail.slice(0, depth + 1).join(' › '),
         statement: line.statement,
         isHeader: line.isHeader,
+        // A header, a computed total and a line worked out from the ledger
+        // all print a figure nobody maps. Offering one and refusing it on
+        // save is the same bug twice, so the picker greys them out instead.
+        takesAccounts: takesAccounts(line),
         depth,
       };
     });

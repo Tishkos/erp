@@ -325,6 +325,22 @@ describe('02 · the Income Statement computes its own result', () => {
     expect(amountOf(rows, 'Result after everything')).toBe(1_800_000);
   });
 
+  it('does not offer a line nothing can report on', async () => {
+    const header = await line('Running the office', { header: true });
+    await line('Rent', { under: header.id });
+
+    const picker = await withScope(scope(manager), (tx) => lines.pickerLines(tx));
+    const income = picker.filter((entry) => entry.statement === 'income_statement');
+    const takes = (name: string) => income.find((entry) => entry.name === name)?.takesAccounts;
+
+    // Offering a total and then refusing it on save is the same mistake
+    // twice; the picker greys it out instead.
+    expect(takes('Gross Profit')).toBe(false);
+    expect(takes('Net Income (Loss)')).toBe(false);
+    expect(takes('Running the office')).toBe(false);
+    expect(takes('Rent')).toBe(true);
+  });
+
   it('refuses to let an account report on a computed total', async () => {
     const total = await line('Subtotal', { total: true });
     const account = await approvedAccount('X000001', 'Office Rent');

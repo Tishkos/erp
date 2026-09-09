@@ -19,12 +19,15 @@ import * as statements from '@/server/services/financial-statements';
  *
  * The one question the other three statements do not answer: equity was this
  * at the start of the period and that at the end — what happened in between.
- * Three columns say it, and the third is the first two added, so a reader can
- * check the statement against itself without leaving the page.
  *
- * The closing column is the Equity section of a Balance Sheet drawn at the
- * same date. That is not a coincidence to be maintained: both are assembled
- * from the same posted lines by the same code.
+ * Read top to bottom, in the form Mr Issa set out (2026-09-09): what equity
+ * was, what was added, what was taken away, what it became. "Add:" and
+ * "Subtract:" are headings; the sign comes from the ledger, so income prints
+ * plainly and a dividend prints in brackets.
+ *
+ * The closing line is the Equity section of a Balance Sheet drawn at the same
+ * date. That is not a coincidence to be maintained: both are assembled from
+ * the same posted lines by the same code.
  */
 export const dynamic = 'force-dynamic';
 
@@ -100,12 +103,7 @@ export default async function ChangesInEquityPage({ searchParams }: { searchPara
         title={t('reports.changes_in_equity')}
       >
         <StatementTable
-          columns={[
-            t('reports.statement_line'),
-            `${t('reports.opening_balance')} \u00b7 ${currency}`,
-            `${t('reports.movement')} \u00b7 ${currency}`,
-            `${t('reports.closing_balance')} \u00b7 ${currency}`,
-          ]}
+          columns={[t('reports.statement_line'), `${t('reports.amount')} · ${currency}`]}
           labels={{
             expandAll: chart('expand_all'),
             collapseAll: chart('collapse_all'),
@@ -116,18 +114,19 @@ export default async function ChangesInEquityPage({ searchParams }: { searchPara
           rows={equity.rows.flatMap((row) => [
             {
               key: `row:${row.code}`,
-              label: row.kind === 'result' ? t('reports.equity_result') : row.name,
+              label: row.name,
               depth: row.depth,
               tone: row.kind === 'header' ? ('header' as const) : ('line' as const),
-              cells: [money(row.opening), money(row.movement), money(row.closing)],
+              rule: row.rule,
+              cells: [money(row.amount)],
             },
             ...(level >= 2
               ? row.accounts.map((account) => ({
                   key: `account:${row.code}:${account.accountCode}`,
-                  label: `${account.accountCode} \u00b7 ${account.accountName}`,
+                  label: `${account.accountCode} · ${account.accountName}`,
                   depth: row.depth + 1,
                   tone: 'account' as const,
-                  cells: [money(account.opening), money(account.movement), money(account.closing)],
+                  cells: [money(account.movement)],
                 }))
               : []),
           ])}

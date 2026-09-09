@@ -51,6 +51,20 @@ export const financialStatementLine = pgTable(
      * takes away, so no line has to be told.
      */
     isSubtotal: boolean('is_subtotal').notNull().default(false),
+    /**
+     * Changes in Equity only: a line whose figure is worked out rather than
+     * mapped.
+     *
+     *   `opening`  the equity the period began with — every balance as at
+     *              the day before it, including profit of earlier periods
+     *              that no year-end close has moved into retained earnings.
+     *   `result`   the profit or loss of the period itself, from the revenue
+     *              and expense accounts not mapped to a line of this
+     *              statement. Mr Issa's "Total Income".
+     *
+     * No account reports on one.
+     */
+    computes: text('computes', { enum: ['opening', 'result'] }),
     /** Balance-sheet lines only: which side of the statement. */
     side: text('side', { enum: ['asset', 'equity', 'liability'] }),
     /**

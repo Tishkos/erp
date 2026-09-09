@@ -62,6 +62,14 @@ export type BalanceSide = (typeof BALANCE_SIDES)[number];
 export const CASH_FLOW_CATEGORIES = ['operating', 'investing', 'financing'] as const;
 export type CashFlowCategory = (typeof CASH_FLOW_CATEGORIES)[number];
 
+/**
+ * The two figures on the Statement of Changes in Equity that are worked out
+ * rather than mapped: the equity the period began with, and the profit or
+ * loss it made. Both are lines Finance places and names like any other.
+ */
+export const COMPUTED_EQUITY = ['opening', 'result'] as const;
+export type ComputedEquity = (typeof COMPUTED_EQUITY)[number];
+
 export interface StatementLine {
   readonly id: string;
   readonly code: string;
@@ -84,6 +92,11 @@ export interface StatementLine {
    * out rather than mapped. Nothing reports on one.
    */
   readonly isSubtotal: boolean;
+  /**
+   * Changes in Equity: `opening` for the equity the period began with,
+   * `result` for the profit or loss it made. Nothing reports on one.
+   */
+  readonly computes: ComputedEquity | null;
   readonly isSystem: boolean;
 
   // ── Derived, so the statements ask one object one question ───────────────
@@ -109,6 +122,7 @@ export interface StatementLineRow {
   readonly cashFlowCategory: string | null;
   readonly isCash: boolean;
   readonly isSubtotal: boolean;
+  readonly computes: string | null;
   readonly isSystem: boolean;
 }
 
@@ -164,7 +178,7 @@ export const DEFAULT_LINES: Readonly<
     expense: 'cash_flow_operating',
   }),
   changes_in_equity: Object.freeze({
-    equity: 'equity_movements',
+    equity: 'equity_paid_in',
   }),
 });
 
@@ -219,6 +233,16 @@ export class StatementLineError extends Error {
   }
 }
 
+/**
+ * Whether accounts may report on a line.
+ *
+ * A header prints the sum of the lines beneath it; a computed total adds up
+ * the lines above it; an `opening` or `result` line is worked out from the
+ * ledger. None of them holds accounts of its own.
+ */
+export const takesAccounts = (line: StatementLine): boolean =>
+  !line.isHeader && !line.isSubtotal && line.computes === null;
+
 function toLine(row: StatementLineRow): StatementLine {
   const statement = row.statement as StatementFace;
   return {
@@ -233,6 +257,7 @@ function toLine(row: StatementLineRow): StatementLine {
     cashFlowCategory: (row.cashFlowCategory as CashFlowCategory | null) ?? null,
     isCash: row.isCash,
     isSubtotal: row.isSubtotal,
+    computes: (row.computes as ComputedEquity | null) ?? null,
     isSystem: row.isSystem,
     section:
       statement === 'income_statement'
@@ -305,7 +330,7 @@ export class LineCatalogue {
     mapped?: string | null,
   ): StatementLine | undefined {
     const chosen = mapped ? this.byCodeMap.get(mapped) : undefined;
-    if (chosen && chosen.statement === statement && !chosen.isHeader && !chosen.isSubtotal) {
+    if (chosen && chosen.statement === statement && takesAccounts(chosen)) {
       return chosen;
     }
 
@@ -313,15 +338,13 @@ export class LineCatalogue {
     const preferred = DEFAULT_LINES[statement][accountType];
     if (preferred) {
       const line = this.byCodeMap.get(preferred);
-      if (line && !line.isHeader && !line.isSubtotal) return line;
+      if (line && takesAccounts(line)) return line;
     }
 
     // …and, once Finance has removed it, the first line of the same kind.
     const fits = FALLBACK_KIND[statement][accountType];
     if (!fits) return undefined;
-    return this.linesOf(statement).find(
-      (line) => !line.isHeader && !line.isSubtotal && fits(line),
-    );
+    return this.linesOf(statement).find((line) => takesAccounts(line) && fits(line));
   }
 
   /**
@@ -350,6 +373,11 @@ export class LineCatalogue {
     if (line.isSubtotal) {
       throw new StatementLineError(
         `'${line.name}' is a computed total — it adds up the lines above it, so nothing reports on it.`,
+      );
+    }
+    if (line.computes) {
+      throw new StatementLineError(
+        `'${line.name}' is worked out from the ledger, so nothing reports on it.`,
       );
     }
     return line;

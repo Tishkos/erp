@@ -1411,7 +1411,6 @@
       "opening_balance": "Opening balance",
       "movement": "Movement in the period",
       "closing_balance": "Closing balance",
-      "equity_result": "Result not yet closed to retained earnings",
       "total_equity": "Total equity",
       "nothing_in_equity": "No equity account has been posted to.",
       "cash_operating": "Operating activities",
@@ -1716,7 +1715,9 @@
       "kind_subtotal": "Total — adds up the lines above it",
       "kind_line_short": "Line",
       "kind_header_short": "Header",
-      "kind_subtotal_short": "Total"
+      "kind_subtotal_short": "Total",
+      "kind_computed": "Worked out from the ledger",
+      "kind_computed_short": "Computed"
     }
   },
   "profile": {

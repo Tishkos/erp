@@ -1411,7 +1411,6 @@
       "opening_balance": "الرصيد الافتتاحي",
       "movement": "الحركة خلال الفترة",
       "closing_balance": "الرصيد الختامي",
-      "equity_result": "نتيجة لم تُقفل بعد في الأرباح المحتجزة",
       "total_equity": "إجمالي حقوق الملكية",
       "nothing_in_equity": "لا يوجد حساب حقوق ملكية تم القيد عليه.",
       "cash_operating": "الأنشطة التشغيلية",
@@ -1716,7 +1715,9 @@
       "kind_subtotal": "مجموع — يجمع البنود التي فوقه",
       "kind_line_short": "بند",
       "kind_header_short": "عنوان",
-      "kind_subtotal_short": "إجمالي"
+      "kind_subtotal_short": "إجمالي",
+      "kind_computed": "يُحتسب من السجلات",
+      "kind_computed_short": "محتسب"
     }
   },
   "profile": {

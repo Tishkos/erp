@@ -41,6 +41,7 @@ export interface LineOption {
   readonly statement: StatementFace;
   /** Shown for the shape of the report, never choosable — accounts map to lines. */
   readonly isHeader: boolean;
+  readonly takesAccounts: boolean;
 }
 
 /** The four reports, in the order the account window asks about them. */
@@ -245,7 +246,11 @@ export function NewAccountDialog({
                       >
                         <option value="">{labels.statementLineDefault}</option>
                         {linesOf(statement).map((line) => (
-                          <option disabled={line.isHeader} key={line.value} value={line.value}>
+                          <option
+                            disabled={!line.takesAccounts}
+                            key={line.value}
+                            value={line.value}
+                          >
                             {line.label}
                           </option>
                         ))}
