@@ -14,7 +14,7 @@
  * `financial_statement_line`, edited on the Statement Mapping screens: one
  * hierarchy per report, built by the people who read the reports. This module
  * holds what is still the code's to say — the vocabulary each report needs
- * (roles, sides, cash-flow activities), and the catalogue that answers, for
+ * (sides, and which line is the cash), and the catalogue that answers, for
  * one account and one report, "where does this print?".
  *
  * ── Four reports, four independent answers ─────────────────────────────────
@@ -59,9 +59,6 @@ export type StatementFace = (typeof STATEMENT_FACES)[number];
 export const BALANCE_SIDES = ['asset', 'equity', 'liability'] as const;
 export type BalanceSide = (typeof BALANCE_SIDES)[number];
 
-export const CASH_FLOW_CATEGORIES = ['operating', 'investing', 'financing'] as const;
-export type CashFlowCategory = (typeof CASH_FLOW_CATEGORIES)[number];
-
 /**
  * The two figures on the Statement of Changes in Equity that are worked out
  * rather than mapped: the equity the period began with, and the profit or
@@ -69,6 +66,14 @@ export type CashFlowCategory = (typeof CASH_FLOW_CATEGORIES)[number];
  */
 export const COMPUTED_EQUITY = ['opening', 'result'] as const;
 export type ComputedEquity = (typeof COMPUTED_EQUITY)[number];
+
+/**
+ * The three figures on the Statement of Cash Flows that are worked out rather
+ * than mapped: the result the period made, the cash it started with, and
+ * everything nobody has classified yet.
+ */
+export const COMPUTED_CASH_FLOW = ['net_income', 'opening_cash', 'unclassified'] as const;
+export type ComputedCashFlow = (typeof COMPUTED_CASH_FLOW)[number];
 
 export interface StatementLine {
   readonly id: string;
@@ -81,7 +86,6 @@ export interface StatementLine {
   /** Where it sits among its siblings, top to bottom. */
   readonly ordinal: number;
   readonly side: BalanceSide | null;
-  readonly cashFlowCategory: CashFlowCategory | null;
   /** On the Cash Flow Statement: the accounts here ARE the cash it explains. */
   readonly isCash: boolean;
   /**
@@ -96,7 +100,7 @@ export interface StatementLine {
    * Changes in Equity: `opening` for the equity the period began with,
    * `result` for the profit or loss it made. Nothing reports on one.
    */
-  readonly computes: ComputedEquity | null;
+  readonly computes: ComputedEquity | ComputedCashFlow | null;
   readonly isSystem: boolean;
 
   // ── Derived, so the statements ask one object one question ───────────────
@@ -119,7 +123,6 @@ export interface StatementLineRow {
   readonly isHeader: boolean;
   readonly ordinal: number;
   readonly side: string | null;
-  readonly cashFlowCategory: string | null;
   readonly isCash: boolean;
   readonly isSubtotal: boolean;
   readonly computes: string | null;
@@ -170,13 +173,12 @@ export const DEFAULT_LINES: Readonly<
     liability: 'current_liabilities',
     equity: 'equity',
   }),
-  cash_flow: Object.freeze({
-    asset: 'cash_flow_operating',
-    liability: 'cash_flow_operating',
-    equity: 'cash_flow_financing',
-    revenue: 'cash_flow_operating',
-    expense: 'cash_flow_operating',
-  }),
+  // Nothing. Which activity an account's movement belongs to — operating,
+  // investing, financing — is a judgement about what the company did with the
+  // money, and the chart cannot tell. An account nobody has classified prints
+  // on the statement's own "Not yet classified" line, where it can be seen and
+  // filed, rather than being guessed into a section and quietly believed.
+  cash_flow: Object.freeze({}),
   changes_in_equity: Object.freeze({
     equity: 'equity_paid_in',
   }),
@@ -203,14 +205,8 @@ const FALLBACK_KIND: Readonly<
     liability: (line: StatementLine) => line.side === 'liability',
     equity: (line: StatementLine) => line.side === 'equity',
   }),
-  cash_flow: Object.freeze({
-    // Anything but the cash itself: an account is not its own explanation.
-    asset: (line: StatementLine) => !line.isCash,
-    liability: (line: StatementLine) => !line.isCash,
-    equity: (line: StatementLine) => !line.isCash,
-    revenue: (line: StatementLine) => !line.isCash,
-    expense: (line: StatementLine) => !line.isCash,
-  }),
+  // Nothing here either, for the reason above.
+  cash_flow: Object.freeze({}),
   changes_in_equity: Object.freeze({
     equity: () => true,
   }),
@@ -254,10 +250,9 @@ function toLine(row: StatementLineRow): StatementLine {
     isHeader: row.isHeader,
     ordinal: row.ordinal,
     side: (row.side as BalanceSide | null) ?? null,
-    cashFlowCategory: (row.cashFlowCategory as CashFlowCategory | null) ?? null,
     isCash: row.isCash,
     isSubtotal: row.isSubtotal,
-    computes: (row.computes as ComputedEquity | null) ?? null,
+    computes: (row.computes as ComputedEquity | ComputedCashFlow | null) ?? null,
     isSystem: row.isSystem,
     section:
       statement === 'income_statement'

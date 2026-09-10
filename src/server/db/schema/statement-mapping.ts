@@ -64,14 +64,11 @@ export const financialStatementLine = pgTable(
      *
      * No account reports on one.
      */
-    computes: text('computes', { enum: ['opening', 'result'] }),
+    computes: text('computes', {
+      enum: ['opening', 'result', 'net_income', 'opening_cash', 'unclassified'],
+    }),
     /** Balance-sheet lines only: which side of the statement. */
     side: text('side', { enum: ['asset', 'equity', 'liability'] }),
-    /**
-     * Where the line's movements land on the Cash Flow Statement. Null for
-     * cash itself — cash moving between cash accounts is not a cash flow.
-     */
-    cashFlowCategory: text('cash_flow_category', { enum: ['operating', 'investing', 'financing'] }),
     /** The accounts on this line ARE the cash the Cash Flow Statement tracks. */
     isCash: boolean('is_cash').notNull().default(false),
     /** The seeded lines: renameable, movable, never deletable. */

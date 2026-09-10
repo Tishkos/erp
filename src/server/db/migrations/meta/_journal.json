@@ -743,6 +743,13 @@
       "when": 1795700400000,
       "tag": "0181_phase02_changes_in_equity_layout",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1795700500000,
+      "tag": "0182_phase02_cash_flow_layout",
+      "breakpoints": true
     }
   ]
 }

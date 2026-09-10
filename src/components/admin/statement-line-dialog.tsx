@@ -36,7 +36,6 @@ export interface LineDialogLabels {
   readonly parent: string;
   readonly parentTop: string;
   readonly side: string;
-  readonly activity: string;
   readonly cash: string;
   readonly save: string;
   readonly required: string;
@@ -49,7 +48,6 @@ export function StatementLineDialog({
   statement,
   parents,
   sides,
-  activities,
   initial,
   mode,
 }: {
@@ -64,14 +62,12 @@ export function StatementLineDialog({
    */
   readonly parents?: readonly Choice[];
   readonly sides: readonly Choice[];
-  readonly activities: readonly Choice[];
   readonly initial?: {
     readonly name?: string;
     readonly kind?: Kind;
     /** Set when the line's figure comes from the ledger rather than accounts. */
     readonly computes?: string | null;
     readonly side?: string;
-    readonly cashFlowCategory?: string;
     readonly isCash?: boolean;
     readonly parentId?: string;
   };
@@ -216,43 +212,24 @@ export function StatementLineDialog({
               ) : null}
 
               {statement === 'cash_flow' && asksVocabulary ? (
-                <>
-                  <div className={styles.field}>
-                    <label className={styles.label} htmlFor={field('cash')}>
-                      {labels.cash}
-                    </label>
-                    <select
-                      className={styles.select}
-                      id={field('cash')}
-                      name="isCash"
-                      onChange={(event) => setIsCash(event.target.value === 'yes')}
-                      value={isCash ? 'yes' : 'no'}
-                    >
-                      <option value="no">—</option>
-                      <option value="yes">{labels.cash}</option>
-                    </select>
-                  </div>
-                  {!isCash ? (
-                    <div className={styles.field}>
-                      <label className={styles.label} htmlFor={field('activity')}>
-                        {labels.activity}
-                      </label>
-                      <select
-                        className={styles.select}
-                        defaultValue={initial?.cashFlowCategory ?? activities[0]?.value ?? ''}
-                        id={field('activity')}
-                        name="cashFlowCategory"
-                        required
-                      >
-                        {activities.map((activity) => (
-                          <option key={activity.value} value={activity.value}>
-                            {activity.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : null}
-                </>
+                <div className={styles.field}>
+                  {/* The only thing a cash-flow line is asked about itself.
+                      Which activity it belongs to is the heading above it; a
+                      field for it could disagree with what is printed. */}
+                  <label className={styles.label} htmlFor={field('cash')}>
+                    {labels.cash}
+                  </label>
+                  <select
+                    className={styles.select}
+                    id={field('cash')}
+                    name="isCash"
+                    onChange={(event) => setIsCash(event.target.value === 'yes')}
+                    value={isCash ? 'yes' : 'no'}
+                  >
+                    <option value="no">—</option>
+                    <option value="yes">{labels.cash}</option>
+                  </select>
+                </div>
               ) : null}
             </div>
 

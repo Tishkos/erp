@@ -171,10 +171,10 @@ describe('1 · the Chart of Accounts', () => {
   it('stores an independent mapping per statement when revenue is created', async () => {
     await ownerPool.query(`
       insert into financial_statement_line
-        (code, name, statement, ordinal, side, cash_flow_category)
+        (code, name, statement, ordinal, side)
       values
-        ('product_revenue', 'Product Revenue', 'income_statement', 11, null, null),
-        ('balance_sheet_revenue', 'Revenue', 'balance_sheet', 41, 'equity', null)
+        ('product_revenue', 'Product Revenue', 'income_statement', 11, null),
+        ('balance_sheet_revenue', 'Revenue', 'balance_sheet', 41, 'equity')
     `);
 
     const accountId = await account('R000001', {
@@ -614,10 +614,10 @@ describe('5 · the financial statements', () => {
     // choices, one account — and no figure counted twice.
     await ownerPool.query(`
       insert into financial_statement_line
-        (code, name, statement, ordinal, side, cash_flow_category)
+        (code, name, statement, ordinal, side)
       values
-        ('balance_sheet_revenue', 'Revenue', 'balance_sheet', 41, 'equity', null),
-        ('equity_trading', 'Trading result', 'changes_in_equity', 20, null, null)
+        ('balance_sheet_revenue', 'Revenue', 'balance_sheet', 41, 'equity'),
+        ('equity_trading', 'Trading result', 'changes_in_equity', 20, null)
     `);
     await withScope(scopeOf(manager), (tx) =>
       coa.setStatementLines(tx, manager, salesRevenue, {

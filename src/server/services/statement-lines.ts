@@ -26,14 +26,12 @@ import type { Tx } from '../db/client';
 import { chartOfAccount, financialStatementLine } from '../db/schema';
 import {
   BALANCE_SIDES,
-  CASH_FLOW_CATEGORIES,
   LineCatalogue,
   STATEMENT_FACES,
   StatementLineError,
   takesAccounts,
   TITLES,
   type BalanceSide,
-  type CashFlowCategory,
   type StatementFace,
   type StatementLineRow,
 } from '../domain/financial-statements';
@@ -125,8 +123,6 @@ export interface CreateLineInput {
   readonly parentId?: string | null;
   /** Balance-sheet headers and lines: which side of the statement. */
   readonly side?: string | null;
-  /** Cash-flow lines: which of the three activities, or the cash itself. */
-  readonly cashFlowCategory?: string | null;
   readonly isCash?: boolean;
 }
 
@@ -136,18 +132,15 @@ export interface CreateLineInput {
  */
 function vocabularyFor(input: CreateLineInput): {
   side: BalanceSide | null;
-  cashFlowCategory: CashFlowCategory | null;
   isCash: boolean;
 } {
-  const blank = { side: null, cashFlowCategory: null, isCash: false } as const;
-  // A title groups and a total adds up; neither carries a figure of its own,
-  // so neither is asked anything further.
-  const carriesAccounts = !input.isHeader && !input.isSubtotal;
+  const blank = { side: null, isCash: false } as const;
 
   switch (input.statement) {
     case 'income_statement':
+    case 'changes_in_equity':
       // Nothing to ask. Which way a figure goes is known from the accounts
-      // mapped to the line, so the line itself has nothing to declare.
+      // mapped to the line, and which section it belongs to is where it sits.
       return { ...blank };
     case 'balance_sheet': {
       if (input.isSubtotal) return { ...blank };
@@ -159,21 +152,12 @@ function vocabularyFor(input: CreateLineInput): {
       }
       return { ...blank, side: input.side as BalanceSide };
     }
-    case 'cash_flow': {
-      if (!carriesAccounts) return { ...blank };
-      if (input.isCash) return { ...blank, isCash: true };
-      if (
-        !input.cashFlowCategory ||
-        !(CASH_FLOW_CATEGORIES as readonly string[]).includes(input.cashFlowCategory)
-      ) {
-        throw new StatementLineError(
-          'A Cash Flow line is either the cash the statement explains, or one of its three activities — operating, investing or financing.',
-        );
-      }
-      return { ...blank, cashFlowCategory: input.cashFlowCategory as CashFlowCategory };
-    }
-    case 'changes_in_equity':
-      return { ...blank };
+    case 'cash_flow':
+      // A cash-flow line says one thing only, and only some of them say it:
+      // whether the accounts on it *are* the cash the statement explains.
+      // Which activity a line belongs to is the heading above it, not a field
+      // on the line that could disagree with it.
+      return { ...blank, isCash: !input.isHeader && !input.isSubtotal && (input.isCash ?? false) };
     default:
       throw new StatementLineError(`'${String(input.statement)}' is not one of the four statements.`);
   }
@@ -328,7 +312,7 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateLineInput) 
   if (!(STATEMENT_FACES as readonly string[]).includes(input.statement)) {
     throw new StatementLineError(`'${String(input.statement)}' is not one of the four statements.`);
   }
-  const { side, cashFlowCategory, isCash } = vocabularyFor(input);
+  const { side, isCash } = vocabularyFor(input);
   const isSubtotal = input.isSubtotal ?? false;
 
   const parentId = await resolveParent(tx, input.parentId, input.statement, side);
@@ -355,7 +339,6 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateLineInput) 
       isSubtotal,
       ordinal,
       side,
-      cashFlowCategory,
       isCash,
     })
     .returning();
@@ -371,7 +354,6 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateLineInput) 
       isHeader: input.isHeader,
       isSubtotal,
       side,
-      cashFlowCategory,
       isCash,
       parentId,
     },
@@ -415,7 +397,6 @@ export interface UpdateLineInput {
   readonly parentId?: string | null;
   readonly role?: string | null;
   readonly side?: string | null;
-  readonly cashFlowCategory?: string | null;
   readonly isCash?: boolean;
 }
 
@@ -474,7 +455,6 @@ export async function update(tx: Tx, ctx: ActorContext, id: string, input: Updat
     isHeader,
     isSubtotal,
     side: input.side ?? line.side,
-    cashFlowCategory: input.cashFlowCategory ?? line.cashFlowCategory,
     isCash: input.isCash ?? false,
   });
 
@@ -509,7 +489,6 @@ export async function update(tx: Tx, ctx: ActorContext, id: string, input: Updat
       isSubtotal: line.isSubtotal,
       parentId: line.parentId,
       side: line.side,
-      cashFlowCategory: line.cashFlowCategory,
       isCash: line.isCash,
     },
     after: { name, isHeader, isSubtotal, parentId, ...vocabulary },
@@ -566,59 +545,25 @@ export async function move(tx: Tx, ctx: ActorContext, id: string, direction: 'up
   });
 }
 
-/** Which of the three activities a Cash Flow line belongs to. */
-export async function setCashFlowCategory(
-  tx: Tx,
-  ctx: ActorContext,
-  id: string,
-  category: CashFlowCategory,
-) {
-  await permit(ctx, 'configure', PERMISSION_OBJECT);
-  const line = await load(tx, id);
-  if (line.statement !== 'cash_flow') {
-    throw new StatementLineError(
-      `'${line.name}' is a line of the ${TITLES[line.statement as StatementFace]}; the three activities belong to the Cash Flow Statement.`,
-    );
-  }
-  if (line.isHeader || line.isSubtotal) {
-    throw new StatementLineError('A header or a total holds no movements of its own — classify its lines.');
-  }
-  if (!(CASH_FLOW_CATEGORIES as readonly string[]).includes(category)) {
-    throw new StatementLineError(`'${String(category)}' is not one of the three activities.`);
-  }
-  if (line.cashFlowCategory === category && !line.isCash) return;
-
-  await tx
-    .update(financialStatementLine)
-    // A line that carries an activity is no longer the cash itself.
-    .set({ cashFlowCategory: category, isCash: false })
-    .where(eq(financialStatementLine.id, id));
-  await recordChange(tx, ctx, {
-    action: 'statement_line.cash_flow_set',
-    objectType: PERMISSION_OBJECT,
-    objectId: id,
-    before: { cashFlowCategory: line.cashFlowCategory, isCash: line.isCash },
-    after: { cashFlowCategory: category, isCash: false },
-  });
-}
-
 /**
  * Marks a Cash Flow line as the cash itself — the accounts mapped to it are
- * the pool whose movement the statement explains, so it carries no activity
- * of its own: cash moving between two cash accounts is not a cash flow.
+ * the pool whose movement the statement explains.
+ *
+ * The only thing a cash-flow line is ever asked about itself. Which activity
+ * a line belongs to used to be a field on it as well, and a field can disagree
+ * with the heading printed above it; since 0182 the heading is the answer.
  */
 export async function setCash(tx: Tx, ctx: ActorContext, id: string, isCash: boolean) {
   await permit(ctx, 'configure', PERMISSION_OBJECT);
   const line = await load(tx, id);
-  if (line.statement !== 'cash_flow' || line.isHeader || line.isSubtotal) {
+  if (line.statement !== 'cash_flow' || line.isHeader || line.isSubtotal || line.computes) {
     throw new StatementLineError('Only a line of the Cash Flow Statement can hold the cash it explains.');
   }
   if (line.isCash === isCash) return;
 
   await tx
     .update(financialStatementLine)
-    // Cash carries no activity; a line that stops being cash starts as operating.
-    .set({ isCash, cashFlowCategory: isCash ? null : 'operating' })
+    .set({ isCash })
     .where(eq(financialStatementLine.id, id));
   await recordChange(tx, ctx, {
     action: 'statement_line.cash_set',

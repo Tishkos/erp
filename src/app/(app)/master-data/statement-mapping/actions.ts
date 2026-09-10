@@ -17,7 +17,6 @@ const vocabularyOf = (formData: FormData) => ({
   isHeader: text(formData, 'kind') === 'header',
   isSubtotal: text(formData, 'kind') === 'subtotal',
   side: text(formData, 'side') || null,
-  cashFlowCategory: text(formData, 'cashFlowCategory') || null,
   isCash: text(formData, 'isCash') === 'yes',
 });
 

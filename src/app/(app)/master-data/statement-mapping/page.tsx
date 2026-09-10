@@ -9,7 +9,6 @@ import { SectionTabs } from '@/components/admin/section-tabs';
 import { can } from '@domain/permissions';
 import {
   BALANCE_SIDES,
-  CASH_FLOW_CATEGORIES,
   type StatementFace,
 } from '@domain/financial-statements';
 import { visibleRoute } from '@/server/phase-gate';
@@ -92,7 +91,7 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
   const attributeHead: Record<Tab, string> = {
     'income-statement': t('mapping.kind'),
     'balance-sheet': t('mapping.side'),
-    'cash-flow': t('mapping.activity'),
+    'cash-flow': t('mapping.kind'),
     'changes-in-equity': t('mapping.kind'),
   };
 
@@ -114,10 +113,6 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
   // so both are handed the same choices to answer them from.
   const choices = {
     sides: BALANCE_SIDES.map((side) => ({ value: side, label: sideName(side) })),
-    activities: CASH_FLOW_CATEGORIES.map((category) => ({
-      value: category,
-      label: t(`reports.cash_${category}`),
-    })),
   };
   const dialogLabels = (open: string, title: string) => ({
     open,
@@ -132,7 +127,6 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
     parent: t('mapping.parent'),
     parentTop: t('mapping.parent_top'),
     side: t('mapping.side'),
-    activity: t('mapping.activity'),
     cash: t('mapping.is_cash'),
     save: t('save'),
     required: t('required_hint'),
@@ -167,7 +161,6 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
         mayConfigure ? (
           <StatementLineDialog
             action={createLine}
-            activities={choices.activities}
             hidden={{ statement, tab }}
             labels={dialogLabels(t('mapping.new_line'), t('mapping.new_title'))}
             mode="new"
@@ -227,9 +220,7 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
                   ? sideName(line.side)
                   : line.isCash
                     ? t('mapping.is_cash')
-                    : line.cashFlowCategory
-                      ? t(`reports.cash_${line.cashFlowCategory}`)
-                      : kindOf(line),
+                    : kindOf(line),
                 accounts:
                   line.isHeader || line.isSubtotal || line.computes
                     ? '—'
@@ -254,14 +245,12 @@ export default async function StatementMappingPage({ searchParams }: { searchPar
                     />
                     <StatementLineDialog
                       action={updateLine}
-                      activities={choices.activities}
                       hidden={{ id: line.id, tab }}
                       initial={{
                         name: line.name,
                         kind: line.isHeader ? 'header' : line.isSubtotal ? 'subtotal' : 'line',
                         computes: line.computes,
                         ...(line.side ? { side: line.side } : {}),
-                        ...(line.cashFlowCategory ? { cashFlowCategory: line.cashFlowCategory } : {}),
                         ...(line.parentId ? { parentId: line.parentId } : {}),
                         isCash: line.isCash,
                       }}

@@ -1421,7 +1421,7 @@
       "closing_cash": "Cash at the end of the period",
       "cash_reconciles": "The movement agrees with the cash balances",
       "cash_does_not_reconcile": "The movement does not agree with the cash balances",
-      "cash_not_configured": "No account reports on Cash and cash equivalents yet. Open an account in the Chart of Accounts, assign it that statement line, and this statement reads from every journal that touches it.",
+      "cash_not_configured": "No account has been marked as cash yet — set one on the Cash Flow mapping, or this statement has nothing to explain.",
       "no_cash_moved": "No cash moved in this period.",
       "inflow_hint": "Money in is positive; money out is negative.",
       "statement_line": "Line",

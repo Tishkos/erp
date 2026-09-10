@@ -36,17 +36,14 @@ import { NORMAL_BALANCE, type AccountType } from '../domain/accounts';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 import {
   ADDS_TO_RESULT,
-  CASH_FLOW_CATEGORIES,
-  type CashFlowCategory,
   LineCatalogue,
+  takesAccounts,
   type StatementFace,
   type StatementLine,
   type StatementLineNode,
   type StatementSection,
 } from '../domain/financial-statements';
 import * as statementLines from './statement-lines';
-
-export { CASH_FLOW_CATEGORIES, type CashFlowCategory };
 
 export interface StatementFilter {
   readonly from: string;
@@ -698,161 +695,110 @@ export async function changesInEquity(tx: Tx, filter: StatementFilter): Promise<
   };
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// Statement of Cash Flows
-//
-// The fourth statement, on a page of its own (by direction, 2026-08-31), and
-// the only one that cannot be read off account balances alone. Cash went up or
-// down by a figure the Balance Sheet already shows; what this statement adds
-// is *why*, and the why is not a property of the cash account — it is a
-// property of the other side of each journal that touched cash.
-//
-// So it is built the direct way, from the journals themselves: take every
-// entry that moved a cash account, and attribute the cash it moved to the
-// accounts on the other side of it. A sale settled in cash is attributed to
-// Revenue and is operating; an equipment purchase to Non-current assets and is
-// investing; capital introduced to Equity and is financing. Nothing is
-// classified by a mapping table somebody has to maintain, and nothing is
-// guessed from an account's name.
-//
-// Which accounts *are* cash is the one thing that must be said out loud, and
-// it is said in the Chart of Accounts: an account reports on the "Cash and
-// cash equivalents" statement line, or it is not cash. Until Finance has
-// assigned at least one, this statement says so plainly rather than showing an
-// empty page that reads as a fault.
-//
-// The arithmetic ties by construction. Every entry that touched cash is
-// attributed in full, so the three sections add to the movement between the
-// opening and closing cash balances — and the page says whether they do.
-// ───────────────────────────────────────────────────────────────────────────
-
-// Where a cash movement belongs is read from the account on the other side of
-// the entry: the *category* of the statement line that account reports on.
-// The categories live on the mapping — Finance sets them on the Cash Flow
-// Mapping screen — and a cash line itself carries none, because cash moving
-// between two cash accounts is not a cash flow.
-
-/** The codes of the lines whose accounts ARE cash, per the mapping. */
-const cashCodes = (catalogue: LineCatalogue): string[] =>
-  catalogue.lines.filter((line) => line.isCash).map((line) => line.code);
-
-export interface CashFlowSection {
-  readonly category: CashFlowCategory;
-  /** Amounts are signed as the cash moved: positive in, negative out. */
-  readonly lines: readonly StatementLineResult[];
-  readonly total: string;
+/** Whether an account is the cash this statement explains, per the mapping. */
+const isCash = (catalogue: LineCatalogue, movement: { cash_flow: string | null }): boolean =>
+  movement.cash_flow !== null && (catalogue.byCode(movement.cash_flow)?.isCash ?? false);
+/**
+ * One row of the Statement of Cash Flows, in the order it is printed.
+ *
+ * `header`   a section title: Operating, Investing, Financing.
+ * `line`     an account's movement, on the line Finance filed it under.
+ * `computed` a figure the ledger works out: the result, the opening cash,
+ *            and everything nobody has classified yet.
+ * `total`    a computed total — a section's, or the statement's.
+ */
+export interface CashFlowRow {
+  readonly code: string;
+  readonly name: string;
+  readonly kind: 'header' | 'line' | 'computed' | 'total';
+  readonly depth: number;
+  /** Signed as the cash moved: positive in, negative out. Brackets are the page's. */
+  readonly amount: string;
+  /** A total is ruled above; the one that closes the statement, twice. */
+  readonly rule: 'none' | 'single' | 'double';
+  /**
+   * The accounts behind the figure. The page prints them under "Not yet
+   * classified" and nowhere else — that line exists to be acted on, and
+   * naming the accounts is the whole of the action.
+   */
+  readonly accounts: readonly StatementAccount[];
 }
 
 export interface CashFlow {
   readonly from: string;
   readonly to: string;
-  readonly sections: readonly CashFlowSection[];
-  readonly netMovement: string;
+  readonly rows: readonly CashFlowRow[];
+  /** Cash the day before the period. */
   readonly openingCash: string;
+  /** What the period did to it. */
+  readonly netMovement: string;
+  /** Cash at the end — and the balance the cash accounts actually stand at. */
   readonly closingCash: string;
-  /** False when no account has been assigned to the cash line yet. */
+  /** False when no account has been marked as the cash this statement explains. */
   readonly configured: boolean;
   /** The cash accounts and what each of them closed at. */
   readonly cashAccounts: readonly StatementAccount[];
+  /**
+   * Whether the statement agrees with the cash accounts.
+   *
+   * It is arithmetically bound to — see the note above `cashFlow` — so a false
+   * here is not a rounding difference to be explained away. It means a figure
+   * has been counted twice or not at all, and the statement is wrong.
+   */
   readonly reconciles: boolean;
 }
 
-interface EntryLine {
-  readonly entryId: string;
-  readonly accountCode: string;
-  readonly accountName: string;
-  readonly accountType: AccountType;
-  readonly cash_flow: string | null;
-  readonly debit: bigint;
-  readonly credit: bigint;
-}
+// ───────────────────────────────────────────────────────────────────────────
+// The Statement of Cash Flows — the indirect method, by direction 2026-09-10
+//
+// Profit is not cash. A company can earn a million and collect none of it, so
+// this statement starts at the result and adjusts it by what happened to every
+// other account, arriving at the cash actually held.
+//
+// ── One rule ───────────────────────────────────────────────────────────────
+// The sponsor set the adjustments out a case at a time:
+//
+//   an operating asset rises      deduct    (receivables up: sold, not paid)
+//   an operating asset falls      add       (receivables down: collected)
+//   an operating liability rises  add       (payables up: bought, not paid)
+//   an operating liability falls  deduct    (the supplier was paid)
+//   a loan rises                  positive  (the bank lent)
+//   a loan falls                  negative  (the bank was repaid)
+//   equipment bought              negative
+//   equipment sold                positive
+//
+// Every one of those is **credits less debits over the period**. An asset
+// rising is a net debit and comes out negative; a liability rising is a net
+// credit and comes out positive. Net Income is the same sum over the revenue
+// and expense accounts. There is no table of special cases here because there
+// are no special cases.
+//
+// ── Why it cannot drift ────────────────────────────────────────────────────
+// Every journal balances, so credits less debits across *all* accounts is
+// zero. Split that sum into cash and everything else:
+//
+//   0 = (credits − debits over cash) + (credits − debits over everything else)
+//     = −(increase in cash)          + (Net Income + every adjustment)
+//
+// so Net Income plus every adjustment *is* the increase in cash, exactly. The
+// statement ties to the ledger by arithmetic rather than by care, which is
+// what `reconciles` asserts and what the tests prove against posted journals.
+//
+// That identity holds only if every account is counted once. So:
+//
+//   * the cash accounts are the subject, never an adjustment;
+//   * revenue and expense are inside Net Income and never also a line, even
+//     if someone maps one — the mapping is ignored rather than obeyed twice;
+//   * an account with no line of its own still appears, under "Not yet
+//     classified", because dropping it is what would break the tie.
+//
+// ── Which section a line belongs to ────────────────────────────────────────
+// Where it sits in the layout, and nothing else — as with "Add:" on the
+// Statement of Changes in Equity. A line is asked nothing about itself.
+// ───────────────────────────────────────────────────────────────────────────
 
-/**
- * Which accounts are the cash this statement explains.
- *
- * Said out loud on the Cash Flow mapping, and nowhere else: an account is
- * mapped to a line marked as cash, or it is not cash. Nothing is guessed from
- * an account's name or from where it sits on another report.
- */
-const isCash = (
-  catalogue: LineCatalogue,
-  account: { accountType: AccountType; cash_flow: string | null },
-) => catalogue.lineFor(account.accountType, 'cash_flow', account.cash_flow)?.isCash ?? false;
-
-/** The line an account's cash movements are attributed to. */
-const cashFlowLineOf = (
-  catalogue: LineCatalogue,
-  account: { accountType: AccountType; cash_flow: string | null },
-) => catalogue.lineFor(account.accountType, 'cash_flow', account.cash_flow);
-
-/** Has anybody said which accounts are cash? */
-async function cashLineAssigned(tx: Tx, codes: readonly string[]): Promise<boolean> {
-  if (codes.length === 0) return false;
-  const list = sql.join(codes.map((code) => sql`${code}`), sql`, `);
-  const result = await tx.execute(sql`
-    select 1 from chart_of_account where cash_flow_line in (${list}) limit 1
-  `);
-  return result.rows.length > 0;
-}
-
-/**
- * Every line of every entry that moved a cash account, in the period.
- *
- * Per entry, not per account: the attribution is a question about one journal
- * — which accounts sat opposite the cash — and summing across journals first
- * would destroy exactly the information it needs.
- */
-async function entryMovements(
-  tx: Tx,
-  filter: StatementFilter,
-  codes: readonly string[],
-): Promise<EntryLine[]> {
-  if (codes.length === 0) return [];
-  const cashList = sql.join(codes.map((code) => sql`${code}`), sql`, `);
-  const debitColumn = debitOf(filter);
-  const creditColumn = creditOf(filter);
-  const branch = branchOf(filter);
-
-  const result = await tx.execute(sql`
-    select l.journal_entry_id::text                as "entryId",
-           a.code                                  as "accountCode",
-           a.name                                  as "accountName",
-           a.account_type::text                    as "accountType",
-           a.cash_flow_line                        as "cashFlowLine",
-           coalesce(sum(${debitColumn}), 0)::text  as "debit",
-           coalesce(sum(${creditColumn}), 0)::text as "credit"
-      from journal_line l
-      join journal_entry e    on e.id = l.journal_entry_id
-      join chart_of_account a on a.id = l.account_id
-     where e.status in ('posted', 'reversed')
-       and e.posting_date between ${filter.from}::date and ${filter.to}::date
-       and ${branch}
-       and exists (
-         select 1
-           from journal_line cash
-           join chart_of_account ca on ca.id = cash.account_id
-          where cash.journal_entry_id = l.journal_entry_id
-            and ca.cash_flow_line in (${cashList})
-       )
-     group by l.journal_entry_id, a.code, a.name, a.account_type, a.cash_flow_line
-     order by l.journal_entry_id, a.code
-  `);
-
-  return (result.rows as unknown as Array<Record<string, string>>).map((row) => ({
-    entryId: row.entryId!,
-    accountCode: row.accountCode!,
-    accountName: row.accountName!,
-    accountType: row.accountType as AccountType,
-    cash_flow: row.cashFlowLine ?? null,
-    debit: parseDecimal(String(row.debit), MONEY_SCALE),
-    credit: parseDecimal(String(row.credit), MONEY_SCALE),
-  }));
-}
-
-const abs = (value: bigint) => (value < 0n ? -value : value);
-
-/** The cash held, and by which account, in a set of movements. */
-function cashHeld(
+/** Cash held by a set of movements: a debit balance, whatever the account type. */
+function cashOf(
   catalogue: LineCatalogue,
   rows: readonly Movement[],
 ): { total: bigint; accounts: StatementAccount[] } {
@@ -860,7 +806,7 @@ function cashHeld(
   const accounts: StatementAccount[] = [];
   for (const movement of rows) {
     if (!isCash(catalogue, movement)) continue;
-    const amount = naturalAmount(movement);
+    const amount = movement.debit - movement.credit;
     total += amount;
     accounts.push({
       accountCode: movement.accountCode,
@@ -872,138 +818,153 @@ function cashHeld(
   return { total, accounts };
 }
 
-/**
- * Statement of Cash Flows, for the period between two dates.
- *
- * Each entry's cash movement is shared out across the accounts opposite it, in
- * proportion to what each of them moved. For the ordinary two-line journal
- * that is the whole amount to the one account facing the cash; for a longer
- * journal it is the only division that does not invent a fact the entry does
- * not contain. The rounding remainder goes to the largest share, so the
- * sections still add to the movement exactly.
- */
 export async function cashFlow(tx: Tx, filter: StatementFilter): Promise<CashFlow> {
-  const catalogue = await statementLines.catalogue(tx);
-  const cash = cashCodes(catalogue);
-  const [configured, before, upToTheEnd, entries] = await Promise.all([
-    cashLineAssigned(tx, cash),
+  const [during, before, upToTheEnd, catalogue] = await Promise.all([
+    movements(tx, filter),
     movements(tx, { ...filter, from: BEGINNING, to: dayBefore(filter.from) }),
     movements(tx, { ...filter, from: BEGINNING }),
-    entryMovements(tx, filter, cash),
+    statementLines.catalogue(tx),
   ]);
 
-  const opening = cashHeld(catalogue, before);
-  const closing = cashHeld(catalogue, upToTheEnd);
+  const opening = cashOf(catalogue, before);
+  const closing = cashOf(catalogue, upToTheEnd);
+  const configured = catalogue.linesOf('cash_flow').some((line) => line.isCash);
 
-  // entryId → its lines.
-  const byEntry = new Map<string, EntryLine[]>();
-  for (const line of entries) {
-    byEntry.set(line.entryId, [...(byEntry.get(line.entryId) ?? []), line]);
-  }
+  const isResult = (movement: Movement) =>
+    movement.accountType === 'revenue' || movement.accountType === 'expense';
 
-  // (category, statement line, account) → the cash attributed to it.
-  const buckets = new Map<
-    string,
-    { category: CashFlowCategory; line: StatementLine; account: EntryLine; amount: bigint }
-  >();
-  const attribute = (
-    category: CashFlowCategory,
-    line: StatementLine,
-    account: EntryLine,
-    amount: bigint,
-  ) => {
-    const key = `${category}|${line.code}|${account.accountCode}`;
-    const existing = buckets.get(key);
-    if (existing) existing.amount += amount;
-    else buckets.set(key, { category, line, account, amount });
-  };
+  // Every figure on this statement, by the line it prints on.
+  const byLine = new Map<string, { total: bigint; accounts: StatementAccount[] }>();
+  let netIncome = 0n;
+  let unclassified = 0n;
+  const unclassifiedAccounts: StatementAccount[] = [];
 
-  for (const lines of byEntry.values()) {
-    const cashSide = lines.filter((line) => isCash(catalogue, line));
-    const others = lines.filter((line) => !isCash(catalogue, line));
-    // Positive when the entry brought cash in.
-    const delta = cashSide.reduce((total, line) => total + line.debit - line.credit, 0n);
-    if (delta === 0n || others.length === 0) continue;
+  for (const movement of during) {
+    // The cash is what the statement explains, not one of its explanations.
+    if (isCash(catalogue, movement)) continue;
 
-    const weights = others.map((line) => abs(line.debit - line.credit));
-    const weight = weights.reduce((total, w) => total + w, 0n);
-    if (weight === 0n) continue;
+    const effect = movement.credit - movement.debit;
+    if (effect === 0n) continue;
 
-    // The largest share absorbs the rounding remainder, so the parts add up.
-    let largest = 0;
-    for (let i = 1; i < weights.length; i += 1) if (weights[i]! > weights[largest]!) largest = i;
-
-    let assigned = 0n;
-    others.forEach((account, index) => {
-      if (index === largest) return;
-      const share = (delta * weights[index]!) / weight;
-      assigned += share;
-      const line = cashFlowLineOf(catalogue, account);
-      const category = line?.cashFlowCategory;
-      if (line && category && share !== 0n) attribute(category, line, account, share);
-    });
-    const rest = delta - assigned;
-    const line = cashFlowLineOf(catalogue, others[largest]!);
-    const category = line?.cashFlowCategory;
-    if (line && category && rest !== 0n) attribute(category, line, others[largest]!, rest);
-  }
-
-  const sections: CashFlowSection[] = CASH_FLOW_CATEGORIES.map((category) => {
-    const byLine = new Map<string, { total: bigint; accounts: StatementAccount[] }>();
-    for (const bucket of buckets.values()) {
-      if (bucket.category !== category) continue;
-      const entry = byLine.get(bucket.line.code) ?? { total: 0n, accounts: [] };
-      entry.total += bucket.amount;
-      entry.accounts.push({
-        accountCode: bucket.account.accountCode,
-        accountName: bucket.account.accountName,
-        accountType: bucket.account.accountType,
-        amount: decimal(bucket.amount),
-      });
-      byLine.set(bucket.line.code, entry);
+    // Revenue and expense are inside Net Income. Counting one again on a line
+    // of its own would be the same money twice, so a mapping on one is ignored
+    // rather than obeyed.
+    if (isResult(movement)) {
+      netIncome += effect;
+      continue;
     }
 
-    // The activity's own branch of the layout — headers included, each
-    // carrying the sum of what this activity holds beneath it.
-    const lines = heldBranches(catalogue.treeFor('cash_flow'), (code) => byLine.has(code)).map(
-      ({ node, depth }) => ({
-        line: node.line,
-        depth,
-        amount: decimal(
-          branchCodes(node).reduce((total, code) => total + (byLine.get(code)?.total ?? 0n), 0n),
-        ),
-        accounts: node.line.isHeader
-          ? []
-          : [...(byLine.get(node.line.code)?.accounts ?? [])].sort((a, b) =>
-              a.accountCode.localeCompare(b.accountCode, 'en'),
-            ),
-      }),
-    );
-
-    return {
-      category,
-      lines,
-      // Headers repeat what their lines hold, so only the lines are added up.
-      total: decimal(
-        lines
-          .filter((entry) => !entry.line.isHeader)
-          .reduce((total, entry) => total + parseDecimal(entry.amount, MONEY_SCALE), 0n),
-      ),
+    const account: StatementAccount = {
+      accountCode: movement.accountCode,
+      accountName: movement.accountName,
+      accountType: movement.accountType,
+      amount: decimal(effect),
     };
-  });
 
-  const netMovement = sections.reduce(
-    (total, section) => total + parseDecimal(section.total, MONEY_SCALE),
-    0n,
-  );
+    const line = movement.cash_flow ? catalogue.byCode(movement.cash_flow) : undefined;
+    if (!line || line.statement !== 'cash_flow' || !takesAccounts(line)) {
+      unclassified += effect;
+      unclassifiedAccounts.push(account);
+      continue;
+    }
+
+    const entry = byLine.get(line.code) ?? { total: 0n, accounts: [] };
+    entry.total += effect;
+    entry.accounts.push(account);
+    byLine.set(line.code, entry);
+  }
+
+  const figureOf = (line: StatementLine): bigint => {
+    switch (line.computes) {
+      case 'net_income':
+        return netIncome;
+      case 'opening_cash':
+        return opening.total;
+      case 'unclassified':
+        return unclassified;
+      default:
+        return byLine.get(line.code)?.total ?? 0n;
+    }
+  };
+  const sorted = (accounts: readonly StatementAccount[]) =>
+    [...accounts].sort((a, b) => a.accountCode.localeCompare(b.accountCode, 'en'));
+  // Only the unclassified line names its accounts. Every other line is one row
+  // and one number, as on the Statement of Changes in Equity — but this line
+  // exists to be acted on, and naming what is sitting in it is the whole of
+  // the action.
+  const accountsOf = (line: StatementLine): StatementAccount[] =>
+    line.computes === 'unclassified' ? sorted(unclassifiedAccounts) : [];
+
+  // ── Laying it out ────────────────────────────────────────────────────────
+  // A total sums the lines above it *within its own section*. At the top level
+  // that is everything above it on the statement; inside "Operating
+  // Activities" it is that section alone — which is the difference between
+  // "Net cash used in investing activities" meaning what it says and meaning
+  // investing plus everything that came before it.
+  //
+  // A total contributes nothing to any other total, or a section counted
+  // inside "Net increase in cash" would arrive there twice.
+  const rows: CashFlowRow[] = [];
+  const nodes = catalogue.treeFor('cash_flow');
+  const topLevelTotals = nodes.filter((node) => node.line.isSubtotal);
+  const lastTotal = topLevelTotals[topLevelTotals.length - 1]?.line.code;
+
+  /** What a branch contributes: its own figure plus its children's. A total contributes nothing. */
+  const contribution = (node: StatementLineNode): bigint => {
+    if (node.line.isSubtotal || node.line.isCash) return 0n;
+    const own = node.line.isHeader ? 0n : figureOf(node.line);
+    return node.children.reduce((total, child) => total + contribution(child), own);
+  };
+
+  const walk = (siblings: readonly StatementLineNode[], depth: number) => {
+    let running = 0n;
+    for (const node of siblings) {
+      const line = node.line;
+      // The cash line names the accounts this statement is about. It is not a
+      // row of it.
+      if (line.isCash) continue;
+
+      if (line.isSubtotal) {
+        rows.push({
+          code: line.code,
+          name: line.name,
+          kind: 'total',
+          depth,
+          amount: decimal(running),
+          rule: line.code === lastTotal ? 'double' : 'single',
+          accounts: [],
+        });
+        continue;
+      }
+
+      const amount = contribution(node);
+      running += amount;
+      rows.push({
+        code: line.code,
+        name: line.name,
+        kind: line.isHeader ? 'header' : line.computes ? 'computed' : 'line',
+        depth,
+        amount: decimal(amount),
+        rule: 'none',
+        accounts: accountsOf(line),
+      });
+      if (node.children.length > 0) walk(node.children, depth + 1);
+    }
+  };
+  walk(nodes, 0);
+
+  const netMovement =
+    netIncome +
+    unclassified +
+    [...byLine.values()].reduce((total, entry) => total + entry.total, 0n);
 
   return {
     from: filter.from,
     to: filter.to,
-    sections,
-    netMovement: decimal(netMovement),
+    rows,
     openingCash: decimal(opening.total),
-    closingCash: decimal(closing.total),
+    netMovement: decimal(netMovement),
+    closingCash: decimal(opening.total + netMovement),
     configured,
     cashAccounts: closing.accounts,
     reconciles: opening.total + netMovement === closing.total,
