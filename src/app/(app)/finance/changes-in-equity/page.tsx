@@ -54,7 +54,6 @@ export default async function ChangesInEquityPage({ searchParams }: { searchPara
     statements.changesInEquity(tx, { from, to, currency, allPermittedBranches: true }),
   );
   const money = (amount: string) => formatStatementAmount(amount, currency, locale as Locale);
-  const loss = Number(equity.resultForThePeriod) < 0;
 
   return (
     <AdminPage
@@ -75,12 +74,12 @@ export default async function ChangesInEquityPage({ searchParams }: { searchPara
         }
         foot={
           <div className={s.sapFootTotals}>
-            <div className={s.sapFootTotal}>
-              <span>{loss ? t('reports.loss') : t('reports.profit')}</span>
-              <strong>
-                <bdi dir="ltr">{money(equity.resultForThePeriod)}</bdi>
-              </strong>
-            </div>
+            {/* No profit-or-loss line here. The statement already carries the
+                result on "Total Income", and by direction (2026-09-09) the
+                brackets say which it is: a figure in brackets is a loss, a
+                figure without them is a profit. Saying it twice, once in a
+                word and once in a number, is one place too many for the two
+                to disagree. */}
             <div className={s.sapFootTotal}>
               <span>{t('reports.total_equity')}</span>
               <strong>
