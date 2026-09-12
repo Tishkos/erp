@@ -524,6 +524,55 @@ describe('02 · the layout is the statement', () => {
     ).toBe('Bank Loan');
   });
 
+  it('adds back an expense that has not been paid, through the liability', async () => {
+    // The sponsor's case (2026-09-12): "the income statement shows that we
+    // have payroll expense, but in reality we did not pay those salaries yet
+    // so there is no cash movement ... the cashflow statement must add the
+    // amount of the payroll to the income."
+    //
+    // It does — and the figure comes from the liability the salaries are owed
+    // on, not from the expense. The liability is the only thing that knows how
+    // much is still unpaid: add the expense back and you would be right only
+    // in the month nothing at all was paid.
+    const payroll = await account('X000001', 'Payroll Expense');
+    const payable = await account('L000001', 'Salaries Payable', 'cf_payables');
+
+    await post(payroll, payable, '1000000.0000'); // earned, not yet paid
+
+    const first = await flow();
+    expect(amountOf(first.rows, 'cf_net_income')).toBe(-1_000_000);
+    expect(amountOf(first.rows, 'cf_payables')).toBe(1_000_000); // added back
+    expect(amountOf(first.rows, 'cf_operating_net')).toBe(0); // no cash moved
+    expect(Number(first.netMovement)).toBe(0);
+
+    // And when they are paid, the cash goes out and the add-back reverses.
+    await post(payable, bank, '1000000.0000', '2026-12-01');
+
+    const after = await flow();
+    expect(amountOf(after.rows, 'cf_net_income')).toBe(-1_000_000); // same expense
+    expect(amountOf(after.rows, 'cf_payables')).toBe(0); // owed, then settled
+    expect(Number(after.netMovement)).toBe(-1_000_000); // the cash really left
+    expect(after.reconciles).toBe(true);
+  });
+
+  it('would be wrong to add the expense back itself, so the mapping is ignored', async () => {
+    // Half the payroll paid, half owed. Adding the expense back whole would
+    // say no cash left at all, when 600,000 did.
+    const payroll = await account('X000001', 'Payroll Expense', 'cf_payables');
+    const payable = await account('L000001', 'Salaries Payable', 'cf_payables');
+
+    await post(payroll, payable, '1000000.0000');
+    await post(payable, bank, '600000.0000', '2026-12-01');
+
+    const { rows, netMovement, reconciles } = await flow();
+    expect(amountOf(rows, 'cf_net_income')).toBe(-1_000_000);
+    // The payroll's own mapping is ignored; the payable carries the 400,000
+    // still owed.
+    expect(amountOf(rows, 'cf_payables')).toBe(400_000);
+    expect(Number(netMovement)).toBe(-600_000); // what actually left
+    expect(reconciles).toBe(true);
+  });
+
   it('does not offer a computed line or a total in the account picker', async () => {
     const picker = await withScope(scope(manager), (tx) => lines.pickerLines(tx));
     const here = picker.filter((entry) => entry.statement === 'cash_flow');

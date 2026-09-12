@@ -1461,7 +1461,8 @@
       "is_a_header": "This is a header account. Create an account under it from the Chart of Accounts.",
       "creating": "Creating…",
       "edit": "Edit account",
-      "header_no_line": "A header account takes no mapping."
+      "header_no_line": "A header account takes no mapping.",
+      "cash_flow_inside_net_income": "This account is already inside Net Income, the first figure of the Cash Flow Statement. An expense that has not been paid is added back through the liability it is owed on — map Salaries Payable or Accounts Payable, not the expense itself."
     },
     "rates": {
       "title": "Accounting rates",

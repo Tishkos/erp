@@ -175,6 +175,15 @@ export async function AccountControls({
   // they can make it. Left out are the lines nothing can report on: a header,
   // which prints the sum of the lines beneath it, and a figure the ledger
   // works out — a total, the opening equity, the result for the period.
+  // A revenue or expense account is already inside Net Income, which is the
+  // first figure of the Cash Flow Statement. Putting it on a line as well
+  // would count the same money twice, so the statement ignores the mapping —
+  // and a setting that is silently ignored is worse than one that is refused.
+  // The lines are shown so the shape of the report is visible, and each says
+  // why it cannot be chosen.
+  const insideNetIncome =
+    account.accountType === 'revenue' || account.accountType === 'expense';
+
   const optionsFor = (statement: StatementFace) => [
     { value: '', label: t('accounts.statement_line_default') },
     ...mapping
@@ -182,6 +191,7 @@ export async function AccountControls({
       .map((entry) => ({
         value: entry.code,
         label: entry.path,
+        ...(statement === 'cash_flow' && insideNetIncome ? { disabled: true } : {}),
       })),
   ];
 
@@ -215,6 +225,9 @@ export async function AccountControls({
                     label={page(entry.page)}
                     name={entry.field}
                     options={optionsFor(entry.statement)}
+                    {...(entry.statement === 'cash_flow' && insideNetIncome
+                      ? { hint: t('accounts.cash_flow_inside_net_income') }
+                      : {})}
                   />
                 ))}
               </Grid>
