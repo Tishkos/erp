@@ -36,6 +36,7 @@ import type { Tx } from '../db/client';
 import {
   arInvoice,
   arInvoiceLine,
+  bankCashAccount,
   deliveryNoteLine,
   inventoryMovement,
   deliveryNoteLineUnit,
@@ -84,15 +85,83 @@ export class InvoiceNotReturnableError extends Error {
 // Request — Appendix B's *Requested*
 // ---------------------------------------------------------------------------
 
+/**
+ * Which side the credit lands on. `'receivable'` reduces what the customer
+ * owes; `'bank'` hands the money back out of a named bank or cash account.
+ */
+export type OffsetKind = 'receivable' | 'bank';
+
+export class OffsetAccountError extends Error {
+  readonly code = 'OFFSET_ACCOUNT_REQUIRED';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'OffsetAccountError';
+  }
+}
+
 export interface RequestReturnInput {
   readonly arInvoiceId: string;
   readonly requestedOn: string;
   readonly reason: string;
+  /**
+   * The sponsor's *"Offset Account (Accounts Receivable or Bank — one must be
+   * selected)"*. No default: the two settle differently and guessing leaves
+   * either a receivable the customer does not owe or cash the company still
+   * has.
+   */
+  readonly offsetKind: OffsetKind;
+  /** Required when `offsetKind` is 'bank', refused otherwise. */
+  readonly offsetBankAccountId?: string | null;
   readonly note?: string | null;
   readonly lines: readonly {
     readonly arInvoiceLineId: string;
     readonly quantity: bigint;
   }[];
+}
+
+/**
+ * Reads the offset choice, and refuses the two shapes the CHECK would refuse
+ * anyway — here, so the person gets a sentence instead of a constraint name.
+ */
+async function resolveOffset(
+  tx: Tx,
+  input: Pick<RequestReturnInput, 'offsetKind' | 'offsetBankAccountId'>,
+): Promise<{ offsetKind: OffsetKind; offsetBankAccountId: string | null }> {
+  if (input.offsetKind === 'receivable') {
+    if (input.offsetBankAccountId) {
+      throw new OffsetAccountError(
+        'A return offset to Accounts Receivable credits the customer, not a bank account. ' +
+          'Choose Bank if the money is going back to them.',
+      );
+    }
+    return { offsetKind: 'receivable', offsetBankAccountId: null };
+  }
+
+  if (!input.offsetBankAccountId) {
+    throw new OffsetAccountError(
+      'A return offset to Bank must name which bank or cash account the refund comes out of.',
+    );
+  }
+
+  const [account] = await tx
+    .select({ id: bankCashAccount.id, active: bankCashAccount.active })
+    .from(bankCashAccount)
+    .where(eq(bankCashAccount.id, input.offsetBankAccountId))
+    .limit(1);
+
+  if (!account) {
+    throw new OffsetAccountError(
+      `No bank or cash account with id '${input.offsetBankAccountId}'.`,
+    );
+  }
+  if (!account.active) {
+    throw new OffsetAccountError(
+      'That bank or cash account is closed. A refund cannot be paid out of it.',
+    );
+  }
+
+  return { offsetKind: 'bank', offsetBankAccountId: account.id };
 }
 
 export async function request(
@@ -129,6 +198,8 @@ export async function request(
     );
   }
 
+  const offset = await resolveOffset(tx, input);
+
   const returnedSoFar = await returnedAgainst(
     tx,
     input.lines.map((line) => line.arInvoiceLineId),
@@ -150,6 +221,8 @@ export async function request(
       branchCode: invoice.branchCode,
       requestedOn: input.requestedOn,
       reason: input.reason.trim(),
+      offsetKind: offset.offsetKind,
+      offsetBankAccountId: offset.offsetBankAccountId,
       note: input.note ?? null,
       createdBy: ctx.principal.userId,
     })
@@ -434,10 +507,14 @@ export async function inspect(
     // §9.9 — which units came back. Taken from what the delivery said left,
     // because that is the chain: a return that invented its own serial would
     // break the trace at its last link, and a tracked item cannot move without
-    // one at all (§9.3).
-    // Null on a direct sale: no delivery scanned anything, so the identity is
-    // whatever the inspection recorded coming back.
-    const identity = await identityFor(tx, line.deliveryNoteLineId, inspection);
+    // one at all (§9.3). On a direct sale nothing was scanned, and the identity
+    // comes from the stock the invoice consumed.
+    const identity = await identityFor(
+      tx,
+      line.deliveryNoteLineId,
+      line.arInvoiceLineId,
+      inspection,
+    );
 
     await tx
       .update(salesReturnLine)
@@ -492,10 +569,66 @@ export async function inspect(
  * where it carried several the inspector must say which came back, and is asked
  * rather than guessed at. A wrong batch on a return is a wrong batch in a recall.
  */
+/**
+ * The units a direct Sales Invoice took out of stock, read from the layers it
+ * consumed back to the receipts that created them.
+ *
+ * One batch is the ordinary case and is used. Several means the sale drew on
+ * more than one receipt, and then nobody can say which of them came back — the
+ * inspector is asked, exactly as they are when a delivery carried several.
+ */
+async function identityFromInvoice(
+  tx: Tx,
+  arInvoiceLineId: string,
+): Promise<{ serialNumber: string | null; batchNumber: string | null }> {
+  const [movement] = await tx
+    .select({ id: inventoryMovement.id })
+    .from(inventoryMovement)
+    .where(
+      and(
+        eq(inventoryMovement.sourceDocumentType, 'ar_invoice'),
+        eq(inventoryMovement.sourceLineId, arInvoiceLineId),
+      ),
+    )
+    .limit(1);
+
+  if (!movement) return { serialNumber: null, batchNumber: null };
+
+  const consumed = await inventory.consumptionsOf(tx, movement.id);
+  if (consumed.length === 0) return { serialNumber: null, batchNumber: null };
+
+  const origins = await tx
+    .select({
+      serialNumber: inventoryMovement.serialNumber,
+      batchNumber: inventoryMovement.batchNumber,
+    })
+    .from(inventoryMovement)
+    .where(
+      inArray(
+        inventoryMovement.id,
+        consumed.map((row) => row.createdByMovementId),
+      ),
+    );
+
+  const serials = new Set(origins.map((o) => o.serialNumber).filter(Boolean));
+  const batches = new Set(origins.map((o) => o.batchNumber).filter(Boolean));
+
+  if (serials.size > 1 || batches.size > 1) {
+    throw new Error(
+      'The invoice sold stock from more than one batch, so the inspection must say which units ' +
+        'came back. Guessing would put the wrong identity on a return, and the wrong units in a ' +
+        'recall (§9.9).',
+    );
+  }
+
+  return { serialNumber: [...serials][0] ?? null, batchNumber: [...batches][0] ?? null };
+}
+
 async function identityFor(
   tx: Tx,
   /** Null when the invoice sold the stock itself and nothing was scanned out. */
   deliveryNoteLineId: string | null,
+  arInvoiceLineId: string,
   inspection: InspectionInput,
 ): Promise<{ serialNumber: string | null; batchNumber: string | null }> {
   if (inspection.serialNumber || inspection.batchNumber) {
@@ -505,14 +638,18 @@ async function identityFor(
     };
   }
 
-  // Nothing to read from on a direct sale — no delivery scanned anything out,
-  // so the inspection above is the only word on what came back.
-  const units = deliveryNoteLineId
-    ? await tx
-        .select()
-        .from(deliveryNoteLineUnit)
-        .where(eq(deliveryNoteLineUnit.deliveryNoteLineId, deliveryNoteLineId))
-    : [];
+  // On a direct sale nothing was scanned out — Operations block 5 — so the
+  // identity comes from the stock the invoice actually consumed. Same source as
+  // the cost, and for the same reason: a return follows its original invoice
+  // rather than asking somebody to retype what the invoice already recorded.
+  // Block 9's lines are item, quantity, price and warehouse; a batch the
+  // sponsor never asked for must not be what stops a return from being taken.
+  if (!deliveryNoteLineId) return identityFromInvoice(tx, arInvoiceLineId);
+
+  const units = await tx
+    .select()
+    .from(deliveryNoteLineUnit)
+    .where(eq(deliveryNoteLineUnit.deliveryNoteLineId, deliveryNoteLineId));
 
   if (units.length === 0) return { serialNumber: null, batchNumber: null };
 

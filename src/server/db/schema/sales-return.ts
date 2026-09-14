@@ -44,7 +44,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { appUser, branch } from './platform';
 import { businessPartner, warehouse } from './organisation';
-import { item, unitOfMeasure } from './item';
+import { bankCashAccount, item, unitOfMeasure } from './item';
 import { journalEntry } from './journal';
 import { arInvoice, arInvoiceLine } from './ar-invoice';
 import { deliveryNoteLine } from './delivery-note';
@@ -102,6 +102,17 @@ export const salesReturn = pgTable(
     /** Where the goods land on receipt, before inspection routes them (§7.5). */
     receivingWarehouseCode: text('receiving_warehouse_code').references(() => warehouse.code),
 
+    /**
+     * Which side the credit lands on. A return can settle two ways and the
+     * difference is money: if the customer has not paid, it reduces what they
+     * owe; if they have, the company hands the cash back out of a bank or a
+     * till. Chosen on the return because whoever takes the goods back is the
+     * one who knows which happened.
+     */
+    offsetKind: text('offset_kind').notNull(),
+    /** Set when — and only when — `offsetKind` is 'bank'. */
+    offsetBankAccountId: uuid('offset_bank_account_id').references(() => bankCashAccount.id),
+
     note: text('note'),
 
     createdBy: uuid('created_by')
@@ -151,6 +162,14 @@ export const salesReturn = pgTable(
     check(
       'sales_return_received_date_with_stamp',
       sql`(${t.receivedOn} is null) = (${t.receivedAt} is null)`,
+    ),
+    // One offset must be selected, and only one can be. As an equivalence
+    // rather than two checks: a bank offset with no account named, and an
+    // account named on a receivable offset, are both unrepresentable.
+    check(
+      'sales_return_offset_one_of',
+      sql`${t.offsetKind} in ('receivable', 'bank')
+          and (${t.offsetKind} = 'bank') = (${t.offsetBankAccountId} is not null)`,
     ),
   ],
 );

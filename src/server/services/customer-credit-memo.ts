@@ -29,6 +29,7 @@ import type { Tx } from '../db/client';
 import {
   arInvoice,
   arInvoiceLine,
+  bankCashAccount,
   businessPartner,
   customerCreditMemo,
   customerCreditMemoLine,
@@ -237,6 +238,27 @@ export async function approve(tx: Tx, ctx: ActorContext, id: string): Promise<vo
 // Post — Dr Sales Returns / Cr Customer A/R (Appendix C)
 // ---------------------------------------------------------------------------
 
+/**
+ * The G/L account a bank or cash position is carried in. A refund credits the
+ * account the money actually left, so the cash the books show is the cash the
+ * bank shows.
+ */
+async function bankGlAccount(tx: Tx, bankCashAccountId: string): Promise<string> {
+  const [account] = await tx
+    .select({ glAccountId: bankCashAccount.glAccountId })
+    .from(bankCashAccount)
+    .where(eq(bankCashAccount.id, bankCashAccountId))
+    .limit(1);
+
+  if (!account) {
+    throw new Error(
+      `No bank or cash account with id '${bankCashAccountId}'. The return names it as the ` +
+        'offset, so the refund has nowhere to come from.',
+    );
+  }
+  return account.glAccountId;
+}
+
 export async function post(
   tx: Tx,
   ctx: ActorContext,
@@ -297,6 +319,34 @@ export async function post(
 
   const amount = parseDecimal(memo.amountIqd, 4n);
 
+  // Operations block 9 — *"Offset Account (Accounts Receivable or Bank — one
+  // must be selected)"*. The return says which, because whoever took the goods
+  // back is the one who knows whether the customer was refunded on the spot.
+  // Read here rather than re-asked: the memo is the accounting half of a
+  // decision already made, not a second chance to make it.
+  const [returnDoc] = await tx
+    .select({
+      offsetKind: salesReturn.offsetKind,
+      offsetBankAccountId: salesReturn.offsetBankAccountId,
+    })
+    .from(salesReturn)
+    .where(eq(salesReturn.id, memo.salesReturnId))
+    .limit(1);
+
+  const offsetLine: PostingLineRequest =
+    returnDoc?.offsetKind === 'bank'
+      ? {
+          // The account is named outright rather than mapped: which bank the
+          // money left is a fact about this refund, and no posting rule can
+          // know it. The role stays 'bank' so the line reads as what it is.
+          role: 'bank',
+          accountId: await bankGlAccount(tx, returnDoc.offsetBankAccountId!),
+          credit: toDecimalString(amount, 4n),
+          criteria,
+          dimensions,
+        }
+      : { role: 'customer_receivable', credit: toDecimalString(amount, 4n), criteria, dimensions };
+
   const postingLines: PostingLineRequest[] = [
     ...lines.map((line) => ({
       role: 'sales_returns',
@@ -305,12 +355,7 @@ export async function post(
       dimensions,
       sourceLineId: line.id,
     })),
-    {
-      role: 'customer_receivable',
-      credit: toDecimalString(amount, 4n),
-      criteria,
-      dimensions,
-    },
+    offsetLine,
   ];
 
   const result = await posting.post(tx, ctx, {

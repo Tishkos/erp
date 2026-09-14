@@ -300,6 +300,7 @@ async function returnedAndAccepted(
       arInvoiceId: invoiceId,
       requestedOn: '2026-02-18',
       reason: 'Customer ordered the wrong length',
+      offsetKind: 'receivable',
       lines: [{ arInvoiceLineId: invoiceLineId, quantity }],
     }),
   );
@@ -384,6 +385,7 @@ describe('06.9 gate · a return cannot exceed what was invoiced (§7.5)', () => 
             arInvoiceId: invoice.id,
             requestedOn: '2026-02-18',
             reason: 'Too many',
+            offsetKind: 'receivable',
             lines: [{ arInvoiceLineId: invoice.lineId, quantity: qty('80') }],
           }),
         ),
@@ -404,6 +406,7 @@ describe('06.9 gate · a return cannot exceed what was invoiced (§7.5)', () => 
             arInvoiceId: invoice.id,
             requestedOn: '2026-02-20',
             reason: 'The rest as well',
+            offsetKind: 'receivable',
             lines: [{ arInvoiceLineId: invoice.lineId, quantity: qty('30') }],
           }),
         ),
@@ -416,6 +419,7 @@ describe('06.9 gate · a return cannot exceed what was invoiced (§7.5)', () => 
         arInvoiceId: invoice.id,
         requestedOn: '2026-02-20',
         reason: 'The rest as well',
+        offsetKind: 'receivable',
         lines: [{ arInvoiceLineId: invoice.lineId, quantity: qty('20') }],
       }),
     );
@@ -431,6 +435,7 @@ describe('06.9 gate · a return cannot exceed what was invoiced (§7.5)', () => 
         arInvoiceId: invoice.id,
         requestedOn: '2026-02-18',
         reason: 'Claimed faulty',
+        offsetKind: 'receivable',
         lines: [{ arInvoiceLineId: invoice.lineId, quantity: qty('60') }],
       }),
     );
@@ -516,6 +521,7 @@ describe('06.9 gate · inspection routes to saleable, quarantine or damaged (§7
         arInvoiceId: invoice.id,
         requestedOn: '2026-02-18',
         reason: 'Arrived crushed',
+        offsetKind: 'receivable',
         lines: [{ arInvoiceLineId: invoice.lineId, quantity: qty('20') }],
       }),
     );
@@ -743,6 +749,7 @@ describe('06.9 gate · the credit memo links to the return and the invoice', () 
         arInvoiceId: invoice.id,
         requestedOn: '2026-02-18',
         reason: 'Not yet inspected',
+        offsetKind: 'receivable',
         lines: [{ arInvoiceLineId: invoice.lineId, quantity: qty('20') }],
       }),
     );
@@ -815,6 +822,7 @@ describe('06.9 · a rejected return never touches the ledger', () => {
         arInvoiceId: invoice.id,
         requestedOn: '2026-02-18',
         reason: 'Claimed faulty',
+        offsetKind: 'receivable',
         lines: [{ arInvoiceLineId: invoice.lineId, quantity: qty('20') }],
       }),
     );
@@ -848,6 +856,7 @@ describe('06.9 · a rejected return never touches the ledger', () => {
         arInvoiceId: invoice.id,
         requestedOn: '2026-02-18',
         reason: 'Claimed faulty',
+        offsetKind: 'receivable',
         lines: [{ arInvoiceLineId: invoice.lineId, quantity: qty('20') }],
       }),
     );
