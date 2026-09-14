@@ -1689,7 +1689,15 @@
       "status_on_hold": "On hold",
       "status_blocked": "Blocked",
       "status_inactive": "Inactive",
-      "deactivate_title": "Deactivate this partner"
+      "deactivate_title": "Deactivate this partner",
+      "statement": "Account statement",
+      "statement_entry": "Entry",
+      "statement_debit": "Debit",
+      "statement_credit": "Credit",
+      "statement_balance": "Balance",
+      "statement_opening": "Opening balance",
+      "statement_closing": "Closing balance",
+      "statement_empty": "Nothing posted to this account in the period."
     },
     "actions": "Actions",
     "mapping": {

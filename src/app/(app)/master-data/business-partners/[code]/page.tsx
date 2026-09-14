@@ -83,7 +83,21 @@ export default async function BusinessPartnerPage({
 
   return (
     <AdminPage
-      actions={<AuditLogButton label={t('history')} />}
+      actions={
+        <>
+          {/* Which side it opens on is the partner's own role; one who is both
+              is read as a customer unless the Suppliers side asked. */}
+          <Link
+            className={s.backButton}
+            href={`/master-data/business-partners/${encodeURIComponent(code)}/statement${
+              row.isCustomer ? '' : '?side=supplier'
+            }`}
+          >
+            {t('partners.statement')}
+          </Link>
+          <AuditLogButton label={t('history')} />
+        </>
+      }
       back={{
         href: row.isCustomer ? '/master-data/customers' : '/master-data/suppliers',
         label: t('back'),

@@ -1689,7 +1689,15 @@
       "status_on_hold": "موقوف مؤقتًا",
       "status_blocked": "محظور",
       "status_inactive": "غير نشط",
-      "deactivate_title": "إلغاء تنشيط الطرف"
+      "deactivate_title": "إلغاء تنشيط الطرف",
+      "statement": "كشف الحساب",
+      "statement_entry": "القيد",
+      "statement_debit": "مدين",
+      "statement_credit": "دائن",
+      "statement_balance": "الرصيد",
+      "statement_opening": "الرصيد الافتتاحي",
+      "statement_closing": "الرصيد الختامي",
+      "statement_empty": "لا يوجد قيد على هذا الحساب خلال الفترة."
     },
     "actions": "إجراءات",
     "mapping": {
