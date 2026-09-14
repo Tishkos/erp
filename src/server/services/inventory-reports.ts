@@ -29,7 +29,19 @@ export const PERMISSION_OBJECT = 'inventory_movement';
 
 export interface ValuationRow {
   readonly itemCode: string;
+  /**
+   * What the item and the warehouse are called — Operations block 7, which
+   * asks the Warehouses Report for "Item Name; Item Code; Warehouse Name;
+   * Warehouse Code; Quantity; Total Price".
+   *
+   * Joined here rather than looked up by the page, because a report of two
+   * hundred rows would otherwise be two hundred lookups, and because a name
+   * fetched separately can be a different name from the one the figure was
+   * grouped under.
+   */
+  readonly itemName: string;
   readonly warehouseCode: string;
+  readonly warehouseName: string;
   readonly branchCode: string;
   readonly quantity: string;
   readonly valueIqd: string;
@@ -80,7 +92,9 @@ export async function valuation(
 
   const result = await tx.execute(sql`
     select l.item_code                                          as "itemCode",
+           i.name                                               as "itemName",
            l.warehouse_code                                     as "warehouseCode",
+           w.name                                               as "warehouseName",
            l.branch_code                                        as "branchCode",
            sum(l.remaining_quantity)::text                      as "quantity",
            sum(l.remaining_quantity * l.unit_cost_iqd)::text    as "valueIqd",
@@ -92,9 +106,11 @@ export async function valuation(
              filter (where m.journal_entry_id is null), 0)::text     as "provisionalValueIqd"
       from cost_layer l
       join inventory_movement m on m.id = l.created_by_movement_id
+      join item i             on i.code = l.item_code
+      join warehouse w        on w.code = l.warehouse_code
      where ${sql.join(conditions, sql` and `)}
-     group by l.item_code, l.warehouse_code, l.branch_code
-     order by l.item_code, l.warehouse_code
+     group by l.item_code, i.name, l.warehouse_code, w.name, l.branch_code
+     order by i.name, w.name
   `);
 
   return (result as unknown as { rows: ValuationRow[] }).rows;
