@@ -1,0 +1,13 @@
+-- A return can point at an invoice that shipped its own stock — Operations
+-- block 5, and groundwork for block 9 (2026-09-12).
+--
+-- A Sales Return line has always named the delivery line the goods went out
+-- on. An invoice raised directly has no delivery: it took the stock from the
+-- warehouse itself. The sponsor's return names "the Original Sales Invoice
+-- Number", which the line already carries, so the delivery reference simply
+-- stops being compulsory.
+--
+-- It is kept, and kept checked, for returns against goods that did ship on a
+-- delivery note — there the scanned units are how a serial is matched back to
+-- what left the building.
+ALTER TABLE "sales_return_line" ALTER COLUMN "delivery_note_line_id" DROP NOT NULL;

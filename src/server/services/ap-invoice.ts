@@ -782,6 +782,9 @@ export async function post(
         // same money, so the warehouse and the ledger agree by construction
         // rather than by coincidence — see the rounding note in `unitCostOf`.
         unitCostIqd: unitCostOf(line, invoicedValue),
+        // Whose stock this is. A sale that names this supplier will consume
+        // these layers and no others — Operations block 5.
+        supplierId: invoice.supplierId,
         movementDate: invoice.invoiceDate,
         kind: 'goods_receipt',
         sourceDocumentType: DOCUMENT_TYPE,

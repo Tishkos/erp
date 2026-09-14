@@ -168,9 +168,13 @@ export const salesReturnLine = pgTable(
     arInvoiceLineId: uuid('ar_invoice_line_id')
       .notNull()
       .references(() => arInvoiceLine.id),
-    deliveryNoteLineId: uuid('delivery_note_line_id')
-      .notNull()
-      .references(() => deliveryNoteLine.id),
+    /**
+     * Null when the invoice sold the stock itself — Operations block 5. The
+     * return names the invoice line, which is what the sponsor's document
+     * points at; the delivery is only how a serial is matched back to what
+     * physically left, and a direct sale had no delivery.
+     */
+    deliveryNoteLineId: uuid('delivery_note_line_id').references(() => deliveryNoteLine.id),
 
     itemCode: text('item_code')
       .notNull()

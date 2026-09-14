@@ -290,12 +290,22 @@ async function postedInvoice(noteId: string) {
 // ---------------------------------------------------------------------------
 
 describe('06.6 gate · no A/R Invoice without a source Delivery Note (§7.4)', () => {
-  it('has no column to record one without — the rule is a property of the type', async () => {
+  it('bills a delivery or moves the stock itself, and a line cannot do both', async () => {
+    // The rule this gate protects is that an invoice never bills goods nobody
+    // shipped. Until the Operations build (block 5, 2026-09-12) that was said
+    // by making `delivery_note_id` NOT NULL: the only way to have goods was to
+    // have delivered them.
+    //
+    // The sponsor's Sales Invoice takes the stock from the warehouse itself,
+    // so the column is now optional — and the guarantee moved rather than
+    // went. A line names a delivery, or it names a warehouse, and the
+    // database refuses a line that names both, because that would move the
+    // same goods twice. Nothing is billed that was not shipped either way.
     const { rows } = await ownerPool.query(
-      `select is_nullable from information_schema.columns
-        where table_name = 'ar_invoice' and column_name = 'delivery_note_id'`,
+      `select conname from pg_constraint
+        where conrelid = 'ar_invoice_line'::regclass and conname = 'ar_invoice_line_one_source'`,
     );
-    expect(rows[0].is_nullable).toBe('NO');
+    expect(rows).toHaveLength(1);
   });
 
   it('refuses a note that has not delivered — approved is not enough', async () => {

@@ -36,7 +36,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { appUser, branch } from './platform';
-import { businessPartner } from './organisation';
+import { businessPartner, warehouse } from './organisation';
 import { item, unitOfMeasure } from './item';
 import { journalEntry } from './journal';
 import { salesOrder, salesOrderLine } from './sales-order';
@@ -66,11 +66,14 @@ export const arInvoice = pgTable(
      * revenue for goods nobody shipped, and there is no column here in which to
      * record one.
      */
-    deliveryNoteId: uuid('delivery_note_id')
-      .notNull()
-      .references(() => deliveryNote.id),
+    /**
+     * Null when the invoice was raised on its own — Operations block 5. The
+     * reference stays and stays checked; it simply stops being compulsory, so
+     * a sale can be invoiced without inventing an order and a delivery nobody
+     * made.
+     */
+    deliveryNoteId: uuid('delivery_note_id').references(() => deliveryNote.id),
     salesOrderId: uuid('sales_order_id')
-      .notNull()
       .references(() => salesOrder.id),
 
     customerId: uuid('customer_id')
@@ -184,12 +187,9 @@ export const arInvoiceLine = pgTable(
     lineNo: integer('line_no').notNull(),
 
     /** What is being billed, and where its quantity came from. */
-    deliveryNoteLineId: uuid('delivery_note_line_id')
-      .notNull()
-      .references(() => deliveryNoteLine.id),
-    salesOrderLineId: uuid('sales_order_line_id')
-      .notNull()
-      .references(() => salesOrderLine.id),
+    /** Null on a directly-raised invoice — see the note on the header. */
+    deliveryNoteLineId: uuid('delivery_note_line_id').references(() => deliveryNoteLine.id),
+    salesOrderLineId: uuid('sales_order_line_id').references(() => salesOrderLine.id),
 
     itemCode: text('item_code')
       .notNull()
@@ -213,6 +213,19 @@ export const arInvoiceLine = pgTable(
 
     grossIqd: numeric('gross_iqd', { precision: 19, scale: 4 }).notNull(),
     netIqd: numeric('net_iqd', { precision: 19, scale: 4 }).notNull(),
+
+    /**
+     * Where this line takes its stock from, and whose stock it is —
+     * Operations block 5. Both on the line, not the document: the sponsor is
+     * explicit that one item can appear on separate lines under different
+     * suppliers, and one invoice may ship from two warehouses.
+     *
+     * Null when a Delivery Note already shipped the goods. The database
+     * refuses a line that has both, because that would move the same stock
+     * twice.
+     */
+    warehouseCode: text('warehouse_code').references(() => warehouse.code),
+    supplierId: uuid('supplier_id').references(() => businessPartner.id),
   },
   (t) => [
     uniqueIndex('ar_invoice_line_no_uniq').on(t.arInvoiceId, t.lineNo),

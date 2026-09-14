@@ -1,0 +1,450 @@
+/**
+ * Operations build, block 5 — the Sales Invoice sells stock (2026-09-12).
+ *
+ *   Effect   A Sales Invoice decreases stock from the selected warehouse.
+ *   Journal  Accounts Receivable Dr. / Revenue Cr. / Inventory Cr. / COGS Dr.
+ *   COGS     FIFO. "The item cost follows the selected item, supplier and
+ *            warehouse stock."
+ *   Supplier "The same item can be entered on separate invoice lines under
+ *            different suppliers when required."
+ *
+ * The last two sentences are the whole of the difficulty. Cost has always been
+ * FIFO per item and per warehouse; the sponsor adds the supplier, which makes
+ * the same panel bought from two suppliers two pools of stock that must not be
+ * consumed from each other. This file is mostly that claim, tested from the
+ * directions it could fail in.
+ */
+import { beforeEach, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { ownerPool, resetTestData, seedBranch } from './setup';
+import { withScope } from '@/server/db/client';
+import * as authz from '@/server/services/authorization';
+import * as coa from '@/server/services/chart-of-accounts';
+import * as ap from '@/server/services/ap-invoice';
+import * as ar from '@/server/services/ar-invoice';
+import * as inventory from '@/server/services/inventory';
+import { parseDecimal } from '@/server/domain/money';
+import { parseQuantity } from '@/server/domain/uom';
+import type { ActorContext } from '@/server/services/chart-of-accounts';
+
+const BAGHDAD = 'BGW';
+const PANEL = 'ITM-PANEL';
+const WAREHOUSE = 'WH-MAIN';
+const OTHER = 'WH-SPARE';
+const BUY_ON = '2026-04-01';
+const SELL_ON = '2026-04-20';
+
+const qty = (units: string) => parseQuantity(units);
+const price = (iqd: string) => parseDecimal(iqd, 4n);
+
+let clerk: ActorContext;
+let manager: ActorContext;
+let customerId: string;
+let jinko: string;
+let longi: string;
+let accounts: Record<string, string>;
+
+async function createUser(role: string): Promise<ActorContext> {
+  const id = randomUUID();
+  await ownerPool.query(`insert into app_user (id, email, display_name) values ($1,$2,$3)`, [
+    id,
+    `${id}@example.com`,
+    'Test User',
+  ]);
+  await ownerPool.query(`insert into user_role (user_id, role_code) values ($1,$2)`, [id, role]);
+  await ownerPool.query(`insert into user_branch_scope (user_id, branch_code) values ($1,$2)`, [
+    id,
+    BAGHDAD,
+  ]);
+  await ownerPool.query(
+    `insert into user_department_scope (user_id, department_code) values ($1,'FIN')
+     on conflict do nothing`,
+    [id],
+  );
+  const principal = await withScope({ userId: id, branchCode: BAGHDAD }, (tx) =>
+    authz.loadPrincipal(tx, id),
+  );
+  return { principal, branchCode: BAGHDAD };
+}
+
+const scope = (ctx: ActorContext) => ({ userId: ctx.principal.userId, branchCode: BAGHDAD });
+
+beforeEach(async () => {
+  await resetTestData();
+  await seedBranch(BAGHDAD, 'Baghdad');
+  await ownerPool.query(
+    `insert into department (code, name, is_finance) values ('FIN','Finance',true)
+     on conflict do nothing`,
+  );
+
+  clerk = await createUser('accounting_officer');
+  manager = await createUser('accounting_manager');
+
+  accounts = {};
+  for (const [role, parent, name] of [
+    ['inventory', 'A000001', 'Inventory'],
+    ['customer_receivable', 'A000001', 'Trade Receivables'],
+    ['grni', 'L000001', 'Goods Received Not Invoiced'],
+    ['supplier_payable', 'L000001', 'Trade Payables'],
+    ['sales_revenue', 'R000001', 'Product Sales'],
+    ['cogs', 'X000001', 'Cost of Goods Sold'],
+    ['expense', 'X000001', 'Service and Expense Cost'],
+    ['purchase_variance', 'X000001', 'Purchase Price Variance'],
+  ] as const) {
+    const { rows: parents } = await ownerPool.query(
+      `select id, account_type from chart_of_account where code = $1`,
+      [parent],
+    );
+    const { rows } = await ownerPool.query(
+      `insert into chart_of_account
+         (code, name, account_type, parent_id, is_group, is_active, approval_status, level,
+          currency_restriction, control_account)
+       values ($1,$2,$3,$4,false,true,'approved',1,'IQD',$5) returning id`,
+      [
+        `${parent.slice(0, 1)}9${String(name.length).padStart(5, '0')}`,
+        name,
+        parents[0].account_type,
+        parents[0].id,
+        role === 'supplier_payable' ? 'supplier' : role === 'customer_receivable' ? 'customer' : null,
+      ],
+    );
+    accounts[role] = rows[0].id;
+    for (const event of ['purchasing.ap_invoice', 'sales.ar_invoice'] as const) {
+      await ownerPool.query(
+        `insert into posting_rule (event_type, line_role, account_id, is_active, created_by)
+         values ($1, $2, $3, true, $4) on conflict do nothing`,
+        [event, role, rows[0].id, manager.principal.userId],
+      );
+    }
+    await withScope(scope(manager), (tx) =>
+      coa.setRequiredDimensions(tx, manager, rows[0].id, []),
+    );
+  }
+
+  // The item knows where its stock lives and what it costs — Operations 1.
+  const client = await ownerPool.connect();
+  try {
+    await client.query('begin');
+    const { rows } = await client.query(
+      `insert into item (code, name, is_stock, base_uom_code, tracking,
+                         inventory_account_id, cogs_account_id)
+       values ($1,'Solar Panel 550W',true,'EA','batch',$2,$3) returning id`,
+      [PANEL, accounts.inventory, accounts.cogs],
+    );
+    await client.query(
+      `insert into item_uom (item_id, uom_code, conversion_numerator, conversion_denominator)
+       values ($1,'EA',1,1)`,
+      [rows[0].id],
+    );
+    await client.query('commit');
+  } catch (error) {
+    await client.query('rollback').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  for (const [code, name] of [
+    [WAREHOUSE, 'Main Warehouse'],
+    [OTHER, 'Spare Warehouse'],
+  ] as const) {
+    await ownerPool.query(
+      `insert into warehouse (code, name, branch_code, warehouse_type)
+       values ($1,$2,$3,'main') on conflict do nothing`,
+      [code, name, BAGHDAD],
+    );
+  }
+
+  const partner = async (code: string, name: string, kind: 'customer' | 'supplier') => {
+    const { rows } = await ownerPool.query(
+      `insert into business_partner (code, legal_name, is_customer, is_supplier, status, active)
+       values ($1,$2,$3,$4,'active',true) returning id`,
+      [code, name, kind === 'customer', kind === 'supplier'],
+    );
+    return rows[0].id as string;
+  };
+  customerId = await partner('CUST-001', 'Al Noor Trading', 'customer');
+  jinko = await partner('SUP-JINKO', 'Jinko Solar', 'supplier');
+  longi = await partner('SUP-LONGI', 'Longi Green', 'supplier');
+
+  await ownerPool.query(
+    `insert into fiscal_year (code, name, starts_on, ends_on, status)
+     values ('FY2026','2026','2026-01-01','2026-12-31','open') on conflict do nothing`,
+  );
+  const { rows: years } = await ownerPool.query(`select id from fiscal_year where code = 'FY2026'`);
+  await ownerPool.query(
+    `insert into fiscal_period (fiscal_year_id, period_no, name, starts_on, ends_on)
+     values ($1,4,'April 2026','2026-04-01','2026-04-30') on conflict do nothing`,
+    [years[0].id],
+  );
+  await ownerPool.query(
+    `insert into exchange_rate (currency_code, rate_type, iqd_per_unit, effective_from, entered_by)
+     values ('USD','accounting',1310.00000000,'2026-01-01',$1) on conflict do nothing`,
+    [manager.principal.userId],
+  );
+  for (const documentType of ['ap_invoice', 'ar_invoice']) {
+    await ownerPool.query(
+      `insert into document_type_dimension (document_type_code, dimension, requirement)
+       values ($1,'business_line','optional')
+       on conflict (document_type_code, dimension) do update set requirement = 'optional'`,
+      [documentType],
+    );
+  }
+});
+
+let seq = 0;
+
+/** Stock in: a purchase invoice from one supplier at one price. */
+async function buy(
+  supplierId: string,
+  options: { quantity?: string; unitPrice?: string; warehouseCode?: string } = {},
+) {
+  seq += 1;
+  const made = await withScope(scope(clerk), (tx) =>
+    ap.create(tx, clerk, {
+      supplierId,
+      supplierInvoiceNo: `SI-${seq}`,
+      purchaseOrderId: null,
+      branchCode: BAGHDAD,
+      invoiceDate: BUY_ON,
+      dueDate: '2026-05-01',
+      nonPoJustification: 'Bought directly.',
+      nonPoApprovedBy: manager.principal.userId,
+      lines: [
+        {
+          itemCode: PANEL,
+          description: 'Solar Panel 550W',
+          quantity: qty(options.quantity ?? '10'),
+          unitPriceIqd: price(options.unitPrice ?? '100000'),
+          uomCode: 'EA',
+          isInventory: true,
+          warehouseCode: options.warehouseCode ?? WAREHOUSE,
+        },
+      ],
+    }),
+  );
+  await withScope(scope(clerk), (tx) => ap.submit(tx, clerk, made.id));
+  await withScope(scope(manager), (tx) => ap.post(tx, manager, made.id));
+}
+
+/** Stock out: a sales invoice raised on its own. */
+async function sell(
+  lines: Array<{
+    quantity: string;
+    unitPrice: string;
+    discount?: string;
+    supplierId?: string | null;
+    warehouseCode?: string;
+  }>,
+) {
+  return withScope(scope(clerk), (tx) =>
+    ar.createDirect(tx, clerk, {
+      customerId,
+      branchCode: BAGHDAD,
+      invoiceDate: SELL_ON,
+      dueDate: '2026-05-20',
+      lines: lines.map((line) => ({
+        itemCode: PANEL,
+        quantity: qty(line.quantity),
+        unitPriceIqd: price(line.unitPrice),
+        warehouseCode: line.warehouseCode ?? WAREHOUSE,
+        ...(line.discount ? { discountIqd: price(line.discount) } : {}),
+        ...('supplierId' in line ? { supplierId: line.supplierId } : {}),
+      })),
+    }),
+  );
+}
+
+/**
+ * The sponsor: "the invoice is not posted until CEO approval." Approval is a
+ * manager's, and posting is a separate step after it — so a clerk cannot do
+ * both, and nothing moves until somebody with the authority says so.
+ */
+const postSale = async (id: string) => {
+  await withScope(scope(manager), (tx) => ar.approve(tx, manager, id));
+  return withScope(scope(manager), (tx) => ar.post(tx, manager, id));
+};
+
+const journalOf = async (journalEntryId: string) => {
+  const { rows } = await ownerPool.query(
+    `select a.name, sum(l.debit_iqd) debit, sum(l.credit_iqd) credit
+       from journal_line l join chart_of_account a on a.id = l.account_id
+      where l.journal_entry_id = $1 group by a.name order by a.name`,
+    [journalEntryId],
+  );
+  return rows.map((r) => ({
+    account: r.name as string,
+    debit: Number(r.debit),
+    credit: Number(r.credit),
+  }));
+};
+
+const onHand = async (warehouseCode = WAREHOUSE) =>
+  Number(
+    (
+      await withScope(scope(manager), (tx) =>
+        inventory.positionOf(tx, PANEL, warehouseCode, BAGHDAD),
+      )
+    ).onHand,
+  ) / 1_000_000;
+
+// ---------------------------------------------------------------------------
+describe('ops 5 · a sales invoice takes the stock and charges its cost', () => {
+  it('posts all four parts: receivable, revenue, inventory and cost', async () => {
+    await buy(jinko, { quantity: '10', unitPrice: '100000' });
+    const invoice = await sell([{ quantity: '4', unitPrice: '250000' }]);
+    const { journalEntryId } = await postSale(invoice.id);
+
+    expect(await journalOf(journalEntryId)).toEqual([
+      { account: 'Cost of Goods Sold', debit: 400_000, credit: 0 },
+      { account: 'Inventory', debit: 0, credit: 400_000 },
+      { account: 'Product Sales', debit: 0, credit: 1_000_000 },
+      { account: 'Trade Receivables', debit: 1_000_000, credit: 0 },
+    ]);
+  });
+
+  it('decreases the stock in the warehouse it names', async () => {
+    await buy(jinko, { quantity: '10' });
+    expect(await onHand()).toBe(10);
+
+    await postSale((await sell([{ quantity: '4', unitPrice: '250000' }])).id);
+    expect(await onHand()).toBe(6);
+  });
+
+  it('costs the oldest stock first', async () => {
+    await buy(jinko, { quantity: '5', unitPrice: '100000' });
+    await buy(jinko, { quantity: '5', unitPrice: '140000' });
+
+    // Seven sold: five at 100,000 and two at 140,000 — 780,000, not 7 × 140,000.
+    const { journalEntryId } = await postSale(
+      (await sell([{ quantity: '7', unitPrice: '250000' }])).id,
+    );
+    const posted = await journalOf(journalEntryId);
+    expect(posted.find((l) => l.account === 'Cost of Goods Sold')!.debit).toBe(780_000);
+  });
+
+  it('takes the discount off the revenue and the receivable, not off the cost', async () => {
+    await buy(jinko, { quantity: '10', unitPrice: '100000' });
+    const invoice = await sell([{ quantity: '4', unitPrice: '250000', discount: '200000' }]);
+    const { journalEntryId } = await postSale(invoice.id);
+
+    const posted = await journalOf(journalEntryId);
+    expect(posted.find((l) => l.account === 'Product Sales')!.credit).toBe(800_000);
+    expect(posted.find((l) => l.account === 'Trade Receivables')!.debit).toBe(800_000);
+    // What the goods cost did not change because they were sold cheaper.
+    expect(posted.find((l) => l.account === 'Cost of Goods Sold')!.debit).toBe(400_000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('ops 5 · the cost follows the supplier', () => {
+  it('consumes the named supplier’s stock, not the oldest of all', async () => {
+    // Jinko's is older and cheaper; Longi's is newer and dearer.
+    await buy(jinko, { quantity: '10', unitPrice: '100000' });
+    await buy(longi, { quantity: '10', unitPrice: '150000' });
+
+    const { journalEntryId } = await postSale(
+      (await sell([{ quantity: '4', unitPrice: '250000', supplierId: longi }])).id,
+    );
+
+    const posted = await journalOf(journalEntryId);
+    // 4 × 150,000 — Longi's. Oldest-first across both would have said 400,000.
+    expect(posted.find((l) => l.account === 'Cost of Goods Sold')!.debit).toBe(600_000);
+  });
+
+  it('sells the same item twice on one invoice, under two suppliers', async () => {
+    await buy(jinko, { quantity: '10', unitPrice: '100000' });
+    await buy(longi, { quantity: '10', unitPrice: '150000' });
+
+    const invoice = await sell([
+      { quantity: '3', unitPrice: '250000', supplierId: jinko },
+      { quantity: '2', unitPrice: '250000', supplierId: longi },
+    ]);
+    const { journalEntryId } = await postSale(invoice.id);
+
+    const posted = await journalOf(journalEntryId);
+    // 3 × 100,000 + 2 × 150,000.
+    expect(posted.find((l) => l.account === 'Cost of Goods Sold')!.debit).toBe(600_000);
+    expect(posted.find((l) => l.account === 'Product Sales')!.credit).toBe(1_250_000);
+    expect(await onHand()).toBe(15);
+  });
+
+  it('will not sell one supplier’s stock out of another’s pool', async () => {
+    await buy(jinko, { quantity: '2', unitPrice: '100000' });
+    await buy(longi, { quantity: '10', unitPrice: '150000' });
+
+    // Ten of Jinko's, when only two of theirs are on hand. Twelve panels are
+    // in the warehouse, but ten of them are not Jinko's to sell.
+    const invoice = await sell([{ quantity: '10', unitPrice: '250000', supplierId: jinko }]);
+    await expect(postSale(invoice.id)).rejects.toThrow();
+    expect(await onHand()).toBe(12);
+  });
+
+  it('consumes oldest-first across every supplier when the line names none', async () => {
+    await buy(jinko, { quantity: '5', unitPrice: '100000' });
+    await buy(longi, { quantity: '5', unitPrice: '150000' });
+
+    const { journalEntryId } = await postSale(
+      (await sell([{ quantity: '7', unitPrice: '250000', supplierId: null }])).id,
+    );
+    const posted = await journalOf(journalEntryId);
+    // 5 × 100,000 + 2 × 150,000.
+    expect(posted.find((l) => l.account === 'Cost of Goods Sold')!.debit).toBe(800_000);
+  });
+
+  it('keeps one warehouse’s stock out of another’s', async () => {
+    await buy(jinko, { quantity: '10', warehouseCode: WAREHOUSE });
+    await buy(jinko, { quantity: '10', warehouseCode: OTHER });
+
+    await postSale((await sell([{ quantity: '4', unitPrice: '250000' }])).id);
+    expect(await onHand(WAREHOUSE)).toBe(6);
+    expect(await onHand(OTHER)).toBe(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('ops 11 · negative stock is not allowed', () => {
+  it('refuses to sell more than the warehouse holds', async () => {
+    await buy(jinko, { quantity: '3', unitPrice: '100000' });
+    const invoice = await sell([{ quantity: '5', unitPrice: '250000' }]);
+
+    await expect(postSale(invoice.id)).rejects.toThrow();
+    // And nothing moved: the whole posting is one transaction.
+    expect(await onHand()).toBe(3);
+  });
+
+  it('refuses to sell from a warehouse that holds none of it', async () => {
+    await buy(jinko, { quantity: '10', warehouseCode: WAREHOUSE });
+    const invoice = await sell([
+      { quantity: '1', unitPrice: '250000', warehouseCode: OTHER },
+    ]);
+    await expect(postSale(invoice.id)).rejects.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('ops 5 · the line says what it needs to', () => {
+  it('brings the item name from the item, rather than taking one on trust', async () => {
+    await buy(jinko);
+    const invoice = await sell([{ quantity: '1', unitPrice: '250000' }]);
+    const { rows } = await ownerPool.query(
+      `select description from ar_invoice_line where ar_invoice_id = $1`,
+      [invoice.id],
+    );
+    expect(rows[0].description).toBe('Solar Panel 550W');
+  });
+
+  it('refuses a discount larger than the line', async () => {
+    await buy(jinko);
+    await expect(
+      sell([{ quantity: '1', unitPrice: '100000', discount: '150000' }]),
+    ).rejects.toThrow(/credit note/);
+  });
+
+  it('refuses to post when the item names no COGS account', async () => {
+    await buy(jinko);
+    await ownerPool.query(`update item set cogs_account_id = null where code = $1`, [PANEL]);
+    const invoice = await sell([{ quantity: '1', unitPrice: '250000' }]);
+    await expect(postSale(invoice.id)).rejects.toThrow(/no COGS account/);
+  });
+});

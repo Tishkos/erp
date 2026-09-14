@@ -36,7 +36,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { appUser, branch } from './platform';
-import { warehouse } from './organisation';
+import { businessPartner, warehouse } from './organisation';
 import { item } from './item';
 import { journalEntry } from './journal';
 
@@ -174,6 +174,18 @@ export const costLayer = pgTable(
     remainingQuantity: numeric('remaining_quantity', { precision: 24, scale: 6 }).notNull(),
     /** IQD cost of one base unit. Money precision, not quantity precision. */
     unitCostIqd: numeric('unit_cost_iqd', { precision: 19, scale: 4 }).notNull(),
+
+    /**
+     * Who supplied this stock — Operations block 5.
+     *
+     * FIFO has always been per item and per warehouse. The sponsor adds a
+     * third key: the same panel bought from two suppliers is two pools, and a
+     * sale that names one must consume that supplier's layers and no others.
+     * Null for stock that arrived without a supplier — opening, a transfer, a
+     * reconciliation — which a sale naming no supplier consumes along with
+     * everything else, oldest first.
+     */
+    supplierId: uuid('supplier_id').references(() => businessPartner.id),
 
     /** The movement that created it — every layer comes from a receipt. */
     createdByMovementId: uuid('created_by_movement_id')

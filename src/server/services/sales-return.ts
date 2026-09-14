@@ -37,6 +37,7 @@ import {
   arInvoice,
   arInvoiceLine,
   deliveryNoteLine,
+  inventoryMovement,
   deliveryNoteLineUnit,
   salesOrder,
   salesReturn,
@@ -183,7 +184,8 @@ export async function request(
       salesReturnId: created!.id,
       lineNo: index + 1,
       arInvoiceLineId: line.arInvoiceLineId,
-      deliveryNoteLineId: invoiceLine.deliveryNoteLineId,
+      // Null when the invoice sold the stock itself — Operations block 5.
+      deliveryNoteLineId: invoiceLine.deliveryNoteLineId ?? null,
       itemCode: invoiceLine.itemCode,
       description: invoiceLine.description,
       uomCode: invoiceLine.uomCode,
@@ -240,6 +242,58 @@ async function returnedAgainst(tx: Tx, arInvoiceLineIds: readonly string[]) {
 // ---------------------------------------------------------------------------
 // Receive — Appendix B's *Received*. Nothing moves yet; see the file note.
 // ---------------------------------------------------------------------------
+
+/** What a line cost when it shipped on a Delivery Note. */
+async function deliveredUnitCost(
+  tx: Tx,
+  line: { itemCode: string; deliveryNoteLineId: string | null },
+): Promise<bigint> {
+  const [delivered] = await tx
+    .select()
+    .from(deliveryNoteLine)
+    .where(eq(deliveryNoteLine.id, line.deliveryNoteLineId!))
+    .limit(1);
+
+  return originalUnitCost({
+    itemCode: line.itemCode,
+    deliveredQuantity: parseQuantity(delivered!.quantity),
+    deliveredCogsIqd: parseDecimal(delivered!.cogsIqd, 4n),
+  });
+}
+
+/**
+ * What a line cost when the invoice sold it directly.
+ *
+ * Read from the layers that invoice's own issue consumed, which is the same
+ * FIFO cost it charged to COGS — so a return credits exactly what the sale
+ * charged, and the two cancel to nothing when everything comes back.
+ */
+async function invoicedUnitCost(
+  tx: Tx,
+  line: { itemCode: string; arInvoiceLineId: string },
+): Promise<bigint> {
+  const [movement] = await tx
+    .select({ id: inventoryMovement.id })
+    .from(inventoryMovement)
+    .where(
+      and(
+        eq(inventoryMovement.sourceDocumentType, 'ar_invoice'),
+        eq(inventoryMovement.sourceLineId, line.arInvoiceLineId),
+      ),
+    )
+    .limit(1);
+
+  if (!movement) {
+    throw new Error(
+      `Invoice line ${line.arInvoiceLineId} moved no stock, so a return of ${line.itemCode} has no cost to take.`,
+    );
+  }
+
+  const consumed = await inventory.consumptionsOf(tx, movement.id);
+  const quantity = consumed.reduce((total, row) => total + parseQuantity(row.quantity), 0n);
+  const cost = consumed.reduce((total, row) => total + parseDecimal(row.costIqd, 4n), 0n);
+  return quantity === 0n ? 0n : (cost * 1_000_000n) / quantity;
+}
 
 export async function receiveGoods(
   tx: Tx,
@@ -366,22 +420,23 @@ export async function inspect(
     assertDestinationMatches(inspection.disposition, store.code, store.type);
 
     // The cost the goods left at — Appendix C's original FIFO cost.
-    const [delivered] = await tx
-      .select()
-      .from(deliveryNoteLine)
-      .where(eq(deliveryNoteLine.id, line.deliveryNoteLineId))
-      .limit(1);
-
-    const unitCost = originalUnitCost({
-      itemCode: line.itemCode,
-      deliveredQuantity: parseQuantity(delivered!.quantity),
-      deliveredCogsIqd: parseDecimal(delivered!.cogsIqd, 4n),
-    });
+    //
+    // Two ways in, because there are two ways out. Goods that shipped on a
+    // Delivery Note carry their cost on that line. An invoice that sold the
+    // stock itself (Operations block 5) has no delivery, and the sponsor says
+    // where to look instead: "the Inventory and COGS amounts for each returned
+    // item are taken from the original Sales Invoice item cost" — which is
+    // what its own issue consumed.
+    const unitCost = line.deliveryNoteLineId
+      ? await deliveredUnitCost(tx, line)
+      : await invoicedUnitCost(tx, line);
 
     // §9.9 — which units came back. Taken from what the delivery said left,
     // because that is the chain: a return that invented its own serial would
     // break the trace at its last link, and a tracked item cannot move without
     // one at all (§9.3).
+    // Null on a direct sale: no delivery scanned anything, so the identity is
+    // whatever the inspection recorded coming back.
     const identity = await identityFor(tx, line.deliveryNoteLineId, inspection);
 
     await tx
@@ -439,7 +494,8 @@ export async function inspect(
  */
 async function identityFor(
   tx: Tx,
-  deliveryNoteLineId: string,
+  /** Null when the invoice sold the stock itself and nothing was scanned out. */
+  deliveryNoteLineId: string | null,
   inspection: InspectionInput,
 ): Promise<{ serialNumber: string | null; batchNumber: string | null }> {
   if (inspection.serialNumber || inspection.batchNumber) {
@@ -449,10 +505,14 @@ async function identityFor(
     };
   }
 
-  const units = await tx
-    .select()
-    .from(deliveryNoteLineUnit)
-    .where(eq(deliveryNoteLineUnit.deliveryNoteLineId, deliveryNoteLineId));
+  // Nothing to read from on a direct sale — no delivery scanned anything out,
+  // so the inspection above is the only word on what came back.
+  const units = deliveryNoteLineId
+    ? await tx
+        .select()
+        .from(deliveryNoteLineUnit)
+        .where(eq(deliveryNoteLineUnit.deliveryNoteLineId, deliveryNoteLineId))
+    : [];
 
   if (units.length === 0) return { serialNumber: null, batchNumber: null };
 

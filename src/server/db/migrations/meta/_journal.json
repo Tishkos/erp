@@ -764,6 +764,34 @@
       "when": 1795700700000,
       "tag": "0184_ops04_purchase_invoice_stock",
       "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1795700800000,
+      "tag": "0185_ops05_sales_invoice_stock",
+      "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1795700900000,
+      "tag": "0186_ops05_return_without_delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1795701000000,
+      "tag": "0187_ops05_invoice_without_delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1795701100000,
+      "tag": "0188_ops05_invoice_line_without_delivery",
+      "breakpoints": true
     }
   ]
 }

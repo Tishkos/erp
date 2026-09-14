@@ -197,11 +197,22 @@ export async function layersOf(
   tx: Tx,
   itemCode: string,
   warehouseCode: string,
+  /**
+   * Narrow to one supplier's stock — Operations block 5. Omitted, every layer
+   * is read, which is the behaviour that came before.
+   */
+  supplierId?: string | null,
 ): Promise<CostLayer[]> {
   const rows = await tx
     .select()
     .from(costLayer)
-    .where(and(eq(costLayer.itemCode, itemCode), eq(costLayer.warehouseCode, warehouseCode)))
+    .where(
+      and(
+        eq(costLayer.itemCode, itemCode),
+        eq(costLayer.warehouseCode, warehouseCode),
+        supplierId ? eq(costLayer.supplierId, supplierId) : undefined,
+      ),
+    )
     .orderBy(asc(costLayer.layerDate), asc(costLayer.sequence));
 
   return rows.map((row) => ({
@@ -213,6 +224,7 @@ export async function layersOf(
     originalQuantity: parseQuantity(row.originalQuantity),
     remainingQuantity: parseQuantity(row.remainingQuantity),
     unitCostIqd: BigInt(row.unitCostIqd.replace('.', '')),
+    supplierId: row.supplierId,
   }));
 }
 
@@ -297,6 +309,14 @@ export interface ReceiveInput {
   readonly quantity: bigint;
   /** IQD cost of one base unit, scaled at MONEY_SCALE. */
   readonly unitCostIqd: bigint;
+  /**
+   * Who supplied this stock — Operations block 5.
+   *
+   * Recorded on the layer so a later sale can consume one supplier's stock and
+   * not another's. Null where the stock arrived without one: opening stock, a
+   * transfer, a reconciliation.
+   */
+  readonly supplierId?: string | null;
   readonly movementDate: string;
   readonly kind?: MovementKind;
   /**
@@ -428,6 +448,7 @@ export async function receive(
     originalQuantity: formatQuantity(layer.originalQuantity),
     remainingQuantity: formatQuantity(layer.remainingQuantity),
     unitCostIqd: toDecimalString(layer.unitCostIqd, 4n),
+    supplierId: input.supplierId ?? null,
     createdByMovementId: movement!.id,
   });
 
@@ -494,6 +515,14 @@ export interface IssueInput {
   readonly journalEntryId?: string | null;
   readonly serialNumber?: string | null;
   readonly batchNumber?: string | null;
+  /**
+   * Take the cost from one supplier's stock only — Operations block 5.
+   *
+   * The availability check narrows with it: selling ten of a supplier's panels
+   * when only six of theirs are on hand is short, however much of another
+   * supplier's stock is sitting beside it.
+   */
+  readonly supplierId?: string | null;
   /** Post the accounting effect in this transaction (Appendix C). */
   readonly post?: boolean;
   /** Analytical dimensions for the posting (§4.2) — the source document's. */
@@ -547,7 +576,7 @@ export async function issue(
     assertCanIssue(position, input.quantity);
   }
 
-  const layers = await layersOf(tx, input.itemCode, input.warehouseCode);
+  const layers = await layersOf(tx, input.itemCode, input.warehouseCode, input.supplierId);
   const plan = planIssue(layers, input.quantity, {
     itemCode: input.itemCode,
     warehouseCode: input.warehouseCode,

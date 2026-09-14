@@ -20,11 +20,14 @@
  * requires the price-list control to survive the UI *and* the API, and the way
  * it survives both is by there being no field to carry an override.
  */
-import { and, eq, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   arInvoice,
   arInvoiceLine,
+  costLayer,
+  inventoryMovement,
+  item,
   businessPartner,
   deliveryNote,
   deliveryNoteLine,
@@ -47,6 +50,7 @@ import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
 import * as posting from './posting';
+import * as inventory from './inventory';
 import * as statuses from './statuses';
 import * as warranty from './warranty';
 import { allocateDocumentNumber } from './numbering';
@@ -108,6 +112,70 @@ export interface CreateArInvoiceInput {
     readonly deliveryNoteLineId: string;
     readonly quantity: bigint;
   }[];
+}
+
+/**
+ * The batch each of these layers holds.
+ *
+ * A cost layer records what stock cost, not what it is called. What it is
+ * called was said by the movement that created it — the goods receipt or the
+ * purchase invoice that brought it in — and that is the batch printed on the
+ * boxes. Read from there rather than copied onto the layer, so there is one
+ * answer rather than two that can differ.
+ */
+async function batchesOfLayers(tx: Tx, layerIds: readonly string[]): Promise<Map<string, string | null>> {
+  if (layerIds.length === 0) return new Map();
+  const rows = await tx
+    .select({ layerId: costLayer.id, batchNumber: inventoryMovement.batchNumber })
+    .from(costLayer)
+    .innerJoin(inventoryMovement, eq(inventoryMovement.id, costLayer.createdByMovementId))
+    .where(inArray(costLayer.id, [...layerIds]));
+  return new Map(rows.map((row) => [row.layerId, row.batchNumber]));
+}
+
+/**
+ * The two accounts this line's stock posts to — the item's own.
+ *
+ * Block 1 put them on the item precisely so this could ask. A posting rule
+ * keyed on the warehouse would give every item in it the same answer, and two
+ * lines of one invoice can be different items held and costed differently.
+ */
+async function stockAccountsFor(
+  tx: Tx,
+  line: { itemCode: string; lineNo: number },
+): Promise<{ inventory: string; cogs: string }> {
+  const [row] = await tx
+    .select({ inventory: item.inventoryAccountId, cogs: item.cogsAccountId })
+    .from(item)
+    .where(eq(item.code, line.itemCode))
+    .limit(1);
+
+  if (!row?.inventory) {
+    throw new DirectSalesLineError(
+      line.lineNo,
+      `sells ${line.itemCode}, which names no inventory account. Set one on the item.`,
+    );
+  }
+  if (!row.cogs) {
+    throw new DirectSalesLineError(
+      line.lineNo,
+      `sells ${line.itemCode}, which names no COGS account, so its cost has nowhere to go. Set one on the item.`,
+    );
+  }
+  return { inventory: row.inventory, cogs: row.cogs };
+}
+
+/** One line of a directly-raised Sales Invoice cannot do what it asks. */
+export class DirectSalesLineError extends Error {
+  readonly code = 'DIRECT_SALES_LINE';
+
+  constructor(
+    readonly lineNo: number,
+    detail: string,
+  ) {
+    super(`Line ${lineNo} ${detail}`);
+    this.name = 'DirectSalesLineError';
+  }
 }
 
 export async function create(
@@ -382,6 +450,181 @@ export async function approve(tx: Tx, ctx: ActorContext, id: string): Promise<vo
 // Post — Dr Customer A/R / Cr Sales Revenue (Appendix B, C)
 // ---------------------------------------------------------------------------
 
+/**
+ * A Sales Invoice raised on its own — Operations block 5 (2026-09-12).
+ *
+ * The sponsor's document is the first in the chain, not the last: it sells the
+ * stock itself rather than billing a delivery somebody else made.
+ *
+ *   Lines    Item Code; Item Name; Quantity; Unit Price; Discount;
+ *            Total Price; Supplier; Warehouse.
+ *   Effect   decreases stock from the selected warehouse.
+ *   Journal  Accounts Receivable Dr. / Revenue Cr. / Inventory Cr. / COGS Dr.
+ *   COGS     FIFO, following the item, the supplier and the warehouse.
+ *
+ * The delivery-driven route above is untouched. Which one an invoice took is
+ * read off its lines: a line names a warehouse, or it names a delivery line,
+ * and the database refuses both — moving the same stock twice is the one
+ * mistake this document must not be able to make.
+ */
+export interface DirectSalesLineInput {
+  readonly itemCode: string;
+  readonly description?: string | null;
+  readonly quantity: bigint;
+  readonly unitPriceIqd: bigint;
+  /** Money off the line. The total is quantity x unit price less this. */
+  readonly discountIqd?: bigint;
+  readonly warehouseCode: string;
+  /**
+   * Whose stock to sell. The cost follows this supplier's layers and no
+   * others — the same item bought from two suppliers is two pools. Omitted,
+   * the oldest stock of any supplier is consumed.
+   */
+  readonly supplierId?: string | null;
+  readonly uomCode?: string;
+}
+
+export interface CreateDirectArInvoiceInput {
+  readonly customerId: string;
+  readonly branchCode: string;
+  readonly invoiceDate: string;
+  /** Omitted, it comes from the customer's payment terms. */
+  readonly dueDate?: string;
+  readonly note?: string | null;
+  readonly lines: readonly DirectSalesLineInput[];
+}
+
+/**
+ * Raises a Sales Invoice with no order and no delivery behind it.
+ *
+ * Nothing moves yet. The stock leaves and the journal posts when the invoice
+ * is posted, which is after approval — the sponsor: "the invoice is not posted
+ * until CEO approval."
+ */
+export async function createDirect(
+  tx: Tx,
+  ctx: ActorContext,
+  input: CreateDirectArInvoiceInput,
+): Promise<{ id: string; invoiceNo: string }> {
+  await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, {
+    branchCode: input.branchCode,
+  });
+
+  if (input.lines.length === 0) {
+    throw new Error('A Sales Invoice needs at least one line.');
+  }
+
+  const [customer] = await tx
+    .select({ id: businessPartner.id, paymentTermsCode: businessPartner.paymentTermsCode })
+    .from(businessPartner)
+    .where(eq(businessPartner.id, input.customerId))
+    .limit(1);
+  if (!customer) throw new Error(`No customer with id '${input.customerId}'.`);
+
+  const dueDate =
+    input.dueDate ?? (await dueDateFrom(tx, customer.paymentTermsCode ?? null, input.invoiceDate));
+
+  const allocated = await allocateDocumentNumber(
+    tx,
+    SEQUENCE_KEY,
+    { branchCode: input.branchCode, year: Number(input.invoiceDate.slice(0, 4)) },
+    ctx.principal.userId,
+  );
+
+  const [created] = await tx
+    .insert(arInvoice)
+    .values({
+      invoiceNo: allocated.documentNo,
+      deliveryNoteId: null,
+      salesOrderId: null,
+      customerId: input.customerId,
+      branchCode: input.branchCode,
+      invoiceDate: input.invoiceDate,
+      paymentTermsCode: customer.paymentTermsCode ?? null,
+      dueDate,
+      currency: 'IQD',
+      note: input.note ?? null,
+      createdBy: ctx.principal.userId,
+    })
+    .returning({ id: arInvoice.id });
+
+  let grossTotal = 0n;
+  let discountTotal = 0n;
+  let netTotal = 0n;
+
+  for (const [index, line] of input.lines.entries()) {
+    const gross = (line.quantity * line.unitPriceIqd) / 1_000_000n;
+    const discount = line.discountIqd ?? 0n;
+    if (discount < 0n || discount > gross) {
+      throw new DirectSalesLineError(
+        index + 1,
+        'has a discount larger than the line, which would make it a credit note.',
+      );
+    }
+    const net = gross - discount;
+    grossTotal += gross;
+    discountTotal += discount;
+    netTotal += net;
+
+    const [stockItem] = await tx
+      .select({ name: item.name })
+      .from(item)
+      .where(eq(item.code, line.itemCode))
+      .limit(1);
+    if (!stockItem) throw new DirectSalesLineError(index + 1, `names no item '${line.itemCode}'.`);
+
+    await tx.insert(arInvoiceLine).values({
+      arInvoiceId: created!.id,
+      lineNo: index + 1,
+      deliveryNoteLineId: null,
+      salesOrderLineId: null,
+      itemCode: line.itemCode,
+      // The sponsor: selecting the Item Code brings the Item Name. It is read
+      // from the master rather than taken from the caller, so an invoice
+      // cannot name an item one thing and the chart another.
+      description: line.description ?? stockItem.name,
+      uomCode: line.uomCode ?? 'EA',
+      quantity: formatQuantity(line.quantity),
+      unitPrice: toDecimalString(line.unitPriceIqd, 4n),
+      discountAmountIqd: discount === 0n ? null : toDecimalString(discount, 4n),
+      grossIqd: toDecimalString(gross, 4n),
+      netIqd: toDecimalString(net, 4n),
+      warehouseCode: line.warehouseCode,
+      supplierId: line.supplierId ?? null,
+    });
+  }
+
+  await tx
+    .update(arInvoice)
+    .set({
+      grossIqd: toDecimalString(grossTotal, 4n),
+      // The header's own total, which the database holds to
+      // net = gross - discount. Two places for one figure, and the constraint
+      // is what stops them drifting.
+      discountIqd: toDecimalString(discountTotal, 4n),
+      netIqd: toDecimalString(netTotal, 4n),
+      updatedAt: new Date(),
+    })
+    .where(eq(arInvoice.id, created!.id));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'ar_invoice.created',
+    objectType: PERMISSION_OBJECT,
+    objectId: created!.id,
+    branchCode: input.branchCode,
+    after: {
+      invoiceNo: allocated.documentNo,
+      direct: true,
+      lines: input.lines.length,
+      netIqd: toDecimalString(netTotal, 4n),
+    },
+    outcome: 'success',
+  });
+
+  return { id: created!.id, invoiceNo: allocated.documentNo };
+}
+
 export async function post(
   tx: Tx,
   ctx: ActorContext,
@@ -408,11 +651,12 @@ export async function post(
     .where(eq(businessPartner.id, invoice.customerId))
     .limit(1);
 
-  const [order] = await tx
-    .select()
-    .from(salesOrder)
-    .where(eq(salesOrder.id, invoice.salesOrderId))
-    .limit(1);
+  // Null on a directly-raised invoice, which has no order behind it. The
+  // dimensions it would have carried are then the ones the accounts require
+  // of the lines themselves.
+  const [order] = invoice.salesOrderId
+    ? await tx.select().from(salesOrder).where(eq(salesOrder.id, invoice.salesOrderId)).limit(1)
+    : [];
 
   const criteria = { branchCode: invoice.branchCode };
   const base = {
@@ -450,6 +694,106 @@ export async function post(
     })),
   ];
 
+  // ── The stock the invoice sells itself (Operations block 5) ────────────
+  //
+  // The sponsor's journal has four parts: Accounts Receivable Dr, Revenue Cr,
+  // Inventory Cr, COGS Dr. The first two are above and are the price; these
+  // two are the cost, and the cost is not the price.
+  //
+  // FIFO decides it. `issue` locks this item's layers, refuses to leave the
+  // warehouse negative (block 11), and returns what the oldest layers
+  // actually cost — narrowed to one supplier's stock when the line names one,
+  // because the same item from two suppliers is two pools and the sponsor
+  // sells from a chosen one.
+  //
+  // Both accounts come from the item, not from a rule, for the reason block 1
+  // put them there: two lines of one invoice can be items held in different
+  // stock accounts and charged to different cost accounts.
+  for (const line of lines) {
+    if (!line.warehouseCode) continue;
+
+    const accounts = await stockAccountsFor(tx, line);
+
+    // One movement per cost layer, rather than one for the line.
+    //
+    // §9.3 asks every stock movement to name the batch it moved, and §9.9
+    // wants that trace to hold from receipt to delivery. A FIFO consumption
+    // can span several layers — three batches bought on three invoices — and a
+    // single movement could only name one of them, which would put a
+    // plausible, wrong batch on two thirds of the goods. Issuing layer by
+    // layer says exactly what left.
+    //
+    // The layers are read here, before anything moves, and narrowed to one
+    // supplier when the line names one. The warehouse still refuses to go
+    // negative: each `issueFromLayer` checks the position, and a line asking
+    // for more than its pool holds runs out of layers with quantity left over,
+    // which is the throw below.
+    const layers = await inventory.layersOf(
+      tx,
+      line.itemCode,
+      line.warehouseCode,
+      line.supplierId,
+    );
+
+    // Which batch each layer holds. The layer does not record it; the
+    // movement that created the layer does, and that is the batch the goods
+    // physically carry.
+    const batches = await batchesOfLayers(tx, layers.map((layer) => layer.id));
+
+    let outstanding = parseQuantity(line.quantity);
+    let cost = 0n;
+
+    for (const layer of layers) {
+      if (outstanding === 0n) break;
+      if (layer.remainingQuantity === 0n) continue;
+
+      const take = layer.remainingQuantity < outstanding ? layer.remainingQuantity : outstanding;
+      const issued = await inventory.issueFromLayer(tx, ctx, {
+        costLayerId: layer.id,
+        itemCode: line.itemCode,
+        warehouseCode: line.warehouseCode,
+        branchCode: invoice.branchCode,
+        quantity: take,
+        movementDate: invoice.invoiceDate,
+        kind: 'delivery',
+        batchNumber: batches.get(layer.id) ?? null,
+        sourceDocumentType: DOCUMENT_TYPE,
+        sourceDocumentId: id,
+        sourceLineId: line.id,
+      });
+      cost += issued.costIqd ?? 0n;
+      outstanding -= take;
+    }
+
+    if (outstanding > 0n) {
+      throw new DirectSalesLineError(
+        line.lineNo,
+        `sells more ${line.itemCode} than ${line.warehouseCode} holds` +
+          `${line.supplierId ? ' of that supplier’s stock' : ''}. Negative stock is not allowed.`,
+      );
+    }
+    if (cost === 0n) continue;
+
+    postingLines.push(
+      {
+        role: 'cogs',
+        accountId: accounts.cogs,
+        debit: toDecimalString(cost, 4n),
+        criteria: { ...criteria, warehouseCode: line.warehouseCode },
+        dimensions: base,
+        sourceLineId: line.id,
+      },
+      {
+        role: 'inventory',
+        accountId: accounts.inventory,
+        credit: toDecimalString(cost, 4n),
+        criteria: { ...criteria, warehouseCode: line.warehouseCode },
+        dimensions: base,
+        sourceLineId: line.id,
+      },
+    );
+  }
+
   const result = await posting.post(tx, ctx, {
     eventType: 'sales.ar_invoice',
     documentTypeCode: DOCUMENT_TYPE,
@@ -478,6 +822,10 @@ export async function post(
   // and credit memos have something to reduce and §7.7's reconciliation has a
   // figure to show.
   for (const line of lines) {
+    // A directly-raised line has no delivery or order to credit; it moved the
+    // stock itself, above.
+    if (!line.deliveryNoteLineId || !line.salesOrderLineId) continue;
+
     await tx
       .update(deliveryNoteLine)
       .set({ invoicedQuantity: sql`${deliveryNoteLine.invoicedQuantity} + ${line.quantity}` })

@@ -273,14 +273,19 @@ export async function post(
     .where(eq(arInvoice.id, memo.arInvoiceId))
     .limit(1);
 
-  const [order] = await tx
-    .select({
-      departmentCode: salesOrder.departmentCode,
-      businessLineCode: salesOrder.businessLineCode,
-    })
-    .from(salesOrder)
-    .where(eq(salesOrder.id, invoice!.salesOrderId))
-    .limit(1);
+  // An invoice raised directly has no order behind it — Operations block 5 —
+  // and then the dimensions below are whatever the accounts require of the
+  // memo's own lines.
+  const [order] = invoice!.salesOrderId
+    ? await tx
+        .select({
+          departmentCode: salesOrder.departmentCode,
+          businessLineCode: salesOrder.businessLineCode,
+        })
+        .from(salesOrder)
+        .where(eq(salesOrder.id, invoice!.salesOrderId))
+        .limit(1)
+    : [];
 
   const criteria = { branchCode: memo.branchCode };
   const dimensions = {

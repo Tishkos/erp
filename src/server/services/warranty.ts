@@ -79,10 +79,15 @@ export async function registerForInvoice(
 
     // The units the delivery carried, so a certificate names the serial the
     // picker scanned (§9.9).
-    const units = await tx
-      .select()
-      .from(deliveryNoteLineUnit)
-      .where(eq(deliveryNoteLineUnit.deliveryNoteLineId, line.deliveryNoteLineId));
+    // An invoice raised directly has no delivery behind it — Operations block
+    // 5 — so there are no scanned units to name, and the certificate covers
+    // the line as a whole, which is the case handled just below.
+    const units = line.deliveryNoteLineId
+      ? await tx
+          .select()
+          .from(deliveryNoteLineUnit)
+          .where(eq(deliveryNoteLineUnit.deliveryNoteLineId, line.deliveryNoteLineId))
+      : [];
 
     const covered =
       units.length > 0
