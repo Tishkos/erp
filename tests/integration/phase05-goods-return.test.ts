@@ -243,6 +243,7 @@ async function shippedReturn(
       branchCode: BAGHDAD,
       returnDate: '2026-02-15',
       reason: 'Cable insulation split on 30 reels; supplier agreed collection.',
+      offsetKind: 'payable',
       lines: [{ goodsReceiptLineId: receiptLineId, quantity }],
     }),
   );
@@ -265,6 +266,7 @@ describe('05.7 gate · a return cannot exceed the available return quantity', ()
           branchCode: BAGHDAD,
           returnDate: '2026-02-15',
           reason: 'Damaged',
+          offsetKind: 'payable',
           lines: [{ goodsReceiptLineId: receipt.lineIds[0]!, quantity: qty('60') }],
         }),
       ),
@@ -290,6 +292,7 @@ describe('05.7 gate · a return cannot exceed the available return quantity', ()
           branchCode: BAGHDAD,
           returnDate: '2026-02-16',
           reason: 'More damage found',
+          offsetKind: 'payable',
           lines: [{ goodsReceiptLineId: receipt.lineIds[0]!, quantity: qty('80') }],
         }),
       ),
@@ -308,6 +311,7 @@ describe('05.7 gate · a return cannot exceed the available return quantity', ()
           branchCode: BAGHDAD,
           returnDate: '2026-02-15',
           reason: 'Damaged',
+          offsetKind: 'payable',
           lines: [
             { goodsReceiptLineId: receipt.lineIds[0]!, quantity: qty('60') },
             { goodsReceiptLineId: receipt.lineIds[0]!, quantity: qty('60') },
@@ -331,6 +335,7 @@ describe('05.7 gate · a return cannot exceed the available return quantity', ()
         branchCode: BAGHDAD,
         returnDate: '2026-02-15',
         reason: 'Considering a return',
+        offsetKind: 'payable',
         lines: [{ goodsReceiptLineId: receipt.lineIds[0]!, quantity: qty('100') }],
       }),
     );
@@ -364,6 +369,7 @@ describe('05.7 gate · a return cannot exceed the available return quantity', ()
           branchCode: BAGHDAD,
           returnDate: '2026-02-15',
           reason: 'Damaged',
+          offsetKind: 'payable',
           lines: [{ goodsReceiptLineId: rows[0].id, quantity: qty('10') }],
         }),
       ),
@@ -463,6 +469,7 @@ describe('05.7 gate · the return relieves the layer the goods arrived in (§9.2
         branchCode: BAGHDAD,
         returnDate: '2026-02-15',
         reason: 'Supplier recall',
+        offsetKind: 'payable',
         lines: [{ goodsReceiptLineId: receipt.lineIds[0]!, quantity: qty('50') }],
       }),
     );
@@ -658,6 +665,7 @@ describe('05.7 gate · the credit memo links to both the return and the invoice'
         branchCode: BAGHDAD,
         returnDate: '2026-02-15',
         reason: 'Damaged',
+        offsetKind: 'payable',
         lines: [{ goodsReceiptLineId: receipt.lineIds[0]!, quantity: qty('30') }],
       }),
     );

@@ -44,7 +44,7 @@ import {
 import { appUser, branch } from './platform';
 import { businessPartner } from './organisation';
 import { warehouse } from './organisation';
-import { item, unitOfMeasure } from './item';
+import { bankCashAccount, item, unitOfMeasure } from './item';
 import { documentStatus } from './workflow';
 import { journalEntry } from './journal';
 import { costLayer, inventoryMovement } from './inventory';
@@ -77,8 +77,11 @@ export const goodsReturn = pgTable(
     apInvoiceId: uuid('ap_invoice_id').references(() => apInvoice.id),
 
     /** Which delivery the goods came from — the source of the available quantity. */
+    /**
+     * Null when the return is against a Purchase Invoice that booked the stock
+     * itself — Operations block 4 — and no receipt was ever raised.
+     */
     goodsReceiptId: uuid('goods_receipt_id')
-      .notNull()
       .references(() => goodsReceipt.id),
 
     supplierId: uuid('supplier_id')
@@ -90,6 +93,16 @@ export const goodsReturn = pgTable(
       .references(() => branch.code),
 
     returnDate: date('return_date').notNull(),
+
+    /**
+     * Which side the debit lands on — block 10's *"Offset Account (Accounts
+     * Payable or Bank — one must be selected)"*. Goods going back either shrink
+     * what the company owes the supplier, or the supplier refunds the money and
+     * it arrives in a bank.
+     */
+    offsetKind: text('offset_kind').notNull(),
+    /** Set when — and only when — `offsetKind` is 'bank'. */
+    offsetBankAccountId: uuid('offset_bank_account_id').references(() => bankCashAccount.id),
 
     /**
      * §5.4 — why the goods are going back. Not nullable: a return with no
@@ -129,6 +142,18 @@ export const goodsReturn = pgTable(
           or (${t.reversedBy} is not null and ${t.reversedAt} is not null
               and coalesce(btrim(${t.reversalReason}), '') <> '')`,
     ),
+    // One offset must be selected, and only one can be.
+    check(
+      'goods_return_offset_one_of',
+      sql`${t.offsetKind} in ('payable', 'bank')
+          and (${t.offsetKind} = 'bank') = (${t.offsetBankAccountId} is not null)`,
+    ),
+    // A return names the delivery it came in on, the invoice it credits, or
+    // both — never neither.
+    check(
+      'goods_return_has_a_source',
+      sql`${t.goodsReceiptId} is not null or ${t.apInvoiceId} is not null`,
+    ),
   ],
 );
 
@@ -145,8 +170,8 @@ export const goodsReturnLine = pgTable(
      * The receipt line these goods arrived on. Not nullable: it decides the
      * available quantity, the cost layer and therefore the money.
      */
+    /** Null when the invoice line below is the whole source. */
     goodsReceiptLineId: uuid('goods_receipt_line_id')
-      .notNull()
       .references(() => goodsReceiptLine.id),
 
     /** The invoice line being credited, where the goods were invoiced. */
@@ -180,6 +205,12 @@ export const goodsReturnLine = pgTable(
     uniqueIndex('goods_return_line_no_uniq').on(t.goodsReturnId, t.lineNo),
     index('goods_return_line_receipt_line_idx').on(t.goodsReceiptLineId),
     check('goods_return_line_quantity_positive', sql`${t.quantity} > 0`),
+    // At least one source. A line naming neither has no cost layer behind it
+    // and no remaining quantity to check against.
+    check(
+      'goods_return_line_one_source',
+      sql`(${t.goodsReceiptLineId} is not null)::int + (${t.apInvoiceLineId} is not null)::int >= 1`,
+    ),
   ],
 );
 

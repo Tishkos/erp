@@ -820,6 +820,13 @@
       "when": 1795787800000,
       "tag": "0192_ops09_sales_return_offset",
       "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1795788900000,
+      "tag": "0193_ops10_purchase_return",
+      "breakpoints": true
     }
   ]
 }

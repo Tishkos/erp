@@ -22,12 +22,14 @@
  * balance until the credit memo arrives; an ageing of that account is the
  * answer to *"what have we sent back and not been credited for?"*
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   apInvoice,
   apInvoiceLine,
+  bankCashAccount,
   businessPartner,
+  inventoryMovement,
   goodsReceipt,
   goodsReceiptLine,
   goodsReturn,
@@ -92,7 +94,33 @@ export interface ReturnLineInput {
   readonly apInvoiceLineId?: string | null;
 }
 
-export interface CreateGoodsReturnInput {
+/**
+ * Which side the debit lands on. `'payable'` reduces what the company owes the
+ * supplier; `'bank'` takes their refund into a named bank or cash account.
+ */
+export type OffsetKind = 'payable' | 'bank';
+
+export class OffsetAccountError extends Error {
+  readonly code = 'OFFSET_ACCOUNT_REQUIRED';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'OffsetAccountError';
+  }
+}
+
+export interface OffsetChoice {
+  /**
+   * Block 10's *"Offset Account (Accounts Payable or Bank — one must be
+   * selected)"*. No default: a refund booked as a reduced payable leaves the
+   * company still expecting to pay a debt that is already settled.
+   */
+  readonly offsetKind: OffsetKind;
+  /** Required when `offsetKind` is 'bank', refused otherwise. */
+  readonly offsetBankAccountId?: string | null;
+}
+
+export interface CreateGoodsReturnInput extends OffsetChoice {
   readonly goodsReceiptId: string;
   /** §8.2 — the invoice this return credits, where one exists. */
   readonly apInvoiceId?: string | null;
@@ -101,6 +129,48 @@ export interface CreateGoodsReturnInput {
   readonly reason: string;
   readonly supplierReference?: string | null;
   readonly lines: readonly ReturnLineInput[];
+}
+
+/**
+ * Reads the offset choice, and refuses the two shapes the CHECK would refuse
+ * anyway — here, so the person gets a sentence instead of a constraint name.
+ */
+async function resolveOffset(
+  tx: Tx,
+  input: OffsetChoice,
+): Promise<{ offsetKind: OffsetKind; offsetBankAccountId: string | null }> {
+  if (input.offsetKind === 'payable') {
+    if (input.offsetBankAccountId) {
+      throw new OffsetAccountError(
+        'A return offset to Accounts Payable reduces what the company owes the supplier, not a ' +
+          'bank balance. Choose Bank if they are refunding the money.',
+      );
+    }
+    return { offsetKind: 'payable', offsetBankAccountId: null };
+  }
+
+  if (!input.offsetBankAccountId) {
+    throw new OffsetAccountError(
+      'A return offset to Bank must name which bank or cash account the refund arrives in.',
+    );
+  }
+
+  const [account] = await tx
+    .select({ id: bankCashAccount.id, active: bankCashAccount.active })
+    .from(bankCashAccount)
+    .where(eq(bankCashAccount.id, input.offsetBankAccountId))
+    .limit(1);
+
+  if (!account) {
+    throw new OffsetAccountError(`No bank or cash account with id '${input.offsetBankAccountId}'.`);
+  }
+  if (!account.active) {
+    throw new OffsetAccountError(
+      'That bank or cash account is closed. A refund cannot be received into it.',
+    );
+  }
+
+  return { offsetKind: 'bank', offsetBankAccountId: account.id };
 }
 
 async function load(tx: Tx, id: string) {
@@ -180,6 +250,8 @@ export async function create(
     );
   }
 
+  const offset = await resolveOffset(tx, input);
+
   const [order] = await tx
     .select({ supplierId: sql<string>`supplier_id` })
     .from(sql`purchase_order`)
@@ -202,6 +274,8 @@ export async function create(
       supplierId: order!.supplierId,
       branchCode: input.branchCode,
       returnDate: input.returnDate,
+      offsetKind: offset.offsetKind,
+      offsetBankAccountId: offset.offsetBankAccountId,
       reason: input.reason.trim(),
       supplierReference: input.supplierReference ?? null,
       createdBy: ctx.principal.userId,
@@ -263,6 +337,193 @@ export async function create(
   return { id: created!.id, returnNo: allocated.documentNo };
 }
 
+/**
+ * How much of a Purchase Invoice line is still available to send back.
+ *
+ * The sponsor controls the quantity against the invoice — *"the remaining
+ * returnable quantity from the original Purchase Invoice after considering
+ * previous returns"* — so this counts what the invoice billed less what has
+ * already gone back against it. A cancelled return is not a return.
+ */
+export async function availableToReturnFromInvoice(
+  tx: Tx,
+  apInvoiceLineId: string,
+): Promise<bigint> {
+  const [invoiced] = await tx
+    .select({ quantity: apInvoiceLine.quantity })
+    .from(apInvoiceLine)
+    .where(eq(apInvoiceLine.id, apInvoiceLineId))
+    .limit(1);
+
+  if (!invoiced) return 0n;
+
+  const [returned] = await tx
+    .select({
+      quantity: sql<string>`coalesce(sum(${goodsReturnLine.quantity}), 0)`,
+    })
+    .from(goodsReturnLine)
+    .innerJoin(goodsReturn, eq(goodsReturn.id, goodsReturnLine.goodsReturnId))
+    .where(
+      and(
+        eq(goodsReturnLine.apInvoiceLineId, apInvoiceLineId),
+        ne(goodsReturn.status, 'cancelled'),
+      ),
+    );
+
+  const remaining = parseQuantity(invoiced.quantity) - parseQuantity(returned?.quantity ?? '0');
+  return remaining > 0n ? remaining : 0n;
+}
+
+export interface InvoiceReturnLineInput {
+  readonly apInvoiceLineId: string;
+  readonly quantity: bigint;
+}
+
+export interface CreateFromInvoiceInput extends OffsetChoice {
+  readonly apInvoiceId: string;
+  readonly returnDate: string;
+  readonly reason: string;
+  readonly supplierReference?: string | null;
+  readonly lines: readonly InvoiceReturnLineInput[];
+}
+
+/**
+ * Block 10 — a Purchase Return raised against the invoice itself.
+ *
+ * The chain this module was built for is purchase order, goods receipt,
+ * invoice, and a return keys to the receipt line because that is the line
+ * carrying the cost layer. Block 4 added the sponsor's own route, where the
+ * invoice books stock straight into a warehouse and there is no receipt at
+ * all — and a return against one of those could not be raised.
+ *
+ * Everything downstream is unchanged: the same approval, the same shipment,
+ * the same credit memo. Only the source of the line differs, and `post` finds
+ * the cost layer through the invoice's own receipt movement instead.
+ */
+export async function createFromInvoice(
+  tx: Tx,
+  ctx: ActorContext,
+  input: CreateFromInvoiceInput,
+): Promise<{ id: string; returnNo: string }> {
+  const [invoice] = await tx
+    .select()
+    .from(apInvoice)
+    .where(eq(apInvoice.id, input.apInvoiceId))
+    .limit(1);
+
+  if (!invoice) throw new Error(`No purchase invoice with id '${input.apInvoiceId}'.`);
+
+  await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, {
+    branchCode: invoice.branchCode,
+  });
+
+  if (input.lines.length === 0) {
+    throw new Error('A return with no lines sends nothing back. Say what is being returned.');
+  }
+
+  if (input.reason.trim().length === 0) {
+    throw new Error(
+      'A return needs a reason (§5.4). The supplier will ask, and a return nobody can explain is a dispute nobody can settle.',
+    );
+  }
+
+  // Stock that has not been booked in cannot be sent back out.
+  if (!['posted', 'partially_settled', 'settled'].includes(invoice.status)) {
+    throw new Error(
+      `Purchase invoice ${invoice.invoiceNo} is '${invoice.status}'. Until it posts, nothing it ` +
+        'names is in a warehouse to return.',
+    );
+  }
+
+  const offset = await resolveOffset(tx, input);
+
+  const allocated = await allocateDocumentNumber(
+    tx,
+    SEQUENCE_KEY,
+    { branchCode: invoice.branchCode, year: Number(input.returnDate.slice(0, 4)) },
+    ctx.principal.userId,
+  );
+
+  const [created] = await tx
+    .insert(goodsReturn)
+    .values({
+      returnNo: allocated.documentNo,
+      apInvoiceId: invoice.id,
+      goodsReceiptId: null,
+      supplierId: invoice.supplierId,
+      branchCode: invoice.branchCode,
+      returnDate: input.returnDate,
+      offsetKind: offset.offsetKind,
+      offsetBankAccountId: offset.offsetBankAccountId,
+      reason: input.reason.trim(),
+      supplierReference: input.supplierReference ?? null,
+      createdBy: ctx.principal.userId,
+    })
+    .returning({ id: goodsReturn.id });
+
+  // What this document has already claimed against each invoice line: two lines
+  // can name the same one, and neither is written yet.
+  const claimed = new Map<string, bigint>();
+
+  for (const [index, line] of input.lines.entries()) {
+    const [invoiceLine] = await tx
+      .select()
+      .from(apInvoiceLine)
+      .where(eq(apInvoiceLine.id, line.apInvoiceLineId))
+      .limit(1);
+
+    if (!invoiceLine || invoiceLine.apInvoiceId !== invoice.id) {
+      throw new Error(
+        `That line does not belong to purchase invoice ${invoice.invoiceNo}. A return reconciles ` +
+          'to the invoice it names.',
+      );
+    }
+
+    if (!invoiceLine.warehouseCode) {
+      throw new Error(
+        `Line ${invoiceLine.lineNo} of ${invoice.invoiceNo} booked no stock into a warehouse, so ` +
+          'there is nothing of it to send back.',
+      );
+    }
+
+    const available =
+      (await availableToReturnFromInvoice(tx, invoiceLine.id)) - (claimed.get(invoiceLine.id) ?? 0n);
+    claimed.set(invoiceLine.id, (claimed.get(invoiceLine.id) ?? 0n) + line.quantity);
+
+    if (line.quantity > available) {
+      throw new ReturnQuantityError(invoiceLine.itemCode!, available, line.quantity);
+    }
+
+    await tx.insert(goodsReturnLine).values({
+      goodsReturnId: created!.id,
+      lineNo: index + 1,
+      goodsReceiptLineId: null,
+      apInvoiceLineId: invoiceLine.id,
+      itemCode: invoiceLine.itemCode!,
+      quantity: formatQuantity(line.quantity),
+      uomCode: invoiceLine.uomCode,
+      warehouseCode: invoiceLine.warehouseCode,
+    });
+  }
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'goods_return.created',
+    objectType: PERMISSION_OBJECT,
+    objectId: created!.id,
+    branchCode: invoice.branchCode,
+    after: {
+      returnNo: allocated.documentNo,
+      invoiceNo: invoice.invoiceNo,
+      lines: input.lines.length,
+    },
+    reason: input.reason.trim(),
+    outcome: 'success',
+  });
+
+  return { id: created!.id, returnNo: allocated.documentNo };
+}
+
 export async function approve(tx: Tx, ctx: ActorContext, id: string): Promise<void> {
   const { document } = await load(tx, id);
 
@@ -309,6 +570,53 @@ export async function approve(tx: Tx, ctx: ActorContext, id: string): Promise<vo
  * what the supplier charged (§8.7, and `issueFromLayer` in the FIFO domain for
  * why that is not a departure from §9.2's single valuation method).
  */
+/** Where the goods came in, when a goods receipt brought them. */
+async function receiptSource(tx: Tx, goodsReceiptLineId: string) {
+  const [receiptLine] = await tx
+    .select()
+    .from(goodsReceiptLine)
+    .where(eq(goodsReceiptLine.id, goodsReceiptLineId))
+    .limit(1);
+
+  return {
+    movementId: receiptLine?.movementId ?? null,
+    serialNumber: receiptLine?.serialNumber ?? null,
+    batchNumber: receiptLine?.batchNumber ?? null,
+  };
+}
+
+/**
+ * Where the goods came in, when the Purchase Invoice booked them itself.
+ *
+ * The invoice's own receipt movement carries the layer and the batch, so a
+ * return against it is valued and identified from the same row the receipt
+ * would have been.
+ */
+async function invoiceSource(tx: Tx, apInvoiceLineId: string | null) {
+  if (!apInvoiceLineId) return { movementId: null, serialNumber: null, batchNumber: null };
+
+  const [movement] = await tx
+    .select({
+      id: inventoryMovement.id,
+      serialNumber: inventoryMovement.serialNumber,
+      batchNumber: inventoryMovement.batchNumber,
+    })
+    .from(inventoryMovement)
+    .where(
+      and(
+        eq(inventoryMovement.sourceDocumentType, 'ap_invoice'),
+        eq(inventoryMovement.sourceLineId, apInvoiceLineId),
+      ),
+    )
+    .limit(1);
+
+  return {
+    movementId: movement?.id ?? null,
+    serialNumber: movement?.serialNumber ?? null,
+    batchNumber: movement?.batchNumber ?? null,
+  };
+}
+
 export async function post(
   tx: Tx,
   ctx: ActorContext,
@@ -338,19 +646,22 @@ export async function post(
   let costIqd = 0n;
 
   for (const line of lines) {
-    const [receiptLine] = await tx
-      .select()
-      .from(goodsReceiptLine)
-      .where(eq(goodsReceiptLine.id, line.goodsReceiptLineId))
-      .limit(1);
+    // The movement that put these goods into the warehouse. Usually the goods
+    // receipt's; on a return against a Purchase Invoice that booked its own
+    // stock — Operations block 4 — it is the invoice's, and there is no receipt
+    // line at all. Either way the return leaves by the layer it arrived on, so
+    // it goes back out at what it came in at.
+    const source = line.goodsReceiptLineId
+      ? await receiptSource(tx, line.goodsReceiptLineId)
+      : await invoiceSource(tx, line.apInvoiceLineId);
 
-    if (!receiptLine?.movementId) {
+    if (!source.movementId) {
       throw new Error(
         `The delivery line behind return ${document.returnNo} has no stock movement, so nothing can be taken back out.`,
       );
     }
 
-    const layerId = await inventory.layerForMovement(tx, receiptLine.movementId);
+    const layerId = await inventory.layerForMovement(tx, source.movementId);
     if (!layerId) {
       throw new Error(
         `The delivery behind return ${document.returnNo} created no cost layer, so the return cannot be valued (§9.2).`,
@@ -368,8 +679,8 @@ export async function post(
       sourceDocumentType: PERMISSION_OBJECT,
       sourceDocumentId: id,
       sourceLineId: line.id,
-      serialNumber: receiptLine.serialNumber,
-      batchNumber: receiptLine.batchNumber,
+      serialNumber: source.serialNumber,
+      batchNumber: source.batchNumber,
       // Appendix C — Dr Return Clearing / Cr Inventory, in this transaction.
       post: true,
       dimensions: { business_partner: supplier?.code ?? null },
@@ -441,6 +752,27 @@ export interface CreateCreditMemoInput {
  * and the difference stays visible in Return Clearing rather than being
  * silently absorbed, because somebody has to chase it.
  */
+/**
+ * The G/L account a bank or cash position is carried in. A refund lands in the
+ * account the money actually arrived in, so the cash the books show is the cash
+ * the bank shows.
+ */
+async function bankGlAccount(tx: Tx, bankCashAccountId: string): Promise<string> {
+  const [account] = await tx
+    .select({ glAccountId: bankCashAccount.glAccountId })
+    .from(bankCashAccount)
+    .where(eq(bankCashAccount.id, bankCashAccountId))
+    .limit(1);
+
+  if (!account) {
+    throw new Error(
+      `No bank or cash account with id '${bankCashAccountId}'. The return names it as the offset, ` +
+        'so the refund has nowhere to land.',
+    );
+  }
+  return account.glAccountId;
+}
+
 export async function creditMemo(
   tx: Tx,
   ctx: ActorContext,
@@ -505,7 +837,21 @@ export async function creditMemo(
     postingDate: input.memoDate,
     description: `Credit memo ${allocated.documentNo} against return ${document.returnNo}`,
     lines: [
-      { role: 'supplier_payable', debit: amount, criteria, dimensions },
+      // Block 10 — *"Accounts Payable or Bank Dr."*. The return said which, and
+      // the sign is the mirror of a sales return: goods going back either
+      // shrink what the company owes, or the supplier refunds the money and it
+      // arrives in a bank.
+      document.offsetKind === 'bank'
+        ? {
+            // Named outright rather than mapped: which bank the refund arrived
+            // in is a fact about this credit, and no posting rule can know it.
+            role: 'bank',
+            accountId: await bankGlAccount(tx, document.offsetBankAccountId!),
+            debit: amount,
+            criteria,
+            dimensions,
+          }
+        : { role: 'supplier_payable', debit: amount, criteria, dimensions },
       { role: 'return_clearing', credit: amount, criteria, dimensions },
     ],
   });
