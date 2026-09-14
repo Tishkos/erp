@@ -1,26 +1,30 @@
 /**
- * The customer and supplier Account Statement — Operations build, blocks 2 and
- * 3 (2026-09-12).
+ * The Account Statement — Operations build, blocks 2, 3 and 6 (2026-09-12).
  *
- * The sponsor asked for one report on each side, and described them as
- * mirrors:
+ * The sponsor asked for three, and described them as mirrors of one another:
  *
  *   Customer   sales are Debit; payments or discounts are Credit.
  *   Supplier   purchases are Credit; payments or discounts are Debit.
+ *   Bank/Cash  incoming amounts are Debit; outgoing are Credit.
  *
- * They are not two reports. Both read the subledger the posting engine already
- * writes beside every journal, and each entry already carries its debit and
- * its credit — an invoice debits the customer, a receipt credits them; an
- * invoice credits the supplier, a payment debits them. Nothing has to be
+ * They are not three reports. All three read the subledger the posting engine
+ * already writes beside every journal, and each entry carries its own debit
+ * and credit — an invoice debits the customer, a receipt credits them; an
+ * invoice credits the supplier, a payment debits them; and the bank is
+ * debited by what arrives and credited by what leaves. Nothing has to be
  * classified here, and nothing is re-derived from the document it came from.
  *
  * What differs is only which way the running balance is read:
  *
  *   a customer owes the company     balance = debits less credits
  *   the company owes a supplier     balance = credits less debits
+ *   a bank account holds money      balance = debits less credits
  *
- * so both statements end at a positive figure when there is money outstanding,
- * which is how a person reading either of them expects it to look.
+ * so each ends at a positive figure when there is something there — money
+ * outstanding, or money in the account — which is how a person reading any of
+ * them expects it to look. A bank reads the same way as a customer for the
+ * same reason: both are debit-normal, and what is owed to you and what you
+ * hold are the same kind of number.
  */
 import { and, asc, eq, lte, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
@@ -28,7 +32,7 @@ import { journalEntry, subledgerEntry } from '../db/schema';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 
 /** Which side of the ledger the party sits on. */
-export type PartySide = 'customer' | 'supplier';
+export type PartySide = 'customer' | 'supplier' | 'bank';
 
 export interface StatementLine {
   readonly postingDate: string;
@@ -54,7 +58,10 @@ export interface PartnerStatement {
   readonly lines: readonly StatementLine[];
   readonly totalDebit: string;
   readonly totalCredit: string;
-  /** What is outstanding at `to`. Positive means money is owed. */
+  /**
+   * What is there at `to`. Positive means money is owed to the company, owed
+   * by it, or held in the account — whichever this side measures.
+   */
   readonly closing: string;
 }
 
@@ -64,11 +71,14 @@ const decimal = (value: bigint) => toDecimalString(value, MONEY_SCALE);
  * Which subledger each side keeps. The names are the seven control-account
  * kinds the ledger has used since Phase 02.
  */
-const SUBLEDGER = { customer: 'customer', supplier: 'supplier' } as const;
+const SUBLEDGER = { customer: 'customer', supplier: 'supplier', bank: 'bank' } as const;
 
-/** A customer's balance runs one way, a supplier's the other. See the note above. */
+/**
+ * A supplier's balance runs one way; a customer's and a bank's the other.
+ * See the note above.
+ */
 const owed = (side: PartySide, debit: bigint, credit: bigint) =>
-  side === 'customer' ? debit - credit : credit - debit;
+  side === 'supplier' ? credit - debit : debit - credit;
 
 /**
  * One party's account, in posting order, with a running balance.
