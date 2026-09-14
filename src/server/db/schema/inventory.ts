@@ -22,6 +22,7 @@
  */
 import { sql } from 'drizzle-orm';
 import {
+  primaryKey,
   bigint,
   check,
   date,
@@ -302,4 +303,65 @@ export const stockReservation = pgTable(
     index('stock_reservation_document_idx').on(t.documentType, t.documentId),
     check('stock_reservation_quantity_positive', sql`${t.quantity} > 0`),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// Ops 08 — Invoice Status Tracking
+// ---------------------------------------------------------------------------
+
+/** The stages goods pass through between an invoice abroad and a shelf here. */
+export const shipmentStage = pgEnum('shipment_stage', ['in_process', 'on_board', 'on_port']);
+
+/**
+ * One tracked purchase invoice.
+ *
+ * It holds no copy of the invoice. "All invoice details" is a screen reading
+ * the invoice it points at — a second set of figures beside the first is a
+ * second set that can disagree, and then nobody can say which is the shipment
+ * and which is the debt.
+ */
+export const supplierShipment = pgTable(
+  'supplier_shipment',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    apInvoiceId: uuid('ap_invoice_id').notNull(),
+    /** in_process, on_board, on_port, in_bounded — the last is the end. */
+    status: text('status').notNull().default('in_process'),
+    /** Where the goods are now. Moves with the status. */
+    warehouseCode: text('warehouse_code')
+      .notNull()
+      .references(() => warehouse.code),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    createdBy: uuid('created_by').references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('supplier_shipment_invoice_uniq').on(t.apInvoiceId),
+    index('supplier_shipment_status_idx').on(t.status),
+  ],
+);
+
+/**
+ * Who is told when a shipment moves.
+ *
+ * Chosen once per branch rather than named on each shipment: the people who
+ * need to know a container has docked are the same people every time, and
+ * asking whoever moves the status to remember them is how somebody stops
+ * being told.
+ */
+export const shipmentWatcher = pgTable(
+  'shipment_watcher',
+  {
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.branchCode, t.userId] })],
 );

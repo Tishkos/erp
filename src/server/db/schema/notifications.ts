@@ -68,8 +68,12 @@ export const notification = pgTable(
   'notification',
   {
     id: bigint('id', { mode: 'bigint' }).generatedAlwaysAsIdentity().primaryKey(),
+    /**
+     * The §21 rule that raised this, or null when it was sent to somebody who
+     * asked to be told rather than to a role the rules name — Operations
+     * block 8.
+     */
     ruleCode: text('rule_code')
-      .notNull()
       .references(() => notificationRule.code),
 
     eventType: text('event_type').notNull(),

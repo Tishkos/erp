@@ -799,6 +799,20 @@
       "when": 1795701200000,
       "tag": "0189_ops06_bank_account_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1795701300000,
+      "tag": "0190_ops08_shipment_tracking",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1795701400000,
+      "tag": "0191_ops08_notification_without_rule",
+      "breakpoints": true
     }
   ]
 }

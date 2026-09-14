@@ -144,6 +144,12 @@ export const warehouse = pgTable(
       .notNull()
       .references(() => branch.code),
     warehouseType: warehouseType('warehouse_type').notNull(),
+    /**
+     * Which stage of an inbound shipment this warehouse holds — Operations
+     * block 8. Null for an ordinary warehouse. A property of the warehouse the
+     * way being a transit warehouse already is.
+     */
+    shipmentStage: text('shipment_stage', { enum: ['in_process', 'on_board', 'on_port'] }),
     /** §9.1 — transit stock is owned but not available for sale. */
     isTransit: boolean('is_transit').notNull().default(false),
     /**
@@ -164,6 +170,12 @@ export const warehouse = pgTable(
     check('warehouse_no_negative_stock', sql`${t.allowNegativeStock} = false`),
     // A transit warehouse is of type transit, and only that type is transit.
     check('warehouse_transit_consistent', sql`${t.isTransit} = (${t.warehouseType} = 'transit')`),
+    // At most one warehouse per shipment stage — Operations block 8. The
+    // sponsor writes "the On Board warehouse" as though there is exactly one,
+    // and this is what makes that true rather than conventional.
+    uniqueIndex('warehouse_shipment_stage_uniq')
+      .on(t.shipmentStage)
+      .where(sql`${t.shipmentStage} is not null`),
   ],
 );
 

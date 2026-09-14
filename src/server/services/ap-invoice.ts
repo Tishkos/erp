@@ -52,6 +52,7 @@ import * as authz from './authorization';
 import * as audit from './audit';
 import * as posting from './posting';
 import * as inventory from './inventory';
+import * as shipments from './supplier-shipment';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
 
@@ -843,6 +844,13 @@ export async function post(
   });
 
   await statuses.assertTransitionAllowed(tx, DOCUMENT_TYPE, invoice.status, 'posted');
+
+  // Goods that landed in the In Process warehouse are in process — Operations
+  // block 8. Tracking opens by itself, because whether a shipment is tracked
+  // is not a flag somebody sets and forgets: it is where the goods went. An
+  // invoice whose goods went anywhere else arrived by other means and has
+  // nothing to follow.
+  await shipments.openForInvoice(tx, ctx, id);
 
   await tx
     .update(apInvoice)

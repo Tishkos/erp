@@ -222,6 +222,12 @@ export async function resetTestData(): Promise<void> {
     // Notifications reference users and rules; the rules themselves are seeded by
     // a migration and are restored rather than wiped.
     await client.query('truncate notification_delivery, notification restart identity cascade');
+
+    // Operations block 8. Both point at users and invoices that the lines
+    // below remove, and the reset runs with foreign keys disabled — so a
+    // watcher left behind here would outlive the user it names and break the
+    // next test that notifies anybody.
+    await client.query('truncate shipment_watcher, supplier_shipment cascade');
     await client.query(`
       update notification_rule
          set active = true,
