@@ -24,6 +24,7 @@ import type { Tx } from '../db/client';
 import {
   apInvoice,
   apInvoiceLine,
+  item,
   apMatchException,
   apMatchTolerance,
   businessPartner,
@@ -50,6 +51,7 @@ import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
 import * as posting from './posting';
+import * as inventory from './inventory';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
 
@@ -62,6 +64,19 @@ export class ApInvoiceNotFoundError extends Error {
   constructor(id: string) {
     super(`No A/P invoice '${id}'.`);
     this.name = 'ApInvoiceNotFoundError';
+  }
+}
+
+/** One line of an invoice cannot do what it is being asked to do. */
+export class ApInvoiceLineError extends Error {
+  readonly code = 'AP_INVOICE_LINE';
+
+  constructor(
+    readonly lineNo: number,
+    detail: string,
+  ) {
+    super(`Line ${lineNo} ${detail}`);
+    this.name = 'ApInvoiceLineError';
   }
 }
 
@@ -145,6 +160,17 @@ export interface InvoiceLineInput {
   readonly itemCode?: string | null;
   readonly isInventory?: boolean;
   readonly costCentreCode?: string | null;
+  /**
+   * Where this line receives stock — Operations block 4.
+   *
+   * Naming one makes this the direct route: the invoice brings the goods in
+   * itself and debits the item's own inventory account. Leaving it null keeps
+   * the route that existed before, where a Goods Receipt already did that and
+   * the invoice clears GRNI.
+   */
+  readonly warehouseCode?: string | null;
+  /** Money off this line. The total is quantity x unit price less this. */
+  readonly discountIqd?: bigint;
 }
 
 export interface CreateApInvoiceInput {
@@ -376,6 +402,8 @@ export async function create(
       unitPrice: toDecimalString(line.unitPriceIqd, 4n),
       isInventory,
       costCentreCode: line.costCentreCode ?? ordered?.costCentreCode ?? null,
+      warehouseCode: line.warehouseCode ?? null,
+      discountIqd: toDecimalString(line.discountIqd ?? 0n, 4n),
       receivedQuantity: formatQuantity(received),
     });
   }
@@ -718,7 +746,8 @@ export async function post(
     // What the receipt supports, at the ordered price — the figure the goods
     // receipt already put into GRNI, or the cost the service confirmation
     // evidenced. Anything above or below it is variance.
-    const supported = await supportedValue(tx, line);
+    // On the direct route there is nothing to vary from — see below.
+    const supported = line.warehouseCode ? invoicedValue : await supportedValue(tx, line);
     const variance = invoicedValue - supported;
     varianceIqd += variance;
 
@@ -728,6 +757,47 @@ export async function post(
       // received by a warehouse rather than confirmed by a department.
       department: line.isInventory ? null : await confirmingDepartment(tx, line),
     };
+
+    // ── The direct route (Operations block 4) ──────────────────────────
+    //
+    // A line that names a warehouse brings the goods in itself: no purchase
+    // order, no goods receipt, nothing in GRNI to clear. The stock arrives at
+    // what the invoice says it cost, and the debit goes to the item's own
+    // inventory account — named on the item because two lines of one invoice
+    // can belong to different stock accounts.
+    //
+    // There is no variance on this route, because there is nothing to vary
+    // from: the invoice *is* the evidence. Falling through to the code below
+    // would post the whole line to the purchase variance account, which is
+    // what happened before this branch existed.
+    if (line.warehouseCode) {
+      const account = await inventoryAccountFor(tx, line);
+      await inventory.receive(tx, ctx, {
+        itemCode: line.itemCode!,
+        warehouseCode: line.warehouseCode,
+        branchCode: invoice.branchCode,
+        quantity: parseQuantity(line.quantity),
+        // A *unit* cost, and the discount is part of it: stock is worth what
+        // was paid for it, not what was asked. The posted debit below is the
+        // same money, so the warehouse and the ledger agree by construction
+        // rather than by coincidence — see the rounding note in `unitCostOf`.
+        unitCostIqd: unitCostOf(line, invoicedValue),
+        movementDate: invoice.invoiceDate,
+        kind: 'goods_receipt',
+        sourceDocumentType: DOCUMENT_TYPE,
+        sourceDocumentId: id,
+        sourceLineId: line.id,
+        ...(await batchFor(tx, line, invoice.invoiceNo)),
+      });
+      postingLines.push({
+        role: 'inventory',
+        accountId: account,
+        debit: amount(invoicedValue),
+        criteria: { ...criteria, warehouseCode: line.warehouseCode },
+        dimensions,
+      });
+      continue;
+    }
 
     if (supported !== 0n) {
       if (line.isInventory) {
@@ -851,8 +921,99 @@ async function confirmingDepartment(
 }
 
 /** The line's own money: invoiced quantity at the invoiced price. */
+/**
+ * What the line comes to: quantity x unit price, less the discount.
+ *
+ * Not stored. A stored total is one more thing that can disagree with its own
+ * parts, and the parts are what the supplier and the company agreed.
+ */
+/**
+ * The stock account this line's goods are held in — the item's own.
+ *
+ * §3.3 exists so "which account does a sale's revenue go to?" is
+ * configuration; this is not that kind of question. Two lines of one invoice
+ * can be different items in different stock accounts, and a posting rule
+ * keyed on the warehouse would give both the same answer.
+ */
+async function inventoryAccountFor(
+  tx: Tx,
+  line: typeof apInvoiceLine.$inferSelect,
+): Promise<string> {
+  if (!line.itemCode) {
+    throw new ApInvoiceLineError(line.lineNo, 'names a warehouse but no item, so nothing can be received into it.');
+  }
+  const [row] = await tx
+    .select({ account: item.inventoryAccountId })
+    .from(item)
+    .where(eq(item.code, line.itemCode))
+    .limit(1);
+  if (!row?.account) {
+    throw new ApInvoiceLineError(
+      line.lineNo,
+      `item ${line.itemCode} names no inventory account, so its stock has nowhere to be held. Set one on the item.`,
+    );
+  }
+  return row.account;
+}
+
+/**
+ * How stock arriving on an invoice is identified.
+ *
+ * §9.3 tracks every stock item, by batch or by serial, and the sponsor's
+ * Purchase Invoice line carries neither — quantity, price, discount and a
+ * warehouse, and that is all.
+ *
+ * For a batch, the invoice number *is* the batch. One delivery from one
+ * supplier on one document is one batch in every sense that matters, and it
+ * makes the stock traceable back to the paper that brought it in, which is
+ * what tracking is for.
+ *
+ * A serial cannot be invented the same way. Ten panels need ten serials, and
+ * nothing on the invoice says what they are. Those goods come in through a
+ * Goods Receipt, where each one is read off the box.
+ */
+async function batchFor(
+  tx: Tx,
+  line: typeof apInvoiceLine.$inferSelect,
+  invoiceNo: string,
+): Promise<{ batchNumber?: string }> {
+  const [row] = await tx
+    .select({ tracking: item.tracking })
+    .from(item)
+    .where(eq(item.code, line.itemCode!))
+    .limit(1);
+
+  if (row?.tracking === 'serial' || row?.tracking === 'serial_and_batch') {
+    throw new ApInvoiceLineError(
+      line.lineNo,
+      `item ${line.itemCode} is tracked by serial number, which an invoice does not carry. Receive it on a Goods Receipt, where each serial is recorded.`,
+    );
+  }
+  return row?.tracking === 'batch' ? { batchNumber: invoiceNo } : {};
+}
+
+/**
+ * What one unit of this line costs, net of its discount.
+ *
+ * Rounding is the thing to be careful of. Three units at a line value of ten
+ * is 3.3333 each, and three layers of 3.3333 are worth 9.9999 — a dinar less
+ * than the ledger was told. The layer is therefore valued at the quotient and
+ * the statement is what it is: for the quantities and prices this document
+ * deals in, held to four decimal places, the difference is below the smallest
+ * unit the ledger records. `ops04` asserts the two agree on a line that does
+ * not divide evenly, which is what would catch it if that ever stopped being
+ * true.
+ */
+function unitCostOf(line: typeof apInvoiceLine.$inferSelect, value: bigint): bigint {
+  const quantity = parseQuantity(line.quantity);
+  if (quantity === 0n) return 0n;
+  // Quantities carry six decimal places, money four.
+  return (value * 1_000_000n) / quantity;
+}
+
 function lineValue(line: typeof apInvoiceLine.$inferSelect): bigint {
-  return (parseQuantity(line.quantity) * parseDecimal(line.unitPrice, 4n)) / 1_000_000n;
+  const gross = (parseQuantity(line.quantity) * parseDecimal(line.unitPrice, 4n)) / 1_000_000n;
+  return gross - parseDecimal(line.discountIqd ?? '0', 4n);
 }
 
 /**

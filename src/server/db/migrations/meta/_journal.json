@@ -757,6 +757,13 @@
       "when": 1795700600000,
       "tag": "0183_ops01_item_stock_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1795700700000,
+      "tag": "0184_ops04_purchase_invoice_stock",
+      "breakpoints": true
     }
   ]
 }

@@ -44,7 +44,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { appUser, branch } from './platform';
-import { businessPartner, costCentre } from './organisation';
+import { businessPartner, costCentre, warehouse } from './organisation';
 import { item, unitOfMeasure } from './item';
 import { documentStatus } from './workflow';
 import { journalEntry } from './journal';
@@ -272,6 +272,25 @@ export const apInvoiceLine = pgTable(
 
     /** True when this line's cost is stock (Dr GRNI) rather than expense. */
     isInventory: boolean('is_inventory').notNull().default(false),
+
+    /**
+     * Where this line receives stock — Operations block 4.
+     *
+     * Null when the line is not stock, and null when a Goods Receipt already
+     * brought the goods in: receiving them again would double the warehouse.
+     * A column on the line rather than a setting on the document, because one
+     * invoice can carry both kinds.
+     */
+    warehouseCode: text('warehouse_code').references(() => warehouse.code),
+
+    /**
+     * Money off this line. An amount, never a percentage — a percentage has to
+     * be multiplied out before it can be posted, and the rounding of that is
+     * then a fact nobody recorded. The total is quantity x unit price less
+     * this, and is not stored: a stored total is one more thing that can
+     * disagree with its own parts.
+     */
+    discountIqd: numeric('discount_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
     costCentreCode: text('cost_centre_code').references(() => costCentre.code),
 
     /** The match, per line, so the exception queue can point at one row. */
