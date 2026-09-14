@@ -1645,7 +1645,11 @@
       "stock_title": "Stock on hand",
       "no_stock": "None on hand. Nothing has been received into stock for this item yet.",
       "stock_hint": "Counted from stock movements — receipts add, deliveries and issues take away — so it always agrees with what actually moved.",
-      "reserved": "{quantity} reserved"
+      "reserved": "{quantity} reserved",
+      "inventory_account": "Inventory account",
+      "inventory_account_hint": "Where this item’s stock is held. Debited when bought, credited when sold.",
+      "cogs_account": "COGS account",
+      "cogs_account_hint": "What this item costs when it is sold."
     },
     "partners": {
       "subtitle_customer": "Who we sell to. One record per company, whatever else they are to us.",

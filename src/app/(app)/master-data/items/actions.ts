@@ -23,6 +23,8 @@ function inputFrom(formData: FormData) {
     tracking: text(formData, 'tracking') || null,
     salesAccountId: text(formData, 'salesAccountId') || null,
     purchaseAccountId: text(formData, 'purchaseAccountId') || null,
+    inventoryAccountId: text(formData, 'inventoryAccountId') || null,
+    cogsAccountId: text(formData, 'cogsAccountId') || null,
     warrantyMonths: text(formData, 'warrantyMonths') || null,
   };
 }

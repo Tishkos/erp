@@ -84,6 +84,18 @@ export const item = pgTable(
     salesAccountId: uuid('sales_account_id').references(() => chartOfAccount.id),
     purchaseAccountId: uuid('purchase_account_id').references(() => chartOfAccount.id),
 
+    /**
+     * Where the stock is held, and what it costs when it leaves.
+     *
+     * Held on the item rather than worked out, because two items on one
+     * invoice can belong to different stock and cost accounts and the journal
+     * has to know which for each line. Optional here — an item may be raised
+     * before Finance has decided — and the document that needs them is what
+     * refuses to post without them.
+     */
+    inventoryAccountId: uuid('inventory_account_id').references(() => chartOfAccount.id),
+    cogsAccountId: uuid('cogs_account_id').references(() => chartOfAccount.id),
+
     /** §7.4 — warranty end date is calculated from the A/R Invoice date. */
     warrantyMonths: smallint('warranty_months'),
     /** §8.3 — retrieved from the master, never typed on a purchase order. */

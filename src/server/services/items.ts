@@ -58,6 +58,8 @@ export interface ItemInput {
   readonly tracking?: string | null;
   readonly salesAccountId?: string | null;
   readonly purchaseAccountId?: string | null;
+  readonly inventoryAccountId?: string | null;
+  readonly cogsAccountId?: string | null;
   readonly warrantyMonths?: string | null;
 }
 
@@ -122,26 +124,24 @@ export async function detail(tx: Tx, code: string) {
     .from(unitOfMeasure)
     .where(eq(unitOfMeasure.code, row.baseUomCode))
     .limit(1);
-  const [sales] = row.salesAccountId
-    ? await tx
-        .select({ code: chartOfAccount.code, name: chartOfAccount.name })
-        .from(chartOfAccount)
-        .where(eq(chartOfAccount.id, row.salesAccountId))
-        .limit(1)
-    : [];
-  const [purchase] = row.purchaseAccountId
-    ? await tx
-        .select({ code: chartOfAccount.code, name: chartOfAccount.name })
-        .from(chartOfAccount)
-        .where(eq(chartOfAccount.id, row.purchaseAccountId))
-        .limit(1)
-    : [];
+  /** "A000004 · Inventory", or nothing when the item names no such account. */
+  const named = async (id: string | null) => {
+    if (!id) return null;
+    const [account] = await tx
+      .select({ code: chartOfAccount.code, name: chartOfAccount.name })
+      .from(chartOfAccount)
+      .where(eq(chartOfAccount.id, id))
+      .limit(1);
+    return account ? `${account.code} · ${account.name}` : null;
+  };
 
   return {
     ...row,
     baseUomName: uom?.name ?? null,
-    salesAccount: sales ? `${sales.code} · ${sales.name}` : null,
-    purchaseAccount: purchase ? `${purchase.code} · ${purchase.name}` : null,
+    salesAccount: await named(row.salesAccountId),
+    purchaseAccount: await named(row.purchaseAccountId),
+    inventoryAccount: await named(row.inventoryAccountId),
+    cogsAccount: await named(row.cogsAccountId),
     suppliers: await suppliersOf(tx, row.id),
     stock: await stockOf(tx, row.code),
   };
@@ -219,7 +219,7 @@ async function assertAccount(
   tx: Tx,
   id: string | null,
   field: string,
-  expected: 'revenue' | 'expense',
+  expected: 'revenue' | 'expense' | 'asset',
 ): Promise<string | null> {
   if (!id) return null;
   const [account] = await tx
@@ -234,7 +234,8 @@ async function assertAccount(
   if (!account) throw new AdminValidationError(field, 'is not a known account');
   if (account.isGroup) throw new AdminValidationError(field, 'is a header, not a posting account');
   if (account.accountType !== expected) {
-    throw new AdminValidationError(field, `must be ${expected === 'revenue' ? 'a revenue' : 'an expense'} account`);
+    const article = expected === 'expense' ? 'an' : 'a';
+    throw new AdminValidationError(field, `must be ${article} ${expected} account`);
   }
   return account.id;
 }
@@ -264,6 +265,13 @@ async function valuesFor(tx: Tx, input: ItemInput) {
       'purchaseAccountId',
       'expense',
     ),
+    inventoryAccountId: await assertAccount(
+      tx,
+      input.inventoryAccountId ?? null,
+      'inventoryAccountId',
+      'asset',
+    ),
+    cogsAccountId: await assertAccount(tx, input.cogsAccountId ?? null, 'cogsAccountId', 'expense'),
     warrantyMonths: assertMonths(input.warrantyMonths),
   };
 }

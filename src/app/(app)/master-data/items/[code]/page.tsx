@@ -93,6 +93,7 @@ export default async function ItemPage({
 
   const revenue = accounts.filter((a) => a.accountType === 'revenue');
   const expense = accounts.filter((a) => a.accountType === 'expense');
+  const asset = accounts.filter((a) => a.accountType === 'asset');
   const linkedIds = new Set(row.suppliers.map((supplier) => supplier.supplierId));
   const linkable = suppliers.filter((supplier) => !linkedIds.has(supplier.id));
 
@@ -149,6 +150,14 @@ export default async function ItemPage({
               <li>
                 <span>{t('items.purchase_account')}</span>
                 <span>{row.purchaseAccount ?? t('none')}</span>
+              </li>
+              <li>
+                <span>{t('items.inventory_account')}</span>
+                <span>{row.inventoryAccount ?? t('none')}</span>
+              </li>
+              <li>
+                <span>{t('items.cogs_account')}</span>
+                <span>{row.cogsAccount ?? t('none')}</span>
               </li>
               <li>
                 <span>{t('items.warranty_months')}</span>
@@ -367,6 +376,22 @@ export default async function ItemPage({
                     hint={t('items.purchase_account_hint')}
                     label={t('items.purchase_account')}
                     name="purchaseAccountId"
+                    options={expense.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
+                  />
+                  <Select
+                    defaultValue={row.inventoryAccountId ?? ''}
+                    emptyLabel={t('items.account_by_rule')}
+                    hint={t('items.inventory_account_hint')}
+                    label={t('items.inventory_account')}
+                    name="inventoryAccountId"
+                    options={asset.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
+                  />
+                  <Select
+                    defaultValue={row.cogsAccountId ?? ''}
+                    emptyLabel={t('items.account_by_rule')}
+                    hint={t('items.cogs_account_hint')}
+                    label={t('items.cogs_account')}
+                    name="cogsAccountId"
                     options={expense.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
                   />
                   <Field
