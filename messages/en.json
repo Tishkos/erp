@@ -1783,6 +1783,26 @@
       "no_customers": "Add a customer first.",
       "no_items": "Add a stock item first.",
       "no_warehouses": "Set up a warehouse first."
+    },
+    "sales_returns": {
+      "title": "Sales Returns",
+      "subtitle": "Goods a customer has sent back",
+      "new": "New return",
+      "none": "No sales returns yet.",
+      "invoice": "Original Sales Invoice",
+      "offset": "Offset Account",
+      "offset_receivable": "Accounts Receivable",
+      "offset_bank": "Bank",
+      "bank_account": "Bank or cash account",
+      "reason": "Reason",
+      "returnable": "Returnable",
+      "return_quantity": "Return Quantity",
+      "receive": "Receive goods",
+      "inspect": "Inspect",
+      "accept": "Accept",
+      "reject": "Reject",
+      "no_invoices": "Post a sales invoice first.",
+      "pick_invoice": "Choose the invoice being returned against."
     }
   },
   "profile": {

@@ -215,6 +215,8 @@ describe('every screen has one address', () => {
       '/purchasing/ap-invoices',
       // Block 5 — the Sales Invoice.
       '/sales/ar-invoices',
+      // Block 9 — Sales Returns.
+      '/sales/sales-returns',
     ]);
   });
 });

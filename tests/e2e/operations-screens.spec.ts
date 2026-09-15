@@ -169,4 +169,34 @@ test.describe('the Operations Build screens open', () => {
     // is a real answer and not an empty one.
     await expect(supplier.locator('option').first()).toHaveText('Any supplier');
   });
+
+  test('block 9 · the Sales Returns register opens', async ({ page }) => {
+    await page.goto('/sales/sales-returns');
+
+    await expect(page.getByRole('heading', { name: 'Sales Returns' }).first()).toBeVisible();
+    // The offset is in the register because it is the difference between
+    // reducing what a customer owes and handing their money back, and a list
+    // that hides it hides the only thing distinguishing two returns.
+    for (const column of ['Customer Code', 'Customer Name', 'Offset Account']) {
+      await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
+    }
+  });
+
+  test('block 9 · the return form asks for one offset account', async ({ page }) => {
+    await page.goto('/sales/sales-returns/new');
+    await expect(page.getByRole('heading', { name: 'New return' })).toBeVisible();
+
+    // The sponsor: "Offset Account (Accounts Receivable or Bank — one must be
+    // selected)". Both are offered, and no third option exists.
+    const offset = page.locator('select[name="offset_kind"]');
+    const invoices = await page.locator('select[name="invoice"] option:not([value=""])').count();
+    if (invoices === 0) {
+      // Nothing posted to return against yet — the page says so rather than
+      // offering a form that cannot be completed.
+      await expect(page.getByText('Post a sales invoice first.')).toBeVisible();
+      return;
+    }
+    await expect(offset).toHaveCount(1);
+    await expect(offset.locator('option')).toHaveCount(2);
+  });
 });

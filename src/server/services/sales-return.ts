@@ -31,12 +31,13 @@
  * left at, and the Delivery Note recorded that. Valuing at today's cost would
  * move the difference into gross margin, where nobody would look for it.
  */
-import { and, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   arInvoice,
   arInvoiceLine,
   bankCashAccount,
+  businessPartner,
   deliveryNoteLine,
   inventoryMovement,
   deliveryNoteLineUnit,
@@ -871,6 +872,53 @@ async function load(tx: Tx, id: string) {
     .limit(1);
   if (!returnDoc) throw new Error(`No sales return with id '${id}'.`);
   return returnDoc;
+}
+
+/** The register — Operations block 9's list of Sales Returns. */
+export async function list(tx: Tx) {
+  return tx
+    .select({
+      id: salesReturn.id,
+      returnNo: salesReturn.returnNo,
+      customerName: businessPartner.legalName,
+      customerCode: businessPartner.code,
+      invoiceNo: arInvoice.invoiceNo,
+      requestedOn: salesReturn.requestedOn,
+      offsetKind: salesReturn.offsetKind,
+      status: salesReturn.status,
+      branchCode: salesReturn.branchCode,
+    })
+    .from(salesReturn)
+    .leftJoin(businessPartner, eq(businessPartner.id, salesReturn.customerId))
+    .leftJoin(arInvoice, eq(arInvoice.id, salesReturn.arInvoiceId))
+    .orderBy(desc(salesReturn.requestedOn), desc(salesReturn.returnNo));
+}
+
+/** The return a person is looking at, found by the number printed on it. */
+export async function viewByNo(tx: Tx, returnNo: string) {
+  const [row] = await tx
+    .select({ id: salesReturn.id })
+    .from(salesReturn)
+    .where(eq(salesReturn.returnNo, returnNo))
+    .limit(1);
+  if (!row) return null;
+  return view(tx, row.id);
+}
+
+/** Posted invoices a return can be raised against, newest first. */
+export async function returnableInvoices(tx: Tx) {
+  return tx
+    .select({
+      id: arInvoice.id,
+      invoiceNo: arInvoice.invoiceNo,
+      invoiceDate: arInvoice.invoiceDate,
+      customerName: businessPartner.legalName,
+      customerCode: businessPartner.code,
+    })
+    .from(arInvoice)
+    .leftJoin(businessPartner, eq(businessPartner.id, arInvoice.customerId))
+    .where(inArray(arInvoice.status, ['posted', 'partially_executed', 'settled']))
+    .orderBy(desc(arInvoice.invoiceDate));
 }
 
 export async function view(tx: Tx, id: string) {
