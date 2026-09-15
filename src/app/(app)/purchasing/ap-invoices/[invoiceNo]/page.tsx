@@ -100,7 +100,8 @@ export default async function ApInvoicePage({
           <AuditLogButton label={t('history')} />
         </>
       }
-      back={{ href: '/purchasing/ap-invoices', label: t('ap_invoices.title') }}
+      back={{ href: '/purchasing/ap-invoices', label: t('back') }}
+      trail={[{ href: '/', label: t('dashboard_label') }]}
       tabs={<SectionTabs route="/purchasing/ap-invoices" />}
       subtitle={supplier ? `${supplier.code} · ${supplier.name}` : t('ap_invoices.subtitle')}
       title={invoice.invoiceNo}

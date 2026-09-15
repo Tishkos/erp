@@ -107,7 +107,8 @@ export default async function ReceiptPage({
           <AuditLogButton label={t('history')} />
         </>
       }
-      back={{ href: '/sales/customer-receipts', label: t('customer_receipts.title') }}
+      back={{ href: '/sales/customer-receipts', label: t('back') }}
+      trail={[{ href: '/', label: t('dashboard_label') }]}
       tabs={<SectionTabs route="/sales/customer-receipts" />}
       subtitle={t('customer_receipts.subtitle')}
       title={receipt.receiptNo}

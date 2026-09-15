@@ -10,6 +10,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as banks from '@/server/services/bank-cash-accounts';
 import * as partners from '@/server/services/partners';
 import * as receipts from '@/server/services/customer-receipt';
+import { gapsFor } from '@domain/setup-gaps';
 import { createReceipt } from '../actions';
 
 /**
@@ -39,22 +40,26 @@ export default async function NewReceiptPage({ searchParams }: { searchParams: S
     return <Denied object={page('customer_receipts')} />;
   }
 
-  const { customers, accounts } = await withCurrentUser(async (tx) => ({
+  const { customers, allCustomers, accounts } = await withCurrentUser(async (tx) => ({
     customers: await partners.listActiveInRole(tx, 'customer'),
+    // The whole list too, so an empty picker can say which of the two things is
+    // wrong: nobody has been added, or nobody added is active.
+    allCustomers: await partners.listByRole(tx, 'customer'),
     accounts: [...(await banks.listOfKind(tx, 'bank')), ...(await banks.listOfKind(tx, 'cash'))],
   }));
 
   const open = accounts.filter((account) => account.active);
   const today = new Date().toISOString().slice(0, 10);
 
-  const missing = [
-    customers.length === 0 ? t('customer_receipts.no_suppliers') : null,
-    open.length === 0 ? t('customer_receipts.no_accounts') : null,
-  ].filter(Boolean);
+  const missing = gapsFor([
+    { kind: 'customers', total: allCustomers.length, usable: customers.length },
+    { kind: 'accounts', total: accounts.length, usable: open.length },
+  ]).map((gap) => t(`setup.${gap.key}`, gap.count === undefined ? {} : { count: gap.count }));
 
   return (
     <AdminPage
-      back={{ href: '/sales/customer-receipts', label: t('customer_receipts.title') }}
+      back={{ href: '/sales/customer-receipts', label: t('back') }}
+      trail={[{ href: '/', label: t('dashboard_label') }]}
       tabs={<SectionTabs route="/sales/customer-receipts" />}
       subtitle={t('customer_receipts.subtitle')}
       title={t('customer_receipts.new')}

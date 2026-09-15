@@ -63,7 +63,8 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
 
   return (
     <AdminPage
-      back={{ href: '/sales/sales-returns', label: t('sales_returns.title') }}
+      back={{ href: '/sales/sales-returns', label: t('back') }}
+      trail={[{ href: '/', label: t('dashboard_label') }]}
       tabs={<SectionTabs route="/sales/sales-returns" />}
       subtitle={t('sales_returns.subtitle')}
       title={t('sales_returns.new')}

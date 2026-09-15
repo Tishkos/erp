@@ -1874,6 +1874,17 @@
       "where": "Where the goods are",
       "all": "All",
       "no_warehouse_for_stage": "No warehouse is set for the next stage."
+    },
+    "setup": {
+      "no_customers": "Add a customer first.",
+      "no_active_customers": "{count} customer(s) exist and none is active. Reactivate one on the Customers screen.",
+      "no_suppliers": "Add a supplier first.",
+      "no_active_suppliers": "{count} supplier(s) exist and none is active. Reactivate one on the Suppliers screen.",
+      "no_items": "Add a stock item first.",
+      "no_active_items": "{count} item(s) exist and none is a stock item that is active. Check them on the Items screen.",
+      "no_warehouses": "Set up a warehouse first.",
+      "no_accounts": "Set up a bank or cash account first.",
+      "no_active_accounts": "{count} bank or cash account(s) exist and none is active."
     }
   },
   "profile": {

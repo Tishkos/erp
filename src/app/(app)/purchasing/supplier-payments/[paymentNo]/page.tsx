@@ -85,7 +85,8 @@ export default async function PaymentPage({
           <AuditLogButton label={t('history')} />
         </>
       }
-      back={{ href: '/purchasing/supplier-payments', label: t('supplier_payments.title') }}
+      back={{ href: '/purchasing/supplier-payments', label: t('back') }}
+      trail={[{ href: '/', label: t('dashboard_label') }]}
       tabs={<SectionTabs route="/purchasing/supplier-payments" />}
       subtitle={t('supplier_payments.subtitle')}
       title={payment.paymentNo}

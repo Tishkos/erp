@@ -107,7 +107,8 @@ export default async function ArInvoicePage({
           <AuditLogButton label={t('history')} />
         </>
       }
-      back={{ href: '/sales/ar-invoices', label: t('ar_invoices.title') }}
+      back={{ href: '/sales/ar-invoices', label: t('back') }}
+      trail={[{ href: '/', label: t('dashboard_label') }]}
       tabs={<SectionTabs route="/sales/ar-invoices" />}
       subtitle={customer ? `${customer.code} · ${customer.name}` : t('ar_invoices.subtitle')}
       title={invoice.invoiceNo}

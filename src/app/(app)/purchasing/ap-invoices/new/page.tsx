@@ -11,6 +11,7 @@ import * as ap from '@/server/services/ap-invoice';
 import * as items from '@/server/services/items';
 import * as partners from '@/server/services/partners';
 import * as warehouses from '@/server/services/warehouses';
+import { gapsFor } from '@domain/setup-gaps';
 import { createApInvoice } from '../actions';
 import { LINE_ROWS } from '../lines';
 
@@ -51,8 +52,11 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
     return <Denied object={page('ap_invoices')} />;
   }
 
-  const { suppliers, stockItems, houses } = await withCurrentUser(async (tx) => ({
+  const { suppliers, allSuppliers, stockItems, houses } = await withCurrentUser(async (tx) => ({
     suppliers: await partners.listActiveInRole(tx, 'supplier'),
+    // The whole list too, so an empty picker can say which of the two things is
+    // wrong: nobody has been added, or nobody added is active.
+    allSuppliers: await partners.listByRole(tx, 'supplier'),
     stockItems: await items.listAll(tx),
     houses: await warehouses.listActive(tx),
   }));
@@ -62,15 +66,16 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
 
   // What is missing is said once, here, rather than discovered as an error
   // after the invoice has been typed out.
-  const missing = [
-    suppliers.length === 0 ? t('ap_invoices.no_suppliers') : null,
-    sellable.length === 0 ? t('ap_invoices.no_items') : null,
-    houses.length === 0 ? t('ap_invoices.no_warehouses') : null,
-  ].filter(Boolean);
+  const missing = gapsFor([
+    { kind: 'suppliers', total: allSuppliers.length, usable: suppliers.length },
+    { kind: 'items', total: stockItems.length, usable: sellable.length },
+    { kind: 'warehouses', total: houses.length, usable: houses.length },
+  ]).map((gap) => t(`setup.${gap.key}`, gap.count === undefined ? {} : { count: gap.count }));
 
   return (
     <AdminPage
-      back={{ href: '/purchasing/ap-invoices', label: t('ap_invoices.title') }}
+      back={{ href: '/purchasing/ap-invoices', label: t('back') }}
+      trail={[{ href: '/', label: t('dashboard_label') }]}
       tabs={<SectionTabs route="/purchasing/ap-invoices" />}
       subtitle={t('ap_invoices.subtitle')}
       title={t('ap_invoices.new')}

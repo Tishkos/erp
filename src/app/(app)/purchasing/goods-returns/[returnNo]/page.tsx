@@ -82,7 +82,8 @@ export default async function GoodsReturnPage({
           <AuditLogButton label={t('history')} />
         </>
       }
-      back={{ href: '/purchasing/goods-returns', label: t('goods_returns.title') }}
+      back={{ href: '/purchasing/goods-returns', label: t('back') }}
+      trail={[{ href: '/', label: t('dashboard_label') }]}
       tabs={<SectionTabs route="/purchasing/goods-returns" />}
       subtitle={t('goods_returns.subtitle')}
       title={document.returnNo}

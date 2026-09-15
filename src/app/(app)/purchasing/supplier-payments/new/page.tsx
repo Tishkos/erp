@@ -10,6 +10,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as banks from '@/server/services/bank-cash-accounts';
 import * as partners from '@/server/services/partners';
 import * as payments from '@/server/services/supplier-payment';
+import { gapsFor } from '@domain/setup-gaps';
 import { createPayment } from '../actions';
 
 /**
@@ -39,22 +40,26 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: S
     return <Denied object={page('supplier_payments')} />;
   }
 
-  const { suppliers, accounts } = await withCurrentUser(async (tx) => ({
+  const { suppliers, allSuppliers, accounts } = await withCurrentUser(async (tx) => ({
     suppliers: await partners.listActiveInRole(tx, 'supplier'),
+    // The whole list too, so an empty picker can say which of the two things is
+    // wrong: nobody has been added, or nobody added is active.
+    allSuppliers: await partners.listByRole(tx, 'supplier'),
     accounts: [...(await banks.listOfKind(tx, 'bank')), ...(await banks.listOfKind(tx, 'cash'))],
   }));
 
   const open = accounts.filter((account) => account.active);
   const today = new Date().toISOString().slice(0, 10);
 
-  const missing = [
-    suppliers.length === 0 ? t('supplier_payments.no_suppliers') : null,
-    open.length === 0 ? t('supplier_payments.no_accounts') : null,
-  ].filter(Boolean);
+  const missing = gapsFor([
+    { kind: 'suppliers', total: allSuppliers.length, usable: suppliers.length },
+    { kind: 'accounts', total: accounts.length, usable: open.length },
+  ]).map((gap) => t(`setup.${gap.key}`, gap.count === undefined ? {} : { count: gap.count }));
 
   return (
     <AdminPage
-      back={{ href: '/purchasing/supplier-payments', label: t('supplier_payments.title') }}
+      back={{ href: '/purchasing/supplier-payments', label: t('back') }}
+      trail={[{ href: '/', label: t('dashboard_label') }]}
       tabs={<SectionTabs route="/purchasing/supplier-payments" />}
       subtitle={t('supplier_payments.subtitle')}
       title={t('supplier_payments.new')}

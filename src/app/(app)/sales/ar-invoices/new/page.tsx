@@ -11,6 +11,7 @@ import * as ar from '@/server/services/ar-invoice';
 import * as items from '@/server/services/items';
 import * as partners from '@/server/services/partners';
 import * as warehouses from '@/server/services/warehouses';
+import { gapsFor } from '@domain/setup-gaps';
 import { createArInvoice } from '../actions';
 import { LINE_ROWS } from '../lines';
 import { SalesLines, type ItemOption } from '../sales-lines';
@@ -50,8 +51,9 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
     return <Denied object={page('ar_invoices')} />;
   }
 
-  const { customers, options, houses } = await withCurrentUser(async (tx) => {
-    const stock = (await items.listAll(tx)).filter((row) => row.isStock && row.active);
+  const { customers, allCustomers, options, allItems, houses } = await withCurrentUser(async (tx) => {
+    const everyItem = await items.listAll(tx);
+    const stock = everyItem.filter((row) => row.isStock && row.active);
     const options: ItemOption[] = [];
     for (const row of stock) {
       const linked = await items.suppliersOf(tx, row.id);
@@ -65,22 +67,27 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
     }
     return {
       customers: await partners.listActiveInRole(tx, 'customer'),
+      // The whole list too, so an empty picker can say which of the two things
+      // is wrong: nobody has been added, or nobody added is active.
+      allCustomers: await partners.listByRole(tx, 'customer'),
       options,
+      allItems: everyItem,
       houses: await warehouses.listActive(tx),
     };
   });
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const missing = [
-    customers.length === 0 ? t('ar_invoices.no_customers') : null,
-    options.length === 0 ? t('ar_invoices.no_items') : null,
-    houses.length === 0 ? t('ar_invoices.no_warehouses') : null,
-  ].filter(Boolean);
+  const missing = gapsFor([
+    { kind: 'customers', total: allCustomers.length, usable: customers.length },
+    { kind: 'items', total: allItems.length, usable: options.length },
+    { kind: 'warehouses', total: houses.length, usable: houses.length },
+  ]).map((gap) => t(`setup.${gap.key}`, gap.count === undefined ? {} : { count: gap.count }));
 
   return (
     <AdminPage
-      back={{ href: '/sales/ar-invoices', label: t('ar_invoices.title') }}
+      back={{ href: '/sales/ar-invoices', label: t('back') }}
+      trail={[{ href: '/', label: t('dashboard_label') }]}
       tabs={<SectionTabs route="/sales/ar-invoices" />}
       subtitle={t('ar_invoices.subtitle')}
       title={t('ar_invoices.new')}
