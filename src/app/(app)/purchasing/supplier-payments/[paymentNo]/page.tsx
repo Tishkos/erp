@@ -1,10 +1,10 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
-import { AuditLogButton, RecordHistory } from '@/components/admin/history';
+import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
+import { RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { toDecimalString } from '@domain/money';
@@ -16,13 +16,16 @@ import { allocatePayment, postPayment } from '../actions';
 /**
  * One Payment — Operations build, block 6.
  *
- *   "Payments can be allocated to the related supplier invoice, including
- *    partial payment."
+ *   Payments  Supplier Name; Supplier Code; Date; Bank/Cash Name; Bank/Cash
+ *             Code; Amount; Reference; Supplier Invoice.
+ *   Journal   Accounts Payable Dr. / Bank or Cash Cr.
  *
- * Which is why the allocation is a row per invoice with its own amount box,
- * pre-filled with whatever is outstanding but editable. A partial payment is
- * the ordinary case rather than an exception, and a form that assumed the whole
- * balance would make the ordinary case the awkward one.
+ * Wearing the Journal Entry's window, like every other document here. Its lines
+ * are the supplier's open invoices: *"payments can be allocated to the related
+ * supplier invoice, including partial payment"*, so each row carries its own
+ * amount box, pre-filled with whatever is outstanding but editable. Partial is
+ * the ordinary case, and a form that assumed the whole balance would make the
+ * ordinary case the awkward one.
  */
 export const dynamic = 'force-dynamic';
 
@@ -69,27 +72,33 @@ export default async function PaymentPage({
     ['draft', 'approved'].includes(payment.status) &&
     can(principal, 'post', payments.PERMISSION_OBJECT);
 
+  const fields: DocumentField[] = [
+    { label: column('reference'), value: <bdi dir="ltr">{payment.paymentNo}</bdi> },
+    { label: column('status'), value: status(payment.status), status: payment.status },
+    {
+      label: column('posting_date'),
+      value: <bdi dir="ltr">{formatBusinessDate(payment.paymentDate, locale as Locale)}</bdi>,
+    },
+    { label: column('branch_code'), value: <bdi dir="ltr">{payment.branchCode}</bdi> },
+    {
+      label: t('supplier_payments.amount'),
+      value: <bdi dir="ltr">{money(payment.amountIqd)}</bdi>,
+    },
+    {
+      label: t('supplier_payments.unallocated'),
+      value: <bdi dir="ltr">{money(toDecimalString(unallocated, 4n))}</bdi>,
+    },
+    {
+      label: t('supplier_payments.reference'),
+      value: <bdi dir="auto">{payment.reference ?? '—'}</bdi>,
+    },
+  ];
+
   return (
     <AdminPage
-      actions={
-        <>
-        mayPost ? (
-          <form action={postPayment}>
-            <input name="id" type="hidden" value={payment.id} />
-            <input name="payment_no" type="hidden" value={payment.paymentNo} />
-            <button className="action action--primary" type="submit">
-              {t('supplier_payments.post')}
-            </button>
-          </form>
-        ) : null
-          <AuditLogButton label={t('history')} />
-        </>
-      }
       back={{ href: '/purchasing/supplier-payments', label: t('back') }}
-      trail={[{ href: '/', label: t('dashboard_label') }]}
-      tabs={<SectionTabs route="/purchasing/supplier-payments" />}
-      subtitle={t('supplier_payments.subtitle')}
       title={payment.paymentNo}
+      trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"
     >
       <Flash
@@ -99,49 +108,32 @@ export default async function PaymentPage({
         savedLabel={t('saved')}
       />
 
-      <dl className={s.inboxFacts}>
-        <div>
-          <dt>{column('status')}</dt>
-          <dd>
-            <span className={`status status--${payment.status}`} data-status={payment.status}>
-              {status(payment.status)}
-            </span>
-          </dd>
-        </div>
-        <div>
-          <dt>{column('posting_date')}</dt>
-          <dd>
-            <bdi dir="ltr">{formatBusinessDate(payment.paymentDate, locale as Locale)}</bdi>
-          </dd>
-        </div>
-        <div>
-          <dt>{t('supplier_payments.amount')}</dt>
-          <dd>
-            <bdi dir="ltr">{money(payment.amountIqd)}</bdi>
-          </dd>
-        </div>
-        <div>
-          <dt>{t('supplier_payments.unallocated')}</dt>
-          <dd>
-            <bdi dir="ltr">{money(toDecimalString(unallocated, 4n))}</bdi>
-          </dd>
-        </div>
-        {payment.reference ? (
-          <div>
-            <dt>{t('supplier_payments.reference')}</dt>
-            <dd>
-              <bdi dir="auto">{payment.reference}</bdi>
-            </dd>
-          </div>
-        ) : null}
-      </dl>
-
-      <h2 className={s.sapTitle}>
-        <span>{t('supplier_payments.invoice')}</span>
-      </h2>
-
-      <div className={s.sapTableWrap}>
-        <table className={s.sapTable}>
+      <DocumentWindow
+        actions={
+          mayPost ? (
+            <form action={postPayment}>
+              <input name="id" type="hidden" value={payment.id} />
+              <input name="payment_no" type="hidden" value={payment.paymentNo} />
+              <button className="action action--primary" type="submit">
+                {t('supplier_payments.post')}
+              </button>
+            </form>
+          ) : null
+        }
+        auditHref="#audit-log"
+        auditLabel={t('history')}
+        documentType={page('supplier_payments')}
+        fields={fields}
+        id="payment-document"
+        linesCount={open.length}
+        linesTitle={t('supplier_payments.invoice')}
+        number={payment.paymentNo}
+        totals={[
+          { label: t('supplier_payments.amount'), value: money(payment.amountIqd) },
+          { label: t('supplier_payments.allocated'), value: money(payment.allocatedAmountIqd) },
+        ]}
+      >
+        <table aria-labelledby="payment-document-lines-heading" className={s.sapTable}>
           <thead>
             <tr>
               <th scope="col">{column('reference')}</th>
@@ -155,9 +147,7 @@ export default async function PaymentPage({
           <tbody>
             {open.length === 0 ? (
               <tr>
-                <td className={s.sapEmptyRow} colSpan={mayAllocate ? 4 : 3}>
-                  {t('supplier_payments.no_open_invoices')}
-                </td>
+                <td colSpan={mayAllocate ? 4 : 3}>{t('supplier_payments.no_open_invoices')}</td>
               </tr>
             ) : null}
             {open.map((invoice) => (
@@ -201,7 +191,7 @@ export default async function PaymentPage({
             ))}
           </tbody>
         </table>
-      </div>
+      </DocumentWindow>
 
       <RecordHistory objectId={payment.id} objectType={payments.PERMISSION_OBJECT} />
     </AdminPage>

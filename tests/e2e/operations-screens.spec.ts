@@ -281,6 +281,15 @@ test.describe('the Operations Build screens open', () => {
     // cannot defend a year later.
     await expect(page.getByRole('link', { name: 'Audit log' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Audit log' })).toBeVisible();
+
+    // The Journal Entry's window: the document's type and number in the title
+    // bar, its fields in boxes, a disclosed lines grid, and the verbs in the
+    // foot beside the totals. Asserting the chrome, because "same as journals"
+    // is the thing that was asked for and the thing that drifts.
+    const window = page.locator('#payment-document');
+    await expect(window).toBeVisible();
+    await expect(window.getByText('Supplier Payments', { exact: false }).first()).toBeVisible();
+    await expect(window.getByText('Supplier Invoice', { exact: true })).toBeVisible();
   });
 
   test('block 8 · Invoice Status Tracking shows the four stages', async ({ page }) => {

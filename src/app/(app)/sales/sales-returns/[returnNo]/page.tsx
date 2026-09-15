@@ -1,10 +1,10 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
-import { AuditLogButton, RecordHistory } from '@/components/admin/history';
+import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
+import { RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
@@ -16,18 +16,19 @@ import { acceptReturn, receiveReturn, rejectReturn } from '../actions';
 /**
  * One Sales Return — Operations build, block 9.
  *
+ *   Header    Customer Name; Customer Code; Date; Offset Account (Accounts
+ *             Receivable or Bank); Original Sales Invoice Number.
+ *   Lines     Item Name; Item Code; Return Quantity; Warehouse.
  *   Journal   Sales Return Dr. / Accounts Receivable or Bank Cr. /
  *             Inventory Dr. / COGS Cr.
- *   Cost      The Inventory and COGS amounts for each returned item are taken
- *             from the original Sales Invoice item cost.
  *
- * Appendix B's order, and it is not the obvious one: the goods are received and
- * inspected *before* anybody accepts the return. Accepting first would be
- * agreeing to credit a customer for goods nobody has looked at.
+ * Wearing the Journal Entry's window, like every other document here.
  *
- * So the buttons appear one at a time, in that order, and only for the person
- * who holds the verb. Rejecting is available wherever accepting is, because
- * they are the two ends of one decision.
+ * The verbs appear one at a time in Appendix B's order, which is not the
+ * obvious one: the goods are received and inspected *before* anybody accepts
+ * the return. Accepting first would be agreeing to credit a customer for goods
+ * nobody has looked at. Rejecting sits wherever accepting does, because they
+ * are the two ends of one decision.
  */
 export const dynamic = 'force-dynamic';
 
@@ -66,57 +67,39 @@ export default async function SalesReturnPage({
   const { lines, ...returnDoc } = found.document;
 
   const today = new Date().toISOString().slice(0, 10);
-  const mayReceive = returnDoc.status === 'submitted' && can(principal, 'execute', sr.PERMISSION_OBJECT);
+  const mayReceive =
+    returnDoc.status === 'submitted' && can(principal, 'execute', sr.PERMISSION_OBJECT);
   const mayDecide =
     ['partially_executed', 'executed'].includes(returnDoc.status) &&
     can(principal, 'approve', sr.PERMISSION_OBJECT);
 
+  const fields: DocumentField[] = [
+    { label: column('reference'), value: <bdi dir="ltr">{returnDoc.returnNo}</bdi> },
+    { label: column('status'), value: status(returnDoc.status), status: returnDoc.status },
+    {
+      label: column('posting_date'),
+      value: <bdi dir="ltr">{formatBusinessDate(returnDoc.requestedOn, locale as Locale)}</bdi>,
+    },
+    { label: column('branch_code'), value: <bdi dir="ltr">{returnDoc.branchCode}</bdi> },
+    {
+      label: t('sales_returns.offset'),
+      value:
+        returnDoc.offsetKind === 'bank'
+          ? t('sales_returns.offset_bank')
+          : t('sales_returns.offset_receivable'),
+    },
+    {
+      label: t('sales_returns.reason'),
+      value: <bdi dir="auto">{returnDoc.reason}</bdi>,
+      wide: true,
+    },
+  ];
+
   return (
     <AdminPage
-      actions={
-        <>
-          {mayReceive ? (
-            <form action={receiveReturn}>
-              <input name="id" type="hidden" value={returnDoc.id} />
-              <input name="return_no" type="hidden" value={returnDoc.returnNo} />
-              <input name="received_on" type="hidden" value={today} />
-              <button className="action action--primary" type="submit">
-                {t('sales_returns.receive')}
-              </button>
-            </form>
-          ) : null}
-          {mayDecide ? (
-            <>
-              <form action={acceptReturn}>
-                <input name="id" type="hidden" value={returnDoc.id} />
-                <input name="return_no" type="hidden" value={returnDoc.returnNo} />
-                <input
-                  name="warehouse_code"
-                  type="hidden"
-                  value={found.houses[0]?.code ?? ''}
-                />
-                <button className="action action--primary" type="submit">
-                  {t('sales_returns.accept')}
-                </button>
-              </form>
-              <form action={rejectReturn}>
-                <input name="id" type="hidden" value={returnDoc.id} />
-                <input name="return_no" type="hidden" value={returnDoc.returnNo} />
-                <input name="reason" type="hidden" value={returnDoc.reason} />
-                <button className="action" type="submit">
-                  {t('sales_returns.reject')}
-                </button>
-              </form>
-            </>
-          ) : null}
-          <AuditLogButton label={t('history')} />
-        </>
-      }
       back={{ href: '/sales/sales-returns', label: t('back') }}
-      trail={[{ href: '/', label: t('dashboard_label') }]}
-      tabs={<SectionTabs route="/sales/sales-returns" />}
-      subtitle={t('sales_returns.subtitle')}
       title={returnDoc.returnNo}
+      trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"
     >
       <Flash
@@ -126,41 +109,54 @@ export default async function SalesReturnPage({
         savedLabel={t('saved')}
       />
 
-      <dl className={s.inboxFacts}>
-        <div>
-          <dt>{column('status')}</dt>
-          <dd>
-            <span className={`status status--${returnDoc.status}`} data-status={returnDoc.status}>
-              {status(returnDoc.status)}
-            </span>
-          </dd>
-        </div>
-        <div>
-          <dt>{column('posting_date')}</dt>
-          <dd>
-            <bdi dir="ltr">{formatBusinessDate(returnDoc.requestedOn, locale as Locale)}</bdi>
-          </dd>
-        </div>
-        <div>
-          <dt>{t('sales_returns.offset')}</dt>
-          <dd>
-            {returnDoc.offsetKind === 'bank'
-              ? t('sales_returns.offset_bank')
-              : t('sales_returns.offset_receivable')}
-          </dd>
-        </div>
-        <div>
-          <dt>{t('sales_returns.reason')}</dt>
-          <dd>
-            <bdi dir="auto">{returnDoc.reason}</bdi>
-          </dd>
-        </div>
-      </dl>
-
-      <div className={s.sapTableWrap}>
-        <table className={s.sapTable}>
+      <DocumentWindow
+        actions={
+          <>
+            {mayReceive ? (
+              <form action={receiveReturn}>
+                <input name="id" type="hidden" value={returnDoc.id} />
+                <input name="return_no" type="hidden" value={returnDoc.returnNo} />
+                <input name="received_on" type="hidden" value={today} />
+                <button className="action action--primary" type="submit">
+                  {t('sales_returns.receive')}
+                </button>
+              </form>
+            ) : null}
+            {mayDecide ? (
+              <>
+                <form action={acceptReturn}>
+                  <input name="id" type="hidden" value={returnDoc.id} />
+                  <input name="return_no" type="hidden" value={returnDoc.returnNo} />
+                  <input name="warehouse_code" type="hidden" value={found.houses[0]?.code ?? ''} />
+                  <button className="action action--primary" type="submit">
+                    {t('sales_returns.accept')}
+                  </button>
+                </form>
+                <form action={rejectReturn}>
+                  <input name="id" type="hidden" value={returnDoc.id} />
+                  <input name="return_no" type="hidden" value={returnDoc.returnNo} />
+                  <input name="reason" type="hidden" value={returnDoc.reason} />
+                  <button className="action" type="submit">
+                    {t('sales_returns.reject')}
+                  </button>
+                </form>
+              </>
+            ) : null}
+          </>
+        }
+        auditHref="#audit-log"
+        auditLabel={t('history')}
+        documentType={page('sales_returns')}
+        fields={fields}
+        id="sales-return-document"
+        linesCount={lines.length}
+        linesTitle={t('sales_returns.lines_title')}
+        number={returnDoc.returnNo}
+      >
+        <table aria-labelledby="sales-return-document-lines-heading" className={s.sapTable}>
           <thead>
             <tr>
+              <th scope="col">#</th>
               <th scope="col">{column('item_code')}</th>
               <th scope="col">{column('item_name')}</th>
               <th className={s.sapNum} scope="col">
@@ -172,6 +168,9 @@ export default async function SalesReturnPage({
           <tbody>
             {lines.map((line) => (
               <tr key={line.id}>
+                <td>
+                  <bdi dir="ltr">{line.lineNo}</bdi>
+                </td>
                 <td>
                   <bdi dir="ltr">{line.itemCode}</bdi>
                 </td>
@@ -190,7 +189,7 @@ export default async function SalesReturnPage({
             ))}
           </tbody>
         </table>
-      </div>
+      </DocumentWindow>
 
       <RecordHistory objectId={returnDoc.id} objectType={sr.PERMISSION_OBJECT} />
     </AdminPage>

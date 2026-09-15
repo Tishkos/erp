@@ -1,11 +1,10 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
-import { AuditLogButton, RecordHistory } from '@/components/admin/history';
+import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
+import { RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
@@ -17,16 +16,18 @@ import { postApInvoice, submitApInvoice } from '../actions';
 /**
  * One Purchase Invoice — Operations build, block 4.
  *
- *   Inventory Effect  A Purchase Invoice increases stock in the selected
- *                     warehouse.
+ *   Header            Invoice Number (automatically generated); Posting Date;
+ *                     Due Date; Supplier Code; Supplier Name.
+ *   Lines             Item Code; Item Name; Quantity; Unit Price; Discount;
+ *                     Total Price; Warehouse.
+ *   Inventory Effect  Increases stock in the selected warehouse.
  *   Journal Entry     Inventory Dr. / Accounts Payable Cr.
  *   Posting           The invoice is not posted until CEO approval.
  *
- * Two buttons and only where they apply: a draft can be sent for approval, and
- * an invoice waiting for approval can be posted by somebody who holds the verb.
- * Neither appears on an invoice that has already posted, because there is
- * nothing left to decide — the stock is in the warehouse and the entry is in
- * the ledger.
+ * Wearing the Journal Entry's window, because it is the same kind of thing: a
+ * numbered document with header fields, a grid of lines, and a foot where what
+ * may be done to it sits beside what it comes to. A person who has read one has
+ * read this.
  */
 export const dynamic = 'force-dynamic';
 
@@ -58,8 +59,7 @@ export default async function ApInvoicePage({
   const found = await withCurrentUser(async (tx) => {
     const document = await ap.viewByNo(tx, decodeURIComponent(invoiceNo));
     if (!document) return null;
-    const suppliers = await partners.listActiveInRole(tx, 'supplier');
-    return { document, suppliers };
+    return { document, suppliers: await partners.listActiveInRole(tx, 'supplier') };
   });
 
   if (!found) notFound();
@@ -68,43 +68,39 @@ export default async function ApInvoicePage({
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   // The sponsor's "Total Price" is not a stored column and should not be: it is
-  // quantity x unit price less the discount, and a second copy of it could
+  // quantity x unit price less the discount, and a fourth copy of it could
   // disagree with the three figures beside it on the same row.
   const lineTotal = (line: { quantity: string; unitPrice: string; discountIqd: string }) =>
     String(Number(line.quantity) * Number(line.unitPrice) - Number(line.discountIqd));
+
   const maySubmit = invoice.status === 'draft' && can(principal, 'submit', ap.PERMISSION_OBJECT);
   const mayPost = invoice.status === 'submitted' && can(principal, 'post', ap.PERMISSION_OBJECT);
 
+  const fields: DocumentField[] = [
+    { label: column('reference'), value: <bdi dir="ltr">{invoice.invoiceNo}</bdi> },
+    { label: column('status'), value: status(invoice.status), status: invoice.status },
+    { label: column('supplier_code'), value: <bdi dir="ltr">{supplier?.code ?? '—'}</bdi> },
+    { label: column('supplier_name'), value: <bdi dir="auto">{supplier?.name ?? '—'}</bdi> },
+    {
+      label: t('ap_invoices.supplier_invoice_no'),
+      value: <bdi dir="ltr">{invoice.supplierInvoiceNo}</bdi>,
+    },
+    { label: column('branch_code'), value: <bdi dir="ltr">{invoice.branchCode}</bdi> },
+    {
+      label: column('posting_date'),
+      value: <bdi dir="ltr">{formatBusinessDate(invoice.invoiceDate, locale as Locale)}</bdi>,
+    },
+    {
+      label: column('due_date'),
+      value: <bdi dir="ltr">{formatBusinessDate(invoice.dueDate, locale as Locale)}</bdi>,
+    },
+  ];
+
   return (
     <AdminPage
-      actions={
-        <>
-          {maySubmit ? (
-            <form action={submitApInvoice}>
-              <input name="id" type="hidden" value={invoice.id} />
-              <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-              <button className="action action--primary" type="submit">
-                {t('ap_invoices.submit')}
-              </button>
-            </form>
-          ) : null}
-          {mayPost ? (
-            <form action={postApInvoice}>
-              <input name="id" type="hidden" value={invoice.id} />
-              <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-              <button className="action action--primary" type="submit">
-                {t('ap_invoices.approve_and_post')}
-              </button>
-            </form>
-          ) : null}
-          <AuditLogButton label={t('history')} />
-        </>
-      }
       back={{ href: '/purchasing/ap-invoices', label: t('back') }}
-      trail={[{ href: '/', label: t('dashboard_label') }]}
-      tabs={<SectionTabs route="/purchasing/ap-invoices" />}
-      subtitle={supplier ? `${supplier.code} · ${supplier.name}` : t('ap_invoices.subtitle')}
       title={invoice.invoiceNo}
+      trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"
     >
       <Flash
@@ -114,55 +110,43 @@ export default async function ApInvoicePage({
         savedLabel={t('saved')}
       />
 
-      <dl className={s.inboxFacts}>
-        <div>
-          <dt>{column('status')}</dt>
-          <dd>
-            <span className={`status status--${invoice.status}`} data-status={invoice.status}>
-              {status(invoice.status)}
-            </span>
-          </dd>
-        </div>
-        <div>
-          <dt>{t('ap_invoices.supplier_invoice_no')}</dt>
-          <dd>
-            <bdi dir="ltr">{invoice.supplierInvoiceNo}</bdi>
-          </dd>
-        </div>
-        <div>
-          <dt>{column('posting_date')}</dt>
-          <dd>
-            <bdi dir="ltr">{formatBusinessDate(invoice.invoiceDate, locale as Locale)}</bdi>
-          </dd>
-        </div>
-        <div>
-          <dt>{column('due_date')}</dt>
-          <dd>
-            <bdi dir="ltr">{formatBusinessDate(invoice.dueDate, locale as Locale)}</bdi>
-          </dd>
-        </div>
-        <div>
-          <dt>{column('amount')}</dt>
-          <dd>
-            <bdi dir="ltr">{money(invoice.totalIqd)}</bdi>
-          </dd>
-        </div>
-        {invoice.journalEntryId ? (
-          <div>
-            <dt>{t('ap_invoices.journal')}</dt>
-            <dd>
-              <Link className={s.sapLink} href="/finance/journals">
-                {t('ap_invoices.posted_note')}
-              </Link>
-            </dd>
-          </div>
-        ) : null}
-      </dl>
-
-      <div className={s.sapTableWrap}>
-        <table className={s.sapTable}>
+      <DocumentWindow
+        actions={
+          <>
+            {maySubmit ? (
+              <form action={submitApInvoice}>
+                <input name="id" type="hidden" value={invoice.id} />
+                <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
+                <button className="action action--primary" type="submit">
+                  {t('ap_invoices.submit')}
+                </button>
+              </form>
+            ) : null}
+            {mayPost ? (
+              <form action={postApInvoice}>
+                <input name="id" type="hidden" value={invoice.id} />
+                <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
+                <button className="action action--primary" type="submit">
+                  {t('ap_invoices.approve_and_post')}
+                </button>
+              </form>
+            ) : null}
+          </>
+        }
+        auditHref="#audit-log"
+        auditLabel={t('history')}
+        documentType={page('ap_invoices')}
+        fields={fields}
+        id="ap-invoice-document"
+        linesCount={lines.length}
+        linesTitle={t('ap_invoices.lines')}
+        number={invoice.invoiceNo}
+        totals={[{ label: column('amount'), value: money(invoice.totalIqd) }]}
+      >
+        <table aria-labelledby="ap-invoice-document-lines-heading" className={s.sapTable}>
           <thead>
             <tr>
+              <th scope="col">#</th>
               <th scope="col">{column('item_code')}</th>
               <th scope="col">{column('item_name')}</th>
               <th className={s.sapNum} scope="col">
@@ -177,17 +161,20 @@ export default async function ApInvoicePage({
               <th className={s.sapNum} scope="col">
                 {column('total_price')}
               </th>
-              <th scope="col">{column('warehouse_name')}</th>
+              <th scope="col">{column('warehouse_code')}</th>
             </tr>
           </thead>
           <tbody>
             {lines.map((line) => (
               <tr key={line.id}>
                 <td>
+                  <bdi dir="ltr">{line.lineNo}</bdi>
+                </td>
+                <td>
                   <bdi dir="ltr">{line.itemCode ?? '—'}</bdi>
                 </td>
                 <td>
-                  <bdi dir="auto">{line.description ?? '—'}</bdi>
+                  <bdi dir="auto">{line.description}</bdi>
                 </td>
                 <td className={s.sapNum}>
                   <bdi dir="ltr">{String(Number(line.quantity))}</bdi>
@@ -209,7 +196,7 @@ export default async function ApInvoicePage({
           </tbody>
           <tfoot>
             <tr className={s.sapTotalRow}>
-              <td colSpan={5}>{t('reports.totals')}</td>
+              <td colSpan={6}>{t('reports.totals')}</td>
               <td className={s.sapNum}>
                 <bdi dir="ltr">{money(invoice.totalIqd)}</bdi>
               </td>
@@ -217,7 +204,7 @@ export default async function ApInvoicePage({
             </tr>
           </tfoot>
         </table>
-      </div>
+      </DocumentWindow>
 
       <RecordHistory objectId={invoice.id} objectType={ap.PERMISSION_OBJECT} />
     </AdminPage>

@@ -1804,7 +1804,8 @@
       "accept": "Accept",
       "reject": "Reject",
       "no_invoices": "Post a sales invoice first.",
-      "pick_invoice": "Choose the invoice being returned against."
+      "pick_invoice": "Choose the invoice being returned against.",
+      "lines_title": "Lines"
     },
     "goods_returns": {
       "title": "Purchase Returns",
@@ -1822,7 +1823,8 @@
       "approve": "Approve",
       "ship": "Send back",
       "no_invoices": "Post a purchase invoice first.",
-      "pick_invoice": "Choose the invoice being returned against."
+      "pick_invoice": "Choose the invoice being returned against.",
+      "lines_title": "Lines"
     },
     "supplier_payments": {
       "title": "Payments",

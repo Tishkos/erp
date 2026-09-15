@@ -1,10 +1,10 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
-import { AuditLogButton, RecordHistory } from '@/components/admin/history';
+import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
+import { RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
@@ -15,7 +15,12 @@ import { approveGoodsReturn, postGoodsReturn } from '../actions';
 /**
  * One Purchase Return — Operations build, block 10.
  *
+ *   Header    Supplier Name; Supplier Code; Date; Offset Account (Accounts
+ *             Payable or Bank); Original Purchase Invoice Number.
+ *   Lines     Item Name; Item Code; Return Quantity; Warehouse.
  *   Journal   Accounts Payable or Bank Dr. / Inventory Cr.
+ *
+ * Wearing the Journal Entry's window, like every other document here.
  *
  * Approved, then sent. The goods leave on the layer they arrived on, so they go
  * back out at what was paid for them rather than at today's price, and the
@@ -53,40 +58,36 @@ export default async function GoodsReturnPage({
   if (!found) notFound();
   const { document, lines } = found;
 
-  const mayApprove =
-    document.status === 'draft' && can(principal, 'approve', gr.PERMISSION_OBJECT);
+  const mayApprove = document.status === 'draft' && can(principal, 'approve', gr.PERMISSION_OBJECT);
   const mayPost = document.status === 'approved' && can(principal, 'post', gr.PERMISSION_OBJECT);
+
+  const fields: DocumentField[] = [
+    { label: column('reference'), value: <bdi dir="ltr">{document.returnNo}</bdi> },
+    { label: column('status'), value: status(document.status), status: document.status },
+    {
+      label: column('posting_date'),
+      value: <bdi dir="ltr">{formatBusinessDate(document.returnDate, locale as Locale)}</bdi>,
+    },
+    { label: column('branch_code'), value: <bdi dir="ltr">{document.branchCode}</bdi> },
+    {
+      label: t('goods_returns.offset'),
+      value:
+        document.offsetKind === 'bank'
+          ? t('goods_returns.offset_bank')
+          : t('goods_returns.offset_payable'),
+    },
+    {
+      label: t('goods_returns.reason'),
+      value: <bdi dir="auto">{document.reason}</bdi>,
+      wide: true,
+    },
+  ];
 
   return (
     <AdminPage
-      actions={
-        <>
-          {mayApprove ? (
-            <form action={approveGoodsReturn}>
-              <input name="id" type="hidden" value={document.id} />
-              <input name="return_no" type="hidden" value={document.returnNo} />
-              <button className="action action--primary" type="submit">
-                {t('goods_returns.approve')}
-              </button>
-            </form>
-          ) : null}
-          {mayPost ? (
-            <form action={postGoodsReturn}>
-              <input name="id" type="hidden" value={document.id} />
-              <input name="return_no" type="hidden" value={document.returnNo} />
-              <button className="action action--primary" type="submit">
-                {t('goods_returns.ship')}
-              </button>
-            </form>
-          ) : null}
-          <AuditLogButton label={t('history')} />
-        </>
-      }
       back={{ href: '/purchasing/goods-returns', label: t('back') }}
-      trail={[{ href: '/', label: t('dashboard_label') }]}
-      tabs={<SectionTabs route="/purchasing/goods-returns" />}
-      subtitle={t('goods_returns.subtitle')}
       title={document.returnNo}
+      trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"
     >
       <Flash
@@ -96,41 +97,42 @@ export default async function GoodsReturnPage({
         savedLabel={t('saved')}
       />
 
-      <dl className={s.inboxFacts}>
-        <div>
-          <dt>{column('status')}</dt>
-          <dd>
-            <span className={`status status--${document.status}`} data-status={document.status}>
-              {status(document.status)}
-            </span>
-          </dd>
-        </div>
-        <div>
-          <dt>{column('posting_date')}</dt>
-          <dd>
-            <bdi dir="ltr">{formatBusinessDate(document.returnDate, locale as Locale)}</bdi>
-          </dd>
-        </div>
-        <div>
-          <dt>{t('goods_returns.offset')}</dt>
-          <dd>
-            {document.offsetKind === 'bank'
-              ? t('goods_returns.offset_bank')
-              : t('goods_returns.offset_payable')}
-          </dd>
-        </div>
-        <div>
-          <dt>{t('goods_returns.reason')}</dt>
-          <dd>
-            <bdi dir="auto">{document.reason}</bdi>
-          </dd>
-        </div>
-      </dl>
-
-      <div className={s.sapTableWrap}>
-        <table className={s.sapTable}>
+      <DocumentWindow
+        actions={
+          <>
+            {mayApprove ? (
+              <form action={approveGoodsReturn}>
+                <input name="id" type="hidden" value={document.id} />
+                <input name="return_no" type="hidden" value={document.returnNo} />
+                <button className="action action--primary" type="submit">
+                  {t('goods_returns.approve')}
+                </button>
+              </form>
+            ) : null}
+            {mayPost ? (
+              <form action={postGoodsReturn}>
+                <input name="id" type="hidden" value={document.id} />
+                <input name="return_no" type="hidden" value={document.returnNo} />
+                <button className="action action--primary" type="submit">
+                  {t('goods_returns.ship')}
+                </button>
+              </form>
+            ) : null}
+          </>
+        }
+        auditHref="#audit-log"
+        auditLabel={t('history')}
+        documentType={page('goods_returns')}
+        fields={fields}
+        id="goods-return-document"
+        linesCount={lines.length}
+        linesTitle={t('goods_returns.lines_title')}
+        number={document.returnNo}
+      >
+        <table aria-labelledby="goods-return-document-lines-heading" className={s.sapTable}>
           <thead>
             <tr>
+              <th scope="col">#</th>
               <th scope="col">{column('item_code')}</th>
               <th className={s.sapNum} scope="col">
                 {t('goods_returns.return_quantity')}
@@ -141,6 +143,9 @@ export default async function GoodsReturnPage({
           <tbody>
             {lines.map((line) => (
               <tr key={line.id}>
+                <td>
+                  <bdi dir="ltr">{line.lineNo}</bdi>
+                </td>
                 <td>
                   <bdi dir="ltr">{line.itemCode}</bdi>
                 </td>
@@ -154,7 +159,7 @@ export default async function GoodsReturnPage({
             ))}
           </tbody>
         </table>
-      </div>
+      </DocumentWindow>
 
       <RecordHistory objectId={document.id} objectType={gr.PERMISSION_OBJECT} />
     </AdminPage>
