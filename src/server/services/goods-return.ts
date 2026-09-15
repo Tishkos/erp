@@ -22,7 +22,7 @@
  * balance until the credit memo arrives; an ageing of that account is the
  * answer to *"what have we sent back and not been credited for?"*
  */
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   apInvoice,
@@ -428,7 +428,7 @@ export async function createFromInvoice(
   }
 
   // Stock that has not been booked in cannot be sent back out.
-  if (!['posted', 'partially_settled', 'settled'].includes(invoice.status)) {
+  if (!['posted', 'settled'].includes(invoice.status)) {
     throw new Error(
       `Purchase invoice ${invoice.invoiceNo} is '${invoice.status}'. Until it posts, nothing it ` +
         'names is in a warehouse to return.',
@@ -948,6 +948,89 @@ export async function awaitingCredit(tx: Tx) {
     .orderBy(goodsReturn.returnDate);
 
   return rows;
+}
+
+/** The register — Operations block 10's list of Purchase Returns. */
+export async function list(tx: Tx) {
+  return tx
+    .select({
+      id: goodsReturn.id,
+      returnNo: goodsReturn.returnNo,
+      supplierName: businessPartner.legalName,
+      supplierCode: businessPartner.code,
+      invoiceNo: apInvoice.invoiceNo,
+      returnDate: goodsReturn.returnDate,
+      offsetKind: goodsReturn.offsetKind,
+      status: goodsReturn.status,
+      branchCode: goodsReturn.branchCode,
+    })
+    .from(goodsReturn)
+    .leftJoin(businessPartner, eq(businessPartner.id, goodsReturn.supplierId))
+    .leftJoin(apInvoice, eq(apInvoice.id, goodsReturn.apInvoiceId))
+    .orderBy(desc(goodsReturn.returnDate), desc(goodsReturn.returnNo));
+}
+
+/** The return a person is looking at, found by the number printed on it. */
+export async function viewByNo(tx: Tx, returnNo: string) {
+  const [row] = await tx
+    .select({ id: goodsReturn.id })
+    .from(goodsReturn)
+    .where(eq(goodsReturn.returnNo, returnNo))
+    .limit(1);
+  if (!row) return null;
+  return load(tx, row.id);
+}
+
+/**
+ * Posted Purchase Invoices a return can be raised against.
+ *
+ * Only the ones that booked stock into a warehouse: an invoice for a service
+ * has nothing to send back, and offering it would end in a refusal a line
+ * later.
+ */
+export async function returnableInvoices(tx: Tx) {
+  return tx
+    .selectDistinct({
+      id: apInvoice.id,
+      invoiceNo: apInvoice.invoiceNo,
+      invoiceDate: apInvoice.invoiceDate,
+      supplierName: businessPartner.legalName,
+      supplierCode: businessPartner.code,
+    })
+    .from(apInvoice)
+    .innerJoin(apInvoiceLine, eq(apInvoiceLine.apInvoiceId, apInvoice.id))
+    .leftJoin(businessPartner, eq(businessPartner.id, apInvoice.supplierId))
+    .where(
+      and(
+        inArray(apInvoice.status, ['posted', 'settled']),
+        isNotNull(apInvoiceLine.warehouseCode),
+      ),
+    )
+    .orderBy(desc(apInvoice.invoiceDate));
+}
+
+/** Every line of one invoice, with how much of it is still returnable. */
+export async function returnableLinesFor(tx: Tx, apInvoiceId: string) {
+  const lines = await tx
+    .select({
+      id: apInvoiceLine.id,
+      lineNo: apInvoiceLine.lineNo,
+      itemCode: apInvoiceLine.itemCode,
+      description: apInvoiceLine.description,
+      quantity: apInvoiceLine.quantity,
+      unitPrice: apInvoiceLine.unitPrice,
+      warehouseCode: apInvoiceLine.warehouseCode,
+    })
+    .from(apInvoiceLine)
+    .where(eq(apInvoiceLine.apInvoiceId, apInvoiceId))
+    .orderBy(apInvoiceLine.lineNo);
+
+  const out = [];
+  for (const line of lines) {
+    if (!line.warehouseCode) continue;
+    out.push({ ...line, returnable: await availableToReturnFromInvoice(tx, line.id) });
+  }
+  return out;
 }
 
 export async function view(tx: Tx, id: string) {

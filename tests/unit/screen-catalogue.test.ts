@@ -213,6 +213,8 @@ describe('every screen has one address', () => {
       '/master-data/warehouses',
       // Operations build — block 4's Purchase Invoice.
       '/purchasing/ap-invoices',
+      // Block 10 — Purchase Returns.
+      '/purchasing/goods-returns',
       // Block 5 — the Sales Invoice.
       '/sales/ar-invoices',
       // Block 9 — Sales Returns.

@@ -1803,6 +1803,24 @@
       "reject": "Reject",
       "no_invoices": "Post a sales invoice first.",
       "pick_invoice": "Choose the invoice being returned against."
+    },
+    "goods_returns": {
+      "title": "Purchase Returns",
+      "subtitle": "Goods sent back to a supplier",
+      "new": "New return",
+      "none": "No purchase returns yet.",
+      "invoice": "Original Purchase Invoice",
+      "offset": "Offset Account",
+      "offset_payable": "Accounts Payable",
+      "offset_bank": "Bank",
+      "bank_account": "Bank or cash account",
+      "reason": "Reason",
+      "returnable": "Returnable",
+      "return_quantity": "Return Quantity",
+      "approve": "Approve",
+      "ship": "Send back",
+      "no_invoices": "Post a purchase invoice first.",
+      "pick_invoice": "Choose the invoice being returned against."
     }
   },
   "profile": {

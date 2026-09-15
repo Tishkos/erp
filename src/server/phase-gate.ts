@@ -97,6 +97,8 @@ export const OPERATIONS: readonly string[] = [
   '/sales/ar-invoices',
   // Block 9 — Sales Returns.
   '/sales/sales-returns',
+  // Block 10 — Purchase Returns.
+  '/purchasing/goods-returns',
 ];
 
 const VISIBLE: ReadonlySet<string> = new Set([

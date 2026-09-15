@@ -199,4 +199,31 @@ test.describe('the Operations Build screens open', () => {
     await expect(offset).toHaveCount(1);
     await expect(offset.locator('option')).toHaveCount(2);
   });
+
+  test('block 10 · the Purchase Returns register opens', async ({ page }) => {
+    await page.goto('/purchasing/goods-returns');
+
+    await expect(page.getByRole('heading', { name: 'Purchase Returns' }).first()).toBeVisible();
+    for (const column of ['Supplier Code', 'Supplier Name', 'Offset Account']) {
+      await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
+    }
+  });
+
+  test('block 10 · the return form asks for one offset account', async ({ page }) => {
+    await page.goto('/purchasing/goods-returns/new');
+    await expect(page.getByRole('heading', { name: 'New return' })).toBeVisible();
+
+    const invoices = await page.locator('select[name="invoice"] option:not([value=""])').count();
+    if (invoices === 0) {
+      await expect(page.getByText('Post a purchase invoice first.')).toBeVisible();
+      return;
+    }
+
+    // "Accounts Payable or Bank — one must be selected", and the sign is the
+    // mirror of block 9's: the debt shrinks, or the money comes back.
+    const offset = page.locator('select[name="offset_kind"]');
+    await expect(offset).toHaveCount(1);
+    await expect(offset.locator('option')).toHaveCount(2);
+    await expect(offset.locator('option').first()).toHaveText('Accounts Payable');
+  });
 });
