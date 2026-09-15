@@ -19,11 +19,12 @@
  * layers and the inventory control account out of step, which §9.9's
  * reconciliation exists to detect.
  */
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   apInvoice,
   apInvoiceLine,
+  appUser,
   item,
   apMatchException,
   apMatchTolerance,
@@ -1124,7 +1125,31 @@ export async function viewByNo(tx: Tx, invoiceNo: string) {
     .where(eq(apInvoice.invoiceNo, invoiceNo))
     .limit(1);
   if (!row) return null;
-  return load(tx, row.id);
+
+  const { invoice, lines } = await load(tx, row.id);
+
+  // Who raised it and who carried it, as the Journal Entry shows. A document
+  // nobody is named on is a document nobody answers for.
+  const people = await tx
+    .select({ id: appUser.id, displayName: appUser.displayName })
+    .from(appUser)
+    .where(
+      inArray(
+        appUser.id,
+        [invoice.createdBy, invoice.submittedBy, invoice.postedBy].filter(
+          (id): id is string => Boolean(id),
+        ),
+      ),
+    );
+  const name = (id: string | null) =>
+    id ? (people.find((person) => person.id === id)?.displayName ?? null) : null;
+
+  return {
+    invoice,
+    lines,
+    raisedBy: name(invoice.createdBy),
+    postedBy: name(invoice.postedBy),
+  };
 }
 
 export async function view(tx: Tx, id: string) {

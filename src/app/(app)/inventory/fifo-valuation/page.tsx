@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, admin as s } from '@/components/admin';
+import { AdminPage, Grid, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -8,7 +8,9 @@ import { formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
+import * as items from '@/server/services/items';
 import * as reports from '@/server/services/inventory-reports';
+import * as warehouses from '@/server/services/warehouses';
 
 /**
  * The Warehouses Report — Operations build, block 7.
@@ -47,13 +49,17 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
   const itemCode = typeof params.item === 'string' ? params.item.trim() : '';
   const warehouseCode = typeof params.warehouse === 'string' ? params.warehouse.trim() : '';
 
-  const rows = await withCurrentUser((tx) =>
-    reports.valuation(tx, context.principal, {
+  const { rows, pickers } = await withCurrentUser(async (tx) => ({
+    rows: await reports.valuation(tx, context.principal, {
       allPermittedBranches: true,
       ...(itemCode ? { itemCode } : {}),
       ...(warehouseCode ? { warehouseCode } : {}),
     }),
-  );
+    pickers: {
+      items: (await items.listAll(tx)).filter((row) => row.isStock),
+      houses: await warehouses.listActive(tx),
+    },
+  }));
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   // The layers carry quantities at six decimal places. A warehouse list reads
@@ -71,26 +77,36 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
       title={t('reports.warehouses_report')}
       variant="sap"
     >
-      <form className="list__toolbar" method="get">
-        <input
-          className="list__search"
-          type="search"
-          name="item"
-          defaultValue={itemCode}
-          placeholder={column('item_code')}
-          aria-label={column('item_code')}
-        />
-        <input
-          className="list__search"
-          type="search"
-          name="warehouse"
-          defaultValue={warehouseCode}
-          placeholder={column('warehouse_code')}
-          aria-label={column('warehouse_code')}
-        />
-        <button className="action" type="submit">
-          {list('search')}
-        </button>
+      {/* The report's own filters, in the form controls every other screen uses
+          rather than two bare search boxes. Pickers rather than free text: the
+          item and the warehouse are both known lists, and a typo in a text box
+          silently returns nothing. */}
+      <form method="get">
+        <Grid>
+          <Select
+            defaultValue={itemCode}
+            emptyLabel={t('reports.all_items')}
+            label={column('item_code')}
+            name="item"
+            options={pickers.items.map((row) => ({
+              value: row.code,
+              label: `${row.code} · ${row.name}`,
+            }))}
+          />
+          <Select
+            defaultValue={warehouseCode}
+            emptyLabel={t('reports.all_warehouses')}
+            label={column('warehouse_code')}
+            name="warehouse"
+            options={pickers.houses.map((row) => ({
+              value: row.code,
+              label: `${row.code} · ${row.name}`,
+            }))}
+          />
+        </Grid>
+        <SubmitRow>
+          <Submit label={list('search')} />
+        </SubmitRow>
       </form>
 
       <table className={`${s.sapTable} ${s.sapReportTable}`}>

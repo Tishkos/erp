@@ -252,7 +252,9 @@
     "cash_flow": "Cash Flow Statement",
     "cash_accounts": "Cash Accounts",
     "payment_methods": "Payment Methods",
-    "statement_mapping": "Statement Mapping"
+    "statement_mapping": "Statement Mapping",
+    "ap_invoice": "Purchase Invoice",
+    "ar_invoice": "Sales Invoice"
   },
   "auth": {
     "email": "Email",
@@ -1450,7 +1452,9 @@
       "stated_in": "in {currency}",
       "warehouses_report": "Warehouses Report",
       "nothing_in_stock": "No stock is held in any warehouse.",
-      "as_it_stands": "Stock held now, valued at what it cost"
+      "as_it_stands": "Stock held now, valued at what it cost",
+      "all_items": "All items",
+      "all_warehouses": "All warehouses"
     },
     "accounts": {
       "new": "New account",
@@ -1768,7 +1772,9 @@
       "journal": "Journal entry",
       "no_suppliers": "Add a supplier first.",
       "no_items": "Add a stock item first.",
-      "no_warehouses": "Set up a warehouse first."
+      "no_warehouses": "Set up a warehouse first.",
+      "raised_by": "Raised by",
+      "posted_by": "Posted by"
     },
     "ar_invoices": {
       "title": "Sales Invoices",
@@ -1784,7 +1790,9 @@
       "any_supplier": "Any supplier",
       "no_customers": "Add a customer first.",
       "no_items": "Add a stock item first.",
-      "no_warehouses": "Set up a warehouse first."
+      "no_warehouses": "Set up a warehouse first.",
+      "raised_by": "Raised by",
+      "carried_by": "Approved by"
     },
     "sales_returns": {
       "title": "Sales Returns",

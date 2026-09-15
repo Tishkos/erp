@@ -72,12 +72,15 @@ export default async function ArInvoicePage({
   });
 
   if (!found) notFound();
-  const { lines, ...invoice } = found.document;
+  const { lines, raisedBy, carriedBy, ...invoice } = found.document;
   const customer = found.customers.find((row) => row.id === invoice.customerId);
   const supplierOf = (id: string | null) =>
     id ? (found.suppliers.find((row) => row.id === id)?.code ?? '—') : '—';
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
+  // Summed from the lines, as the Journal Entry sums its own. A sale writes each
+  // line's net when it is raised, so this agrees with the header at every stage.
+  const total = lines.reduce((sum, line) => sum + Number(line.netIqd), 0);
 
   // Two steps, and the sponsor's rule lives in the second: "the invoice is not
   // posted until CEO approval". Approval and posting are separate verbs, so the
@@ -100,6 +103,11 @@ export default async function ArInvoicePage({
     {
       label: column('due_date'),
       value: <bdi dir="ltr">{formatBusinessDate(invoice.dueDate, locale as Locale)}</bdi>,
+    },
+    { label: t('ar_invoices.raised_by'), value: <bdi dir="auto">{raisedBy ?? '—'}</bdi> },
+    {
+      label: t('ar_invoices.carried_by'),
+      value: <bdi dir="auto">{carriedBy ?? t('none')}</bdi>,
     },
     // The note the invoice was raised with. It is on the record and was shown
     // nowhere, which is the one field a person actually writes prose into.
@@ -149,13 +157,13 @@ export default async function ArInvoicePage({
         }
         auditHref="#audit-log"
         auditLabel={t('history')}
-        documentType={page('ar_invoices')}
+        documentType={page('ar_invoice')}
         fields={fields}
         id="ar-invoice-document"
         linesCount={lines.length}
         linesTitle={t('ar_invoices.lines')}
         number={invoice.invoiceNo}
-        totals={[{ label: column('amount'), value: money(invoice.netIqd) }]}
+        totals={[{ label: column('amount'), value: money(String(total)) }]}
       >
         <table aria-labelledby="ar-invoice-document-lines-heading" className={s.sapTable}>
           <thead>
@@ -216,7 +224,7 @@ export default async function ArInvoicePage({
             <tr className={s.sapTotalRow}>
               <td colSpan={6}>{t('reports.totals')}</td>
               <td className={s.sapNum}>
-                <bdi dir="ltr">{money(invoice.netIqd)}</bdi>
+                <bdi dir="ltr">{money(String(total))}</bdi>
               </td>
               <td colSpan={2} />
             </tr>

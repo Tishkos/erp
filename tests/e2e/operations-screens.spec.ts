@@ -116,7 +116,10 @@ test.describe('the Operations Build screens open', () => {
 
     // Every picker has something in it. An empty one means the screen is built
     // and unusable, which is the failure this whole file exists to catch.
-    await expect(page.locator('select[name="supplier_id"] option')).not.toHaveCount(0);
+    //
+    // The supplier is the sponsor's "searchable" field — an input over a
+    // datalist rather than a select, so it is the list that is counted.
+    await expect(page.locator('datalist option')).not.toHaveCount(0);
     await expect(page.locator('select[name="item_code_0"] option')).not.toHaveCount(1);
     await expect(page.locator('select[name="warehouse_code_0"] option')).not.toHaveCount(0);
   });
@@ -256,13 +259,19 @@ test.describe('the Operations Build screens open', () => {
     await expect(page.getByRole('heading', { name: 'New payment' })).toBeVisible();
 
     // Both pickers have something in them, or the screen is built and unusable.
-    await expect(page.locator('select[name="supplier_id"] option')).not.toHaveCount(0);
+    // The supplier is searchable — an input over a datalist, not a select.
+    await expect(page.locator('datalist option')).not.toHaveCount(0);
     const accounts = await page.locator('select[name="bank_cash_account_id"] option').count();
     if (accounts === 0) {
       await expect(page.getByText('Set up a bank or cash account first.')).toBeVisible();
       return;
     }
 
+    // A searchable picker submits the id only when the text matches an option
+    // exactly, so the test picks one the way a person would: read the first
+    // entry out of the list and type it.
+    const firstSupplier = await page.locator('datalist option').first().getAttribute('value');
+    await page.getByLabel('Supplier Name').fill(firstSupplier!);
     await page.getByLabel('Amount').fill('1000');
     await page.getByRole('button', { name: 'Create' }).click();
 
@@ -297,11 +306,13 @@ test.describe('the Operations Build screens open', () => {
 
     await expect(page.getByRole('heading', { name: 'Invoice Status Tracking' })).toBeVisible();
 
-    // The sponsor's four, in his order. Nothing is created here — a shipment
-    // appears when a Purchase Invoice posts, which is what "automatically
-    // copied to this section" means.
+    // The sponsor's four, in his order, in one picker rather than five links.
+    // Nothing is created here — a shipment appears when a Purchase Invoice
+    // posts, which is what "automatically copied to this section" means.
+    const stages = page.locator('select[name="status"]');
+    await expect(stages).toBeVisible();
     for (const stage of ['In Process', 'On Board', 'On Port', 'In Bounded']) {
-      await expect(page.getByRole('link', { name: stage, exact: true })).toBeVisible();
+      await expect(stages.locator('option', { hasText: stage })).toHaveCount(1);
     }
   });
 });

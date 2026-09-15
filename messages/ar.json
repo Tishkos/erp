@@ -252,7 +252,9 @@
     "cash_flow": "قائمة التدفقات النقدية",
     "cash_accounts": "الحسابات النقدية",
     "payment_methods": "طرق الدفع",
-    "statement_mapping": "تخطيط القوائم المالية"
+    "statement_mapping": "تخطيط القوائم المالية",
+    "ap_invoice": "فاتورة شراء",
+    "ar_invoice": "فاتورة مبيعات"
   },
   "auth": {
     "email": "البريد الإلكتروني",
@@ -1450,7 +1452,9 @@
       "stated_in": "بالـ{currency}",
       "warehouses_report": "تقرير المخازن",
       "nothing_in_stock": "لا يوجد مخزون في أي مخزن.",
-      "as_it_stands": "المخزون الحالي مقوّماً بتكلفته"
+      "as_it_stands": "المخزون الحالي مقوّماً بتكلفته",
+      "all_items": "كل الأصناف",
+      "all_warehouses": "كل المخازن"
     },
     "accounts": {
       "new": "حساب جديد",
@@ -1768,7 +1772,9 @@
       "journal": "قيد اليومية",
       "no_suppliers": "أضف مورّداً أولاً.",
       "no_items": "أضف صنفاً مخزنياً أولاً.",
-      "no_warehouses": "أنشئ مخزناً أولاً."
+      "no_warehouses": "أنشئ مخزناً أولاً.",
+      "raised_by": "أنشأها",
+      "posted_by": "رحّلها"
     },
     "ar_invoices": {
       "title": "فواتير المبيعات",
@@ -1784,7 +1790,9 @@
       "any_supplier": "أي مورّد",
       "no_customers": "أضف عميلاً أولاً.",
       "no_items": "أضف صنفاً مخزنياً أولاً.",
-      "no_warehouses": "أنشئ مخزناً أولاً."
+      "no_warehouses": "أنشئ مخزناً أولاً.",
+      "raised_by": "أنشأها",
+      "carried_by": "اعتمدها"
     },
     "sales_returns": {
       "title": "مرتجعات المبيعات",

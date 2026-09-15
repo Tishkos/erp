@@ -63,7 +63,7 @@ export default async function ApInvoicePage({
   });
 
   if (!found) notFound();
-  const { invoice, lines } = found.document;
+  const { invoice, lines, raisedBy, postedBy } = found.document;
   const supplier = found.suppliers.find((row) => row.id === invoice.supplierId);
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
@@ -71,7 +71,12 @@ export default async function ApInvoicePage({
   // quantity x unit price less the discount, and a fourth copy of it could
   // disagree with the three figures beside it on the same row.
   const lineTotal = (line: { quantity: string; unitPrice: string; discountIqd: string }) =>
-    String(Number(line.quantity) * Number(line.unitPrice) - Number(line.discountIqd));
+    Number(line.quantity) * Number(line.unitPrice) - Number(line.discountIqd);
+
+  // Summed from the lines, as the Journal Entry sums its own. `totalIqd` is
+  // written at posting and is deliberately zero until then, so printing it on a
+  // draft shows nothing next to lines that plainly come to something.
+  const total = lines.reduce((sum, line) => sum + lineTotal(line), 0);
 
   const maySubmit = invoice.status === 'draft' && can(principal, 'submit', ap.PERMISSION_OBJECT);
   const mayPost = invoice.status === 'submitted' && can(principal, 'post', ap.PERMISSION_OBJECT);
@@ -93,6 +98,11 @@ export default async function ApInvoicePage({
     {
       label: column('due_date'),
       value: <bdi dir="ltr">{formatBusinessDate(invoice.dueDate, locale as Locale)}</bdi>,
+    },
+    { label: t('ap_invoices.raised_by'), value: <bdi dir="auto">{raisedBy ?? '—'}</bdi> },
+    {
+      label: t('ap_invoices.posted_by'),
+      value: <bdi dir="auto">{postedBy ?? t('none')}</bdi>,
     },
     // The note the invoice was raised with. It is on the record and was shown
     // nowhere, which is the one field a person actually writes prose into.
@@ -142,13 +152,13 @@ export default async function ApInvoicePage({
         }
         auditHref="#audit-log"
         auditLabel={t('history')}
-        documentType={page('ap_invoices')}
+        documentType={page('ap_invoice')}
         fields={fields}
         id="ap-invoice-document"
         linesCount={lines.length}
         linesTitle={t('ap_invoices.lines')}
         number={invoice.invoiceNo}
-        totals={[{ label: column('amount'), value: money(invoice.totalIqd) }]}
+        totals={[{ label: column('amount'), value: money(String(total)) }]}
       >
         <table aria-labelledby="ap-invoice-document-lines-heading" className={s.sapTable}>
           <thead>
@@ -193,7 +203,7 @@ export default async function ApInvoicePage({
                   <bdi dir="ltr">{money(line.discountIqd)}</bdi>
                 </td>
                 <td className={s.sapNum}>
-                  <bdi dir="ltr">{money(lineTotal(line))}</bdi>
+                  <bdi dir="ltr">{money(String(lineTotal(line)))}</bdi>
                 </td>
                 <td>
                   <bdi dir="ltr">{line.warehouseCode ?? '—'}</bdi>
@@ -205,7 +215,7 @@ export default async function ApInvoicePage({
             <tr className={s.sapTotalRow}>
               <td colSpan={6}>{t('reports.totals')}</td>
               <td className={s.sapNum}>
-                <bdi dir="ltr">{money(invoice.totalIqd)}</bdi>
+                <bdi dir="ltr">{money(String(total))}</bdi>
               </td>
               <td />
             </tr>

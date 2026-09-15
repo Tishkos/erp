@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Flash, admin as s, matches } from '@/components/admin';
+import { AdminPage, Flash, Grid, Select, Submit, SubmitRow, admin as s, matches } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -43,10 +43,11 @@ const NEXT: Record<string, shipments.ShipmentStatus | null> = {
 export default async function InTransitPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/inventory/in-transit')) notFound();
 
-  const [t, page, column, locale, context, outcome, params] = await Promise.all([
+  const [t, page, column, list, locale, context, outcome, params] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('column'),
+    getTranslations('list'),
     getLocale(),
     requireContext(),
     outcomeOf(searchParams),
@@ -89,21 +90,26 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
         savedLabel={t('saved')}
       />
 
-      <nav className="list__toolbar">
-        <Link className="action" href="/inventory/in-transit">
-          {t('in_transit.all')}
-        </Link>
-        {shipments.SHIPMENT_STATUSES.map((value) => (
-          <Link
-            className="action"
-            href={`/inventory/in-transit?status=${value}`}
-            key={value}
-            aria-current={status === value ? 'page' : undefined}
-          >
-            {label(value)}
-          </Link>
-        ))}
-      </nav>
+      {/* One picker rather than five links. Four stages is a list, and a list
+          belongs in a control the reader already knows — the same Select every
+          other screen filters with. */}
+      <form method="get">
+        <Grid>
+          <Select
+            defaultValue={status ?? ''}
+            emptyLabel={t('in_transit.all')}
+            label={column('status')}
+            name="status"
+            options={shipments.SHIPMENT_STATUSES.map((value) => ({
+              value,
+              label: label(value),
+            }))}
+          />
+        </Grid>
+        <SubmitRow>
+          <Submit label={list('search')} />
+        </SubmitRow>
+      </form>
 
       <div className={s.sapTableWrap}>
         <table className={s.sapTable}>

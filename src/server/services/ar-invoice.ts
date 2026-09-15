@@ -23,6 +23,7 @@
 import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
+  appUser,
   arInvoice,
   arInvoiceLine,
   costLayer,
@@ -955,7 +956,27 @@ export async function viewByNo(tx: Tx, invoiceNo: string) {
     .where(eq(arInvoice.invoiceNo, invoiceNo))
     .limit(1);
   if (!row) return null;
-  return view(tx, row.id);
+
+  const seen = await view(tx, row.id);
+
+  // Who raised it and who carried it, as the Journal Entry shows.
+  const people = await tx
+    .select({ id: appUser.id, displayName: appUser.displayName })
+    .from(appUser)
+    .where(
+      inArray(
+        appUser.id,
+        [seen.createdBy, seen.approvedBy, seen.postedBy].filter((id): id is string => Boolean(id)),
+      ),
+    );
+  const name = (id: string | null) =>
+    id ? (people.find((person) => person.id === id)?.displayName ?? null) : null;
+
+  return {
+    ...seen,
+    raisedBy: name(seen.createdBy),
+    carriedBy: name(seen.approvedBy ?? seen.postedBy),
+  };
 }
 
 export async function view(tx: Tx, id: string) {

@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { AdminPage, Field, Flash, Form, Grid, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { AdminPage, Field, Flash, Form, Grid, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { SearchablePicker } from '@/components/admin/searchable-picker';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { can } from '@domain/permissions';
@@ -72,26 +73,24 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: S
       ) : (
         <Form action={createPayment}>
           <Grid>
-            <label className="field">
-              <span className="field__label">{column('supplier_name')}</span>
-              <select className="field__input" name="supplier_id" required>
-                {suppliers.map((supplier) => (
-                  <option key={supplier.id} value={supplier.id}>
-                    {supplier.code} · {supplier.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span className="field__label">{t('supplier_payments.bank_account')}</span>
-              <select className="field__input" name="bank_cash_account_id" required>
-                {open.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.code} · {account.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <SearchablePicker
+              label={column('supplier_name')}
+              name="supplier_id"
+              options={suppliers.map((supplier) => ({
+                value: supplier.id,
+                label: `${supplier.code} · ${supplier.name}`,
+              }))}
+              required
+            />
+            <Select
+              label={t('supplier_payments.bank_account')}
+              name="bank_cash_account_id"
+              options={open.map((account) => ({
+                value: account.id,
+                label: `${account.code} · ${account.name}`,
+              }))}
+              required
+            />
             <Field
               defaultValue={today}
               label={column('posting_date')}

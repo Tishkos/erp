@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { AdminPage, Field, Flash, Form, Grid, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { AdminPage, Field, Flash, Form, Grid, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { SearchablePicker } from '@/components/admin/searchable-picker';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { can } from '@domain/permissions';
@@ -72,26 +73,24 @@ export default async function NewReceiptPage({ searchParams }: { searchParams: S
       ) : (
         <Form action={createReceipt}>
           <Grid>
-            <label className="field">
-              <span className="field__label">{column('customer_name')}</span>
-              <select className="field__input" name="customer_id" required>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.code} · {customer.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span className="field__label">{t('customer_receipts.bank_account')}</span>
-              <select className="field__input" name="bank_cash_account_id" required>
-                {open.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.code} · {account.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <SearchablePicker
+              label={column('customer_name')}
+              name="customer_id"
+              options={customers.map((customer) => ({
+                value: customer.id,
+                label: `${customer.code} · ${customer.name}`,
+              }))}
+              required
+            />
+            <Select
+              label={t('customer_receipts.bank_account')}
+              name="bank_cash_account_id"
+              options={open.map((account) => ({
+                value: account.id,
+                label: `${account.code} · ${account.name}`,
+              }))}
+              required
+            />
             <Field
               defaultValue={today}
               label={column('posting_date')}
