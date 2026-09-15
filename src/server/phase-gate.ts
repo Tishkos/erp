@@ -77,7 +77,27 @@ const PHASE_2: readonly string[] = [
   '/master-data/payment-methods',
 ];
 
-const VISIBLE: ReadonlySet<string> = new Set([...PHASE_0, ...PHASE_1, ...PHASE_2]);
+/**
+ * The Operations Build — the sponsor's own specification (2026-09-12), built
+ * block by block on Phase 2's master data.
+ *
+ * Not a numbered phase, and deliberately not counted as one below: the phases
+ * arrive as documents the sponsor accepts as a set, and this arrived as its own
+ * list of eleven blocks to be accepted one at a time. A route joins this list
+ * on the day its screen reads real data — never before, because a route that is
+ * visible and unbuilt is a menu item that leads to an apology.
+ */
+export const OPERATIONS: readonly string[] = [
+  // Block 7 — the Warehouses Report.
+  '/inventory/fifo-valuation',
+];
+
+const VISIBLE: ReadonlySet<string> = new Set([
+  ...PHASE_0,
+  ...PHASE_1,
+  ...PHASE_2,
+  ...OPERATIONS,
+]);
 
 /**
  * The phase the system is at, as the footer says it.
