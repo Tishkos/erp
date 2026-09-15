@@ -85,9 +85,11 @@ export function DocumentWindow({
           <div className={admin.sapFields}>
             {fields.map((field) => (
               <div
-                className={admin.sapField}
+                // `sapWide` rather than an inline grid span: the Journal Entry
+                // marks a full-width field with that class, and a second way of
+                // saying the same thing is a second thing to keep in step.
+                className={field.wide ? `${admin.sapField} ${admin.sapWide}` : admin.sapField}
                 key={field.label}
-                {...(field.wide ? { style: { gridColumn: '1 / -1' } } : {})}
               >
                 <span className={admin.sapLabel}>{field.label}</span>
                 {field.status ? (

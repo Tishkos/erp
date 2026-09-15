@@ -286,8 +286,26 @@ export async function create(
     throw new Error('An invoice with no lines charges nothing. Add what is being charged for.');
   }
 
-  // §15 — the non-PO route costs a justification and a second approver.
-  if (!input.purchaseOrderId) {
+  /*
+   * §15 — the non-PO route costs a justification and a second approver.
+   *
+   * Unless the invoice receives its own stock. The rule exists because "the
+   * three-way match cannot protect a charge that no order and no receipt
+   * describe" — and Operations block 4's invoice describes the receipt: every
+   * line names the warehouse its goods arrive in, and posting puts them there.
+   * The evidence §15 asks for is the document being approved.
+   *
+   * What is left unguarded is the charge, and block 4 holds that behind "the
+   * invoice is not posted until CEO approval" — a separate verb the person who
+   * raised it does not hold. So the control is not removed, it is the one the
+   * sponsor specified.
+   *
+   * Narrow on purpose: one service line among the stock lines and the evidence
+   * is owed again, because that line has no receipt of any kind behind it.
+   */
+  const receivesItsOwnStock = input.lines.every((line) => Boolean(line.warehouseCode));
+
+  if (!input.purchaseOrderId && !receivesItsOwnStock) {
     if (
       !input.nonPoJustification ||
       input.nonPoJustification.trim().length === 0 ||
@@ -353,6 +371,10 @@ export async function create(
       dueDate: input.dueDate,
       currency: input.currency ?? 'IQD',
       note: input.note ?? null,
+      // The route this invoice took, recorded on the header so the §15 CHECK
+      // can read one field rather than trust the application to have looked at
+      // the lines.
+      receivesOwnStock: receivesItsOwnStock,
       nonPoJustification: input.nonPoJustification?.trim() ?? null,
       nonPoApprovedBy: input.nonPoApprovedBy ?? null,
       nonPoApprovedAt: input.nonPoApprovedBy ? new Date() : null,

@@ -841,6 +841,13 @@
       "when": 1795880000000,
       "tag": "0195_ops07_warehouse_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1795900000000,
+      "tag": "0196_ops04_invoice_is_its_own_receipt",
+      "breakpoints": true
     }
   ]
 }

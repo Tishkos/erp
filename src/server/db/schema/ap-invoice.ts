@@ -172,6 +172,12 @@ export const apInvoice = pgTable(
     duplicateApprovalReason: text('duplicate_approval_reason'),
 
     /** §15 — the non-PO route's evidence and stronger approval. */
+    /**
+     * True when every line names a warehouse, so the invoice is itself the
+     * receipt and §15's non-PO evidence is the document being approved —
+     * Operations block 4. Set by the service from the lines it just wrote.
+     */
+    receivesOwnStock: boolean('receives_own_stock').notNull().default(false),
     nonPoJustification: text('non_po_justification'),
     nonPoApprovedBy: uuid('non_po_approved_by').references(() => appUser.id),
     nonPoApprovedAt: timestamp('non_po_approved_at', { withTimezone: true }),
@@ -223,9 +229,14 @@ export const apInvoice = pgTable(
 
     // §15 — an invoice with no purchase order takes the stronger route: it
     // states why, and somebody other than the raiser has approved that.
+    //
+    // Unless it receives its own stock, when the receipt §15 wants evidence of
+    // is this document. The charge is then held by block 4's own control: "the
+    // invoice is not posted until CEO approval", which is a separate verb.
     check(
       'ap_invoice_non_po_needs_justification',
       sql`${t.purchaseOrderId} is not null
+          or ${t.receivesOwnStock}
           or (coalesce(btrim(${t.nonPoJustification}), '') <> ''
               and ${t.nonPoApprovedBy} is not null
               and ${t.nonPoApprovedAt} is not null)`,

@@ -61,10 +61,11 @@ function linesFrom(formData: FormData): ap.InvoiceLineInput[] {
 /**
  * Raise the invoice — Operations block 4.
  *
- * The §15 non-PO route, because the sponsor's purchase invoice does not come
- * from a purchase order: it is the first document in the chain and it brings
- * the goods in itself. That route costs a justification, which is recorded as
- * what it is rather than left blank.
+ * No purchase order, because the sponsor's invoice is the first document in the
+ * chain: it brings the goods in itself and names the warehouse each line lands
+ * in. §15 asks a non-PO invoice for a justification and a second approver; an
+ * invoice that receives its own stock already carries the receipt evidence §15
+ * wants, and what remains is held by "not posted until CEO approval".
  */
 export async function createApInvoice(formData: FormData): Promise<void> {
   const outcome = await runAdmin(async (tx, ctx) => {
@@ -76,8 +77,6 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       branchCode: ctx.branchCode,
       invoiceDate: text(formData, 'invoice_date'),
       dueDate: text(formData, 'due_date'),
-      nonPoJustification: 'Raised directly from the supplier’s invoice (Operations block 4).',
-      nonPoApprovedBy: ctx.principal.userId,
       note: text(formData, 'note').trim() || null,
       lines,
     });

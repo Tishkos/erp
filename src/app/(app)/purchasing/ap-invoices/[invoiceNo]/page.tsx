@@ -94,6 +94,13 @@ export default async function ApInvoicePage({
       label: column('due_date'),
       value: <bdi dir="ltr">{formatBusinessDate(invoice.dueDate, locale as Locale)}</bdi>,
     },
+    // The note the invoice was raised with. It is on the record and was shown
+    // nowhere, which is the one field a person actually writes prose into.
+    {
+      label: t('journals.description'),
+      value: <bdi dir="auto">{invoice.note ?? '—'}</bdi>,
+      wide: true,
+    },
   ];
 
   return (

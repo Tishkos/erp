@@ -367,3 +367,108 @@ describe('ops 4 · a purchase invoice increases stock in the warehouse', () => {
     expect(Number(position.onHand)).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('ops 4 · an invoice that receives its own stock is its own evidence', () => {
+  /*
+   * §15 asks a non-PO invoice for a written justification and a second
+   * approver, because "the three-way match cannot protect a charge that no
+   * order and no receipt describe". The sponsor's invoice describes the
+   * receipt: it names the warehouse each line arrives in and posting puts them
+   * there.
+   *
+   * Without this, block 4's screen could not raise a single invoice — the form
+   * has one person on it, and the rule refuses an approver who is the raiser.
+   * It was not caught because the browser test checked that the form rendered
+   * and never pressed Create.
+   */
+  it('takes a stock invoice from one person, with no second approver', async () => {
+    const made = await withScope(scope(clerk), (tx) =>
+      ap.create(tx, clerk, {
+        supplierId,
+        supplierInvoiceNo: 'EVIDENCE-1',
+        purchaseOrderId: null,
+        branchCode: BAGHDAD,
+        invoiceDate: ON,
+        dueDate: '2026-05-01',
+        lines: [
+          {
+            itemCode: PANEL,
+            description: 'Solar Panel 550W',
+            quantity: qty('4'),
+            unitPriceIqd: price('100000'),
+            uomCode: 'EA',
+            isInventory: true,
+            warehouseCode: WAREHOUSE,
+          },
+        ],
+      }),
+    );
+
+    expect(made.invoiceNo).toBeTruthy();
+  });
+
+  it('still asks for evidence when a line receives nothing', async () => {
+    // One service line among the stock lines and the evidence is owed again:
+    // that line has no receipt of any kind behind it, which is the case §15 was
+    // written for.
+    await expect(
+      withScope(scope(clerk), (tx) =>
+        ap.create(tx, clerk, {
+          supplierId,
+          supplierInvoiceNo: 'EVIDENCE-2',
+          purchaseOrderId: null,
+          branchCode: BAGHDAD,
+          invoiceDate: ON,
+          dueDate: '2026-05-01',
+          lines: [
+            {
+              itemCode: PANEL,
+              description: 'Solar Panel 550W',
+              quantity: qty('4'),
+              unitPriceIqd: price('100000'),
+              uomCode: 'EA',
+              isInventory: true,
+              warehouseCode: WAREHOUSE,
+            },
+            {
+              description: 'Delivery charge',
+              quantity: qty('1'),
+              unitPriceIqd: price('50000'),
+              uomCode: 'EA',
+              isInventory: false,
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('still refuses the raiser as their own second approver', async () => {
+    // The relaxation is about receipts, not about who signs. An invoice with
+    // no warehouse on any line is the case the rule guards, and it still does.
+    await expect(
+      withScope(scope(clerk), (tx) =>
+        ap.create(tx, clerk, {
+          supplierId,
+          supplierInvoiceNo: 'EVIDENCE-3',
+          purchaseOrderId: null,
+          branchCode: BAGHDAD,
+          invoiceDate: ON,
+          dueDate: '2026-05-01',
+          nonPoJustification: 'Bought on the spot.',
+          nonPoApprovedBy: clerk.principal.userId,
+          lines: [
+            {
+              description: 'Consultancy',
+              quantity: qty('1'),
+              unitPriceIqd: price('250000'),
+              uomCode: 'EA',
+              isInventory: false,
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+});
