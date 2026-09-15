@@ -404,7 +404,9 @@
     "supplier_name": "اسم المورّد",
     "discount": "الخصم",
     "customer_code": "رمز العميل",
-    "customer_name": "اسم العميل"
+    "customer_name": "اسم العميل",
+    "bank_code": "رمز البنك/الصندوق",
+    "bank_name": "اسم البنك/الصندوق"
   },
   "list": {
     "search": "بحث",
@@ -1821,6 +1823,44 @@
       "ship": "إرسال",
       "no_invoices": "رحّل فاتورة شراء أولاً.",
       "pick_invoice": "اختر الفاتورة التي يتم الإرجاع مقابلها."
+    },
+    "supplier_payments": {
+      "title": "المدفوعات",
+      "subtitle": "المبالغ المدفوعة للموردين",
+      "new": "دفعة جديدة",
+      "none": "لا توجد مدفوعات بعد.",
+      "amount": "المبلغ",
+      "reference": "المرجع",
+      "allocate": "تخصيص",
+      "allocated": "المخصص",
+      "unallocated": "غير المخصص",
+      "outstanding": "المتبقي",
+      "invoice": "فاتورة المورّد",
+      "post": "ترحيل",
+      "approve": "اعتماد",
+      "no_suppliers": "أضف مورّداً أولاً.",
+      "no_accounts": "أنشئ حساباً بنكياً أو نقدياً أولاً.",
+      "no_open_invoices": "لا يوجد متبقٍ لهذا المورّد.",
+      "bank_account": "اسم البنك/الصندوق"
+    },
+    "customer_receipts": {
+      "title": "المقبوضات",
+      "subtitle": "المبالغ المقبوضة من العملاء",
+      "new": "مقبوض جديد",
+      "none": "لا توجد مقبوضات بعد.",
+      "amount": "المبلغ",
+      "reference": "المرجع",
+      "allocate": "تخصيص",
+      "allocated": "المخصص",
+      "unallocated": "غير المخصص",
+      "outstanding": "المتبقي",
+      "invoice": "فاتورة العميل",
+      "post": "ترحيل",
+      "approve": "اعتماد",
+      "no_suppliers": "أضف عميلاً أولاً.",
+      "no_accounts": "أنشئ حساباً بنكياً أو نقدياً أولاً.",
+      "no_open_invoices": "لا يوجد متبقٍ لهذا العميل.",
+      "bank_account": "اسم البنك/الصندوق"
     }
   },
   "profile": {

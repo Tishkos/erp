@@ -215,8 +215,12 @@ describe('every screen has one address', () => {
       '/purchasing/ap-invoices',
       // Block 10 — Purchase Returns.
       '/purchasing/goods-returns',
+      // Block 6 — Payments and Receipts.
+      '/purchasing/supplier-payments',
       // Block 5 — the Sales Invoice.
       '/sales/ar-invoices',
+      // Block 6 — Receipts.
+      '/sales/customer-receipts',
       // Block 9 — Sales Returns.
       '/sales/sales-returns',
     ]);

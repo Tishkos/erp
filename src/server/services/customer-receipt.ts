@@ -21,7 +21,7 @@
  * an unidentified receipt is fully recorded, fully reconciled to the bank, and
  * visibly unresolved, which is what §16 asks for.
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   arInvoice,
@@ -525,6 +525,70 @@ async function codeOf(tx: Tx, businessPartnerId: string): Promise<string | null>
     .where(eq(businessPartner.id, businessPartnerId))
     .limit(1);
   return partner?.code ?? null;
+}
+
+/**
+ * The register — Operations block 6's list of Receipts.
+ *
+ *   Receipts   Customer Name; Customer Code; Date; Bank/Cash Name;
+ *              Bank/Cash Code; Amount; Reference; Customer Invoice.
+ *
+ * The customer may be null. §16 allows money to arrive before anybody knows
+ * whose it is, and a receipt that pretended otherwise would settle the wrong
+ * person's debt.
+ */
+export async function list(tx: Tx) {
+  return tx
+    .select({
+      id: customerReceipt.id,
+      receiptNo: customerReceipt.receiptNo,
+      customerName: businessPartner.legalName,
+      customerCode: businessPartner.code,
+      bankName: bankCashAccount.name,
+      bankCode: bankCashAccount.code,
+      receiptDate: customerReceipt.receiptDate,
+      amountIqd: customerReceipt.amountIqd,
+      allocatedIqd: customerReceipt.allocatedIqd,
+      bankReference: customerReceipt.bankReference,
+      status: customerReceipt.status,
+      branchCode: customerReceipt.branchCode,
+    })
+    .from(customerReceipt)
+    .leftJoin(businessPartner, eq(businessPartner.id, customerReceipt.customerId))
+    .leftJoin(bankCashAccount, eq(bankCashAccount.id, customerReceipt.bankCashAccountId))
+    .orderBy(desc(customerReceipt.receiptDate), desc(customerReceipt.receiptNo));
+}
+
+export async function viewByNo(tx: Tx, receiptNo: string) {
+  const [row] = await tx
+    .select({ id: customerReceipt.id })
+    .from(customerReceipt)
+    .where(eq(customerReceipt.receiptNo, receiptNo))
+    .limit(1);
+  if (!row) return null;
+  return view(tx, row.id);
+}
+
+/** A customer's invoices with something still owed on them, oldest first. */
+export async function openInvoicesFor(tx: Tx, customerId: string) {
+  const rows = await tx
+    .select({
+      id: arInvoice.id,
+      invoiceNo: arInvoice.invoiceNo,
+      dueDate: arInvoice.dueDate,
+      netIqd: arInvoice.netIqd,
+      allocatedIqd: arInvoice.allocatedIqd,
+    })
+    .from(arInvoice)
+    .where(and(eq(arInvoice.customerId, customerId), inArray(arInvoice.status, ['posted', 'settled'])))
+    .orderBy(asc(arInvoice.dueDate));
+
+  return rows
+    .map((invoice) => ({
+      ...invoice,
+      outstanding: parseDecimal(invoice.netIqd, 4n) - parseDecimal(invoice.allocatedIqd, 4n),
+    }))
+    .filter((invoice) => invoice.outstanding > 0n);
 }
 
 export async function view(tx: Tx, id: string) {

@@ -404,7 +404,9 @@
     "supplier_name": "Supplier Name",
     "discount": "Discount",
     "customer_code": "Customer Code",
-    "customer_name": "Customer Name"
+    "customer_name": "Customer Name",
+    "bank_code": "Bank/Cash Code",
+    "bank_name": "Bank/Cash Name"
   },
   "list": {
     "search": "Search",
@@ -1821,6 +1823,44 @@
       "ship": "Send back",
       "no_invoices": "Post a purchase invoice first.",
       "pick_invoice": "Choose the invoice being returned against."
+    },
+    "supplier_payments": {
+      "title": "Payments",
+      "subtitle": "Money paid to suppliers",
+      "new": "New payment",
+      "none": "No payments yet.",
+      "amount": "Amount",
+      "reference": "Reference",
+      "allocate": "Allocate",
+      "allocated": "Allocated",
+      "unallocated": "Unallocated",
+      "outstanding": "Outstanding",
+      "invoice": "Supplier Invoice",
+      "post": "Post",
+      "approve": "Approve",
+      "no_suppliers": "Add a supplier first.",
+      "no_accounts": "Set up a bank or cash account first.",
+      "no_open_invoices": "Nothing outstanding for this supplier.",
+      "bank_account": "Bank/Cash Name"
+    },
+    "customer_receipts": {
+      "title": "Receipts",
+      "subtitle": "Money received from customers",
+      "new": "New receipt",
+      "none": "No receipts yet.",
+      "amount": "Amount",
+      "reference": "Reference",
+      "allocate": "Allocate",
+      "allocated": "Allocated",
+      "unallocated": "Unallocated",
+      "outstanding": "Outstanding",
+      "invoice": "Customer Invoice",
+      "post": "Post",
+      "approve": "Approve",
+      "no_suppliers": "Add a customer first.",
+      "no_accounts": "Set up a bank or cash account first.",
+      "no_open_invoices": "Nothing outstanding for this customer.",
+      "bank_account": "Bank/Cash Name"
     }
   },
   "profile": {

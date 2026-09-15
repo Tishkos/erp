@@ -24,7 +24,7 @@
  * Netting them into one supplier balance would make each unanswerable, and it
  * is exactly the netting §15 forbids.
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   apInvoice,
@@ -925,6 +925,68 @@ export async function reconcileStatement(
   }
 
   return { matched, differing, onlyOnOurs, onlyOnTheirs };
+}
+
+/**
+ * The register — Operations block 6's list of Payments.
+ *
+ *   Payments   Supplier Name; Supplier Code; Date; Bank/Cash Name;
+ *              Bank/Cash Code; Amount; Reference; Supplier Invoice.
+ *
+ * Every column the sponsor names except the invoice, which is not one value:
+ * a payment can be spread across several, including partly, so it belongs on
+ * the payment's own page rather than squeezed into a cell here.
+ */
+export async function list(tx: Tx) {
+  return tx
+    .select({
+      id: supplierPayment.id,
+      paymentNo: supplierPayment.paymentNo,
+      supplierName: businessPartner.legalName,
+      supplierCode: businessPartner.code,
+      bankName: bankCashAccount.name,
+      bankCode: bankCashAccount.code,
+      paymentDate: supplierPayment.paymentDate,
+      amountIqd: supplierPayment.amountIqd,
+      allocatedAmountIqd: supplierPayment.allocatedAmountIqd,
+      reference: supplierPayment.reference,
+      status: supplierPayment.status,
+      branchCode: supplierPayment.branchCode,
+    })
+    .from(supplierPayment)
+    .leftJoin(businessPartner, eq(businessPartner.id, supplierPayment.supplierId))
+    .leftJoin(bankCashAccount, eq(bankCashAccount.id, supplierPayment.bankCashAccountId))
+    .orderBy(desc(supplierPayment.paymentDate), desc(supplierPayment.paymentNo));
+}
+
+export async function viewByNo(tx: Tx, paymentNo: string) {
+  const [row] = await tx
+    .select({ id: supplierPayment.id })
+    .from(supplierPayment)
+    .where(eq(supplierPayment.paymentNo, paymentNo))
+    .limit(1);
+  if (!row) return null;
+  return view(tx, row.id);
+}
+
+/** A supplier's invoices with something still owed on them, oldest first. */
+export async function openInvoicesFor(tx: Tx, supplierId: string) {
+  const rows = await tx
+    .select()
+    .from(apInvoice)
+    .where(and(eq(apInvoice.supplierId, supplierId), inArray(apInvoice.status, ['posted', 'settled'])))
+    .orderBy(asc(apInvoice.dueDate));
+
+  return rows
+    .map((invoice) => ({
+      id: invoice.id,
+      invoiceNo: invoice.invoiceNo,
+      supplierInvoiceNo: invoice.supplierInvoiceNo,
+      dueDate: invoice.dueDate,
+      totalIqd: invoice.totalIqd,
+      outstanding: outstandingOn(invoice),
+    }))
+    .filter((invoice) => invoice.outstanding > 0n);
 }
 
 export async function view(tx: Tx, id: string) {

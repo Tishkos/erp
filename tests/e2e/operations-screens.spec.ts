@@ -226,4 +226,44 @@ test.describe('the Operations Build screens open', () => {
     await expect(offset.locator('option')).toHaveCount(2);
     await expect(offset.locator('option').first()).toHaveText('Accounts Payable');
   });
+
+  test('block 6 · Payments and Receipts open, with the bank columns', async ({ page }) => {
+    await page.goto('/purchasing/supplier-payments');
+    await expect(page.getByRole('heading', { name: 'Payments' }).first()).toBeVisible();
+    for (const column of ['Supplier Code', 'Supplier Name', 'Bank/Cash Code', 'Bank/Cash Name']) {
+      await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
+    }
+
+    await page.goto('/sales/customer-receipts');
+    await expect(page.getByRole('heading', { name: 'Receipts' }).first()).toBeVisible();
+    for (const column of ['Customer Code', 'Customer Name', 'Bank/Cash Code', 'Bank/Cash Name']) {
+      await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
+    }
+  });
+
+  test('block 6 · a payment can be recorded against a bank account', async ({ page }) => {
+    await page.goto('/purchasing/supplier-payments/new');
+    await expect(page.getByRole('heading', { name: 'New payment' })).toBeVisible();
+
+    // Both pickers have something in them, or the screen is built and unusable.
+    await expect(page.locator('select[name="supplier_id"] option')).not.toHaveCount(0);
+    const accounts = await page.locator('select[name="bank_cash_account_id"] option').count();
+    if (accounts === 0) {
+      await expect(page.getByText('Set up a bank or cash account first.')).toBeVisible();
+      return;
+    }
+
+    await page.getByLabel('Amount').fill('1000');
+    await page.getByRole('button', { name: 'Create' }).click();
+
+    // Wait for the navigation rather than for the text. The record page may be
+    // compiling for the first time, and an assertion that starts its own clock
+    // fails on a cold build while passing on every warm one — which is a flaky
+    // test, and a flaky test gets muted.
+    await page.waitForURL(/\/purchasing\/supplier-payments\/PAY-/, { timeout: 60_000 });
+
+    // The payment exists and says what is still unallocated, which is the whole
+    // of it until somebody puts it against an invoice.
+    await expect(page.getByText('Unallocated')).toBeVisible({ timeout: 30_000 });
+  });
 });
