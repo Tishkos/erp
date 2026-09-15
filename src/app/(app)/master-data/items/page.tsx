@@ -23,7 +23,7 @@ import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
-import { formatQuantity } from '@domain/uom';
+import { formatQuantity, parseQuantity } from '@domain/uom';
 import * as items from '@/server/services/items';
 import * as uom from '@/server/services/units-of-measure';
 import { createItem } from './actions';
@@ -175,7 +175,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
                       rather than a zero. */}
                   <td>
                     {row.isStock ? (
-                      <bdi dir="ltr">{formatQuantity(BigInt(row.onHand))}</bdi>
+                      <bdi dir="ltr">{formatQuantity(parseQuantity(row.onHand))}</bdi>
                     ) : (
                       '—'
                     )}

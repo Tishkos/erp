@@ -402,7 +402,9 @@
     "total_price": "Total Price",
     "supplier_code": "Supplier Code",
     "supplier_name": "Supplier Name",
-    "discount": "Discount"
+    "discount": "Discount",
+    "customer_code": "Customer Code",
+    "customer_name": "Customer Name"
   },
   "list": {
     "search": "Search",
@@ -1763,6 +1765,22 @@
       "awaiting": "Waiting for approval.",
       "journal": "Journal entry",
       "no_suppliers": "Add a supplier first.",
+      "no_items": "Add a stock item first.",
+      "no_warehouses": "Set up a warehouse first."
+    },
+    "ar_invoices": {
+      "title": "Sales Invoices",
+      "subtitle": "What the company has billed",
+      "new": "New invoice",
+      "none": "No sales invoices yet.",
+      "lines": "Lines",
+      "line_hint": "Leave a row blank to skip it.",
+      "approve": "Approve",
+      "post": "Post",
+      "posted_note": "Posted to the ledger.",
+      "journal": "Journal entry",
+      "any_supplier": "Any supplier",
+      "no_customers": "Add a customer first.",
       "no_items": "Add a stock item first.",
       "no_warehouses": "Set up a warehouse first."
     }

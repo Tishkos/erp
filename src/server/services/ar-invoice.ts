@@ -20,7 +20,7 @@
  * requires the price-list control to survive the UI *and* the API, and the way
  * it survives both is by there being no field to carry an override.
  */
-import { and, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   arInvoice,
@@ -921,6 +921,41 @@ async function load(tx: Tx, id: string) {
   const [invoice] = await tx.select().from(arInvoice).where(eq(arInvoice.id, id)).limit(1);
   if (!invoice) throw new Error(`No A/R invoice with id '${id}'.`);
   return invoice;
+}
+
+/**
+ * The register — Operations block 5's list of Sales Invoices.
+ *
+ * The customer's name is joined rather than copied onto the invoice, so a
+ * customer renamed this year still reads correctly on last year's invoice.
+ */
+export async function list(tx: Tx) {
+  return tx
+    .select({
+      id: arInvoice.id,
+      invoiceNo: arInvoice.invoiceNo,
+      customerName: businessPartner.legalName,
+      customerCode: businessPartner.code,
+      invoiceDate: arInvoice.invoiceDate,
+      dueDate: arInvoice.dueDate,
+      netIqd: arInvoice.netIqd,
+      status: arInvoice.status,
+      branchCode: arInvoice.branchCode,
+    })
+    .from(arInvoice)
+    .leftJoin(businessPartner, eq(businessPartner.id, arInvoice.customerId))
+    .orderBy(desc(arInvoice.invoiceDate), desc(arInvoice.invoiceNo));
+}
+
+/** The invoice a person is looking at, found by the number printed on it. */
+export async function viewByNo(tx: Tx, invoiceNo: string) {
+  const [row] = await tx
+    .select({ id: arInvoice.id })
+    .from(arInvoice)
+    .where(eq(arInvoice.invoiceNo, invoiceNo))
+    .limit(1);
+  if (!row) return null;
+  return view(tx, row.id);
 }
 
 export async function view(tx: Tx, id: string) {

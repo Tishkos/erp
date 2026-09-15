@@ -93,6 +93,8 @@ export const OPERATIONS: readonly string[] = [
   '/master-data/warehouses',
   // Block 4 — the Purchase Invoice.
   '/purchasing/ap-invoices',
+  // Block 5 — the Sales Invoice.
+  '/sales/ar-invoices',
 ];
 
 const VISIBLE: ReadonlySet<string> = new Set([

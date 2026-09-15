@@ -110,4 +110,63 @@ test.describe('the Operations Build screens open', () => {
     await expect(page.locator('select[name="item_code_0"] option')).not.toHaveCount(1);
     await expect(page.locator('select[name="warehouse_code_0"] option')).not.toHaveCount(0);
   });
+
+  test('block 5 · the Sales Invoice register opens', async ({ page }) => {
+    await page.goto('/sales/ar-invoices');
+
+    await expect(page.getByRole('heading', { name: 'Sales Invoices' }).first()).toBeVisible();
+    for (const column of ['Posting Date', 'Due Date', 'Customer Code', 'Customer Name']) {
+      await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
+    }
+  });
+
+  test('block 5 · the supplier column follows the item that was chosen', async ({ page }) => {
+    // Block 1's link is what block 5's rule reads, so the two are proved
+    // together: link a supplier to an item, then watch the invoice's supplier
+    // field come alive when that item is chosen. Without the link there is
+    // nothing for the field to show, which is the state the assertion below
+    // starts from.
+    await page.goto('/master-data/items/ITM-SEED');
+    await expect(page.getByRole('heading', { level: 1, name: /Seed Cable/ })).toBeVisible();
+
+    // Idempotent: a previous run may already have linked one, and the screen
+    // then offers nothing left to link. Either way the item ends up with a
+    // supplier, which is all the next step needs.
+    const picker = page.getByLabel('Add a supplier');
+    const choice = picker.locator('option:not([value=""])').first();
+    if ((await choice.count()) > 0) {
+      // By value, not by index: the picker has no placeholder row, so index 1
+      // is past the end when exactly one supplier is offered.
+      await picker.selectOption((await choice.getAttribute('value'))!);
+      await page.getByRole('button', { name: 'Link supplier' }).click();
+    }
+    await expect(page.getByRole('heading', { name: /Bought from \([1-9]/ })).toBeVisible();
+
+    await page.goto('/sales/ar-invoices/new');
+    await expect(page.getByRole('heading', { name: 'New invoice' })).toBeVisible();
+
+    // The sponsor's line columns, Supplier among them — it is on the line and
+    // not the header because the same item bought from two suppliers is two
+    // pools of stock at two costs.
+    for (const column of ['Quantity', 'Unit Price', 'Discount', 'Supplier']) {
+      await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
+    }
+
+    const supplier = page.locator('select[name="supplier_id_0"]');
+    const item = page.locator('select[name="item_code_0"]');
+
+    // Nothing chosen: the column is there and has nothing to offer, which is
+    // the item's doing rather than a fault, so it is disabled rather than gone.
+    await expect(supplier).toBeDisabled();
+
+    // "When an item is selected, the supplier field shows the supplier(s)
+    // linked to that item." Choosing one is what makes the field live.
+    const firstItem = await item.locator('option:not([value=""])').first().getAttribute('value');
+    await item.selectOption(firstItem!);
+    await expect(supplier).toBeEnabled();
+
+    // Blank stays on the list: it means the oldest stock of any supplier, which
+    // is a real answer and not an empty one.
+    await expect(supplier.locator('option').first()).toHaveText('Any supplier');
+  });
 });

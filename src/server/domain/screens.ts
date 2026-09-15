@@ -406,6 +406,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/master-data/warehouses',
   // Block 4 — the Purchase Invoice.
   '/purchasing/ap-invoices',
+  // Block 5 — the Sales Invoice.
+  '/sales/ar-invoices',
 ]);
 
 export function isDelivered(route: string): boolean {

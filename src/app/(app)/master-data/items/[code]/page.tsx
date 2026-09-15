@@ -25,7 +25,7 @@ import { can } from '@domain/permissions';
 import { AdminNotFoundError } from '@/server/services/administration';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
-import { formatQuantity } from '@domain/uom';
+import { formatQuantity, parseQuantity } from '@domain/uom';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as items from '@/server/services/items';
 import * as uom from '@/server/services/units-of-measure';
@@ -181,11 +181,11 @@ export default async function ItemPage({
                         {line.warehouseName ? ` · ${line.warehouseName}` : ''}
                       </span>
                       <span>
-                        <bdi dir="ltr">{formatQuantity(BigInt(line.onHand))}</bdi> {row.baseUomCode}
-                        {BigInt(line.reserved) > 0n ? (
+                        <bdi dir="ltr">{formatQuantity(parseQuantity(line.onHand))}</bdi> {row.baseUomCode}
+                        {parseQuantity(line.reserved) > 0n ? (
                           <span className="muted">
                             {' '}
-                            ({t('items.reserved', { quantity: formatQuantity(BigInt(line.reserved)) })})
+                            ({t('items.reserved', { quantity: formatQuantity(parseQuantity(line.reserved)) })})
                           </span>
                         ) : null}
                       </span>
