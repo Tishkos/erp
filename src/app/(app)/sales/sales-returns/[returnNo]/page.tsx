@@ -171,7 +171,7 @@ export default async function SalesReturnPage({
                 <td>
                   <bdi dir="ltr">{line.lineNo}</bdi>
                 </td>
-                <td>
+                <td className={s.sapAccountCell}>
                   <bdi dir="ltr">{line.itemCode}</bdi>
                 </td>
                 <td>

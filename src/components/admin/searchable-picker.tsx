@@ -30,6 +30,7 @@ export function SearchablePicker({
   defaultValue,
   required,
   placeholder,
+  bare = false,
 }: {
   readonly label: string;
   readonly name: string;
@@ -37,6 +38,13 @@ export function SearchablePicker({
   readonly defaultValue?: string | undefined;
   readonly required?: boolean | undefined;
   readonly placeholder?: string | undefined;
+  /**
+   * Render the control alone, with no label or field wrapper.
+   *
+   * For a document window, which supplies both and styles the control itself —
+   * the form chrome here would be a second, differently-sized box inside it.
+   */
+  readonly bare?: boolean;
 }) {
   const listId = useId();
   const inputId = useId();
@@ -51,19 +59,12 @@ export function SearchablePicker({
   // Electrico" is, and until the text says so there is nothing to submit.
   const chosen = options.find((option) => option.label === text)?.value ?? '';
 
-  return (
-    <div className={styles.field}>
-      <label className={styles.label} htmlFor={inputId}>
-        {label}
-        {required ? (
-          <span aria-hidden="true" className={styles.required}>
-            *
-          </span>
-        ) : null}
-      </label>
+  const control = (
+    <>
       <input
+        aria-label={bare ? label : undefined}
         autoComplete="off"
-        className={styles.input}
+        {...(bare ? {} : { className: styles.input })}
         dir="auto"
         id={inputId}
         list={listId}
@@ -78,6 +79,22 @@ export function SearchablePicker({
         ))}
       </datalist>
       <input name={name} type="hidden" value={chosen} />
+    </>
+  );
+
+  if (bare) return control;
+
+  return (
+    <div className={styles.field}>
+      <label className={styles.label} htmlFor={inputId}>
+        {label}
+        {required ? (
+          <span aria-hidden="true" className={styles.required}>
+            *
+          </span>
+        ) : null}
+      </label>
+      {control}
     </div>
   );
 }

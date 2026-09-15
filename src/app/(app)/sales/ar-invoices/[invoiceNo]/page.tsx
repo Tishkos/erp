@@ -193,7 +193,7 @@ export default async function ArInvoicePage({
                 <td>
                   <bdi dir="ltr">{line.lineNo}</bdi>
                 </td>
-                <td>
+                <td className={s.sapAccountCell}>
                   <bdi dir="ltr">{line.itemCode}</bdi>
                 </td>
                 <td>

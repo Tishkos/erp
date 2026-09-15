@@ -187,7 +187,7 @@ export default async function ApInvoicePage({
                 <td>
                   <bdi dir="ltr">{line.lineNo}</bdi>
                 </td>
-                <td>
+                <td className={s.sapAccountCell}>
                   <bdi dir="ltr">{line.itemCode ?? '—'}</bdi>
                 </td>
                 <td>

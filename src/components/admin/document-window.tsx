@@ -23,6 +23,14 @@ export interface DocumentField {
   readonly status?: string | undefined;
   /** Spans the row, for a description or a reason. */
   readonly wide?: boolean;
+  /**
+   * The value is a form control rather than a figure.
+   *
+   * A read-only field puts its value in a `sapBox`; an editable one puts the
+   * input straight into the field, as the Journal Entry's draft header does,
+   * so `.sapDoc input` styles it and it fills the column like the rest.
+   */
+  readonly control?: boolean;
 }
 
 export interface DocumentTotal {
@@ -92,7 +100,9 @@ export function DocumentWindow({
                 key={field.label}
               >
                 <span className={admin.sapLabel}>{field.label}</span>
-                {field.status ? (
+                {field.control ? (
+                  field.value
+                ) : field.status ? (
                   <span className={`${admin.sapBox} ${admin.sapStatus}`} data-status={field.status}>
                     {field.value}
                   </span>

@@ -1,10 +1,10 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { AdminPage, Field, Flash, Form, Grid, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { AdminPage, Flash, admin as s } from '@/components/admin';
+import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { SearchablePicker } from '@/components/admin/searchable-picker';
 import { Denied } from '@/components/denied';
-import { SectionTabs } from '@/components/admin/section-tabs';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
@@ -24,17 +24,19 @@ import { LINE_ROWS } from '../lines';
  *   Lines   Item Code; Item Name (automatically shown when the Item Code is
  *           selected); Quantity; Unit Price; Discount; Total Price; Warehouse.
  *
- * The invoice number is not on this form because the sponsor says it is
- * generated, and it is — allocated when the invoice is saved, from the same
- * sequence every other document draws on.
+ * In the Journal Entry's window, like the invoice it becomes. That is not only
+ * for the look: `.sapDoc` styles the controls inside it, so every box fills its
+ * column. Outside the window they were unstyled, which is what made the grid
+ * read as a row of loose boxes rather than a table.
  *
- * "Item Name automatically shown when the Item Code is selected" is met by the
- * picker carrying both: one control, `CODE · Name`, so the name is never a
- * second thing to keep in step with the code. The same is true of the supplier.
+ * The invoice number is not on the form because the sponsor says it is
+ * generated, and it is — allocated when the invoice is saved. "Item Name shown
+ * when the Item Code is selected" is met by the picker carrying `CODE · Name`
+ * in one control, so the name is never a second thing to keep in step.
  *
- * Eight line rows, and a blank row is dropped rather than refused. A row that
- * names an item and nothing else is somebody halfway through typing, and that
- * is refused with a sentence — posting it as a zero would be worse.
+ * Eight rows, and a blank one is dropped rather than refused. A row naming an
+ * item and nothing else is somebody halfway through typing, and that is refused
+ * with a sentence — posting it as a zero would be worse.
  */
 export const dynamic = 'force-dynamic';
 
@@ -65,21 +67,73 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
   const sellable = stockItems.filter((item) => item.isStock && item.active);
   const today = new Date().toISOString().slice(0, 10);
 
-  // What is missing is said once, here, rather than discovered as an error
-  // after the invoice has been typed out.
   const missing = gapsFor([
     { kind: 'suppliers', total: allSuppliers.length, usable: suppliers.length },
     { kind: 'items', total: stockItems.length, usable: sellable.length },
     { kind: 'warehouses', total: houses.length, usable: houses.length },
   ]).map((gap) => t(`setup.${gap.key}`, gap.count === undefined ? {} : { count: gap.count }));
 
+  const fields: DocumentField[] = [
+    {
+      label: column('supplier_name'),
+      control: true,
+      value: (
+        <SearchablePicker
+          bare
+          label={column('supplier_name')}
+          name="supplier_id"
+          options={suppliers.map((supplier) => ({
+            value: supplier.id,
+            label: `${supplier.code} · ${supplier.name}`,
+          }))}
+          placeholder={t('search_placeholder')}
+          required
+        />
+      ),
+    },
+    {
+      label: t('ap_invoices.supplier_invoice_no'),
+      control: true,
+      value: (
+        <input
+          aria-label={t('ap_invoices.supplier_invoice_no')}
+          name="supplier_invoice_no"
+          required
+          type="text"
+        />
+      ),
+    },
+    {
+      label: column('posting_date'),
+      control: true,
+      value: (
+        <input
+          aria-label={column('posting_date')}
+          defaultValue={today}
+          name="invoice_date"
+          required
+          type="date"
+        />
+      ),
+    },
+    {
+      label: column('due_date'),
+      control: true,
+      value: <input aria-label={column('due_date')} name="due_date" required type="date" />,
+    },
+    {
+      label: t('journals.description'),
+      control: true,
+      wide: true,
+      value: <input aria-label={t('journals.description')} name="note" type="text" />,
+    },
+  ];
+
   return (
     <AdminPage
       back={{ href: '/purchasing/ap-invoices', label: t('back') }}
-      trail={[{ href: '/', label: t('dashboard_label') }]}
-      tabs={<SectionTabs route="/purchasing/ap-invoices" />}
-      subtitle={t('ap_invoices.subtitle')}
       title={t('ap_invoices.new')}
+      trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"
     >
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={false} savedLabel="" />
@@ -87,49 +141,24 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
       {missing.length > 0 ? (
         <p className={s.sectionHint}>{missing.join(' ')}</p>
       ) : (
-        <Form action={createApInvoice}>
-          <Grid>
-            <SearchablePicker
-              label={column('supplier_name')}
-              name="supplier_id"
-              options={suppliers.map((supplier) => ({
-                value: supplier.id,
-                label: `${supplier.code} · ${supplier.name}`,
-              }))}
-              required
-            />
-            <Field
-              label={t('ap_invoices.supplier_invoice_no')}
-              name="supplier_invoice_no"
-              required
-              requiredLabel={t('required_hint')}
-            />
-            <Field
-              defaultValue={today}
-              label={column('posting_date')}
-              name="invoice_date"
-              required
-              requiredLabel={t('required_hint')}
-              type="date"
-            />
-            <Field
-              label={column('due_date')}
-              name="due_date"
-              required
-              requiredLabel={t('required_hint')}
-              type="date"
-            />
-          </Grid>
-
-          <h2 className={s.sapTitle}>
-            <span>{t('ap_invoices.lines')}</span>
-            <span className={s.sapTitleMeta}>{t('ap_invoices.line_hint')}</span>
-          </h2>
-
-          <div className={s.sapTableWrap}>
-            <table className={s.sapTable}>
+        <form action={createApInvoice}>
+          <DocumentWindow
+            actions={
+              <button className="action action--primary" type="submit">
+                {t('create')}
+              </button>
+            }
+            documentType={page('ap_invoice')}
+            fields={fields}
+            id="ap-invoice-new"
+            linesCount={LINE_ROWS}
+            linesTitle={t('ap_invoices.lines')}
+            number=""
+          >
+            <table aria-labelledby="ap-invoice-new-lines-heading" className={s.sapTable}>
               <thead>
                 <tr>
+                  <th scope="col">#</th>
                   <th scope="col">{column('item_code')}</th>
                   <th className={s.sapNum} scope="col">
                     {column('quantity')}
@@ -140,19 +169,17 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
                   <th className={s.sapNum} scope="col">
                     {column('discount')}
                   </th>
-                  <th scope="col">{column('warehouse_name')}</th>
+                  <th scope="col">{column('warehouse_code')}</th>
                 </tr>
               </thead>
               <tbody>
                 {Array.from({ length: LINE_ROWS }, (_, row) => (
                   <tr key={row}>
                     <td>
-                      <select
-                        aria-label={column('item_code')}
-                        className="field__input"
-                        defaultValue=""
-                        name={`item_code_${row}`}
-                      >
+                      <bdi dir="ltr">{row + 1}</bdi>
+                    </td>
+                    <td className={s.sapAccountCell}>
+                      <select aria-label={column('item_code')} defaultValue="" name={`item_code_${row}`}>
                         <option value="" />
                         {sellable.map((item) => (
                           <option key={item.code} value={item.code}>
@@ -164,7 +191,6 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
                     <td className={s.sapNum}>
                       <input
                         aria-label={column('quantity')}
-                        className="field__input"
                         inputMode="decimal"
                         name={`quantity_${row}`}
                       />
@@ -172,7 +198,6 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
                     <td className={s.sapNum}>
                       <input
                         aria-label={column('unit_price')}
-                        className="field__input"
                         inputMode="decimal"
                         name={`unit_price_${row}`}
                       />
@@ -180,15 +205,13 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
                     <td className={s.sapNum}>
                       <input
                         aria-label={column('discount')}
-                        className="field__input"
                         inputMode="decimal"
                         name={`discount_${row}`}
                       />
                     </td>
                     <td>
                       <select
-                        aria-label={column('warehouse_name')}
-                        className="field__input"
+                        aria-label={column('warehouse_code')}
                         defaultValue={houses[0]?.code ?? ''}
                         name={`warehouse_code_${row}`}
                       >
@@ -203,12 +226,8 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
                 ))}
               </tbody>
             </table>
-          </div>
-
-          <SubmitRow>
-            <Submit label={t('create')} />
-          </SubmitRow>
-        </Form>
+          </DocumentWindow>
+        </form>
       )}
     </AdminPage>
   );

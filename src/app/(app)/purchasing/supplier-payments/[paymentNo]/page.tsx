@@ -152,7 +152,7 @@ export default async function PaymentPage({
             ) : null}
             {open.map((invoice) => (
               <tr key={invoice.id}>
-                <td>
+                <td className={s.sapAccountCell}>
                   <bdi dir="ltr">{invoice.invoiceNo}</bdi>
                 </td>
                 <td>

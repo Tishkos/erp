@@ -65,10 +65,15 @@ test.describe('the Operations Build screens open', () => {
     await dialog.getByLabel(/Warehouse Name/).fill('End To End Depot');
     await dialog.getByRole('button', { name: 'Create' }).click();
 
+    // Wait for the redirect back to the list before looking for the row. The
+    // assertion starting its own clock against a page still being produced is
+    // the flake this suite has already been bitten by twice.
+    await page.waitForURL(/\/master-data\/warehouses(\?|$)/, { timeout: 60_000 });
+
     // The row is on the list, and its code opens the warehouse's own record —
     // where it is named, edited, and carries its history, like every other
     // master record.
-    await expect(page.getByRole('link', { name: code })).toBeVisible();
+    await expect(page.getByRole('link', { name: code })).toBeVisible({ timeout: 30_000 });
     await page.getByRole('link', { name: code }).click();
     await page.waitForURL(new RegExp(`/master-data/warehouses/${code}`), { timeout: 60_000 });
     await expect(page.getByRole('heading', { level: 1, name: new RegExp(code) })).toBeVisible({

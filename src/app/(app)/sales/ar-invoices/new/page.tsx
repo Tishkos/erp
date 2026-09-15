@@ -1,10 +1,10 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { AdminPage, Field, Flash, Form, Grid, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { AdminPage, Flash, admin as s } from '@/components/admin';
+import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { SearchablePicker } from '@/components/admin/searchable-picker';
 import { Denied } from '@/components/denied';
-import { SectionTabs } from '@/components/admin/section-tabs';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
@@ -85,13 +85,55 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
     { kind: 'warehouses', total: houses.length, usable: houses.length },
   ]).map((gap) => t(`setup.${gap.key}`, gap.count === undefined ? {} : { count: gap.count }));
 
+  const fields: DocumentField[] = [
+    {
+      label: column('customer_name'),
+      control: true,
+      value: (
+        <SearchablePicker
+          bare
+          label={column('customer_name')}
+          name="customer_id"
+          options={customers.map((customer) => ({
+            value: customer.id,
+            label: `${customer.code} · ${customer.name}`,
+          }))}
+          placeholder={t('search_placeholder')}
+          required
+        />
+      ),
+    },
+    {
+      label: column('posting_date'),
+      control: true,
+      value: (
+        <input
+          aria-label={column('posting_date')}
+          defaultValue={today}
+          name="invoice_date"
+          required
+          type="date"
+        />
+      ),
+    },
+    {
+      label: column('due_date'),
+      control: true,
+      value: <input aria-label={column('due_date')} name="due_date" type="date" />,
+    },
+    {
+      label: t('journals.description'),
+      control: true,
+      wide: true,
+      value: <input aria-label={t('journals.description')} name="note" type="text" />,
+    },
+  ];
+
   return (
     <AdminPage
       back={{ href: '/sales/ar-invoices', label: t('back') }}
-      trail={[{ href: '/', label: t('dashboard_label') }]}
-      tabs={<SectionTabs route="/sales/ar-invoices" />}
-      subtitle={t('ar_invoices.subtitle')}
       title={t('ar_invoices.new')}
+      trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"
     >
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={false} savedLabel="" />
@@ -99,37 +141,24 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
       {missing.length > 0 ? (
         <p className={s.sectionHint}>{missing.join(' ')}</p>
       ) : (
-        <Form action={createArInvoice}>
-          <Grid>
-            <SearchablePicker
-              label={column('customer_name')}
-              name="customer_id"
-              options={customers.map((customer) => ({
-                value: customer.id,
-                label: `${customer.code} · ${customer.name}`,
-              }))}
-              required
-            />
-            <Field
-              defaultValue={today}
-              label={column('posting_date')}
-              name="invoice_date"
-              required
-              requiredLabel={t('required_hint')}
-              type="date"
-            />
-            <Field label={column('due_date')} name="due_date" type="date" />
-          </Grid>
-
-          <h2 className={s.sapTitle}>
-            <span>{t('ar_invoices.lines')}</span>
-            <span className={s.sapTitleMeta}>{t('ar_invoices.line_hint')}</span>
-          </h2>
-
-          <div className={s.sapTableWrap}>
-            <table className={s.sapTable}>
+        <form action={createArInvoice}>
+          <DocumentWindow
+            actions={
+              <button className="action action--primary" type="submit">
+                {t('create')}
+              </button>
+            }
+            documentType={page('ar_invoice')}
+            fields={fields}
+            id="ar-invoice-new"
+            linesCount={LINE_ROWS}
+            linesTitle={t('ar_invoices.lines')}
+            number=""
+          >
+            <table aria-labelledby="ar-invoice-new-lines-heading" className={s.sapTable}>
               <thead>
                 <tr>
+                  <th scope="col">#</th>
                   <th scope="col">{column('item_code')}</th>
                   <th className={s.sapNum} scope="col">
                     {column('quantity')}
@@ -141,7 +170,7 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
                     {column('discount')}
                   </th>
                   <th scope="col">{column('supplier')}</th>
-                  <th scope="col">{column('warehouse_name')}</th>
+                  <th scope="col">{column('warehouse_code')}</th>
                 </tr>
               </thead>
               <SalesLines
@@ -152,19 +181,15 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
                   unitPrice: column('unit_price'),
                   discount: column('discount'),
                   supplier: column('supplier'),
-                  warehouse: column('warehouse_name'),
+                  warehouse: column('warehouse_code'),
                   anySupplier: t('ar_invoices.any_supplier'),
                 }}
                 rows={LINE_ROWS}
                 warehouses={houses.map((house) => ({ code: house.code, name: house.name }))}
               />
             </table>
-          </div>
-
-          <SubmitRow>
-            <Submit label={t('create')} />
-          </SubmitRow>
-        </Form>
+          </DocumentWindow>
+        </form>
       )}
     </AdminPage>
   );

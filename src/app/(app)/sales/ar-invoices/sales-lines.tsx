@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import styles from '@/components/admin/admin.module.css';
 
 /**
  * The Sales Invoice line grid — Operations build, block 5.
@@ -57,9 +58,11 @@ export function SalesLines({
         return (
           <tr key={row}>
             <td>
+              <bdi dir="ltr">{row + 1}</bdi>
+            </td>
+            <td className={styles.sapAccountCell}>
               <select
                 aria-label={labels.itemCode}
-                className="field__input"
                 name={`item_code_${row}`}
                 onChange={(event) =>
                   setChosen((previous) =>
@@ -79,7 +82,6 @@ export function SalesLines({
             <td>
               <input
                 aria-label={labels.quantity}
-                className="field__input"
                 inputMode="decimal"
                 name={`quantity_${row}`}
               />
@@ -87,7 +89,6 @@ export function SalesLines({
             <td>
               <input
                 aria-label={labels.unitPrice}
-                className="field__input"
                 inputMode="decimal"
                 name={`unit_price_${row}`}
               />
@@ -95,7 +96,6 @@ export function SalesLines({
             <td>
               <input
                 aria-label={labels.discount}
-                className="field__input"
                 inputMode="decimal"
                 name={`discount_${row}`}
               />
@@ -103,7 +103,6 @@ export function SalesLines({
             <td>
               <select
                 aria-label={labels.supplier}
-                className="field__input"
                 // Disabled rather than hidden when the item has no links: the
                 // column stays where the eye expects it, and the reason it is
                 // empty is the item, not a fault.
@@ -122,7 +121,6 @@ export function SalesLines({
             <td>
               <select
                 aria-label={labels.warehouse}
-                className="field__input"
                 defaultValue={warehouses[0]?.code ?? ''}
                 name={`warehouse_code_${row}`}
               >
