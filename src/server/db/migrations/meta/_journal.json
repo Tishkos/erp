@@ -827,6 +827,13 @@
       "when": 1795788900000,
       "tag": "0193_ops10_purchase_return",
       "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1795875000000,
+      "tag": "0194_ops08_shipment_super_user_policy",
+      "breakpoints": true
     }
   ]
 }

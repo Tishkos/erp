@@ -403,3 +403,61 @@ describe('ops 8 · every status change tells the people who asked', () => {
     expect(await inboxOf(watcher)).toHaveLength(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('ops 8 · a super user sees shipments in every branch', () => {
+  /**
+   * The policy was written by hand rather than calling `app_is_super_user()`,
+   * and compared the setting to the string 'on' where `applyScope` writes
+   * 'true'. The super-user branch was therefore false for everybody.
+   *
+   * What made it worth a test of its own is the shape of the failure. A super
+   * user holds no rows in `user_branch_scope` — seeing every branch is the
+   * point of the role — so the other half of the policy matched nothing either
+   * and the list came back empty. Not "permission denied", which somebody would
+   * have reported. Empty, which reads as "there are no shipments".
+   */
+  it('lists a shipment the super user has no branch scope for', async () => {
+    const invoice = await buy(IN_PROCESS);
+    const shipment = await shipmentFor(invoice.invoiceNo);
+
+    const id = randomUUID();
+    await ownerPool.query(
+      `insert into app_user (id, email, display_name, is_super_user)
+       values ($1,$2,'Super User',true)`,
+      [id, `${id}@example.com`],
+    );
+    // Deliberately no user_branch_scope row: that is what a super user is.
+
+    const seen = await withScope({ userId: id, branchCode: BAGHDAD, isSuperUser: true }, (tx) =>
+      shipments.list(tx),
+    );
+
+    expect(seen.map((row) => row.id)).toContain(shipment.id);
+  });
+
+  it('shows nothing to an ordinary user scoped to another branch', async () => {
+    await seedBranch('BSR', 'Basra');
+    const invoice = await buy(IN_PROCESS);
+    await shipmentFor(invoice.invoiceNo);
+
+    const id = randomUUID();
+    await ownerPool.query(`insert into app_user (id, email, display_name) values ($1,$2,$3)`, [
+      id,
+      `${id}@example.com`,
+      'Basra Clerk',
+    ]);
+    await ownerPool.query(
+      `insert into user_role (user_id, role_code) values ($1,'accounting_officer')`,
+      [id],
+    );
+    await ownerPool.query(`insert into user_branch_scope (user_id, branch_code) values ($1,'BSR')`, [
+      id,
+    ]);
+
+    // The other half of the policy, which the super-user test alone would not
+    // prove: fixing the first half must not have opened the second.
+    const seen = await withScope({ userId: id, branchCode: 'BSR' }, (tx) => shipments.list(tx));
+    expect(seen).toEqual([]);
+  });
+});
