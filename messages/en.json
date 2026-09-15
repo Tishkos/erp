@@ -396,7 +396,10 @@
     "is_default": "Default",
     "decision": "Decision",
     "decided_at": "Decided",
-    "account": "Account"
+    "account": "Account",
+    "item_name": "Item Name",
+    "warehouse_name": "Warehouse Name",
+    "total_price": "Total Price"
   },
   "list": {
     "search": "Search",
@@ -1437,7 +1440,10 @@
       "gross_profit": "Gross profit",
       "net_profit": "Net profit",
       "net_loss": "Net loss",
-      "stated_in": "in {currency}"
+      "stated_in": "in {currency}",
+      "warehouses_report": "Warehouses Report",
+      "nothing_in_stock": "No stock is held in any warehouse.",
+      "as_it_stands": "Stock held now, valued at what it cost"
     },
     "accounts": {
       "new": "New account",

@@ -396,7 +396,10 @@
     "is_default": "افتراضي",
     "decision": "القرار",
     "decided_at": "تاريخ القرار",
-    "account": "الحساب"
+    "account": "الحساب",
+    "item_name": "اسم الصنف",
+    "warehouse_name": "اسم المخزن",
+    "total_price": "القيمة الإجمالية"
   },
   "list": {
     "search": "بحث",
@@ -1437,7 +1440,10 @@
       "gross_profit": "مجمل الربح",
       "net_profit": "صافي الربح",
       "net_loss": "صافي الخسارة",
-      "stated_in": "بالـ{currency}"
+      "stated_in": "بالـ{currency}",
+      "warehouses_report": "تقرير المخازن",
+      "nothing_in_stock": "لا يوجد مخزون في أي مخزن.",
+      "as_it_stands": "المخزون الحالي مقوّماً بتكلفته"
     },
     "accounts": {
       "new": "حساب جديد",

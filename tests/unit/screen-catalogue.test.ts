@@ -193,6 +193,8 @@ describe('every screen has one address', () => {
       '/finance/reversals',
       '/finance/trial-balance',
       '/inventory/availability',
+      // Operations build — block 7's Warehouses Report.
+      '/inventory/fifo-valuation',
       '/master-data/bank-accounts',
       '/master-data/branches',
       '/master-data/cash-accounts',
