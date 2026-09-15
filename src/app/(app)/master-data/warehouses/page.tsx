@@ -23,7 +23,7 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as warehouses from '@/server/services/warehouses';
-import { createWarehouse, setWarehouseActive } from './actions';
+import { createWarehouse } from './actions';
 
 /**
  * Warehouse Setup — Operations build, block 7.
@@ -56,7 +56,6 @@ export default async function WarehousesPage({ searchParams }: { searchParams: S
     return <Denied object={page('warehouses')} />;
   }
   const mayCreate = can(principal, 'create', warehouses.PERMISSION_OBJECT);
-  const mayEdit = can(principal, 'configure', warehouses.PERMISSION_OBJECT);
 
   const rows = await withCurrentUser((tx) => warehouses.list(tx));
   const shown = rows.filter((row) => matches(row, outcome.q));
@@ -119,13 +118,12 @@ export default async function WarehousesPage({ searchParams }: { searchParams: S
                 <th scope="col">{column('warehouse_name')}</th>
                 <th scope="col">{column('branch_code')}</th>
                 <th scope="col">{column('active')}</th>
-                {mayEdit ? <th scope="col" /> : null}
               </tr>
             </thead>
             <tbody>
               {shown.length === 0 ? (
                 <tr>
-                  <td colSpan={mayEdit ? 5 : 4}>{t('warehouses.none')}</td>
+                  <td colSpan={4}>{t('warehouses.none')}</td>
                 </tr>
               ) : null}
               {shown.map((row) => (
@@ -144,17 +142,6 @@ export default async function WarehousesPage({ searchParams }: { searchParams: S
                   <td>
                     <Pill label={row.active ? t('active') : t('inactive')} on={row.active} />
                   </td>
-                  {mayEdit ? (
-                    <td>
-                      <form action={setWarehouseActive}>
-                        <input name="code" type="hidden" value={row.code} />
-                        {row.active ? null : <input name="active" type="hidden" value="on" />}
-                        <button className="action" type="submit">
-                          {row.active ? t('warehouses.close') : t('warehouses.reopen')}
-                        </button>
-                      </form>
-                    </td>
-                  ) : null}
                 </tr>
               ))}
             </tbody>

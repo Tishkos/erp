@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
+import { AuditLogButton, RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -78,6 +79,7 @@ export default async function GoodsReturnPage({
               </button>
             </form>
           ) : null}
+          <AuditLogButton label={t('history')} />
         </>
       }
       back={{ href: '/purchasing/goods-returns', label: t('goods_returns.title') }}
@@ -152,6 +154,8 @@ export default async function GoodsReturnPage({
           </tbody>
         </table>
       </div>
+
+      <RecordHistory objectId={document.id} objectType={gr.PERMISSION_OBJECT} />
     </AdminPage>
   );
 }

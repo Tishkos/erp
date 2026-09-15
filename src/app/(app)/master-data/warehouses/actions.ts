@@ -4,6 +4,7 @@ import { flag, runAdminAndReturn, text } from '@/server/admin-action';
 import * as warehouses from '@/server/services/warehouses';
 
 const LIST = '/master-data/warehouses';
+const record = (code: string) => `${LIST}/${encodeURIComponent(code)}`;
 
 export async function createWarehouse(formData: FormData): Promise<void> {
   await runAdminAndReturn(
@@ -19,13 +20,20 @@ export async function createWarehouse(formData: FormData): Promise<void> {
 export async function renameWarehouse(formData: FormData): Promise<void> {
   await runAdminAndReturn(
     (tx, ctx) => warehouses.rename(tx, ctx, text(formData, 'code'), text(formData, 'name')),
-    LIST,
+    record(text(formData, 'code')),
   );
 }
 
 export async function setWarehouseActive(formData: FormData): Promise<void> {
   await runAdminAndReturn(
-    (tx, ctx) => warehouses.setActive(tx, ctx, text(formData, 'code'), flag(formData, 'active')),
-    LIST,
+    (tx, ctx) =>
+      warehouses.setActive(
+        tx,
+        ctx,
+        text(formData, 'code'),
+        flag(formData, 'active'),
+        text(formData, 'reason') || null,
+      ),
+    record(text(formData, 'code')),
   );
 }

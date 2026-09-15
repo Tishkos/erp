@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
+import { Warehouse } from 'lucide-react';
 import { Panel } from '@/components/ui';
 import {
   ActionButton,
@@ -9,6 +10,7 @@ import {
   Form,
   Grid,
   Pill,
+  ReasonForm,
   Submit,
   SubmitRow,
   admin as s,
@@ -16,7 +18,7 @@ import {
 import { AuditLogButton, RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { formatMoney, type Locale } from '@/i18n/config';
+import { formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
@@ -27,12 +29,15 @@ import { renameWarehouse, setWarehouseActive } from '../actions';
 /**
  * One warehouse — Operations build, block 7.
  *
- * Its name and code, what it is holding, and everything that has been done to
- * it. The history is the point: a warehouse that was renamed, closed and
- * reopened is a warehouse whose stock reports change meaning on those dates,
- * and the only place that is recoverable is the audit trail.
+ * Laid out as a branch is, because it is the same kind of record: identity and
+ * facts on the left, editing and history on the right. A person who has learned
+ * one master-data screen has learned this one.
  *
- * The stock table is the Warehouses Report narrowed to one warehouse, reading
+ * The history is the part worth having. A warehouse that was renamed, closed
+ * and reopened is a warehouse whose stock reports change meaning on those
+ * dates, and the audit trail is the only place that is recoverable.
+ *
+ * The stock panel is the Warehouses Report narrowed to this warehouse, reading
  * the same FIFO layers, so the two can never disagree about what is here.
  */
 export const dynamic = 'force-dynamic';
@@ -97,104 +102,117 @@ export default async function WarehouseRecordPage({
         savedLabel={t('saved')}
       />
 
-      <Panel title={page('warehouses')}>
-        {mayEdit ? (
-          <Form action={renameWarehouse}>
-            <input name="code" type="hidden" value={row.code} />
-            <Grid>
-              <Field
-                defaultValue={row.name}
-                label={column('warehouse_name')}
-                name="name"
-                required
-                requiredLabel={t('required_hint')}
-              />
-            </Grid>
-            <SubmitRow>
-              <Submit label={t('warehouses.rename')} />
-              <ActionButton
-                action={setWarehouseActive}
-                hidden={row.active ? { code: row.code } : { code: row.code, active: 'on' }}
-                label={row.active ? t('warehouses.close') : t('warehouses.reopen')}
-              />
-            </SubmitRow>
-          </Form>
-        ) : (
-          <dl className={s.inboxFacts}>
-            <div>
-              <dt>{column('warehouse_name')}</dt>
-              <dd>
-                <bdi dir="auto">{row.name}</bdi>
-              </dd>
-            </div>
-          </dl>
-        )}
-
-        <dl className={s.inboxFacts}>
-          <div>
-            <dt>{column('branch_code')}</dt>
-            <dd>
-              <bdi dir="ltr">{row.branchCode}</bdi>
-            </dd>
-          </div>
-          <div>
-            <dt>{column('active')}</dt>
-            <dd>
+      <div className={s.profileGrid}>
+        {/* Left: identity, facts, lifecycle */}
+        <div className={s.profileStack}>
+          <Panel>
+            <div className={s.profileCard}>
+              <span className={`${s.avatarLarge} ${s.profileAvatar}`}>
+                <Warehouse aria-hidden="true" style={{ inlineSize: '2rem', blockSize: '2rem' }} />
+              </span>
+              <h2>{row.name}</h2>
+              <p>
+                {column('warehouse_code')}: {row.code}
+              </p>
               <Pill label={row.active ? t('active') : t('inactive')} on={row.active} />
-            </dd>
-          </div>
-        </dl>
-      </Panel>
+            </div>
+          </Panel>
 
-      <Panel title={t('reports.warehouses_report')}>
-        <div className="table-wrap">
-          <table className="list">
-            <thead>
-              <tr>
-                <th scope="col">{column('item_code')}</th>
-                <th scope="col">{column('item_name')}</th>
-                <th scope="col">{column('quantity')}</th>
-                <th scope="col">{column('total_price')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stock.length === 0 ? (
-                <tr>
-                  <td colSpan={4}>{t('reports.nothing_in_stock')}</td>
-                </tr>
-              ) : null}
-              {stock.map((line) => (
-                <tr key={line.itemCode}>
-                  <td>
-                    <bdi dir="ltr">{line.itemCode}</bdi>
-                  </td>
-                  <td>
-                    <bdi dir="auto">{line.itemName}</bdi>
-                  </td>
-                  <td>
-                    <bdi dir="ltr">{units(line.quantity)}</bdi>
-                  </td>
-                  <td>
-                    <bdi dir="ltr">{money(line.valueIqd)}</bdi>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            {stock.length > 0 ? (
-              <tfoot>
-                <tr>
-                  <td colSpan={3}>{t('reports.totals')}</td>
-                  <td>
-                    <bdi dir="ltr">{money(String(total))}</bdi>
-                  </td>
-                </tr>
-              </tfoot>
-            ) : null}
-          </table>
+          <Panel title={t('details')}>
+            <ul className={s.profileFacts}>
+              <li>
+                <span>{column('branch_code')}</span>
+                <span>{row.branchCode}</span>
+              </li>
+              <li>
+                <span>{t('reports.totals')}</span>
+                <span>{money(String(total))}</span>
+              </li>
+              <li>
+                <span>{t('created_at')}</span>
+                <span>{formatTimestamp(row.createdAt.toISOString(), locale as Locale)}</span>
+              </li>
+            </ul>
+          </Panel>
+
+          {mayEdit ? (
+            <Panel title={row.active ? t('warehouses.close') : t('warehouses.reopen')}>
+              {row.active ? (
+                <ReasonForm
+                  action={setWarehouseActive}
+                  hidden={{ code: row.code }}
+                  label={t('warehouses.close')}
+                  reasonLabel={t('reason')}
+                  reasonPlaceholder={t('reason_placeholder')}
+                />
+              ) : (
+                <ActionButton
+                  action={setWarehouseActive}
+                  hidden={{ code: row.code, active: '1' }}
+                  label={t('warehouses.reopen')}
+                  small={false}
+                  tone="primary"
+                />
+              )}
+            </Panel>
+          ) : null}
         </div>
-      </Panel>
 
-      <RecordHistory objectId={row.code} objectType={warehouses.PERMISSION_OBJECT} />
+        {/* Right: editing, what it holds, and history */}
+        <div className={s.profileStack}>
+          {mayEdit ? (
+            <Panel title={t('update')}>
+              <Form action={renameWarehouse}>
+                <input name="code" type="hidden" value={row.code} />
+                <Grid>
+                  <Field
+                    defaultValue={row.name}
+                    label={column('warehouse_name')}
+                    name="name"
+                    required
+                    requiredLabel={t('required_hint')}
+                  />
+                </Grid>
+                <SubmitRow>
+                  <Submit label={t('save')} />
+                </SubmitRow>
+              </Form>
+            </Panel>
+          ) : null}
+
+          <Panel title={t('reports.warehouses_report')}>
+            <div className="table-wrap">
+              <table className="list">
+                <thead>
+                  <tr>
+                    <th scope="col">{column('item_code')}</th>
+                    <th scope="col">{column('item_name')}</th>
+                    <th scope="col">{column('quantity')}</th>
+                    <th scope="col">{column('total_price')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stock.length === 0 ? (
+                    <tr>
+                      <td colSpan={4}>{t('reports.nothing_in_stock')}</td>
+                    </tr>
+                  ) : null}
+                  {stock.map((line) => (
+                    <tr key={line.itemCode}>
+                      <td>{line.itemCode}</td>
+                      <td>{line.itemName}</td>
+                      <td>{units(line.quantity)}</td>
+                      <td>{money(line.valueIqd)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+
+          <RecordHistory objectId={row.code} objectType={warehouses.PERMISSION_OBJECT} />
+        </div>
+      </div>
     </AdminPage>
   );
 }

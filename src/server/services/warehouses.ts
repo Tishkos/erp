@@ -141,13 +141,26 @@ export async function rename(tx: Tx, ctx: ActorContext, code: string, name: stri
  * row, and a warehouse that has ever held anything is part of the record of
  * where it was.
  */
-export async function setActive(tx: Tx, ctx: ActorContext, code: string, active: boolean) {
+export async function setActive(
+  tx: Tx,
+  ctx: ActorContext,
+  code: string,
+  active: boolean,
+  reason: string | null = null,
+) {
   const existing = await get(tx, code);
   if (!existing) throw new WarehouseError(`No warehouse with code '${code}'.`);
 
   await authz.authorize(ctx.principal, 'configure', PERMISSION_OBJECT, {
     branchCode: existing.branchCode,
   });
+
+  // Closing one needs a reason, as deactivating a branch does. A warehouse that
+  // went quiet is a warehouse whose stock reports change meaning from that day,
+  // and "why" is the question somebody asks a year later.
+  if (!active && !reason?.trim()) {
+    throw new WarehouseError('Say why this warehouse is being closed.');
+  }
 
   await tx.update(warehouse).set({ active }).where(eq(warehouse.code, code));
 
@@ -159,6 +172,7 @@ export async function setActive(tx: Tx, ctx: ActorContext, code: string, active:
     branchCode: existing.branchCode,
     before: { active: existing.active },
     after: { active },
+    ...(reason?.trim() ? { reason: reason.trim() } : {}),
     outcome: 'success',
   });
 }

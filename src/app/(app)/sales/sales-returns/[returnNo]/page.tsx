@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
+import { AuditLogButton, RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -108,6 +109,7 @@ export default async function SalesReturnPage({
               </form>
             </>
           ) : null}
+          <AuditLogButton label={t('history')} />
         </>
       }
       back={{ href: '/sales/sales-returns', label: t('sales_returns.title') }}
@@ -188,6 +190,8 @@ export default async function SalesReturnPage({
           </tbody>
         </table>
       </div>
+
+      <RecordHistory objectId={returnDoc.id} objectType={sr.PERMISSION_OBJECT} />
     </AdminPage>
   );
 }

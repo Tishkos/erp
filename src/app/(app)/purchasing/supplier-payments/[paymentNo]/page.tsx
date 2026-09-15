@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
+import { AuditLogButton, RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -71,6 +72,7 @@ export default async function PaymentPage({
   return (
     <AdminPage
       actions={
+        <>
         mayPost ? (
           <form action={postPayment}>
             <input name="id" type="hidden" value={payment.id} />
@@ -80,6 +82,8 @@ export default async function PaymentPage({
             </button>
           </form>
         ) : null
+          <AuditLogButton label={t('history')} />
+        </>
       }
       back={{ href: '/purchasing/supplier-payments', label: t('supplier_payments.title') }}
       tabs={<SectionTabs route="/purchasing/supplier-payments" />}
@@ -197,6 +201,8 @@ export default async function PaymentPage({
           </tbody>
         </table>
       </div>
+
+      <RecordHistory objectId={payment.id} objectType={payments.PERMISSION_OBJECT} />
     </AdminPage>
   );
 }

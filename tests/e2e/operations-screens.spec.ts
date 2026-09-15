@@ -75,6 +75,11 @@ test.describe('the Operations Build screens open', () => {
       timeout: 30_000,
     });
     await expect(page.getByLabel('Warehouse Name')).toHaveValue('End To End Depot');
+
+    // Laid out as a branch is: identity and facts on the left, editing and
+    // history on the right.
+    await expect(page.getByRole('heading', { name: 'Details' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Audit log' })).toBeVisible();
   });
 
   test('block 4 · the Purchase Invoice register opens', async ({ page }) => {
@@ -270,6 +275,12 @@ test.describe('the Operations Build screens open', () => {
     // The payment exists and says what is still unallocated, which is the whole
     // of it until somebody puts it against an invoice.
     await expect(page.getByText('Unallocated')).toBeVisible({ timeout: 30_000 });
+
+    // Every record carries its history, as the master-data screens do. A
+    // document you cannot ask "who did this, and when" of is a document you
+    // cannot defend a year later.
+    await expect(page.getByRole('link', { name: 'Audit log' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Audit log' })).toBeVisible();
   });
 
   test('block 8 · Invoice Status Tracking shows the four stages', async ({ page }) => {

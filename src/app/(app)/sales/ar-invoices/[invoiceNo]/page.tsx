@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
+import { AuditLogButton, RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -103,6 +104,7 @@ export default async function ArInvoicePage({
               </button>
             </form>
           ) : null}
+          <AuditLogButton label={t('history')} />
         </>
       }
       back={{ href: '/sales/ar-invoices', label: t('ar_invoices.title') }}
@@ -216,6 +218,8 @@ export default async function ArInvoicePage({
           </tfoot>
         </table>
       </div>
+
+      <RecordHistory objectId={invoice.id} objectType={ar.PERMISSION_OBJECT} />
     </AdminPage>
   );
 }
