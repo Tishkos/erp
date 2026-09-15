@@ -91,6 +91,8 @@ export const OPERATIONS: readonly string[] = [
   // Block 7 — the Warehouses Report and Warehouse Setup.
   '/inventory/fifo-valuation',
   '/master-data/warehouses',
+  // Block 4 — the Purchase Invoice.
+  '/purchasing/ap-invoices',
 ];
 
 const VISIBLE: ReadonlySet<string> = new Set([

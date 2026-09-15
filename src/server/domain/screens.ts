@@ -404,6 +404,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   // Operations build — block 7's Warehouses Report and Warehouse Setup.
   '/inventory/fifo-valuation',
   '/master-data/warehouses',
+  // Block 4 — the Purchase Invoice.
+  '/purchasing/ap-invoices',
 ]);
 
 export function isDelivered(route: string): boolean {

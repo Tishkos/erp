@@ -52,8 +52,8 @@ test.describe('04.4 gate · the UI path', () => {
       .nth(4)
       .innerText();
 
-    await page.getByLabel('Item', { exact: true }).fill('ITM-SEED');
-    await page.getByLabel('Warehouse', { exact: true }).fill('WH-HQ');
+    await page.getByLabel('Item Code', { exact: true }).fill('ITM-SEED');
+    await page.getByLabel('Warehouse Code', { exact: true }).fill('WH-HQ');
     await page.getByLabel('Batch', { exact: true }).fill('B-SEED');
     await page.getByLabel('Quantity', { exact: true }).fill('99999');
     await page.getByRole('button', { name: 'Issue' }).click();
@@ -73,8 +73,8 @@ test.describe('04.4 gate · the UI path', () => {
   test('leaves the stock untouched after the refusal', async ({ page }) => {
     const before = await page.locator('table.list tbody tr').first().locator('td').nth(3).innerText();
 
-    await page.getByLabel('Item', { exact: true }).fill('ITM-SEED');
-    await page.getByLabel('Warehouse', { exact: true }).fill('WH-HQ');
+    await page.getByLabel('Item Code', { exact: true }).fill('ITM-SEED');
+    await page.getByLabel('Warehouse Code', { exact: true }).fill('WH-HQ');
     await page.getByLabel('Batch', { exact: true }).fill('B-SEED');
     await page.getByLabel('Quantity', { exact: true }).fill('99999');
     await page.getByRole('button', { name: 'Issue' }).click();
@@ -92,8 +92,8 @@ test.describe('04.4 gate · the UI path', () => {
       ),
     );
 
-    await page.getByLabel('Item', { exact: true }).fill('ITM-SEED');
-    await page.getByLabel('Warehouse', { exact: true }).fill('WH-HQ');
+    await page.getByLabel('Item Code', { exact: true }).fill('ITM-SEED');
+    await page.getByLabel('Warehouse Code', { exact: true }).fill('WH-HQ');
     await page.getByLabel('Batch', { exact: true }).fill('B-SEED');
     await page.getByLabel('Quantity', { exact: true }).fill('1');
     await page.getByRole('button', { name: 'Issue' }).click();

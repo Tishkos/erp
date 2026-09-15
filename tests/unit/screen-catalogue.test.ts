@@ -211,6 +211,8 @@ describe('every screen has one address', () => {
       '/master-data/suppliers',
       '/master-data/uom',
       '/master-data/warehouses',
+      // Operations build — block 4's Purchase Invoice.
+      '/purchasing/ap-invoices',
     ]);
   });
 });

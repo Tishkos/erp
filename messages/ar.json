@@ -298,8 +298,8 @@
     "branch_code": "الفرع",
     "total_debit_iqd": "مدين (IQD)",
     "total_credit_iqd": "دائن (IQD)",
-    "item_code": "الصنف",
-    "warehouse_code": "المستودع",
+    "item_code": "رمز الصنف",
+    "warehouse_code": "رمز المخزن",
     "batch_number": "الدفعة",
     "quantity": "الكمية",
     "on_hand": "في المخزون",
@@ -399,7 +399,10 @@
     "account": "الحساب",
     "item_name": "اسم الصنف",
     "warehouse_name": "اسم المخزن",
-    "total_price": "القيمة الإجمالية"
+    "total_price": "القيمة الإجمالية",
+    "supplier_code": "رمز المورّد",
+    "supplier_name": "اسم المورّد",
+    "discount": "الخصم"
   },
   "list": {
     "search": "بحث",
@@ -1745,6 +1748,23 @@
       "rename": "إعادة تسمية",
       "close": "إغلاق",
       "reopen": "إعادة فتح"
+    },
+    "ap_invoices": {
+      "title": "فواتير الشراء",
+      "subtitle": "ما تمت مطالبة الشركة به",
+      "new": "فاتورة جديدة",
+      "none": "لا توجد فواتير شراء بعد.",
+      "supplier_invoice_no": "رقم فاتورة المورّد",
+      "lines": "البنود",
+      "line_hint": "اترك الصف فارغاً لتجاهله.",
+      "submit": "إرسال للاعتماد",
+      "approve_and_post": "اعتماد وترحيل",
+      "posted_note": "تم الترحيل إلى الدفاتر.",
+      "awaiting": "بانتظار الاعتماد.",
+      "journal": "قيد اليومية",
+      "no_suppliers": "أضف مورّداً أولاً.",
+      "no_items": "أضف صنفاً مخزنياً أولاً.",
+      "no_warehouses": "أنشئ مخزناً أولاً."
     }
   },
   "profile": {

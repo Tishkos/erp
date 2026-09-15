@@ -291,15 +291,15 @@
     "currency_restriction": "Currency",
     "entry_no": "Entry no.",
     "document_date": "Document date",
-    "posting_date": "Posting date",
+    "posting_date": "Posting Date",
     "description": "Description",
     "journal_type": "Journal type",
     "source": "Source",
     "branch_code": "Branch",
     "total_debit_iqd": "Debit (IQD)",
     "total_credit_iqd": "Credit (IQD)",
-    "item_code": "Item",
-    "warehouse_code": "Warehouse",
+    "item_code": "Item Code",
+    "warehouse_code": "Warehouse Code",
     "batch_number": "Batch",
     "quantity": "Quantity",
     "on_hand": "On hand",
@@ -399,7 +399,10 @@
     "account": "Account",
     "item_name": "Item Name",
     "warehouse_name": "Warehouse Name",
-    "total_price": "Total Price"
+    "total_price": "Total Price",
+    "supplier_code": "Supplier Code",
+    "supplier_name": "Supplier Name",
+    "discount": "Discount"
   },
   "list": {
     "search": "Search",
@@ -1745,6 +1748,23 @@
       "rename": "Rename",
       "close": "Close",
       "reopen": "Reopen"
+    },
+    "ap_invoices": {
+      "title": "Purchase Invoices",
+      "subtitle": "What the company has been billed",
+      "new": "New invoice",
+      "none": "No purchase invoices yet.",
+      "supplier_invoice_no": "Supplier's Invoice Number",
+      "lines": "Lines",
+      "line_hint": "Leave a row blank to skip it.",
+      "submit": "Send for approval",
+      "approve_and_post": "Approve and post",
+      "posted_note": "Posted to the ledger.",
+      "awaiting": "Waiting for approval.",
+      "journal": "Journal entry",
+      "no_suppliers": "Add a supplier first.",
+      "no_items": "Add a stock item first.",
+      "no_warehouses": "Set up a warehouse first."
     }
   },
   "profile": {

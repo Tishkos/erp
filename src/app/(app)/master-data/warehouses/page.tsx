@@ -140,7 +140,11 @@ export default async function WarehousesPage({ searchParams }: { searchParams: S
                       <form action={renameWarehouse} className="row-form">
                         <input name="code" type="hidden" value={row.code} />
                         <input
-                          aria-label={column('warehouse_name')}
+                          // Named for the row it is in. Every rename field on
+                          // the page would otherwise announce "Warehouse Name",
+                          // and a screen reader would give no way to tell which
+                          // warehouse is about to be renamed.
+                          aria-label={`${t('warehouses.rename')} ${row.code}`}
                           className="list__search"
                           defaultValue={row.name}
                           name="name"

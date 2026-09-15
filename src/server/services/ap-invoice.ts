@@ -1088,6 +1088,23 @@ export async function list(tx: Tx) {
     .orderBy(desc(apInvoice.invoiceDate), desc(apInvoice.invoiceNo));
 }
 
+/**
+ * The invoice a person is looking at, found by the number on it.
+ *
+ * The screens address an invoice by its number rather than its id, because the
+ * number is what the document says and what somebody would read out over the
+ * phone.
+ */
+export async function viewByNo(tx: Tx, invoiceNo: string) {
+  const [row] = await tx
+    .select({ id: apInvoice.id })
+    .from(apInvoice)
+    .where(eq(apInvoice.invoiceNo, invoiceNo))
+    .limit(1);
+  if (!row) return null;
+  return load(tx, row.id);
+}
+
 export async function view(tx: Tx, id: string) {
   return load(tx, id);
 }
