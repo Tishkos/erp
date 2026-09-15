@@ -60,7 +60,7 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Sea
         ) : null
       }
       back={{ href: '/', label: t('dashboard_label') }}
-      tabs={<SectionTabs route="/purchasing/supplier-payments" />}
+      tabs={<SectionTabs route="/sales/customer-receipts" />}
       subtitle={t('customer_receipts.subtitle')}
       title={t('customer_receipts.title')}
       variant="sap"
@@ -80,7 +80,7 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Sea
           </h2>
 
           <ListToolbar
-            clearHref="/purchasing/supplier-payments"
+            clearHref="/sales/customer-receipts"
             clearLabel={t('clear_search')}
             countLabel={t('rows_shown', { count: shown.length })}
             placeholder={t('search_placeholder')}

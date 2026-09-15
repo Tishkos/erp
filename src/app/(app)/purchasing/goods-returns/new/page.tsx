@@ -64,7 +64,7 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
   return (
     <AdminPage
       back={{ href: '/purchasing/goods-returns', label: t('goods_returns.title') }}
-      tabs={<SectionTabs route="/sales/sales-returns" />}
+      tabs={<SectionTabs route="/purchasing/goods-returns" />}
       subtitle={t('goods_returns.subtitle')}
       title={t('goods_returns.new')}
       variant="sap"

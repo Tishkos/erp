@@ -415,6 +415,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   // Block 6 — Payments and Receipts.
   '/purchasing/supplier-payments',
   '/sales/customer-receipts',
+  // Block 8 — Invoice Status Tracking.
+  '/inventory/in-transit',
 ]);
 
 export function isDelivered(route: string): boolean {

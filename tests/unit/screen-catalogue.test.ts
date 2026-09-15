@@ -195,6 +195,8 @@ describe('every screen has one address', () => {
       '/inventory/availability',
       // Operations build — block 7's Warehouses Report.
       '/inventory/fifo-valuation',
+      // Block 8 — Invoice Status Tracking.
+      '/inventory/in-transit',
       '/master-data/bank-accounts',
       '/master-data/branches',
       '/master-data/cash-accounts',

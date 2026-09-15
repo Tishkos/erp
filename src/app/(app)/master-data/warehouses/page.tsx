@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
@@ -22,7 +23,7 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as warehouses from '@/server/services/warehouses';
-import { createWarehouse, renameWarehouse, setWarehouseActive } from './actions';
+import { createWarehouse, setWarehouseActive } from './actions';
 
 /**
  * Warehouse Setup — Operations build, block 7.
@@ -130,33 +131,12 @@ export default async function WarehousesPage({ searchParams }: { searchParams: S
               {shown.map((row) => (
                 <tr key={row.code}>
                   <td>
-                    <bdi dir="ltr">{row.code}</bdi>
+                    <Link href={`/master-data/warehouses/${encodeURIComponent(row.code)}`}>
+                      <bdi dir="ltr">{row.code}</bdi>
+                    </Link>
                   </td>
                   <td>
-                    {mayEdit ? (
-                      // The name is edited where it is read. A warehouse has
-                      // one field worth changing, and sending somebody to a
-                      // record page to change it would be the longer way round.
-                      <form action={renameWarehouse} className="row-form">
-                        <input name="code" type="hidden" value={row.code} />
-                        <input
-                          // Named for the row it is in. Every rename field on
-                          // the page would otherwise announce "Warehouse Name",
-                          // and a screen reader would give no way to tell which
-                          // warehouse is about to be renamed.
-                          aria-label={`${t('warehouses.rename')} ${row.code}`}
-                          className="list__search"
-                          defaultValue={row.name}
-                          name="name"
-                          required
-                        />
-                        <button className="action" type="submit">
-                          {t('warehouses.rename')}
-                        </button>
-                      </form>
-                    ) : (
-                      <bdi dir="auto">{row.name}</bdi>
-                    )}
+                    <bdi dir="auto">{row.name}</bdi>
                   </td>
                   <td>
                     <bdi dir="auto">{row.branchName ?? row.branchCode}</bdi>

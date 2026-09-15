@@ -1861,6 +1861,19 @@
       "no_accounts": "Set up a bank or cash account first.",
       "no_open_invoices": "Nothing outstanding for this customer.",
       "bank_account": "Bank/Cash Name"
+    },
+    "in_transit": {
+      "title": "Invoice Status Tracking",
+      "subtitle": "Goods bought abroad, between the invoice and the shelf",
+      "none": "Nothing is in transit.",
+      "status_in_process": "In Process",
+      "status_on_board": "On Board",
+      "status_on_port": "On Port",
+      "status_in_bounded": "In Bounded",
+      "advance": "Move to",
+      "where": "Where the goods are",
+      "all": "All",
+      "no_warehouse_for_stage": "No warehouse is set for the next stage."
     }
   },
   "profile": {

@@ -55,7 +55,7 @@ export default async function NewReceiptPage({ searchParams }: { searchParams: S
   return (
     <AdminPage
       back={{ href: '/sales/customer-receipts', label: t('customer_receipts.title') }}
-      tabs={<SectionTabs route="/purchasing/supplier-payments" />}
+      tabs={<SectionTabs route="/sales/customer-receipts" />}
       subtitle={t('customer_receipts.subtitle')}
       title={t('customer_receipts.new')}
       variant="sap"

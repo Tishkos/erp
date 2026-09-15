@@ -65,11 +65,16 @@ test.describe('the Operations Build screens open', () => {
     await dialog.getByLabel(/Warehouse Name/).fill('End To End Depot');
     await dialog.getByRole('button', { name: 'Create' }).click();
 
-    // The row is on the list, which is the whole of what block 7 asks for. The
-    // name is read from the rename field's value, because that is where the
-    // list puts it — it is edited in place rather than on a record page.
-    await expect(page.getByText(code)).toBeVisible();
-    await expect(page.getByLabel(`Rename ${code}`)).toHaveValue('End To End Depot');
+    // The row is on the list, and its code opens the warehouse's own record —
+    // where it is named, edited, and carries its history, like every other
+    // master record.
+    await expect(page.getByRole('link', { name: code })).toBeVisible();
+    await page.getByRole('link', { name: code }).click();
+    await page.waitForURL(new RegExp(`/master-data/warehouses/${code}`), { timeout: 60_000 });
+    await expect(page.getByRole('heading', { level: 1, name: new RegExp(code) })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByLabel('Warehouse Name')).toHaveValue('End To End Depot');
   });
 
   test('block 4 · the Purchase Invoice register opens', async ({ page }) => {
@@ -265,5 +270,18 @@ test.describe('the Operations Build screens open', () => {
     // The payment exists and says what is still unallocated, which is the whole
     // of it until somebody puts it against an invoice.
     await expect(page.getByText('Unallocated')).toBeVisible({ timeout: 30_000 });
+  });
+
+  test('block 8 · Invoice Status Tracking shows the four stages', async ({ page }) => {
+    await page.goto('/inventory/in-transit');
+
+    await expect(page.getByRole('heading', { name: 'Invoice Status Tracking' })).toBeVisible();
+
+    // The sponsor's four, in his order. Nothing is created here — a shipment
+    // appears when a Purchase Invoice posts, which is what "automatically
+    // copied to this section" means.
+    for (const stage of ['In Process', 'On Board', 'On Port', 'In Bounded']) {
+      await expect(page.getByRole('link', { name: stage, exact: true })).toBeVisible();
+    }
   });
 });

@@ -52,7 +52,7 @@ export default async function GoodsReturnsPage({ searchParams }: { searchParams:
         ) : null
       }
       back={{ href: '/', label: t('dashboard_label') }}
-      tabs={<SectionTabs route="/sales/sales-returns" />}
+      tabs={<SectionTabs route="/purchasing/goods-returns" />}
       subtitle={t('goods_returns.subtitle')}
       title={t('goods_returns.title')}
       variant="sap"
@@ -72,7 +72,7 @@ export default async function GoodsReturnsPage({ searchParams }: { searchParams:
           </h2>
 
           <ListToolbar
-            clearHref="/sales/sales-returns"
+            clearHref="/purchasing/goods-returns"
             clearLabel={t('clear_search')}
             countLabel={t('rows_shown', { count: shown.length })}
             placeholder={t('search_placeholder')}

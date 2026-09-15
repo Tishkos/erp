@@ -106,7 +106,7 @@ export default async function ArInvoicePage({
         </>
       }
       back={{ href: '/sales/ar-invoices', label: t('ar_invoices.title') }}
-      tabs={<SectionTabs route="/purchasing/ap-invoices" />}
+      tabs={<SectionTabs route="/sales/ar-invoices" />}
       subtitle={customer ? `${customer.code} · ${customer.name}` : t('ar_invoices.subtitle')}
       title={invoice.invoiceNo}
       variant="sap"
