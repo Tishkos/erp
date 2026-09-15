@@ -834,6 +834,13 @@
       "when": 1795875000000,
       "tag": "0194_ops08_shipment_super_user_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1795880000000,
+      "tag": "0195_ops07_warehouse_grants",
+      "breakpoints": true
     }
   ]
 }

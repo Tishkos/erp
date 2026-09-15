@@ -88,8 +88,9 @@ const PHASE_2: readonly string[] = [
  * visible and unbuilt is a menu item that leads to an apology.
  */
 export const OPERATIONS: readonly string[] = [
-  // Block 7 — the Warehouses Report.
+  // Block 7 — the Warehouses Report and Warehouse Setup.
   '/inventory/fifo-valuation',
+  '/master-data/warehouses',
 ];
 
 const VISIBLE: ReadonlySet<string> = new Set([

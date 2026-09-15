@@ -210,6 +210,7 @@ describe('every screen has one address', () => {
       '/master-data/statement-mapping',
       '/master-data/suppliers',
       '/master-data/uom',
+      '/master-data/warehouses',
     ]);
   });
 });

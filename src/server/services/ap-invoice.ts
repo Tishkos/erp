@@ -19,7 +19,7 @@
  * layers and the inventory control account out of step, which §9.9's
  * reconciliation exists to detect.
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   apInvoice,
@@ -1058,6 +1058,34 @@ async function supportedValue(tx: Tx, line: typeof apInvoiceLine.$inferSelect): 
   const clearing = invoiced < uninvoiced ? invoiced : uninvoiced;
 
   return (clearing * parseDecimal(ordered.unitPrice, 4n)) / 1_000_000n;
+}
+
+/**
+ * The register — Operations block 4's list of Purchase Invoices.
+ *
+ * The supplier's name is joined rather than stored on the invoice, so a
+ * supplier renamed today reads correctly on an invoice raised last year. Row
+ * level security decides which branches are in the list; this does not filter
+ * by branch itself, because doing it in two places is how the two answers
+ * start to differ.
+ */
+export async function list(tx: Tx) {
+  return tx
+    .select({
+      id: apInvoice.id,
+      invoiceNo: apInvoice.invoiceNo,
+      supplierInvoiceNo: apInvoice.supplierInvoiceNo,
+      supplierName: businessPartner.legalName,
+      supplierCode: businessPartner.code,
+      invoiceDate: apInvoice.invoiceDate,
+      dueDate: apInvoice.dueDate,
+      totalIqd: apInvoice.totalIqd,
+      status: apInvoice.status,
+      branchCode: apInvoice.branchCode,
+    })
+    .from(apInvoice)
+    .leftJoin(businessPartner, eq(businessPartner.id, apInvoice.supplierId))
+    .orderBy(desc(apInvoice.invoiceDate), desc(apInvoice.invoiceNo));
 }
 
 export async function view(tx: Tx, id: string) {

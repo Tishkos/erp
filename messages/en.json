@@ -1737,6 +1737,14 @@
       "kind_subtotal_short": "Total",
       "kind_computed": "Worked out from the ledger",
       "kind_computed_short": "Computed"
+    },
+    "warehouses": {
+      "subtitle": "Where stock is held",
+      "new": "New warehouse",
+      "none": "No warehouses yet.",
+      "rename": "Rename",
+      "close": "Close",
+      "reopen": "Reopen"
     }
   },
   "profile": {

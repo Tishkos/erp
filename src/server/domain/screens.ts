@@ -401,8 +401,9 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/finance/cash-flow',
   '/finance/periods',
   '/master-data/exchange-rates',
-  // Operations build — block 7's Warehouses Report.
+  // Operations build — block 7's Warehouses Report and Warehouse Setup.
   '/inventory/fifo-valuation',
+  '/master-data/warehouses',
 ]);
 
 export function isDelivered(route: string): boolean {

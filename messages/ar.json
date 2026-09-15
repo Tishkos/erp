@@ -1737,6 +1737,14 @@
       "kind_subtotal_short": "إجمالي",
       "kind_computed": "يُحتسب من السجلات",
       "kind_computed_short": "محتسب"
+    },
+    "warehouses": {
+      "subtitle": "أماكن حفظ المخزون",
+      "new": "مخزن جديد",
+      "none": "لا توجد مخازن بعد.",
+      "rename": "إعادة تسمية",
+      "close": "إغلاق",
+      "reopen": "إعادة فتح"
     }
   },
   "profile": {
