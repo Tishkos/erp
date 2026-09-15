@@ -475,24 +475,35 @@ describe('10.1 — one register, both services (D16, §11.3, §12.4)', () => {
 
   it('has nowhere to raise a Sales Invoice from a logistics job (§11.3)', async () => {
     // Appendix C: the company provides a service rather than selling the goods.
-    // Phase 06 closed this without knowing Phase 10 needed it — an A/R invoice
-    // names a delivery note and a sales order, both NOT NULL, and there is no
-    // column a logistics job could be written into.
-    const { rows } = await ownerPool.query(
-      `select column_name, is_nullable from information_schema.columns
-        where table_name = 'ar_invoice'
-          and column_name in ('delivery_note_id','sales_order_id')
-        order by column_name`,
-    );
-    expect(rows).toHaveLength(2);
-    for (const row of rows) expect(row.is_nullable).toBe('NO');
-
-    const { rows: none } = await ownerPool.query(
+    //
+    // This used to be proved by the A/R invoice's delivery note and sales order
+    // both being NOT NULL — an invoice had to come from a sale, so a logistics
+    // job had no way in. Operations block 5 made them nullable, because the
+    // sponsor raises a Sales Invoice directly against a customer and a
+    // warehouse. That removed the proof and not the guarantee, so the guarantee
+    // is now asserted for itself: an invoice can be raised without a sale
+    // behind it, but not from a logistics job, because nothing joins the two.
+    const { rows: named } = await ownerPool.query(
       `select column_name from information_schema.columns
-        where table_name = 'ar_invoice'
+        where table_name in ('ar_invoice','ar_invoice_line')
           and (column_name like '%client_goods%' or column_name like '%logistics%')`,
     );
-    expect(none).toHaveLength(0);
+    expect(named).toHaveLength(0);
+
+    // And no foreign key either, whatever it might be called. A column named
+    // `job_id` pointing at logistics_job would have passed the check above.
+    const { rows: linked } = await ownerPool.query(
+      `select kcu.column_name, ccu.table_name as references_table
+         from information_schema.table_constraints tc
+         join information_schema.key_column_usage kcu
+           on kcu.constraint_name = tc.constraint_name
+         join information_schema.constraint_column_usage ccu
+           on ccu.constraint_name = tc.constraint_name
+        where tc.constraint_type = 'FOREIGN KEY'
+          and tc.table_name in ('ar_invoice','ar_invoice_line')
+          and ccu.table_name like 'logistics%'`,
+    );
+    expect(linked).toHaveLength(0);
   });
 
   it('holds no Client Inventory balance of its own (§12.4 is Money Transfer\'s)', async () => {
