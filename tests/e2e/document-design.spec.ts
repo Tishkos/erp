@@ -8,6 +8,10 @@ import { expect, test, type Page } from '@playwright/test';
  * structure a person sees is the thing being asked for, so the structure a
  * person sees is what this reads.
  *
+ * Four claims, four tests: it wears the same window, its grid grows as it is
+ * typed the way the journal's does, it names everybody it passed through, and
+ * a draft is corrected on the document itself rather than raised again.
+ *
  * Requires `npm run db:seed`.
  */
 
@@ -96,5 +100,130 @@ test.describe('an invoice is built like a journal entry', () => {
       .filter((part) => !invoice.includes(part));
 
     expect(missing).toEqual([]);
+  });
+
+  test('the line grid opens a new line as each one is filled', async ({ page }) => {
+    await signIn(page);
+    await page.goto('/purchasing/ap-invoices/new');
+    await expect(page.locator('select[name="item_code_0"]')).toBeVisible({ timeout: 60_000 });
+
+    // One line to start with. There is no "Add line" button to look for —
+    // the second row is meant to exist only because the first was filled.
+    await expect(page.getByRole('button', { name: /add line/i })).toHaveCount(0);
+    await expect(page.locator('select[name="item_code_1"]')).toHaveCount(0);
+
+    const item = await page
+      .locator('select[name="item_code_0"] option:not([value=""])')
+      .first()
+      .getAttribute('value');
+    await page.selectOption('select[name="item_code_0"]', item!);
+
+    await expect(page.locator('select[name="item_code_1"]')).toBeVisible();
+
+    // The line's total follows the typing rather than waiting for the server:
+    // three at a thousand, less nothing, is three thousand on screen.
+    await page.fill('input[name="quantity_0"]', '3');
+    await page.fill('input[name="unit_price_0"]', '1000');
+    await expect(page.getByText('IQD 3,000').first()).toBeVisible();
+
+    // How many rows there are travels with the form, because the grid grew
+    // after the server drew it and the action has to read what was typed.
+    await expect(page.locator('input[name="line_count"]')).toHaveValue('2');
+
+    // And a row is dropped from the row itself.
+    await page.getByRole('button', { name: 'Remove line' }).first().click();
+    await expect(page.locator('select[name="item_code_0"]')).toHaveValue('');
+  });
+
+  test('the document names everybody it passed through', async ({ page }) => {
+    await signIn(page);
+    await page.goto('/purchasing/ap-invoices');
+    await expect(page.getByRole('heading', { name: 'Purchase Invoices' }).first()).toBeVisible({
+      timeout: 60_000,
+    });
+
+    const firstInvoice = page
+      .locator('a[href^="/purchasing/ap-invoices/"]:not([href$="/new"])')
+      .first();
+    if ((await firstInvoice.count()) === 0) {
+      test.skip(true, 'No purchase invoice to read — raise one first.');
+      return;
+    }
+    await firstInvoice.click();
+    await expect(page.locator('#ap-invoice-document')).toBeVisible({ timeout: 60_000 });
+
+    // Four questions with four different answers, as the Journal Entry asks
+    // them. An empty box is an answer too: that step has not happened.
+    const document = page.locator('#ap-invoice-document');
+    for (const label of ['Raised by', 'Submitted by', 'Posted by', 'Posted on']) {
+      await expect(document.getByText(label, { exact: true })).toBeVisible();
+    }
+
+    // Blueprint 8.4 — "match status is visible on the invoice at all times".
+    await expect(document.getByText('Match status', { exact: true })).toBeVisible();
+  });
+
+  test('a draft is corrected on the document itself', async ({ page }) => {
+    // Raising a document, saving two lines through it and taking one off again
+    // is four server round trips; the default half-minute is not enough.
+    test.setTimeout(120_000);
+    await signIn(page);
+
+    // Raised here rather than found on the register, so the test owns the
+    // draft it is about to edit and does not depend on what an earlier run
+    // left behind.
+    await page.goto('/sales/ar-invoices/new');
+    await expect(page.locator('select[name="item_code_0"]')).toBeVisible({ timeout: 60_000 });
+
+    const customer = await page.locator('datalist option').first().getAttribute('value');
+    await page.getByLabel('Customer Name').fill(customer!);
+    const item = await page
+      .locator('select[name="item_code_0"] option:not([value=""])')
+      .first()
+      .getAttribute('value');
+    await page.selectOption('select[name="item_code_0"]', item!);
+    await page.fill('input[name="quantity_0"]', '1');
+    await page.fill('input[name="unit_price_0"]', '5000');
+    await page.getByRole('button', { name: 'Create' }).click();
+
+    await page.waitForURL(/\/sales\/ar-invoices\/INV-/);
+    const document = page.locator('#ar-invoice-document');
+    await expect(document).toBeVisible({ timeout: 60_000 });
+
+    // The count in the grid's caption is the server's answer — the number of
+    // lines the invoice actually carries. The totals under the grid are summed
+    // on screen as it is typed, so waiting on those would pass before anything
+    // had been saved, which is how this test first fooled itself.
+    const carried = page.locator('#ar-invoice-document-lines-heading');
+    await expect(carried).toContainText('1');
+
+    // The one line it was raised with, and a blank one under it. The lines are
+    // typed into on the record — not read back as text, as they were.
+    const rows = document.locator('tbody tr:not([aria-hidden="true"])');
+    await expect(rows).toHaveCount(2);
+
+    // Fill the blank row: another opens under it, as on the form.
+    // `.nth(1)` and not `.last()` — the last row moves the moment one opens.
+    const second = rows.nth(1);
+    await second.locator('select[aria-label="Item Code"]').selectOption(item!);
+    await second.locator('input[aria-label="Quantity"]').fill('2');
+    await second.locator('input[aria-label="Unit Price"]').fill('3000');
+    await expect(rows).toHaveCount(3);
+
+    // Leaving the row saves it. There is no button to press.
+    await document.getByText('Lines', { exact: true }).click();
+    await expect(carried).toContainText('2', { timeout: 60_000 });
+
+    // And ✕ takes it off again.
+    await rows.nth(1).locator('button[aria-label="Remove line"]').click();
+    await expect(carried).toContainText('1', { timeout: 60_000 });
+
+    // The last line is refused, on the row it concerns, because an invoice
+    // bills for something. The sentence is the service's own.
+    await rows.nth(0).locator('button[aria-label="Remove line"]').click();
+    await expect(document.getByRole('alert')).toContainText('billing for nothing', {
+      timeout: 60_000,
+    });
+    await expect(carried).toContainText('1');
   });
 });

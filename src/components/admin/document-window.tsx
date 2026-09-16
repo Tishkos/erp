@@ -57,7 +57,12 @@ export function DocumentWindow({
   readonly number: string;
   readonly fields: readonly DocumentField[];
   readonly linesTitle: string;
-  readonly linesCount: number;
+  /**
+   * How many lines the document has. Omitted on a form whose grid grows as it
+   * is typed: a badge counting the rows the server drew would be answering a
+   * question about the screen a moment ago.
+   */
+  readonly linesCount?: number | undefined;
   /** The lines table. */
   readonly children: ReactNode;
   /** What may be done to it, at the foot. */
@@ -118,7 +123,9 @@ export function DocumentWindow({
               ▾
             </span>
             <strong>{linesTitle}</strong>
-            <span className={admin.sapGridCount}>{linesCount}</span>
+            {linesCount === undefined ? null : (
+              <span className={admin.sapGridCount}>{linesCount}</span>
+            )}
           </div>
 
           <div className={`${admin.sapTableWrap} ${admin.sapLineTableWrap}`}>{children}</div>

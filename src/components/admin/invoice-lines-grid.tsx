@@ -1,0 +1,532 @@
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import styles from './admin.module.css';
+
+/**
+ * The lines of an invoice, typed straight into the grid.
+ *
+ * The Journal Entry's grid, for a document that bills rather than posts (by
+ * direction, 2026-09-16). There is no "Add line": the table always carries one
+ * empty row at the foot, so filling the current line opens the next one, and a
+ * person keeps going until they stop. A row is dropped with the ✕ beside it.
+ *
+ * It is the same grid in two places, because it is the same act:
+ *
+ *   raising one   the rows are form fields, and the whole document — header,
+ *                 lines and all — is written when the button is pressed. There
+ *                 is no invoice yet for a line to be saved against.
+ *   correcting a  the invoice exists, so each row saves itself the moment it
+ *   draft         is complete and left, and the server's copy comes back on
+ *                 the refresh that follows.
+ *
+ * Passing `live` chooses the second. Everything it enforces is enforced again
+ * in the service — a line the domain refuses is refused there, and the refusal
+ * is shown on the row it concerns.
+ */
+
+export interface LineItem {
+  readonly code: string;
+  readonly name: string;
+  /** The item's own unit, sent with the line rather than assumed to be each. */
+  readonly uomCode?: string | null;
+  /** What is on the shelf, when the screen knows — a sale reads it. */
+  readonly onHand?: string | null;
+  /** Whose stock this line draws from; empty when the item has no links. */
+  readonly suppliers?: readonly { readonly id: string; readonly label: string }[];
+}
+
+export interface LineWarehouse {
+  readonly code: string;
+  readonly name: string;
+}
+
+/** A line the invoice already carries. */
+export interface SavedInvoiceLine {
+  readonly id: string;
+  readonly lineNo: number;
+  readonly itemCode: string;
+  readonly quantity: string;
+  readonly unitPrice: string;
+  readonly discount: string;
+  readonly supplierId: string;
+  readonly warehouseCode: string;
+}
+
+interface Outcome {
+  readonly ok: boolean;
+  readonly error?: string;
+}
+
+/** Correcting a draft: the document exists, so the rows save themselves. */
+export interface LiveLines {
+  readonly documentId: string;
+  readonly documentNo: string;
+  readonly lines: readonly SavedInvoiceLine[];
+  readonly save: (formData: FormData) => Promise<Outcome>;
+  readonly remove: (formData: FormData) => Promise<Outcome>;
+}
+
+export interface InvoiceLineLabels {
+  readonly itemCode: string;
+  readonly quantity: string;
+  readonly unitPrice: string;
+  readonly discount: string;
+  readonly total: string;
+  readonly supplier: string;
+  readonly warehouse: string;
+  readonly anySupplier: string;
+  readonly chooseItem: string;
+  readonly remove: string;
+  readonly documentTotal: string;
+  readonly lines: string;
+  readonly onHand: string;
+  readonly saving: string;
+}
+
+interface Row {
+  readonly key: string;
+  /** A saved line's id, or null while the row is only on screen. */
+  lineId: string | null;
+  itemCode: string;
+  quantity: string;
+  unitPrice: string;
+  discount: string;
+  supplierId: string;
+  warehouseCode: string;
+  /** Why the server refused it, shown on the row. */
+  error: string | null;
+  /** Something changed since it was last saved. */
+  dirty: boolean;
+  /** A new row the server has accepted; its own copy arrives on the refresh. */
+  settled: boolean;
+}
+
+/** Empty rows drawn under the lines — an accountant reads them as room left. */
+const FILLER_ROWS = 2;
+
+let counter = 0;
+const blank = (warehouseCode: string): Row => ({
+  key: `line-${(counter += 1)}`,
+  lineId: null,
+  itemCode: '',
+  quantity: '',
+  unitPrice: '',
+  discount: '',
+  supplierId: '',
+  warehouseCode,
+  error: null,
+  dirty: false,
+  settled: false,
+});
+
+/** "2400.0000" reads as 2400; a person did not type the zeros. */
+function trimZeros(value: string): string {
+  return value.includes('.') ? value.replace(/\.?0+$/, '') : value;
+}
+
+const fromLine = (line: SavedInvoiceLine): Row => ({
+  key: line.id,
+  lineId: line.id,
+  itemCode: line.itemCode,
+  quantity: trimZeros(line.quantity),
+  unitPrice: trimZeros(line.unitPrice),
+  discount: Number(line.discount) === 0 ? '' : trimZeros(line.discount),
+  supplierId: line.supplierId,
+  warehouseCode: line.warehouseCode,
+  error: null,
+  dirty: false,
+  settled: false,
+});
+
+const written = (row: Row) =>
+  row.itemCode !== '' || row.quantity !== '' || row.unitPrice !== '' || row.discount !== '';
+
+/** A row is complete when it names an item, an amount and somewhere to put it. */
+const complete = (row: Row) =>
+  row.itemCode !== '' &&
+  row.quantity.trim() !== '' &&
+  row.unitPrice.trim() !== '' &&
+  row.warehouseCode !== '';
+
+/** Quantity × price less the discount — the sponsor's Total Price, per row. */
+const totalOf = (row: Row) => {
+  const quantity = Number(row.quantity);
+  const price = Number(row.unitPrice);
+  const discount = Number(row.discount || 0);
+  if (!Number.isFinite(quantity) || !Number.isFinite(price) || !Number.isFinite(discount)) return 0;
+  return quantity * price - discount;
+};
+
+export function InvoiceLinesGrid({
+  items,
+  warehouses,
+  showSupplier = false,
+  labels,
+  currency,
+  locale,
+  headingId,
+  live,
+}: {
+  readonly items: readonly LineItem[];
+  readonly warehouses: readonly LineWarehouse[];
+  /** The Sales Invoice's Supplier column: whose stock the line is sold from. */
+  readonly showSupplier?: boolean;
+  readonly labels: InvoiceLineLabels;
+  readonly currency: string;
+  readonly locale: string;
+  readonly headingId: string;
+  /** Present on a draft that already exists: each row saves itself. */
+  readonly live?: LiveLines | undefined;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const defaultWarehouse = warehouses[0]?.code ?? '';
+  const [rows, setRows] = useState<Row[]>(() =>
+    live && live.lines.length > 0
+      ? [...live.lines.map(fromLine), blank(defaultWarehouse)]
+      : [blank(defaultWarehouse)],
+  );
+  // Rows in flight: a second save of the same row waits for the first.
+  const saving = useRef(new Set<string>());
+
+  const savedLines = live?.lines;
+
+  // When the server's lines change (a save landed, a line was removed), take
+  // its version of every saved row that is not mid-edit, and keep whatever is
+  // still being typed. A new row the server has just accepted is dropped here:
+  // its own copy is in `lines` now.
+  useEffect(() => {
+    if (!savedLines) return;
+    setRows((current) => {
+      const mine = new Map(current.filter((row) => row.lineId).map((row) => [row.lineId!, row]));
+      const saved = savedLines.map((line) => {
+        const local = mine.get(line.id);
+        return local && local.dirty ? local : fromLine(line);
+      });
+      const unsaved = current.filter((row) => row.lineId === null && !row.settled);
+      return [...saved, ...(unsaved.length > 0 ? unsaved : [blank(defaultWarehouse)])];
+    });
+  }, [savedLines, defaultWarehouse]);
+
+  const money = useMemo(
+    () =>
+      new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency,
+        currencyDisplay: 'code',
+        // The dinar has no subunit in practice: IQD 2,000, never IQD 2,000.00.
+        minimumFractionDigits: currency === 'IQD' ? 0 : 2,
+        maximumFractionDigits: currency === 'IQD' ? 0 : 2,
+      }),
+    [locale, currency],
+  );
+
+  const itemsByCode = useMemo(() => new Map(items.map((item) => [item.code, item])), [items]);
+
+  /** One empty row at the foot, always. Filling the last one opens the next. */
+  const settle = (next: Row[]): Row[] => {
+    const last = next[next.length - 1];
+    if (!last) return [blank(defaultWarehouse)];
+    return written(last) ? [...next, blank(defaultWarehouse)] : next;
+  };
+
+  const patch = (key: string, change: Partial<Row>) =>
+    setRows((current) =>
+      settle(
+        current.map((row) =>
+          row.key === key ? { ...row, ...change, dirty: true, error: null } : row,
+        ),
+      ),
+    );
+
+  /** A refusal, kept on the row it concerns. Typing into the row clears it. */
+  const refuse = (key: string, error: string) =>
+    setRows((current) => current.map((row) => (row.key === key ? { ...row, error } : row)));
+
+  // Changing the item changes whose stock the line may draw from, so a supplier
+  // chosen for the previous item is cleared rather than left pointing at a link
+  // this item does not have.
+  const chooseItem = (key: string, itemCode: string) => patch(key, { itemCode, supplierId: '' });
+
+  const commit = (row: Row) => {
+    if (!live || !row.dirty || !complete(row) || saving.current.has(row.key)) return;
+    saving.current.add(row.key);
+
+    const form = new FormData();
+    form.set('id', live.documentId);
+    form.set('invoice_no', live.documentNo);
+    if (row.lineId) form.set('lineId', row.lineId);
+    form.set('itemCode', row.itemCode);
+    form.set('quantity', row.quantity.trim());
+    form.set('unitPrice', row.unitPrice.trim());
+    form.set('discount', row.discount.trim());
+    form.set('warehouseCode', row.warehouseCode);
+    form.set('supplierId', row.supplierId);
+
+    startTransition(async () => {
+      const outcome = await live.save(form);
+      saving.current.delete(row.key);
+      if (outcome.ok) {
+        setRows((current) =>
+          current.map((r) =>
+            r.key === row.key ? { ...r, dirty: false, error: null, settled: r.lineId === null } : r,
+          ),
+        );
+        router.refresh();
+      } else {
+        refuse(row.key, outcome.error ?? '');
+      }
+    });
+  };
+
+  const drop = (row: Row) => {
+    if (!live || row.lineId === null) {
+      setRows((current) => settle(current.filter((r) => r.key !== row.key)));
+      return;
+    }
+    const form = new FormData();
+    form.set('id', live.documentId);
+    form.set('invoice_no', live.documentNo);
+    form.set('lineId', row.lineId);
+    startTransition(async () => {
+      const outcome = await live.remove(form);
+      if (outcome.ok) router.refresh();
+      // Not `patch`: that is for something a person typed, and it clears the
+      // row's error on the way through — which would swallow this one.
+      else refuse(row.key, outcome.error ?? '');
+    });
+  };
+
+  const filled = rows.filter(written);
+  const total = filled.reduce((sum, row) => sum + totalOf(row), 0);
+  const columns = showSupplier ? 9 : 8;
+
+  /** Only a form posts its rows; a live grid has already sent them. */
+  const field = (name: string, index: number) => (live ? {} : { name: `${name}_${index}` });
+
+  return (
+    <>
+      <table aria-labelledby={headingId} className={styles.sapTable}>
+        <thead>
+          <tr>
+            <th scope="col">#</th>
+            <th scope="col">{labels.itemCode}</th>
+            <th className={styles.sapNum} scope="col">
+              {labels.quantity}
+            </th>
+            <th className={styles.sapNum} scope="col">
+              {labels.unitPrice}
+            </th>
+            <th className={styles.sapNum} scope="col">
+              {labels.discount}
+            </th>
+            <th className={styles.sapNum} scope="col">
+              {labels.total}
+            </th>
+            {showSupplier ? <th scope="col">{labels.supplier}</th> : null}
+            <th scope="col">{labels.warehouse}</th>
+            <th aria-label={labels.remove} />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => {
+            const item = itemsByCode.get(row.itemCode);
+            const suppliers = item?.suppliers ?? [];
+            const live_ = written(row);
+            const last = index === rows.length - 1;
+            return (
+              <tr
+                className={last ? styles.sapEntryRow : undefined}
+                data-error={row.error ? 'true' : undefined}
+                key={row.key}
+                onBlur={(event) => {
+                  // Only when focus leaves the row altogether, not when it
+                  // moves from one cell of it to the next.
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                    commit(row);
+                  }
+                }}
+              >
+                <td>
+                  <bdi dir="ltr">{index + 1}</bdi>
+                </td>
+                <td className={styles.sapAccountCell}>
+                  <select
+                    aria-label={labels.itemCode}
+                    dir="auto"
+                    onChange={(event) => chooseItem(row.key, event.target.value)}
+                    // An invoice bills for something: on the form that raises
+                    // one, the first row names an item or there is no document.
+                    required={!live && index === 0}
+                    value={row.itemCode}
+                    {...field('item_code', index)}
+                  >
+                    <option value="">{labels.chooseItem}</option>
+                    {items.map((option) => (
+                      <option key={option.code} value={option.code}>
+                        {option.code} · {option.name}
+                      </option>
+                    ))}
+                  </select>
+                  {/* The item's own unit travels with the line. Without it every
+                      line is billed in "each", whatever the item is measured in. */}
+                  {live ? null : (
+                    <input name={`uom_code_${index}`} type="hidden" value={item?.uomCode ?? ''} />
+                  )}
+                  {row.error ? (
+                    <span className={styles.sapRowError} role="alert">
+                      {row.error}
+                    </span>
+                  ) : null}
+                  {item?.onHand ? (
+                    <span className={styles.sapEnteredNote}>
+                      {labels.onHand} {Number(item.onHand)}
+                    </span>
+                  ) : null}
+                </td>
+                <td>
+                  <input
+                    aria-label={labels.quantity}
+                    dir="ltr"
+                    inputMode="decimal"
+                    min={0}
+                    onChange={(event) => patch(row.key, { quantity: event.target.value })}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur();
+                    }}
+                    // Required the moment the row names an item: a line with an
+                    // item and no quantity is somebody halfway through typing,
+                    // and posting it as a zero would be worse than saying so.
+                    required={!live && row.itemCode !== ''}
+                    step="any"
+                    type="number"
+                    value={row.quantity}
+                    {...field('quantity', index)}
+                  />
+                </td>
+                <td>
+                  <input
+                    aria-label={labels.unitPrice}
+                    dir="ltr"
+                    inputMode="decimal"
+                    min={0}
+                    onChange={(event) => patch(row.key, { unitPrice: event.target.value })}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur();
+                    }}
+                    required={!live && row.itemCode !== ''}
+                    step="any"
+                    type="number"
+                    value={row.unitPrice}
+                    {...field('unit_price', index)}
+                  />
+                </td>
+                <td>
+                  <input
+                    aria-label={labels.discount}
+                    dir="ltr"
+                    inputMode="decimal"
+                    min={0}
+                    onChange={(event) => patch(row.key, { discount: event.target.value })}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur();
+                    }}
+                    step="any"
+                    type="number"
+                    value={row.discount}
+                    {...field('discount', index)}
+                  />
+                </td>
+                {/* Not a field: the line's total is its own three numbers, and a
+                    fourth box holding the answer is a box that can disagree. */}
+                <td className={styles.sapNum}>
+                  <bdi dir="ltr">{live_ ? money.format(totalOf(row)) : ''}</bdi>
+                </td>
+                {showSupplier ? (
+                  <td>
+                    <select
+                      aria-label={labels.supplier}
+                      // Disabled rather than hidden when the item has no links:
+                      // the column stays where the eye expects it, and the
+                      // reason it is empty is the item, not a fault.
+                      disabled={suppliers.length === 0}
+                      onChange={(event) => patch(row.key, { supplierId: event.target.value })}
+                      value={row.supplierId}
+                      {...field('supplier_id', index)}
+                    >
+                      {/* Blank is a real choice — the oldest stock of any supplier. */}
+                      <option value="">{labels.anySupplier}</option>
+                      {suppliers.map((supplier) => (
+                        <option key={supplier.id} value={supplier.id}>
+                          {supplier.label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                ) : null}
+                <td>
+                  <select
+                    aria-label={labels.warehouse}
+                    onChange={(event) => patch(row.key, { warehouseCode: event.target.value })}
+                    value={row.warehouseCode}
+                    {...field('warehouse_code', index)}
+                  >
+                    {warehouses.map((house) => (
+                      <option key={house.code} value={house.code}>
+                        {house.code} · {house.name}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td className={styles.sapRowRemove}>
+                  {live_ ? (
+                    <button
+                      aria-label={labels.remove}
+                      onClick={() => drop(row)}
+                      title={labels.remove}
+                      type="button"
+                    >
+                      ✕
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            );
+          })}
+          {Array.from({ length: FILLER_ROWS }, (_, i) => (
+            <tr aria-hidden="true" className={styles.sapFiller} key={`filler-${i}`}>
+              {Array.from({ length: columns }, (_, cell) => (
+                <td key={cell} />
+              ))}
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          {/* What the document comes to, live, the way the journal sums its own
+              grid as it is typed rather than after a round trip. */}
+          <tr className={styles.sapTotalRow}>
+            <td colSpan={5}>
+              {labels.documentTotal}
+              <span className={styles.sapNote}>
+                {' '}
+                · {labels.lines}: {filled.length}
+                {pending ? ` · ${labels.saving}` : ''}
+              </span>
+            </td>
+            <td aria-live="polite" className={styles.sapNum}>
+              <bdi dir="ltr">{money.format(total)}</bdi>
+            </td>
+            <td colSpan={showSupplier ? 3 : 2} />
+          </tr>
+        </tfoot>
+      </table>
+
+      {/* How many rows the action should read. The grid grows as it is typed,
+          so the number cannot be a constant the two sides agree on in advance.
+          A live grid has already sent each row and needs none of it. */}
+      {live ? null : <input name="line_count" type="hidden" value={rows.length} />}
+    </>
+  );
+}

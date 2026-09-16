@@ -1647,6 +1647,9 @@
   font-weight: 700;
 }
 
+/* The match is its own axis, not a document status (blueprint 8.4), so it takes
+   the same chip: agreed with the order and the receipt, or not. */
+.sapStatus[data-status='matched'],
 .sapStatus[data-status='posted'],
 .sapStatus[data-status='approved'] {
   border-color: #86a28c;
@@ -1660,6 +1663,7 @@
   color: #294f6d;
 }
 
+.sapStatus[data-status='exception'],
 .sapStatus[data-status='rejected'],
 .sapStatus[data-status='cancelled'],
 .sapStatus[data-status='reversed'] {

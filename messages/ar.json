@@ -324,6 +324,8 @@
     "unit_price": "سعر الوحدة",
     "line_total": "إجمالي البند",
     "net_amount": "الصافي",
+    "gross_amount": "الإجمالي",
+    "settled": "المسدَّد",
     "tax_amount": "الضريبة",
     "outstanding": "المتبقي",
     "allocated": "المخصّص",
@@ -1717,6 +1719,8 @@
       "statement_empty": "لا يوجد قيد على هذا الحساب خلال الفترة."
     },
     "actions": "إجراءات",
+    "choose_item": "اختر صنفاً…",
+    "remove_line": "حذف البند",
     "mapping": {
       "subtitle": "بنود كل قائمة.",
       "line": "البند",
@@ -1774,7 +1778,12 @@
       "no_items": "أضف صنفاً مخزنياً أولاً.",
       "no_warehouses": "أنشئ مخزناً أولاً.",
       "raised_by": "أنشأها",
-      "posted_by": "رحّلها"
+      "posted_by": "رحّلها",
+      "match_status": "حالة المطابقة",
+      "match_matched": "مطابقة",
+      "match_exception": "اختلاف",
+      "variance_approved_by": "اعتمد الفرق",
+      "variance_reason": "سبب الفرق"
     },
     "ar_invoices": {
       "title": "فواتير المبيعات",
@@ -1792,7 +1801,11 @@
       "no_items": "أضف صنفاً مخزنياً أولاً.",
       "no_warehouses": "أنشئ مخزناً أولاً.",
       "raised_by": "أنشأها",
-      "carried_by": "اعتمدها"
+      "approved_by": "اعتمدها",
+      "approved_at": "تاريخ الاعتماد",
+      "posted_by": "رحّلها",
+      "reversed_by": "عكسها",
+      "awaiting": "بانتظار الاعتماد."
     },
     "sales_returns": {
       "title": "مرتجعات المبيعات",

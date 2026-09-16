@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
+import { InvoiceLinesGrid, type LineItem } from '@/components/admin/invoice-lines-grid';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { SearchablePicker } from '@/components/admin/searchable-picker';
 import { Denied } from '@/components/denied';
@@ -14,8 +15,6 @@ import * as partners from '@/server/services/partners';
 import * as warehouses from '@/server/services/warehouses';
 import { gapsFor } from '@domain/setup-gaps';
 import { createArInvoice } from '../actions';
-import { LINE_ROWS } from '../lines';
-import { SalesLines, type ItemOption } from '../sales-lines';
 
 /**
  * Raising a Sales Invoice — Operations build, block 5.
@@ -34,16 +33,22 @@ import { SalesLines, type ItemOption } from '../sales-lines';
  *
  * Every item's suppliers are sent to the grid up front. It is one small list
  * per item, and the alternative is a round trip each time somebody picks a row.
+ *
+ * The grid grows as it is typed (by direction, 2026-09-16): one line to start
+ * with, and filling it opens the next, the way the Journal Entry's does. It is
+ * the same component the Purchase Invoice uses — the Supplier column is the
+ * only difference between the two, and it is a flag rather than a second file.
  */
 export const dynamic = 'force-dynamic';
 
 export default async function NewArInvoicePage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/sales/ar-invoices')) notFound();
 
-  const [t, page, column, context, outcome] = await Promise.all([
+  const [t, page, column, locale, context, outcome] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('column'),
+    getLocale(),
     requireContext(),
     outcomeOf(searchParams),
   ]);
@@ -55,12 +60,16 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
   const { customers, allCustomers, options, allItems, houses } = await withCurrentUser(async (tx) => {
     const everyItem = await items.listAll(tx);
     const stock = everyItem.filter((row) => row.isStock && row.active);
-    const options: ItemOption[] = [];
+    const options: LineItem[] = [];
     for (const row of stock) {
       const linked = await items.suppliersOf(tx, row.id);
       options.push({
         code: row.code,
         name: row.name,
+        // The item's own unit and what is on the shelf: a person selling from
+        // stock is entitled to see how much of it there is.
+        uomCode: row.baseUomCode,
+        onHand: row.onHand,
         suppliers: linked
           .filter((link) => link.active)
           .map((link) => ({ id: link.supplierId, label: `${link.supplierCode} · ${link.supplierName}` })),
@@ -151,43 +160,33 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
             documentType={page('ar_invoice')}
             fields={fields}
             id="ar-invoice-new"
-            linesCount={LINE_ROWS}
             linesTitle={t('ar_invoices.lines')}
             number=""
           >
-            <table aria-labelledby="ar-invoice-new-lines-heading" className={s.sapTable}>
-              <thead>
-                <tr>
-                  <th scope="col">#</th>
-                  <th scope="col">{column('item_code')}</th>
-                  <th className={s.sapNum} scope="col">
-                    {column('quantity')}
-                  </th>
-                  <th className={s.sapNum} scope="col">
-                    {column('unit_price')}
-                  </th>
-                  <th className={s.sapNum} scope="col">
-                    {column('discount')}
-                  </th>
-                  <th scope="col">{column('supplier')}</th>
-                  <th scope="col">{column('warehouse_code')}</th>
-                </tr>
-              </thead>
-              <SalesLines
-                items={options}
-                labels={{
-                  itemCode: column('item_code'),
-                  quantity: column('quantity'),
-                  unitPrice: column('unit_price'),
-                  discount: column('discount'),
-                  supplier: column('supplier'),
-                  warehouse: column('warehouse_code'),
-                  anySupplier: t('ar_invoices.any_supplier'),
-                }}
-                rows={LINE_ROWS}
-                warehouses={houses.map((house) => ({ code: house.code, name: house.name }))}
-              />
-            </table>
+            <InvoiceLinesGrid
+              currency="IQD"
+              headingId="ar-invoice-new-lines-heading"
+              items={options}
+              labels={{
+                itemCode: column('item_code'),
+                quantity: column('quantity'),
+                unitPrice: column('unit_price'),
+                discount: column('discount'),
+                total: column('total_price'),
+                supplier: column('supplier'),
+                warehouse: column('warehouse_code'),
+                anySupplier: t('ar_invoices.any_supplier'),
+                chooseItem: t('choose_item'),
+                remove: t('remove_line'),
+                documentTotal: t('reports.totals'),
+                lines: t('ar_invoices.lines'),
+                onHand: column('on_hand'),
+                saving: t('journals.saving'),
+              }}
+              locale={locale}
+              showSupplier
+              warehouses={houses.map((house) => ({ code: house.code, name: house.name }))}
+            />
           </DocumentWindow>
         </form>
       )}

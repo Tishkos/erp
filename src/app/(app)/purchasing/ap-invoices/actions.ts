@@ -1,7 +1,8 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { runAdmin, runAdminAndReturn, text, withQuery } from '@/server/admin-action';
+import { revalidatePath } from 'next/cache';
+import { rowCount, runAdmin, runAdminAndReturn, text, withQuery } from '@/server/admin-action';
 import { parseDecimal } from '@domain/money';
 import { parseQuantity } from '@domain/uom';
 import * as ap from '@/server/services/ap-invoice';
@@ -16,11 +17,16 @@ const record = (invoiceNo: string) => `${LIST}/${encodeURIComponent(invoiceNo)}`
  * A row counts as written the moment it names an item, and everything else on
  * it is then required — a row with an item and no quantity is somebody halfway
  * through typing, and posting it as a zero would be worse than telling them.
+ *
+ * How many rows there are is the form's answer, not this file's: the grid opens
+ * a new line each time the current one is filled, so the count is whatever the
+ * person typed by the time they pressed the button.
  */
 function linesFrom(formData: FormData): ap.InvoiceLineInput[] {
   const lines: ap.InvoiceLineInput[] = [];
+  const rows = rowCount(formData, LINE_ROWS);
 
-  for (let row = 0; row < LINE_ROWS; row += 1) {
+  for (let row = 0; row < rows; row += 1) {
     const itemCode = text(formData, `item_code_${row}`).trim();
     if (!itemCode) continue;
 
@@ -46,6 +52,8 @@ function linesFrom(formData: FormData): ap.InvoiceLineInput[] {
       quantity: parseQuantity(quantity),
       unitPriceIqd: parseDecimal(unitPrice, 4n),
       ...(discount ? { discountIqd: parseDecimal(discount, 4n) } : {}),
+      // The item's own unit, sent with the line. Falling back to "each" was
+      // wrong for anything measured in metres or kilogrammes.
       uomCode: text(formData, `uom_code_${row}`).trim() || 'EA',
       isInventory: true,
       warehouseCode,
@@ -84,6 +92,49 @@ export async function createApInvoice(formData: FormData): Promise<void> {
 
   if (!outcome.ok) redirect(withQuery(`${LIST}/new`, 'error', outcome.error!));
   redirect(record(outcome.value!.invoiceNo));
+}
+
+/** What the grid hears back: it happened, or why it did not. */
+export interface LineOutcome {
+  readonly ok: boolean;
+  readonly error?: string;
+  readonly lineNo?: number;
+}
+
+/**
+ * One line of a draft, saved as it is left — by direction, 2026-09-16.
+ *
+ * With a `lineId` the line is changed in place; without one it is added. It
+ * returns rather than redirects, so the grid stays where the person is typing
+ * and refreshes its own figures.
+ */
+export async function saveApInvoiceLine(formData: FormData): Promise<LineOutcome> {
+  const lineId = text(formData, 'lineId').trim();
+  const discount = text(formData, 'discount').trim();
+
+  const outcome = await runAdmin((tx, ctx) =>
+    ap.saveLine(tx, ctx, text(formData, 'id'), lineId || null, {
+      itemCode: text(formData, 'itemCode').trim(),
+      quantity: parseQuantity(text(formData, 'quantity').trim()),
+      unitPriceIqd: parseDecimal(text(formData, 'unitPrice').trim(), 4n),
+      ...(discount ? { discountIqd: parseDecimal(discount, 4n) } : {}),
+      warehouseCode: text(formData, 'warehouseCode').trim(),
+    }),
+  );
+
+  if (outcome.ok) revalidatePath(record(text(formData, 'invoice_no')));
+  return outcome.ok
+    ? { ok: true, lineNo: outcome.value!.lineNo }
+    : { ok: false, error: outcome.error! };
+}
+
+/** Taking one line off a draft. The rest renumber; the total follows. */
+export async function removeApInvoiceLine(formData: FormData): Promise<LineOutcome> {
+  const outcome = await runAdmin((tx, ctx) =>
+    ap.removeLine(tx, ctx, text(formData, 'id'), text(formData, 'lineId')),
+  );
+  if (outcome.ok) revalidatePath(record(text(formData, 'invoice_no')));
+  return outcome.ok ? { ok: true } : { ok: false, error: outcome.error! };
 }
 
 /** Appendix B's *Pending Approval* — the invoice leaves the clerk's hands. */

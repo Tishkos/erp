@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
+import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { SearchablePicker } from '@/components/admin/searchable-picker';
 import { Denied } from '@/components/denied';
@@ -14,7 +15,6 @@ import * as partners from '@/server/services/partners';
 import * as warehouses from '@/server/services/warehouses';
 import { gapsFor } from '@domain/setup-gaps';
 import { createApInvoice } from '../actions';
-import { LINE_ROWS } from '../lines';
 
 /**
  * Raising a Purchase Invoice — Operations build, block 4.
@@ -34,19 +34,20 @@ import { LINE_ROWS } from '../lines';
  * when the Item Code is selected" is met by the picker carrying `CODE · Name`
  * in one control, so the name is never a second thing to keep in step.
  *
- * Eight rows, and a blank one is dropped rather than refused. A row naming an
- * item and nothing else is somebody halfway through typing, and that is refused
- * with a sentence — posting it as a zero would be worse.
+ * The grid grows as it is typed (by direction, 2026-09-16): one line to start
+ * with, and filling it opens the next, the way the Journal Entry's does. Eight
+ * fixed rows made short invoices look half-finished and long ones impossible.
  */
 export const dynamic = 'force-dynamic';
 
 export default async function NewApInvoicePage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/purchasing/ap-invoices')) notFound();
 
-  const [t, page, column, context, outcome] = await Promise.all([
+  const [t, page, column, locale, context, outcome] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('column'),
+    getLocale(),
     requireContext(),
     outcomeOf(searchParams),
   ]);
@@ -151,81 +152,36 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
             documentType={page('ap_invoice')}
             fields={fields}
             id="ap-invoice-new"
-            linesCount={LINE_ROWS}
             linesTitle={t('ap_invoices.lines')}
             number=""
           >
-            <table aria-labelledby="ap-invoice-new-lines-heading" className={s.sapTable}>
-              <thead>
-                <tr>
-                  <th scope="col">#</th>
-                  <th scope="col">{column('item_code')}</th>
-                  <th className={s.sapNum} scope="col">
-                    {column('quantity')}
-                  </th>
-                  <th className={s.sapNum} scope="col">
-                    {column('unit_price')}
-                  </th>
-                  <th className={s.sapNum} scope="col">
-                    {column('discount')}
-                  </th>
-                  <th scope="col">{column('warehouse_code')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Array.from({ length: LINE_ROWS }, (_, row) => (
-                  <tr key={row}>
-                    <td>
-                      <bdi dir="ltr">{row + 1}</bdi>
-                    </td>
-                    <td className={s.sapAccountCell}>
-                      <select aria-label={column('item_code')} defaultValue="" name={`item_code_${row}`}>
-                        <option value="" />
-                        {sellable.map((item) => (
-                          <option key={item.code} value={item.code}>
-                            {item.code} · {item.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className={s.sapNum}>
-                      <input
-                        aria-label={column('quantity')}
-                        inputMode="decimal"
-                        name={`quantity_${row}`}
-                      />
-                    </td>
-                    <td className={s.sapNum}>
-                      <input
-                        aria-label={column('unit_price')}
-                        inputMode="decimal"
-                        name={`unit_price_${row}`}
-                      />
-                    </td>
-                    <td className={s.sapNum}>
-                      <input
-                        aria-label={column('discount')}
-                        inputMode="decimal"
-                        name={`discount_${row}`}
-                      />
-                    </td>
-                    <td>
-                      <select
-                        aria-label={column('warehouse_code')}
-                        defaultValue={houses[0]?.code ?? ''}
-                        name={`warehouse_code_${row}`}
-                      >
-                        {houses.map((house) => (
-                          <option key={house.code} value={house.code}>
-                            {house.code} · {house.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <InvoiceLinesGrid
+              currency="IQD"
+              headingId="ap-invoice-new-lines-heading"
+              items={sellable.map((item) => ({
+                code: item.code,
+                name: item.name,
+                uomCode: item.baseUomCode,
+              }))}
+              labels={{
+                itemCode: column('item_code'),
+                quantity: column('quantity'),
+                unitPrice: column('unit_price'),
+                discount: column('discount'),
+                total: column('total_price'),
+                supplier: column('supplier'),
+                warehouse: column('warehouse_code'),
+                anySupplier: t('ar_invoices.any_supplier'),
+                chooseItem: t('choose_item'),
+                remove: t('remove_line'),
+                documentTotal: t('reports.totals'),
+                lines: t('ap_invoices.lines'),
+                onHand: column('on_hand'),
+                saving: t('journals.saving'),
+              }}
+              locale={locale}
+              warehouses={houses.map((house) => ({ code: house.code, name: house.name }))}
+            />
           </DocumentWindow>
         </form>
       )}

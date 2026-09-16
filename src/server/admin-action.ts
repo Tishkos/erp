@@ -68,6 +68,20 @@ export const text = (form: FormData, name: string): string => String(form.get(na
 /** Reads a checkbox. */
 export const flag = (form: FormData, name: string): boolean => form.get(name) !== null;
 
+/**
+ * How many line rows a grid submitted.
+ *
+ * A grid that grows as it is typed cannot agree a row count with its action in
+ * advance, so the count travels with the form. Clamped on the way in: the
+ * number arrives from a browser, and a form claiming a million rows should cost
+ * nothing to refuse.
+ */
+export function rowCount(form: FormData, fallback: number, cap = 500): number {
+  const claimed = Number(text(form, 'line_count'));
+  if (!Number.isInteger(claimed) || claimed <= 0) return fallback;
+  return Math.min(claimed, cap);
+}
+
 /** Reads a multi-select / checkbox group. */
 export const list = (form: FormData, name: string): string[] =>
   form.getAll(name).map(String).filter(Boolean);

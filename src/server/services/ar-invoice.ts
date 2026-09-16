@@ -32,10 +32,12 @@ import {
   businessPartner,
   deliveryNote,
   deliveryNoteLine,
+  journalEntry,
   paymentTerms,
   paymentTermInstalment,
   salesOrder,
   salesOrderLine,
+  warehouse,
 } from '../db/schema';
 import { formatQuantity, parseQuantity } from '../domain/uom';
 import { parseDecimal, toDecimalString } from '../domain/money';
@@ -626,6 +628,252 @@ export async function createDirect(
   return { id: created!.id, invoiceNo: allocated.documentNo };
 }
 
+// ---------------------------------------------------------------------------
+// The lines of a draft, typed in place — by direction, 2026-09-16
+// ---------------------------------------------------------------------------
+
+/**
+ * The Journal Entry's grid, on the document that bills the customer.
+ *
+ * A line is saved the moment it is complete and left, and a new one opens under
+ * it. `edit_draft` has been granted to both accounting roles since migration
+ * 0047 and no screen had ever used it, so a mistyped invoice had to be
+ * abandoned and raised again under a new number.
+ *
+ * **Only an invoice raised on its own.** §7.4 makes the Delivery Note the
+ * source of an inventory invoice: its lines are the shipment's, the item is
+ * carried down the chain rather than chosen at invoicing, and a trigger has
+ * refused anything else since 0047. Those are corrected on the delivery.
+ */
+export interface DraftSalesLineInput {
+  readonly itemCode: string;
+  readonly quantity: bigint;
+  readonly unitPriceIqd: bigint;
+  readonly discountIqd?: bigint;
+  readonly warehouseCode: string;
+  /** Whose stock the line draws from. Blank is the oldest of any supplier. */
+  readonly supplierId?: string | null;
+}
+
+/** The draft, and the reasons it may be typed into. */
+async function editableDraft(tx: Tx, ctx: ActorContext, id: string) {
+  const seen = await view(tx, id);
+
+  await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, {
+    branchCode: seen.branchCode,
+    objectId: id,
+  });
+
+  if (seen.status !== 'draft') {
+    throw new Error(
+      `Sales Invoice ${seen.invoiceNo} is ${seen.status} and its lines can no longer be changed. An approved invoice goes back to draft first, and a posted one is reversed.`,
+    );
+  }
+
+  if (seen.deliveryNoteId) {
+    throw new Error(
+      `Sales Invoice ${seen.invoiceNo} bills a Delivery Note, so its lines are the shipment's (§7.4). Correct the delivery, or raise an invoice on its own.`,
+    );
+  }
+
+  return seen;
+}
+
+/**
+ * The header's three figures, restated from the lines.
+ *
+ * `net = gross − discount` is a CHECK on the table, and the ageing, the
+ * receipts and Appendix B's Partially Paid all read `net_iqd`. So the header is
+ * rewritten from the lines on every change rather than adjusted by the
+ * difference, which is how two figures for one invoice start to disagree.
+ */
+async function restateTotals(tx: Tx, id: string): Promise<void> {
+  const rows = await tx
+    .select({ grossIqd: arInvoiceLine.grossIqd, netIqd: arInvoiceLine.netIqd })
+    .from(arInvoiceLine)
+    .where(eq(arInvoiceLine.arInvoiceId, id));
+
+  let gross = 0n;
+  let net = 0n;
+  for (const row of rows) {
+    gross += parseDecimal(row.grossIqd, 4n);
+    net += parseDecimal(row.netIqd, 4n);
+  }
+
+  await tx
+    .update(arInvoice)
+    .set({
+      grossIqd: toDecimalString(gross, 4n),
+      discountIqd: toDecimalString(gross - net, 4n),
+      netIqd: toDecimalString(net, 4n),
+      updatedAt: new Date(),
+    })
+    .where(eq(arInvoice.id, id));
+}
+
+export async function saveLine(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  lineId: string | null,
+  input: DraftSalesLineInput,
+): Promise<{ lineNo: number }> {
+  const invoice = await editableDraft(tx, ctx, id);
+
+  const existing = lineId ? invoice.lines.find((line) => line.id === lineId) : undefined;
+  if (lineId && !existing) {
+    throw new Error(`That line is not on invoice ${invoice.invoiceNo}.`);
+  }
+  const lineNo =
+    existing?.lineNo ?? invoice.lines.reduce((max, line) => Math.max(max, line.lineNo), 0) + 1;
+
+  const [stockItem] = await tx
+    .select({
+      code: item.code,
+      name: item.name,
+      uomCode: item.baseUomCode,
+      active: item.active,
+    })
+    .from(item)
+    .where(eq(item.code, input.itemCode))
+    .limit(1);
+  if (!stockItem) throw new DirectSalesLineError(lineNo, `names no item '${input.itemCode}'.`);
+  if (!stockItem.active) {
+    throw new DirectSalesLineError(lineNo, `names ${stockItem.code}, which is no longer active.`);
+  }
+
+  const [house] = await tx
+    .select({ code: warehouse.code })
+    .from(warehouse)
+    .where(eq(warehouse.code, input.warehouseCode))
+    .limit(1);
+  if (!house) {
+    throw new DirectSalesLineError(lineNo, `names no warehouse '${input.warehouseCode}'.`);
+  }
+
+  if (input.quantity <= 0n) {
+    throw new DirectSalesLineError(lineNo, 'has no quantity. An invoice bills for something.');
+  }
+  if (input.unitPriceIqd < 0n) {
+    throw new DirectSalesLineError(lineNo, 'has a negative price. A refund is a credit note.');
+  }
+
+  // Quantity carries six decimal places and the price four, so their product
+  // carries ten; the divisor brings it back to the four money is stored at.
+  const gross = (input.quantity * input.unitPriceIqd) / 1_000_000n;
+  const discount = input.discountIqd ?? 0n;
+  if (discount < 0n || discount > gross) {
+    throw new DirectSalesLineError(
+      lineNo,
+      'has a discount larger than the line, which would make it a credit note.',
+    );
+  }
+
+  const values = {
+    itemCode: stockItem.code,
+    // The sponsor: selecting the Item Code brings the Item Name. It is read
+    // from the master rather than taken from the caller, so an invoice cannot
+    // name an item one thing and the chart another.
+    description: stockItem.name,
+    uomCode: stockItem.uomCode,
+    quantity: formatQuantity(input.quantity),
+    unitPrice: toDecimalString(input.unitPriceIqd, 4n),
+    discountAmountIqd: discount === 0n ? null : toDecimalString(discount, 4n),
+    grossIqd: toDecimalString(gross, 4n),
+    netIqd: toDecimalString(gross - discount, 4n),
+    warehouseCode: house.code,
+    supplierId: input.supplierId ?? null,
+  };
+
+  if (existing) {
+    await tx.update(arInvoiceLine).set(values).where(eq(arInvoiceLine.id, existing.id));
+  } else {
+    await tx.insert(arInvoiceLine).values({
+      arInvoiceId: id,
+      lineNo,
+      deliveryNoteLineId: null,
+      salesOrderLineId: null,
+      ...values,
+    });
+  }
+
+  await restateTotals(tx, id);
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: existing ? 'ar_invoice.line_changed' : 'ar_invoice.line_added',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: invoice.branchCode,
+    ...(existing
+      ? {
+          before: {
+            lineNo: existing.lineNo,
+            itemCode: existing.itemCode,
+            quantity: existing.quantity,
+            unitPrice: existing.unitPrice,
+            netIqd: existing.netIqd,
+            warehouseCode: existing.warehouseCode,
+          },
+        }
+      : {}),
+    after: { lineNo, ...values },
+    outcome: 'success',
+  });
+
+  return { lineNo };
+}
+
+/** Taking one line off a draft. The rest renumber, so the grid stays 1..n. */
+export async function removeLine(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  lineId: string,
+): Promise<void> {
+  const invoice = await editableDraft(tx, ctx, id);
+
+  const line = invoice.lines.find((row) => row.id === lineId);
+  if (!line) throw new Error(`That line is not on invoice ${invoice.invoiceNo}.`);
+  if (invoice.lines.length === 1) {
+    throw new Error(
+      `${invoice.invoiceNo} would be left billing for nothing. Change this line, or cancel the invoice.`,
+    );
+  }
+
+  await tx.delete(arInvoiceLine).where(eq(arInvoiceLine.id, lineId));
+
+  // Out of the way and back: the numbers are unique per invoice, so closing the
+  // gap in place would collide with the row above it.
+  await tx.execute(
+    sql`update ar_invoice_line set line_no = line_no + 1000
+         where ar_invoice_id = ${id} and line_no > ${line.lineNo}`,
+  );
+  await tx.execute(
+    sql`update ar_invoice_line set line_no = line_no - 1001
+         where ar_invoice_id = ${id} and line_no > 1000`,
+  );
+
+  await restateTotals(tx, id);
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'ar_invoice.line_removed',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: invoice.branchCode,
+    before: {
+      lineNo: line.lineNo,
+      itemCode: line.itemCode,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      netIqd: line.netIqd,
+      warehouseCode: line.warehouseCode,
+    },
+    outcome: 'success',
+  });
+}
+
 export async function post(
   tx: Tx,
   ctx: ActorContext,
@@ -959,23 +1207,41 @@ export async function viewByNo(tx: Tx, invoiceNo: string) {
 
   const seen = await view(tx, row.id);
 
-  // Who raised it and who carried it, as the Journal Entry shows.
+  // Everybody the document passed through, as the Journal Entry names them.
+  // Approving and posting are two verbs — "the invoice is not posted until CEO
+  // approval" — so they are two names, even when one person did both. Rolling
+  // them into a single "carried by" hid which of the two steps had happened.
   const people = await tx
     .select({ id: appUser.id, displayName: appUser.displayName })
     .from(appUser)
     .where(
       inArray(
         appUser.id,
-        [seen.createdBy, seen.approvedBy, seen.postedBy].filter((id): id is string => Boolean(id)),
+        [seen.createdBy, seen.approvedBy, seen.postedBy, seen.reversedBy].filter(
+          (id): id is string => Boolean(id),
+        ),
       ),
     );
   const name = (id: string | null) =>
     id ? (people.find((person) => person.id === id)?.displayName ?? null) : null;
 
+  // The posting, by the number a person would read out, so the invoice drills
+  // to its own journal rather than to an id nobody can type.
+  const [posted] = seen.journalEntryId
+    ? await tx
+        .select({ entryNo: journalEntry.entryNo })
+        .from(journalEntry)
+        .where(eq(journalEntry.id, seen.journalEntryId))
+        .limit(1)
+    : [];
+
   return {
     ...seen,
     raisedBy: name(seen.createdBy),
-    carriedBy: name(seen.approvedBy ?? seen.postedBy),
+    approvedByName: name(seen.approvedBy),
+    postedByName: name(seen.postedBy),
+    reversedByName: name(seen.reversedBy),
+    journalEntryNo: posted?.entryNo ?? null,
   };
 }
 

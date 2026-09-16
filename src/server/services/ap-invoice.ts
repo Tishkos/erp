@@ -31,6 +31,8 @@ import {
   businessPartner,
   goodsReceipt,
   goodsReceiptLine,
+  journalEntry,
+  warehouse,
   purchaseOrder,
   purchaseOrderLine,
   serviceReceipt,
@@ -451,6 +453,244 @@ export async function create(
   });
 
   return { id: created!.id, invoiceNo: allocated.documentNo, matchStatus: match.status };
+}
+
+/**
+ * The lines of a draft invoice, typed in place — by direction, 2026-09-16.
+ *
+ * The Journal Entry's grid, on the document that bills for the goods: a line is
+ * saved the moment it is complete and left, and a new one opens under it.
+ * `edit_draft` has been granted to both accounting roles since migration 0036
+ * and no screen had ever used it, so a mistyped invoice had to be abandoned and
+ * raised again under a new number.
+ *
+ * **Only an invoice raised on its own.** An invoice created from a purchase
+ * order takes its lines from that order — §8.4's match compares the three
+ * documents, and a line typed over an ordered one would be comparing the
+ * invoice with itself. Those are corrected on the order.
+ */
+export interface DraftLineInput {
+  readonly itemCode: string;
+  readonly quantity: bigint;
+  readonly unitPriceIqd: bigint;
+  readonly discountIqd?: bigint;
+  readonly warehouseCode: string;
+}
+
+/** The draft, and the reasons it may be typed into. */
+async function editableDraft(tx: Tx, ctx: ActorContext, id: string) {
+  const { invoice, lines } = await load(tx, id);
+
+  await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, {
+    branchCode: invoice.branchCode,
+    objectId: id,
+  });
+
+  if (invoice.status !== 'draft') {
+    throw new ApInvoiceStateError(
+      invoice.invoiceNo,
+      invoice.status,
+      'only a draft invoice may have its lines changed. A submitted invoice is rejected back to draft first, and a posted one is reversed.',
+    );
+  }
+
+  if (invoice.purchaseOrderId) {
+    throw new ApInvoiceStateError(
+      invoice.invoiceNo,
+      invoice.status,
+      "it was raised from a purchase order, so its lines are the order's (§8.4). Correct the order, or raise an invoice on its own.",
+    );
+  }
+
+  return { invoice, lines };
+}
+
+/**
+ * §15's evidence, kept in step with the lines.
+ *
+ * `receives_own_stock` is what the CHECK reads, and it is true when every line
+ * names the warehouse its goods arrive in. Re-stated after each change, because
+ * a column set once at creation would be a claim about lines that have since
+ * been edited.
+ */
+async function restateOwnStock(tx: Tx, id: string, fallback: boolean): Promise<void> {
+  const rows = await tx
+    .select({ warehouseCode: apInvoiceLine.warehouseCode })
+    .from(apInvoiceLine)
+    .where(eq(apInvoiceLine.apInvoiceId, id));
+
+  await tx
+    .update(apInvoice)
+    .set({
+      receivesOwnStock:
+        rows.length === 0 ? fallback : rows.every((row) => row.warehouseCode !== null),
+      updatedAt: new Date(),
+    })
+    .where(eq(apInvoice.id, id));
+}
+
+export async function saveLine(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  lineId: string | null,
+  input: DraftLineInput,
+): Promise<{ lineNo: number }> {
+  const { invoice, lines } = await editableDraft(tx, ctx, id);
+
+  const existing = lineId ? lines.find((line) => line.id === lineId) : undefined;
+  if (lineId && !existing) {
+    throw new Error(`That line is not on invoice ${invoice.invoiceNo}.`);
+  }
+  const lineNo = existing?.lineNo ?? lines.reduce((max, line) => Math.max(max, line.lineNo), 0) + 1;
+
+  const [stockItem] = await tx
+    .select({
+      code: item.code,
+      name: item.name,
+      uomCode: item.baseUomCode,
+      isStock: item.isStock,
+      active: item.active,
+    })
+    .from(item)
+    .where(eq(item.code, input.itemCode))
+    .limit(1);
+  if (!stockItem) throw new ApInvoiceLineError(lineNo, `names no item '${input.itemCode}'.`);
+  if (!stockItem.active) {
+    throw new ApInvoiceLineError(lineNo, `names ${stockItem.code}, which is no longer active.`);
+  }
+
+  const [house] = await tx
+    .select({ code: warehouse.code })
+    .from(warehouse)
+    .where(eq(warehouse.code, input.warehouseCode))
+    .limit(1);
+  if (!house) {
+    throw new ApInvoiceLineError(lineNo, `names no warehouse '${input.warehouseCode}'.`);
+  }
+
+  if (input.quantity <= 0n) {
+    throw new ApInvoiceLineError(lineNo, 'has no quantity. An invoice bills for something.');
+  }
+  if (input.unitPriceIqd < 0n) {
+    throw new ApInvoiceLineError(lineNo, 'has a negative price. A refund is a credit note.');
+  }
+
+  // Quantity carries six decimal places and the price four, so their product
+  // carries ten; the divisor brings it back to the four money is stored at.
+  const gross = (input.quantity * input.unitPriceIqd) / 1_000_000n;
+  const discount = input.discountIqd ?? 0n;
+  if (discount < 0n || discount > gross) {
+    throw new ApInvoiceLineError(
+      lineNo,
+      'has a discount larger than the line, which would make it a credit note.',
+    );
+  }
+
+  const values = {
+    itemCode: stockItem.code,
+    // The name is read from the master rather than taken from the caller, so an
+    // invoice cannot name an item one thing and the chart another.
+    description: stockItem.name,
+    quantity: formatQuantity(input.quantity),
+    uomCode: stockItem.uomCode,
+    unitPrice: toDecimalString(input.unitPriceIqd, 4n),
+    isInventory: true,
+    warehouseCode: house.code,
+    discountIqd: toDecimalString(discount, 4n),
+  };
+
+  if (existing) {
+    await tx.update(apInvoiceLine).set(values).where(eq(apInvoiceLine.id, existing.id));
+  } else {
+    await tx.insert(apInvoiceLine).values({
+      apInvoiceId: id,
+      lineNo,
+      purchaseOrderLineId: null,
+      receivedQuantity: '0',
+      ...values,
+    });
+  }
+
+  await restateOwnStock(tx, id, invoice.receivesOwnStock);
+  // The match is recomputed on every change rather than on demand — 05.4's gate
+  // asks for a status that is the answer to "as of now".
+  await rematch(tx, id);
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: existing ? 'ap_invoice.line_changed' : 'ap_invoice.line_added',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: invoice.branchCode,
+    ...(existing
+      ? {
+          before: {
+            lineNo: existing.lineNo,
+            itemCode: existing.itemCode,
+            quantity: existing.quantity,
+            unitPrice: existing.unitPrice,
+            discountIqd: existing.discountIqd,
+            warehouseCode: existing.warehouseCode,
+          },
+        }
+      : {}),
+    after: { lineNo, ...values },
+    outcome: 'success',
+  });
+
+  return { lineNo };
+}
+
+/** Taking one line off a draft. The rest renumber, so the grid stays 1..n. */
+export async function removeLine(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  lineId: string,
+): Promise<void> {
+  const { invoice, lines } = await editableDraft(tx, ctx, id);
+
+  const line = lines.find((row) => row.id === lineId);
+  if (!line) throw new Error(`That line is not on invoice ${invoice.invoiceNo}.`);
+  if (lines.length === 1) {
+    throw new Error(
+      `${invoice.invoiceNo} would be left billing for nothing. Change this line, or delete the invoice.`,
+    );
+  }
+
+  await tx.delete(apInvoiceLine).where(eq(apInvoiceLine.id, lineId));
+
+  // Out of the way and back: the numbers are unique per invoice, so closing the
+  // gap in place would collide with the row above it.
+  await tx.execute(
+    sql`update ap_invoice_line set line_no = line_no + 1000
+         where ap_invoice_id = ${id} and line_no > ${line.lineNo}`,
+  );
+  await tx.execute(
+    sql`update ap_invoice_line set line_no = line_no - 1001
+         where ap_invoice_id = ${id} and line_no > 1000`,
+  );
+
+  await restateOwnStock(tx, id, invoice.receivesOwnStock);
+  await rematch(tx, id);
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'ap_invoice.line_removed',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: invoice.branchCode,
+    before: {
+      lineNo: line.lineNo,
+      itemCode: line.itemCode,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      discountIqd: line.discountIqd,
+      warehouseCode: line.warehouseCode,
+    },
+    outcome: 'success',
+  });
 }
 
 /**
@@ -1102,7 +1342,19 @@ export async function list(tx: Tx) {
       supplierCode: businessPartner.code,
       invoiceDate: apInvoice.invoiceDate,
       dueDate: apInvoice.dueDate,
-      totalIqd: apInvoice.totalIqd,
+      // What the invoice comes to. `total_iqd` is written at posting, so on a
+      // draft it is zero — and a register whose Amount column reads nothing for
+      // every unposted invoice is a register nobody can scan. Until it is
+      // posted the figure is summed from the lines, which is the same
+      // arithmetic the posting itself does.
+      totalIqd: sql<string>`case
+        when ${apInvoice.totalIqd} <> 0 then ${apInvoice.totalIqd}::text
+        else coalesce((
+          select sum(l.quantity * l.unit_price - l.discount_iqd)
+          from ap_invoice_line l
+          where l.ap_invoice_id = ${apInvoice.id}
+        ), 0)::text
+      end`,
       status: apInvoice.status,
       branchCode: apInvoice.branchCode,
     })
@@ -1128,27 +1380,48 @@ export async function viewByNo(tx: Tx, invoiceNo: string) {
 
   const { invoice, lines } = await load(tx, row.id);
 
-  // Who raised it and who carried it, as the Journal Entry shows. A document
-  // nobody is named on is a document nobody answers for.
+  // Everybody the document passed through, as the Journal Entry names them. A
+  // document nobody is named on is a document nobody answers for, and each of
+  // these is a different answer: who wrote it, who sent it up, who accepted the
+  // variance, and who carried it to the ledger.
   const people = await tx
     .select({ id: appUser.id, displayName: appUser.displayName })
     .from(appUser)
     .where(
       inArray(
         appUser.id,
-        [invoice.createdBy, invoice.submittedBy, invoice.postedBy].filter(
-          (id): id is string => Boolean(id),
-        ),
+        [
+          invoice.createdBy,
+          invoice.submittedBy,
+          invoice.postedBy,
+          invoice.varianceApprovedBy,
+          invoice.nonPoApprovedBy,
+          invoice.reversedBy,
+        ].filter((id): id is string => Boolean(id)),
       ),
     );
   const name = (id: string | null) =>
     id ? (people.find((person) => person.id === id)?.displayName ?? null) : null;
 
+  // The posting, by the number a person would read out, so the invoice drills
+  // to its own journal rather than to an id nobody can type.
+  const [posted] = invoice.journalEntryId
+    ? await tx
+        .select({ entryNo: journalEntry.entryNo })
+        .from(journalEntry)
+        .where(eq(journalEntry.id, invoice.journalEntryId))
+        .limit(1)
+    : [];
+
   return {
     invoice,
     lines,
     raisedBy: name(invoice.createdBy),
+    submittedBy: name(invoice.submittedBy),
     postedBy: name(invoice.postedBy),
+    varianceApprovedBy: name(invoice.varianceApprovedBy),
+    reversedBy: name(invoice.reversedBy),
+    journalEntryNo: posted?.entryNo ?? null,
   };
 }
 
