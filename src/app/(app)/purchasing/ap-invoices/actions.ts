@@ -80,12 +80,16 @@ export async function createApInvoice(formData: FormData): Promise<void> {
     const lines = linesFrom(formData);
     return ap.create(tx, ctx, {
       supplierId: text(formData, 'supplier_id'),
-      supplierInvoiceNo: text(formData, 'supplier_invoice_no').trim(),
+      // Block 4's header is the invoice number, the two dates and the
+      // supplier. The supplier's own number is not among them, and the column
+      // is not nullable — so the service takes our number for it, which is
+      // unique per supplier and keeps §15's duplicate control meaningful.
+      supplierInvoiceNo: '',
       purchaseOrderId: null,
       branchCode: ctx.branchCode,
       invoiceDate: text(formData, 'invoice_date'),
       dueDate: text(formData, 'due_date'),
-      note: text(formData, 'note').trim() || null,
+      note: null,
       lines,
     });
   });

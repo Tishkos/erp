@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import Link from 'next/link';
 import { History } from 'lucide-react';
 import admin from './admin.module.css';
@@ -31,6 +31,13 @@ export interface DocumentField {
    * so `.sapDoc input` styles it and it fills the column like the rest.
    */
   readonly control?: boolean;
+  /**
+   * The node draws its own labelled boxes and is placed in the grid as it is.
+   *
+   * For a control that is two fields at once — a code and a name that fill
+   * each other — which cannot be one cell holding two.
+   */
+  readonly bare?: boolean;
 }
 
 export interface DocumentTotal {
@@ -96,7 +103,10 @@ export function DocumentWindow({
 
         <div className={admin.sapBody}>
           <div className={admin.sapFields}>
-            {fields.map((field) => (
+            {fields.map((field) =>
+              field.bare ? (
+                <Fragment key={field.label}>{field.value}</Fragment>
+              ) : (
               <div
                 // `sapWide` rather than an inline grid span: the Journal Entry
                 // marks a full-width field with that class, and a second way of
@@ -115,7 +125,8 @@ export function DocumentWindow({
                   <span className={admin.sapBox}>{field.value}</span>
                 )}
               </div>
-            ))}
+              ),
+            )}
           </div>
 
           <div className={admin.sapGridCaption} id={headingId}>

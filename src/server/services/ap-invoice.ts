@@ -323,7 +323,10 @@ export async function create(
 
   // §15 — the duplicate control. Checked here for a message that names the
   // earlier invoice; the partial unique index refuses it by any other path.
-  if (!input.duplicateApprovedBy) {
+  //
+  // Nothing to check when the supplier's own number was not collected: block
+  // 4's header does not ask for one, and the invoice takes our number below.
+  if (input.supplierInvoiceNo.trim() !== '' && !input.duplicateApprovedBy) {
     const [existing] = await tx
       .select({ invoiceNo: apInvoice.invoiceNo })
       .from(apInvoice)
@@ -366,7 +369,10 @@ export async function create(
     .insert(apInvoice)
     .values({
       invoiceNo: allocated.documentNo,
-      supplierInvoiceNo: input.supplierInvoiceNo.trim(),
+      // Ours, when the supplier's own was not asked for. The column is not
+      // nullable and §15's index is on (supplier, number): a blank on every
+      // invoice would collide the second time the same supplier billed us.
+      supplierInvoiceNo: input.supplierInvoiceNo.trim() || allocated.documentNo,
       supplierId: input.supplierId,
       purchaseOrderId: input.purchaseOrderId ?? null,
       branchCode: input.branchCode,

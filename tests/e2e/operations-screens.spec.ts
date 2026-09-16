@@ -112,10 +112,8 @@ test.describe('the Operations Build screens open', () => {
 
     await expect(page.getByRole('heading', { name: 'New invoice' })).toBeVisible();
 
-    // The sponsor's line columns. Item Name is not among them because the item
-    // picker carries `CODE · Name` in one control — "automatically shown when
-    // the Item Code is selected", without a second field to keep in step.
-    for (const column of ['Quantity', 'Unit Price', 'Discount']) {
+    // The sponsor's line columns, in the sponsor's own words.
+    for (const column of ['Item Code', 'Item Name', 'Quantity', 'Unit Price', 'Discount']) {
       await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
     }
 
@@ -166,12 +164,14 @@ test.describe('the Operations Build screens open', () => {
     // The sponsor's line columns, Supplier among them — it is on the line and
     // not the header because the same item bought from two suppliers is two
     // pools of stock at two costs.
-    for (const column of ['Quantity', 'Unit Price', 'Discount', 'Supplier']) {
+    for (const column of ['Item Code', 'Item Name', 'Quantity', 'Unit Price', 'Discount', 'Supplier']) {
       await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
     }
 
     const supplier = page.locator('select[name="supplier_id_0"]');
-    const item = page.locator('select[name="item_code_0"]');
+    // Block 5: "Item Code (searchable); Item Name (searchable)" — typed into
+    // over a list, not chosen from a drop-down.
+    const item = page.locator('input[name="item_code_0"]');
 
     // Nothing chosen: the column is there and has nothing to offer, which is
     // the item's doing rather than a fault, so it is disabled rather than gone.
@@ -179,9 +179,18 @@ test.describe('the Operations Build screens open', () => {
 
     // "When an item is selected, the supplier field shows the supplier(s)
     // linked to that item." Choosing one is what makes the field live.
-    const firstItem = await item.locator('option:not([value=""])').first().getAttribute('value');
-    await item.selectOption(firstItem!);
+    // The item's own list, not the first datalist on the page — the customer
+    // pair has two of its own above it.
+    const itemList = await item.getAttribute('list');
+    const firstItem = await page
+      .locator(`datalist[id="${itemList}"] option`)
+      .first()
+      .getAttribute('value');
+    await item.fill(firstItem!);
     await expect(supplier).toBeEnabled();
+
+    // "Selecting the Item Code brings the Item Name."
+    await expect(page.locator('input[aria-label="Item Name"]').first()).not.toHaveValue('');
 
     // Blank stays on the list: it means the oldest stock of any supplier, which
     // is a real answer and not an empty one.

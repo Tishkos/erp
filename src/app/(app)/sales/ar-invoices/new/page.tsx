@@ -3,8 +3,8 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { InvoiceLinesGrid, type LineItem } from '@/components/admin/invoice-lines-grid';
+import { PairedPicker } from '@/components/admin/paired-picker';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
-import { SearchablePicker } from '@/components/admin/searchable-picker';
 import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
@@ -34,10 +34,14 @@ import { createArInvoice } from '../actions';
  * Every item's suppliers are sent to the grid up front. It is one small list
  * per item, and the alternative is a round trip each time somebody picks a row.
  *
- * The grid grows as it is typed (by direction, 2026-09-16): one line to start
- * with, and filling it opens the next, the way the Journal Entry's does. It is
- * the same component the Purchase Invoice uses — the Supplier column is the
- * only difference between the two, and it is a flag rather than a second file.
+ * Those fields and no others (by direction, 2026-09-16). The customer is two
+ * boxes because the sponsor lists two, both searchable, and either one fills
+ * the other — as the item's code and name do on every line.
+ *
+ * The grid grows as it is typed: one line to start with, and filling it opens
+ * the next, the way the Journal Entry's does. It is the same component the
+ * Purchase Invoice uses — the Supplier column and the searchable item are the
+ * only differences, and they are flags rather than a second file.
  */
 export const dynamic = 'force-dynamic';
 
@@ -66,10 +70,8 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
       options.push({
         code: row.code,
         name: row.name,
-        // The item's own unit and what is on the shelf: a person selling from
-        // stock is entitled to see how much of it there is.
+        // The item's own unit, sent with the line rather than assumed to be each.
         uomCode: row.baseUomCode,
-        onHand: row.onHand,
         suppliers: linked
           .filter((link) => link.active)
           .map((link) => ({ id: link.supplierId, label: `${link.supplierCode} · ${link.supplierName}` })),
@@ -96,16 +98,17 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
 
   const fields: DocumentField[] = [
     {
-      label: column('customer_name'),
-      control: true,
+      label: column('customer_code'),
+      bare: true,
       value: (
-        <SearchablePicker
-          bare
-          label={column('customer_name')}
+        <PairedPicker
+          codeLabel={column('customer_code')}
           name="customer_id"
+          nameLabel={column('customer_name')}
           options={customers.map((customer) => ({
             value: customer.id,
-            label: `${customer.code} · ${customer.name}`,
+            code: customer.code,
+            name: customer.name,
           }))}
           placeholder={t('search_placeholder')}
           required
@@ -129,12 +132,6 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
       label: column('due_date'),
       control: true,
       value: <input aria-label={column('due_date')} name="due_date" type="date" />,
-    },
-    {
-      label: t('journals.description'),
-      control: true,
-      wide: true,
-      value: <input aria-label={t('journals.description')} name="note" type="text" />,
     },
   ];
 
@@ -169,21 +166,21 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
               items={options}
               labels={{
                 itemCode: column('item_code'),
+                itemName: column('item_name'),
                 quantity: column('quantity'),
                 unitPrice: column('unit_price'),
                 discount: column('discount'),
                 total: column('total_price'),
                 supplier: column('supplier'),
-                warehouse: column('warehouse_code'),
+                warehouse: column('warehouse'),
                 anySupplier: t('ar_invoices.any_supplier'),
-                chooseItem: t('choose_item'),
+                chooseItem: '',
                 remove: t('remove_line'),
                 documentTotal: t('reports.totals'),
-                lines: t('ar_invoices.lines'),
-                onHand: column('on_hand'),
                 saving: t('journals.saving'),
               }}
               locale={locale}
+              searchItems
               showSupplier
               warehouses={houses.map((house) => ({ code: house.code, name: house.name }))}
             />

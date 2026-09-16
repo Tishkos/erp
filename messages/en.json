@@ -302,6 +302,7 @@
     "total_credit_iqd": "Credit (IQD)",
     "item_code": "Item Code",
     "warehouse_code": "Warehouse Code",
+    "warehouse": "Warehouse",
     "batch_number": "Batch",
     "quantity": "Quantity",
     "on_hand": "On hand",
@@ -312,6 +313,7 @@
     "damaged": "Damaged",
     "returns_stock": "Returns",
     "reference": "Reference",
+    "invoice_no": "Invoice Number",
     "partner": "Business Partner",
     "amount": "Amount",
     "due_date": "Due Date",
@@ -324,8 +326,6 @@
     "unit_price": "Unit Price",
     "line_total": "Line Total",
     "net_amount": "Net",
-    "gross_amount": "Gross",
-    "settled": "Settled",
     "tax_amount": "Tax",
     "outstanding": "Outstanding",
     "allocated": "Allocated",
@@ -1719,7 +1719,6 @@
       "statement_empty": "Nothing posted to this account in the period."
     },
     "actions": "Actions",
-    "choose_item": "Choose an item…",
     "remove_line": "Remove line",
     "mapping": {
       "subtitle": "The lines each report prints.",
@@ -1778,12 +1777,7 @@
       "no_items": "Add a stock item first.",
       "no_warehouses": "Set up a warehouse first.",
       "raised_by": "Raised by",
-      "posted_by": "Posted by",
-      "match_status": "Match status",
-      "match_matched": "Matched",
-      "match_exception": "Exception",
-      "variance_approved_by": "Variance approved by",
-      "variance_reason": "Reason for the variance"
+      "posted_by": "Posted by"
     },
     "ar_invoices": {
       "title": "Sales Invoices",
@@ -1802,10 +1796,7 @@
       "no_warehouses": "Set up a warehouse first.",
       "raised_by": "Raised by",
       "approved_by": "Approved by",
-      "approved_at": "Approved on",
-      "posted_by": "Posted by",
-      "reversed_by": "Reversed by",
-      "awaiting": "Waiting for approval."
+      "posted_by": "Posted by"
     },
     "sales_returns": {
       "title": "Sales Returns",

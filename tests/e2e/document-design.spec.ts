@@ -93,8 +93,10 @@ test.describe('an invoice is built like a journal entry', () => {
     // Every structural part the journal has, the invoice has — except the ones
     // that are about a journal's content rather than a document's shape. An
     // account cell holds "code · name" and an invoice has no accounts on it;
-    // requiring that would be requiring the invoice to be a journal.
-    const contentOnly = ['sapAccountCell'];
+    // a full-width field exists only where there is a description to put in
+    // one, and block 4's header has none (2026-09-16: "no extra details").
+    // Requiring either would be requiring the invoice to be a journal.
+    const contentOnly = ['sapAccountCell', 'sapWide'];
     const missing = journal
       .filter((part) => !contentOnly.includes(part))
       .filter((part) => !invoice.includes(part));
@@ -152,15 +154,21 @@ test.describe('an invoice is built like a journal entry', () => {
     await firstInvoice.click();
     await expect(page.locator('#ap-invoice-document')).toBeVisible({ timeout: 60_000 });
 
-    // Four questions with four different answers, as the Journal Entry asks
+    // Three questions with three different answers, as the Journal Entry asks
     // them. An empty box is an answer too: that step has not happened.
     const document = page.locator('#ap-invoice-document');
-    for (const label of ['Raised by', 'Submitted by', 'Posted by', 'Posted on']) {
+    for (const label of ['Raised by', 'Submitted by', 'Posted by']) {
       await expect(document.getByText(label, { exact: true })).toBeVisible();
     }
 
-    // Blueprint 8.4 — "match status is visible on the invoice at all times".
-    await expect(document.getByText('Match status', { exact: true })).toBeVisible();
+    // Block 4's header, and nothing else beside it (2026-09-16: "no extra
+    // details"). What the document also carries is read from the audit log.
+    for (const label of ['Invoice Number', 'Supplier Code', 'Supplier Name']) {
+      await expect(document.getByText(label, { exact: true })).toBeVisible();
+    }
+    for (const gone of ['Match status', 'Branch', 'Description', "Supplier's Invoice Number"]) {
+      await expect(document.getByText(gone, { exact: true })).toHaveCount(0);
+    }
   });
 
   test('a draft is corrected on the document itself', async ({ page }) => {
@@ -173,15 +181,22 @@ test.describe('an invoice is built like a journal entry', () => {
     // draft it is about to edit and does not depend on what an earlier run
     // left behind.
     await page.goto('/sales/ar-invoices/new');
-    await expect(page.locator('select[name="item_code_0"]')).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator('input[name="item_code_0"]')).toBeVisible({ timeout: 60_000 });
 
+    // Block 5's header is a code and a name that fill each other: typing the
+    // code is enough, and the name follows.
     const customer = await page.locator('datalist option').first().getAttribute('value');
-    await page.getByLabel('Customer Name').fill(customer!);
+    await page.getByLabel('Customer Code').fill(customer!);
+    await expect(page.getByLabel('Customer Name')).not.toHaveValue('');
+
+    // The item's own list, not the first datalist on the page — the customer
+    // pair has two of its own above it.
+    const itemList = await page.locator('input[name="item_code_0"]').getAttribute('list');
     const item = await page
-      .locator('select[name="item_code_0"] option:not([value=""])')
+      .locator(`datalist[id="${itemList}"] option`)
       .first()
       .getAttribute('value');
-    await page.selectOption('select[name="item_code_0"]', item!);
+    await page.fill('input[name="item_code_0"]', item!);
     await page.fill('input[name="quantity_0"]', '1');
     await page.fill('input[name="unit_price_0"]', '5000');
     await page.getByRole('button', { name: 'Create' }).click();
@@ -205,7 +220,7 @@ test.describe('an invoice is built like a journal entry', () => {
     // Fill the blank row: another opens under it, as on the form.
     // `.nth(1)` and not `.last()` — the last row moves the moment one opens.
     const second = rows.nth(1);
-    await second.locator('select[aria-label="Item Code"]').selectOption(item!);
+    await second.locator('input[aria-label="Item Code"]').fill(item!);
     await second.locator('input[aria-label="Quantity"]').fill('2');
     await second.locator('input[aria-label="Unit Price"]').fill('3000');
     await expect(rows).toHaveCount(3);

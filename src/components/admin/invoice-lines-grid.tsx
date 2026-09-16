@@ -1,7 +1,15 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from 'react';
 import styles from './admin.module.css';
 
 /**
@@ -31,8 +39,6 @@ export interface LineItem {
   readonly name: string;
   /** The item's own unit, sent with the line rather than assumed to be each. */
   readonly uomCode?: string | null;
-  /** What is on the shelf, when the screen knows — a sale reads it. */
-  readonly onHand?: string | null;
   /** Whose stock this line draws from; empty when the item has no links. */
   readonly suppliers?: readonly { readonly id: string; readonly label: string }[];
 }
@@ -70,6 +76,7 @@ export interface LiveLines {
 
 export interface InvoiceLineLabels {
   readonly itemCode: string;
+  readonly itemName: string;
   readonly quantity: string;
   readonly unitPrice: string;
   readonly discount: string;
@@ -80,8 +87,6 @@ export interface InvoiceLineLabels {
   readonly chooseItem: string;
   readonly remove: string;
   readonly documentTotal: string;
-  readonly lines: string;
-  readonly onHand: string;
   readonly saving: string;
 }
 
@@ -90,6 +95,15 @@ interface Row {
   /** A saved line's id, or null while the row is only on screen. */
   lineId: string | null;
   itemCode: string;
+  /**
+   * What is in the Item Name box.
+   *
+   * Its own field rather than the chosen item's name, because block 5 lets a
+   * person type the name to find the code. Deriving it from the code would
+   * clear the box on every keystroke that had not yet matched an item, which
+   * makes the field impossible to type into.
+   */
+  itemName: string;
   quantity: string;
   unitPrice: string;
   discount: string;
@@ -111,6 +125,7 @@ const blank = (warehouseCode: string): Row => ({
   key: `line-${(counter += 1)}`,
   lineId: null,
   itemCode: '',
+  itemName: '',
   quantity: '',
   unitPrice: '',
   discount: '',
@@ -126,10 +141,11 @@ function trimZeros(value: string): string {
   return value.includes('.') ? value.replace(/\.?0+$/, '') : value;
 }
 
-const fromLine = (line: SavedInvoiceLine): Row => ({
+const fromLine = (line: SavedInvoiceLine, nameOf: (code: string) => string): Row => ({
   key: line.id,
   lineId: line.id,
   itemCode: line.itemCode,
+  itemName: nameOf(line.itemCode),
   quantity: trimZeros(line.quantity),
   unitPrice: trimZeros(line.unitPrice),
   discount: Number(line.discount) === 0 ? '' : trimZeros(line.discount),
@@ -141,7 +157,11 @@ const fromLine = (line: SavedInvoiceLine): Row => ({
 });
 
 const written = (row: Row) =>
-  row.itemCode !== '' || row.quantity !== '' || row.unitPrice !== '' || row.discount !== '';
+  row.itemCode !== '' ||
+  row.itemName !== '' ||
+  row.quantity !== '' ||
+  row.unitPrice !== '' ||
+  row.discount !== '';
 
 /** A row is complete when it names an item, an amount and somewhere to put it. */
 const complete = (row: Row) =>
@@ -163,6 +183,7 @@ export function InvoiceLinesGrid({
   items,
   warehouses,
   showSupplier = false,
+  searchItems = false,
   labels,
   currency,
   locale,
@@ -173,6 +194,13 @@ export function InvoiceLinesGrid({
   readonly warehouses: readonly LineWarehouse[];
   /** The Sales Invoice's Supplier column: whose stock the line is sold from. */
   readonly showSupplier?: boolean;
+  /**
+   * Block 5 — *"Item Code (searchable); Item Name (searchable)"*. Typed into
+   * over a list rather than chosen from a drop-down, and either one fills the
+   * other. Block 4 asks only for the name to follow the code, so its grid
+   * leaves this off and the name is shown rather than typed.
+   */
+  readonly searchItems?: boolean;
   readonly labels: InvoiceLineLabels;
   readonly currency: string;
   readonly locale: string;
@@ -181,11 +209,21 @@ export function InvoiceLinesGrid({
   readonly live?: LiveLines | undefined;
 }) {
   const router = useRouter();
+  const codeList = useId();
+  const nameList = useId();
   const [pending, startTransition] = useTransition();
   const defaultWarehouse = warehouses[0]?.code ?? '';
+
+  const itemsByCode = useMemo(() => new Map(items.map((item) => [item.code, item])), [items]);
+  const itemsByName = useMemo(() => new Map(items.map((item) => [item.name, item])), [items]);
+  const nameOf = useCallback(
+    (code: string) => itemsByCode.get(code)?.name ?? '',
+    [itemsByCode],
+  );
+
   const [rows, setRows] = useState<Row[]>(() =>
     live && live.lines.length > 0
-      ? [...live.lines.map(fromLine), blank(defaultWarehouse)]
+      ? [...live.lines.map((line) => fromLine(line, nameOf)), blank(defaultWarehouse)]
       : [blank(defaultWarehouse)],
   );
   // Rows in flight: a second save of the same row waits for the first.
@@ -203,12 +241,12 @@ export function InvoiceLinesGrid({
       const mine = new Map(current.filter((row) => row.lineId).map((row) => [row.lineId!, row]));
       const saved = savedLines.map((line) => {
         const local = mine.get(line.id);
-        return local && local.dirty ? local : fromLine(line);
+        return local && local.dirty ? local : fromLine(line, nameOf);
       });
       const unsaved = current.filter((row) => row.lineId === null && !row.settled);
       return [...saved, ...(unsaved.length > 0 ? unsaved : [blank(defaultWarehouse)])];
     });
-  }, [savedLines, defaultWarehouse]);
+  }, [savedLines, defaultWarehouse, nameOf]);
 
   const money = useMemo(
     () =>
@@ -222,8 +260,6 @@ export function InvoiceLinesGrid({
       }),
     [locale, currency],
   );
-
-  const itemsByCode = useMemo(() => new Map(items.map((item) => [item.code, item])), [items]);
 
   /** One empty row at the foot, always. Filling the last one opens the next. */
   const settle = (next: Row[]): Row[] => {
@@ -248,7 +284,18 @@ export function InvoiceLinesGrid({
   // Changing the item changes whose stock the line may draw from, so a supplier
   // chosen for the previous item is cleared rather than left pointing at a link
   // this item does not have.
-  const chooseItem = (key: string, itemCode: string) => patch(key, { itemCode, supplierId: '' });
+  // "Selecting the Item Code brings the Item Name, and selecting the Item Name
+  // brings the Item Code" (block 5). One is typed, the other follows — and
+  // until what is typed names an item, what is typed is what stands.
+  const chooseItem = (key: string, itemCode: string) => {
+    const match = itemsByCode.get(itemCode);
+    patch(key, { itemCode, supplierId: '', ...(match ? { itemName: match.name } : {}) });
+  };
+
+  const chooseByName = (key: string, itemName: string) => {
+    const match = itemsByName.get(itemName);
+    patch(key, { itemName, ...(match ? { itemCode: match.code, supplierId: '' } : {}) });
+  };
 
   const commit = (row: Row) => {
     if (!live || !row.dirty || !complete(row) || saving.current.has(row.key)) return;
@@ -301,7 +348,7 @@ export function InvoiceLinesGrid({
 
   const filled = rows.filter(written);
   const total = filled.reduce((sum, row) => sum + totalOf(row), 0);
-  const columns = showSupplier ? 9 : 8;
+  const columns = showSupplier ? 10 : 9;
 
   /** Only a form posts its rows; a live grid has already sent them. */
   const field = (name: string, index: number) => (live ? {} : { name: `${name}_${index}` });
@@ -313,6 +360,7 @@ export function InvoiceLinesGrid({
           <tr>
             <th scope="col">#</th>
             <th scope="col">{labels.itemCode}</th>
+            <th scope="col">{labels.itemName}</th>
             <th className={styles.sapNum} scope="col">
               {labels.quantity}
             </th>
@@ -353,23 +401,36 @@ export function InvoiceLinesGrid({
                   <bdi dir="ltr">{index + 1}</bdi>
                 </td>
                 <td className={styles.sapAccountCell}>
-                  <select
-                    aria-label={labels.itemCode}
-                    dir="auto"
-                    onChange={(event) => chooseItem(row.key, event.target.value)}
-                    // An invoice bills for something: on the form that raises
-                    // one, the first row names an item or there is no document.
-                    required={!live && index === 0}
-                    value={row.itemCode}
-                    {...field('item_code', index)}
-                  >
-                    <option value="">{labels.chooseItem}</option>
-                    {items.map((option) => (
-                      <option key={option.code} value={option.code}>
-                        {option.code} · {option.name}
-                      </option>
-                    ))}
-                  </select>
+                  {searchItems ? (
+                    <input
+                      aria-label={labels.itemCode}
+                      autoComplete="off"
+                      dir="ltr"
+                      list={codeList}
+                      onChange={(event) => chooseItem(row.key, event.target.value)}
+                      // An invoice bills for something: on the form that raises
+                      // one, the first row names an item or there is no document.
+                      required={!live && index === 0}
+                      value={row.itemCode}
+                      {...field('item_code', index)}
+                    />
+                  ) : (
+                    <select
+                      aria-label={labels.itemCode}
+                      dir="ltr"
+                      onChange={(event) => chooseItem(row.key, event.target.value)}
+                      required={!live && index === 0}
+                      value={row.itemCode}
+                      {...field('item_code', index)}
+                    >
+                      <option value="">{labels.chooseItem}</option>
+                      {items.map((option) => (
+                        <option key={option.code} value={option.code}>
+                          {option.code}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   {/* The item's own unit travels with the line. Without it every
                       line is billed in "each", whatever the item is measured in. */}
                   {live ? null : (
@@ -380,11 +441,22 @@ export function InvoiceLinesGrid({
                       {row.error}
                     </span>
                   ) : null}
-                  {item?.onHand ? (
-                    <span className={styles.sapEnteredNote}>
-                      {labels.onHand} {Number(item.onHand)}
-                    </span>
-                  ) : null}
+                </td>
+                {/* Block 4: shown as soon as the code is chosen. Block 5: typed
+                    into as well, and what is typed brings the code back. */}
+                <td>
+                  {searchItems ? (
+                    <input
+                      aria-label={labels.itemName}
+                      autoComplete="off"
+                      dir="auto"
+                      list={nameList}
+                      onChange={(event) => chooseByName(row.key, event.target.value)}
+                      value={row.itemName}
+                    />
+                  ) : (
+                    <bdi dir="auto">{item?.name ?? ''}</bdi>
+                  )}
                 </td>
                 <td>
                   <input
@@ -507,13 +579,9 @@ export function InvoiceLinesGrid({
           {/* What the document comes to, live, the way the journal sums its own
               grid as it is typed rather than after a round trip. */}
           <tr className={styles.sapTotalRow}>
-            <td colSpan={5}>
+            <td colSpan={6}>
               {labels.documentTotal}
-              <span className={styles.sapNote}>
-                {' '}
-                · {labels.lines}: {filled.length}
-                {pending ? ` · ${labels.saving}` : ''}
-              </span>
+              {pending ? <span className={styles.sapNote}> · {labels.saving}</span> : null}
             </td>
             <td aria-live="polite" className={styles.sapNum}>
               <bdi dir="ltr">{money.format(total)}</bdi>
@@ -522,6 +590,21 @@ export function InvoiceLinesGrid({
           </tr>
         </tfoot>
       </table>
+
+      {searchItems ? (
+        <>
+          <datalist id={codeList}>
+            {items.map((option) => (
+              <option key={option.code} value={option.code} />
+            ))}
+          </datalist>
+          <datalist id={nameList}>
+            {items.map((option) => (
+              <option key={option.code} value={option.name} />
+            ))}
+          </datalist>
+        </>
+      ) : null}
 
       {/* How many rows the action should read. The grid grows as it is typed,
           so the number cannot be a constant the two sides agree on in advance.

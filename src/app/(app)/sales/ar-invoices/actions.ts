@@ -77,7 +77,9 @@ export async function createArInvoice(formData: FormData): Promise<void> {
       branchCode: ctx.branchCode,
       invoiceDate: text(formData, 'invoice_date'),
       ...(dueDate ? { dueDate } : {}),
-      note: text(formData, 'note').trim() || null,
+      // Block 5's header is the invoice number, the two dates and the
+      // customer. There is no note among them.
+      note: null,
       lines,
     });
   });
