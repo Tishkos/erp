@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import styles from './admin.module.css';
 
 /**
@@ -26,6 +26,16 @@ export interface PairedOption {
   readonly name: string;
 }
 
+/** What the picker fires on the form when its choice changes. */
+export const PAIRED_CHOICE = 'paired-picker:choice';
+
+export interface PairedChoice {
+  /** The hidden field the id is submitted under. */
+  readonly name: string;
+  /** The chosen id, or '' while what is typed matches nothing. */
+  readonly value: string;
+}
+
 export function PairedPicker({
   codeLabel,
   nameLabel,
@@ -33,6 +43,7 @@ export function PairedPicker({
   options,
   placeholder,
   required = false,
+  plain = false,
 }: {
   readonly codeLabel: string;
   readonly nameLabel: string;
@@ -41,6 +52,13 @@ export function PairedPicker({
   readonly options: readonly PairedOption[];
   readonly placeholder?: string | undefined;
   readonly required?: boolean;
+  /**
+   * The application's own field chrome rather than the document window's.
+   *
+   * The two look different on purpose — a document is a form on paper, a
+   * settings screen is not — and this control is used on both.
+   */
+  readonly plain?: boolean;
 }) {
   const codeList = useId();
   const nameList = useId();
@@ -48,6 +66,24 @@ export function PairedPicker({
   const [label, setLabel] = useState('');
 
   const chosen = options.find((option) => option.code === code && option.name === label);
+
+  /*
+   * The choice, said out loud for the rest of the document.
+   *
+   * The hidden input carries the id to the server, but setting a value in
+   * React fires no event a sibling field could hear — so a header field that
+   * depends on who was chosen (the due date, from the supplier's terms) would
+   * never learn of it. The event goes out after the render that set the value,
+   * so whoever listens reads the id that is actually on the form.
+   */
+  const picked = useRef<HTMLInputElement>(null);
+  const chosenValue = chosen?.value ?? '';
+
+  useEffect(() => {
+    picked.current?.dispatchEvent(
+      new CustomEvent(PAIRED_CHOICE, { bubbles: true, detail: { name, value: chosenValue } }),
+    );
+  }, [name, chosenValue]);
 
   const typeCode = (value: string) => {
     setCode(value);
@@ -61,13 +97,18 @@ export function PairedPicker({
     if (match) setCode(match.code);
   };
 
+  const field = plain ? 'field' : styles.sapField;
+  const caption = plain ? 'field__label' : styles.sapLabel;
+  const box = plain ? 'field__input' : undefined;
+
   return (
     <>
-      <div className={styles.sapField}>
-        <span className={styles.sapLabel}>{codeLabel}</span>
+      <div className={field}>
+        <span className={caption}>{codeLabel}</span>
         <input
           aria-label={codeLabel}
           autoComplete="off"
+          {...(box ? { className: box } : {})}
           dir="ltr"
           list={codeList}
           onChange={(event) => typeCode(event.target.value)}
@@ -81,11 +122,12 @@ export function PairedPicker({
         </datalist>
       </div>
 
-      <div className={styles.sapField}>
-        <span className={styles.sapLabel}>{nameLabel}</span>
+      <div className={field}>
+        <span className={caption}>{nameLabel}</span>
         <input
           aria-label={nameLabel}
           autoComplete="off"
+          {...(box ? { className: box } : {})}
           dir="auto"
           list={nameList}
           onChange={(event) => typeName(event.target.value)}
@@ -100,7 +142,7 @@ export function PairedPicker({
         </datalist>
       </div>
 
-      <input name={name} type="hidden" value={chosen?.value ?? ''} />
+      <input name={name} ref={picked} type="hidden" value={chosenValue} />
     </>
   );
 }

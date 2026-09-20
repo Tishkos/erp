@@ -57,6 +57,7 @@ import * as posting from './posting';
 import * as inventory from './inventory';
 import * as shipments from './supplier-shipment';
 import * as statuses from './statuses';
+import * as terms from './payment-terms';
 import { allocateDocumentNumber } from './numbering';
 
 export const DOCUMENT_TYPE = 'ap_invoice';
@@ -184,7 +185,8 @@ export interface CreateApInvoiceInput {
   readonly purchaseOrderId?: string | null;
   readonly branchCode: string;
   readonly invoiceDate: string;
-  readonly dueDate: string;
+  /** Left out, the supplier's payment terms decide it (§16). */
+  readonly dueDate?: string | undefined;
   readonly currency?: string;
   readonly note?: string | null;
   readonly lines: readonly InvoiceLineInput[];
@@ -321,31 +323,45 @@ export async function create(
     }
   }
 
-  // §15 — the duplicate control. Checked here for a message that names the
-  // earlier invoice; the partial unique index refuses it by any other path.
-  //
-  // Nothing to check when the supplier's own number was not collected: block
-  // 4's header does not ask for one, and the invoice takes our number below.
-  if (input.supplierInvoiceNo.trim() !== '' && !input.duplicateApprovedBy) {
+  const supplierNumber = input.supplierInvoiceNo.trim();
+
+  /*
+   * §15 — the duplicate control.
+   *
+   * Two cases, and only two. Somebody claiming the exception owes the reason:
+   * the CHECK refuses the row without one, and §15 asks for the words rather
+   * than only the approver's name. Everybody else is checked against what the
+   * supplier has already billed — here, for a message that names the earlier
+   * invoice, and by the partial unique index on every other path.
+   *
+   * A blank number is neither. Block 4's header does not collect the
+   * supplier's own number, so the invoice takes ours below: unique by
+   * construction, nothing to look up, and no exception to justify. Asking one
+   * of those invoices for a duplicate reason refused every invoice the screen
+   * could raise.
+   */
+  if (input.duplicateApprovedBy) {
+    if (!input.duplicateApprovalReason || input.duplicateApprovalReason.trim().length === 0) {
+      throw new Error(
+        'A duplicate supplier invoice number is accepted only with a reason (§15). ' +
+          'Say why the same number is genuinely a second charge.',
+      );
+    }
+  } else if (supplierNumber !== '') {
     const [existing] = await tx
       .select({ invoiceNo: apInvoice.invoiceNo })
       .from(apInvoice)
       .where(
         and(
           eq(apInvoice.supplierId, input.supplierId),
-          eq(apInvoice.supplierInvoiceNo, input.supplierInvoiceNo.trim()),
+          eq(apInvoice.supplierInvoiceNo, supplierNumber),
         ),
       )
       .limit(1);
 
     if (existing) {
-      throw new DuplicateSupplierInvoiceError(input.supplierInvoiceNo, existing.invoiceNo);
+      throw new DuplicateSupplierInvoiceError(supplierNumber, existing.invoiceNo);
     }
-  } else if (!input.duplicateApprovalReason || input.duplicateApprovalReason.trim().length === 0) {
-    throw new Error(
-      'A duplicate supplier invoice number is accepted only with a reason (§15). ' +
-        'Say why the same number is genuinely a second charge.',
-    );
   }
 
   let order: typeof purchaseOrder.$inferSelect | undefined;
@@ -357,6 +373,26 @@ export async function create(
       .limit(1);
     if (!order) throw new Error(`No purchase order with id '${input.purchaseOrderId}'.`);
   }
+
+  /*
+   * §16 — the due date the supplier's terms give, when the document does not
+   * carry one of its own.
+   *
+   * A typed date still wins: an invoice can say when it falls due, and terms
+   * are the default rather than the law. What they are not is optional work
+   * for the person raising it — "net 30" is a fact about the supplier, already
+   * on the partner record, and asking somebody to count thirty days by hand is
+   * asking them to get it wrong.
+   */
+  const [supplier] = await tx
+    .select({ paymentTermsCode: businessPartner.paymentTermsCode })
+    .from(businessPartner)
+    .where(eq(businessPartner.id, input.supplierId))
+    .limit(1);
+
+  const dueDate = input.dueDate?.trim()
+    ? input.dueDate.trim()
+    : await terms.dueDateOn(tx, supplier?.paymentTermsCode ?? null, input.invoiceDate);
 
   const allocated = await allocateDocumentNumber(
     tx,
@@ -372,12 +408,12 @@ export async function create(
       // Ours, when the supplier's own was not asked for. The column is not
       // nullable and §15's index is on (supplier, number): a blank on every
       // invoice would collide the second time the same supplier billed us.
-      supplierInvoiceNo: input.supplierInvoiceNo.trim() || allocated.documentNo,
+      supplierInvoiceNo: supplierNumber || allocated.documentNo,
       supplierId: input.supplierId,
       purchaseOrderId: input.purchaseOrderId ?? null,
       branchCode: input.branchCode,
       invoiceDate: input.invoiceDate,
-      dueDate: input.dueDate,
+      dueDate,
       currency: input.currency ?? 'IQD',
       note: input.note ?? null,
       // The route this invoice took, recorded on the header so the §15 CHECK

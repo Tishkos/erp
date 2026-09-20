@@ -33,8 +33,6 @@ import {
   deliveryNote,
   deliveryNoteLine,
   journalEntry,
-  paymentTerms,
-  paymentTermInstalment,
   salesOrder,
   salesOrderLine,
   warehouse,
@@ -42,7 +40,6 @@ import {
 import { formatQuantity, parseQuantity } from '../domain/uom';
 import { parseDecimal, toDecimalString } from '../domain/money';
 import { totalsFor } from '../domain/sales-pricing';
-import { dueDateFor } from '../domain/payment-terms';
 import type { PostingLineRequest } from '../domain/posting';
 import {
   assertInvoiceDateMatchesDelivery,
@@ -55,6 +52,7 @@ import * as audit from './audit';
 import * as posting from './posting';
 import * as inventory from './inventory';
 import * as statuses from './statuses';
+import * as terms from './payment-terms';
 import * as warranty from './warranty';
 import { allocateDocumentNumber } from './numbering';
 
@@ -249,7 +247,7 @@ export async function create(
   // §4.3 — the due date comes from the order's payment terms, applied to the
   // invoice date. Without terms the invoice is due on issue, which is what
   // "no terms" means rather than a reason to leave the date empty.
-  const dueDate = await dueDateFrom(tx, order?.paymentTermsCode ?? null, invoiceDate);
+  const dueDate = await terms.dueDateOn(tx, order?.paymentTermsCode ?? null, invoiceDate);
 
   const allocated = await allocateDocumentNumber(
     tx,
@@ -376,43 +374,6 @@ export async function create(
   return { id: created!.id, invoiceNo: allocated.documentNo };
 }
 
-async function dueDateFrom(
-  tx: Tx,
-  paymentTermsCode: string | null,
-  invoiceDate: string,
-): Promise<string> {
-  if (!paymentTermsCode) return invoiceDate;
-
-  const [terms] = await tx
-    .select()
-    .from(paymentTerms)
-    .where(eq(paymentTerms.code, paymentTermsCode))
-    .limit(1);
-
-  if (!terms) return invoiceDate;
-
-  const instalments = await tx
-    .select()
-    .from(paymentTermInstalment)
-    .where(eq(paymentTermInstalment.termsCode, paymentTermsCode))
-    .orderBy(paymentTermInstalment.sequence);
-
-  return dueDateFor(
-    {
-      code: terms.code,
-      name: terms.name,
-      basis: terms.basis,
-      dueDays: terms.dueDays,
-      instalments: instalments.map((row) => ({
-        sequence: row.sequence,
-        daysAfter: row.daysAfter,
-        percentage: row.percentage,
-      })),
-    },
-    invoiceDate,
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Approve — draft → approved
 // ---------------------------------------------------------------------------
@@ -525,7 +486,7 @@ export async function createDirect(
   if (!customer) throw new Error(`No customer with id '${input.customerId}'.`);
 
   const dueDate =
-    input.dueDate ?? (await dueDateFrom(tx, customer.paymentTermsCode ?? null, input.invoiceDate));
+    input.dueDate ?? (await terms.dueDateOn(tx, customer.paymentTermsCode ?? null, input.invoiceDate));
 
   const allocated = await allocateDocumentNumber(
     tx,

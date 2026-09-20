@@ -326,7 +326,14 @@ export async function setActive(
 /** Active partners in a role — for the pickers later phases will need. */
 export async function listActiveInRole(tx: Tx, role: PartnerRole) {
   return tx
-    .select({ id: businessPartner.id, code: businessPartner.code, name: businessPartner.legalName })
+    .select({
+      id: businessPartner.id,
+      code: businessPartner.code,
+      name: businessPartner.legalName,
+      // Carried with the partner because the documents they head need it: a
+      // due date the screen can fill before the invoice is saved (§16).
+      paymentTermsCode: businessPartner.paymentTermsCode,
+    })
     .from(businessPartner)
     .where(
       and(

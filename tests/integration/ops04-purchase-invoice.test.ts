@@ -472,3 +472,151 @@ describe('ops 4 · an invoice that receives its own stock is its own evidence', 
     ).rejects.toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('ops 4 · the invoice the screen actually raises', () => {
+  /*
+   * Block 4's header is the invoice number, the two dates and the supplier.
+   * The supplier's own number is not among them, so the screen sends none —
+   * and every invoice it raised was refused with §15's duplicate message,
+   * because a blank number fell to the branch that demands a duplicate reason.
+   *
+   * The tests above all sent a number, which is exactly why nobody saw it.
+   */
+  const asTheScreenDoes = (overrides: Partial<Parameters<typeof ap.create>[2]> = {}) =>
+    withScope(scope(clerk), (tx) =>
+      ap.create(tx, clerk, {
+        supplierId,
+        supplierInvoiceNo: '',
+        purchaseOrderId: null,
+        branchCode: BAGHDAD,
+        invoiceDate: ON,
+        dueDate: '2026-05-01',
+        lines: [
+          {
+            itemCode: PANEL,
+            description: 'Solar Panel 550W',
+            quantity: qty('4'),
+            unitPriceIqd: price('100000'),
+            uomCode: 'EA',
+            isInventory: true,
+            warehouseCode: WAREHOUSE,
+          },
+        ],
+        ...overrides,
+      }),
+    );
+
+  it('saves an invoice that carries no supplier invoice number', async () => {
+    const made = await asTheScreenDoes();
+    expect(made.invoiceNo).toBeTruthy();
+  });
+
+  it('numbers it with ours, so the §15 control still means something', async () => {
+    const made = await asTheScreenDoes();
+    const { rows } = await ownerPool.query(
+      `select supplier_invoice_no from ap_invoice where id = $1`,
+      [made.id],
+    );
+    expect(rows[0].supplier_invoice_no).toBe(made.invoiceNo);
+  });
+
+  it('raises a second one for the same supplier on the same day', async () => {
+    // Two blank numbers are not a duplicate of each other: each takes our own
+    // number, and the unique index is on (supplier, number).
+    await asTheScreenDoes();
+    const second = await asTheScreenDoes();
+    expect(second.invoiceNo).toBeTruthy();
+  });
+
+  it('still refuses a duplicate exception with no reason behind it', async () => {
+    await expect(
+      asTheScreenDoes({
+        supplierInvoiceNo: 'SI-CLAIMED',
+        duplicateApprovedBy: manager.principal.userId,
+      }),
+    ).rejects.toThrow(/only with a reason/);
+  });
+
+  it('still refuses a supplier number the supplier has already billed', async () => {
+    await asTheScreenDoes({ supplierInvoiceNo: 'SI-REPEATED' });
+    await expect(asTheScreenDoes({ supplierInvoiceNo: 'SI-REPEATED' })).rejects.toThrow(
+      /has already been entered as/,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('ops 4 · the due date comes from the payment terms (§16)', () => {
+  /*
+   * "Net 30" is on the supplier's record. Asking the person raising the
+   * invoice to count thirty days on a calendar is asking them to get it wrong,
+   * and the screen fills the field from the same arithmetic this service uses.
+   */
+  const invoiceWith = (dueDate?: string) =>
+    withScope(scope(clerk), (tx) =>
+      ap.create(tx, clerk, {
+        supplierId,
+        supplierInvoiceNo: '',
+        purchaseOrderId: null,
+        branchCode: BAGHDAD,
+        invoiceDate: ON,
+        ...(dueDate ? { dueDate } : {}),
+        lines: [
+          {
+            itemCode: PANEL,
+            description: 'Solar Panel 550W',
+            quantity: qty('4'),
+            unitPriceIqd: price('100000'),
+            uomCode: 'EA',
+            isInventory: true,
+            warehouseCode: WAREHOUSE,
+          },
+        ],
+      }),
+    );
+
+  const dueDateOf = async (id: string) => {
+    const { rows } = await ownerPool.query(`select due_date from ap_invoice where id = $1`, [id]);
+    return rows[0].due_date as string;
+  };
+
+  const putSupplierOn = async (code: string) =>
+    ownerPool.query(`update business_partner set payment_terms_code = $1 where id = $2`, [
+      code,
+      supplierId,
+    ]);
+
+  beforeEach(async () => {
+    await ownerPool.query(
+      `insert into payment_terms (code, name, basis, due_days)
+       values ('NET30','Net 30 days','document_date',30),
+              ('EOM60','60 days, end of month','end_of_month',60)
+       on conflict (code) do nothing`,
+    );
+  });
+
+  it('counts the days from the invoice date', async () => {
+    await putSupplierOn('NET30');
+    const made = await invoiceWith();
+    expect(await dueDateOf(made.id)).toBe('2026-05-01');
+  });
+
+  it('starts the clock at month end when the terms say so', async () => {
+    await putSupplierOn('EOM60');
+    const made = await invoiceWith();
+    // April ends on the 30th; sixty days after that is 29 June.
+    expect(await dueDateOf(made.id)).toBe('2026-06-29');
+  });
+
+  it('keeps a due date the invoice states for itself', async () => {
+    await putSupplierOn('NET30');
+    const made = await invoiceWith('2026-04-15');
+    expect(await dueDateOf(made.id)).toBe('2026-04-15');
+  });
+
+  it('falls due on presentation when no terms were agreed', async () => {
+    const made = await invoiceWith();
+    expect(await dueDateOf(made.id)).toBe(ON);
+  });
+});

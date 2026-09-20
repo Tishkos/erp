@@ -88,7 +88,10 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       purchaseOrderId: null,
       branchCode: ctx.branchCode,
       invoiceDate: text(formData, 'invoice_date'),
-      dueDate: text(formData, 'due_date'),
+      // Blank only when the browser could not fill it — no supplier terms were
+      // on the page, or no JavaScript ran. The service then applies the
+      // supplier's terms itself, by the same arithmetic the form uses (§16).
+      dueDate: text(formData, 'due_date').trim() || undefined,
       note: null,
       lines,
     });

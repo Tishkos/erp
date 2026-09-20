@@ -18,11 +18,20 @@ import { expect, test, type Page } from '@playwright/test';
  */
 
 const MANAGER = { email: 'manager@example.com', password: 'Ledger-Trial-Balance-7' };
+/**
+ * The development super user, for the master data a manager may not maintain.
+ *
+ * Payment Terms is one of those screens: §4.3 puts it with the masters an
+ * administrator keeps, and the manager who raises invoices is refused it. So
+ * the term is created the way it is created in life — by an administrator, in
+ * a session of their own — and the invoice is still raised as the manager.
+ */
+const ADMIN = { email: 'admin@example.com', password: 'Ledger-Trial-Balance-7' };
 
-async function signIn(page: Page) {
+async function signIn(page: Page, who: { email: string; password: string } = MANAGER) {
   await page.goto('/sign-in');
-  await page.getByLabel('Email').fill(MANAGER.email);
-  await page.getByLabel('Password', { exact: true }).fill(MANAGER.password);
+  await page.getByLabel('Email').fill(who.email);
+  await page.getByLabel('Password', { exact: true }).fill(who.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL('/');
 }
@@ -125,6 +134,87 @@ test.describe('the Operations Build screens open', () => {
     await expect(page.locator('datalist option')).not.toHaveCount(0);
     await expect(page.locator('select[name="item_code_0"] option')).not.toHaveCount(1);
     await expect(page.locator('select[name="warehouse_code_0"] option')).not.toHaveCount(0);
+  });
+
+  test('block 4 · the invoice is raised, and falls due when the terms say', async ({
+    browser,
+    page,
+  }) => {
+    /*
+     * The screen's own path, pressed all the way through.
+     *
+     * The test above stops at "the form rendered", and that is how a form
+     * nobody could submit came to ship: block 4's header does not collect the
+     * supplier's own invoice number, and the service asked every blank one for
+     * the reason behind a duplicate exception (§15). Every invoice raised here
+     * came back refused.
+     *
+     * It proves §16 on the same pass. The due date is not typed — it is the
+     * supplier's payment terms counted from the posting date, filled in by the
+     * form before anything is saved.
+     */
+    const stamp = Date.now().toString().slice(-6);
+    const termsCode = `E2ET${stamp}`;
+    const supplierCode = `E2ESUP${stamp}`;
+
+    const administration = await browser.newContext();
+    const administrator = await administration.newPage();
+    try {
+      await signIn(administrator, ADMIN);
+      await administrator.goto('/master-data/payment-terms');
+      await administrator.getByRole('button', { name: 'New payment term' }).click();
+      const term = administrator.locator('dialog[open], [role="dialog"]').first();
+      await term.getByLabel('Code', { exact: true }).fill(termsCode);
+      await term.getByLabel(/^Name/).fill('Thirty days');
+      await term.getByLabel('Days to pay').fill('30');
+      await term.getByRole('button', { name: 'Create' }).click();
+      // A new term opens its own record, where its worked example is.
+      await administrator.waitForURL(new RegExp(`/master-data/payment-terms/${termsCode}`), {
+        timeout: 60_000,
+      });
+    } finally {
+      await administration.close();
+    }
+
+    await page.goto('/master-data/suppliers');
+    await page.getByRole('button', { name: 'New supplier' }).click();
+    const supplier = page.locator('dialog[open], [role="dialog"]').first();
+    await supplier.getByLabel('Code', { exact: true }).fill(supplierCode);
+    await supplier.getByLabel(/^Legal name/).fill(`Terms Test ${stamp}`);
+    await supplier.getByLabel(/^Payment terms/).selectOption(termsCode);
+    await supplier.getByRole('button', { name: 'Create' }).click();
+    await page.waitForURL(new RegExp(`/master-data/business-partners/${supplierCode}`), {
+      timeout: 60_000,
+    });
+
+    await page.goto('/purchasing/ap-invoices/new');
+    await expect(page.getByRole('heading', { name: 'New invoice' })).toBeVisible();
+
+    // Today, as the form opens it — and thirty days after it, which is what
+    // the due date should say once the supplier is named, and nothing else.
+    const posting = await page.getByLabel('Posting Date').inputValue();
+    const thirtyDaysOn = new Date(`${posting}T00:00:00Z`);
+    thirtyDaysOn.setUTCDate(thirtyDaysOn.getUTCDate() + 30);
+
+    await page.getByLabel('Supplier Code').fill(supplierCode);
+    await expect(page.getByLabel('Due Date')).toHaveValue(thirtyDaysOn.toISOString().slice(0, 10));
+
+    await page.locator('select[name="item_code_0"]').selectOption('ITM-SEED');
+    await page.getByLabel('Quantity').first().fill('2');
+    await page.getByLabel('Unit Price').first().fill('1000');
+    await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
+
+    await page.getByRole('button', { name: 'Create' }).click();
+
+    // On the invoice's own record, not back on the form under a refusal.
+    await page.waitForURL(
+      (url) =>
+        url.pathname.startsWith('/purchasing/ap-invoices/') &&
+        !url.pathname.endsWith('/new') &&
+        url.search === '',
+      { timeout: 120_000 },
+    );
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible({ timeout: 60_000 });
   });
 
   test('block 5 · the Sales Invoice register opens', async ({ page }) => {

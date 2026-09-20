@@ -24,6 +24,7 @@ import {
   DUE_DATE_BASIS,
   dueDateFor,
   type DueDateBasis,
+  type PaymentTerms,
 } from '../domain/payment-terms';
 import {
   AdminNotFoundError,
@@ -93,6 +94,70 @@ export async function instalmentsOf(tx: Tx, code: string) {
     .from(paymentTermInstalment)
     .where(eq(paymentTermInstalment.termsCode, code))
     .orderBy(asc(paymentTermInstalment.sequence));
+}
+
+/**
+ * Every term with its schedule, in the shape the due-date arithmetic takes.
+ *
+ * For a screen that has to answer "when does this fall due?" while somebody is
+ * still typing: the terms travel with the page, and the same `dueDateFor` runs
+ * in the browser that will run on the server when the document is saved.
+ */
+export async function allWithSchedules(tx: Tx): Promise<PaymentTerms[]> {
+  const rows = await tx.select().from(paymentTerms).orderBy(asc(paymentTerms.code));
+  const schedules = await tx
+    .select({
+      termsCode: paymentTermInstalment.termsCode,
+      sequence: paymentTermInstalment.sequence,
+      daysAfter: paymentTermInstalment.daysAfter,
+      percentage: paymentTermInstalment.percentage,
+    })
+    .from(paymentTermInstalment)
+    .orderBy(asc(paymentTermInstalment.termsCode), asc(paymentTermInstalment.sequence));
+
+  return rows.map((row) => ({
+    code: row.code,
+    name: row.name,
+    basis: row.basis as DueDateBasis,
+    dueDays: row.dueDays,
+    instalments: schedules
+      .filter((instalment) => instalment.termsCode === row.code)
+      .map(({ sequence, daysAfter, percentage }) => ({ sequence, daysAfter, percentage })),
+  }));
+}
+
+/**
+ * When a document dated `documentDate` falls due under the terms `code`.
+ *
+ * The one place the question is answered, because a due date computed two ways
+ * is a due date that disagrees with itself: the A/R invoice, the A/P invoice
+ * and the worked example on the terms record all come through here.
+ *
+ * No terms, or terms that have since been deleted, means the document date
+ * itself. That is what "nothing was agreed" comes to — the charge is due on
+ * presentation — and it is the only fallback that cannot invent credit nobody
+ * granted.
+ */
+export async function dueDateOn(
+  tx: Tx,
+  code: string | null,
+  documentDate: string,
+): Promise<string> {
+  if (!code) return documentDate;
+
+  const [row] = await tx.select().from(paymentTerms).where(eq(paymentTerms.code, code)).limit(1);
+  if (!row) return documentDate;
+
+  return dueDateFor(
+    {
+      code: row.code,
+      name: row.name,
+      basis: row.basis as DueDateBasis,
+      dueDays: row.dueDays,
+      instalments: await instalmentsOf(tx, code),
+    },
+    documentDate,
+  );
 }
 
 /**

@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
+import { DueDateField } from '@/components/admin/due-date-field';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { PairedPicker } from '@/components/admin/paired-picker';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
@@ -12,6 +13,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as ap from '@/server/services/ap-invoice';
 import * as items from '@/server/services/items';
 import * as partners from '@/server/services/partners';
+import * as paymentTerms from '@/server/services/payment-terms';
 import * as warehouses from '@/server/services/warehouses';
 import { gapsFor } from '@domain/setup-gaps';
 import { createApInvoice } from '../actions';
@@ -53,17 +55,30 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
     return <Denied object={page('ap_invoices')} />;
   }
 
-  const { suppliers, allSuppliers, stockItems, houses } = await withCurrentUser(async (tx) => ({
-    suppliers: await partners.listActiveInRole(tx, 'supplier'),
-    // The whole list too, so an empty picker can say which of the two things is
-    // wrong: nobody has been added, or nobody added is active.
-    allSuppliers: await partners.listByRole(tx, 'supplier'),
-    stockItems: await items.listAll(tx),
-    houses: await warehouses.listActive(tx),
-  }));
+  const { suppliers, allSuppliers, stockItems, houses, schedules } = await withCurrentUser(
+    async (tx) => ({
+      suppliers: await partners.listActiveInRole(tx, 'supplier'),
+      // The whole list too, so an empty picker can say which of the two things is
+      // wrong: nobody has been added, or nobody added is active.
+      allSuppliers: await partners.listByRole(tx, 'supplier'),
+      stockItems: await items.listAll(tx),
+      houses: await warehouses.listActive(tx),
+      // The payment terms travel with the page so the due date can be worked
+      // out while the invoice is being typed (§16).
+      schedules: await paymentTerms.allWithSchedules(tx),
+    }),
+  );
 
   const sellable = stockItems.filter((item) => item.isStock && item.active);
   const today = new Date().toISOString().slice(0, 10);
+
+  // Each supplier beside the terms they are on, which is all the due date
+  // needs: the partner chosen in the header decides which schedule applies.
+  const termsByCode = new Map(schedules.map((terms) => [terms.code, terms]));
+  const supplierTerms = suppliers.map((supplier) => ({
+    partnerId: supplier.id,
+    terms: (supplier.paymentTermsCode ? termsByCode.get(supplier.paymentTermsCode) : null) ?? null,
+  }));
 
   const missing = gapsFor([
     { kind: 'suppliers', total: allSuppliers.length, usable: suppliers.length },
@@ -106,7 +121,18 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
     {
       label: column('due_date'),
       control: true,
-      value: <input aria-label={column('due_date')} name="due_date" required type="date" />,
+      // Filled from the supplier's payment terms the moment the supplier is
+      // chosen, and editable after that — §16's default, not a lock.
+      value: (
+        <DueDateField
+          dateField="invoice_date"
+          label={column('due_date')}
+          name="due_date"
+          partnerField="supplier_id"
+          required
+          terms={supplierTerms}
+        />
+      ),
     },
   ];
 
