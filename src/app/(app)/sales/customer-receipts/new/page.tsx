@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { AdminPage, Field, Flash, Form, Grid, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { AdminPage, Field, Flash, Form, Grid, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
-import { SearchablePicker } from '@/components/admin/searchable-picker';
+import { PairedPicker } from '@/components/admin/paired-picker';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { can } from '@domain/permissions';
@@ -73,22 +73,28 @@ export default async function NewReceiptPage({ searchParams }: { searchParams: S
       ) : (
         <Form action={createReceipt}>
           <Grid>
-            <SearchablePicker
-              label={column('customer_name')}
+            <PairedPicker
+              codeLabel={column('customer_code')}
               name="customer_id"
+              nameLabel={column('customer_name')}
               options={customers.map((customer) => ({
                 value: customer.id,
-                label: `${customer.code} · ${customer.name}`,
+                code: customer.code,
+                name: customer.name,
               }))}
+              plain
               required
             />
-            <Select
-              label={t('customer_receipts.bank_account')}
+            <PairedPicker
+              codeLabel={column('bank_code')}
               name="bank_cash_account_id"
+              nameLabel={column('bank_name')}
               options={open.map((account) => ({
                 value: account.id,
-                label: `${account.code} · ${account.name}`,
+                code: account.code,
+                name: account.name,
               }))}
+              plain
               required
             />
             <Field

@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { AdminPage, Field, Flash, Form, Grid, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { AdminPage, Field, Flash, Form, Grid, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { PairedPicker } from '@/components/admin/paired-picker';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
-import { SearchablePicker } from '@/components/admin/searchable-picker';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { can } from '@domain/permissions';
@@ -23,6 +23,9 @@ import { createPayment } from '../actions';
  * The invoice is not on this form. A payment is allocated after it exists —
  * possibly across several invoices, possibly partly — so asking for one here
  * would make the common case the awkward one. The payment's own page does it.
+ *
+ * The supplier and the account are each two boxes, because the sponsor lists
+ * each twice — a code and a name. Either one fills the other.
  */
 export const dynamic = 'force-dynamic';
 
@@ -73,22 +76,28 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: S
       ) : (
         <Form action={createPayment}>
           <Grid>
-            <SearchablePicker
-              label={column('supplier_name')}
+            <PairedPicker
+              codeLabel={column('supplier_code')}
               name="supplier_id"
+              nameLabel={column('supplier_name')}
               options={suppliers.map((supplier) => ({
                 value: supplier.id,
-                label: `${supplier.code} · ${supplier.name}`,
+                code: supplier.code,
+                name: supplier.name,
               }))}
+              plain
               required
             />
-            <Select
-              label={t('supplier_payments.bank_account')}
+            <PairedPicker
+              codeLabel={column('bank_code')}
               name="bank_cash_account_id"
+              nameLabel={column('bank_name')}
               options={open.map((account) => ({
                 value: account.id,
-                label: `${account.code} · ${account.name}`,
+                code: account.code,
+                name: account.name,
               }))}
+              plain
               required
             />
             <Field

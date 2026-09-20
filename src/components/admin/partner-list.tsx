@@ -100,11 +100,12 @@ export async function PartnerList({
                   required
                   requiredLabel={t('required_hint')}
                 />
-                <Field hint={t('partners.trade_name_hint')} label={t('partners.trade_name')} name="tradeName" />
+                {/* Blocks 2 and 3 ask for a name, a code, payment terms and
+                    contact information. The trade name, the registration
+                    number and the tax identifier are none of those; their
+                    columns remain, and a partner that has them keeps them. */}
                 <Field label={t('partners.email')} name="email" type="email" />
                 <Field label={t('partners.phone')} name="phone" />
-                <Field label={t('partners.registration_no')} name="registrationNo" />
-                <Field label={t('partners.tax_identifier')} name="taxIdentifier" />
                 <Select
                   emptyLabel={t('partners.no_terms')}
                   hint={t('partners.terms_hint')}
@@ -162,7 +163,6 @@ export async function PartnerList({
               <tr>
                 <th scope="col">{column('code')}</th>
                 <th scope="col">{t('partners.legal_name')}</th>
-                <th scope="col">{t('partners.roles')}</th>
                 <th scope="col">{column('status')}</th>
                 <th scope="col">{t('partners.payment_terms')}</th>
                 <th scope="col">{t('partners.contact')}</th>
@@ -172,7 +172,7 @@ export async function PartnerList({
             <tbody>
               {shown.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>{t(`partners.none_${key}`)}</td>
+                  <td colSpan={6}>{t(`partners.none_${key}`)}</td>
                 </tr>
               ) : null}
               {shown.map((row) => (
@@ -180,19 +180,7 @@ export async function PartnerList({
                   <td>
                     <Link href={`${RECORD}/${encodeURIComponent(row.code)}`}>{row.code}</Link>
                   </td>
-                  <td>
-                    {row.legalName}
-                    {row.tradeName ? <span className="muted"> · {row.tradeName}</span> : null}
-                  </td>
-                  {/* One record, both roles — said plainly rather than implied. */}
-                  <td>
-                    {[
-                      row.isCustomer ? t('partners.role_customer') : null,
-                      row.isSupplier ? t('partners.role_supplier') : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </td>
+                  <td>{row.legalName}</td>
                   <td>{t(`partners.status_${row.status}`)}</td>
                   <td>{row.paymentTermsCode ?? t('none')}</td>
                   <td>{row.email ?? row.phone ?? t('none')}</td>

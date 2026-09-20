@@ -938,6 +938,12 @@ export async function returnableFor(tx: Tx, arInvoiceId: string) {
     select l.id::text                                     as "arInvoiceLineId",
            l.line_no                                      as "lineNo",
            l.item_code                                    as "itemCode",
+           -- Block 9's line: the name, and the price the customer was billed.
+           -- Both read from the invoice rather than the item master, because a
+           -- return is measured against what was actually sold.
+           l.description                                  as "itemName",
+           l.unit_price::text                             as "unitPrice",
+           l.warehouse_code                               as "warehouseCode",
            l.quantity::text                               as "invoiced",
            coalesce((select sum(coalesce(rl.accepted_quantity, rl.requested_quantity))
                        from sales_return_line rl

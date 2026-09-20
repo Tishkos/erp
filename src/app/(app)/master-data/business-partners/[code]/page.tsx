@@ -185,10 +185,6 @@ export default async function BusinessPartnerPage({
           <Panel title={t('details')}>
             <ul className={s.profileFacts}>
               <li>
-                <span>{t('partners.trade_name')}</span>
-                <span>{row.tradeName ?? t('none')}</span>
-              </li>
-              <li>
                 <span>{column('status')}</span>
                 <span>{t(`partners.status_${row.status}`)}</span>
               </li>
@@ -199,14 +195,6 @@ export default async function BusinessPartnerPage({
               <li>
                 <span>{t('partners.phone')}</span>
                 <span>{row.phone ?? t('none')}</span>
-              </li>
-              <li>
-                <span>{t('partners.registration_no')}</span>
-                <span>{row.registrationNo ?? t('none')}</span>
-              </li>
-              <li>
-                <span>{t('partners.tax_identifier')}</span>
-                <span>{row.taxIdentifier ?? t('none')}</span>
               </li>
               <li>
                 <span>{t('partners.payment_terms')}</span>
@@ -272,24 +260,16 @@ export default async function BusinessPartnerPage({
                     required
                     requiredLabel={t('required_hint')}
                   />
-                  <Field
-                    defaultValue={row.tradeName}
-                    hint={t('partners.trade_name_hint')}
-                    label={t('partners.trade_name')}
-                    name="tradeName"
-                  />
                   <Field defaultValue={row.email} label={t('partners.email')} name="email" type="email" />
                   <Field defaultValue={row.phone} label={t('partners.phone')} name="phone" />
-                  <Field
-                    defaultValue={row.registrationNo}
-                    label={t('partners.registration_no')}
-                    name="registrationNo"
-                  />
-                  <Field
-                    defaultValue={row.taxIdentifier}
-                    label={t('partners.tax_identifier')}
-                    name="taxIdentifier"
-                  />
+                  {/* Blocks 2 and 3 name four things: the name, the code, the
+                      payment terms and the contact information. These three
+                      are none of them, so they are off the screen — and
+                      carried through a save, because the update replaces every
+                      column and their absence would wipe what is stored. */}
+                  <input name="tradeName" type="hidden" value={row.tradeName ?? ''} />
+                  <input name="registrationNo" type="hidden" value={row.registrationNo ?? ''} />
+                  <input name="taxIdentifier" type="hidden" value={row.taxIdentifier ?? ''} />
                   <Select
                     defaultValue={row.paymentTermsCode ?? ''}
                     emptyLabel={t('partners.no_terms')}

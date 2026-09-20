@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Field, Flash, Form, Grid, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
+import { formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
@@ -36,15 +37,17 @@ export const dynamic = 'force-dynamic';
 export default async function NewGoodsReturnPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/purchasing/goods-returns')) notFound();
 
-  const [t, page, column, context, outcome, params] = await Promise.all([
+  const [t, page, column, locale, context, outcome, params] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('column'),
+    getLocale(),
     requireContext(),
     outcomeOf(searchParams),
     searchParams,
   ]);
 
+  const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   if (!can(context.principal, 'create', gr.PERMISSION_OBJECT)) {
     return <Denied object={page('goods_returns')} />;
   }
@@ -98,10 +101,18 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
               <input name="ap_invoice_id" type="hidden" value={invoice.id} />
 
               <Grid>
+                {/* The sponsor lists the code and the name as two fields, and
+                    both are read from the invoice this return is against. */}
+                <label className="field">
+                  <span className="field__label">{column('supplier_code')}</span>
+                  <span className="field__input" aria-readonly>
+                    {invoice.supplierCode}
+                  </span>
+                </label>
                 <label className="field">
                   <span className="field__label">{column('supplier_name')}</span>
                   <span className="field__input" aria-readonly>
-                    {invoice.supplierCode} · {invoice.supplierName}
+                    {invoice.supplierName}
                   </span>
                 </label>
                 <Field
@@ -146,6 +157,11 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
                   <thead>
                     <tr>
                       <th scope="col">{column('item_code')}</th>
+                      <th scope="col">{column('item_name')}</th>
+                      <th className={s.sapNum} scope="col">
+                        {column('unit_price')}
+                      </th>
+                      <th scope="col">{column('warehouse')}</th>
                       <th className={s.sapNum} scope="col">
                         {t('goods_returns.returnable')}
                       </th>
@@ -157,7 +173,7 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
                   <tbody>
                     {open.length === 0 ? (
                       <tr>
-                        <td className={s.sapEmptyRow} colSpan={3}>
+                        <td className={s.sapEmptyRow} colSpan={6}>
                           {t('goods_returns.none')}
                         </td>
                       </tr>
@@ -171,6 +187,18 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
                             value={line.id}
                           />
                           <bdi dir="ltr">{line.itemCode}</bdi>
+                        </td>
+                        {/* Read from the invoice: the name it was bought
+                            under, the price it was billed at, and the
+                            warehouse it is going back out of. */}
+                        <td>
+                          <bdi dir="auto">{line.description}</bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{money(line.unitPrice)}</bdi>
+                        </td>
+                        <td>
+                          <bdi dir="ltr">{line.warehouseCode ?? '—'}</bdi>
                         </td>
                         <td className={s.sapNum}>
                           <bdi dir="ltr">{String(Number(line.returnable))}</bdi>

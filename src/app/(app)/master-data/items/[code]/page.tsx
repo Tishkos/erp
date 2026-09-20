@@ -79,7 +79,6 @@ export default async function ItemPage({
       return {
         row,
         units: mayEdit ? await uom.listActive(tx) : [],
-        categories: mayEdit ? await items.categories(tx) : [],
         accounts: mayEdit ? await coa.postableAccounts(tx) : [],
         suppliers: mayEdit ? await items.selectableSuppliers(tx) : [],
       };
@@ -89,7 +88,7 @@ export default async function ItemPage({
     }
   });
   if (!data) notFound();
-  const { row, units, categories, accounts, suppliers } = data;
+  const { row, units, accounts, suppliers } = data;
 
   const revenue = accounts.filter((a) => a.accountType === 'revenue');
   const expense = accounts.filter((a) => a.accountType === 'expense');
@@ -127,10 +126,6 @@ export default async function ItemPage({
               <li>
                 <span>{t('items.kind')}</span>
                 <span>{row.isStock ? t('items.kind_stock') : t('items.kind_service')}</span>
-              </li>
-              <li>
-                <span>{t('items.category')}</span>
-                <span>{row.category ?? t('none')}</span>
               </li>
               <li>
                 <span>{t('items.base_uom')}</span>
@@ -350,18 +345,11 @@ export default async function ItemPage({
                       label: t(`items.tracking_${value}`),
                     }))}
                   />
-                  <Select
-                    defaultValue={row.category ?? ''}
-                    emptyLabel={t('items.no_category')}
-                    label={t('items.category')}
-                    name="category"
-                    options={categories.map((c) => ({ value: c, label: c }))}
-                  />
-                  <Field
-                    hint={t('items.new_category_hint')}
-                    label={t('items.new_category')}
-                    name="newCategory"
-                  />
+                  {/* Block 1's fields are the code, the name, the suppliers
+                      and the three accounts. The category is none of them, so
+                      it is off the screen — and carried through a save, so
+                      what is already stored is not wiped by its absence. */}
+                  <input name="category" type="hidden" value={row.category ?? ''} />
                   <Select
                     defaultValue={row.salesAccountId ?? ''}
                     emptyLabel={t('items.account_by_rule')}

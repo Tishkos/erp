@@ -54,10 +54,9 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
   }
   const mayCreate = can(principal, 'create', items.PERMISSION_OBJECT);
 
-  const { rows, units, categories } = await withCurrentUser(async (tx) => ({
+  const { rows, units } = await withCurrentUser(async (tx) => ({
     rows: await items.listAll(tx),
     units: mayCreate ? await uom.listActive(tx) : [],
-    categories: mayCreate ? await items.categories(tx) : [],
   }));
   const shown = rows.filter((row) => matches(row, outcome.q));
 
@@ -105,13 +104,6 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
                     label: t(`items.tracking_${value}`),
                   }))}
                 />
-                <Select
-                  emptyLabel={t('items.no_category')}
-                  label={t('items.category')}
-                  name="category"
-                  options={categories.map((c) => ({ value: c, label: c }))}
-                />
-                <Field hint={t('items.new_category_hint')} label={t('items.new_category')} name="newCategory" />
               </Grid>
               <SubmitRow>
                 <Submit label={t('create')} />
@@ -148,7 +140,6 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
               <tr>
                 <th scope="col">{column('code')}</th>
                 <th scope="col">{column('name')}</th>
-                <th scope="col">{t('items.category')}</th>
                 <th scope="col">{t('items.kind')}</th>
                 <th scope="col">{t('items.base_uom')}</th>
                 <th scope="col">{t('items.on_hand')}</th>
@@ -159,7 +150,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
             <tbody>
               {shown.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>{t('items.none')}</td>
+                  <td colSpan={7}>{t('items.none')}</td>
                 </tr>
               ) : null}
               {shown.map((row) => (
@@ -168,7 +159,6 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
                     <Link href={`/master-data/items/${encodeURIComponent(row.code)}`}>{row.code}</Link>
                   </td>
                   <td>{row.name}</td>
-                  <td>{row.category ?? t('none')}</td>
                   <td>{row.isStock ? t('items.kind_stock') : t('items.kind_service')}</td>
                   <td>{row.baseUomCode}</td>
                   {/* A service has no stock, so a figure here would be a lie
