@@ -319,3 +319,42 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     ).toContainText('The two sides agree');
   });
 });
+
+test('supplier statement keeps its side when filters run', async ({ page, baseURL }) => {
+  expect(['localhost', '127.0.0.1']).toContain(new URL(baseURL!).hostname);
+  await signIn(page, ADMIN);
+  const stamp = Date.now().toString(36).toUpperCase();
+  const createPartner = async (kind: 'supplier' | 'customer') => {
+    const code = `E2E-STMT-${kind === 'supplier' ? 'S' : 'C'}-${stamp}`;
+    await page.goto(`/master-data/${kind}s`);
+    await page.getByRole('button', { name: `New ${kind}`, exact: true }).click();
+    const dialog = page.locator('dialog[open], [role="dialog"]').first();
+    await dialog.getByLabel('Code', { exact: true }).fill(code);
+    await dialog.getByLabel(/^Legal name/).fill(`Statement ${kind} ${stamp}`);
+    await dialog.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.waitForURL(new RegExp(`/master-data/business-partners/${code}(?:\\?|$)`), {
+      timeout: 60_000,
+    });
+    return `/master-data/business-partners/${code}/statement`;
+  };
+  const supplierStatement = await createPartner('supplier');
+  for (const side of ['supplier', 'customer'] as const) {
+    await page.goto(`${supplierStatement}?side=${side}`);
+    const filter = page.locator('form[method="get"]');
+    await filter.locator('input[name="from"]').fill(`${YEAR}-02-01`);
+    await filter.locator('input[name="to"]').fill(`${YEAR}-12-31`);
+    await Promise.all([
+      page.waitForURL((url) => url.searchParams.get('from') === `${YEAR}-02-01`),
+      filter.locator('button[type="submit"]').click(),
+    ]);
+    expect(new URL(page.url()).searchParams.get('side')).toBe(side);
+    await expect(page.locator('input[name="side"]')).toHaveValue(side);
+  }
+  await page.goto(supplierStatement);
+  await expect(page.locator('input[name="side"]')).toHaveValue('supplier');
+  await page.goto(`${supplierStatement}?side=unknown`);
+  await expect(page.locator('input[name="side"]')).toHaveValue('supplier');
+  const customerStatement = await createPartner('customer');
+  await page.goto(customerStatement);
+  await expect(page.locator('input[name="side"]')).toHaveValue('customer');
+});

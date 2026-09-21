@@ -57,19 +57,22 @@ export default async function PartnerStatementPage({
   const to = typeof query.to === 'string' ? query.to : `${year}-12-31`;
   // A partner who is both is read from whichever side was asked for, and as a
   // customer when nothing was said.
-  const side: statement.PartySide = query.side === 'supplier' ? 'supplier' : 'customer';
+  const requestedSide =
+    query.side === 'supplier' || query.side === 'customer' ? query.side : null;
 
   const data = await withCurrentUser(async (tx) => {
     try {
       const row = await partners.detail(tx, code);
-      return { row, account: await statement.statementFor(tx, side, code, { from, to }) };
+      const side: statement.PartySide =
+        requestedSide ?? (row.isSupplier && !row.isCustomer ? 'supplier' : 'customer');
+      return { row, side, account: await statement.statementFor(tx, side, code, { from, to }) };
     } catch (error) {
       if (error instanceof AdminNotFoundError) return null;
       throw error;
     }
   });
   if (!data) notFound();
-  const { row, account } = data;
+  const { row, side, account } = data;
 
   const money = (amount: string) => formatStatementAmount(amount, 'IQD', locale as Locale);
 
@@ -86,6 +89,7 @@ export default async function PartnerStatementPage({
             action={`/master-data/business-partners/${encodeURIComponent(code)}/statement`}
             currency="IQD"
             from={from}
+            hiddenFields={{ side }}
             to={to}
           />
         }
