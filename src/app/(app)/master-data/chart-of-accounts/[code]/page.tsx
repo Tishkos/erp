@@ -9,7 +9,11 @@ import { registerAllRecords } from '@/server/records';
 import { RecordNotFoundError, view } from '@/server/services/record';
 import { PermissionDeniedError, can } from '@domain/permissions';
 import { withCurrentUser } from '@/server/session';
-import { AccountControls, MAPPING_STATEMENTS } from '@/components/admin/account-controls';
+import {
+  AccountControls,
+  ControlAccountDesignation,
+  MAPPING_STATEMENTS,
+} from '@/components/admin/account-controls';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '@domain/money';
@@ -96,13 +100,14 @@ export default async function AccountRecordPage({
       parent,
       activity,
       mapping: await statementLines.pickerLines(tx),
+      mayApprove: can(context.principal, 'approve', 'chart_of_account'),
       mayConfigure: can(context.principal, 'configure', 'chart_of_account'),
       mayPrint: can(context.principal, 'print', 'chart_of_account'),
       mayExport: can(context.principal, 'export', 'chart_of_account'),
     };
   });
   if (!data) notFound();
-  const { node, parent, activity, mapping, mayConfigure, mayPrint, mayExport } = data;
+  const { node, parent, activity, mapping, mayApprove, mayConfigure, mayPrint, mayExport } = data;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   const dec = (value: string) => parseDecimal(value, MONEY_SCALE);
@@ -233,6 +238,7 @@ export default async function AccountRecordPage({
           </section>
 
           {mayConfigure ? <AccountControls account={node} mapping={mapping} mayConfigure={mayConfigure} /> : null}
+          {mayApprove && !node.isGroup ? <ControlAccountDesignation account={node} /> : null}
         </div>
 
         <div className={s.profileStack}>

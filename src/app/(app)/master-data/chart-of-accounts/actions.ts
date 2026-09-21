@@ -1,7 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 import { runAdmin, runAdminAndReturn, text } from '@/server/admin-action';
+import { CONTROL_ACCOUNT_KINDS } from '@domain/chart-of-accounts';
 import type { AccountMappingInput } from '@domain/financial-statements';
 import * as coa from '@/server/services/chart-of-accounts';
 
@@ -65,6 +67,20 @@ export async function setStatementLines(formData: FormData): Promise<void> {
   const code = text(formData, 'code');
   await runAdminAndReturn(
     (tx, ctx) => coa.setStatementLines(tx, ctx, text(formData, 'id'), mappingFrom(formData)),
+    record(code),
+  );
+}
+
+export async function setControlAccount(formData: FormData): Promise<void> {
+  const code = text(formData, 'code');
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      coa.setControlAccount(
+        tx,
+        ctx,
+        text(formData, 'id'),
+        z.enum(CONTROL_ACCOUNT_KINDS).nullable().parse(text(formData, 'controlAccount') || null),
+      ),
     record(code),
   );
 }

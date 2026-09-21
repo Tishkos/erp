@@ -39,6 +39,10 @@ import {
   type PostingRule,
 } from '../domain/posting';
 import { assertCurrencyAllowed, assertPostable } from '../domain/chart-of-accounts';
+import {
+  assertMappedControlAccount,
+  requiredControlAccount,
+} from '../domain/posting-map';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 import type { DimensionType, SuppliedDimensions } from '../domain/dimensions';
 import {
@@ -142,6 +146,7 @@ export async function plan(
     // account is legitimate here — §14.3 restricts *manual* posting to them.
     assertPostable(account, { source: 'system' });
     assertCurrencyAllowed(account, currency);
+    assertMappedControlAccount(request.eventType, line.role, account);
 
     const dimensions: SuppliedDimensions = {
       branch: request.branchCode,
@@ -591,6 +596,13 @@ export async function defineRule(
     branchCode: ctx.branchCode,
     requestId: ctx.requestId ?? null,
   });
+  if (requiredControlAccount(input.eventType, input.lineRole)) {
+    assertMappedControlAccount(
+      input.eventType,
+      input.lineRole,
+      await coa.loadAccount(tx, input.accountId),
+    );
+  }
 
   const [created] = await tx
     .insert(postingRuleTable)
@@ -647,6 +659,13 @@ export async function setMapping(
     branchCode: ctx.branchCode,
     requestId: ctx.requestId ?? null,
   });
+  if (requiredControlAccount(input.eventType, input.lineRole)) {
+    assertMappedControlAccount(
+      input.eventType,
+      input.lineRole,
+      await coa.loadAccount(tx, input.accountId),
+    );
+  }
 
   const existing = await plainRule(tx, input.eventType, input.lineRole);
   let ruleId = existing?.id;

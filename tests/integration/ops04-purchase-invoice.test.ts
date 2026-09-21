@@ -738,4 +738,95 @@ describe('ops 4 · the invoice posts through the mapping, and not without it', (
       balances: true,
     });
   });
+
+  it('refuses a saved payable mapping that is not supplier-controlled until the chosen account is designated', async () => {
+    await ownerPool.query(
+      `update posting_rule set account_id = $1
+        where event_type = 'purchasing.ap_invoice' and line_role = 'supplier_payable'`,
+      [accounts.grni],
+    );
+    const invoice = await purchaseInvoice({ quantity: '10', unitPrice: '100000' });
+
+    await expect(postIt(invoice.id)).rejects.toThrow(/supplier control account/);
+
+    const { rows: invoices } = await ownerPool.query(
+      `select status, journal_entry_id from ap_invoice where id = $1`,
+      [invoice.id],
+    );
+    expect(invoices[0]).toMatchObject({ status: 'submitted', journal_entry_id: null });
+    const { rows: journals } = await ownerPool.query(
+      `select count(*)::int as n from journal_entry where source_doc_id = $1`,
+      [invoice.id],
+    );
+    expect(journals[0].n).toBe(0);
+    const { rows: movements } = await ownerPool.query(
+      `select count(*)::int as n from inventory_movement
+        where source_document_type = 'ap_invoice' and source_document_id = $1`,
+      [invoice.id],
+    );
+    expect(movements[0].n).toBe(0);
+    const { rows: subledgerRows } = await ownerPool.query(
+      `select count(*)::int as n from subledger_entry where source_doc_id = $1`,
+      [invoice.id],
+    );
+    expect(subledgerRows[0].n).toBe(0);
+    const position = await withScope(scope(manager), (tx) =>
+      inventory.positionOf(tx, PANEL, WAREHOUSE, BAGHDAD),
+    );
+    expect(position.onHand).toBe(0n);
+
+    await withScope(scope(manager), (tx) =>
+      coa.setControlAccount(tx, manager, accounts.grni!, 'supplier'),
+    );
+    await withScope(scope(manager), (tx) =>
+      posting.setMapping(tx, manager, {
+        eventType: 'purchasing.ap_invoice',
+        lineRole: 'supplier_payable',
+        accountId: accounts.grni!,
+      }),
+    );
+
+    const { journalEntryId } = await withScope(scope(manager), (tx) =>
+      ap.post(tx, manager, invoice.id),
+    );
+    const { rows: journalLines } = await ownerPool.query(
+      `select account_id, debit_iqd, credit_iqd from journal_line
+        where journal_entry_id = $1 order by line_no`,
+      [journalEntryId],
+    );
+    expect(journalLines).toEqual([
+      { account_id: itemInventoryAccount, debit_iqd: '1000000.0000', credit_iqd: '0.0000' },
+      { account_id: accounts.grni, debit_iqd: '0.0000', credit_iqd: '1000000.0000' },
+    ]);
+
+    const repairedPosition = await withScope(scope(manager), (tx) =>
+      inventory.positionOf(tx, PANEL, WAREHOUSE, BAGHDAD),
+    );
+    expect(repairedPosition.onHand).toBe(qty('10'));
+    const statement = await withScope(scope(manager), (tx) =>
+      subledger.statementFor(tx, 'supplier', 'SUP-001'),
+    );
+    expect(statement).toHaveLength(1);
+    expect(statement[0]).toMatchObject({
+      debitIqd: '0.0000',
+      creditIqd: '1000000.0000',
+      sourceDocId: invoice.id,
+    });
+
+    const balance = await withScope(scope(manager), (tx) =>
+      trialBalance.trialBalance(tx, { from: ON, to: ON, branchCode: BAGHDAD }),
+    );
+    expect(balance.find((row) => row.accountName === 'Inventory')).toMatchObject({
+      debit: '1000000.0000',
+      credit: '0.0000',
+    });
+    expect(balance.find((row) => row.accountName === 'Goods Received Not Invoiced')).toMatchObject({
+      debit: '0.0000',
+      credit: '1000000.0000',
+    });
+    expect(trialBalance.totalsOf(balance)).toMatchObject({
+      difference: '0.0000',
+      balances: true,
+    });
+  });
 });

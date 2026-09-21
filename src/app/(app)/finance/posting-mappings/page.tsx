@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
@@ -49,10 +50,11 @@ export default async function PostingMappingsPage({
 }) {
   if (!visibleRoute('/finance/posting-mappings')) notFound();
 
-  const [t, page, column, map, context, outcome] = await Promise.all([
+  const [t, page, column, chart, map, context, outcome] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('column'),
+    getTranslations('chart'),
     // The documents and the lines they post, named where a reader will look
     // for them rather than inside the administration block.
     getTranslations('posting_map'),
@@ -88,8 +90,18 @@ export default async function PostingMappingsPage({
       .map((rule) => [`${rule.eventType} ${rule.lineRole}`, rule]),
   );
 
+  const eligibleFor = (line: (typeof POSTING_MAP)[number]['lines'][number]) =>
+    accounts.filter(
+      (account) => !line.controlAccount || account.controlAccount === line.controlAccount,
+    );
   const missing = POSTING_MAP.flatMap((document) =>
-    document.lines.filter((line) => line.always && !mapped.has(`${document.event} ${line.role}`)),
+    document.lines.filter((line) => {
+      const rule = mapped.get(`${document.event} ${line.role}`);
+      return (
+        line.always &&
+        (!rule || !eligibleFor(line).some((account) => account.id === rule.accountId))
+      );
+    }),
   ).length;
 
   return (
@@ -112,6 +124,16 @@ export default async function PostingMappingsPage({
           ? t('posting_mappings.missing', { count: missing })
           : t('posting_mappings.complete')}
       </p>
+      <p className={s.sectionHint}>
+        {t('posting_mappings.setup_hint')}{' '}
+        <Link className={s.sapLink} href="/master-data/chart-of-accounts">
+          {page('chart_of_accounts')}
+        </Link>{' '}
+        ·{' '}
+        <Link className={s.sapLink} href="/master-data/items">
+          {page('items')}
+        </Link>
+      </p>
 
       {POSTING_MAP.map((document) => (
         <Panel
@@ -131,6 +153,11 @@ export default async function PostingMappingsPage({
                 {document.lines.map((line) => {
                   const rule = mapped.get(`${document.event} ${line.role}`);
                   const label = map(`role.${line.role}`);
+                  const eligibleAccounts = eligibleFor(line);
+                  const invalidRule =
+                    rule && !eligibleAccounts.some((account) => account.id === rule.accountId)
+                      ? rule
+                      : null;
 
                   return (
                     <tr key={line.role}>
@@ -141,6 +168,23 @@ export default async function PostingMappingsPage({
                         ) : null}
                       </td>
                       <td>
+                        {line.controlAccount ? (
+                          <p className={s.sectionHint}>
+                            {t('posting_mappings.control_required', {
+                              kind: chart(`control_accounts.${line.controlAccount}`),
+                            })}
+                          </p>
+                        ) : null}
+                        {rule ? (
+                          <p>
+                            <Link
+                              className={s.sapLink}
+                              href={`/master-data/chart-of-accounts/${encodeURIComponent(rule.accountCode)}`}
+                            >
+                              <bdi dir="auto">{`${rule.accountCode} · ${rule.accountName}`}</bdi>
+                            </Link>
+                          </p>
+                        ) : null}
                         {mayConfigure ? (
                           <form
                             action={setPostingMapping}
@@ -155,7 +199,12 @@ export default async function PostingMappingsPage({
                               name="account_id"
                             >
                               <option value="">{t('posting_mappings.not_set')}</option>
-                              {accounts.map((account) => (
+                              {invalidRule ? (
+                                <option disabled value={invalidRule.accountId}>
+                                  {`${invalidRule.accountCode} · ${invalidRule.accountName}`}
+                                </option>
+                              ) : null}
+                              {eligibleAccounts.map((account) => (
                                 <option key={account.id} value={account.id}>
                                   {`${account.code} · ${account.name}`}
                                 </option>
@@ -165,11 +214,14 @@ export default async function PostingMappingsPage({
                               {t('save')}
                             </button>
                           </form>
-                        ) : rule ? (
-                          <bdi dir="auto">{`${rule.accountCode} · ${rule.accountName}`}</bdi>
-                        ) : (
+                        ) : rule ? null : (
                           <Pill label={t('posting_mappings.not_set')} on={false} />
                         )}
+                        {invalidRule ? (
+                          <p className={s.sectionHint}>
+                            {t('posting_mappings.invalid_account')}
+                          </p>
+                        ) : null}
                       </td>
                     </tr>
                   );

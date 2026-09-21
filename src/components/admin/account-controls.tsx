@@ -3,11 +3,12 @@ import { Panel } from '@/components/ui';
 import { ActionButton, Field, Form, Grid, ReasonForm, Select, Submit, SubmitRow, admin as s } from './index';
 import { NewAccountDialog } from './new-account-dialog';
 import type { StatementFace } from '@domain/financial-statements';
-import type { AccountNode } from '@domain/chart-of-accounts';
+import { CONTROL_ACCOUNT_KINDS, type AccountNode } from '@domain/chart-of-accounts';
 import {
   allowSubAccounts,
   createAccount,
   deactivateAccount,
+  setControlAccount,
   setStatementLines,
   updateAccount,
 } from '@/app/(app)/master-data/chart-of-accounts/actions';
@@ -276,5 +277,38 @@ export async function AccountControls({
         </Panel>
       ) : null}
     </div>
+  );
+}
+
+export async function ControlAccountDesignation({ account }: { readonly account: AccountNode }) {
+  if (account.isGroup) return null;
+  const [t, chart, column] = await Promise.all([
+    getTranslations('admin'),
+    getTranslations('chart'),
+    getTranslations('column'),
+  ]);
+  return (
+    <Panel title={column('control_account')}>
+      <Form action={setControlAccount}>
+        <input name="id" type="hidden" value={account.id} />
+        <input name="code" type="hidden" value={account.code} />
+        <Select
+          defaultValue={account.controlAccount ?? ''}
+          hint={t('accounts.control_hint')}
+          label={column('control_account')}
+          name="controlAccount"
+          options={[
+            { value: '', label: t('accounts.control_none') },
+            ...CONTROL_ACCOUNT_KINDS.map((kind) => ({
+              value: kind,
+              label: chart(`control_accounts.${kind}`),
+            })),
+          ]}
+        />
+        <SubmitRow>
+          <Submit label={t('save')} />
+        </SubmitRow>
+      </Form>
+    </Panel>
   );
 }

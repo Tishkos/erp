@@ -19,10 +19,14 @@ export async function setPostingMapping(formData: FormData): Promise<void> {
   const accountId = text(formData, 'account_id').trim();
 
   await runAdminAndReturn(
-    (tx, ctx) =>
-      accountId
+    (tx, ctx) => {
+      if (!formData.has('account_id')) {
+        throw new Error('Choose an eligible account or explicitly select Not set before saving.');
+      }
+      return accountId
         ? posting.setMapping(tx, ctx, { eventType, lineRole, accountId })
-        : posting.clearMapping(tx, ctx, { eventType, lineRole }),
+        : posting.clearMapping(tx, ctx, { eventType, lineRole });
+    },
     SCREEN,
   );
 }

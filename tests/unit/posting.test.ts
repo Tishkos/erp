@@ -17,6 +17,10 @@ import {
   type PostingRequest,
   type PostingRule,
 } from '@domain/posting';
+import {
+  assertMappedControlAccount,
+  requiredControlAccount,
+} from '@domain/posting-map';
 
 const rule = (overrides: Partial<PostingRule> = {}): PostingRule => ({
   id: 'r-1',
@@ -151,6 +155,56 @@ describe('resolving the account for a line', () => {
       itemGroup: 'FUEL',
     });
     expect(resolved.accountCode).toBe('R000002');
+  });
+});
+
+describe('the control account an invoice mapping must name', () => {
+  it.each([
+    {
+      eventType: 'purchasing.ap_invoice',
+      lineRole: 'supplier_payable',
+      required: 'supplier',
+      opposite: 'customer',
+    },
+    {
+      eventType: 'sales.ar_invoice',
+      lineRole: 'customer_receivable',
+      required: 'customer',
+      opposite: 'supplier',
+    },
+  ] as const)('requires %s / %s to use a %s control account', ({ eventType, lineRole, required, opposite }) => {
+    expect(requiredControlAccount(eventType, lineRole)).toBe(required);
+    expect(() =>
+      assertMappedControlAccount(eventType, lineRole, {
+        code: 'USER-CHOSEN',
+        controlAccount: required,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertMappedControlAccount(eventType, lineRole, {
+        code: 'USER-CHOSEN',
+        controlAccount: null,
+      }),
+    ).toThrow(/control account/);
+    expect(() =>
+      assertMappedControlAccount(eventType, lineRole, {
+        code: 'USER-CHOSEN',
+        controlAccount: opposite,
+      }),
+    ).toThrow(/control account/);
+  });
+
+  it.each([
+    ['sales_invoice.posted', 'receivable'],
+    ['sales.ar_invoice', 'sales_revenue'],
+  ] as const)('leaves %s / %s to any postable account', (eventType, lineRole) => {
+    expect(requiredControlAccount(eventType, lineRole)).toBeNull();
+    expect(() =>
+      assertMappedControlAccount(eventType, lineRole, {
+        code: 'USER-CHOSEN',
+        controlAccount: null,
+      }),
+    ).not.toThrow();
   });
 });
 

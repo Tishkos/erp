@@ -1481,7 +1481,9 @@
       "creating": "Creating…",
       "edit": "Edit account",
       "header_no_line": "A header account takes no mapping.",
-      "cash_flow_inside_net_income": "This account is already inside Net Income, the first figure of the Cash Flow Statement. An expense that has not been paid is added back through the liability it is owed on — map Salaries Payable or Accounts Payable, not the expense itself."
+      "cash_flow_inside_net_income": "This account is already inside Net Income, the first figure of the Cash Flow Statement. An expense that has not been paid is added back through the liability it is owed on — map Salaries Payable or Accounts Payable, not the expense itself.",
+      "control_none": "Not a control account",
+      "control_hint": "Choose which subledger this account controls. Customer and supplier control accounts feed their statements. Changes affect future postings; existing journals and statements are not rewritten."
     },
     "rates": {
       "title": "Accounting rates",
@@ -1906,7 +1908,10 @@
       "not_set": "Not set",
       "always": "Required",
       "missing": "{count, plural, one {One required line has no account yet, so the documents that post it cannot be posted.} other {# required lines have no account yet, so the documents that post them cannot be posted.}}",
-      "complete": "Every required line has an account."
+      "complete": "Every required line has an account.",
+      "setup_hint": "Choose accounts from your Chart of Accounts; no account numbers are fixed. Create and approve accounts there, then select them below. Inventory and COGS accounts are selected on each item.",
+      "control_required": "Select a {kind} control account. Set its designation in Chart of Accounts first.",
+      "invalid_account": "The saved account is not eligible for this line. Check its approval, active status and control-account designation."
     }
   },
   "profile": {

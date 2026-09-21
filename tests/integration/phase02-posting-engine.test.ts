@@ -731,6 +731,141 @@ describe('§3.3 · the mapping is set from the Posting Mappings screen', () => {
       ],
     });
 
+  it.each([
+    {
+      eventType: 'purchasing.ap_invoice',
+      lineRole: 'supplier_payable',
+      required: 'supplier',
+    },
+    {
+      eventType: 'sales.ar_invoice',
+      lineRole: 'customer_receivable',
+      required: 'customer',
+    },
+  ] as const)(
+    'requires $eventType / $lineRole to point at a $required control account',
+    async ({ eventType, lineRole, required }) => {
+      const chosenAccountId = await approvedAccount(
+        'A000001',
+        `${required === 'supplier' ? 'Supplier' : 'Customer'} Control ${eventType}`,
+      );
+      await expect(
+        withScope(scope(), (tx) =>
+          posting.setMapping(tx, manager, {
+            eventType,
+            lineRole,
+            accountId: chosenAccountId,
+          }),
+        ),
+      ).rejects.toThrow(/control account/);
+      await expect(
+        withScope(scope(), (tx) =>
+          posting.defineRule(tx, manager, {
+            eventType,
+            lineRole,
+            accountId: chosenAccountId,
+          }),
+        ),
+      ).rejects.toThrow(/control account/);
+
+      let { rows } = await ownerPool.query(
+        `select count(*)::int as rules from posting_rule where event_type = $1 and line_role = $2`,
+        [eventType, lineRole],
+      );
+      expect(rows[0].rules).toBe(0);
+
+      await withScope(scope(), (tx) =>
+        coa.setControlAccount(tx, manager, chosenAccountId, required),
+      );
+      await withScope(scope(), (tx) =>
+        posting.setMapping(tx, manager, {
+          eventType,
+          lineRole,
+          accountId: chosenAccountId,
+        }),
+      );
+
+      await expect(
+        withScope(scope(), (tx) =>
+          posting.setMapping(tx, manager, {
+            eventType,
+            lineRole,
+            accountId: revenueAccountId,
+          }),
+        ),
+      ).rejects.toThrow(/control account/);
+
+      ({ rows } = await ownerPool.query(
+        `select account_id from posting_rule where event_type = $1 and line_role = $2`,
+        [eventType, lineRole],
+      ));
+      expect(rows).toEqual([{ account_id: chosenAccountId }]);
+    },
+  );
+
+  it.each([
+    {
+      eventType: 'purchasing.ap_invoice',
+      lineRole: 'supplier_payable',
+      otherRole: 'expense',
+      debitRole: 'expense',
+      creditRole: 'supplier_payable',
+    },
+    {
+      eventType: 'sales.ar_invoice',
+      lineRole: 'customer_receivable',
+      otherRole: 'sales_revenue',
+      debitRole: 'customer_receivable',
+      creditRole: 'sales_revenue',
+    },
+  ] as const)(
+    'refuses a stale or overridden $eventType / $lineRole account at posting',
+    async ({ eventType, lineRole, otherRole, debitRole, creditRole }) => {
+      await ownerPool.query(
+        `insert into posting_rule (event_type, line_role, account_id, is_active, created_by)
+         values ($1, $2, $3, true, $4)`,
+        [eventType, lineRole, receivableAccountId, manager.principal.userId],
+      );
+
+      const invalid = request({
+        eventType,
+        documentTypeCode: EVENT,
+        source: { module: eventType.split('.')[0]!, documentId: `STALE-${eventType}`, event: 'posted' },
+        lines:
+          debitRole === lineRole
+            ? [
+                { role: lineRole, debit: '1000.0000' },
+                { role: otherRole, credit: '1000.0000', accountId: revenueAccountId },
+              ]
+            : [
+                { role: otherRole, debit: '1000.0000', accountId: revenueAccountId },
+                { role: lineRole, credit: '1000.0000' },
+              ],
+      });
+      await expect(
+        withScope(scope(), (tx) => posting.post(tx, manager, invalid)),
+      ).rejects.toThrow(/control account/);
+
+      const overridden = request({
+        eventType,
+        documentTypeCode: EVENT,
+        source: { module: eventType.split('.')[0]!, documentId: `OVERRIDE-${eventType}`, event: 'posted' },
+        lines: [
+          { role: debitRole, debit: '1000.0000', accountId: receivableAccountId },
+          { role: creditRole, credit: '1000.0000', accountId: revenueAccountId },
+        ],
+      });
+      await expect(
+        withScope(scope(), (tx) => posting.post(tx, manager, overridden)),
+      ).rejects.toThrow(/control account/);
+
+      const { rows } = await ownerPool.query(
+        `select count(*)::int as journals from journal_entry`,
+      );
+      expect(rows[0].journals).toBe(0);
+    },
+  );
+
   it('refuses the posting while the line has no account', async () => {
     await expect(withScope(scope(), (tx) => posting.post(tx, manager, withDiscount()))).rejects.toThrow(
       NoPostingRuleError,

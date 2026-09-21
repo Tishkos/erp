@@ -432,6 +432,104 @@ describe('ops 5 · approval, posting, stock and the ledger stay in step', () => 
       ),
     ).toHaveLength(1);
   });
+
+  it('refuses a saved receivable mapping that is not customer-controlled until the chosen account is designated', async () => {
+    await buy(jinko, { quantity: '10', unitPrice: '100000' });
+    await ownerPool.query(
+      `update posting_rule set account_id = $1
+        where event_type = 'sales.ar_invoice' and line_role = 'customer_receivable'`,
+      [accounts.inventory],
+    );
+    const invoice = await sell([{ quantity: '2', unitPrice: '150000' }]);
+    await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
+
+    await expect(
+      withScope(scope(manager), (tx) => ar.post(tx, manager, invoice.id)),
+    ).rejects.toThrow(/customer control account/);
+
+    const { rows: invoices } = await ownerPool.query(
+      `select status, journal_entry_id from ar_invoice where id = $1`,
+      [invoice.id],
+    );
+    expect(invoices[0]).toMatchObject({ status: 'approved', journal_entry_id: null });
+    const { rows: journals } = await ownerPool.query(
+      `select count(*)::int as n from journal_entry where source_doc_id = $1`,
+      [invoice.id],
+    );
+    expect(journals[0].n).toBe(0);
+    const { rows: movements } = await ownerPool.query(
+      `select count(*)::int as n from inventory_movement
+        where source_document_type = 'ar_invoice' and source_document_id = $1`,
+      [invoice.id],
+    );
+    expect(movements[0].n).toBe(0);
+    const { rows: subledgerRows } = await ownerPool.query(
+      `select count(*)::int as n from subledger_entry where source_doc_id = $1`,
+      [invoice.id],
+    );
+    expect(subledgerRows[0].n).toBe(0);
+    expect(await onHand()).toBe(10);
+
+    const { rows: assets } = await ownerPool.query(
+      `select id from chart_of_account where code = 'A000001'`,
+    );
+    const chosen = await withScope(scope(clerk), (tx) =>
+      coa.createAccount(tx, clerk, {
+        name: 'User-selected receivables',
+        parentId: assets[0].id,
+        currencyRestriction: 'IQD',
+      }),
+    );
+    await withScope(scope(clerk), (tx) => coa.submitForApproval(tx, clerk, chosen.id));
+    await withScope(scope(manager), (tx) => coa.approve(tx, manager, chosen.id));
+    await withScope(scope(manager), (tx) =>
+      coa.setControlAccount(tx, manager, chosen.id, 'customer'),
+    );
+    await withScope(scope(manager), (tx) =>
+      coa.setRequiredDimensions(tx, manager, chosen.id, []),
+    );
+    await withScope(scope(manager), (tx) =>
+      posting.setMapping(tx, manager, {
+        eventType: 'sales.ar_invoice',
+        lineRole: 'customer_receivable',
+        accountId: chosen.id,
+      }),
+    );
+
+    const { journalEntryId } = await withScope(scope(manager), (tx) =>
+      ar.post(tx, manager, invoice.id),
+    );
+    expect(await onHand()).toBe(8);
+
+    const { rows: journalLines } = await ownerPool.query(
+      `select account_id, debit_iqd, credit_iqd from journal_line
+        where journal_entry_id = $1 order by line_no`,
+      [journalEntryId],
+    );
+    expect(journalLines).toEqual([
+      { account_id: chosen.id, debit_iqd: '300000.0000', credit_iqd: '0.0000' },
+      { account_id: accounts.sales_revenue, debit_iqd: '0.0000', credit_iqd: '300000.0000' },
+      { account_id: accounts.cogs, debit_iqd: '200000.0000', credit_iqd: '0.0000' },
+      { account_id: accounts.inventory, debit_iqd: '0.0000', credit_iqd: '200000.0000' },
+    ]);
+
+    const statement = await withScope(scope(manager), (tx) =>
+      subledger.statementFor(tx, 'customer', 'CUST-001'),
+    );
+    expect(statement).toHaveLength(1);
+    expect(statement[0]).toMatchObject({
+      debitIqd: '300000.0000',
+      creditIqd: '0.0000',
+      sourceDocId: invoice.id,
+    });
+    const balance = await withScope(scope(manager), (tx) =>
+      trialBalance.trialBalance(tx, { from: BUY_ON, to: SELL_ON, branchCode: BAGHDAD }),
+    );
+    expect(trialBalance.totalsOf(balance)).toMatchObject({
+      difference: '0.0000',
+      balances: true,
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

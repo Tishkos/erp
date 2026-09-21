@@ -18,6 +18,7 @@ import { expect, test, type Page } from '@playwright/test';
  */
 
 const MANAGER = { email: 'manager@example.com', password: 'Ledger-Trial-Balance-7' };
+const OFFICER = { email: 'officer@example.com', password: 'Ledger-Trial-Balance-7' };
 /**
  * The development super user, for the master data a manager may not maintain.
  *
@@ -217,7 +218,10 @@ test.describe('the Operations Build screens open', () => {
     await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible({ timeout: 60_000 });
   });
 
-  test('§3.3 · an account is mapped to a document line, on the row', async ({ browser }) => {
+  test('§3.3 · an account is mapped to a document line, on the row', async ({
+    browser,
+    page,
+  }) => {
     /*
      * The screen that did not exist while every document needed it. The
      * Purchase Invoice refuses to post without an account for what the company
@@ -228,34 +232,96 @@ test.describe('the Operations Build screens open', () => {
      * administrator keeps, and the Accounting Manager who may configure it is
      * not who the seed signs in as here.
      */
+    test.setTimeout(180_000);
     const administration = await browser.newContext();
     const administrator = await administration.newPage();
+    const stamp = Date.now().toString(36).toUpperCase();
+
+    const supplierAccount = async (name: string) => {
+      await administrator.goto('/master-data/chart-of-accounts');
+      await administrator.getByRole('button', { name: 'New account' }).click();
+      const dialog = administrator.locator('dialog[open], [role="dialog"]').first();
+      const under = dialog.getByLabel('Under', { exact: true });
+      const parent = under
+        .locator('option:not([disabled])')
+        .filter({ hasText: 'Liabilities' })
+        .first();
+      const parentId = await parent.getAttribute('value');
+      await under.selectOption(parentId!);
+      await dialog.getByLabel(/^Name/).fill(name);
+      await dialog.getByRole('button', { name: 'Create' }).click();
+      await administrator.waitForURL(/\/master-data\/chart-of-accounts\/[A-Z]\d+/, {
+        timeout: 60_000,
+      });
+
+      const path = new URL(administrator.url()).pathname;
+      const accountId = await administrator.locator('input[name="id"]').first().inputValue();
+      const controlForm = administrator
+        .locator('form')
+        .filter({ has: administrator.locator('select[name="controlAccount"]') });
+      await controlForm
+        .getByLabel('Control account', { exact: true })
+        .selectOption('supplier');
+      await controlForm.getByRole('button', { name: 'Save', exact: true }).click();
+      await administrator.waitForURL(/saved=1/, { timeout: 60_000 });
+      await administrator
+        .getByRole('button', { name: 'Submit for approval', exact: true })
+        .click();
+      await expect(
+        administrator.getByText('Pending approval', { exact: true }).first(),
+      ).toBeVisible({ timeout: 30_000 });
+
+      await page.goto(path);
+      await expect(page.getByLabel('Control account', { exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Approve', exact: true }).click();
+      await expect(page.getByText('Approved', { exact: true }).first()).toBeVisible({
+        timeout: 30_000,
+      });
+      return { accountId, path };
+    };
+
     try {
       await signIn(administrator, ADMIN);
+      const first = await supplierAccount(`E2E Supplier Payable ${stamp} A`);
+
+      const officers = await browser.newContext();
+      const officer = await officers.newPage();
+      try {
+        await signIn(officer, OFFICER);
+        await officer.goto(first.path);
+        await expect(officer.getByLabel('Control account', { exact: true })).toHaveCount(0);
+      } finally {
+        await officers.close();
+      }
+
+      const second = await supplierAccount(`E2E Supplier Payable ${stamp} B`);
       await administrator.goto('/finance/posting-mappings');
       await expect(
         administrator.getByRole('heading', { name: 'Posting Mappings' }).first(),
       ).toBeVisible();
 
       // The line every purchase invoice credits, and the account it will go to.
-      const row = administrator.getByRole('row').filter({
-        hasText: 'What the company owes the supplier',
-      });
-      const chooser = row.first().getByRole('combobox');
-      const account = (await chooser.locator('option:not([value=""])').first().textContent())!;
-      await chooser.selectOption({ label: account });
-      await row.first().getByRole('button', { name: 'Save' }).click();
-
-      // Saved, and read back from the database rather than from the form.
-      await administrator.waitForURL(/posting-mappings/, { timeout: 60_000 });
-      await expect(administrator.getByRole('combobox').first()).toBeVisible({ timeout: 30_000 });
-      await expect(
-        administrator
+      for (const accountId of [first.accountId, second.accountId]) {
+        await administrator.goto('/finance/posting-mappings');
+        const row = administrator
           .getByRole('row')
           .filter({ hasText: 'What the company owes the supplier' })
-          .first()
-          .getByRole('combobox'),
-      ).toHaveValue(/.+/);
+          .first();
+        await row.getByRole('combobox').selectOption(accountId);
+        await Promise.all([
+          administrator.waitForURL(/posting-mappings\?saved=1/, { timeout: 60_000 }),
+          row.getByRole('button', { name: 'Save' }).click(),
+        ]);
+        // Saved, and read back from the database rather than from the form.
+        await administrator.reload();
+        await expect(
+          administrator
+            .getByRole('row')
+            .filter({ hasText: 'What the company owes the supplier' })
+            .first()
+            .getByRole('combobox'),
+        ).toHaveValue(accountId);
+      }
     } finally {
       await administration.close();
     }

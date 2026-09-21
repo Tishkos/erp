@@ -18,6 +18,7 @@
  * of sales account the item carries. Those are answered once, on the record,
  * and a mapping for them would be a second answer that could disagree.
  */
+import type { AccountNode } from './chart-of-accounts';
 
 export interface MappedLine {
   /** The role the posting engine names when it asks for an account. */
@@ -31,6 +32,7 @@ export interface MappedLine {
    * they are needed, which is why they are listed rather than hidden.
    */
   readonly always: boolean;
+  readonly controlAccount?: 'customer' | 'supplier';
 }
 
 export interface MappedDocument {
@@ -39,14 +41,18 @@ export interface MappedDocument {
   readonly lines: readonly MappedLine[];
 }
 
-const line = (role: string, always = false): MappedLine => ({ role, always });
+const line = (
+  role: string,
+  always = false,
+  controlAccount?: 'customer' | 'supplier',
+): MappedLine => ({ role, always, ...(controlAccount ? { controlAccount } : {}) });
 
 export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
   {
     event: 'purchasing.ap_invoice',
     lines: [
       // What the company now owes. Every purchase invoice credits it.
-      line('supplier_payable', true),
+      line('supplier_payable', true, 'supplier'),
       // The goods-receipt route: the receipt debited GRNI, the invoice clears
       // it. An invoice that receives its own stock debits the item's account
       // instead and never comes here.
@@ -60,7 +66,7 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
   },
   {
     event: 'sales.ar_invoice',
-    lines: [line('customer_receivable', true), line('sales_revenue', true)],
+    lines: [line('customer_receivable', true, 'customer'), line('sales_revenue', true)],
   },
   {
     event: 'sales.customer_receipt',
@@ -91,10 +97,29 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
 ]);
 
 /** The catalogue as flat (event, role) pairs, in the order shown. */
-export function mappedLines(): readonly { event: string; role: string; always: boolean }[] {
+export function mappedLines(): readonly (MappedLine & { event: string })[] {
   return POSTING_MAP.flatMap((document) =>
     document.lines.map((entry) => ({ event: document.event, ...entry })),
   );
+}
+
+export function requiredControlAccount(eventType: string, lineRole: string) {
+  return POSTING_MAP.find((document) => document.event === eventType)
+    ?.lines.find((entry) => entry.role === lineRole)?.controlAccount ?? null;
+}
+
+export function assertMappedControlAccount(
+  eventType: string,
+  lineRole: string,
+  account: Pick<AccountNode, 'code' | 'controlAccount'>,
+): void {
+  const required = requiredControlAccount(eventType, lineRole);
+  if (required && account.controlAccount !== required) {
+    throw new Error(
+      `${account.code} must be designated as a ${required} control account for ${eventType} / ${lineRole}. ` +
+      'Set its control account in Chart of Accounts, then choose it in Posting Mappings so the journal and statement are posted together.',
+    );
+  }
 }
 
 /**
