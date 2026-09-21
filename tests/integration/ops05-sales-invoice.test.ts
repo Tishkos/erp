@@ -23,7 +23,12 @@ import * as coa from '@/server/services/chart-of-accounts';
 import * as ap from '@/server/services/ap-invoice';
 import * as ar from '@/server/services/ar-invoice';
 import * as inventory from '@/server/services/inventory';
+import * as posting from '@/server/services/posting';
+import * as subledger from '@/server/services/subledger';
+import * as trialBalance from '@/server/services/trial-balance';
 import { parseDecimal } from '@/server/domain/money';
+import { PermissionDeniedError } from '@/server/domain/permissions';
+import { NoPostingRuleError } from '@/server/domain/posting';
 import { parseQuantity } from '@/server/domain/uom';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
 
@@ -287,6 +292,147 @@ const onHand = async (warehouseCode = WAREHOUSE) =>
       )
     ).onHand,
   ) / 1_000_000;
+
+describe('ops 5 · approval, posting, stock and the ledger stay in step', () => {
+  it('refuses a clerk approval and leaves the direct sale in draft', async () => {
+    const invoice = await sell([{ quantity: '2', unitPrice: '150000' }]);
+
+    await expect(
+      withScope(scope(clerk), (tx) => ar.approve(tx, clerk, invoice.id)),
+    ).rejects.toThrow(PermissionDeniedError);
+
+    const { rows } = await ownerPool.query(`select status from ar_invoice where id = $1`, [
+      invoice.id,
+    ]);
+    expect(rows[0].status).toBe('draft');
+  });
+
+  it('moves nothing on approval and reconciles stock, journal, statement and trial balance on post', async () => {
+    await buy(jinko, { quantity: '10', unitPrice: '100000' });
+    const invoice = await sell([{ quantity: '2', unitPrice: '150000' }]);
+
+    await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
+    expect(await onHand()).toBe(10);
+    expect(
+      await withScope(scope(manager), (tx) =>
+        subledger.statementFor(tx, 'customer', 'CUST-001'),
+      ),
+    ).toEqual([]);
+
+    const { journalEntryId } = await withScope(scope(manager), (tx) =>
+      ar.post(tx, manager, invoice.id),
+    );
+    expect(await onHand()).toBe(8);
+    expect(await journalOf(journalEntryId)).toEqual([
+      { account: 'Cost of Goods Sold', debit: 200_000, credit: 0 },
+      { account: 'Inventory', debit: 0, credit: 200_000 },
+      { account: 'Product Sales', debit: 0, credit: 300_000 },
+      { account: 'Trade Receivables', debit: 300_000, credit: 0 },
+    ]);
+
+    const statement = await withScope(scope(manager), (tx) =>
+      subledger.statementFor(tx, 'customer', 'CUST-001'),
+    );
+    expect(statement).toHaveLength(1);
+    expect(statement[0]).toMatchObject({
+      debitIqd: '300000.0000',
+      creditIqd: '0.0000',
+      sourceDocId: invoice.id,
+    });
+
+    const balance = await withScope(scope(manager), (tx) =>
+      trialBalance.trialBalance(tx, { from: BUY_ON, to: SELL_ON, branchCode: BAGHDAD }),
+    );
+    expect(balance.find((row) => row.accountName === 'Inventory')).toMatchObject({
+      debit: '1000000.0000',
+      credit: '200000.0000',
+    });
+    expect(balance.find((row) => row.accountName === 'Trade Payables')).toMatchObject({
+      credit: '1000000.0000',
+    });
+    expect(balance.find((row) => row.accountName === 'Trade Receivables')).toMatchObject({
+      debit: '300000.0000',
+    });
+    expect(balance.find((row) => row.accountName === 'Product Sales')).toMatchObject({
+      credit: '300000.0000',
+    });
+    expect(balance.find((row) => row.accountName === 'Cost of Goods Sold')).toMatchObject({
+      debit: '200000.0000',
+    });
+    expect(trialBalance.totalsOf(balance)).toMatchObject({
+      difference: '0.0000',
+      balances: true,
+    });
+  });
+
+  it('requires post permission after approval and leaves the sale approved without moving stock', async () => {
+    await buy(jinko, { quantity: '10', unitPrice: '100000' });
+    const invoice = await sell([{ quantity: '2', unitPrice: '150000' }]);
+    await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
+    const deniedCtx: ActorContext = {
+      ...manager,
+      principal: {
+        ...manager.principal,
+        grants: manager.principal.grants.filter(
+          (grant) => !(grant.object === ar.PERMISSION_OBJECT && grant.verb === 'post'),
+        ),
+      },
+    };
+
+    await expect(
+      withScope(scope(deniedCtx), (tx) => ar.post(tx, deniedCtx, invoice.id)),
+    ).rejects.toThrow(PermissionDeniedError);
+
+    const { rows } = await ownerPool.query(
+      `select status, journal_entry_id from ar_invoice where id = $1`,
+      [invoice.id],
+    );
+    expect(rows[0]).toMatchObject({ status: 'approved', journal_entry_id: null });
+    expect(await onHand()).toBe(10);
+  });
+
+  it('keeps an approved sale atomic until a missing revenue mapping is restored', async () => {
+    await buy(jinko, { quantity: '10', unitPrice: '100000' });
+    const invoice = await sell([{ quantity: '2', unitPrice: '150000' }]);
+    await ownerPool.query(
+      `update posting_rule set is_active = false where event_type = $1 and line_role = $2`,
+      ['sales.ar_invoice', 'sales_revenue'],
+    );
+    await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
+
+    await expect(
+      withScope(scope(manager), (tx) => ar.post(tx, manager, invoice.id)),
+    ).rejects.toThrow(NoPostingRuleError);
+
+    const { rows } = await ownerPool.query(
+      `select status, journal_entry_id from ar_invoice where id = $1`,
+      [invoice.id],
+    );
+    expect(rows[0]).toMatchObject({ status: 'approved', journal_entry_id: null });
+    expect(await onHand()).toBe(10);
+    expect(
+      await withScope(scope(manager), (tx) =>
+        subledger.statementFor(tx, 'customer', 'CUST-001'),
+      ),
+    ).toEqual([]);
+
+    await withScope(scope(manager), (tx) =>
+      posting.setMapping(tx, manager, {
+        eventType: 'sales.ar_invoice',
+        lineRole: 'sales_revenue',
+        accountId: accounts.sales_revenue!,
+      }),
+    );
+    await withScope(scope(manager), (tx) => ar.post(tx, manager, invoice.id));
+
+    expect(await onHand()).toBe(8);
+    expect(
+      await withScope(scope(manager), (tx) =>
+        subledger.statementFor(tx, 'customer', 'CUST-001'),
+      ),
+    ).toHaveLength(1);
+  });
+});
 
 // ---------------------------------------------------------------------------
 describe('ops 5 · a sales invoice takes the stock and charges its cost', () => {

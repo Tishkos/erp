@@ -217,6 +217,50 @@ test.describe('the Operations Build screens open', () => {
     await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible({ timeout: 60_000 });
   });
 
+  test('§3.3 · an account is mapped to a document line, on the row', async ({ browser }) => {
+    /*
+     * The screen that did not exist while every document needed it. The
+     * Purchase Invoice refuses to post without an account for what the company
+     * owes, and said so by naming this page — so the page is proved the way the
+     * invoice was: by pressing the control and reading back what it saved.
+     *
+     * As the administrator: §4.3 puts the mapping with the configuration an
+     * administrator keeps, and the Accounting Manager who may configure it is
+     * not who the seed signs in as here.
+     */
+    const administration = await browser.newContext();
+    const administrator = await administration.newPage();
+    try {
+      await signIn(administrator, ADMIN);
+      await administrator.goto('/finance/posting-mappings');
+      await expect(
+        administrator.getByRole('heading', { name: 'Posting Mappings' }).first(),
+      ).toBeVisible();
+
+      // The line every purchase invoice credits, and the account it will go to.
+      const row = administrator.getByRole('row').filter({
+        hasText: 'What the company owes the supplier',
+      });
+      const chooser = row.first().getByRole('combobox');
+      const account = (await chooser.locator('option:not([value=""])').first().textContent())!;
+      await chooser.selectOption({ label: account });
+      await row.first().getByRole('button', { name: 'Save' }).click();
+
+      // Saved, and read back from the database rather than from the form.
+      await administrator.waitForURL(/posting-mappings/, { timeout: 60_000 });
+      await expect(administrator.getByRole('combobox').first()).toBeVisible({ timeout: 30_000 });
+      await expect(
+        administrator
+          .getByRole('row')
+          .filter({ hasText: 'What the company owes the supplier' })
+          .first()
+          .getByRole('combobox'),
+      ).toHaveValue(/.+/);
+    } finally {
+      await administration.close();
+    }
+  });
+
   test('block 5 · the Sales Invoice register opens', async ({ page }) => {
     await page.goto('/sales/ar-invoices');
 
@@ -330,11 +374,20 @@ test.describe('the Operations Build screens open', () => {
     await page.goto('/purchasing/goods-returns/new');
     await expect(page.getByRole('heading', { name: 'New return' })).toBeVisible();
 
-    const invoices = await page.locator('select[name="invoice"] option:not([value=""])').count();
-    if (invoices === 0) {
+    const choices = page.locator('select[name="invoice"] option:not([value=""])');
+    if ((await choices.count()) === 0) {
       await expect(page.getByText('Post a purchase invoice first.')).toBeVisible();
       return;
     }
+
+    // The form belongs to an invoice, so one has to be chosen before there is
+    // a form to look at. Asserting without choosing passed only while the
+    // database held no posted invoice — which is to say, it asserted nothing.
+    await page
+      .locator('select[name="invoice"]')
+      .selectOption((await choices.first().getAttribute('value'))!);
+    await page.getByRole('button', { name: 'Choose the invoice being returned against.' }).click();
+    await page.waitForURL(/invoice=/, { timeout: 60_000 });
 
     // "Accounts Payable or Bank — one must be selected", and the sign is the
     // mirror of block 9's: the debt shrinks, or the money comes back.
@@ -363,19 +416,26 @@ test.describe('the Operations Build screens open', () => {
     await expect(page.getByRole('heading', { name: 'New payment' })).toBeVisible();
 
     // Both pickers have something in them, or the screen is built and unusable.
-    // The supplier is searchable — an input over a datalist, not a select.
+    // Supplier and bank are both code-and-name pairs now — inputs over
+    // datalists rather than selects, so it is the lists that are counted.
     await expect(page.locator('datalist option')).not.toHaveCount(0);
-    const accounts = await page.locator('select[name="bank_cash_account_id"] option').count();
-    if (accounts === 0) {
+    const bank = page.getByLabel('Bank/Cash Name');
+    const bankOptions = page.locator(
+      `datalist#${(await bank.getAttribute('list'))!} option`,
+    );
+    if ((await bankOptions.count()) === 0) {
       await expect(page.getByText('Set up a bank or cash account first.')).toBeVisible();
       return;
     }
 
-    // A searchable picker submits the id only when the text matches an option
+    // A paired picker submits the id only when what is typed matches an option
     // exactly, so the test picks one the way a person would: read the first
     // entry out of the list and type it.
-    const firstSupplier = await page.locator('datalist option').first().getAttribute('value');
-    await page.getByLabel('Supplier Name').fill(firstSupplier!);
+    const supplierList = page.locator(
+      `datalist#${(await page.getByLabel('Supplier Name').getAttribute('list'))!} option`,
+    );
+    await page.getByLabel('Supplier Name').fill((await supplierList.first().getAttribute('value'))!);
+    await bank.fill((await bankOptions.first().getAttribute('value'))!);
     await page.getByLabel('Amount').fill('1000');
     await page.getByRole('button', { name: 'Create' }).click();
 

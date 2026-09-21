@@ -240,7 +240,12 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('trial_balance', 'trial_balance', '02', '/finance/trial-balance'),
       page('soft_close', 'accounting_period', '02', '/finance/periods'),
       page('year_end_close', 'year_end_close', '16'),
-      page('posting_mappings', 'posting_mapping', '02', '/finance/posting-mappings'),
+      // `posting_rule` is the object the grants are written against and the
+      // one the service authorises on. The tree used to name a second object
+      // nobody could hold, so the screen was invisible to everyone but a
+      // Super User — including the Accounting Manager whose role may
+      // configure it.
+      page('posting_mappings', 'posting_rule', '02', '/finance/posting-mappings'),
       // Each statement is its own screen (by direction, 2026-08-29, extended
       // 2026-08-31 to all four): one report to a window, so a reader is never
       // shown two answers to one question.

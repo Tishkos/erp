@@ -1003,6 +1003,10 @@ export async function post(
   await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, {
     branchCode: invoice.branchCode,
   });
+  await authz.authorize(ctx.principal, 'approve', PERMISSION_OBJECT, {
+    branchCode: invoice.branchCode,
+    objectId: id,
+  });
 
   if (invoice.status !== 'submitted') {
     throw new ApInvoiceStateError(

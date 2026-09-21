@@ -21,7 +21,9 @@ import * as coa from '@/server/services/chart-of-accounts';
 import * as journal from '@/server/services/journal';
 import * as periods from '@/server/services/periods';
 import * as rates from '@/server/services/exchange-rates';
+import * as roles from '@/server/services/roles';
 import * as trialBalance from '@/server/services/trial-balance';
+import { can, PermissionDeniedError } from '@/server/domain/permissions';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
 
 const BRANCH = 'HQ';
@@ -59,6 +61,142 @@ beforeEach(async () => {
     authz.loadPrincipal(tx, id),
   );
   admin = { principal, branchCode: BRANCH };
+});
+
+describe('role permissions can be edited safely', () => {
+  const createRole = (code: string) =>
+    withScope(scope(), (tx) => roles.create(tx, admin, { name: 'Invoice approver', code }));
+
+  const roleHolder = async (code: string): Promise<ActorContext> => {
+    const id = randomUUID();
+    await ownerPool.query(
+      `insert into app_user (id, email, display_name) values ($1,$2,$3)`,
+      [id, `${id}@example.com`, 'Invoice Approver'],
+    );
+    await ownerPool.query(`insert into user_role (user_id, role_code) values ($1,$2)`, [
+      id,
+      code,
+    ]);
+    await ownerPool.query(`insert into user_branch_scope (user_id, branch_code) values ($1,$2)`, [
+      id,
+      BRANCH,
+    ]);
+    const principal = await withScope({ userId: id, branchCode: BRANCH }, (tx) =>
+      authz.loadPrincipal(tx, id),
+    );
+    return { principal, branchCode: BRANCH };
+  };
+
+  it('replaces offered invoice grants and preserves grants outside the offered objects', async () => {
+    const code = `invoice_approver_${randomUUID().slice(0, 8)}`;
+    await createRole(code);
+    await withScope(scope(), (tx) =>
+      roles.setGrants(
+        tx,
+        admin,
+        code,
+        [
+          { object: 'ap_invoice', verb: 'view' },
+          { object: 'ap_invoice', verb: 'approve' },
+          { object: 'ap_invoice', verb: 'post' },
+          { object: 'ar_invoice', verb: 'view' },
+          { object: 'ar_invoice', verb: 'approve' },
+          { object: 'ar_invoice', verb: 'post' },
+        ],
+        { offeredObjects: ['ap_invoice', 'ar_invoice'] },
+      ),
+    );
+
+    const holder = await roleHolder(code);
+    const granted = await withScope(scope(), (tx) => roles.get(tx, code));
+    expect(granted.grants).toEqual(
+      expect.arrayContaining([
+        { object: 'ap_invoice', verb: 'approve' },
+        { object: 'ap_invoice', verb: 'post' },
+        { object: 'ar_invoice', verb: 'approve' },
+        { object: 'ar_invoice', verb: 'post' },
+      ]),
+    );
+    expect(can(holder.principal, 'approve', 'ap_invoice')).toBe(true);
+    expect(can(holder.principal, 'approve', 'ar_invoice')).toBe(true);
+
+    await withScope(scope(), (tx) =>
+      roles.setGrants(
+        tx,
+        admin,
+        code,
+        [
+          { object: 'ap_invoice', verb: 'view' },
+          { object: 'ap_invoice', verb: 'post' },
+        ],
+        { offeredObjects: ['ap_invoice'] },
+      ),
+    );
+    const replaced = await withScope(scope(), (tx) =>
+      authz.loadPrincipal(tx, holder.principal.userId),
+    );
+    expect(can(replaced, 'approve', 'ap_invoice')).toBe(false);
+    expect(can(replaced, 'post', 'ap_invoice')).toBe(true);
+    expect(can(replaced, 'approve', 'ar_invoice')).toBe(true);
+    expect(can(replaced, 'post', 'ar_invoice')).toBe(true);
+
+    await withScope(scope(), (tx) =>
+      roles.setGrants(tx, admin, code, [], { offeredObjects: ['ap_invoice'] }),
+    );
+    const revoked = await withScope(scope(), (tx) =>
+      authz.loadPrincipal(tx, holder.principal.userId),
+    );
+    expect(can(revoked, 'view', 'ap_invoice')).toBe(false);
+    expect(can(revoked, 'post', 'ap_invoice')).toBe(false);
+    expect(can(revoked, 'approve', 'ar_invoice')).toBe(true);
+    expect(can(revoked, 'post', 'ar_invoice')).toBe(true);
+  });
+
+  it('leaves prior grants unchanged when no objects are offered', async () => {
+    const code = `invoice_approver_${randomUUID().slice(0, 8)}`;
+    await createRole(code);
+    await withScope(scope(), (tx) =>
+      roles.setGrants(tx, admin, code, [{ object: 'ap_invoice', verb: 'view' }], {
+        offeredObjects: ['ap_invoice'],
+      }),
+    );
+    const before = await withScope(scope(), (tx) => roles.get(tx, code));
+
+    await withScope(scope(), (tx) =>
+      roles.setGrants(tx, admin, code, [], { offeredObjects: [] }),
+    );
+
+    const after = await withScope(scope(), (tx) => roles.get(tx, code));
+    expect(after.grants).toEqual(before.grants);
+  });
+
+  it('refuses a role holder without permission administration and keeps stored grants', async () => {
+    const code = `invoice_approver_${randomUUID().slice(0, 8)}`;
+    await createRole(code);
+    await withScope(scope(), (tx) =>
+      roles.setGrants(tx, admin, code, [{ object: 'ap_invoice', verb: 'view' }], {
+        offeredObjects: ['ap_invoice'],
+      }),
+    );
+    const holder = await roleHolder(code);
+
+    await expect(
+      withScope(
+        { userId: holder.principal.userId, branchCode: BRANCH },
+        (tx) =>
+          roles.setGrants(
+            tx,
+            holder,
+            code,
+            [{ object: 'ap_invoice', verb: 'post' }],
+            { offeredObjects: ['ap_invoice'] },
+          ),
+      ),
+    ).rejects.toThrow(PermissionDeniedError);
+
+    const stored = await withScope(scope(), (tx) => roles.get(tx, code));
+    expect(stored.grants).toEqual([{ object: 'ap_invoice', verb: 'view' }]);
+  });
 });
 
 // ---------------------------------------------------------------------------

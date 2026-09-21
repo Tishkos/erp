@@ -23,7 +23,11 @@ import * as authz from '@/server/services/authorization';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as ap from '@/server/services/ap-invoice';
 import * as inventory from '@/server/services/inventory';
+import * as posting from '@/server/services/posting';
+import * as subledger from '@/server/services/subledger';
+import * as trialBalance from '@/server/services/trial-balance';
 import { parseDecimal } from '@/server/domain/money';
+import { PermissionDeniedError } from '@/server/domain/permissions';
 import { parseQuantity } from '@/server/domain/uom';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
 
@@ -618,5 +622,120 @@ describe('ops 4 · the due date comes from the payment terms (§16)', () => {
   it('falls due on presentation when no terms were agreed', async () => {
     const made = await invoiceWith();
     expect(await dueDateOf(made.id)).toBe(ON);
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('ops 4 · the invoice posts through the mapping, and not without it', () => {
+  /*
+   * §3.3 — "the posting engine never chooses an account on its own." The
+   * invoice above receives its own stock, so the debit is the item's own
+   * inventory account; the credit is what the company now owes, and that comes
+   * from the mapping.
+   *
+   * On a system where nobody had set one, every purchase invoice reached its
+   * approval and stopped there — with a message naming a screen that did not
+   * exist. This is that loop, closed: no mapping refuses the posting, the
+   * mapping set the way the screen sets it lets it through.
+   */
+  const supplierPayableRule = () =>
+    ownerPool.query(
+      `delete from posting_rule where event_type = 'purchasing.ap_invoice' and line_role = 'supplier_payable'`,
+    );
+
+  it.each(['approve', 'post'] as const)(
+    'requires the manager to hold %s as well as the other posting grant',
+    async (missingVerb) => {
+      const invoice = await purchaseInvoice();
+      await withScope(scope(clerk), (tx) => ap.submit(tx, clerk, invoice.id));
+      const deniedCtx: ActorContext = {
+        ...manager,
+        principal: {
+          ...manager.principal,
+          grants: manager.principal.grants.filter(
+            (grant) => !(grant.object === ap.PERMISSION_OBJECT && grant.verb === missingVerb),
+          ),
+        },
+      };
+
+      await expect(
+        withScope(scope(deniedCtx), (tx) => ap.post(tx, deniedCtx, invoice.id)),
+      ).rejects.toThrow(PermissionDeniedError);
+
+      const { rows } = await ownerPool.query(
+        `select status, journal_entry_id from ap_invoice where id = $1`,
+        [invoice.id],
+      );
+      expect(rows[0]).toMatchObject({ status: 'submitted', journal_entry_id: null });
+      const position = await withScope(scope(manager), (tx) =>
+        inventory.positionOf(tx, PANEL, WAREHOUSE, BAGHDAD),
+      );
+      expect(position.onHand).toBe(0n);
+    },
+  );
+
+  it('refuses to post while what the company owes has no account', async () => {
+    await supplierPayableRule();
+    const invoice = await purchaseInvoice();
+    await expect(postIt(invoice.id)).rejects.toThrow(/No accounting mapping is configured/);
+
+    const { rows } = await ownerPool.query(
+      `select status, journal_entry_id from ap_invoice where id = $1`,
+      [invoice.id],
+    );
+    expect(rows[0]).toMatchObject({ status: 'submitted', journal_entry_id: null });
+    const position = await withScope(scope(manager), (tx) =>
+      inventory.positionOf(tx, PANEL, WAREHOUSE, BAGHDAD),
+    );
+    expect(position.onHand).toBe(0n);
+    const statement = await withScope(scope(manager), (tx) =>
+      subledger.statementFor(tx, 'supplier', 'SUP-001'),
+    );
+    expect(statement).toEqual([]);
+  });
+
+  it('posts once the mapping names one', async () => {
+    await supplierPayableRule();
+    const invoice = await purchaseInvoice({ quantity: '10', unitPrice: '100000' });
+
+    await withScope(scope(manager), (tx) =>
+      posting.setMapping(tx, manager, {
+        eventType: 'purchasing.ap_invoice',
+        lineRole: 'supplier_payable',
+        accountId: accounts.supplier_payable!,
+      }),
+    );
+
+    const { journalEntryId } = await postIt(invoice.id);
+    expect(await journalOf(journalEntryId)).toEqual([
+      { account: 'Inventory', debit: 1_000_000, credit: 0 },
+      { account: 'Trade Payables', debit: 0, credit: 1_000_000 },
+    ]);
+
+    const statement = await withScope(scope(manager), (tx) =>
+      subledger.statementFor(tx, 'supplier', 'SUP-001'),
+    );
+    expect(statement).toHaveLength(1);
+    expect(statement[0]).toMatchObject({
+      debitIqd: '0.0000',
+      creditIqd: '1000000.0000',
+      sourceDocId: invoice.id,
+    });
+
+    const balance = await withScope(scope(manager), (tx) =>
+      trialBalance.trialBalance(tx, { from: ON, to: ON, branchCode: BAGHDAD }),
+    );
+    expect(balance.find((row) => row.accountName === 'Inventory')).toMatchObject({
+      debit: '1000000.0000',
+      credit: '0.0000',
+    });
+    expect(balance.find((row) => row.accountName === 'Trade Payables')).toMatchObject({
+      debit: '0.0000',
+      credit: '1000000.0000',
+    });
+    expect(trialBalance.totalsOf(balance)).toMatchObject({
+      difference: '0.0000',
+      balances: true,
+    });
   });
 });

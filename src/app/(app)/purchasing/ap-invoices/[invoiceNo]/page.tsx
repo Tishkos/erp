@@ -115,7 +115,10 @@ export default async function ApInvoicePage({
     invoice.purchaseOrderId === null &&
     can(principal, 'edit_draft', ap.PERMISSION_OBJECT);
   const maySubmit = invoice.status === 'draft' && can(principal, 'submit', ap.PERMISSION_OBJECT);
-  const mayPost = invoice.status === 'submitted' && can(principal, 'post', ap.PERMISSION_OBJECT);
+  const mayPost =
+    invoice.status === 'submitted' &&
+    can(principal, 'approve', ap.PERMISSION_OBJECT) &&
+    can(principal, 'post', ap.PERMISSION_OBJECT);
 
   const fields: DocumentField[] = [
     { label: column('invoice_no'), value: <bdi dir="ltr">{invoice.invoiceNo}</bdi> },

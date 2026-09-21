@@ -622,6 +622,126 @@ export async function defineRule(
   return { id: created!.id };
 }
 
+/**
+ * The account for one (event, line), with no criteria — what the Posting
+ * Mappings screen sets.
+ *
+ * Replaces rather than adds. `defineRule` is the general act: a mapping
+ * narrowed by item group, warehouse or branch sits *over* the plain one and
+ * both are wanted. The screen sets the plain one, and setting it twice must
+ * leave one rule — a second would match equally well and every posting through
+ * it would fail with `AmbiguousPostingRuleError`, which is a worse state than
+ * the unmapped one it came from.
+ *
+ * An account that cannot be posted to is refused by the database trigger with
+ * a sentence of its own (§02.1, §3.3); the screen only offers accounts that
+ * can, so the two agree.
+ */
+export async function setMapping(
+  tx: Tx,
+  ctx: ActorContext,
+  input: { readonly eventType: string; readonly lineRole: string; readonly accountId: string },
+): Promise<void> {
+  const { authorize } = await import('./authorization');
+  await authorize(ctx.principal, 'configure', PERMISSION_OBJECT, {
+    branchCode: ctx.branchCode,
+    requestId: ctx.requestId ?? null,
+  });
+
+  const existing = await plainRule(tx, input.eventType, input.lineRole);
+  let ruleId = existing?.id;
+
+  if (existing) {
+    if (existing.accountId === input.accountId && existing.isActive) return;
+    await tx
+      .update(postingRuleTable)
+      .set({ accountId: input.accountId, isActive: true })
+      .where(eq(postingRuleTable.id, existing.id));
+  } else {
+    const [created] = await tx
+      .insert(postingRuleTable)
+      .values({
+        eventType: input.eventType,
+        lineRole: input.lineRole,
+        accountId: input.accountId,
+        createdBy: ctx.principal.userId,
+      })
+      .returning({ id: postingRuleTable.id });
+    ruleId = created!.id;
+  }
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'posting_rule.configured',
+    objectType: PERMISSION_OBJECT,
+    objectId: ruleId!,
+    branchCode: ctx.branchCode,
+    before: existing ? { accountId: existing.accountId } : null,
+    after: { eventType: input.eventType, lineRole: input.lineRole, accountId: input.accountId },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+}
+
+/**
+ * Takes the mapping off a line.
+ *
+ * Deactivated, not deleted: a journal line records the rule it posted through,
+ * and a deleted rule would take that trail with it. `ruleMatches` refuses an
+ * inactive rule, so the line is unmapped from the next posting on.
+ */
+export async function clearMapping(
+  tx: Tx,
+  ctx: ActorContext,
+  input: { readonly eventType: string; readonly lineRole: string },
+): Promise<void> {
+  const { authorize } = await import('./authorization');
+  await authorize(ctx.principal, 'configure', PERMISSION_OBJECT, {
+    branchCode: ctx.branchCode,
+    requestId: ctx.requestId ?? null,
+  });
+
+  const existing = await plainRule(tx, input.eventType, input.lineRole);
+  if (!existing || !existing.isActive) return;
+
+  await tx
+    .update(postingRuleTable)
+    .set({ isActive: false })
+    .where(eq(postingRuleTable.id, existing.id));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'posting_rule.cleared',
+    objectType: PERMISSION_OBJECT,
+    objectId: existing.id,
+    branchCode: ctx.branchCode,
+    before: { accountId: existing.accountId, isActive: true },
+    after: { isActive: false },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+}
+
+/** The rule for an (event, line) that states no criteria at all. */
+async function plainRule(tx: Tx, eventType: string, lineRole: string) {
+  const [row] = await tx
+    .select()
+    .from(postingRuleTable)
+    .where(
+      and(
+        eq(postingRuleTable.eventType, eventType),
+        eq(postingRuleTable.lineRole, lineRole),
+        isNull(postingRuleTable.itemGroup),
+        isNull(postingRuleTable.partnerGroup),
+        isNull(postingRuleTable.warehouseCode),
+        isNull(postingRuleTable.projectCode),
+        isNull(postingRuleTable.branchCode),
+      ),
+    )
+    .limit(1);
+  return row;
+}
+
 /** The mappings, for the Accounting Mapping screen (Appendix C). */
 export async function rules(tx: Tx, eventType?: string) {
   const query = tx
@@ -629,6 +749,7 @@ export async function rules(tx: Tx, eventType?: string) {
       id: postingRuleTable.id,
       eventType: postingRuleTable.eventType,
       lineRole: postingRuleTable.lineRole,
+      accountId: postingRuleTable.accountId,
       accountCode: chartOfAccount.code,
       accountName: chartOfAccount.name,
       itemGroup: postingRuleTable.itemGroup,

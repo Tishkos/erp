@@ -1899,6 +1899,14 @@
       "no_warehouses": "أنشئ مخزناً أولاً.",
       "no_accounts": "أنشئ حساباً بنكياً أو نقدياً أولاً.",
       "no_active_accounts": "يوجد {count} حساب بنكي/نقدي ولا أحد منها نشط."
+    },
+    "posting_mappings": {
+      "subtitle": "الحساب الذي يرحّل إليه كل مستند. محرك الترحيل لا يختار حسابًا من تلقاء نفسه (§3.3).",
+      "line": "السطر",
+      "not_set": "غير محدد",
+      "always": "مطلوب",
+      "missing": "{count, plural, zero {لا يوجد} one {سطر مطلوب واحد بلا حساب، فلا يمكن ترحيل المستندات التي تستخدمه.} two {سطران مطلوبان بلا حساب، فلا يمكن ترحيل المستندات التي تستخدمهما.} few {# أسطر مطلوبة بلا حساب، فلا يمكن ترحيل المستندات التي تستخدمها.} many {# سطرًا مطلوبًا بلا حساب، فلا يمكن ترحيل المستندات التي تستخدمها.} other {# سطر مطلوب بلا حساب، فلا يمكن ترحيل المستندات التي تستخدمها.}}",
+      "complete": "كل سطر مطلوب له حساب."
     }
   },
   "profile": {
@@ -2032,5 +2040,27 @@
     "operating_expenses": "مصروفات تشغيلية",
     "finance_costs": "أعباء تمويلية",
     "tax_expense": "الضريبة"
+  },
+  "posting_map": {
+    "event": {
+      "purchasing_ap_invoice": "فاتورة شراء",
+      "sales_ar_invoice": "فاتورة بيع",
+      "sales_customer_receipt": "سند قبض من عميل",
+      "sales_customer_receipt_identified": "سند قبض — عند تحديد العميل",
+      "purchasing_supplier_payment": "دفعة لمورد",
+      "purchasing_supplier_credit_memo": "مرتجع مشتريات",
+      "sales_customer_credit_memo": "مرتجع مبيعات"
+    },
+    "role": {
+      "supplier_payable": "ما على الشركة للمورد",
+      "grni": "بضاعة مستلمة ولم تُفوتر",
+      "expense": "كلفة خدمة مفوترة",
+      "purchase_variance": "الفرق بين أمر الشراء والفاتورة",
+      "customer_receivable": "ما على العميل للشركة",
+      "sales_revenue": "المبيعات",
+      "customer_clearing": "مبالغ مقبوضة لم تُنسب إلى عميل",
+      "return_clearing": "بضاعة مرتجعة لم يصدر بها إشعار",
+      "sales_returns": "عكس المبيعات"
+    }
   }
 }

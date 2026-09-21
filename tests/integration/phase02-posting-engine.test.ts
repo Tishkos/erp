@@ -25,6 +25,7 @@ import { AmbiguousPostingRuleError, NoPostingRuleError } from '@domain/posting';
 import { PeriodClosedError } from '@domain/periods';
 import { MissingDimensionsError } from '@domain/dimensions';
 import { JournalUnbalancedError } from '@domain/journal';
+import { PermissionDeniedError } from '@domain/permissions';
 
 const BAGHDAD = 'BGW';
 const EVENT = 'sales_invoice.posted';
@@ -691,5 +692,344 @@ describe('§24 · the failed-posting queue', () => {
       await rejection(ownerPool.query(`update posting_failure set error_message = 'nothing wrong'`)),
     ).toMatch(/cannot be edited/);
     expect(await rejection(ownerPool.query(`delete from posting_failure`))).toMatch(/append-only/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('§3.3 · the mapping is set from the Posting Mappings screen', () => {
+  /*
+   * The screen sets one account for one line of one document, and sets it
+   * again when it is wrong. Both acts go through `setMapping`, which is
+   * `defineRule` with the one property the screen needs: setting a mapping
+   * twice leaves one rule.
+   *
+   * Without that, the second choice would be a second rule matching exactly as
+   * well as the first, and every posting through it would fail as ambiguous —
+   * a worse state than the unmapped one the person was trying to fix.
+   */
+  /*
+   * An expense account with no §4.2 dimensions to satisfy. Department and Cost
+   * Centre are required of expense accounts by the chart's own rules, and this
+   * block is about the mapping rather than about dimensions — which the 02.4
+   * tests above already cover.
+   */
+  const discountAccount = async (name: string) => {
+    const id = await approvedAccount('X000001', name);
+    await withScope(scope(), (tx) => coa.setRequiredDimensions(tx, manager, id, []));
+    return id;
+  };
+
+  const withDiscount = () =>
+    request({
+      // A thousand of revenue, settled for nine hundred: the hundred is the
+      // discount, and it is a line of its own so the mapping has something to
+      // answer for.
+      lines: [
+        { role: 'receivable', debit: '900.0000', sourceLineId: null },
+        { role: 'settlement_discount', debit: '100.0000', sourceLineId: 'INV-000001-L2' },
+        { role: 'revenue', credit: '1000.0000', sourceLineId: 'INV-000001-L1' },
+      ],
+    });
+
+  it('refuses the posting while the line has no account', async () => {
+    await expect(withScope(scope(), (tx) => posting.post(tx, manager, withDiscount()))).rejects.toThrow(
+      NoPostingRuleError,
+    );
+  });
+
+  it('posts to the account the mapping names', async () => {
+    const discountAccountId = await discountAccount('Settlement Discount');
+    await withScope(scope(), (tx) =>
+      posting.setMapping(tx, manager, {
+        eventType: EVENT,
+        lineRole: 'settlement_discount',
+        accountId: discountAccountId,
+      }),
+    );
+
+    const result = await withScope(scope(), (tx) => posting.post(tx, manager, withDiscount()));
+    const { rows } = await ownerPool.query(
+      `select a.name, l.debit_iqd from journal_line l
+         join chart_of_account a on a.id = l.account_id
+        where l.journal_entry_id = $1 and l.line_role = 'settlement_discount'`,
+      [result.journalEntryId],
+    );
+    expect(rows[0]).toMatchObject({ name: 'Settlement Discount', debit_iqd: '100.0000' });
+  });
+
+  it('replaces the account rather than adding a second rule', async () => {
+    const first = await discountAccount('Settlement Discount');
+    const second = await discountAccount('Discount Allowed');
+
+    for (const accountId of [first, second]) {
+      await withScope(scope(), (tx) =>
+        posting.setMapping(tx, manager, {
+          eventType: EVENT,
+          lineRole: 'settlement_discount',
+          accountId,
+        }),
+      );
+    }
+
+    const { rows } = await ownerPool.query(
+      `select count(*)::int as rules from posting_rule
+        where event_type = $1 and line_role = 'settlement_discount'`,
+      [EVENT],
+    );
+    expect(rows[0].rules).toBe(1);
+
+    // And the posting goes to the second, which is the point of changing it.
+    const result = await withScope(scope(), (tx) => posting.post(tx, manager, withDiscount()));
+    const { rows: posted } = await ownerPool.query(
+      `select a.name from journal_line l join chart_of_account a on a.id = l.account_id
+        where l.journal_entry_id = $1 and l.line_role = 'settlement_discount'`,
+      [result.journalEntryId],
+    );
+    expect(posted[0].name).toBe('Discount Allowed');
+  });
+
+  it('leaves a narrowed mapping alone', async () => {
+    // The screen writes the plain rule. A mapping narrowed to an item group is
+    // an exception somebody configured deliberately, and it sits over the
+    // plain one — changing the plain one must not disturb it.
+    const plain = await approvedAccount('R000001', 'Trading Revenue Two');
+    await withScope(scope(), (tx) =>
+      posting.defineRule(tx, manager, {
+        eventType: EVENT,
+        lineRole: 'revenue',
+        itemGroup: 'FUEL',
+        accountId: fuelRevenueAccountId,
+      }),
+    );
+    await withScope(scope(), (tx) =>
+      posting.setMapping(tx, manager, {
+        eventType: EVENT,
+        lineRole: 'revenue',
+        accountId: plain,
+      }),
+    );
+
+    const { rows } = await ownerPool.query(
+      `select item_group, account_id from posting_rule
+        where event_type = $1 and line_role = 'revenue' order by item_group nulls first`,
+      [EVENT],
+    );
+    expect(rows.map((r) => r.item_group)).toEqual([null, 'FUEL']);
+    expect(rows[1].account_id).toBe(fuelRevenueAccountId);
+
+    const result = await withScope(scope(), (tx) => posting.post(tx, manager, request()));
+    const { rows: posted } = await ownerPool.query(
+      `select a.name from journal_line l join chart_of_account a on a.id = l.account_id
+        where l.journal_entry_id = $1 and l.line_role = 'revenue'`,
+      [result.journalEntryId],
+    );
+    expect(posted[0].name).toBe('Trading Revenue Two');
+
+    const fuelResult = await withScope(scope(), (tx) =>
+      posting.post(
+        tx,
+        manager,
+        request({
+          source: { module: 'sales', documentId: 'INV-FUEL', event: 'posted' },
+          lines: [
+            { role: 'receivable', debit: '1000.0000' },
+            { role: 'revenue', credit: '1000.0000', criteria: { itemGroup: 'FUEL' } },
+          ],
+        }),
+      ),
+    );
+    const { rows: fuelPosted } = await ownerPool.query(
+      `select account_id from journal_line
+        where journal_entry_id = $1 and line_role = 'revenue'`,
+      [fuelResult.journalEntryId],
+    );
+    expect(fuelPosted[0].account_id).toBe(fuelRevenueAccountId);
+  });
+
+  it('audits a newly created mapping against the rule it created', async () => {
+    const accountId = await discountAccount('Settlement Discount');
+    await withScope(scope(), (tx) =>
+      posting.setMapping(tx, manager, {
+        eventType: EVENT,
+        lineRole: 'settlement_discount',
+        accountId,
+      }),
+    );
+
+    const { rows: rules } = await ownerPool.query(
+      `select id from posting_rule where event_type = $1 and line_role = 'settlement_discount'`,
+      [EVENT],
+    );
+    const { rows: events } = await ownerPool.query(
+      `select object_id, after_value from audit_event
+        where action = 'posting_rule.configured' and object_id = $1`,
+      [rules[0].id],
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ object_id: rules[0].id });
+    expect(events[0].after_value).toMatchObject({ accountId });
+  });
+
+  it('reactivates a cleared mapping with the same id and an updated account', async () => {
+    const first = await discountAccount('Settlement Discount');
+    const second = await discountAccount('Discount Allowed');
+    await withScope(scope(), (tx) =>
+      posting.setMapping(tx, manager, {
+        eventType: EVENT,
+        lineRole: 'settlement_discount',
+        accountId: first,
+      }),
+    );
+    const { rows: created } = await ownerPool.query(
+      `select id from posting_rule where event_type = $1 and line_role = 'settlement_discount'`,
+      [EVENT],
+    );
+    await withScope(scope(), (tx) =>
+      posting.clearMapping(tx, manager, { eventType: EVENT, lineRole: 'settlement_discount' }),
+    );
+    await withScope(scope(), (tx) =>
+      posting.setMapping(tx, manager, {
+        eventType: EVENT,
+        lineRole: 'settlement_discount',
+        accountId: second,
+      }),
+    );
+
+    const { rows } = await ownerPool.query(
+      `select id, account_id, is_active from posting_rule
+        where event_type = $1 and line_role = 'settlement_discount'`,
+      [EVENT],
+    );
+    expect(rows).toEqual([{ id: created[0].id, account_id: second, is_active: true }]);
+  });
+
+  it('refuses mapping changes without configure permission and leaves the mapping unchanged', async () => {
+    const first = await discountAccount('Settlement Discount');
+    const second = await discountAccount('Discount Allowed');
+    await withScope(scope(), (tx) =>
+      posting.setMapping(tx, manager, {
+        eventType: EVENT,
+        lineRole: 'settlement_discount',
+        accountId: first,
+      }),
+    );
+    const denied: ActorContext = {
+      ...manager,
+      principal: {
+        ...manager.principal,
+        grants: manager.principal.grants.filter(
+          (grant) => !(grant.object === posting.PERMISSION_OBJECT && grant.verb === 'configure'),
+        ),
+      },
+    };
+
+    await expect(
+      withScope(scope(), (tx) =>
+        posting.setMapping(tx, denied, {
+          eventType: EVENT,
+          lineRole: 'settlement_discount',
+          accountId: second,
+        }),
+      ),
+    ).rejects.toThrow(PermissionDeniedError);
+    await expect(
+      withScope(scope(), (tx) =>
+        posting.clearMapping(tx, denied, { eventType: EVENT, lineRole: 'settlement_discount' }),
+      ),
+    ).rejects.toThrow(PermissionDeniedError);
+
+    const { rows } = await ownerPool.query(
+      `select account_id, is_active from posting_rule
+        where event_type = $1 and line_role = 'settlement_discount'`,
+      [EVENT],
+    );
+    expect(rows).toEqual([{ account_id: first, is_active: true }]);
+  });
+
+  it('refuses group, draft and inactive accounts through the database mapping guard', async () => {
+    const { rows: groups } = await ownerPool.query(
+      `select id from chart_of_account where code = 'R000001'`,
+    );
+    const { rows: parents } = await ownerPool.query(
+      `select id from chart_of_account where code = 'R000001'`,
+    );
+    const draft = await withScope(scope(), (tx) =>
+      coa.createAccount(tx, manager, {
+        name: 'Draft Revenue',
+        parentId: parents[0].id,
+        currencyRestriction: 'IQD',
+      }),
+    );
+    const inactive = await approvedAccount('R000001', 'Inactive Revenue');
+    await withScope(scope(), (tx) =>
+      coa.deactivate(tx, manager, inactive, 'No longer used'),
+    );
+
+    const groupMessage = await rejection(
+      withScope(scope(), (tx) =>
+        posting.setMapping(tx, manager, {
+          eventType: EVENT,
+          lineRole: 'group_account',
+          accountId: groups[0].id,
+        }),
+      ),
+    );
+    const draftMessage = await rejection(
+      withScope(scope(), (tx) =>
+        posting.setMapping(tx, manager, {
+          eventType: EVENT,
+          lineRole: 'draft_account',
+          accountId: draft.id,
+        }),
+      ),
+    );
+    const inactiveMessage = await rejection(
+      withScope(scope(), (tx) =>
+        posting.setMapping(tx, manager, {
+          eventType: EVENT,
+          lineRole: 'inactive_account',
+          accountId: inactive,
+        }),
+      ),
+    );
+
+    expect(groupMessage).toMatch(/is a group and cannot be mapped/);
+    expect(draftMessage).toMatch(/is not approved and active, so it cannot be mapped/);
+    expect(inactiveMessage).toMatch(/is not approved and active, so it cannot be mapped/);
+  });
+
+  it('unmaps a line without losing the rule the journals point at', async () => {
+    const discountAccountId = await discountAccount('Settlement Discount');
+    await withScope(scope(), (tx) =>
+      posting.setMapping(tx, manager, {
+        eventType: EVENT,
+        lineRole: 'settlement_discount',
+        accountId: discountAccountId,
+      }),
+    );
+    await withScope(scope(), (tx) => posting.post(tx, manager, withDiscount()));
+
+    await withScope(scope(), (tx) =>
+      posting.clearMapping(tx, manager, { eventType: EVENT, lineRole: 'settlement_discount' }),
+    );
+
+    // Unmapped from here on. A second document number, because the engine
+    // answers a repeat of the first from what it already posted.
+    const next = {
+      ...withDiscount(),
+      source: { module: 'sales', documentId: 'INV-000002', event: 'posted' },
+    };
+    await expect(withScope(scope(), (tx) => posting.post(tx, manager, next))).rejects.toThrow(
+      NoPostingRuleError,
+    );
+
+    // ...but the rule is still there, because a journal line records the rule
+    // it posted through and a deleted rule would take that trail with it.
+    const { rows } = await ownerPool.query(
+      `select is_active from posting_rule where event_type = $1 and line_role = 'settlement_discount'`,
+      [EVENT],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].is_active).toBe(false);
   });
 });

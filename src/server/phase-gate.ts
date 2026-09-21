@@ -104,6 +104,11 @@ export const OPERATIONS: readonly string[] = [
   '/sales/customer-receipts',
   // Block 8 — Invoice Status Tracking.
   '/inventory/in-transit',
+  // Not a block, and here for the reason Phase 1 gave periods and rates:
+  // nothing above can post without it. §3.3 forbids the engine from choosing
+  // an account, so every document in this list stops at its first approval
+  // until the mapping exists.
+  '/finance/posting-mappings',
 ];
 
 const VISIBLE: ReadonlySet<string> = new Set([
