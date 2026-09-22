@@ -712,14 +712,15 @@ test.describe('the Operations Build screens open', () => {
 
     // "When an item is selected, the supplier field shows the supplier(s)
     // linked to that item." Choosing one is what makes the field live.
-    // The item's own list, not the first datalist on the page — the customer
-    // pair has two of its own above it.
+    // The item the supplier was just linked to, by name — not "the first one
+    // on the list". The list grows with every run of this suite, and the item
+    // that happens to sort first has no supplier behind it, so the assertion
+    // below would be about the wrong item.
     const itemList = await item.getAttribute('list');
-    const firstItem = await page
-      .locator(`datalist[id="${itemList}"] option`)
-      .first()
-      .getAttribute('value');
-    await item.fill(firstItem!);
+    await expect(
+      page.locator(`datalist[id="${itemList}"] option[value="ITM-SEED"]`),
+    ).toHaveCount(1);
+    await item.fill('ITM-SEED');
     await expect(supplier).toBeEnabled();
 
     // "Selecting the Item Code brings the Item Name."
@@ -749,13 +750,21 @@ test.describe('the Operations Build screens open', () => {
     // The sponsor: "Offset Account (Accounts Receivable or Bank — one must be
     // selected)". Both are offered, and no third option exists.
     const offset = page.locator('select[name="offset_kind"]');
-    const invoices = await page.locator('select[name="invoice"] option:not([value=""])').count();
-    if (invoices === 0) {
+    const choices = page.locator('select[name="invoice"] option:not([value=""])');
+    if ((await choices.count()) === 0) {
       // Nothing posted to return against yet — the page says so rather than
       // offering a form that cannot be completed.
       await expect(page.getByText('Post a sales invoice first.')).toBeVisible();
       return;
     }
+
+    // The form belongs to an invoice, so one is chosen before there is a form.
+    await page
+      .locator('select[name="invoice"]')
+      .selectOption((await choices.first().getAttribute('value'))!);
+    await page.getByRole('button', { name: 'Choose the invoice being returned against.' }).click();
+    await page.waitForURL(/invoice=/, { timeout: 60_000 });
+
     await expect(offset).toHaveCount(1);
     await expect(offset.locator('option')).toHaveCount(2);
   });

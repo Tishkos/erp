@@ -124,8 +124,11 @@ describe('ops 7 · changing one afterwards', () => {
 
   it('closes one without deleting it', async () => {
     await make(manager, 'WH-EAST', 'East Warehouse');
+    // Closing costs a reason — "why" is the question somebody asks a year
+    // later, and the service has required it since the warehouses kept their
+    // history.
     await withScope(scope(manager), (tx) =>
-      warehouses.setActive(tx, manager, 'WH-EAST', false),
+      warehouses.setActive(tx, manager, 'WH-EAST', false, 'The depot lease ended.'),
     );
 
     // Gone from the pickers, still in the record — the movements that put stock
@@ -139,7 +142,9 @@ describe('ops 7 · changing one afterwards', () => {
 
   it('reopens one that was closed', async () => {
     await make(manager, 'WH-EAST', 'East Warehouse');
-    await withScope(scope(manager), (tx) => warehouses.setActive(tx, manager, 'WH-EAST', false));
+    await withScope(scope(manager), (tx) =>
+      warehouses.setActive(tx, manager, 'WH-EAST', false, 'Closed for stocktaking.'),
+    );
     await withScope(scope(manager), (tx) => warehouses.setActive(tx, manager, 'WH-EAST', true));
 
     const picker = await withScope(scope(manager), (tx) => warehouses.listActive(tx));

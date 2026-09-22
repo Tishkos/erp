@@ -139,12 +139,6 @@ async function accountingValues(
   return values;
 }
 
-export async function accountingChoices(tx: Tx) {
-  const businessLines = await tx.select({ code: businessLine.code, name: businessLine.name, active: businessLine.active }).from(businessLine).orderBy(asc(businessLine.code));
-  const departments = await tx.select({ code: department.code, name: department.name, active: department.active }).from(department).orderBy(asc(department.code));
-  return { businessLines, departments };
-}
-
 export async function setAccountingDimensions(
   tx: Tx,
   ctx: ActorContext,

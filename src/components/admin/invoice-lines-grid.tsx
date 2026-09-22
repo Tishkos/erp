@@ -330,7 +330,19 @@ export function InvoiceLinesGrid({
       const mine = new Map(current.filter((row) => row.lineId).map((row) => [row.lineId!, row]));
       const saved = savedLines.map((line) => {
         const local = mine.get(line.id);
-        return local && (local.dirty || local.saving) ? local : fromLine(line, nameOf);
+        if (local && (local.dirty || local.saving)) return local;
+        // The server's version of the line, with what the browser knows that
+        // the server does not: how much of the item is available. Taking the
+        // row wholesale would blank it on every refresh, and the request is
+        // never made again — the key it was made under has not changed — so
+        // the figure would disappear for good the first time a line saved.
+        return {
+          ...fromLine(line, nameOf),
+          availabilityKey: local?.availabilityKey ?? '',
+          availability: local?.availability ?? null,
+          availabilityPending: local?.availabilityPending ?? false,
+          availabilityError: local?.availabilityError ?? false,
+        };
       });
       const unsaved = current.filter((row) => row.lineId === null && !row.settled);
       return [...saved, ...(unsaved.length > 0 ? unsaved : [blank(defaultWarehouse)])];

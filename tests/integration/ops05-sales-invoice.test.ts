@@ -14,7 +14,7 @@
  * consumed from each other. This file is mostly that claim, tested from the
  * directions it could fail in.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { ownerPool, resetTestData, seedBranch } from './setup';
@@ -198,6 +198,21 @@ beforeEach(async () => {
       [documentType],
     );
   }
+});
+
+/*
+ * The dimension fixtures below are master data, and master data outlives
+ * `resetTestData` — which is the point of it. Three business lines and an
+ * inactive department left behind here made the Phase 03 suite fail on a
+ * count it was right to make, whenever it ran second. So this suite puts its
+ * own back.
+ */
+afterAll(async () => {
+  await resetTestData();
+  await ownerPool.query(
+    `delete from business_line where code in ('DIM_SALES','DIM_OTHER','DIM_OFF')`,
+  );
+  await ownerPool.query(`delete from department where code = 'OFF'`);
 });
 
 let seq = 0;
