@@ -358,3 +358,78 @@ test('supplier statement keeps its side when filters run', async ({ page, baseUR
   await page.goto(customerStatement);
   await expect(page.locator('input[name="side"]')).toHaveValue('customer');
 });
+
+test('sales invoice accounting dimensions survive controlled reapproval', async ({
+  page,
+  baseURL,
+  browser,
+}) => {
+  expect(['localhost', '127.0.0.1']).toContain(new URL(baseURL!).hostname);
+  await signIn(page, ADMIN);
+
+  const stamp = Date.now().toString(36).toUpperCase();
+  const customerCode = `E2E-DIM-${stamp}`;
+  await page.goto('/master-data/customers');
+  await page.getByRole('button', { name: 'New customer', exact: true }).click();
+  const dialog = page.locator('dialog[open], [role="dialog"]').first();
+  await dialog.getByLabel('Code', { exact: true }).fill(customerCode);
+  await dialog.getByLabel(/^Legal name/).fill(`Dimension Customer ${stamp}`);
+  await dialog.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.waitForURL(new RegExp(`/master-data/business-partners/${customerCode}(?:\\?saved=1)?$`), {
+    timeout: 60_000,
+  });
+
+  await page.goto('/sales/ar-invoices/new');
+  await expect(page.locator('input[name="item_code_0"]')).toBeVisible({ timeout: 60_000 });
+  await page.getByLabel('Customer Code', { exact: true }).fill(customerCode);
+  await page.getByLabel('Business Line', { exact: true }).selectOption('PRODUCT_SALES');
+  await page.getByLabel('Department', { exact: true }).selectOption('FIN');
+  await page.locator('input[name="item_code_0"]').fill('ITM-SEED');
+  await page.locator('input[name="quantity_0"]').fill('1');
+  await page.locator('input[name="unit_price_0"]').fill('100');
+  await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.waitForURL(/\/sales\/ar-invoices\/INV-/);
+
+  const businessLine = page.getByLabel('Business Line', { exact: true });
+  const department = page.getByLabel('Department', { exact: true });
+  await expect(businessLine).toHaveValue('PRODUCT_SALES');
+  await expect(department).toHaveValue('FIN');
+  await page.reload();
+  await expect(businessLine).toHaveValue('PRODUCT_SALES');
+  await expect(department).toHaveValue('FIN');
+
+  await businessLine.selectOption('LOGISTICS');
+  await page.getByRole('button', { name: 'Approve', exact: true }).click();
+  await expect(page.getByText('Approved', { exact: true }).first()).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText(/LOGISTICS/).first()).toBeVisible();
+  await expect(page.locator('select[name="business_line_code"]')).toHaveCount(0);
+  await expect(page.locator('select[name="department_code"]')).toHaveCount(0);
+
+  const officerContext = await browser.newContext();
+  const officerPage = await officerContext.newPage();
+  try {
+    await signIn(officerPage, OFFICER);
+    await officerPage.goto(page.url());
+    await expect(
+      officerPage.getByRole('button', { name: 'Return to draft', exact: true }),
+    ).toHaveCount(0);
+  } finally {
+    await officerContext.close();
+  }
+
+  await page.getByLabel('Reason', { exact: true }).fill('Correct the accounting fields.');
+  await page.getByRole('button', { name: 'Return to draft', exact: true }).click();
+  await expect(page.getByText('Draft', { exact: true }).first()).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole('button', { name: 'Post', exact: true })).toHaveCount(0);
+  await expect(businessLine).toHaveValue('LOGISTICS');
+  await expect(department).toHaveValue('FIN');
+
+  await businessLine.selectOption('PRODUCT_SALES');
+  await department.selectOption('FIN');
+  await page.getByRole('button', { name: 'Save accounting fields', exact: true }).click();
+  await page.waitForLoadState('networkidle');
+  await page.reload();
+  await expect(businessLine).toHaveValue('PRODUCT_SALES');
+  await expect(department).toHaveValue('FIN');
+});

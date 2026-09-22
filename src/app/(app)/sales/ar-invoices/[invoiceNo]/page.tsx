@@ -18,6 +18,8 @@ import {
   approveArInvoice,
   postArInvoice,
   removeArInvoiceLine,
+  returnArInvoiceToDraft,
+  saveArInvoiceAccountingDimensions,
   saveArInvoiceLine,
 } from '../actions';
 
@@ -106,6 +108,7 @@ export default async function ArInvoicePage({
       suppliers: await partners.listActiveInRole(tx, 'supplier'),
       options,
       houses: editable ? await warehouses.listActive(tx) : [],
+      accounting: await ar.accountingChoices(tx),
     };
   });
 
@@ -135,6 +138,35 @@ export default async function ArInvoicePage({
     invoice.deliveryNoteId === null &&
     can(principal, 'edit_draft', ar.PERMISSION_OBJECT);
   const mayPost = invoice.status === 'approved' && can(principal, 'post', ar.PERMISSION_OBJECT);
+  const mayEditAccounting = mayEdit && invoice.salesOrderId === null;
+  const mayReturnToDraft =
+    invoice.status === 'approved' &&
+    invoice.salesOrderId === null &&
+    invoice.deliveryNoteId === null &&
+    invoice.journalEntryId === null &&
+    invoice.postedAt === null &&
+    can(principal, 'approve', ar.PERMISSION_OBJECT) &&
+    can(principal, 'edit_draft', ar.PERMISSION_OBJECT);
+
+  const choices = (
+    rows: readonly { code: string; name: string; active: boolean }[],
+    current: string | null,
+  ) => rows
+    .filter((row) => row.active || row.code === current)
+    .map((row) => ({ ...row, label: `${row.code} · ${row.name}${row.active ? '' : ` (${t('ar_invoices.inactive_choice')})`}` }));
+  const dimensionSelect = (
+    name: 'business_line_code' | 'department_code',
+    label: string,
+    current: string | null,
+    rows: readonly { code: string; name: string; active: boolean }[],
+  ) => mayEditAccounting ? (
+    <select aria-label={label} defaultValue={current ?? ''} form="ar-invoice-accounting" name={name}>
+      <option value="">{t('none')}</option>
+      {choices(rows, current).map((row) => <option key={row.code} value={row.code}>{row.label}</option>)}
+    </select>
+  ) : (
+    <bdi dir="ltr">{rows.find((row) => row.code === current) ? `${current} · ${rows.find((row) => row.code === current)!.name}` : t('none')}</bdi>
+  );
 
   const fields: DocumentField[] = [
     { label: column('invoice_no'), value: <bdi dir="ltr">{invoice.invoiceNo}</bdi> },
@@ -148,6 +180,16 @@ export default async function ArInvoicePage({
     {
       label: column('due_date'),
       value: <bdi dir="ltr">{formatBusinessDate(invoice.dueDate, locale as Locale)}</bdi>,
+    },
+    {
+      label: t('ar_invoices.business_line'),
+      control: mayEditAccounting,
+      value: dimensionSelect('business_line_code', t('ar_invoices.business_line'), invoice.businessLineCode, found.accounting.businessLines),
+    },
+    {
+      label: t('ar_invoices.department'),
+      control: mayEditAccounting,
+      value: dimensionSelect('department_code', t('ar_invoices.department'), invoice.departmentCode, found.accounting.departments),
     },
 
     // Who the document passed through. An empty box is an answer too: it says
@@ -180,13 +222,26 @@ export default async function ArInvoicePage({
       <DocumentWindow
         actions={
           <>
-            {mayApprove ? (
+            {mayEditAccounting ? (
+              <form action={saveArInvoiceAccountingDimensions} id="ar-invoice-accounting">
+                <input name="id" type="hidden" value={invoice.id} />
+                <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
+                <button className="action" type="submit">{t('ar_invoices.save_dimensions')}</button>
+                {mayApprove ? <button className="action action--primary" formAction={approveArInvoice} type="submit">{t('ar_invoices.approve')}</button> : null}
+              </form>
+            ) : mayApprove ? (
               <form action={approveArInvoice}>
                 <input name="id" type="hidden" value={invoice.id} />
                 <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-                <button className="action action--primary" type="submit">
-                  {t('ar_invoices.approve')}
-                </button>
+                <button className="action action--primary" type="submit">{t('ar_invoices.approve')}</button>
+              </form>
+            ) : null}
+            {mayReturnToDraft ? (
+              <form action={returnArInvoiceToDraft}>
+                <input name="id" type="hidden" value={invoice.id} />
+                <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
+                <input aria-label={t('reason')} name="reason" placeholder={t('reason_placeholder')} required type="text" />
+                <button className="action" type="submit">{t('ar_invoices.return_to_draft')}</button>
               </form>
             ) : null}
             {/* "The invoice is not posted until CEO approval." */}

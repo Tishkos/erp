@@ -20,18 +20,20 @@
  * requires the price-list control to survive the UI *and* the API, and the way
  * it survives both is by there being no field to carry an override.
  */
-import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   appUser,
   arInvoice,
   arInvoiceLine,
+  businessLine,
   costLayer,
   inventoryMovement,
   item,
   businessPartner,
   deliveryNote,
   deliveryNoteLine,
+  department,
   journalEntry,
   salesOrder,
   salesOrderLine,
@@ -39,6 +41,7 @@ import {
 } from '../db/schema';
 import { formatQuantity, parseQuantity } from '../domain/uom';
 import { parseDecimal, toDecimalString } from '../domain/money';
+import { assertDimensionAvailable } from '../domain/dimensions';
 import { totalsFor } from '../domain/sales-pricing';
 import type { PostingLineRequest } from '../domain/posting';
 import {
@@ -50,6 +53,7 @@ import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
 import * as posting from './posting';
+import * as dimensions from './dimensions';
 import * as inventory from './inventory';
 import * as statuses from './statuses';
 import * as terms from './payment-terms';
@@ -89,6 +93,101 @@ export class AlreadyInvoicedError extends Error {
     );
     this.name = 'AlreadyInvoicedError';
   }
+}
+
+export interface InvoiceAccountingDimensions {
+  readonly businessLineCode: string | null;
+  readonly departmentCode: string | null;
+}
+
+async function lockInvoice(tx: Tx, id: string): Promise<void> {
+  await tx.execute(sql`select id from ar_invoice where id = ${id}::uuid for update`);
+}
+
+async function accountingValues(
+  tx: Tx,
+  input: Partial<InvoiceAccountingDimensions>,
+): Promise<InvoiceAccountingDimensions> {
+  const values = {
+    businessLineCode: input.businessLineCode?.trim() || null,
+    departmentCode: input.departmentCode?.trim() || null,
+  };
+  const registry = await dimensions.definitions(tx);
+  for (const [dimension, value] of [
+    ['business_line', values.businessLineCode],
+    ['department', values.departmentCode],
+  ] as const) {
+    if (!value) continue;
+    const definition = registry.find((entry) => entry.dimension === dimension);
+    if (!definition) throw new dimensions.UnknownDimensionValueError(dimension, value);
+    assertDimensionAvailable(definition);
+    const result = await tx.execute<{ exists: boolean }>(
+      sql`select dimension_value_exists(${dimension}::dimension_type, ${value}) as exists`,
+    );
+    if (!result.rows[0]?.exists) throw new dimensions.UnknownDimensionValueError(dimension, value);
+  }
+  return values;
+}
+
+export async function accountingChoices(tx: Tx) {
+  const businessLines = await tx.select({ code: businessLine.code, name: businessLine.name, active: businessLine.active }).from(businessLine).orderBy(asc(businessLine.code));
+  const departments = await tx.select({ code: department.code, name: department.name, active: department.active }).from(department).orderBy(asc(department.code));
+  return { businessLines, departments };
+}
+
+export async function setAccountingDimensions(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  input: InvoiceAccountingDimensions,
+): Promise<void> {
+  const invoice = await editableDraft(tx, ctx, id);
+  if (invoice.salesOrderId) throw new Error('Accounting dimensions are inherited from the sales order.');
+  const values = await accountingValues(tx, input);
+  if (invoice.businessLineCode === values.businessLineCode && invoice.departmentCode === values.departmentCode) return;
+  await tx.update(arInvoice).set({ ...values, updatedAt: new Date() }).where(eq(arInvoice.id, id));
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'ar_invoice.accounting_dimensions_changed',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: invoice.branchCode,
+    before: { businessLineCode: invoice.businessLineCode, departmentCode: invoice.departmentCode },
+    after: values,
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+}
+
+export async function returnToDraft(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  reason: string,
+): Promise<void> {
+  await lockInvoice(tx, id);
+  const invoice = await load(tx, id);
+  await authz.authorize(ctx.principal, 'approve', PERMISSION_OBJECT, { branchCode: invoice.branchCode, objectId: id });
+  await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, { branchCode: invoice.branchCode, objectId: id });
+  if (!reason.trim()) throw new Error('Give a reason for returning the invoice to draft.');
+  if (invoice.status !== 'approved' || invoice.journalEntryId || invoice.postedAt || parseDecimal(invoice.allocatedIqd, 4n) !== 0n) {
+    throw new Error('Only an approved, unposted and unallocated invoice can return to draft. Posted invoices require a reversal.');
+  }
+  if (invoice.salesOrderId || invoice.deliveryNoteId) throw new Error('Correct a source-linked invoice through its source document.');
+  await statuses.assertTransitionAllowed(tx, DOCUMENT_TYPE, invoice.status, 'draft', reason.trim());
+  await tx.update(arInvoice).set({ status: 'draft', approvedBy: null, approvedAt: null, updatedAt: new Date() }).where(eq(arInvoice.id, id));
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'ar_invoice.returned_to_draft',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: invoice.branchCode,
+    before: { status: invoice.status, approvedBy: invoice.approvedBy, approvedAt: invoice.approvedAt?.toISOString() ?? null },
+    after: { status: 'draft', approvedBy: null, approvedAt: null },
+    reason: reason.trim(),
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -379,6 +478,7 @@ export async function create(
 // ---------------------------------------------------------------------------
 
 export async function approve(tx: Tx, ctx: ActorContext, id: string): Promise<void> {
+  await lockInvoice(tx, id);
   const invoice = await load(tx, id);
 
   await authz.authorize(ctx.principal, 'approve', PERMISSION_OBJECT, {
@@ -455,6 +555,8 @@ export interface CreateDirectArInvoiceInput {
   /** Omitted, it comes from the customer's payment terms. */
   readonly dueDate?: string;
   readonly note?: string | null;
+  readonly businessLineCode?: string | null;
+  readonly departmentCode?: string | null;
   readonly lines: readonly DirectSalesLineInput[];
 }
 
@@ -488,6 +590,7 @@ export async function createDirect(
   const dueDate =
     input.dueDate ?? (await terms.dueDateOn(tx, customer.paymentTermsCode ?? null, input.invoiceDate));
 
+  const accounting = await accountingValues(tx, input);
   const allocated = await allocateDocumentNumber(
     tx,
     SEQUENCE_KEY,
@@ -503,6 +606,7 @@ export async function createDirect(
       salesOrderId: null,
       customerId: input.customerId,
       branchCode: input.branchCode,
+      ...accounting,
       invoiceDate: input.invoiceDate,
       paymentTermsCode: customer.paymentTermsCode ?? null,
       dueDate,
@@ -580,6 +684,7 @@ export async function createDirect(
     after: {
       invoiceNo: allocated.documentNo,
       direct: true,
+      ...accounting,
       lines: input.lines.length,
       netIqd: toDecimalString(netTotal, 4n),
     },
@@ -618,6 +723,7 @@ export interface DraftSalesLineInput {
 
 /** The draft, and the reasons it may be typed into. */
 async function editableDraft(tx: Tx, ctx: ActorContext, id: string) {
+  await lockInvoice(tx, id);
   const seen = await view(tx, id);
 
   await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, {
@@ -840,6 +946,7 @@ export async function post(
   ctx: ActorContext,
   id: string,
 ): Promise<{ journalEntryId: string }> {
+  await lockInvoice(tx, id);
   const invoice = await load(tx, id);
 
   await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, {
@@ -876,8 +983,8 @@ export async function post(
     // requires business line by default (migration 0005), and this is the same
     // value the delivery's COGS carried, so the two halves of the sale report
     // under one line of business.
-    business_line: order?.businessLineCode ?? null,
-    department: order?.departmentCode ?? null,
+    business_line: order?.businessLineCode ?? invoice.businessLineCode ?? null,
+    department: order?.departmentCode ?? invoice.departmentCode ?? null,
   };
 
   // Revenue line by line, receivable in one.
@@ -1168,6 +1275,17 @@ export async function viewByNo(tx: Tx, invoiceNo: string) {
 
   const seen = await view(tx, row.id);
 
+  const [order] = seen.salesOrderId
+    ? await tx
+        .select({
+          businessLineCode: salesOrder.businessLineCode,
+          departmentCode: salesOrder.departmentCode,
+        })
+        .from(salesOrder)
+        .where(eq(salesOrder.id, seen.salesOrderId))
+        .limit(1)
+    : [];
+
   // Everybody the document passed through, as the Journal Entry names them.
   // Approving and posting are two verbs — "the invoice is not posted until CEO
   // approval" — so they are two names, even when one person did both. Rolling
@@ -1198,6 +1316,8 @@ export async function viewByNo(tx: Tx, invoiceNo: string) {
 
   return {
     ...seen,
+    businessLineCode: order?.businessLineCode ?? seen.businessLineCode,
+    departmentCode: order?.departmentCode ?? seen.departmentCode,
     raisedBy: name(seen.createdBy),
     approvedByName: name(seen.approvedBy),
     postedByName: name(seen.postedBy),

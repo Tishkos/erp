@@ -61,7 +61,7 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
     return <Denied object={page('ar_invoices')} />;
   }
 
-  const { customers, allCustomers, options, allItems, houses } = await withCurrentUser(async (tx) => {
+  const { customers, allCustomers, options, allItems, houses, accounting } = await withCurrentUser(async (tx) => {
     const everyItem = await items.listAll(tx);
     const stock = everyItem.filter((row) => row.isStock && row.active);
     const options: LineItem[] = [];
@@ -85,6 +85,7 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
       options,
       allItems: everyItem,
       houses: await warehouses.listActive(tx),
+      accounting: await ar.accountingChoices(tx),
     };
   });
 
@@ -132,6 +133,30 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
       label: column('due_date'),
       control: true,
       value: <input aria-label={column('due_date')} name="due_date" type="date" />,
+    },
+    {
+      label: t('ar_invoices.business_line'),
+      control: true,
+      value: (
+        <select aria-label={t('ar_invoices.business_line')} name="business_line_code" defaultValue="">
+          <option value="">{t('none')}</option>
+          {accounting.businessLines.filter((line) => line.active).map((line) => (
+            <option key={line.code} value={line.code}>{line.code} · {line.name}</option>
+          ))}
+        </select>
+      ),
+    },
+    {
+      label: t('ar_invoices.department'),
+      control: true,
+      value: (
+        <select aria-label={t('ar_invoices.department')} name="department_code" defaultValue="">
+          <option value="">{t('none')}</option>
+          {accounting.departments.filter((row) => row.active).map((row) => (
+            <option key={row.code} value={row.code}>{row.code} · {row.name}</option>
+          ))}
+        </select>
+      ),
     },
   ];
 

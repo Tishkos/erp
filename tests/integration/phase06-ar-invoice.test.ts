@@ -711,3 +711,35 @@ describe('06.6 · Partially Paid and Paid follow the money (Appendix B)', () => 
     ).toMatch(/allocation_within_total|exceeds its balance/);
   });
 });
+
+describe('06.6 · source-linked accounting dimensions stay inherited', () => {
+  it('displays the order dimensions and refuses direct overrides even in draft', async () => {
+    const { noteId } = await deliveredNote(qty('60'));
+    const invoice = await withScope(scope(salesUser), (tx) =>
+      ar.create(tx, salesUser, { deliveryNoteId: noteId }),
+    );
+
+    const seen = await withScope(scope(manager), (tx) =>
+      ar.viewByNo(tx, invoice.invoiceNo),
+    );
+    expect(seen).toMatchObject({
+      businessLineCode: 'PRODUCT_SALES',
+      departmentCode: 'SALES',
+    });
+
+    await expect(
+      withScope(scope(manager), (tx) =>
+        ar.setAccountingDimensions(tx, manager, invoice.id, {
+          businessLineCode: 'PRODUCT_SALES',
+          departmentCode: 'SALES',
+        }),
+      ),
+    ).rejects.toThrow(/Delivery Note|inherited/);
+    await expect(
+      ownerPool.query(
+        `update ar_invoice set business_line_code = 'PRODUCT_SALES' where id = $1`,
+        [invoice.id],
+      ),
+    ).rejects.toThrow(/source-linked invoice inherits/);
+  });
+});
