@@ -50,6 +50,7 @@ async function loadAccountHeader(tx: Tx, documentId: string): Promise<RecordHead
   return {
     documentType: 'chart_of_account',
     documentId: row.code,
+    workflowDocumentId: row.id,
     auditObjectId: row.id,
     documentNumber: row.code,
     status: row.approvalStatus as DocumentStatus,

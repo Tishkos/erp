@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { inArray } from 'drizzle-orm';
 import type { RecordView } from '@domain/record-view';
@@ -25,12 +26,14 @@ export async function RecordPage({
   view,
   returnTo,
   hideTitle = false,
+  journalEmptyContent,
 }: {
   view: RecordView;
   /** Where to come back to after an action. The record's own address. */
   readonly returnTo?: string;
   /** The page already carries the record's name in its own header. */
   readonly hideTitle?: boolean;
+  readonly journalEmptyContent?: ReactNode;
 }) {
   const [t, statusLabel, actionLabel, eventLabel, page, locale] = await Promise.all([
     getTranslations('record'),
@@ -214,7 +217,7 @@ export async function RecordPage({
       <section className="panel">
         <h2 className="panel__title">{t('journals')}</h2>
         {journals.length === 0 ? (
-          <p className="muted">{t('no_journals')}</p>
+          journalEmptyContent ?? <p className="muted">{t('no_journals')}</p>
         ) : (
           <ul className="timeline">
             {journals.map((journal) => (

@@ -11,6 +11,7 @@ import {
   NoPostingRuleError,
   PostingRequestError,
   assertRequestWellFormed,
+  resolveLineAccount,
   resolveRule,
   ruleMatches,
   specificity,
@@ -18,7 +19,10 @@ import {
   type PostingRule,
 } from '@domain/posting';
 import {
+  InvalidSalesRevenueAccountError,
+  assertMappedAccount,
   assertMappedControlAccount,
+  mappingAccountEligible,
   requiredControlAccount,
 } from '@domain/posting-map';
 
@@ -158,6 +162,65 @@ describe('resolving the account for a line', () => {
   });
 });
 
+describe('choosing between a scoped exception, an item account and a fallback', () => {
+  const event = 'sales.ar_invoice';
+  const role = 'sales_revenue';
+  const generic = rule({ id: 'generic', eventType: event, lineRole: role, accountId: 'generic', accountCode: 'GENERAL' });
+  const warehouse = rule({ id: 'warehouse', eventType: event, lineRole: role, warehouseCode: 'WH1', accountId: 'scoped', accountCode: 'SCOPED' });
+  const branch = rule({ id: 'branch', eventType: event, lineRole: role, branchCode: 'BGW', accountId: 'branch', accountCode: 'BRANCH' });
+  const criteria = { warehouseCode: 'WH1', branchCode: 'BGW' };
+
+  it('keeps an explicit document account ahead of every configured answer', () => {
+    expect(resolveLineAccount([generic, warehouse], event, {
+      role,
+      accountId: 'document',
+      itemAccountId: 'item',
+    }, criteria)).toEqual({ accountId: 'document', postingRuleId: null, source: 'explicit' });
+  });
+
+  it('lets a matching scoped mapping beat the item', () => {
+    expect(resolveLineAccount([generic, warehouse], event, {
+      role,
+      itemAccountId: 'item',
+    }, criteria)).toEqual({ accountId: 'scoped', postingRuleId: 'warehouse', source: 'scoped_rule' });
+  });
+
+  it('lets the item beat the general mapping', () => {
+    expect(resolveLineAccount([generic], event, { role, itemAccountId: 'item' }, criteria))
+      .toEqual({ accountId: 'item', postingRuleId: null, source: 'item' });
+  });
+
+  it('lets the item work without a general mapping', () => {
+    expect(resolveLineAccount([], event, { role, itemAccountId: 'item' }, criteria))
+      .toEqual({ accountId: 'item', postingRuleId: null, source: 'item' });
+  });
+
+  it('uses the general mapping when there is no item account', () => {
+    expect(resolveLineAccount([generic], event, { role }, criteria))
+      .toEqual({ accountId: 'generic', postingRuleId: 'generic', source: 'default_rule' });
+  });
+
+  it('ignores scoped mappings that do not match or are inactive', () => {
+    const otherWarehouse = rule({ ...warehouse, id: 'other', warehouseCode: 'WH2' });
+    const inactive = rule({ ...warehouse, id: 'inactive', isActive: false });
+    expect(resolveLineAccount([generic, otherWarehouse, inactive], event, {
+      role,
+      itemAccountId: 'item',
+    }, { warehouseCode: 'WH3' })).toEqual({ accountId: 'item', postingRuleId: null, source: 'item' });
+  });
+
+  it('still refuses equally specific scoped mappings when an item exists', () => {
+    expect(() => resolveLineAccount([warehouse, branch], event, {
+      role,
+      itemAccountId: 'item',
+    }, criteria)).toThrow(AmbiguousPostingRuleError);
+  });
+
+  it('refuses when neither an item account nor a mapping exists', () => {
+    expect(() => resolveLineAccount([], event, { role }, criteria)).toThrow(NoPostingRuleError);
+  });
+});
+
 describe('the control account an invoice mapping must name', () => {
   it.each([
     {
@@ -205,6 +268,34 @@ describe('the control account an invoice mapping must name', () => {
         controlAccount: null,
       }),
     ).not.toThrow();
+  });
+});
+
+describe('the account a revenue mapping may choose', () => {
+  it('accepts an ordinary revenue posting account', () => {
+    const account = { code: 'REV', accountType: 'revenue', controlAccount: null } as const;
+    expect(mappingAccountEligible('sales.ar_invoice', 'sales_revenue', account)).toBe(true);
+    expect(() => assertMappedAccount('sales.ar_invoice', 'sales_revenue', account)).not.toThrow();
+  });
+
+  it.each([
+    { code: 'ASSET', accountType: 'asset', controlAccount: null },
+    { code: 'CONTROL', accountType: 'revenue', controlAccount: 'customer' },
+  ] as const)('rejects %s', (account) => {
+    expect(mappingAccountEligible('sales.ar_invoice', 'sales_revenue', account)).toBe(false);
+    expect(() => assertMappedAccount('sales.ar_invoice', 'sales_revenue', account))
+      .toThrow(InvalidSalesRevenueAccountError);
+  });
+
+  it('keeps customer and supplier control-account requirements unchanged', () => {
+    expect(mappingAccountEligible('sales.ar_invoice', 'customer_receivable', {
+      accountType: 'asset',
+      controlAccount: 'customer',
+    })).toBe(true);
+    expect(mappingAccountEligible('purchasing.ap_invoice', 'supplier_payable', {
+      accountType: 'liability',
+      controlAccount: 'customer',
+    })).toBe(false);
   });
 });
 

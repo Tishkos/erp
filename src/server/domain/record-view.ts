@@ -37,6 +37,7 @@ import { can, type PermissionVerb, type Principal } from './permissions';
 export interface RecordHeader {
   readonly documentType: string;
   readonly documentId: string;
+  readonly workflowDocumentId?: string | null;
   /**
    * The identity the audit trail keys this record by, when it differs from the
    * one the URL uses.

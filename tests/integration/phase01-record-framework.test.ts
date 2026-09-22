@@ -169,6 +169,31 @@ describe('Appendix A rule 2 · every record shows the nine facts', () => {
     expect(view.journals).toEqual([]);
   });
 
+  it('shows the workflow decision on an account opened by its public code', async () => {
+    await withScope({ userId: officer.userId, branchCode: 'HQ' }, (tx) =>
+      actions.perform(tx, officer, {
+        documentType: 'chart_of_account',
+        documentId: code,
+        action: 'submit',
+      }),
+    );
+    await withScope({ userId: manager.userId, branchCode: 'HQ' }, (tx) =>
+      actions.perform(tx, manager, {
+        documentType: 'chart_of_account',
+        documentId: code,
+        action: 'approve',
+      }),
+    );
+
+    const view = await asPrincipal(manager, (tx) =>
+      record.view(tx, manager, 'chart_of_account', code),
+    );
+    expect(view.header.documentId).toBe(code);
+    expect(view.approvals.at(-1)?.decisions).toContainEqual(
+      expect.objectContaining({ actorUserId: manager.userId, decision: 'approved' }),
+    );
+  });
+
   it('reports a record outside the reader’s reach as simply absent', async () => {
     // Not "you may not see this" — that confirms it exists.
     expect(

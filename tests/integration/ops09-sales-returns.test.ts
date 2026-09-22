@@ -255,13 +255,18 @@ async function buy(options: { quantity?: string; unitPrice?: string } = {}) {
 }
 
 /** A posted Sales Invoice, and the id of its one line. */
-async function sell(quantity = '4', unitPrice = '250000') {
+async function sell(
+  quantity = '4',
+  unitPrice = '250000',
+  accounting: Partial<ar.InvoiceAccountingDimensions> = {},
+) {
   const invoice = await withScope(scope(clerk), (tx) =>
     ar.createDirect(tx, clerk, {
       customerId,
       branchCode: BAGHDAD,
       invoiceDate: SELL_ON,
       dueDate: '2026-05-20',
+      ...accounting,
       lines: [
         {
           itemCode: PANEL,
@@ -496,6 +501,65 @@ describe('ops 9 · the journal follows the offset that was chosen', () => {
       [accounts.customer_receivable],
     );
     expect(Number(rows[0].balance)).toBe(1_000_000);
+  });
+
+  it('carries the direct invoice dimensions through the return without changing contra-revenue', async () => {
+    await ownerPool.query(
+      `insert into business_line (code,name,active) values ('RET_DIM','Returned Sales',true)
+       on conflict (code) do update set active = true`,
+    );
+    for (const [documentType, name, module] of [
+      ['customer_credit_memo', 'Customer Credit Memo', 'sales'],
+      ['inventory.sales_return', 'Sales Return', 'inventory'],
+    ] as const) {
+      await ownerPool.query(
+        `insert into document_type (code,name,module) values ($1,$2,$3) on conflict (code) do nothing`,
+        [documentType, name, module],
+      );
+      for (const dimension of ['business_line', 'department']) {
+        await ownerPool.query(
+          `insert into document_type_dimension (document_type_code,dimension,requirement)
+           values ($1,$2,'mandatory') on conflict (document_type_code,dimension)
+           do update set requirement = 'mandatory'`,
+          [documentType, dimension],
+        );
+      }
+    }
+    await buy({ quantity: '10', unitPrice: '100000' });
+    const invoice = await sell('4', '250000', {
+      businessLineCode: 'RET_DIM',
+      departmentCode: 'FIN',
+    });
+    const taken = await takeBack(invoice, '2');
+    const posted = await credit(taken.id);
+    expect(await onHand()).toBe(8);
+    expect(await journalOf(posted.journalEntryId)).toEqual([
+      { account: 'Sales Returns', debit: 500_000, credit: 0 },
+      { account: 'Trade Receivables', debit: 0, credit: 500_000 },
+    ]);
+    const { rows: memoLines } = await ownerPool.query(
+      `select business_line_code, department_code from journal_line where journal_entry_id = $1`,
+      [posted.journalEntryId],
+    );
+    expect(memoLines).toEqual([
+      { business_line_code: 'RET_DIM', department_code: 'FIN' },
+      { business_line_code: 'RET_DIM', department_code: 'FIN' },
+    ]);
+    const { rows: returnLines } = await ownerPool.query(
+      `select l.business_line_code, l.department_code
+         from journal_line l
+        where l.journal_entry_id = (select journal_entry_id from inventory_movement where id = $1)`,
+      [taken.movementIds?.[0] ?? null],
+    );
+    expect(returnLines).toEqual([
+      { business_line_code: 'RET_DIM', department_code: 'FIN' },
+      { business_line_code: 'RET_DIM', department_code: 'FIN' },
+    ]);
+    const { rows: statement } = await ownerPool.query(
+      `select coalesce(sum(debit_iqd) - sum(credit_iqd),0)::text as balance
+         from subledger_entry where subledger_type='customer' and party_code='CUST-001'`,
+    );
+    expect(statement[0].balance).toBe('500000.0000');
   });
 
   it('puts the stock back and reverses its cost, at the original invoice cost', async () => {

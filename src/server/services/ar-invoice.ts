@@ -43,7 +43,16 @@ import { formatQuantity, parseQuantity } from '../domain/uom';
 import { parseDecimal, toDecimalString } from '../domain/money';
 import { assertDimensionAvailable } from '../domain/dimensions';
 import { totalsFor } from '../domain/sales-pricing';
-import type { PostingLineRequest } from '../domain/posting';
+import {
+  AmbiguousPostingRuleError,
+  NoPostingRuleError,
+  POSTING_ACCOUNT_SOURCES,
+  resolveLineAccount,
+  type PostingAccountSource,
+  type PostingLineRequest,
+} from '../domain/posting';
+import { AccountPostingError, assertCurrencyAllowed, assertPostable } from '../domain/chart-of-accounts';
+import { assertMappedAccount, InvalidSalesRevenueAccountError } from '../domain/posting-map';
 import {
   assertInvoiceDateMatchesDelivery,
   assertWithinDelivered,
@@ -51,6 +60,7 @@ import {
 } from '../domain/ar-invoicing';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
+import * as coa from './chart-of-accounts';
 import * as audit from './audit';
 import * as posting from './posting';
 import * as dimensions from './dimensions';
@@ -263,6 +273,43 @@ async function stockAccountsFor(
     );
   }
   return { inventory: row.inventory, cogs: row.cogs };
+}
+
+async function revenueRequests(
+  tx: Tx,
+  invoice: typeof arInvoice.$inferSelect,
+  lines: readonly (typeof arInvoiceLine.$inferSelect)[],
+): Promise<PostingLineRequest[]> {
+  if (lines.length === 0) return [];
+  const itemRows = await tx
+    .select({ code: item.code, salesAccountId: item.salesAccountId })
+    .from(item)
+    .where(inArray(item.code, [...new Set(lines.map((line) => line.itemCode))]));
+  const byCode = new Map(itemRows.map((row) => [row.code, row.salesAccountId]));
+  const [note] = invoice.deliveryNoteId
+    ? await tx
+        .select({ warehouseCode: deliveryNote.warehouseCode })
+        .from(deliveryNote)
+        .where(eq(deliveryNote.id, invoice.deliveryNoteId))
+        .limit(1)
+    : [];
+  if (invoice.deliveryNoteId && !note) {
+    throw new Error('The source delivery note is unavailable for account selection.');
+  }
+  return lines.map((line, index) => {
+    if (!byCode.has(line.itemCode)) {
+      throw new DirectSalesLineError(line.lineNo ?? index + 1, `names no item '${line.itemCode}'.`);
+    }
+    const warehouseCode = line.warehouseCode ?? note?.warehouseCode ?? null;
+    return {
+      role: 'sales_revenue',
+      credit: line.netIqd,
+      itemAccountId: byCode.get(line.itemCode) ?? null,
+      criteria: { branchCode: invoice.branchCode, warehouseCode },
+      dimensions: { warehouse: warehouseCode },
+      sourceLineId: line.id,
+    };
+  });
 }
 
 /** One line of a directly-raised Sales Invoice cannot do what it asks. */
@@ -1002,12 +1049,9 @@ export async function post(
       criteria,
       dimensions: base,
     },
-    ...lines.map((line) => ({
-      role: 'sales_revenue',
-      credit: line.netIqd,
-      criteria,
-      dimensions: base,
-      sourceLineId: line.id,
+    ...(await revenueRequests(tx, invoice, lines)).map((line) => ({
+      ...line,
+      dimensions: { ...base, ...line.dimensions },
     })),
   ];
 
@@ -1097,7 +1141,7 @@ export async function post(
         accountId: accounts.cogs,
         debit: toDecimalString(cost, 4n),
         criteria: { ...criteria, warehouseCode: line.warehouseCode },
-        dimensions: base,
+        dimensions: { ...base, warehouse: line.warehouseCode },
         sourceLineId: line.id,
       },
       {
@@ -1105,7 +1149,7 @@ export async function post(
         accountId: accounts.inventory,
         credit: toDecimalString(cost, 4n),
         criteria: { ...criteria, warehouseCode: line.warehouseCode },
-        dimensions: base,
+        dimensions: { ...base, warehouse: line.warehouseCode },
         sourceLineId: line.id,
       },
     );
@@ -1173,6 +1217,13 @@ export async function post(
       journalEntryId: result.journalEntryId,
       netIqd: invoice.netIqd,
       warrantiesRegistered: warranties.registered,
+      revenueAccounts: result.plan.lines.filter((line) => line.role === 'sales_revenue').map((line) => ({
+        sourceLineId: line.sourceLineId,
+        accountId: line.accountId,
+        accountCode: line.accountCode,
+        postingRuleId: line.postingRuleId,
+        source: line.accountSource ?? null,
+      })),
     },
   });
 
@@ -1335,6 +1386,140 @@ export async function view(tx: Tx, id: string) {
     .orderBy(arInvoiceLine.lineNo);
 
   return { ...invoice, lines };
+}
+
+export interface RevenueAccountTraceLine {
+  readonly lineId: string | null;
+  readonly lineNo: number | null;
+  readonly itemCode: string | null;
+  readonly accountId: string | null;
+  readonly accountCode: string | null;
+  readonly accountName: string | null;
+  readonly source: PostingAccountSource | 'recorded_journal' | null;
+  readonly error: string | null;
+}
+
+export interface RevenueAccountTrace {
+  readonly posted: boolean;
+  readonly lines: RevenueAccountTraceLine[];
+  readonly adjustments: Array<{ id: string; entryNo: string; status: string; postingDate: string }>;
+}
+
+export async function revenueAccountsFor(
+  tx: Tx,
+  invoice: Awaited<ReturnType<typeof view>>,
+): Promise<RevenueAccountTrace> {
+  const posted = Boolean(invoice.journalEntryId) ||
+    ['posted', 'partially_executed', 'settled', 'reversed'].includes(invoice.status);
+  if (posted && !invoice.journalEntryId) return { posted: true, lines: [], adjustments: [] };
+  if (!posted) {
+    const rules = await posting.rules(tx, 'sales.ar_invoice');
+    const requests = await revenueRequests(tx, invoice, invoice.lines);
+    const lines: RevenueAccountTraceLine[] = [];
+    for (const [index, request] of requests.entries()) {
+      const sourceLine = invoice.lines[index];
+      try {
+        const selection = resolveLineAccount(rules, 'sales.ar_invoice', request, {
+          branchCode: invoice.branchCode,
+          ...(request.criteria ?? {}),
+        });
+        const account = await coa.loadAccount(tx, selection.accountId);
+        let error: string | null = null;
+        try {
+          assertPostable(account, { source: 'system' });
+          assertCurrencyAllowed(account, invoice.currency);
+          assertMappedAccount('sales.ar_invoice', request.role, account);
+        } catch (cause) {
+          if (cause instanceof AccountPostingError || cause instanceof InvalidSalesRevenueAccountError) {
+            error = cause.message;
+          } else throw cause;
+        }
+        lines.push({
+          lineId: request.sourceLineId ?? null,
+          lineNo: sourceLine?.lineNo ?? null,
+          itemCode: sourceLine?.itemCode ?? null,
+          accountId: account.id,
+          accountCode: account.code,
+          accountName: account.name,
+          source: selection.source,
+          error,
+        });
+      } catch (cause) {
+        if (!(cause instanceof NoPostingRuleError || cause instanceof AmbiguousPostingRuleError)) throw cause;
+        lines.push({
+          lineId: request.sourceLineId ?? null,
+          lineNo: sourceLine?.lineNo ?? null,
+          itemCode: sourceLine?.itemCode ?? null,
+          accountId: null,
+          accountCode: null,
+          accountName: null,
+          source: null,
+          error: cause.message,
+        });
+      }
+    }
+    return { posted: false, lines, adjustments: [] };
+  }
+
+  const actual = await tx.execute<{
+    id: string;
+    lineId: string | null;
+    accountId: string;
+    accountCode: string;
+    accountName: string;
+  }>(sql`
+    SELECT l.id, l.source_line_id AS "lineId", a.id AS "accountId", a.code AS "accountCode", a.name AS "accountName"
+    FROM journal_line l JOIN journal_entry j ON j.id=l.journal_entry_id
+    JOIN chart_of_account a ON a.id=l.account_id
+    WHERE l.journal_entry_id=${invoice.journalEntryId}::uuid AND j.status IN ('posted','reversed')
+      AND l.line_role='sales_revenue'
+    ORDER BY l.line_no
+  `);
+  const captured = await tx.execute<{ selections: unknown }>(sql`
+    SELECT after_value->'revenueAccounts' AS selections FROM audit_event
+    WHERE object_type='ar_invoice' AND object_id=${invoice.id} AND action='ar_invoice.posted'
+      AND after_value->>'journalEntryId'=${invoice.journalEntryId}
+    ORDER BY id DESC LIMIT 1
+  `);
+  const selections = Array.isArray(captured.rows[0]?.selections)
+    ? captured.rows[0].selections
+    : [];
+  const byLineId = new Map(invoice.lines.map((line) => [line.id, line]));
+  const lines = actual.rows.map((row) => {
+    const invoiceLine = row.lineId ? byLineId.get(row.lineId) : undefined;
+    const selection = selections.find((entry): entry is Record<string, unknown> =>
+      Boolean(entry) && typeof entry === 'object' &&
+      (entry as Record<string, unknown>).sourceLineId === row.lineId &&
+      (entry as Record<string, unknown>).accountId === row.accountId,
+    );
+    const source: RevenueAccountTraceLine['source'] =
+      selection && POSTING_ACCOUNT_SOURCES.includes(selection.source as PostingAccountSource)
+        ? selection.source as PostingAccountSource
+        : 'recorded_journal';
+    return {
+      lineId: row.lineId,
+      lineNo: invoiceLine?.lineNo ?? null,
+      itemCode: invoiceLine?.itemCode ?? null,
+      accountId: row.accountId,
+      accountCode: row.accountCode,
+      accountName: row.accountName,
+      source,
+      error: null,
+    };
+  });
+  const adjustments = await tx.execute<{
+    id: string;
+    entryNo: string;
+    status: string;
+    postingDate: string;
+  }>(sql`
+    SELECT DISTINCT j.id, j.entry_no AS "entryNo", j.status, j.posting_date::text AS "postingDate"
+    FROM audit_event e JOIN journal_entry j ON j.id::text=e.after_value->>'journalEntryId'
+    WHERE e.object_type='ar_invoice' AND e.object_id=${invoice.id}
+      AND e.action='ar_invoice.reclassification_draft_linked'
+    ORDER BY j.posting_date::text,j.entry_no
+  `);
+  return { posted: true, lines, adjustments: adjustments.rows };
 }
 
 /**

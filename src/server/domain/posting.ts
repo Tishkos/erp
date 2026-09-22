@@ -160,6 +160,31 @@ export function resolveRule(
   return winners[0]!;
 }
 
+export const POSTING_ACCOUNT_SOURCES = ['explicit', 'scoped_rule', 'item', 'default_rule'] as const;
+export type PostingAccountSource = (typeof POSTING_ACCOUNT_SOURCES)[number];
+export interface PostingAccountSelection {
+  readonly accountId: string;
+  readonly postingRuleId: string | null;
+  readonly source: PostingAccountSource;
+}
+export function resolveLineAccount(
+  rules: readonly PostingRule[],
+  eventType: string,
+  line: Pick<PostingLineRequest, 'role' | 'accountId' | 'itemAccountId'>,
+  criteria: PostingCriteria,
+): PostingAccountSelection {
+  if (line.accountId) return { accountId: line.accountId, postingRuleId: null, source: 'explicit' };
+  const hasScoped = rules.some((rule) =>
+    rule.eventType === eventType && rule.lineRole === line.role &&
+    specificity(rule) > 0 && ruleMatches(rule, criteria),
+  );
+  if (!hasScoped && line.itemAccountId) {
+    return { accountId: line.itemAccountId, postingRuleId: null, source: 'item' };
+  }
+  const rule = resolveRule(rules, eventType, line.role, criteria);
+  return { accountId: rule.accountId, postingRuleId: rule.id, source: specificity(rule) > 0 ? 'scoped_rule' : 'default_rule' };
+}
+
 // ---------------------------------------------------------------------------
 // The request a module makes, and the plan the engine produces from it
 // ---------------------------------------------------------------------------
@@ -198,6 +223,7 @@ export interface PostingLineRequest {
    * dimensions are enforced exactly as a mapped account's are.
    */
   readonly accountId?: string;
+  readonly itemAccountId?: string | null;
   /** Decimal string. Exactly one of the two. */
   readonly debit?: string | null;
   readonly credit?: string | null;
@@ -240,6 +266,7 @@ export interface PlannedLine {
   readonly accountCode: string;
   /** Null when the line named its own account — see . */
   readonly postingRuleId: string | null;
+  readonly accountSource?: PostingAccountSource;
   readonly debit: string;
   readonly credit: string;
   readonly currency: string;

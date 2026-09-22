@@ -66,7 +66,7 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
   },
   {
     event: 'sales.ar_invoice',
-    lines: [line('customer_receivable', true, 'customer'), line('sales_revenue', true)],
+    lines: [line('customer_receivable', true, 'customer'), line('sales_revenue')],
   },
   {
     event: 'sales.customer_receipt',
@@ -120,6 +120,32 @@ export function assertMappedControlAccount(
       'Set its control account in Chart of Accounts, then choose it in Posting Mappings so the journal and statement are posted together.',
     );
   }
+}
+
+export class InvalidSalesRevenueAccountError extends Error {
+  readonly code = 'SALES_REVENUE_ACCOUNT_INVALID';
+  constructor(code: string) {
+    super(`${code} cannot receive sales revenue. Choose a Revenue posting account that is not a control account; customer balances belong on the receivable line.`);
+    this.name = 'InvalidSalesRevenueAccountError';
+  }
+}
+export function mappingAccountEligible(
+  eventType: string,
+  lineRole: string,
+  account: Pick<AccountNode, 'accountType' | 'controlAccount'>,
+): boolean {
+  const required = requiredControlAccount(eventType, lineRole);
+  return (!required || account.controlAccount === required) &&
+    (eventType !== 'sales.ar_invoice' || lineRole !== 'sales_revenue' ||
+      (account.accountType === 'revenue' && account.controlAccount === null));
+}
+export function assertMappedAccount(
+  eventType: string,
+  lineRole: string,
+  account: Pick<AccountNode, 'code' | 'accountType' | 'controlAccount'>,
+): void {
+  assertMappedControlAccount(eventType, lineRole, account);
+  if (!mappingAccountEligible(eventType, lineRole, account)) throw new InvalidSalesRevenueAccountError(account.code);
 }
 
 /**

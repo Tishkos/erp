@@ -313,8 +313,8 @@ export async function post(
   const dimensions = {
     branch: memo.branchCode,
     business_partner: customer?.code ?? null,
-    business_line: order?.businessLineCode ?? null,
-    department: order?.departmentCode ?? null,
+    business_line: order?.businessLineCode ?? invoice!.businessLineCode ?? null,
+    department: order?.departmentCode ?? invoice!.departmentCode ?? null,
   };
 
   const amount = parseDecimal(memo.amountIqd, 4n);

@@ -1107,7 +1107,7 @@ export async function post(
         accountId: account,
         debit: amount(invoicedValue),
         criteria: { ...criteria, warehouseCode: line.warehouseCode },
-        dimensions,
+        dimensions: { ...dimensions, warehouse: line.warehouseCode },
       });
       continue;
     }
