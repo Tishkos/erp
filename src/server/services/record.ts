@@ -188,7 +188,7 @@ export async function view(
   // driver serialises them regardless, so the parallel form buys nothing — the
   // rule `dimensions.ts` writes down, applied here too.
   const transitions = await transitionsFor(tx, documentType);
-  const approvals = await approvalsFor(tx, documentType, documentId);
+  const approvals = await approvalsFor(tx, documentType, header.workflowDocumentId ?? documentId);
   const related = await (source.loadRelated?.(tx, documentId) ?? Promise.resolve([]));
   const journals = await (source.loadJournals?.(tx, documentId) ?? Promise.resolve([]));
   const timeline = await audit.timelineFor(

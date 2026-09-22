@@ -56,6 +56,7 @@ async function signIn(page: Page, user: { email: string; password: string }) {
   // session goes first.
   await page.context().clearCookies();
   await page.goto('/sign-in');
+  expect(['localhost', '127.0.0.1']).toContain(new URL(page.url()).hostname);
   await page.getByRole('textbox', { name: 'Email', exact: true }).fill(user.email);
   await page.getByLabel('Password', { exact: true }).fill(user.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
@@ -235,6 +236,17 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     await expect(page.getByRole('cell', { name: cashAccount })).toBeVisible();
     // Requirement 4 — the two totals must remain equal.
     await expect(page.getByText('Debits equal credits', { exact: true })).toBeVisible();
+
+    await page.goto(`/master-data/chart-of-accounts/${salesAccount}`);
+    await expect(page.getByRole('link', { name: entryNo })).toBeVisible();
+    await expect(page.getByText(/Approved by /)).toBeVisible();
+    await expect(page.getByText('No approval decisions are available for this record.')).toHaveCount(0);
+    await expect(page.getByText('This document has not posted to the General Ledger.')).toHaveCount(0);
+    await expect(
+      page.getByText(
+        'When transactions post to this account, they appear in Recent Journals and the General Ledger. The account master itself does not create a journal.',
+      ),
+    ).toBeVisible();
   });
 
   test('5 · the financial statements are produced from the same postings', async ({ page }) => {
@@ -244,7 +256,7 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     await page.waitForLoadState('networkidle');
     const pl = page.locator('section', { hasText: 'Income Statement' }).last();
     await expect(pl).toContainText('Revenue');
-    await expect(pl).toContainText('Profit for the period');
+    await expect(pl).toContainText('Net profit');
 
     await page.goto(`/finance/balance-sheet?to=${YEAR}-12-31`);
     await page.waitForLoadState('networkidle');
@@ -315,7 +327,7 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     await page.goto(`/finance/balance-sheet?to=${YEAR}-12-31`);
     await page.waitForLoadState('networkidle');
     await expect(
-      page.locator('section', { hasText: 'Statement of Financial Position' }).last(),
+      page.locator('section', { hasText: 'Balance Sheet' }).last(),
     ).toContainText('The two sides agree');
   });
 });
@@ -357,4 +369,121 @@ test('supplier statement keeps its side when filters run', async ({ page, baseUR
   const customerStatement = await createPartner('customer');
   await page.goto(customerStatement);
   await expect(page.locator('input[name="side"]')).toHaveValue('customer');
+});
+test('item sales account appears in invoice account selection', async ({ page }) => {
+  const stamp = Date.now().toString(36).toUpperCase();
+  await signIn(page, MANAGER);
+  await page.goto('/master-data/chart-of-accounts');
+  await page.getByRole('button', { name: 'New account' }).click();
+  const accountDialog = page.locator('dialog[open], [role="dialog"]').first();
+  const under = accountDialog.getByLabel('Under', { exact: true });
+  const revenueParent = await under
+    .locator('option:not([disabled])')
+    .filter({ hasText: 'Revenue' })
+    .first()
+    .getAttribute('value');
+  await under.selectOption(revenueParent!);
+  await accountDialog.getByLabel(/^Name/).fill(`E2E Item Revenue ${stamp}`);
+  await accountDialog.getByRole('button', { name: 'Create' }).click();
+  await page.waitForURL(/\/master-data\/chart-of-accounts\/[A-Z]\d+/, { timeout: 60_000 });
+  const itemSalesAccount = page.url().split('/').pop()!;
+  await press(page, 'Submit for approval', 'Pending approval');
+  await press(page, 'Approve', 'Approved');
+
+  await signIn(page, ADMIN);
+  const itemCode = `E2E-ITEM-${stamp}`;
+  await page.goto('/master-data/items');
+  await page.getByRole('button', { name: 'New item' }).click();
+  const itemDialog = page.locator('dialog[open], [role="dialog"]').first();
+  await itemDialog.getByLabel('Code', { exact: true }).fill(itemCode);
+  await itemDialog.getByLabel(/^Name/).fill(`E2E Routed Item ${stamp}`);
+  await itemDialog.getByLabel('Base unit', { exact: true }).selectOption('EA');
+  await itemDialog.getByLabel('Tracking', { exact: true }).selectOption('batch');
+  await itemDialog.getByRole('button', { name: 'Create' }).click();
+  await page.waitForURL(new RegExp(`/master-data/items/${itemCode}`), { timeout: 60_000 });
+  const salesAccount = page.getByLabel('Sales account', { exact: true });
+  const salesAccountId = await salesAccount
+    .locator('option')
+    .filter({ hasText: itemSalesAccount })
+    .first()
+    .getAttribute('value');
+  await salesAccount.selectOption(salesAccountId!);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForLoadState('networkidle');
+
+  const customerCode = `E2E-CUST-${stamp}`;
+  await page.goto('/master-data/customers');
+  await page.getByRole('button', { name: 'New customer', exact: true }).click();
+  const customerDialog = page.locator('dialog[open], [role="dialog"]').first();
+  await customerDialog.getByLabel('Code', { exact: true }).fill(customerCode);
+  await customerDialog.getByLabel(/^Legal name/).fill(`E2E Routed Customer ${stamp}`);
+  await customerDialog.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.waitForURL(new RegExp(`/master-data/business-partners/${customerCode}`), {
+    timeout: 60_000,
+  });
+
+  await page.goto('/sales/ar-invoices/new');
+  await expect(page.locator('input[name="item_code_0"]')).toBeVisible({ timeout: 60_000 });
+  await page.getByLabel('Customer Code', { exact: true }).fill(customerCode);
+  await page.locator('input[name="item_code_0"]').fill(itemCode);
+  await page.locator('input[name="quantity_0"]').fill('1');
+  await page.locator('input[name="unit_price_0"]').fill('100');
+  await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.waitForURL(/\/sales\/ar-invoices\/INV-/);
+
+  const revenueAccounts = page.locator('section', { hasText: 'Revenue accounts' }).last();
+  await expect(
+    revenueAccounts.getByRole('link', { name: new RegExp(itemSalesAccount) }),
+  ).toBeVisible();
+  await expect(revenueAccounts).toContainText('Item sales account');
+});
+
+test('a sales invoice header carries block 5 fields, and approves without dimensions', async ({
+  page,
+  baseURL,
+}) => {
+  /*
+   * The two accounting dimensions came off the document by direction
+   * (2026-09-22): block 5's header is the invoice number, the two dates and
+   * the customer, and Business Line was neither on it nor wanted. What matters
+   * now is that their absence costs nothing — the invoice still approves, and
+   * the revenue still posts, because the document type no longer asks the
+   * lines for a dimension the screen cannot supply.
+   */
+  expect(['localhost', '127.0.0.1']).toContain(new URL(baseURL!).hostname);
+  await signIn(page, ADMIN);
+
+  const stamp = Date.now().toString(36).toUpperCase();
+  const customerCode = `E2E-DIM-${stamp}`;
+  await page.goto('/master-data/customers');
+  await page.getByRole('button', { name: 'New customer', exact: true }).click();
+  const dialog = page.locator('dialog[open], [role="dialog"]').first();
+  await dialog.getByLabel('Code', { exact: true }).fill(customerCode);
+  await dialog.getByLabel(/^Legal name/).fill(`Dimension Customer ${stamp}`);
+  await dialog.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.waitForURL(new RegExp(`/master-data/business-partners/${customerCode}(?:\?saved=1)?$`), {
+    timeout: 60_000,
+  });
+
+  await page.goto('/sales/ar-invoices/new');
+  await expect(page.locator('input[name="item_code_0"]')).toBeVisible({ timeout: 60_000 });
+
+  // Not on the form, on either side of saving it.
+  await expect(page.locator('select[name="business_line_code"]')).toHaveCount(0);
+  await expect(page.locator('select[name="department_code"]')).toHaveCount(0);
+
+  await page.getByLabel('Customer Code', { exact: true }).fill(customerCode);
+  await page.locator('input[name="item_code_0"]').fill('ITM-SEED');
+  await page.locator('input[name="quantity_0"]').fill('1');
+  await page.locator('input[name="unit_price_0"]').fill('100');
+  await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.waitForURL(/\/sales\/ar-invoices\/INV-/);
+
+  await expect(page.locator('select[name="business_line_code"]')).toHaveCount(0);
+  await expect(page.locator('select[name="department_code"]')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Approve', exact: true }).click();
+  await expect(page.getByText('Approved', { exact: true }).first()).toBeVisible({ timeout: 60_000 });
 });

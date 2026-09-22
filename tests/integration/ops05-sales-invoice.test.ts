@@ -14,8 +14,9 @@
  * consumed from each other. This file is mostly that claim, tested from the
  * directions it could fail in.
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import { sql } from 'drizzle-orm';
 import { ownerPool, resetTestData, seedBranch } from './setup';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
@@ -23,6 +24,8 @@ import * as coa from '@/server/services/chart-of-accounts';
 import * as ap from '@/server/services/ap-invoice';
 import * as ar from '@/server/services/ar-invoice';
 import * as inventory from '@/server/services/inventory';
+import * as journal from '@/server/services/journal';
+import * as audit from '@/server/services/audit';
 import * as posting from '@/server/services/posting';
 import * as subledger from '@/server/services/subledger';
 import * as trialBalance from '@/server/services/trial-balance';
@@ -202,7 +205,7 @@ let seq = 0;
 /** Stock in: a purchase invoice from one supplier at one price. */
 async function buy(
   supplierId: string,
-  options: { quantity?: string; unitPrice?: string; warehouseCode?: string } = {},
+  options: { quantity?: string; unitPrice?: string; warehouseCode?: string; itemCode?: string; description?: string } = {},
 ) {
   seq += 1;
   const made = await withScope(scope(clerk), (tx) =>
@@ -217,8 +220,8 @@ async function buy(
       nonPoApprovedBy: manager.principal.userId,
       lines: [
         {
-          itemCode: PANEL,
-          description: 'Solar Panel 550W',
+          itemCode: options.itemCode ?? PANEL,
+          description: options.description ?? 'Solar Panel 550W',
           quantity: qty(options.quantity ?? '10'),
           unitPriceIqd: price(options.unitPrice ?? '100000'),
           uomCode: 'EA',
@@ -240,7 +243,9 @@ async function sell(
     discount?: string;
     supplierId?: string | null;
     warehouseCode?: string;
+    itemCode?: string;
   }>,
+  accounting: Partial<ar.InvoiceAccountingDimensions> = {},
 ) {
   return withScope(scope(clerk), (tx) =>
     ar.createDirect(tx, clerk, {
@@ -248,8 +253,9 @@ async function sell(
       branchCode: BAGHDAD,
       invoiceDate: SELL_ON,
       dueDate: '2026-05-20',
+      ...accounting,
       lines: lines.map((line) => ({
-        itemCode: PANEL,
+        itemCode: line.itemCode ?? PANEL,
         quantity: qty(line.quantity),
         unitPriceIqd: price(line.unitPrice),
         warehouseCode: line.warehouseCode ?? WAREHOUSE,
@@ -284,14 +290,15 @@ const journalOf = async (journalEntryId: string) => {
   }));
 };
 
-const onHand = async (warehouseCode = WAREHOUSE) =>
+const stockOf = async (itemCode: string, warehouseCode = WAREHOUSE) =>
   Number(
     (
       await withScope(scope(manager), (tx) =>
-        inventory.positionOf(tx, PANEL, warehouseCode, BAGHDAD),
+        inventory.positionOf(tx, itemCode, warehouseCode, BAGHDAD),
       )
     ).onHand,
   ) / 1_000_000;
+const onHand = async (warehouseCode = WAREHOUSE) => stockOf(PANEL, warehouseCode);
 
 const invoiceStock = (
   ctx: ActorContext,
@@ -748,5 +755,789 @@ describe('ops 5 · the line says what it needs to', () => {
     await ownerPool.query(`update item set cogs_account_id = null where code = $1`, [PANEL]);
     const invoice = await sell([{ quantity: '1', unitPrice: '250000' }]);
     await expect(postSale(invoice.id)).rejects.toThrow(/no COGS account/);
+  });
+});
+
+describe('ops 5 · direct invoice accounting dimensions', () => {
+  beforeEach(async () => {
+    await ownerPool.query(
+      `delete from document_type_dimension
+        where document_type_code = 'ar_invoice' and dimension = 'business_line'`,
+    );
+    await withScope(scope(manager), async (tx) => {
+      await coa.inheritDimensions(tx, manager, accounts.sales_revenue!);
+      await coa.inheritDimensions(tx, manager, accounts.cogs!);
+    });
+    await ownerPool.query(
+      `insert into business_line (code, name, active) values
+         ('DIM_SALES','Dimension Sales',true),
+         ('DIM_OTHER','Dimension Other',true),
+         ('DIM_OFF','Inactive Line',false)
+       on conflict (code) do update set active = excluded.active`,
+    );
+    await ownerPool.query(
+      `insert into department (code, name, active) values ('OFF','Inactive Department',false)
+       on conflict (code) do update set active = false`,
+    );
+  });
+
+  const noEffects = async (invoiceId: string) => {
+    const { rows: invoices } = await ownerPool.query(
+      `select status, journal_entry_id from ar_invoice where id = $1`,
+      [invoiceId],
+    );
+    expect(invoices[0]).toMatchObject({ status: 'approved', journal_entry_id: null });
+    const { rows: journals } = await ownerPool.query(
+      `select count(*)::int as n from journal_entry where source_doc_id = $1`,
+      [invoiceId],
+    );
+    const { rows: movements } = await ownerPool.query(
+      `select count(*)::int as n from inventory_movement
+        where source_document_type = 'ar_invoice' and source_document_id = $1`,
+      [invoiceId],
+    );
+    const { rows: subledgerRows } = await ownerPool.query(
+      `select count(*)::int as n from subledger_entry where source_doc_id = $1`,
+      [invoiceId],
+    );
+    expect(journals[0].n).toBe(0);
+    expect(movements[0].n).toBe(0);
+    expect(subledgerRows[0].n).toBe(0);
+    expect(await onHand()).toBe(10);
+  };
+
+  it('stores direct dimensions and posts every journal line under them', async () => {
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    const invoice = await sell(
+      [{ quantity: '5', unitPrice: '20', discount: '25' }],
+      { businessLineCode: 'DIM_SALES', departmentCode: 'FIN' },
+    );
+
+    const { rows: headers } = await ownerPool.query(
+      `select business_line_code, department_code from ar_invoice where id = $1`,
+      [invoice.id],
+    );
+    expect(headers[0]).toMatchObject({
+      business_line_code: 'DIM_SALES',
+      department_code: 'FIN',
+    });
+
+    const { journalEntryId } = await postSale(invoice.id);
+    const { rows: lines } = await ownerPool.query(
+      `select l.business_line_code, l.department_code, a.name,
+              l.debit_iqd::text as debit, l.credit_iqd::text as credit
+         from journal_line l join chart_of_account a on a.id = l.account_id
+        where l.journal_entry_id = $1 order by l.line_no`,
+      [journalEntryId],
+    );
+    expect(lines).toEqual([
+      { business_line_code: 'DIM_SALES', department_code: 'FIN', name: 'Trade Receivables', debit: '75.0000', credit: '0.0000' },
+      { business_line_code: 'DIM_SALES', department_code: 'FIN', name: 'Product Sales', debit: '0.0000', credit: '75.0000' },
+      { business_line_code: 'DIM_SALES', department_code: 'FIN', name: 'Cost of Goods Sold', debit: '500.0000', credit: '0.0000' },
+      { business_line_code: 'DIM_SALES', department_code: 'FIN', name: 'Inventory', debit: '0.0000', credit: '500.0000' },
+    ]);
+    expect(await onHand()).toBe(5);
+    const statement = await withScope(scope(manager), (tx) =>
+      subledger.statementFor(tx, 'customer', 'CUST-001'),
+    );
+    expect(statement).toHaveLength(1);
+    expect(statement[0]).toMatchObject({ debitIqd: '75.0000', sourceDocId: invoice.id });
+  });
+
+  it('approves without dimensions but refuses posting until Business Line is supplied', async () => {
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    const invoice = await sell([{ quantity: '5', unitPrice: '20' }]);
+    await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
+
+    await expect(
+      withScope(scope(manager), (tx) => ar.post(tx, manager, invoice.id)),
+    ).rejects.toThrow(/Business Line/);
+    await noEffects(invoice.id);
+  });
+
+  it('requires Department too when Business Line is present', async () => {
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    const invoice = await sell(
+      [{ quantity: '5', unitPrice: '20' }],
+      { businessLineCode: 'DIM_SALES' },
+    );
+    await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
+
+    await expect(
+      withScope(scope(manager), (tx) => ar.post(tx, manager, invoice.id)),
+    ).rejects.toThrow(/Department/);
+    await noEffects(invoice.id);
+  });
+
+  it.each([
+    ['businessLineCode', 'NO_SUCH'],
+    ['businessLineCode', 'DIM_OFF'],
+    ['departmentCode', 'NO_SUCH'],
+    ['departmentCode', 'OFF'],
+  ] as const)('rejects %s=%s at create', async (key, value) => {
+    await expect(
+      sell([{ quantity: '1', unitPrice: '20' }], { [key]: value }),
+    ).rejects.toThrow(/not an active/);
+  });
+
+  it.each([
+    ['businessLineCode', 'NO_SUCH'],
+    ['businessLineCode', 'DIM_OFF'],
+    ['departmentCode', 'NO_SUCH'],
+    ['departmentCode', 'OFF'],
+  ] as const)('rejects %s=%s on a draft without discarding saved values', async (key, value) => {
+    const invoice = await sell(
+      [{ quantity: '1', unitPrice: '20' }],
+      { businessLineCode: 'DIM_SALES', departmentCode: 'FIN' },
+    );
+
+    await expect(
+      withScope(scope(clerk), (tx) =>
+        ar.setAccountingDimensions(tx, clerk, invoice.id, {
+          businessLineCode: 'DIM_SALES',
+          departmentCode: 'FIN',
+          [key]: value,
+        }),
+      ),
+    ).rejects.toThrow(/not an active/);
+
+    const { rows } = await ownerPool.query(
+      `select business_line_code, department_code from ar_invoice where id = $1`,
+      [invoice.id],
+    );
+    expect(rows[0]).toMatchObject({
+      business_line_code: 'DIM_SALES',
+      department_code: 'FIN',
+    });
+  });
+
+  it('requires draft-edit authority to set accounting dimensions', async () => {
+    const invoice = await sell([{ quantity: '1', unitPrice: '20' }]);
+    const denied: ActorContext = {
+      ...manager,
+      principal: {
+        ...manager.principal,
+        grants: manager.principal.grants.filter(
+          (grant) => !(grant.object === ar.PERMISSION_OBJECT && grant.verb === 'edit_draft'),
+        ),
+      },
+    };
+
+    await expect(
+      withScope(scope(denied), (tx) =>
+        ar.setAccountingDimensions(tx, denied, invoice.id, {
+          businessLineCode: 'DIM_SALES',
+          departmentCode: 'FIN',
+        }),
+      ),
+    ).rejects.toThrow(PermissionDeniedError);
+  });
+
+  it.each(['approve', 'edit_draft'] as const)(
+    'return to draft requires %s authority',
+    async (verb) => {
+      const invoice = await sell(
+        [{ quantity: '1', unitPrice: '20' }],
+        { businessLineCode: 'DIM_SALES', departmentCode: 'FIN' },
+      );
+      await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
+      const denied: ActorContext = {
+        ...manager,
+        principal: {
+          ...manager.principal,
+          grants: manager.principal.grants.filter(
+            (grant) => !(grant.object === ar.PERMISSION_OBJECT && grant.verb === verb),
+          ),
+        },
+      };
+
+      await expect(
+        withScope(scope(denied), (tx) =>
+          ar.returnToDraft(tx, denied, invoice.id, 'Correction required.'),
+        ),
+      ).rejects.toThrow(PermissionDeniedError);
+    },
+  );
+
+  it('returns approved work to draft with a reason, then posts the corrected values after fresh approval', async () => {
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    const invoice = await sell(
+      [{ quantity: '5', unitPrice: '20', discount: '25' }],
+      { businessLineCode: 'DIM_SALES', departmentCode: 'FIN' },
+    );
+    await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
+
+    await expect(
+      withScope(scope(manager), (tx) => ar.returnToDraft(tx, manager, invoice.id, ' ')),
+    ).rejects.toThrow(/reason/);
+    await withScope(scope(manager), (tx) =>
+      ar.returnToDraft(tx, manager, invoice.id, 'Correct the accounting dimensions.'),
+    );
+
+    const { rows: draft } = await ownerPool.query(
+      `select status, approved_by, approved_at, net_iqd::text as net
+         from ar_invoice where id = $1`,
+      [invoice.id],
+    );
+    expect(draft[0]).toMatchObject({
+      status: 'draft',
+      approved_by: null,
+      approved_at: null,
+      net: '75.0000',
+    });
+    const { rows: events } = await ownerPool.query(
+      `select before_value, reason from audit_event
+        where object_id = $1 and action = 'ar_invoice.returned_to_draft'
+        order by id desc limit 1`,
+      [invoice.id],
+    );
+    expect(events[0].reason).toBe('Correct the accounting dimensions.');
+    expect(events[0].before_value.approvedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+    await expect(
+      withScope(scope(manager), (tx) => ar.post(tx, manager, invoice.id)),
+    ).rejects.toThrow(/cannot move from 'draft' to 'posted'/);
+
+    await withScope(scope(clerk), (tx) =>
+      ar.setAccountingDimensions(tx, clerk, invoice.id, {
+        businessLineCode: 'DIM_OTHER',
+        departmentCode: 'FIN',
+      }),
+    );
+    await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
+    const { journalEntryId } = await withScope(scope(manager), (tx) =>
+      ar.post(tx, manager, invoice.id),
+    );
+    const { rows: dimensions } = await ownerPool.query(
+      `select business_line_code, department_code from journal_line
+        where journal_entry_id = $1`,
+      [journalEntryId],
+    );
+    expect(dimensions).toHaveLength(4);
+    expect(new Set(dimensions.map((row) => row.business_line_code))).toEqual(new Set(['DIM_OTHER']));
+    expect(new Set(dimensions.map((row) => row.department_code))).toEqual(new Set(['FIN']));
+  });
+
+  it('locks approved and posted invoices against service or direct-table dimension changes', async () => {
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    const invoice = await sell(
+      [{ quantity: '5', unitPrice: '20' }],
+      { businessLineCode: 'DIM_SALES', departmentCode: 'FIN' },
+    );
+    await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
+
+    await expect(
+      withScope(scope(manager), (tx) =>
+        ar.setAccountingDimensions(tx, manager, invoice.id, {
+          businessLineCode: 'DIM_OTHER',
+          departmentCode: 'FIN',
+        }),
+      ),
+    ).rejects.toThrow(/approved/);
+    await expect(
+      ownerPool.query(
+        `update ar_invoice set business_line_code = 'DIM_OTHER' where id = $1`,
+        [invoice.id],
+      ),
+    ).rejects.toThrow(/draft invoice/);
+    await expect(
+      ownerPool.query(
+        `update ar_invoice set status = 'draft', department_code = 'OFF' where id = $1`,
+        [invoice.id],
+      ),
+    ).rejects.toThrow(/draft invoice/);
+
+    const { journalEntryId } = await withScope(scope(manager), (tx) =>
+      ar.post(tx, manager, invoice.id),
+    );
+    await expect(
+      withScope(scope(manager), (tx) =>
+        ar.returnToDraft(tx, manager, invoice.id, 'Try to change posted work.'),
+      ),
+    ).rejects.toThrow(/posted/);
+    await expect(
+      withScope(scope(manager), (tx) =>
+        ar.setAccountingDimensions(tx, manager, invoice.id, {
+          businessLineCode: 'DIM_OTHER',
+          departmentCode: 'FIN',
+        }),
+      ),
+    ).rejects.toThrow(/posted/);
+    await expect(
+      ownerPool.query(
+        `update ar_invoice set business_line_code = 'DIM_OTHER' where id = $1`,
+        [invoice.id],
+      ),
+    ).rejects.toThrow(/draft invoice/);
+
+    const { rows: posted } = await ownerPool.query(
+      `select i.status, i.business_line_code, i.department_code,
+              count(l.*)::int as lines
+         from ar_invoice i left join journal_line l on l.journal_entry_id = i.journal_entry_id
+        where i.id = $1 group by i.id`,
+      [invoice.id],
+    );
+    expect(posted[0]).toMatchObject({
+      status: 'posted',
+      business_line_code: 'DIM_SALES',
+      department_code: 'FIN',
+      lines: 4,
+    });
+    const { rows: journal } = await ownerPool.query(
+      `select status from journal_entry where id = $1`,
+      [journalEntryId],
+    );
+    expect(journal[0].status).toBe('posted');
+  });
+
+  it('makes a posting waiting behind return-to-draft see the draft and refuse', async () => {
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    const invoice = await sell(
+      [{ quantity: '5', unitPrice: '20' }],
+      { businessLineCode: 'DIM_SALES', departmentCode: 'FIN' },
+    );
+    await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
+
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let locked!: () => void;
+    const invoiceLocked = new Promise<void>((resolve) => {
+      locked = resolve;
+    });
+    const reopen = withScope(scope(manager), async (tx) => {
+      await ar.returnToDraft(tx, manager, invoice.id, 'Accounting correction.');
+      locked();
+      await hold;
+    });
+    await invoiceLocked;
+
+    let postingPid: number | null = null;
+    const postingResult = withScope(scope(manager), async (tx) => {
+      const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+      postingPid = pid.rows[0]!.pid;
+      return ar.post(tx, manager, invoice.id);
+    }).then(
+      (value) => ({ ok: true as const, value }),
+      (error) => ({ ok: false as const, error }),
+    );
+
+    try {
+      await vi.waitFor(
+        async () => {
+          expect(postingPid).not.toBeNull();
+          const { rows } = await ownerPool.query(
+            `select exists(
+               select 1 from pg_stat_activity
+                where pid = $1 and wait_event_type = 'Lock'
+             ) as blocked`,
+            [postingPid],
+          );
+          expect(rows[0].blocked).toBe(true);
+        },
+        { timeout: 10_000, interval: 50 },
+      );
+    } finally {
+      release();
+    }
+    await reopen;
+    const result = await postingResult;
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(Error);
+      expect((result.error as Error).message).toMatch(/cannot move from 'draft' to 'posted'/);
+    }
+
+    const { rows } = await ownerPool.query(
+      `select status, journal_entry_id from ar_invoice where id = $1`,
+      [invoice.id],
+    );
+    expect(rows[0]).toMatchObject({ status: 'draft', journal_entry_id: null });
+    expect(await onHand()).toBe(10);
+  });
+});
+
+describe('item sales account routing', () => {
+  async function revenueAccount(code: string, name: string) {
+    const { rows: parents } = await ownerPool.query(
+      `select id from chart_of_account where code = 'R000001'`,
+    );
+    const { rows } = await ownerPool.query(
+      `insert into chart_of_account
+         (code, name, account_type, parent_id, is_group, is_active, approval_status, level,
+          currency_restriction, control_account, declares_dimensions)
+       values ($1,$2,'revenue',$3,false,true,'approved',1,'IQD',null,true) returning id`,
+      [code, name, parents[0].id],
+    );
+    return rows[0].id as string;
+  }
+
+  it('posts revenue to the item sales account before the general mapping', async () => {
+    const itemSales = await revenueAccount('R980001', 'Item Sales A');
+    await ownerPool.query(`update item set sales_account_id = $1 where code = $2`, [
+      itemSales,
+      PANEL,
+    ]);
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    const invoice = await sell([{ quantity: '2', unitPrice: '150' }]);
+    const { journalEntryId } = await postSale(invoice.id);
+    const { rows } = await ownerPool.query(
+      `select l.credit_iqd::text as credit, a.code, l.posting_rule_id
+         from journal_line l join chart_of_account a on a.id = l.account_id
+        where l.journal_entry_id = $1 and l.line_role = 'sales_revenue'`,
+      [journalEntryId],
+    );
+    expect(rows).toEqual([{ credit: '300.0000', code: 'R980001', posting_rule_id: null }]);
+    const { rows: audits } = await ownerPool.query(
+      `select after_value->'revenueAccounts'->0 as selection from audit_event
+        where object_type = 'ar_invoice' and object_id = $1 and action = 'ar_invoice.posted'`,
+      [invoice.id],
+    );
+    expect(audits[0].selection).toMatchObject({
+      accountCode: 'R980001',
+      postingRuleId: null,
+      source: 'item',
+    });
+  });
+
+  it('posts with the item account when no general sales mapping exists', async () => {
+    const itemSales = await revenueAccount('R980001', 'Item Sales A');
+    await ownerPool.query(`update item set sales_account_id = $1 where code = $2`, [itemSales, PANEL]);
+    await ownerPool.query(
+      `update posting_rule set is_active = false
+        where event_type = 'sales.ar_invoice' and line_role = 'sales_revenue'`,
+    );
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    const invoice = await sell([{ quantity: '2', unitPrice: '150' }]);
+    const { journalEntryId } = await postSale(invoice.id);
+    const { rows } = await ownerPool.query(
+      `select a.code, l.posting_rule_id from journal_line l join chart_of_account a on a.id = l.account_id
+        where l.journal_entry_id = $1 and l.line_role = 'sales_revenue'`,
+      [journalEntryId],
+    );
+    expect(rows).toEqual([{ code: 'R980001', posting_rule_id: null }]);
+  });
+
+  it('uses a matching warehouse exception, and an unmatching warehouse keeps the item account', async () => {
+    const itemSales = await revenueAccount('R980001', 'Item Sales A');
+    const override = await revenueAccount('R980003', 'Override Sales');
+    await ownerPool.query(`update item set sales_account_id = $1 where code = $2`, [itemSales, PANEL]);
+    const { rows: rules } = await ownerPool.query(
+      `insert into posting_rule
+         (event_type, line_role, account_id, warehouse_code, is_active, created_by)
+       values ('sales.ar_invoice','sales_revenue',$1,$2,true,$3) returning id`,
+      [override, WAREHOUSE, manager.principal.userId],
+    );
+    await buy(jinko, { quantity: '20', unitPrice: '100' });
+    await buy(jinko, { quantity: '2', unitPrice: '100', warehouseCode: OTHER });
+    const first = await sell([{ quantity: '2', unitPrice: '150' }]);
+    const second = await sell([{ quantity: '2', unitPrice: '150', warehouseCode: OTHER }]);
+    const firstJournal = (await postSale(first.id)).journalEntryId;
+    const secondJournal = (await postSale(second.id)).journalEntryId;
+    const { rows } = await ownerPool.query(
+      `select l.journal_entry_id, a.code, l.posting_rule_id
+         from journal_line l join chart_of_account a on a.id = l.account_id
+        where l.journal_entry_id = any($1::uuid[]) and l.line_role = 'sales_revenue'
+        order by l.journal_entry_id`,
+      [[firstJournal, secondJournal]],
+    );
+    expect(rows.find((row) => row.journal_entry_id === firstJournal)?.code).toBe('R980003');
+    expect(rows.find((row) => row.journal_entry_id === secondJournal)?.code).toBe('R980001');
+    expect(rows.find((row) => row.journal_entry_id === firstJournal)?.posting_rule_id).toBe(rules[0].id);
+    expect(rows.find((row) => row.journal_entry_id === secondJournal)?.posting_rule_id).toBeNull();
+  });
+
+  it('refuses equally specific matching exceptions and reports the draft configuration', async () => {
+    const itemSales = await revenueAccount('R980001', 'Item Sales A');
+    const branchSales = await revenueAccount('R980002', 'Item Sales B');
+    const warehouseSales = await revenueAccount('R980003', 'Override Sales');
+    await ownerPool.query(`update item set sales_account_id = $1 where code = $2`, [itemSales, PANEL]);
+    for (const [accountId, criterion] of [
+      [branchSales, 'branch_code'],
+      [warehouseSales, 'warehouse_code'],
+    ] as const) {
+      await ownerPool.query(
+        `insert into posting_rule (event_type,line_role,account_id,${criterion},is_active,created_by)
+         values ('sales.ar_invoice','sales_revenue',$1,$2,true,$3)`,
+        [accountId, criterion === 'branch_code' ? BAGHDAD : WAREHOUSE, manager.principal.userId],
+      );
+    }
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    const invoice = await sell([{ quantity: '2', unitPrice: '150' }]);
+    await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
+    await expect(withScope(scope(manager), (tx) => ar.post(tx, manager, invoice.id)))
+      .rejects.toThrow(/More than one accounting mapping/);
+    const trace = await withScope(scope(manager), async (tx) =>
+      ar.revenueAccountsFor(tx, await ar.view(tx, invoice.id)),
+    );
+    expect(trace.lines[0]?.error).toMatch(/More than one accounting mapping/);
+    expect(await onHand()).toBe(10);
+    const { rows: effects } = await ownerPool.query(
+      `select
+         (select count(*)::int from journal_entry where source_module='sales' and source_doc_id=$1) as journals,
+         (select count(*)::int from inventory_movement where source_document_type='ar_invoice' and source_document_id=$1) as movements,
+         (select count(*)::int from subledger_entry where source_doc_id=$1) as subledger`,
+      [invoice.id],
+    );
+    expect(effects[0]).toEqual({ journals: 0, movements: 0, subledger: 0 });
+  });
+
+  it('shows an inactive item account instead of silently falling back', async () => {
+    const itemSales = await revenueAccount('R980001', 'Item Sales A');
+    await ownerPool.query(`update item set sales_account_id = $1 where code = $2`, [itemSales, PANEL]);
+    await ownerPool.query(`update chart_of_account set is_active = false where id = $1`, [itemSales]);
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    const invoice = await sell([{ quantity: '2', unitPrice: '150' }]);
+    const trace = await withScope(scope(manager), async (tx) =>
+      ar.revenueAccountsFor(tx, await ar.view(tx, invoice.id)),
+    );
+    expect(trace.lines[0]).toMatchObject({ accountCode: 'R980001', source: 'item' });
+    expect(trace.lines[0]?.error).toMatch(/not active|Cannot post/);
+    await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
+    await expect(withScope(scope(manager), (tx) => ar.post(tx, manager, invoice.id)))
+      .rejects.toThrow(/not active|Cannot post/);
+    const { rows: effects } = await ownerPool.query(
+      `select
+         (select count(*)::int from journal_entry where source_module='sales' and source_doc_id=$1) as journals,
+         (select count(*)::int from inventory_movement where source_document_type='ar_invoice' and source_document_id=$1) as movements,
+         (select count(*)::int from subledger_entry where source_doc_id=$1) as subledger`,
+      [invoice.id],
+    );
+    expect(effects[0]).toEqual({ journals: 0, movements: 0, subledger: 0 });
+    expect(await onHand()).toBe(10);
+  });
+
+  it('keeps the recorded account after setup changes and lists a draft adjustment separately', async () => {
+    const itemSales = await revenueAccount('R980001', 'Item Sales A');
+    const laterSales = await revenueAccount('R980002', 'Item Sales B');
+    await ownerPool.query(`update item set sales_account_id = $1 where code = $2`, [itemSales, PANEL]);
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    const invoice = await sell([{ quantity: '2', unitPrice: '150' }]);
+    const { journalEntryId } = await postSale(invoice.id);
+    await ownerPool.query(`update item set sales_account_id = $1 where code = $2`, [laterSales, PANEL]);
+    const correction = await withScope(scope(manager), async (tx) => {
+      const draft = await journal.createDraft(tx, manager, {
+        branchCode: BAGHDAD,
+        documentDate: SELL_ON,
+        postingDate: SELL_ON,
+        description: 'Revenue correction.',
+      });
+      await journal.addLine(tx, manager, draft.id, {
+        accountId: accounts.sales_revenue!,
+        debit: '300.0000',
+        currency: 'IQD',
+        dimensions: { branch: BAGHDAD, department: 'FIN' },
+      });
+      await journal.addLine(tx, manager, draft.id, {
+        accountId: itemSales,
+        credit: '300.0000',
+        currency: 'IQD',
+        dimensions: { branch: BAGHDAD, department: 'FIN' },
+      });
+      await audit.record(tx, {
+        actorUserId: manager.principal.userId,
+        action: 'ar_invoice.reclassification_draft_linked',
+        objectType: 'ar_invoice',
+        objectId: invoice.id,
+        branchCode: BAGHDAD,
+        after: { journalEntryId: draft.id },
+        outcome: 'success',
+      });
+      return draft;
+    });
+    const trace = await withScope(scope(manager), async (tx) =>
+      ar.revenueAccountsFor(tx, await ar.view(tx, invoice.id)),
+    );
+    expect(trace.posted).toBe(true);
+    expect(trace.lines[0]).toMatchObject({ accountCode: 'R980001', source: 'item' });
+    expect(trace.adjustments).toContainEqual(expect.objectContaining({
+      id: correction.id,
+      entryNo: correction.entryNo,
+      status: 'draft',
+    }));
+    const { rows } = await ownerPool.query(
+      `select a.code from journal_line l join chart_of_account a on a.id=l.account_id
+        where l.journal_entry_id=$1 and l.line_role='sales_revenue'`,
+      [journalEntryId],
+    );
+    expect(rows[0].code).toBe('R980001');
+  });
+
+  it('routes mixed invoice lines to their own item sales accounts', async () => {
+    const salesA = await revenueAccount('R980001', 'Item Sales A');
+    const salesB = await revenueAccount('R980002', 'Item Sales B');
+    await ownerPool.query(`update item set sales_account_id = $1 where code = $2`, [salesA, PANEL]);
+    const client = await ownerPool.connect();
+    try {
+      await client.query('begin');
+      const { rows } = await client.query(
+        `insert into item (code,name,is_stock,base_uom_code,tracking,
+                          inventory_account_id,cogs_account_id,sales_account_id)
+         values ('ITM-BATT','Battery Bank',true,'EA','batch',$1,$2,$3) returning id`,
+        [accounts.inventory, accounts.cogs, salesB],
+      );
+      await client.query(
+        `insert into item_uom (item_id,uom_code,conversion_numerator,conversion_denominator)
+         values ($1,'EA',1,1)`,
+        [rows[0].id],
+      );
+      await client.query('commit');
+    } catch (error) {
+      await client.query('rollback').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    await buy(jinko, {
+      quantity: '10',
+      unitPrice: '50',
+      itemCode: 'ITM-BATT',
+      description: 'Battery Bank',
+    });
+    const invoice = await sell([
+      { quantity: '2', unitPrice: '150' },
+      { quantity: '3', unitPrice: '200', itemCode: 'ITM-BATT' },
+    ]);
+    const preview = await withScope(scope(manager), async (tx) =>
+      ar.revenueAccountsFor(tx, await ar.view(tx, invoice.id)),
+    );
+    expect(preview.lines).toEqual([
+      expect.objectContaining({ accountId: salesA, accountCode: 'R980001', source: 'item' }),
+      expect.objectContaining({ accountId: salesB, accountCode: 'R980002', source: 'item' }),
+    ]);
+    const { journalEntryId } = await postSale(invoice.id);
+    const { rows } = await ownerPool.query(
+      `select l.line_role, a.code, sum(l.debit_iqd)::text as debit, sum(l.credit_iqd)::text as credit
+         from journal_line l join chart_of_account a on a.id=l.account_id
+        where l.journal_entry_id=$1 group by l.line_role,a.code order by l.line_role,a.code`,
+      [journalEntryId],
+    );
+    expect(rows).toEqual([
+      { line_role: 'cogs', code: expect.any(String), debit: '350.0000', credit: '0.0000' },
+      { line_role: 'customer_receivable', code: expect.any(String), debit: '900.0000', credit: '0.0000' },
+      { line_role: 'inventory', code: expect.any(String), debit: '0.0000', credit: '350.0000' },
+      { line_role: 'sales_revenue', code: 'R980001', debit: '0.0000', credit: '300.0000' },
+      { line_role: 'sales_revenue', code: 'R980002', debit: '0.0000', credit: '600.0000' },
+    ]);
+    const { rows: customer } = await ownerPool.query(
+      `select count(*)::int as n, sum(debit_iqd)::text as debit from subledger_entry
+        where subledger_type='customer' and party_code='CUST-001' and journal_entry_id=$1`,
+      [journalEntryId],
+    );
+    expect(customer[0]).toEqual({ n: 1, debit: '900.0000' });
+    expect(await stockOf(PANEL)).toBe(8);
+    expect(await stockOf('ITM-BATT')).toBe(7);
+  });
+
+  it('writes the warehouse inventory subledger for receipt and sale', async () => {
+    await withScope(scope(manager), (tx) =>
+      coa.setControlAccount(tx, manager, accounts.inventory!, 'inventory'),
+    );
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    const invoice = await sell([{ quantity: '2', unitPrice: '150' }]);
+    await postSale(invoice.id);
+    const { rows } = await ownerPool.query(
+      `select sum(debit_iqd)::text as debit, sum(credit_iqd)::text as credit
+         from subledger_entry where subledger_type='inventory' and party_code=$1`,
+      [WAREHOUSE],
+    );
+    expect(rows[0]).toEqual({ debit: '1000.0000', credit: '200.0000' });
+    const { rows: fifo } = await ownerPool.query(
+      `select sum(remaining_quantity * unit_cost_iqd)::numeric(19,4)::text as value
+         from cost_layer where item_code=$1 and warehouse_code=$2`,
+      [PANEL, WAREHOUSE],
+    );
+    expect(fifo[0].value).toBe('800.0000');
+    const { rows: customer } = await ownerPool.query(
+      `select count(*)::int as n, sum(debit_iqd)::text as debit from subledger_entry
+        where subledger_type='customer' and party_code='CUST-001'`,
+    );
+    expect(customer[0]).toEqual({ n: 1, debit: '300.0000' });
+  });
+
+  it('rejects non-revenue and control accounts at configuration and posting', async () => {
+    const { rows: parents } = await ownerPool.query(
+      `select id from chart_of_account where code='A000001'`,
+    );
+    const { rows: assetRows } = await ownerPool.query(
+      `insert into chart_of_account
+        (code,name,account_type,parent_id,is_group,is_active,approval_status,level,currency_restriction)
+       values ('A980099','Not Revenue','asset',$1,false,true,'approved',1,'IQD') returning id`,
+      [parents[0].id],
+    );
+    const asset = assetRows[0].id as string;
+    const controlled = await revenueAccount('R980003', 'Controlled Revenue');
+    await withScope(scope(manager), (tx) =>
+      coa.setControlAccount(tx, manager, controlled, 'customer'),
+    );
+    for (const accountId of [asset, controlled]) {
+      await expect(
+        withScope(scope(manager), (tx) =>
+          posting.setMapping(tx, manager, {
+            eventType: 'sales.ar_invoice',
+            lineRole: 'sales_revenue',
+            accountId,
+          }),
+        ),
+      ).rejects.toThrow(/cannot receive sales revenue|control account/);
+    }
+
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    for (const accountId of [asset, controlled]) {
+      await ownerPool.query(`update item set sales_account_id=$1 where code=$2`, [accountId, PANEL]);
+      const invoice = await sell([{ quantity: '2', unitPrice: '150' }]);
+      const trace = await withScope(scope(manager), async (tx) =>
+        ar.revenueAccountsFor(tx, await ar.view(tx, invoice.id)),
+      );
+      expect(trace.lines[0]?.error).toMatch(/cannot receive sales revenue|control account/);
+      await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
+      await expect(withScope(scope(manager), (tx) => ar.post(tx, manager, invoice.id)))
+        .rejects.toThrow(/cannot receive sales revenue|control account/);
+      const { rows: saved } = await ownerPool.query(
+        `select status, journal_entry_id from ar_invoice where id=$1`,
+        [invoice.id],
+      );
+      expect(saved[0]).toEqual({ status: 'approved', journal_entry_id: null });
+      const { rows: effects } = await ownerPool.query(
+        `select
+           (select count(*)::int from journal_entry where source_module='sales' and source_doc_id=$1) as journals,
+           (select count(*)::int from inventory_movement where source_document_type='ar_invoice' and source_document_id=$1) as movements,
+           (select count(*)::int from subledger_entry where source_doc_id=$1) as subledger`,
+        [invoice.id],
+      );
+      expect(effects[0]).toEqual({ journals: 0, movements: 0, subledger: 0 });
+    }
+    expect(await onHand()).toBe(10);
+  });
+
+  it('does not infer historical revenue accounts from current setup', async () => {
+    const itemSales = await revenueAccount('R980001', 'Item Sales A');
+    await ownerPool.query(`update item set sales_account_id=$1 where code=$2`, [itemSales, PANEL]);
+    const invoice = await sell([{ quantity: '2', unitPrice: '150' }]);
+    const trace = await withScope(scope(manager), async (tx) => {
+      const loaded = await ar.view(tx, invoice.id);
+      const missingJournal = await ar.revenueAccountsFor(tx, {
+        ...loaded,
+        status: 'posted',
+        journalEntryId: null,
+      });
+      const legacyJournal = await journal.createDraft(tx, manager, {
+        branchCode: BAGHDAD,
+        documentDate: SELL_ON,
+        postingDate: SELL_ON,
+        description: 'Legacy posting without revenue rows.',
+      });
+      const draftRows = await ar.revenueAccountsFor(tx, {
+        ...loaded,
+        status: 'posted',
+        journalEntryId: legacyJournal.id,
+      });
+      return { missingJournal, draftRows };
+    });
+    expect(trace.missingJournal).toEqual({ posted: true, lines: [], adjustments: [] });
+    expect(trace.draftRows).toEqual({ posted: true, lines: [], adjustments: [] });
   });
 });

@@ -32,17 +32,14 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
   assertRequestWellFormed,
-  resolveRule,
+  resolveLineAccount,
   type PlannedLine,
   type PostingPlan,
   type PostingRequest,
   type PostingRule,
 } from '../domain/posting';
 import { assertCurrencyAllowed, assertPostable } from '../domain/chart-of-accounts';
-import {
-  assertMappedControlAccount,
-  requiredControlAccount,
-} from '../domain/posting-map';
+import { assertMappedAccount } from '../domain/posting-map';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 import type { DimensionType, SuppliedDimensions } from '../domain/dimensions';
 import {
@@ -136,17 +133,14 @@ export async function plan(
     // the account is still checked postable, still checked for currency, and
     // its §4.2 dimensions are still enforced.
     const criteria = { branchCode: request.branchCode, ...(line.criteria ?? {}) };
-    const rule = line.accountId
-      ? null
-      : resolveRule(rules, request.eventType, line.role, criteria);
-
-    const account = await coa.loadAccount(tx, line.accountId ?? rule!.accountId);
+    const selection = resolveLineAccount(rules, request.eventType, line, criteria);
+    const account = await coa.loadAccount(tx, selection.accountId);
 
     // The engine posts on behalf of an approved source document, so a control
     // account is legitimate here — §14.3 restricts *manual* posting to them.
     assertPostable(account, { source: 'system' });
     assertCurrencyAllowed(account, currency);
-    assertMappedControlAccount(request.eventType, line.role, account);
+    assertMappedAccount(request.eventType, line.role, account);
 
     const dimensions: SuppliedDimensions = {
       branch: request.branchCode,
@@ -176,7 +170,8 @@ export async function plan(
       role: line.role,
       accountId: account.id,
       accountCode: account.code,
-      postingRuleId: rule?.id ?? null,
+      postingRuleId: selection.postingRuleId,
+      accountSource: selection.source,
       debit: toDecimalString(debit),
       credit: toDecimalString(credit),
       currency,
@@ -596,13 +591,11 @@ export async function defineRule(
     branchCode: ctx.branchCode,
     requestId: ctx.requestId ?? null,
   });
-  if (requiredControlAccount(input.eventType, input.lineRole)) {
-    assertMappedControlAccount(
-      input.eventType,
-      input.lineRole,
-      await coa.loadAccount(tx, input.accountId),
-    );
-  }
+  assertMappedAccount(
+    input.eventType,
+    input.lineRole,
+    await coa.loadAccount(tx, input.accountId),
+  );
 
   const [created] = await tx
     .insert(postingRuleTable)
@@ -659,13 +652,11 @@ export async function setMapping(
     branchCode: ctx.branchCode,
     requestId: ctx.requestId ?? null,
   });
-  if (requiredControlAccount(input.eventType, input.lineRole)) {
-    assertMappedControlAccount(
-      input.eventType,
-      input.lineRole,
-      await coa.loadAccount(tx, input.accountId),
-    );
-  }
+  assertMappedAccount(
+    input.eventType,
+    input.lineRole,
+    await coa.loadAccount(tx, input.accountId),
+  );
 
   const existing = await plainRule(tx, input.eventType, input.lineRole);
   let ruleId = existing?.id;

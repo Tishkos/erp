@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
@@ -6,6 +7,7 @@ import { RecordHistory } from '@/components/admin/history';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { Panel } from '@/components/ui';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
@@ -19,6 +21,7 @@ import {
   invoiceLineAvailability,
   postArInvoice,
   removeArInvoiceLine,
+  returnArInvoiceToDraft,
   saveArInvoiceLine,
 } from '../actions';
 
@@ -92,6 +95,7 @@ export default async function ArInvoicePage({
             (house) => house.branchCode === document.branchCode,
           )
         : [],
+      revenueAccounts: await ar.revenueAccountsFor(tx, document),
     };
   });
 
@@ -121,6 +125,14 @@ export default async function ArInvoicePage({
     invoice.deliveryNoteId === null &&
     can(principal, 'edit_draft', ar.PERMISSION_OBJECT);
   const mayPost = invoice.status === 'approved' && can(principal, 'post', ar.PERMISSION_OBJECT);
+  const mayReturnToDraft =
+    invoice.status === 'approved' &&
+    invoice.salesOrderId === null &&
+    invoice.deliveryNoteId === null &&
+    invoice.journalEntryId === null &&
+    invoice.postedAt === null &&
+    can(principal, 'approve', ar.PERMISSION_OBJECT) &&
+    can(principal, 'edit_draft', ar.PERMISSION_OBJECT);
 
   const fields: DocumentField[] = [
     { label: column('invoice_no'), value: <bdi dir="ltr">{invoice.invoiceNo}</bdi> },
@@ -135,7 +147,6 @@ export default async function ArInvoicePage({
       label: column('due_date'),
       value: <bdi dir="ltr">{formatBusinessDate(invoice.dueDate, locale as Locale)}</bdi>,
     },
-
     // Who the document passed through. An empty box is an answer too: it says
     // that step has not happened.
     { label: t('ar_invoices.raised_by'), value: <bdi dir="auto">{raisedBy ?? '—'}</bdi> },
@@ -170,9 +181,15 @@ export default async function ArInvoicePage({
               <form action={approveArInvoice}>
                 <input name="id" type="hidden" value={invoice.id} />
                 <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-                <button className="action action--primary" type="submit">
-                  {t('ar_invoices.approve')}
-                </button>
+                <button className="action action--primary" type="submit">{t('ar_invoices.approve')}</button>
+              </form>
+            ) : null}
+            {mayReturnToDraft ? (
+              <form action={returnArInvoiceToDraft}>
+                <input name="id" type="hidden" value={invoice.id} />
+                <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
+                <input aria-label={t('reason')} name="reason" placeholder={t('reason_placeholder')} required type="text" />
+                <button className="action" type="submit">{t('ar_invoices.return_to_draft')}</button>
               </form>
             ) : null}
             {/* "The invoice is not posted until CEO approval." */}
@@ -321,6 +338,62 @@ export default async function ArInvoicePage({
           </table>
         )}
       </DocumentWindow>
+
+      <Panel title={t('ar_invoices.revenue_accounts')}>
+        <p className="muted">
+          {found.revenueAccounts.posted
+            ? t('ar_invoices.posted_accounts_hint')
+            : t('ar_invoices.account_selection_hint')}
+        </p>
+        {found.revenueAccounts.posted && found.revenueAccounts.lines.length === 0 ? (
+          <p className="muted" role="alert">{t('ar_invoices.revenue_trace_missing')}</p>
+        ) : null}
+        <div className={s.sapTableWrap}>
+          <table className={s.sapTable}>
+            <thead>
+              <tr>
+                <th scope="col">#</th>
+                <th scope="col">{column('item_code')}</th>
+                <th scope="col">{t('ar_invoices.revenue_accounts')}</th>
+                <th scope="col">{t('ar_invoices.selection_source')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {found.revenueAccounts.lines.map((line, index) => (
+                <tr key={line.lineId ?? `${line.accountId ?? 'none'}-${index}`}>
+                  <td><bdi dir="ltr">{line.lineNo ?? '—'}</bdi></td>
+                  <td><bdi dir="ltr">{line.itemCode ?? '—'}</bdi></td>
+                  <td>
+                    {line.accountCode ? (
+                      <Link className={s.sapLink} href={`/master-data/chart-of-accounts/${encodeURIComponent(line.accountCode)}`}>
+                        <bdi dir="ltr">{line.accountCode}</bdi>{line.accountName ? ` · ${line.accountName}` : ''}
+                      </Link>
+                    ) : '—'}
+                    {line.error ? <div className="muted" role="alert">{line.error}</div> : null}
+                  </td>
+                  <td>{line.source ? t(`ar_invoices.account_sources.${line.source}`) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {found.revenueAccounts.adjustments.length > 0 ? (
+          <>
+            <h3>{t('ar_invoices.adjustment_journals')}</h3>
+            <p className="muted">{t('ar_invoices.adjustment_hint')}</p>
+            <ul className="timeline">
+              {found.revenueAccounts.adjustments.map((adjustment) => (
+                <li key={adjustment.id}>
+                  <Link className={s.sapLink} href={`/finance/journals/${encodeURIComponent(adjustment.entryNo)}`}>
+                    <bdi dir="ltr">{adjustment.entryNo}</bdi>
+                  </Link>
+                  <span className={`status status--${adjustment.status}`}>{status(adjustment.status)}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+      </Panel>
 
       <RecordHistory objectId={invoice.id} objectType={ar.PERMISSION_OBJECT} />
     </AdminPage>

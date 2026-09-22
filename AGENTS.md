@@ -18,6 +18,6 @@ Pass timestamps to `audit.record` as ISO strings, not JavaScript `Date` objects:
 
 ## Release integration and migration ordering
 
-Release `5f721629294249c8e9bd16b124f8b770253b50c3` on `fix/item-revenue-routing` includes the supplier-statement fix, invoice dimensions, item-based revenue routing, and account-profile corrections. It builds on release `1a8dfab`. The primary tree's unfinished pricing work predates these releases; integrate the released changes before shipping it.
+Release `5f721629294249c8e9bd16b124f8b770253b50c3` on `fix/item-revenue-routing` — the supplier-statement fix, invoice dimensions, item-based revenue routing and account-profile corrections — is integrated here. The tree's pricing work predates it and was committed first, so the merge reads as "the release on top of the prices".
 
-Production applied migrations `0197` and `0200` with journal timestamps `1795900000001` and `1795900000002`. Drizzle orders execution by `_journal.json` timestamps, not filename numbers. Append pending `0198`/`0199` after the latest journal entry with strictly greater timestamps; never rewrite applied migrations or sort the journal by filenames.
+Production applied migrations `0197` and `0200` with journal timestamps `1795900000001` and `1795900000002`. Drizzle orders execution by `_journal.json` timestamps, not filename numbers, so the pending `0198`/`0199`/`0201` migrations are appended after the latest journal entry with strictly greater timestamps. Never rewrite an applied migration and never sort the journal by filename.

@@ -7,7 +7,7 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { can } from '@domain/permissions';
-import { POSTING_MAP, eventKey } from '@domain/posting-map';
+import { POSTING_MAP, eventKey, mappingAccountEligible } from '@domain/posting-map';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as coa from '@/server/services/chart-of-accounts';
@@ -90,16 +90,17 @@ export default async function PostingMappingsPage({
       .map((rule) => [`${rule.eventType} ${rule.lineRole}`, rule]),
   );
 
-  const eligibleFor = (line: (typeof POSTING_MAP)[number]['lines'][number]) =>
-    accounts.filter(
-      (account) => !line.controlAccount || account.controlAccount === line.controlAccount,
-    );
+  const eligibleFor = (
+    event: (typeof POSTING_MAP)[number],
+    line: (typeof POSTING_MAP)[number]['lines'][number],
+  ) =>
+    accounts.filter((account) => mappingAccountEligible(event.event, line.role, account));
   const missing = POSTING_MAP.flatMap((document) =>
     document.lines.filter((line) => {
       const rule = mapped.get(`${document.event} ${line.role}`);
       return (
         line.always &&
-        (!rule || !eligibleFor(line).some((account) => account.id === rule.accountId))
+        (!rule || !eligibleFor(document, line).some((account) => account.id === rule.accountId))
       );
     }),
   ).length;
@@ -153,7 +154,7 @@ export default async function PostingMappingsPage({
                 {document.lines.map((line) => {
                   const rule = mapped.get(`${document.event} ${line.role}`);
                   const label = map(`role.${line.role}`);
-                  const eligibleAccounts = eligibleFor(line);
+                  const eligibleAccounts = eligibleFor(document, line);
                   const invalidRule =
                     rule && !eligibleAccounts.some((account) => account.id === rule.accountId)
                       ? rule

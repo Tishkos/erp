@@ -696,15 +696,11 @@ export async function accept(
     .orderBy(salesReturnLine.lineNo);
 
   // §4.2 — the dimensions the sale carried, so the return reports beside it.
-  const [sale] = await tx
-    .select({
-      departmentCode: salesOrder.departmentCode,
-      businessLineCode: salesOrder.businessLineCode,
-    })
-    .from(salesOrder)
-    .innerJoin(arInvoice, eq(arInvoice.salesOrderId, salesOrder.id))
-    .where(eq(arInvoice.id, returnDoc.arInvoiceId))
-    .limit(1);
+  const [sale] = await tx.select({
+    departmentCode: sql<string | null>`coalesce(${salesOrder.departmentCode}, ${arInvoice.departmentCode})`,
+    businessLineCode: sql<string | null>`coalesce(${salesOrder.businessLineCode}, ${arInvoice.businessLineCode})`,
+  }).from(arInvoice).leftJoin(salesOrder, eq(arInvoice.salesOrderId, salesOrder.id))
+    .where(eq(arInvoice.id, returnDoc.arInvoiceId)).limit(1);
 
   const movementIds: string[] = [];
   let valueIqd = 0n;

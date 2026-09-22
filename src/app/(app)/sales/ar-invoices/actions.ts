@@ -81,6 +81,8 @@ export async function createArInvoice(formData: FormData): Promise<void> {
       // Block 5's header is the invoice number, the two dates and the
       // customer. There is no note among them.
       note: null,
+      businessLineCode: text(formData, 'business_line_code').trim() || null,
+      departmentCode: text(formData, 'department_code').trim() || null,
       lines,
     });
   });
@@ -146,7 +148,32 @@ export async function removeArInvoiceLine(formData: FormData): Promise<LineOutco
 /** *"The invoice is not posted until CEO approval."* Approval, then posting. */
 export async function approveArInvoice(formData: FormData): Promise<void> {
   const invoiceNo = text(formData, 'invoice_no');
-  await runAdminAndReturn((tx, ctx) => ar.approve(tx, ctx, text(formData, 'id')), record(invoiceNo));
+  await runAdminAndReturn(async (tx, ctx) => {
+    if (formData.has('business_line_code') || formData.has('department_code')) {
+      await ar.setAccountingDimensions(tx, ctx, text(formData, 'id'), {
+        businessLineCode: text(formData, 'business_line_code').trim() || null,
+        departmentCode: text(formData, 'department_code').trim() || null,
+      });
+    }
+    await ar.approve(tx, ctx, text(formData, 'id'));
+  }, record(invoiceNo));
+}
+
+export async function saveArInvoiceAccountingDimensions(formData: FormData): Promise<void> {
+  await runAdminAndReturn(
+    (tx, ctx) => ar.setAccountingDimensions(tx, ctx, text(formData, 'id'), {
+      businessLineCode: text(formData, 'business_line_code').trim() || null,
+      departmentCode: text(formData, 'department_code').trim() || null,
+    }),
+    record(text(formData, 'invoice_no')),
+  );
+}
+
+export async function returnArInvoiceToDraft(formData: FormData): Promise<void> {
+  await runAdminAndReturn(
+    (tx, ctx) => ar.returnToDraft(tx, ctx, text(formData, 'id'), text(formData, 'reason')),
+    record(text(formData, 'invoice_no')),
+  );
 }
 
 export async function postArInvoice(formData: FormData): Promise<void> {

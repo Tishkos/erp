@@ -352,7 +352,24 @@ export default async function AccountRecordPage({
             </section>
           )}
 
-          <RecordPage hideTitle returnTo={address} view={record} />
+          <RecordPage
+            hideTitle
+            journalEmptyContent={(
+              <p className="muted">
+                {chart(node.isGroup ? 'group_journal_hint' : 'account_journal_hint')}
+                {node.isGroup ? null : (
+                  <>
+                    {' '}
+                    <Link className={s.sapLink} href={`/finance/gl-inquiry/${encodeURIComponent(code)}`}>
+                      {chart('open_ledger')}
+                    </Link>
+                  </>
+                )}
+              </p>
+            )}
+            returnTo={address}
+            view={record}
+          />
         </div>
       </div>
     </AdminPage>

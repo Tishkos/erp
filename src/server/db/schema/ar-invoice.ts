@@ -35,8 +35,8 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { appUser, branch } from './platform';
-import { businessPartner, warehouse } from './organisation';
+import { appUser, branch, department } from './platform';
+import { businessLine, businessPartner, warehouse } from './organisation';
 import { item, unitOfMeasure } from './item';
 import { journalEntry } from './journal';
 import { salesOrder, salesOrderLine } from './sales-order';
@@ -82,6 +82,8 @@ export const arInvoice = pgTable(
     branchCode: text('branch_code')
       .notNull()
       .references(() => branch.code),
+    businessLineCode: text('business_line_code').references(() => businessLine.code),
+    departmentCode: text('department_code').references(() => department.code),
 
     /**
      * §7.4 — the same date as the delivery. Enforced by a trigger against the
