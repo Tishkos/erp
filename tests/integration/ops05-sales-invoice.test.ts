@@ -859,29 +859,47 @@ describe('ops 5 · direct invoice accounting dimensions', () => {
     expect(statement[0]).toMatchObject({ debitIqd: '75.0000', sourceDocId: invoice.id });
   });
 
-  it('approves without dimensions but refuses posting until Business Line is supplied', async () => {
+  it('posts with no Business Line, under the company selling line', async () => {
+    /*
+     * By direction, 2026-09-22: *"i dont want business line"*, and where one
+     * is recorded it is Product Sales. Migration 0202 takes the requirement
+     * off the account type, the account and the document type, so an invoice
+     * raised from block 5's header — which carries no dimension at all — posts
+     * rather than being refused for an answer the screen cannot give.
+     *
+     * The journal still says which line the sale belongs to, because a report
+     * that groups by line should not be told "none" for every sale.
+     */
     await buy(jinko, { quantity: '10', unitPrice: '100' });
     const invoice = await sell([{ quantity: '5', unitPrice: '20' }]);
-    await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
 
-    await expect(
-      withScope(scope(manager), (tx) => ar.post(tx, manager, invoice.id)),
-    ).rejects.toThrow(/Business Line/);
-    await noEffects(invoice.id);
+    // Approval and posting, in that order — `postSale` is both.
+    const { journalEntryId } = await postSale(invoice.id);
+    const { rows } = await ownerPool.query(
+      `select distinct business_line_code from journal_line where journal_entry_id = $1`,
+      [journalEntryId],
+    );
+    expect(rows).toEqual([{ business_line_code: 'PRODUCT_SALES' }]);
   });
 
-  it('requires Department too when Business Line is present', async () => {
+  it('keeps a line that was given, and asks for no department beside it', async () => {
+    // A line the document carries is the document's own answer and outranks
+    // the company default. Department is not asked for either: the invoice
+    // has nowhere to say one, and §4.2's document-type layer says so
+    // (migration 0201).
     await buy(jinko, { quantity: '10', unitPrice: '100' });
     const invoice = await sell(
       [{ quantity: '5', unitPrice: '20' }],
       { businessLineCode: 'DIM_SALES' },
     );
-    await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
 
-    await expect(
-      withScope(scope(manager), (tx) => ar.post(tx, manager, invoice.id)),
-    ).rejects.toThrow(/Department/);
-    await noEffects(invoice.id);
+    const { journalEntryId } = await postSale(invoice.id);
+    const { rows } = await ownerPool.query(
+      `select distinct business_line_code, department_code
+         from journal_line where journal_entry_id = $1`,
+      [journalEntryId],
+    );
+    expect(rows).toEqual([{ business_line_code: 'DIM_SALES', department_code: null }]);
   });
 
   it.each([
@@ -1554,5 +1572,79 @@ describe('item sales account routing', () => {
     });
     expect(trace.missingJournal).toEqual({ posted: true, lines: [], adjustments: [] });
     expect(trace.draftRows).toEqual({ posted: true, lines: [], adjustments: [] });
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('§3.3 · a mapping is refused when the account cannot answer for the line', () => {
+  /*
+   * The rule that was missing when the sponsor reported an empty statement.
+   *
+   * A payable mapped to an ordinary liability account posts a balanced journal
+   * and writes no subledger entry — `writeForJournal` only writes for a line
+   * that hits a control account — so the supplier's statement stays empty and
+   * nothing says why. The screen offers only eligible accounts; the service
+   * refuses the rest, because a screen is not a control.
+   */
+  it('refuses a payable that is not the supplier control account', async () => {
+    await expect(
+      withScope(scope(manager), (tx) =>
+        posting.setMapping(tx, manager, {
+          eventType: 'purchasing.ap_invoice',
+          lineRole: 'supplier_payable',
+          accountId: accounts.expense!,
+        }),
+      ),
+    ).rejects.toThrow(/must be designated as a supplier control account/);
+  });
+
+  it('refuses a receivable that is not the customer control account', async () => {
+    await expect(
+      withScope(scope(manager), (tx) =>
+        posting.setMapping(tx, manager, {
+          eventType: 'sales.ar_invoice',
+          lineRole: 'customer_receivable',
+          accountId: accounts.sales_revenue!,
+        }),
+      ),
+    ).rejects.toThrow(/must be designated as a customer control account/);
+  });
+
+  it('refuses a control account for the sale itself', async () => {
+    // Revenue on the receivable account would make the customer's balance and
+    // the company's income the same number, which is the one mistake this
+    // mapping can make that still balances.
+    await expect(
+      withScope(scope(manager), (tx) =>
+        posting.setMapping(tx, manager, {
+          eventType: 'sales.ar_invoice',
+          lineRole: 'sales_revenue',
+          accountId: accounts.customer_receivable!,
+        }),
+      ),
+    ).rejects.toThrow(/cannot receive sales revenue/);
+  });
+
+  it('takes the accounts that can answer', async () => {
+    await withScope(scope(manager), (tx) =>
+      posting.setMapping(tx, manager, {
+        eventType: 'purchasing.ap_invoice',
+        lineRole: 'supplier_payable',
+        accountId: accounts.supplier_payable!,
+      }),
+    );
+    await withScope(scope(manager), (tx) =>
+      posting.setMapping(tx, manager, {
+        eventType: 'sales.ar_invoice',
+        lineRole: 'customer_receivable',
+        accountId: accounts.customer_receivable!,
+      }),
+    );
+
+    const { rows } = await ownerPool.query(
+      `select count(*)::int as n from posting_rule
+        where is_active and line_role in ('supplier_payable','customer_receivable')`,
+    );
+    expect(rows[0].n).toBeGreaterThan(0);
   });
 });

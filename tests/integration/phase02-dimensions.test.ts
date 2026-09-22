@@ -155,23 +155,40 @@ describe('the registry of the seven dimensions', () => {
 // ---------------------------------------------------------------------------
 describe('§4.2 · resolving a requirement from account and document type', () => {
   it('applies the account-type default to an expense account', async () => {
-    // Migration 0005 seeds §4.2's own rule: Cost Centre and Business Line are
-    // mandatory for operating expense accounts.
+    // Migration 0005 seeds §4.2's own rule: Cost Centre is mandatory for
+    // operating expense accounts. (Business Line was seeded beside it and is
+    // no longer required of anything — migration 0202, by direction.)
     const salaries = await approvedAccount({ name: 'Salaries', parentId: expenseRootId });
 
     const mandatory = await withScope(scopeOf(manager), (tx) =>
       dimensions.mandatoryFor(tx, salaries, DOCUMENT_TYPE),
     );
-    expect(mandatory).toEqual(['department', 'business_line']);
+    expect(mandatory).toEqual(['department']);
   });
 
-  it('applies Business Line to a revenue account', async () => {
-    const sales = await approvedAccount({ name: 'Trading Revenue', parentId: revenueRootId });
-
-    const mandatory = await withScope(scopeOf(manager), (tx) =>
-      dimensions.mandatoryFor(tx, sales, DOCUMENT_TYPE),
+  it('applies a default the Business Process Owner adds for a revenue account', async () => {
+    // §4.2 holds these as rows so they can be changed without a release, and
+    // this proves the mechanism rather than the company's current policy: the
+    // rule is added here, and the revenue account picks it up.
+    await ownerPool.query(
+      `insert into account_type_dimension_default (account_type, dimension)
+       values ('revenue', 'project') on conflict do nothing`,
     );
-    expect(mandatory).toEqual(['business_line']);
+    try {
+      const sales = await approvedAccount({ name: 'Trading Revenue', parentId: revenueRootId });
+
+      const mandatory = await withScope(scopeOf(manager), (tx) =>
+        dimensions.mandatoryFor(tx, sales, DOCUMENT_TYPE),
+      );
+      expect(mandatory).toEqual(['project']);
+    } finally {
+      // Master configuration outlives `resetTestData` by design, so a rule
+      // borrowed for one assertion is given back here rather than left for
+      // the next file to trip over.
+      await ownerPool.query(
+        `delete from account_type_dimension_default where account_type = 'revenue' and dimension = 'project'`,
+      );
+    }
   });
 
   it('requires nothing by default on an asset account', async () => {
@@ -214,7 +231,6 @@ describe('§4.2 · resolving a requirement from account and document type', () =
       dimensions.mandatoryFor(tx, salaries, DOCUMENT_TYPE),
     );
     expect(after).not.toContain('department');
-    expect(after).toContain('business_line');
   });
 
   it('lets a document type add a requirement the account does not have', async () => {
@@ -283,7 +299,7 @@ describe('validating the dimensions on a posting', () => {
       withScope(scopeOf(officer), (tx) =>
         dimensions.assertDimensionsValid(tx, salaries, DOCUMENT_TYPE, {}),
       ),
-    ).rejects.toThrow(/Department \/ Cost Centre, Business Line/);
+    ).rejects.toThrow(/Department \/ Cost Centre/);
   });
 
   it('accepts one that carries everything required, with real values', async () => {
@@ -356,7 +372,9 @@ describe('validating the dimensions on a posting', () => {
     );
 
     expect(requirements.department).toBe('mandatory');
-    expect(requirements.business_line).toBe('mandatory');
+    // Never mandatory anywhere since migration 0202, of any account or any
+    // document — which a screen renders as a field it does not have to fill.
+    expect(requirements.business_line).toBe('optional');
     expect(requirements.project).toBe('optional');
     expect(requirements.branch).toBe('optional');
   });

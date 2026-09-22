@@ -599,18 +599,32 @@ export async function resetTestData(): Promise<void> {
              -- and expense accounts by §4.2, and its master does not exist
              -- until a later phase. Restored here for the same reason Branch
              -- is — a test run must not quietly differ from production.
-             ('journal_entry', 'business_line', 'optional')
+             ('journal_entry', 'business_line', 'optional'),
+             -- Migration 0201: the invoices ask for no dimension, because
+             -- their headers carry none (block 4 and block 5, by direction).
+             ('ar_invoice', 'business_line', 'optional'),
+             ('ar_invoice', 'department',    'optional'),
+             ('ap_invoice', 'business_line', 'optional'),
+             ('ap_invoice', 'department',    'optional')
       on conflict do nothing
     `);
 
     // §4.2's own defaults, restored rather than assumed. A test that alters them
     // would otherwise poison every file that runs after it, and the failure would
     // appear far from its cause.
+    await client.query('delete from account_type_dimension_default');
     await client.query(`
       insert into account_type_dimension_default (account_type, dimension)
-      values ('expense', 'department'), ('expense', 'business_line'), ('revenue', 'business_line')
-      on conflict do nothing
+      values ('expense', 'department')
     `);
+    // Migration 0202: Business Line is never required — of an account type, of
+    // an account, or of a document type. Restored *as removed*, because a
+    // fixture that puts back a rule production has dropped is a test run
+    // proving something nobody will ever see.
+    await client.query(
+      `delete from account_type_dimension_default where dimension = 'business_line'`,
+    );
+    await client.query(`delete from account_required_dimension where dimension = 'business_line'`);
 
     // Accounts are deleted leaves-first: parent_id is RESTRICT, and an approved
     // account is protected by a trigger that production must keep and a test

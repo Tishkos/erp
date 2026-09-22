@@ -982,6 +982,24 @@ export async function removeLine(
   });
 }
 
+/**
+ * The line the company sells under, when the document names none.
+ *
+ * Read rather than hardcoded into the posting: a database that has never had
+ * `PRODUCT_SALES` (an older one, or a test fixture) records no line at all,
+ * which is honest, rather than failing on a value it cannot produce.
+ */
+const SELLING_LINE = 'PRODUCT_SALES';
+
+async function sellingLine(tx: Tx): Promise<string | null> {
+  const [row] = await tx
+    .select({ code: businessLine.code })
+    .from(businessLine)
+    .where(and(eq(businessLine.code, SELLING_LINE), eq(businessLine.active, true)))
+    .limit(1);
+  return row?.code ?? null;
+}
+
 export async function post(
   tx: Tx,
   ctx: ActorContext,
@@ -1020,11 +1038,21 @@ export async function post(
   const base = {
     branch: invoice.branchCode,
     business_partner: customer?.code ?? null,
-    // §4.2 — from the order, where the sale was attributed. The revenue account
-    // requires business line by default (migration 0005), and this is the same
-    // value the delivery's COGS carried, so the two halves of the sale report
-    // under one line of business.
-    business_line: order?.businessLineCode ?? invoice.businessLineCode ?? null,
+    /*
+     * §4.2 — where the sale was attributed.
+     *
+     * An order's own line first: the same value the delivery's COGS carried,
+     * so the two halves of one sale report under one line. A sales invoice
+     * raised on its own has nobody to ask — the header carries the invoice
+     * number, the two dates and the customer, and by direction (2026-09-22)
+     * will not carry a Business Line — so it takes the company's own selling
+     * line, `PRODUCT_SALES`, rather than posting an attribution of nothing.
+     *
+     * Nothing requires it any more (migration 0202); this is so the reports
+     * that group by line have the answer the sponsor gave, not a blank.
+     */
+    business_line:
+      order?.businessLineCode ?? invoice.businessLineCode ?? (await sellingLine(tx)),
     department: order?.departmentCode ?? invoice.departmentCode ?? null,
   };
 

@@ -81,8 +81,6 @@ export async function createArInvoice(formData: FormData): Promise<void> {
       // Block 5's header is the invoice number, the two dates and the
       // customer. There is no note among them.
       note: null,
-      businessLineCode: text(formData, 'business_line_code').trim() || null,
-      departmentCode: text(formData, 'department_code').trim() || null,
       lines,
     });
   });
