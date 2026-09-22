@@ -1,0 +1,23 @@
+(node:16188) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:20556) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:20580) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |integration| tests/integration/phase01-platform-core.test.ts > 01.5 · document numbering (§3.4, §14.2, §24) > issues 1,000 distinct numbers under parallel allocation
+Error: timeout exceeded when trying to connect
+ ❯ node_modules/pg-pool/index.js:45:11
+ ❯ NodePgSession.transaction node_modules/src/node-postgres/session.ts:254:23
+ ❯ tests/integration/phase01-platform-core.test.ts:504:23
+    502|     await withScope(scopeOf(userId), (tx) => allocateDocumentNumber(tx…
+    503|
+    504|     const allocated = await Promise.all(
+       |                       ^
+    505|       Array.from({ length: 1000 }, () =>
+    506|         withScope(scopeOf(userId), (tx) => allocateDocumentNumber(tx, …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

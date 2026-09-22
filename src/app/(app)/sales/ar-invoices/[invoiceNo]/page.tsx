@@ -184,14 +184,6 @@ export default async function ArInvoicePage({
                 <button className="action action--primary" type="submit">{t('ar_invoices.approve')}</button>
               </form>
             ) : null}
-            {mayReturnToDraft ? (
-              <form action={returnArInvoiceToDraft}>
-                <input name="id" type="hidden" value={invoice.id} />
-                <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-                <input aria-label={t('reason')} name="reason" placeholder={t('reason_placeholder')} required type="text" />
-                <button className="action" type="submit">{t('ar_invoices.return_to_draft')}</button>
-              </form>
-            ) : null}
             {/* "The invoice is not posted until CEO approval." */}
             {mayPost ? (
               <form action={postArInvoice}>
@@ -200,6 +192,14 @@ export default async function ArInvoicePage({
                 <button className="action action--primary" type="submit">
                   {t('ar_invoices.post')}
                 </button>
+              </form>
+            ) : null}
+            {mayReturnToDraft ? (
+              <form action={returnArInvoiceToDraft}>
+                <input name="id" type="hidden" value={invoice.id} />
+                <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
+                <input aria-label={t('reason')} name="reason" placeholder={t('reason_placeholder')} required type="text" />
+                <button className="action" type="submit">{t('ar_invoices.return_to_draft')}</button>
               </form>
             ) : null}
           </>

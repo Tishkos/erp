@@ -1871,7 +1871,30 @@
 .sapFootActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  /* A document's verbs are irreversible ones — approve, post, return to
+     draft — and 0.45rem put two of them close enough to be hit by mistake
+     (reported 2026-09-22). Far enough apart to aim at, still one group. */
+  gap: 0.75rem 1.4rem;
+  align-items: center;
+}
+
+/*
+ * One verb, one group.
+ *
+ * "Return to draft" carries a reason box; "Post" carries nothing. Left to
+ * wrap as loose children, the reason box ended up beside Post and its own
+ * button below — so the box read as belonging to the button next to it, and
+ * the two buttons a person had to choose between were the two furthest apart.
+ */
+.sapFootActions > form {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sapFootActions > form input[type='text'] {
+  inline-size: 16rem;
+  max-inline-size: 40vw;
 }
 .sapFootTotals {
   display: flex;
