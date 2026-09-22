@@ -24,6 +24,7 @@ import {
   inventoryMovement,
   item as itemTable,
   stockReservation,
+  warehouse,
 } from '../db/schema';
 import {
   assertCanIssue,
@@ -1215,6 +1216,37 @@ export async function availableOf(
   branchCode: string,
 ): Promise<bigint> {
   return availableQuantity(await positionOf(tx, itemCode, warehouseCode, branchCode));
+}
+
+/** The advisory figure an invoice line can show before posting checks it again. */
+export async function invoiceAvailability(
+  tx: Tx,
+  ctx: ActorContext,
+  permissionObject: 'ap_invoice' | 'ar_invoice',
+  input: { itemCode: string; warehouseCode: string; supplierId?: string | null },
+): Promise<{ onHand: string; available: string }> {
+  await authz.authorize(ctx.principal, 'view', permissionObject, { branchCode: ctx.branchCode });
+  const [house] = await tx
+    .select({ code: warehouse.code, branchCode: warehouse.branchCode, active: warehouse.active })
+    .from(warehouse)
+    .where(eq(warehouse.code, input.warehouseCode))
+    .limit(1);
+  if (!house || !house.active || house.branchCode !== ctx.branchCode) {
+    throw new Error('Choose an active warehouse in the current branch.');
+  }
+  const stockItem = await loadItem(tx, input.itemCode);
+  if (!stockItem.isStock) throw new ItemNotStockedError(input.itemCode);
+  const position = await positionOf(tx, input.itemCode, house.code, house.branchCode);
+  const usable = availableQuantity(position);
+  const pool = (await layersOf(tx, input.itemCode, house.code, input.supplierId)).reduce(
+    (sum, layer) => sum + layer.remainingQuantity,
+    0n,
+  );
+  const available = usable < pool ? usable : pool;
+  return {
+    onHand: formatQuantity(position.onHand),
+    available: formatQuantity(available > 0n ? available : 0n),
+  };
 }
 
 /** Total remaining across an item's layers — used to reconcile against the ledger. */

@@ -293,6 +293,18 @@ const onHand = async (warehouseCode = WAREHOUSE) =>
     ).onHand,
   ) / 1_000_000;
 
+const invoiceStock = (
+  ctx: ActorContext,
+  input: { itemCode?: string; warehouseCode: string; supplierId?: string | null },
+) =>
+  withScope(scope(ctx), (tx) =>
+    inventory.invoiceAvailability(tx, ctx, 'ar_invoice', {
+      itemCode: input.itemCode ?? PANEL,
+      warehouseCode: input.warehouseCode,
+      supplierId: input.supplierId ?? null,
+    }),
+  );
+
 describe('ops 5 · approval, posting, stock and the ledger stay in step', () => {
   it('refuses a clerk approval and leaves the direct sale in draft', async () => {
     const invoice = await sell([{ quantity: '2', unitPrice: '150000' }]);
@@ -577,6 +589,52 @@ describe('ops 5 · a sales invoice takes the stock and charges its cost', () => 
     expect(posted.find((l) => l.account === 'Trade Receivables')!.debit).toBe(800_000);
     // What the goods cost did not change because they were sold cheaper.
     expect(posted.find((l) => l.account === 'Cost of Goods Sold')!.debit).toBe(400_000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('ops 5 · the invoice can see the stock it will sell', () => {
+  it('reports warehouse and supplier availability without changing posting authority', async () => {
+    await buy(jinko, { quantity: '10', warehouseCode: WAREHOUSE });
+    await buy(longi, { quantity: '7', warehouseCode: OTHER });
+
+    await expect(
+      invoiceStock(manager, { warehouseCode: WAREHOUSE, supplierId: jinko }),
+    ).resolves.toEqual({ onHand: '10', available: '10' });
+    await expect(
+      invoiceStock(manager, { warehouseCode: WAREHOUSE, supplierId: longi }),
+    ).resolves.toEqual({ onHand: '10', available: '0' });
+    await expect(
+      invoiceStock(manager, { warehouseCode: OTHER, supplierId: longi }),
+    ).resolves.toEqual({ onHand: '7', available: '7' });
+
+    const invoice = await sell([
+      { quantity: '2', unitPrice: '250000', supplierId: jinko, warehouseCode: WAREHOUSE },
+    ]);
+    await postSale(invoice.id);
+
+    await expect(
+      invoiceStock(manager, { warehouseCode: WAREHOUSE, supplierId: jinko }),
+    ).resolves.toEqual({ onHand: '8', available: '8' });
+    await expect(
+      invoiceStock(manager, { warehouseCode: OTHER, supplierId: longi }),
+    ).resolves.toEqual({ onHand: '7', available: '7' });
+
+    const denied: ActorContext = {
+      ...manager,
+      principal: {
+        ...manager.principal,
+        grants: manager.principal.grants.filter(
+          (grant) => !(grant.object === ar.PERMISSION_OBJECT && grant.verb === 'view'),
+        ),
+      },
+    };
+    await expect(
+      invoiceStock(denied, { warehouseCode: WAREHOUSE, supplierId: jinko }),
+    ).rejects.toThrow(PermissionDeniedError);
+    await expect(
+      invoiceStock(manager, { warehouseCode: 'WH-NONE', supplierId: jinko }),
+    ).rejects.toThrow(/active warehouse in the current branch/);
   });
 });
 

@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
-import { InvoiceLinesGrid, type LineItem } from '@/components/admin/invoice-lines-grid';
+import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { PairedPicker } from '@/components/admin/paired-picker';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -14,7 +14,7 @@ import * as items from '@/server/services/items';
 import * as partners from '@/server/services/partners';
 import * as warehouses from '@/server/services/warehouses';
 import { gapsFor } from '@domain/setup-gaps';
-import { createArInvoice } from '../actions';
+import { createArInvoice, invoiceLineAvailability } from '../actions';
 
 /**
  * Raising a Sales Invoice — Operations build, block 5.
@@ -61,32 +61,17 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
     return <Denied object={page('ar_invoices')} />;
   }
 
-  const { customers, allCustomers, options, allItems, houses } = await withCurrentUser(async (tx) => {
-    const everyItem = await items.listAll(tx);
-    const stock = everyItem.filter((row) => row.isStock && row.active);
-    const options: LineItem[] = [];
-    for (const row of stock) {
-      const linked = await items.suppliersOf(tx, row.id);
-      options.push({
-        code: row.code,
-        name: row.name,
-        // The item's own unit, sent with the line rather than assumed to be each.
-        uomCode: row.baseUomCode,
-        suppliers: linked
-          .filter((link) => link.active)
-          .map((link) => ({ id: link.supplierId, label: `${link.supplierCode} · ${link.supplierName}` })),
-      });
-    }
-    return {
-      customers: await partners.listActiveInRole(tx, 'customer'),
-      // The whole list too, so an empty picker can say which of the two things
-      // is wrong: nobody has been added, or nobody added is active.
-      allCustomers: await partners.listByRole(tx, 'customer'),
-      options,
-      allItems: everyItem,
-      houses: await warehouses.listActive(tx),
-    };
-  });
+  const { customers, allCustomers, options, allItems, houses } = await withCurrentUser(async (tx) => ({
+    customers: await partners.listActiveInRole(tx, 'customer'),
+    // The whole list too, so an empty picker can say which of the two things
+    // is wrong: nobody has been added, or nobody added is active.
+    allCustomers: await partners.listByRole(tx, 'customer'),
+    options: await items.invoiceChoices(tx, 'sale'),
+    allItems: await items.listAll(tx),
+    houses: (await warehouses.listActive(tx)).filter(
+      (house) => house.branchCode === context.scope.branchCode,
+    ),
+  }));
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -164,6 +149,8 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
               currency="IQD"
               headingId="ar-invoice-new-lines-heading"
               items={options}
+              loadAvailability={invoiceLineAvailability}
+              mode="sale"
               labels={{
                 itemCode: column('item_code'),
                 itemName: column('item_name'),
@@ -178,6 +165,12 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
                 remove: t('remove_line'),
                 documentTotal: t('reports.totals'),
                 saving: t('journals.saving'),
+                saveFailed: t('invoices.save_failed'),
+                noDefaultPrice: t('invoices.no_default_price'),
+                checkingStock: t('invoices.checking_stock'),
+                stockUnavailable: t('invoices.stock_unavailable'),
+                availableStock: t('invoices.available_stock'),
+                availabilityHint: t('invoices.availability_hint'),
               }}
               locale={locale}
               searchItems

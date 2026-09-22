@@ -848,6 +848,13 @@
       "when": 1795900000000,
       "tag": "0196_ops04_invoice_is_its_own_receipt",
       "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1795900000001,
+      "tag": "0197_ops_invoice_price_defaults",
+      "breakpoints": true
     }
   ]
 }

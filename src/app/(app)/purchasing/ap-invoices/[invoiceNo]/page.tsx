@@ -15,6 +15,7 @@ import * as items from '@/server/services/items';
 import * as partners from '@/server/services/partners';
 import * as warehouses from '@/server/services/warehouses';
 import {
+  invoiceLineAvailability,
   postApInvoice,
   removeApInvoiceLine,
   saveApInvoiceLine,
@@ -83,10 +84,12 @@ export default async function ApInvoicePage({
     return {
       document,
       suppliers: await partners.listActiveInRole(tx, 'supplier'),
-      stockItems: editable
-        ? (await items.listAll(tx)).filter((row) => row.isStock && row.active)
+      stockItems: editable ? await items.invoiceChoices(tx, 'purchase') : [],
+      houses: editable
+        ? (await warehouses.listActive(tx)).filter(
+            (house) => house.branchCode === document.invoice.branchCode,
+          )
         : [],
-      houses: editable ? await warehouses.listActive(tx) : [],
     };
   });
 
@@ -193,11 +196,10 @@ export default async function ApInvoicePage({
           <InvoiceLinesGrid
             currency="IQD"
             headingId="ap-invoice-document-lines-heading"
-            items={found.stockItems.map((row) => ({
-              code: row.code,
-              name: row.name,
-              uomCode: row.baseUomCode,
-            }))}
+            items={found.stockItems}
+            loadAvailability={invoiceLineAvailability}
+            mode="purchase"
+            purchaseSupplierId={invoice.supplierId}
             labels={{
               itemCode: column('item_code'),
               itemName: column('item_name'),
@@ -212,6 +214,12 @@ export default async function ApInvoicePage({
               remove: t('remove_line'),
               documentTotal: t('reports.totals'),
               saving: t('journals.saving'),
+              saveFailed: t('invoices.save_failed'),
+              noDefaultPrice: t('invoices.no_default_price'),
+              checkingStock: t('invoices.checking_stock'),
+              stockUnavailable: t('invoices.stock_unavailable'),
+              availableStock: t('invoices.available_stock'),
+              availabilityHint: t('invoices.availability_hint'),
             }}
             live={{
               documentId: invoice.id,

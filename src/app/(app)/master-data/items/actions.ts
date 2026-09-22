@@ -81,6 +81,29 @@ export async function makeDefaultSupplier(formData: FormData): Promise<void> {
   );
 }
 
+export async function setItemSellingPrice(formData: FormData): Promise<void> {
+  const code = text(formData, 'code');
+  await runAdminAndReturn(
+    (tx, ctx) => items.setSellingPrice(tx, ctx, code, text(formData, 'price') || null),
+    record(code),
+  );
+}
+
+export async function setItemSupplierPrice(formData: FormData): Promise<void> {
+  const code = text(formData, 'code');
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      items.setSupplierPrice(
+        tx,
+        ctx,
+        code,
+        text(formData, 'supplierId'),
+        text(formData, 'price') || null,
+      ),
+    record(code),
+  );
+}
+
 export async function unlinkItemSupplier(formData: FormData): Promise<void> {
   const code = text(formData, 'code');
   await runAdminAndReturn(

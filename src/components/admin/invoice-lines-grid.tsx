@@ -11,6 +11,7 @@ import {
   useTransition,
 } from 'react';
 import styles from './admin.module.css';
+import { PAIRED_CHOICE } from './paired-picker';
 
 /**
  * The lines of an invoice, typed straight into the grid.
@@ -40,7 +41,12 @@ export interface LineItem {
   /** The item's own unit, sent with the line rather than assumed to be each. */
   readonly uomCode?: string | null;
   /** Whose stock this line draws from; empty when the item has no links. */
-  readonly suppliers?: readonly { readonly id: string; readonly label: string }[];
+  readonly suppliers?: readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly purchasePriceIqd?: string | null;
+  }[];
+  readonly defaultUnitPriceIqd?: string | null;
 }
 
 export interface LineWarehouse {
@@ -88,6 +94,12 @@ export interface InvoiceLineLabels {
   readonly remove: string;
   readonly documentTotal: string;
   readonly saving: string;
+  readonly saveFailed: string;
+  readonly noDefaultPrice: string;
+  readonly checkingStock: string;
+  readonly stockUnavailable: string;
+  readonly availableStock: string;
+  readonly availabilityHint: string;
 }
 
 interface Row {
@@ -113,6 +125,13 @@ interface Row {
   error: string | null;
   /** Something changed since it was last saved. */
   dirty: boolean;
+  /** The price was typed rather than copied from the item's defaults. */
+  priceEdited: boolean;
+  saving: boolean;
+  availabilityKey: string;
+  availability: string | null;
+  availabilityPending: boolean;
+  availabilityError: boolean;
   /** A new row the server has accepted; its own copy arrives on the refresh. */
   settled: boolean;
 }
@@ -133,6 +152,12 @@ const blank = (warehouseCode: string): Row => ({
   warehouseCode,
   error: null,
   dirty: false,
+  priceEdited: false,
+  saving: false,
+  availabilityKey: '',
+  availability: null,
+  availabilityPending: false,
+  availabilityError: false,
   settled: false,
 });
 
@@ -153,6 +178,12 @@ const fromLine = (line: SavedInvoiceLine, nameOf: (code: string) => string): Row
   warehouseCode: line.warehouseCode,
   error: null,
   dirty: false,
+  priceEdited: true,
+  saving: false,
+  availabilityKey: '',
+  availability: null,
+  availabilityPending: false,
+  availabilityError: false,
   settled: false,
 });
 
@@ -182,6 +213,10 @@ const totalOf = (row: Row) => {
 export function InvoiceLinesGrid({
   items,
   warehouses,
+  mode,
+  purchaseSupplierId,
+  purchaseSupplierField,
+  loadAvailability,
   showSupplier = false,
   searchItems = false,
   labels,
@@ -192,6 +227,14 @@ export function InvoiceLinesGrid({
 }: {
   readonly items: readonly LineItem[];
   readonly warehouses: readonly LineWarehouse[];
+  readonly mode: 'purchase' | 'sale';
+  readonly purchaseSupplierId?: string | undefined;
+  readonly purchaseSupplierField?: string | undefined;
+  readonly loadAvailability?: ((input: {
+    itemCode: string;
+    warehouseCode: string;
+    supplierId?: string | null;
+  }) => Promise<{ ok: boolean; value?: { onHand: string; available: string }; error?: string }>) | undefined;
   /** The Sales Invoice's Supplier column: whose stock the line is sold from. */
   readonly showSupplier?: boolean;
   /**
@@ -228,6 +271,52 @@ export function InvoiceLinesGrid({
   );
   // Rows in flight: a second save of the same row waits for the first.
   const saving = useRef(new Set<string>());
+  const table = useRef<HTMLTableElement>(null);
+  const [chosenPurchaseSupplier, setChosenPurchaseSupplier] = useState(
+    purchaseSupplierId ?? '',
+  );
+  const availabilityRequests = useRef(new Map<string, { key: string }>());
+
+  useEffect(() => {
+    if (!purchaseSupplierField) return;
+    const form = table.current?.closest('form');
+    if (!form) return;
+    const read = () => {
+      const field = form.elements.namedItem(purchaseSupplierField);
+      setChosenPurchaseSupplier(field instanceof HTMLInputElement ? field.value : '');
+    };
+    const chosen = (event: Event) => {
+      const detail = (event as CustomEvent<{ name: string; value: string }>).detail;
+      if (detail.name === purchaseSupplierField) setChosenPurchaseSupplier(detail.value);
+    };
+    read();
+    form.addEventListener(PAIRED_CHOICE, chosen);
+    return () => form.removeEventListener(PAIRED_CHOICE, chosen);
+  }, [purchaseSupplierField]);
+
+  const defaultPriceFor = useCallback(
+    (item: LineItem | undefined) => {
+      if (!item) return '';
+      if (mode === 'sale') return item.defaultUnitPriceIqd ?? '';
+      if (!chosenPurchaseSupplier) return '';
+      return (
+        item.suppliers?.find((supplier) => supplier.id === chosenPurchaseSupplier)
+          ?.purchasePriceIqd ?? ''
+      );
+    },
+    [chosenPurchaseSupplier, mode],
+  );
+
+  useEffect(() => {
+    if (mode !== 'purchase') return;
+    setRows((current) =>
+      current.map((row) =>
+        row.lineId === null && !row.priceEdited && row.itemCode
+          ? { ...row, unitPrice: defaultPriceFor(itemsByCode.get(row.itemCode)) }
+          : row,
+      ),
+    );
+  }, [chosenPurchaseSupplier, defaultPriceFor, itemsByCode, mode]);
 
   const savedLines = live?.lines;
 
@@ -241,12 +330,75 @@ export function InvoiceLinesGrid({
       const mine = new Map(current.filter((row) => row.lineId).map((row) => [row.lineId!, row]));
       const saved = savedLines.map((line) => {
         const local = mine.get(line.id);
-        return local && local.dirty ? local : fromLine(line, nameOf);
+        return local && (local.dirty || local.saving) ? local : fromLine(line, nameOf);
       });
       const unsaved = current.filter((row) => row.lineId === null && !row.settled);
       return [...saved, ...(unsaved.length > 0 ? unsaved : [blank(defaultWarehouse)])];
     });
   }, [savedLines, defaultWarehouse, nameOf]);
+
+  useEffect(() => {
+    if (!loadAvailability) return;
+    for (const row of rows) {
+      const supplierId = mode === 'sale' ? row.supplierId || null : null;
+      const key = row.itemCode && row.warehouseCode
+        ? `${row.itemCode}\u0000${row.warehouseCode}\u0000${supplierId ?? ''}`
+        : '';
+      if (availabilityRequests.current.get(row.key)?.key === key) continue;
+      const marker = { key };
+      availabilityRequests.current.set(row.key, marker);
+      if (!key) {
+        setRows((current) =>
+          current.map((currentRow) =>
+            currentRow.key === row.key
+              ? {
+                  ...currentRow,
+                  availabilityKey: '',
+                  availability: null,
+                  availabilityPending: false,
+                  availabilityError: false,
+                }
+              : currentRow,
+          ),
+        );
+        continue;
+      }
+      setRows((current) =>
+        current.map((currentRow) =>
+          currentRow.key === row.key &&
+          currentRow.itemCode === row.itemCode &&
+          currentRow.warehouseCode === row.warehouseCode
+            ? {
+                ...currentRow,
+                availabilityKey: key,
+                availability: null,
+                availabilityPending: true,
+                availabilityError: false,
+              }
+            : currentRow,
+        ),
+      );
+      void loadAvailability({
+        itemCode: row.itemCode,
+        warehouseCode: row.warehouseCode,
+        supplierId,
+      }).then((outcome) => {
+        if (availabilityRequests.current.get(row.key) !== marker) return;
+        setRows((current) =>
+          current.map((currentRow) =>
+            currentRow.key === row.key && currentRow.availabilityKey === key
+              ? {
+                  ...currentRow,
+                  availability: outcome.ok ? (outcome.value?.available ?? null) : null,
+                  availabilityPending: false,
+                  availabilityError: !outcome.ok,
+                }
+              : currentRow,
+          ),
+        );
+      });
+    }
+  }, [loadAvailability, mode, rows]);
 
   const money = useMemo(
     () =>
@@ -289,17 +441,64 @@ export function InvoiceLinesGrid({
   // until what is typed names an item, what is typed is what stands.
   const chooseItem = (key: string, itemCode: string) => {
     const match = itemsByCode.get(itemCode);
-    patch(key, { itemCode, supplierId: '', ...(match ? { itemName: match.name } : {}) });
+    setRows((current) =>
+      settle(
+        current.map((row) =>
+          row.key === key
+            ? {
+                ...row,
+                itemCode,
+                itemName: match ? match.name : row.itemName,
+                quantity: match && row.quantity.trim() === '' ? '1' : row.quantity,
+                unitPrice: match ? defaultPriceFor(match) : row.unitPrice,
+                priceEdited: false,
+                supplierId: '',
+                dirty: true,
+                error: null,
+              }
+            : row,
+        ),
+      ),
+    );
   };
 
   const chooseByName = (key: string, itemName: string) => {
     const match = itemsByName.get(itemName);
-    patch(key, { itemName, ...(match ? { itemCode: match.code, supplierId: '' } : {}) });
+    setRows((current) =>
+      settle(
+        current.map((row) =>
+          row.key === key
+            ? {
+                ...row,
+                itemName,
+                itemCode: match ? match.code : row.itemCode,
+                quantity: match && row.quantity.trim() === '' ? '1' : row.quantity,
+                unitPrice: match ? defaultPriceFor(match) : row.unitPrice,
+                priceEdited: match ? false : row.priceEdited,
+                supplierId: match ? '' : row.supplierId,
+                dirty: true,
+                error: null,
+              }
+            : row,
+        ),
+      ),
+    );
   };
 
   const commit = (row: Row) => {
-    if (!live || !row.dirty || !complete(row) || saving.current.has(row.key)) return;
+    if (
+      !live ||
+      !row.dirty ||
+      !complete(row) ||
+      row.saving ||
+      row.settled ||
+      saving.current.has(row.key)
+    )
+      return;
     saving.current.add(row.key);
+    setRows((current) =>
+      current.map((r) => (r.key === row.key ? { ...r, saving: true } : r)),
+    );
 
     const form = new FormData();
     form.set('id', live.documentId);
@@ -313,22 +512,32 @@ export function InvoiceLinesGrid({
     form.set('supplierId', row.supplierId);
 
     startTransition(async () => {
-      const outcome = await live.save(form);
-      saving.current.delete(row.key);
-      if (outcome.ok) {
+      try {
+        const outcome = await live.save(form);
         setRows((current) =>
           current.map((r) =>
-            r.key === row.key ? { ...r, dirty: false, error: null, settled: r.lineId === null } : r,
+            r.key !== row.key
+              ? r
+              : outcome.ok
+                ? { ...r, saving: false, dirty: false, error: null, settled: r.lineId === null }
+                : { ...r, saving: false, error: outcome.error ?? '' },
           ),
         );
-        router.refresh();
-      } else {
-        refuse(row.key, outcome.error ?? '');
+        if (outcome.ok) router.refresh();
+      } catch {
+        setRows((current) =>
+          current.map((r) =>
+            r.key === row.key ? { ...r, saving: false, error: labels.saveFailed } : r,
+          ),
+        );
+      } finally {
+        saving.current.delete(row.key);
       }
     });
   };
 
   const drop = (row: Row) => {
+    if (row.saving || row.settled || saving.current.has(row.key)) return;
     if (!live || row.lineId === null) {
       setRows((current) => settle(current.filter((r) => r.key !== row.key)));
       return;
@@ -355,7 +564,7 @@ export function InvoiceLinesGrid({
 
   return (
     <>
-      <table aria-labelledby={headingId} className={styles.sapTable}>
+      <table aria-labelledby={headingId} className={styles.sapTable} ref={table}>
         <thead>
           <tr>
             <th scope="col">#</th>
@@ -383,9 +592,11 @@ export function InvoiceLinesGrid({
             const item = itemsByCode.get(row.itemCode);
             const suppliers = item?.suppliers ?? [];
             const live_ = written(row);
+            const locked = row.saving || row.settled;
             const last = index === rows.length - 1;
             return (
               <tr
+                aria-busy={locked}
                 className={last ? styles.sapEntryRow : undefined}
                 data-error={row.error ? 'true' : undefined}
                 key={row.key}
@@ -406,6 +617,7 @@ export function InvoiceLinesGrid({
                       aria-label={labels.itemCode}
                       autoComplete="off"
                       dir="ltr"
+                      disabled={locked}
                       list={codeList}
                       onChange={(event) => chooseItem(row.key, event.target.value)}
                       // An invoice bills for something: on the form that raises
@@ -418,6 +630,7 @@ export function InvoiceLinesGrid({
                     <select
                       aria-label={labels.itemCode}
                       dir="ltr"
+                      disabled={locked}
                       onChange={(event) => chooseItem(row.key, event.target.value)}
                       required={!live && index === 0}
                       value={row.itemCode}
@@ -436,6 +649,7 @@ export function InvoiceLinesGrid({
                   {live ? null : (
                     <input name={`uom_code_${index}`} type="hidden" value={item?.uomCode ?? ''} />
                   )}
+                  {locked ? <span className={styles.sapNote}>{labels.saving}</span> : null}
                   {row.error ? (
                     <span className={styles.sapRowError} role="alert">
                       {row.error}
@@ -450,6 +664,7 @@ export function InvoiceLinesGrid({
                       aria-label={labels.itemName}
                       autoComplete="off"
                       dir="auto"
+                      disabled={locked}
                       list={nameList}
                       onChange={(event) => chooseByName(row.key, event.target.value)}
                       value={row.itemName}
@@ -462,6 +677,7 @@ export function InvoiceLinesGrid({
                   <input
                     aria-label={labels.quantity}
                     dir="ltr"
+                    disabled={locked}
                     inputMode="decimal"
                     min={0}
                     onChange={(event) => patch(row.key, { quantity: event.target.value })}
@@ -477,14 +693,26 @@ export function InvoiceLinesGrid({
                     value={row.quantity}
                     {...field('quantity', index)}
                   />
+                  {row.availabilityPending ? (
+                    <span className={styles.sapNote}>{labels.checkingStock}</span>
+                  ) : row.availabilityError ? (
+                    <span className={styles.sapNote}>{labels.stockUnavailable}</span>
+                  ) : row.availability !== null ? (
+                    <span className={styles.sapNote} title={labels.availabilityHint}>
+                      {labels.availableStock}: {row.availability} {item?.uomCode ?? ''}
+                    </span>
+                  ) : null}
                 </td>
                 <td>
                   <input
                     aria-label={labels.unitPrice}
                     dir="ltr"
+                    disabled={locked}
                     inputMode="decimal"
                     min={0}
-                    onChange={(event) => patch(row.key, { unitPrice: event.target.value })}
+                    onChange={(event) =>
+                      patch(row.key, { unitPrice: event.target.value, priceEdited: true })
+                    }
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') event.currentTarget.blur();
                     }}
@@ -494,11 +722,15 @@ export function InvoiceLinesGrid({
                     value={row.unitPrice}
                     {...field('unit_price', index)}
                   />
+                  {item && row.unitPrice.trim() === '' && !defaultPriceFor(item) ? (
+                    <span className={styles.sapNote}>{labels.noDefaultPrice}</span>
+                  ) : null}
                 </td>
                 <td>
                   <input
                     aria-label={labels.discount}
                     dir="ltr"
+                    disabled={locked}
                     inputMode="decimal"
                     min={0}
                     onChange={(event) => patch(row.key, { discount: event.target.value })}
@@ -523,7 +755,7 @@ export function InvoiceLinesGrid({
                       // Disabled rather than hidden when the item has no links:
                       // the column stays where the eye expects it, and the
                       // reason it is empty is the item, not a fault.
-                      disabled={suppliers.length === 0}
+                      disabled={locked || suppliers.length === 0}
                       onChange={(event) => patch(row.key, { supplierId: event.target.value })}
                       value={row.supplierId}
                       {...field('supplier_id', index)}
@@ -541,6 +773,7 @@ export function InvoiceLinesGrid({
                 <td>
                   <select
                     aria-label={labels.warehouse}
+                    disabled={locked}
                     onChange={(event) => patch(row.key, { warehouseCode: event.target.value })}
                     value={row.warehouseCode}
                     {...field('warehouse_code', index)}
@@ -556,6 +789,7 @@ export function InvoiceLinesGrid({
                   {live_ ? (
                     <button
                       aria-label={labels.remove}
+                      disabled={locked}
                       onClick={() => drop(row)}
                       title={labels.remove}
                       type="button"

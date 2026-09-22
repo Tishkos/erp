@@ -21,7 +21,7 @@
  * is why `isStock` decides whether tracking is asked for at all rather than
  * being one more field on one long form.
  */
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   businessPartner,
@@ -31,6 +31,7 @@ import {
   itemUom,
   unitOfMeasure,
 } from '../db/schema';
+import { parseDecimal, toDecimalString } from '../domain/money';
 import {
   AdminNotFoundError,
   AdminValidationError,
@@ -73,6 +74,7 @@ export async function listAll(tx: Tx) {
       isStock: item.isStock,
       baseUomCode: item.baseUomCode,
       tracking: item.tracking,
+      sellingPriceIqd: item.sellingPriceIqd,
       active: item.active,
       // How many suppliers can sell it — the column that tells a buyer whether
       // this item has been set up for purchasing at all.
@@ -108,6 +110,7 @@ export async function suppliersOf(tx: Tx, itemId: string) {
       supplierCode: businessPartner.code,
       supplierName: businessPartner.legalName,
       supplierItemCode: itemSupplier.supplierItemCode,
+      purchasePriceIqd: itemSupplier.purchasePriceIqd,
       isDefault: itemSupplier.isDefault,
       active: itemSupplier.active,
     })
@@ -115,6 +118,112 @@ export async function suppliersOf(tx: Tx, itemId: string) {
     .innerJoin(businessPartner, eq(businessPartner.id, itemSupplier.supplierId))
     .where(eq(itemSupplier.itemId, itemId))
     .orderBy(desc(itemSupplier.isDefault), asc(businessPartner.code));
+}
+
+function priceOrNull(value: string | null): string | null {
+  if (value === null || !value.trim()) return null;
+  const amount = parseDecimal(value.trim(), 4n);
+  if (amount < 0n) throw new AdminValidationError('price', 'must not be negative');
+  return toDecimalString(amount, 4n);
+}
+
+export async function setSellingPrice(
+  tx: Tx,
+  ctx: ActorContext,
+  code: string,
+  value: string | null,
+) {
+  await permit(ctx, 'configure', PERMISSION_OBJECT, code);
+  const before = await get(tx, code);
+  const price = priceOrNull(value);
+  await tx
+    .update(item)
+    .set({ sellingPriceIqd: price, updatedAt: new Date() })
+    .where(eq(item.id, before.id));
+  await recordChange(tx, ctx, {
+    action: 'item.selling_price_changed',
+    objectType: PERMISSION_OBJECT,
+    objectId: code,
+    before: { sellingPriceIqd: before.sellingPriceIqd },
+    after: { sellingPriceIqd: price },
+  });
+}
+
+export async function setSupplierPrice(
+  tx: Tx,
+  ctx: ActorContext,
+  code: string,
+  supplierId: string,
+  value: string | null,
+) {
+  await permit(ctx, 'configure', PERMISSION_OBJECT, code);
+  const row = await get(tx, code);
+  const [before] = await tx
+    .select()
+    .from(itemSupplier)
+    .where(and(eq(itemSupplier.itemId, row.id), eq(itemSupplier.supplierId, supplierId)))
+    .limit(1);
+  if (!before) throw new AdminValidationError('supplierId', 'is not linked to this item');
+  const price = priceOrNull(value);
+  await tx
+    .update(itemSupplier)
+    .set({ purchasePriceIqd: price })
+    .where(and(eq(itemSupplier.itemId, row.id), eq(itemSupplier.supplierId, supplierId)));
+  await recordChange(tx, ctx, {
+    action: 'item.supplier_price_changed',
+    objectType: PERMISSION_OBJECT,
+    objectId: code,
+    before: { supplierId, purchasePriceIqd: before.purchasePriceIqd },
+    after: { supplierId, purchasePriceIqd: price },
+  });
+}
+
+/** The stock items and supplier links an invoice grid needs in one read. */
+export async function invoiceChoices(tx: Tx, mode: 'purchase' | 'sale') {
+  const rows = (await listAll(tx)).filter((row) => row.isStock && row.active);
+  if (rows.length === 0) return [];
+
+  const linked = await tx
+    .select({
+      itemId: itemSupplier.itemId,
+      supplierId: itemSupplier.supplierId,
+      supplierCode: businessPartner.code,
+      legalName: businessPartner.legalName,
+      purchasePriceIqd: itemSupplier.purchasePriceIqd,
+    })
+    .from(itemSupplier)
+    .innerJoin(businessPartner, eq(businessPartner.id, itemSupplier.supplierId))
+    .where(
+      and(
+        inArray(
+          itemSupplier.itemId,
+          rows.map((row) => row.id),
+        ),
+        eq(itemSupplier.active, true),
+        eq(businessPartner.active, true),
+        eq(businessPartner.isSupplier, true),
+      ),
+    )
+    .orderBy(desc(itemSupplier.isDefault), asc(businessPartner.code));
+
+  const byItem = new Map<string, typeof linked>();
+  for (const link of linked) {
+    const existing = byItem.get(link.itemId);
+    if (existing) existing.push(link);
+    else byItem.set(link.itemId, [link]);
+  }
+
+  return rows.map((row) => ({
+    code: row.code,
+    name: row.name,
+    uomCode: row.baseUomCode,
+    defaultUnitPriceIqd: mode === 'sale' ? row.sellingPriceIqd : null,
+    suppliers: (byItem.get(row.id) ?? []).map((link) => ({
+      id: link.supplierId,
+      label: `${link.supplierCode} · ${link.legalName}`,
+      ...(mode === 'purchase' ? { purchasePriceIqd: link.purchasePriceIqd } : {}),
+    })),
+  }));
 }
 
 export async function detail(tx: Tx, code: string) {

@@ -3,7 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
-import { InvoiceLinesGrid, type LineItem } from '@/components/admin/invoice-lines-grid';
+import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
@@ -16,6 +16,7 @@ import * as partners from '@/server/services/partners';
 import * as warehouses from '@/server/services/warehouses';
 import {
   approveArInvoice,
+  invoiceLineAvailability,
   postArInvoice,
   removeArInvoiceLine,
   saveArInvoiceLine,
@@ -80,32 +81,17 @@ export default async function ArInvoicePage({
     // The pickers the grid needs, fetched only when there is a grid to fill: a
     // posted invoice is read, and reading it should not cost the item master.
     const editable = document.status === 'draft' && document.deliveryNoteId === null;
-    const options: LineItem[] = [];
-    if (editable) {
-      for (const row of await items.listAll(tx)) {
-        if (!row.isStock || !row.active) continue;
-        const linked = await items.suppliersOf(tx, row.id);
-        options.push({
-          code: row.code,
-          name: row.name,
-          uomCode: row.baseUomCode,
-          suppliers: linked
-            .filter((link) => link.active)
-            .map((link) => ({
-              id: link.supplierId,
-              label: `${link.supplierCode} · ${link.supplierName}`,
-            })),
-        });
-      }
-    }
-
     return {
       document,
       customers: await partners.listActiveInRole(tx, 'customer'),
       // The sponsor's Supplier column: whose stock each line was sold from.
       suppliers: await partners.listActiveInRole(tx, 'supplier'),
-      options,
-      houses: editable ? await warehouses.listActive(tx) : [],
+      options: editable ? await items.invoiceChoices(tx, 'sale') : [],
+      houses: editable
+        ? (await warehouses.listActive(tx)).filter(
+            (house) => house.branchCode === document.branchCode,
+          )
+        : [],
     };
   });
 
@@ -216,6 +202,8 @@ export default async function ArInvoicePage({
             currency="IQD"
             headingId="ar-invoice-document-lines-heading"
             items={found.options}
+            loadAvailability={invoiceLineAvailability}
+            mode="sale"
             labels={{
               itemCode: column('item_code'),
               itemName: column('item_name'),
@@ -230,6 +218,12 @@ export default async function ArInvoicePage({
               remove: t('remove_line'),
               documentTotal: t('reports.totals'),
               saving: t('journals.saving'),
+              saveFailed: t('invoices.save_failed'),
+              noDefaultPrice: t('invoices.no_default_price'),
+              checkingStock: t('invoices.checking_stock'),
+              stockUnavailable: t('invoices.stock_unavailable'),
+              availableStock: t('invoices.available_stock'),
+              availabilityHint: t('invoices.availability_hint'),
             }}
             live={{
               documentId: invoice.id,

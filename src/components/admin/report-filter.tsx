@@ -52,6 +52,7 @@ export function ReportWindow({
  */
 export async function ReportFilter({
   action,
+  hiddenFields = {},
   from,
   to,
   asAt,
@@ -60,6 +61,7 @@ export async function ReportFilter({
   maxLevel,
 }: {
   readonly action: string;
+  readonly hiddenFields?: Readonly<Record<string, string>>;
   /** A period report carries both; a position report carries `asAt` alone. */
   readonly from?: string;
   readonly to?: string;
@@ -73,6 +75,9 @@ export async function ReportFilter({
 
   return (
     <form action={action} className={s.sapFilterBar} method="get">
+      {Object.entries(hiddenFields).map(([name, value]) => (
+        <input key={name} name={name} type="hidden" value={value} />
+      ))}
       {from !== undefined ? (
         <label className={s.sapFilterField}>
           <span className={s.sapLabel}>{t('reports.from')}</span>

@@ -98,6 +98,7 @@ export const item = pgTable(
 
     /** §7.4 — warranty end date is calculated from the A/R Invoice date. */
     warrantyMonths: smallint('warranty_months'),
+    sellingPriceIqd: numeric('selling_price_iqd', { precision: 19, scale: 4 }),
     /** §8.3 — retrieved from the master, never typed on a purchase order. */
     supplierItemCode: text('supplier_item_code'),
 
@@ -122,6 +123,7 @@ export const item = pgTable(
       'item_warranty_non_negative',
       sql`${t.warrantyMonths} is null or ${t.warrantyMonths} >= 0`,
     ),
+    check('item_selling_price_non_negative', sql`${t.sellingPriceIqd} is null or ${t.sellingPriceIqd} >= 0`),
   ],
 );
 
@@ -205,6 +207,7 @@ export const itemSupplier = pgTable(
 
     /** The supplier a purchase proposes first. At most one per item. */
     isDefault: boolean('is_default').notNull().default(false),
+    purchasePriceIqd: numeric('purchase_price_iqd', { precision: 19, scale: 4 }),
 
     active: boolean('active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -214,6 +217,10 @@ export const itemSupplier = pgTable(
     // At most one default per item — see the note above.
     uniqueIndex('item_supplier_default_uniq').on(t.itemId).where(sql`${t.isDefault}`),
     index('item_supplier_supplier_idx').on(t.supplierId),
+    check(
+      'item_supplier_purchase_price_non_negative',
+      sql`${t.purchasePriceIqd} is null or ${t.purchasePriceIqd} >= 0`,
+    ),
   ],
 );
 

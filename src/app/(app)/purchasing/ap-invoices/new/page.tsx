@@ -16,7 +16,7 @@ import * as partners from '@/server/services/partners';
 import * as paymentTerms from '@/server/services/payment-terms';
 import * as warehouses from '@/server/services/warehouses';
 import { gapsFor } from '@domain/setup-gaps';
-import { createApInvoice } from '../actions';
+import { createApInvoice, invoiceLineAvailability } from '../actions';
 
 /**
  * Raising a Purchase Invoice — Operations build, block 4.
@@ -55,21 +55,24 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
     return <Denied object={page('ap_invoices')} />;
   }
 
-  const { suppliers, allSuppliers, stockItems, houses, schedules } = await withCurrentUser(
-    async (tx) => ({
+  const { suppliers, allSuppliers, stockItems, allItems, houses, schedules } =
+    await withCurrentUser(async (tx) => ({
       suppliers: await partners.listActiveInRole(tx, 'supplier'),
       // The whole list too, so an empty picker can say which of the two things is
       // wrong: nobody has been added, or nobody added is active.
       allSuppliers: await partners.listByRole(tx, 'supplier'),
-      stockItems: await items.listAll(tx),
-      houses: await warehouses.listActive(tx),
+      stockItems: await items.invoiceChoices(tx, 'purchase'),
+      allItems: await items.listAll(tx),
+      houses: (await warehouses.listActive(tx)).filter(
+        (house) => house.branchCode === context.scope.branchCode,
+      ),
       // The payment terms travel with the page so the due date can be worked
       // out while the invoice is being typed (§16).
       schedules: await paymentTerms.allWithSchedules(tx),
     }),
   );
 
-  const sellable = stockItems.filter((item) => item.isStock && item.active);
+  const sellable = stockItems;
   const today = new Date().toISOString().slice(0, 10);
 
   // Each supplier beside the terms they are on, which is all the due date
@@ -82,7 +85,7 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
 
   const missing = gapsFor([
     { kind: 'suppliers', total: allSuppliers.length, usable: suppliers.length },
-    { kind: 'items', total: stockItems.length, usable: sellable.length },
+    { kind: 'items', total: allItems.length, usable: sellable.length },
     { kind: 'warehouses', total: houses.length, usable: houses.length },
   ]).map((gap) => t(`setup.${gap.key}`, gap.count === undefined ? {} : { count: gap.count }));
 
@@ -164,11 +167,10 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
             <InvoiceLinesGrid
               currency="IQD"
               headingId="ap-invoice-new-lines-heading"
-              items={sellable.map((item) => ({
-                code: item.code,
-                name: item.name,
-                uomCode: item.baseUomCode,
-              }))}
+              items={sellable}
+              loadAvailability={invoiceLineAvailability}
+              mode="purchase"
+              purchaseSupplierField="supplier_id"
               labels={{
                 itemCode: column('item_code'),
                 itemName: column('item_name'),
@@ -183,6 +185,12 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
                 remove: t('remove_line'),
                 documentTotal: t('reports.totals'),
                 saving: t('journals.saving'),
+                saveFailed: t('invoices.save_failed'),
+                noDefaultPrice: t('invoices.no_default_price'),
+                checkingStock: t('invoices.checking_stock'),
+                stockUnavailable: t('invoices.stock_unavailable'),
+                availableStock: t('invoices.available_stock'),
+                availabilityHint: t('invoices.availability_hint'),
               }}
               locale={locale}
               warehouses={houses.map((house) => ({ code: house.code, name: house.name }))}

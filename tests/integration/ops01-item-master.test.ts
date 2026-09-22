@@ -193,3 +193,133 @@ describe('ops 1 · the same item can belong to more than one supplier', () => {
     ).rejects.toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('ops 1 · invoice price defaults are maintained on the item', () => {
+  async function supplier(code: string, name: string): Promise<string> {
+    const { rows } = await ownerPool.query(
+      `insert into business_partner (code, legal_name, is_supplier, status, active)
+       values ($1, $2, true, 'active', true) returning id`,
+      [code, name],
+    );
+    return rows[0].id;
+  }
+
+  it('persists selling and per-supplier buying prices, including zero and blank', async () => {
+    const made = await create({ inventoryAccountId, cogsAccountId });
+    const first = await supplier('SUP-80', 'Jinko Solar');
+    const second = await supplier('SUP-90', 'Longi Green');
+
+    await withScope(scope(manager), (tx) =>
+      items.linkSupplier(tx, manager, made.code, { supplierId: first, makeDefault: true }),
+    );
+    await withScope(scope(manager), (tx) =>
+      items.linkSupplier(tx, manager, made.code, { supplierId: second, makeDefault: false }),
+    );
+    await withScope(scope(manager), (tx) =>
+      items.setSellingPrice(tx, manager, made.code, '150'),
+    );
+    await withScope(scope(manager), (tx) =>
+      items.setSupplierPrice(tx, manager, made.code, first, '80'),
+    );
+    await withScope(scope(manager), (tx) =>
+      items.setSupplierPrice(tx, manager, made.code, second, '90'),
+    );
+
+    let row = await withScope(scope(manager), (tx) => items.detail(tx, made.code));
+    expect(row.sellingPriceIqd).toBe('150.0000');
+    expect(row.suppliers.find((link) => link.supplierId === first)?.purchasePriceIqd).toBe(
+      '80.0000',
+    );
+    expect(row.suppliers.find((link) => link.supplierId === second)?.purchasePriceIqd).toBe(
+      '90.0000',
+    );
+
+    await withScope(scope(manager), (tx) =>
+      items.setSupplierPrice(tx, manager, made.code, first, '0'),
+    );
+    await withScope(scope(manager), (tx) =>
+      items.setSupplierPrice(tx, manager, made.code, second, ''),
+    );
+    row = await withScope(scope(manager), (tx) => items.detail(tx, made.code));
+    expect(row.suppliers.find((link) => link.supplierId === first)?.purchasePriceIqd).toBe(
+      '0.0000',
+    );
+    expect(row.suppliers.find((link) => link.supplierId === second)?.purchasePriceIqd).toBeNull();
+  });
+
+  it('rejects a negative price and keeps price changes behind configure', async () => {
+    const made = await create();
+    const linked = await supplier('SUP-NEG', 'Negative Supplier');
+    await withScope(scope(manager), (tx) =>
+      items.linkSupplier(tx, manager, made.code, { supplierId: linked, makeDefault: true }),
+    );
+
+    await expect(
+      withScope(scope(manager), (tx) => items.setSellingPrice(tx, manager, made.code, '-1')),
+    ).rejects.toThrow(/must not be negative/);
+    await expect(
+      withScope(scope(manager), (tx) =>
+        items.setSupplierPrice(tx, manager, made.code, linked, '-1'),
+      ),
+    ).rejects.toThrow(/must not be negative/);
+
+    const denied: ActorContext = {
+      ...manager,
+      principal: {
+        ...manager.principal,
+        grants: manager.principal.grants.filter(
+          (grant) => !(grant.object === items.PERMISSION_OBJECT && grant.verb === 'configure'),
+        ),
+      },
+    };
+    await expect(
+      withScope(scope(denied), (tx) => items.setSellingPrice(tx, denied, made.code, '10')),
+    ).rejects.toThrow();
+    await expect(
+      withScope(scope(denied), (tx) =>
+        items.setSupplierPrice(tx, denied, made.code, linked, '10'),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('keeps a supplier price when the default changes and batches invoice choices', async () => {
+    const made = await create({ inventoryAccountId, cogsAccountId });
+    const first = await supplier('SUP-FIRST', 'First Supplier');
+    const second = await supplier('SUP-SECOND', 'Second Supplier');
+    await withScope(scope(manager), (tx) =>
+      items.linkSupplier(tx, manager, made.code, { supplierId: first, makeDefault: true }),
+    );
+    await withScope(scope(manager), (tx) =>
+      items.setSupplierPrice(tx, manager, made.code, first, '80'),
+    );
+    await withScope(scope(manager), (tx) =>
+      items.linkSupplier(tx, manager, made.code, { supplierId: second, makeDefault: true }),
+    );
+    await withScope(scope(manager), (tx) =>
+      items.linkSupplier(tx, manager, made.code, { supplierId: first, makeDefault: true }),
+    );
+    await withScope(scope(manager), (tx) =>
+      items.setSellingPrice(tx, manager, made.code, '150'),
+    );
+
+    const row = await withScope(scope(manager), (tx) => items.detail(tx, made.code));
+    expect(row.suppliers.find((link) => link.supplierId === first)?.purchasePriceIqd).toBe(
+      '80.0000',
+    );
+
+    const purchase = await withScope(scope(manager), (tx) =>
+      items.invoiceChoices(tx, 'purchase'),
+    );
+    const purchaseChoice = purchase.find((choice) => choice.code === made.code)!;
+    expect(purchaseChoice.defaultUnitPriceIqd).toBeNull();
+    expect(purchaseChoice.suppliers.find((link) => link.id === first)?.purchasePriceIqd).toBe(
+      '80.0000',
+    );
+
+    const sale = await withScope(scope(manager), (tx) => items.invoiceChoices(tx, 'sale'));
+    const saleChoice = sale.find((choice) => choice.code === made.code)!;
+    expect(saleChoice.defaultUnitPriceIqd).toBe('150.0000');
+    expect('purchasePriceIqd' in (saleChoice.suppliers[0] ?? {})).toBe(false);
+  });
+});

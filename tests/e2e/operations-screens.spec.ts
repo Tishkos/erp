@@ -218,6 +218,339 @@ test.describe('the Operations Build screens open', () => {
     await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible({ timeout: 60_000 });
   });
 
+  test('draft quantity remains reliable while a row saves', async ({ browser, page }) => {
+    test.setTimeout(180_000);
+    const stamp = Date.now().toString(36).toUpperCase();
+    const supplierCode = `E2E-SUP-${stamp}`;
+    const itemCode = `E2E-ITM-${stamp}`;
+    const administration = await browser.newContext();
+    const administrator = await administration.newPage();
+
+    try {
+      await signIn(administrator, ADMIN);
+      await administrator.goto('/master-data/suppliers');
+      await administrator.getByRole('button', { name: 'New supplier' }).click();
+      const supplier = administrator.locator('dialog[open], [role="dialog"]').first();
+      await supplier.getByLabel('Code', { exact: true }).fill(supplierCode);
+      await supplier.getByLabel(/^Legal name/).fill(`Draft Save ${stamp}`);
+      await supplier.getByRole('button', { name: 'Create' }).click();
+      await administrator.waitForURL(
+        new RegExp(`/master-data/business-partners/${supplierCode}`),
+        { timeout: 60_000 },
+      );
+
+      await administrator.goto('/master-data/items');
+      await administrator.getByRole('button', { name: 'New item' }).click();
+      const item = administrator.locator('dialog[open], [role="dialog"]').first();
+      await item.getByLabel('Code', { exact: true }).fill(itemCode);
+      await item.getByLabel(/^Name/).fill(`Draft Save Item ${stamp}`);
+      const uom = item.getByLabel('Base unit', { exact: true });
+      await uom.selectOption(
+        (await uom.locator('option:not([value=""])').first().getAttribute('value'))!,
+      );
+      await item.getByRole('button', { name: 'Create' }).click();
+      await administrator.waitForURL(new RegExp(`/master-data/items/${itemCode}`), {
+        timeout: 60_000,
+      });
+    } finally {
+      await administration.close();
+    }
+
+    await page.goto('/purchasing/ap-invoices/new');
+    await page.getByLabel('Supplier Code').fill(supplierCode);
+    await page.locator('select[name="item_code_0"]').selectOption('ITM-SEED');
+    await page.locator('input[name="quantity_0"]').fill('2');
+    await page.locator('input[name="unit_price_0"]').fill('100');
+    await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
+    await page.getByRole('button', { name: 'Create' }).click();
+    await page.waitForURL(/\/purchasing\/ap-invoices\/[^/]+$/, { timeout: 60_000 });
+
+    const grid = page.locator('table[aria-labelledby="ap-invoice-document-lines-heading"]');
+    const rows = grid.locator('tbody tr:not([aria-hidden="true"])');
+    const row = rows.first();
+    const quantity = row.getByLabel('Quantity', { exact: true });
+    const remove = row.getByRole('button', { name: 'Remove line' });
+    await expect(
+      row.getByText(/Available stock|Stock availability is unavailable/, { exact: false }),
+    ).toBeVisible({ timeout: 60_000 });
+    const isLineSave = (request: { method(): string }) => request.method() === 'POST';
+    const isLineSaveResponse = (response: import('@playwright/test').Response) =>
+      isLineSave(response.request());
+
+    let releaseResponse!: () => void;
+    const responseHeld = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    let requestSeen!: () => void;
+    const requestArrived = new Promise<void>((resolve) => {
+      requestSeen = resolve;
+    });
+    let responseFinished!: () => void;
+    const responseComplete = new Promise<void>((resolve) => {
+      responseFinished = resolve;
+    });
+    let holding = true;
+    const holdRoute = async (route: import('@playwright/test').Route) => {
+      const request = route.request();
+      if (holding && isLineSave(request)) {
+        holding = false;
+        requestSeen();
+        const response = await route.fetch();
+        await responseHeld;
+        await route.fulfill({ response });
+        responseFinished();
+      } else {
+        await route.continue();
+      }
+    };
+    await page.route('**/*', holdRoute);
+    try {
+      await quantity.fill('3');
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await requestArrived;
+      await expect(quantity).toBeDisabled();
+      await expect(remove).toBeDisabled();
+      await expect(rows.nth(1).getByLabel('Item Code', { exact: true })).toBeEnabled();
+    } finally {
+      releaseResponse();
+      await responseComplete;
+      await page.unroute('**/*', holdRoute);
+    }
+    await expect(quantity).toBeEnabled({ timeout: 60_000 });
+
+    const savedSeven = page.waitForResponse(isLineSaveResponse, { timeout: 60_000 });
+    await quantity.fill('7');
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await savedSeven;
+    await expect(quantity).toBeEnabled({ timeout: 60_000 });
+    await page.reload();
+    await expect(
+      page
+        .locator('table[aria-labelledby="ap-invoice-document-lines-heading"]')
+        .locator('tbody tr:not([aria-hidden="true"])')
+        .first()
+        .getByLabel('Quantity', { exact: true }),
+    ).toHaveValue('7');
+    await expect(
+      page
+        .locator('table[aria-labelledby="ap-invoice-document-lines-heading"]')
+        .locator('tbody tr:not([aria-hidden="true"])'),
+    ).toHaveCount(2);
+
+    let abortSeen!: () => void;
+    const aborted = new Promise<void>((resolve) => {
+      abortSeen = resolve;
+    });
+    const abortRoute = async (route: import('@playwright/test').Route) => {
+      if (isLineSave(route.request())) {
+        abortSeen();
+        await route.abort();
+      } else {
+        await route.continue();
+      }
+    };
+    await page.route('**/*', abortRoute);
+    try {
+      await quantity.fill('5');
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await aborted;
+      await expect(quantity).toBeEnabled({ timeout: 60_000 });
+      await expect(row.getByRole('alert')).toContainText('could not be saved');
+      await expect(quantity).toHaveValue('5');
+      await expect(remove).toBeEnabled();
+    } finally {
+      await page.unroute('**/*', abortRoute);
+    }
+
+    const retried = page.waitForResponse(isLineSaveResponse, { timeout: 60_000 });
+    await quantity.focus();
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await retried;
+    await page.reload();
+    await expect(
+      page
+        .locator('table[aria-labelledby="ap-invoice-document-lines-heading"]')
+        .locator('tbody tr:not([aria-hidden="true"])')
+        .first()
+        .getByLabel('Quantity', { exact: true }),
+    ).toHaveValue('5');
+
+    await page.goto('/purchasing/ap-invoices/new');
+    const newQuantity = page.locator('input[name="quantity_0"]');
+    const newItem = page.locator('select[name="item_code_0"]');
+    await newItem.selectOption('ITM-SEED');
+    await expect(newQuantity).toHaveValue('1');
+    await newQuantity.fill('2');
+    await newItem.selectOption(itemCode);
+    await expect(newQuantity).toHaveValue('2');
+  });
+
+  test('invoice prices follow user-maintained defaults', async ({ browser, page }) => {
+    test.setTimeout(180_000);
+    const stamp = Date.now().toString(36).toUpperCase();
+    const supplierACode = `E2E-PA-${stamp}`;
+    const supplierBCode = `E2E-PB-${stamp}`;
+    const customerCode = `E2E-C-${stamp}`;
+    const itemCode = `E2E-P-${stamp}`;
+    const administration = await browser.newContext();
+    const administrator = await administration.newPage();
+
+    const saveCurrentPage = async (submit: () => Promise<void>) => {
+      await Promise.all([
+        administrator.waitForResponse(
+          (response) =>
+            response.request().method() === 'POST' &&
+            response.url().includes('/master-data/items/'),
+          { timeout: 60_000 },
+        ),
+        submit(),
+      ]);
+      await administrator.waitForLoadState('networkidle');
+    };
+
+    try {
+      await signIn(administrator, ADMIN);
+      const makePartner = async (
+        list: 'suppliers' | 'customers',
+        buttonName: string,
+        code: string,
+        name: string,
+      ) => {
+        await administrator.goto(`/master-data/${list}`);
+        await administrator.getByRole('button', { name: buttonName }).click();
+        const dialog = administrator.locator('dialog[open], [role="dialog"]').first();
+        await dialog.getByLabel('Code', { exact: true }).fill(code);
+        await dialog.getByLabel(/^Legal name/).fill(name);
+        await dialog.getByRole('button', { name: 'Create' }).click();
+        await administrator.waitForURL(new RegExp(`/master-data/business-partners/${code}`), {
+          timeout: 60_000,
+        });
+      };
+      await makePartner('suppliers', 'New supplier', supplierACode, `Price Supplier A ${stamp}`);
+      await makePartner('suppliers', 'New supplier', supplierBCode, `Price Supplier B ${stamp}`);
+      await makePartner('customers', 'New customer', customerCode, `Price Customer ${stamp}`);
+
+      await administrator.goto('/master-data/items');
+      await administrator.getByRole('button', { name: 'New item' }).click();
+      const item = administrator.locator('dialog[open], [role="dialog"]').first();
+      await item.getByLabel('Code', { exact: true }).fill(itemCode);
+      await item.getByLabel(/^Name/).fill(`Priced Item ${stamp}`);
+      const uom = item.getByLabel('Base unit', { exact: true });
+      await uom.selectOption(
+        (await uom.locator('option:not([value=""])').first().getAttribute('value'))!,
+      );
+      await item.getByRole('button', { name: 'Create' }).click();
+      await administrator.waitForURL(new RegExp(`/master-data/items/${itemCode}`), {
+        timeout: 60_000,
+      });
+
+      for (const [code, name, price] of [
+        [supplierACode, `Price Supplier A ${stamp}`, '80'],
+        [supplierBCode, `Price Supplier B ${stamp}`, '90'],
+      ] as const) {
+        await administrator
+          .getByLabel('Add a supplier', { exact: true })
+          .selectOption({ label: `${code} · ${name}` });
+        await saveCurrentPage(() =>
+          administrator
+            .getByRole('button', { name: 'Link supplier', exact: true })
+            .click(),
+        );
+        const supplierRow = administrator
+          .getByRole('row')
+          .filter({ hasText: code })
+          .first();
+        await supplierRow.locator('input[name="price"]').fill(price);
+        await saveCurrentPage(() =>
+          supplierRow.getByRole('button', { name: 'Save', exact: true }).click(),
+        );
+      }
+
+      const sellingForm = administrator
+        .locator('form')
+        .filter({ has: administrator.locator('input[name="price"]') })
+        .filter({ hasNot: administrator.locator('input[name="supplierId"]') });
+      const sellingPrice = sellingForm.locator('input[name="price"]');
+      const sellingButton = sellingForm.getByRole('button', {
+        name: 'Save',
+        exact: true,
+      });
+      await expect(sellingButton).toBeEnabled();
+      await sellingPrice.fill('150');
+      await expect(sellingPrice).toHaveValue('150');
+      await expect
+        .poll(async () =>
+          sellingForm.evaluate(
+            (form) => new FormData(form as HTMLFormElement).get('price'),
+          ),
+        )
+        .toBe('150');
+      await saveCurrentPage(() => sellingPrice.press('Enter'));
+      await expect(administrator.getByLabel(/^Selling price \(IQD\)/)).toHaveValue(
+        '150',
+      );
+    } finally {
+      await administration.close();
+    }
+
+    await page.goto('/purchasing/ap-invoices/new');
+    await page.getByLabel('Supplier Code').fill(supplierACode);
+    await page.locator('select[name="item_code_0"]').selectOption(itemCode);
+    await expect(page.locator('input[name="quantity_0"]')).toHaveValue('1');
+    await expect(page.locator('input[name="unit_price_0"]')).toHaveValue('80.0000');
+
+    await page.getByLabel('Supplier Code').fill(supplierBCode);
+    await expect(page.locator('input[name="unit_price_0"]')).toHaveValue('90.0000');
+    await page.locator('input[name="unit_price_0"]').fill('95');
+    await page.getByLabel('Supplier Code').fill(supplierACode);
+    await expect(page.locator('input[name="unit_price_0"]')).toHaveValue('95');
+
+    const warehouse = page.locator('select[name="warehouse_code_0"]');
+    await warehouse.selectOption(
+      (await warehouse.locator('option:not([value=""])').first().getAttribute('value'))!,
+    );
+    await page.getByRole('button', { name: 'Create' }).click();
+    await page.waitForURL(/\/purchasing\/ap-invoices\/(?!new\b)[^/]+$/, {
+      timeout: 60_000,
+    });
+    const draftUrl = page.url();
+
+    const secondAdministration = await browser.newContext();
+    const priceEditor = await secondAdministration.newPage();
+    try {
+      await signIn(priceEditor, ADMIN);
+      await priceEditor.goto(`/master-data/items/${itemCode}`);
+      const supplierRow = priceEditor
+        .getByRole('row')
+        .filter({ hasText: supplierACode })
+        .first();
+      await supplierRow.locator('input[name="price"]').fill('85');
+      await Promise.all([
+        priceEditor.waitForURL(/saved=1/, { timeout: 60_000 }),
+        supplierRow.getByRole('button', { name: 'Save', exact: true }).click(),
+      ]);
+    } finally {
+      await secondAdministration.close();
+    }
+
+    await page.goto(draftUrl);
+    await expect(
+      page
+        .locator('table[aria-labelledby="ap-invoice-document-lines-heading"]')
+        .locator('tbody tr:not([aria-hidden="true"])')
+        .first()
+        .getByLabel('Unit Price', { exact: true }),
+    ).toHaveValue('95');
+
+    await page.goto('/sales/ar-invoices/new');
+    await page.getByLabel('Customer Code').fill(customerCode);
+    await page.getByLabel('Item Code', { exact: true }).first().fill(itemCode);
+    await expect(page.locator('input[name="quantity_0"]')).toHaveValue('1');
+    await expect(page.locator('input[name="unit_price_0"]')).toHaveValue('150.0000');
+    await expect(page.locator('input[name="quantity_0"]')).toBeEnabled();
+    await expect(page.locator('input[name="unit_price_0"]')).toBeEnabled();
+  });
+
   test('§3.3 · an account is mapped to a document line, on the row', async ({
     browser,
     page,

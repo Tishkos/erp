@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import { Package } from 'lucide-react';
 import { Panel } from '@/components/ui';
 import {
@@ -26,6 +26,7 @@ import { AdminNotFoundError } from '@/server/services/administration';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { formatQuantity, parseQuantity } from '@domain/uom';
+import { formatMoney, type Locale } from '@/i18n/config';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as items from '@/server/services/items';
 import * as uom from '@/server/services/units-of-measure';
@@ -33,6 +34,8 @@ import {
   linkItemSupplier,
   makeDefaultSupplier,
   setItemActive,
+  setItemSellingPrice,
+  setItemSupplierPrice,
   unlinkItemSupplier,
   updateItem,
 } from '../actions';
@@ -57,10 +60,11 @@ export default async function ItemPage({
 }) {
   if (!visibleRoute('/master-data/items')) notFound();
 
-  const [t, page, column, context, outcome, { code: rawCode }] = await Promise.all([
+  const [t, page, column, locale, context, outcome, { code: rawCode }] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('column'),
+    getLocale(),
     requireContext(),
     outcomeOf(searchParams),
     params,
@@ -158,8 +162,36 @@ export default async function ItemPage({
                 <span>{t('items.warranty_months')}</span>
                 <span>{row.warrantyMonths ?? t('none')}</span>
               </li>
+              <li>
+                <span>{t('items.selling_price')}</span>
+                <span>
+                  {row.sellingPriceIqd === null
+                    ? t('none')
+                    : formatMoney(row.sellingPriceIqd, 'IQD', locale as Locale)}
+                </span>
+              </li>
             </ul>
           </Panel>
+
+          {mayEdit ? (
+            <Panel title={t('items.selling_price')}>
+              <Form action={setItemSellingPrice}>
+                <Hidden name="code" value={row.code} />
+                <Field
+                  defaultValue={row.sellingPriceIqd ?? ''}
+                  hint={t('items.prices_hint')}
+                  label={t('items.selling_price')}
+                  min={0}
+                  name="price"
+                  step="0.0001"
+                  type="number"
+                />
+                <SubmitRow>
+                  <Submit label={t('save')} />
+                </SubmitRow>
+              </Form>
+            </Panel>
+          ) : null}
 
           {/* What is actually on the shelf. Not stored on the item — summed
               from the stock movements, so it cannot disagree with them. */}
@@ -227,6 +259,7 @@ export default async function ItemPage({
                     <tr>
                       <th scope="col">{t('items.supplier')}</th>
                       <th scope="col">{t('items.supplier_item_code')}</th>
+                      <th scope="col">{t('items.purchase_price')}</th>
                       <th scope="col">{t('items.is_default')}</th>
                       {mayEdit ? <th scope="col">{t('actions')}</th> : null}
                     </tr>
@@ -243,6 +276,27 @@ export default async function ItemPage({
                           · {supplier.supplierName}
                         </td>
                         <td>{supplier.supplierItemCode ?? t('none')}</td>
+                        <td>
+                          {mayEdit ? (
+                            <Form action={setItemSupplierPrice}>
+                              <Hidden name="code" value={row.code} />
+                              <Hidden name="supplierId" value={supplier.supplierId} />
+                              <Field
+                                defaultValue={supplier.purchasePriceIqd ?? ''}
+                                label={t('items.purchase_price')}
+                                min={0}
+                                name="price"
+                                step="0.0001"
+                                type="number"
+                              />
+                              <Submit label={t('save')} />
+                            </Form>
+                          ) : supplier.purchasePriceIqd === null ? (
+                            t('none')
+                          ) : (
+                            formatMoney(supplier.purchasePriceIqd, 'IQD', locale as Locale)
+                          )}
+                        </td>
                         <td>
                           {supplier.isDefault ? (
                             <Pill label={t('items.default')} on />

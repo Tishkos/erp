@@ -1655,6 +1655,9 @@
       "supplier": "Supplier",
       "supplier_item_code": "Their code for it",
       "supplier_item_code_hint": "The code this supplier knows the item by — read from here rather than typed on an order.",
+      "selling_price": "Selling price (IQD)",
+      "purchase_price": "Buying price (IQD)",
+      "prices_hint": "Defaults per base unit. Invoice prices are copied into drafts; changing a default does not change saved invoices.",
       "is_default": "Default",
       "default": "Default",
       "make_default": "Make default",
@@ -1761,6 +1764,14 @@
       "rename": "Rename",
       "close": "Close",
       "reopen": "Reopen"
+    },
+    "invoices": {
+      "save_failed": "The line could not be saved. Your changes are still here; leave the row again to retry.",
+      "no_default_price": "No default price is set. Enter a price or configure it on the item.",
+      "checking_stock": "Checking stock…",
+      "stock_unavailable": "Stock availability is unavailable.",
+      "available_stock": "Available stock",
+      "availability_hint": "Availability is checked again when posting."
     },
     "ap_invoices": {
       "title": "Purchase Invoices",

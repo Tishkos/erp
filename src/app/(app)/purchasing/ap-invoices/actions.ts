@@ -6,6 +6,7 @@ import { rowCount, runAdmin, runAdminAndReturn, text, withQuery } from '@/server
 import { parseDecimal } from '@domain/money';
 import { parseQuantity } from '@domain/uom';
 import * as ap from '@/server/services/ap-invoice';
+import * as inventory from '@/server/services/inventory';
 import { LINE_ROWS } from './lines';
 
 const LIST = '/purchasing/ap-invoices';
@@ -106,6 +107,16 @@ export interface LineOutcome {
   readonly ok: boolean;
   readonly error?: string;
   readonly lineNo?: number;
+}
+
+export async function invoiceLineAvailability(input: {
+  itemCode: string;
+  warehouseCode: string;
+  supplierId?: string | null;
+}) {
+  return runAdmin((tx, ctx) =>
+    inventory.invoiceAvailability(tx, ctx, ap.PERMISSION_OBJECT, input),
+  );
 }
 
 /**
