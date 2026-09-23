@@ -408,7 +408,12 @@ test('item sales account appears in invoice account selection', async ({ page })
     .first()
     .getAttribute('value');
   await salesAccount.selectOption(salesAccountId!);
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  // Scoped to the form that holds the field: the item's record grew a second
+  // Save when it gained its prices, and "the Save button" is now ambiguous.
+  await page
+    .locator('form:has(select[name="salesAccountId"]) button[type="submit"]')
+    .first()
+    .click();
   await page.waitForLoadState('networkidle');
 
   const customerCode = `E2E-CUST-${stamp}`;
