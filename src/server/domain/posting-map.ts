@@ -148,6 +148,75 @@ export function assertMappedAccount(
   if (!mappingAccountEligible(eventType, lineRole, account)) throw new InvalidSalesRevenueAccountError(account.code);
 }
 
+export class ChosenAccountError extends Error {
+  readonly code = 'CHOSEN_ACCOUNT_INVALID';
+  constructor(detail: string) {
+    super(detail);
+    this.name = 'ChosenAccountError';
+  }
+}
+
+/**
+ * May this document post its statement side to this account?
+ *
+ * The one rule that cannot be relaxed. A customer's or supplier's balance is
+ * kept in the subledger, and the subledger is written only for a line that
+ * hits a control account of that kind — so an invoice pointed at an ordinary
+ * account posts a balanced journal and vanishes from the partner's statement
+ * without a word. SAP calls the same field an alternative reconciliation
+ * account and constrains it the same way, for the same reason.
+ */
+export function assertStatementAccount(
+  kind: 'customer' | 'supplier',
+  account: Pick<AccountNode, 'code' | 'isGroup' | 'controlAccount'>,
+): void {
+  if (account.isGroup) {
+    throw new ChosenAccountError(
+      `${account.code} is a group account, and nothing posts to a group (§02.1).`,
+    );
+  }
+  if (account.controlAccount !== kind) {
+    throw new ChosenAccountError(
+      `${account.code} is not a ${kind} control account, so this invoice would post a balanced journal ` +
+        `and never appear on the ${kind}'s statement. Designate it in Chart of Accounts, or leave the ` +
+        'field empty to use the configured mapping.',
+    );
+  }
+}
+
+/**
+ * May this document post its income or its cost to this account?
+ *
+ * The opposite constraint: a control account is somebody's balance, and
+ * revenue or cost landing there makes the subledger disagree with its own
+ * control account. Everything else postable is the person's business — which
+ * revenue line a sale belongs to is an accounting judgement, not a rule.
+ */
+export function assertResultAccount(
+  expected: 'revenue' | 'expense',
+  account: Pick<AccountNode, 'code' | 'accountType' | 'isGroup' | 'controlAccount'>,
+): void {
+  if (account.isGroup) {
+    throw new ChosenAccountError(
+      `${account.code} is a group account, and nothing posts to a group (§02.1).`,
+    );
+  }
+  if (account.controlAccount !== null) {
+    throw new ChosenAccountError(
+      `${account.code} is the ${account.controlAccount} control account and keeps a partner's balance; ` +
+        'income and cost cannot be posted there.',
+    );
+  }
+  if (account.accountType !== expected) {
+    throw new ChosenAccountError(
+      `${account.code} is ${article(account.accountType)} ${account.accountType} account, and this line posts ` +
+        `${expected === 'revenue' ? 'income' : 'cost'}. Choose ${article(expected)} ${expected} account.`,
+    );
+  }
+}
+
+const article = (word: string) => ('aeiou'.includes(word[0]!) ? 'an' : 'a');
+
 /**
  * A message key for an event type.
  *

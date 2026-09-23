@@ -63,6 +63,7 @@ import * as authz from './authorization';
 import * as coa from './chart-of-accounts';
 import * as audit from './audit';
 import * as posting from './posting';
+import { assertResultAccount, assertStatementAccount } from '../domain/posting-map';
 import * as dimensions from './dimensions';
 import * as inventory from './inventory';
 import * as statuses from './statuses';
@@ -137,6 +138,72 @@ async function accountingValues(
     if (!result.rows[0]?.exists) throw new dimensions.UnknownDimensionValueError(dimension, value);
   }
   return values;
+}
+
+export interface InvoiceChosenAccounts {
+  /** The account this customer's balance is kept on. Null returns it to the mapping. */
+  readonly receivableAccountId?: string | null;
+  /** Where the income belongs. Null returns it to the item, then the mapping. */
+  readonly revenueAccountId?: string | null;
+}
+
+/**
+ * The accounts this invoice posts to, chosen on the document itself.
+ *
+ * The sponsor's ask (2026-09-22): name the accounts on the invoice, the way a
+ * journal entry names its own, rather than having them decided elsewhere.
+ * Both are optional and both default to the configuration — this is an
+ * exception, typed on the document, recorded in the trail, and shown on the
+ * record beside what it changed.
+ *
+ * Draft only, and the same reason as everything else on a draft: a posted
+ * figure does not move without a reversal, and an approved one goes back to
+ * draft for a fresh approval first.
+ */
+export async function setChosenAccounts(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  input: InvoiceChosenAccounts,
+): Promise<void> {
+  const invoice = await editableDraft(tx, ctx, id);
+
+  const receivableAccountId = input.receivableAccountId?.trim() || null;
+  const revenueAccountId = input.revenueAccountId?.trim() || null;
+
+  if (receivableAccountId) {
+    assertStatementAccount('customer', await coa.loadAccount(tx, receivableAccountId));
+  }
+  if (revenueAccountId) {
+    assertResultAccount('revenue', await coa.loadAccount(tx, revenueAccountId));
+  }
+
+  if (
+    invoice.receivableAccountId === receivableAccountId &&
+    invoice.revenueAccountId === revenueAccountId
+  ) {
+    return;
+  }
+
+  await tx
+    .update(arInvoice)
+    .set({ receivableAccountId, revenueAccountId, updatedAt: new Date() })
+    .where(eq(arInvoice.id, id));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'ar_invoice.accounts_chosen',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: invoice.branchCode,
+    before: {
+      receivableAccountId: invoice.receivableAccountId,
+      revenueAccountId: invoice.revenueAccountId,
+    },
+    after: { receivableAccountId, revenueAccountId },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
 }
 
 export async function setAccountingDimensions(
@@ -298,6 +365,10 @@ async function revenueRequests(
     return {
       role: 'sales_revenue',
       credit: line.netIqd,
+      // What the invoice says, then what the item says, then the mapping —
+      // most specific answer first, and each one is somebody's decision
+      // rather than the engine's (§3.3).
+      ...(invoice.revenueAccountId ? { accountId: invoice.revenueAccountId } : {}),
       itemAccountId: byCode.get(line.itemCode) ?? null,
       criteria: { branchCode: invoice.branchCode, warehouseCode },
       dimensions: { warehouse: warehouseCode },
@@ -1067,6 +1138,11 @@ export async function post(
   const postingLines: PostingLineRequest[] = [
     {
       role: 'customer_receivable',
+      // The account the invoice names for itself, when it names one; the
+      // customer_receivable mapping otherwise. Checked at the moment it was
+      // chosen, and again here, because a designation can be taken off an
+      // account between the two.
+      ...(invoice.receivableAccountId ? { accountId: invoice.receivableAccountId } : {}),
       debit: toDecimalString(netIqd, 4n),
       criteria,
       dimensions: base,

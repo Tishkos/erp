@@ -14,10 +14,12 @@ import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as ar from '@/server/services/ar-invoice';
 import * as items from '@/server/services/items';
+import * as coa from '@/server/services/chart-of-accounts';
 import * as partners from '@/server/services/partners';
 import * as warehouses from '@/server/services/warehouses';
 import {
   approveArInvoice,
+  saveArInvoiceAccounts,
   invoiceLineAvailability,
   postArInvoice,
   removeArInvoiceLine,
@@ -96,6 +98,9 @@ export default async function ArInvoicePage({
           )
         : [],
       revenueAccounts: await ar.revenueAccountsFor(tx, document),
+      // What may be chosen on the document: the customer control accounts the
+      // statement can be kept on, and the revenue accounts income may go to.
+      accounts: editable ? await coa.postableAccounts(tx) : [],
     };
   });
 
@@ -125,6 +130,12 @@ export default async function ArInvoicePage({
     invoice.deliveryNoteId === null &&
     can(principal, 'edit_draft', ar.PERMISSION_OBJECT);
   const mayPost = invoice.status === 'approved' && can(principal, 'post', ar.PERMISSION_OBJECT);
+  const mayChooseAccounts = mayEdit && can(principal, 'edit_draft', ar.PERMISSION_OBJECT);
+  const accountLabel = (id: string | null) => {
+    if (!id) return t('invoices.account_default');
+    const account = found.accounts.find((row) => row.id === id);
+    return account ? `${account.code} · ${account.name}` : t('invoices.account_default');
+  };
   const mayReturnToDraft =
     invoice.status === 'approved' &&
     invoice.salesOrderId === null &&
@@ -146,6 +157,58 @@ export default async function ArInvoicePage({
     {
       label: column('due_date'),
       value: <bdi dir="ltr">{formatBusinessDate(invoice.dueDate, locale as Locale)}</bdi>,
+    },
+    {
+      // The sponsor's ask (2026-09-22): the invoice names its own accounts,
+      // the way a journal entry does. Blank is the ordinary case and reads
+      // "as configured" — the mapping decides, and the record still says so
+      // below, where the posting is traced line by line.
+      label: t('invoices.statement_account_customer'),
+      control: mayChooseAccounts,
+      value: mayChooseAccounts ? (
+        <select
+          aria-label={t('invoices.statement_account_customer')}
+          defaultValue={invoice.receivableAccountId ?? ''}
+          form="ar-invoice-accounts"
+          name="receivable_account_id"
+        >
+          <option value="">{t('invoices.account_default')}</option>
+          {found.accounts
+            .filter((account) => account.controlAccount === 'customer')
+            .map((account) => (
+              <option key={account.id} value={account.id}>
+                {`${account.code} · ${account.name}`}
+              </option>
+            ))}
+        </select>
+      ) : (
+        <bdi dir="auto">{accountLabel(invoice.receivableAccountId)}</bdi>
+      ),
+    },
+    {
+      label: t('invoices.revenue_account'),
+      control: mayChooseAccounts,
+      value: mayChooseAccounts ? (
+        <select
+          aria-label={t('invoices.revenue_account')}
+          defaultValue={invoice.revenueAccountId ?? ''}
+          form="ar-invoice-accounts"
+          name="revenue_account_id"
+        >
+          <option value="">{t('invoices.account_default')}</option>
+          {found.accounts
+            .filter(
+              (account) => account.accountType === 'revenue' && account.controlAccount === null,
+            )
+            .map((account) => (
+              <option key={account.id} value={account.id}>
+                {`${account.code} · ${account.name}`}
+              </option>
+            ))}
+        </select>
+      ) : (
+        <bdi dir="auto">{accountLabel(invoice.revenueAccountId)}</bdi>
+      ),
     },
     // Who the document passed through. An empty box is an answer too: it says
     // that step has not happened.
@@ -177,6 +240,13 @@ export default async function ArInvoicePage({
       <DocumentWindow
         actions={
           <>
+            {mayChooseAccounts ? (
+              <form action={saveArInvoiceAccounts} id="ar-invoice-accounts">
+                <input name="id" type="hidden" value={invoice.id} />
+                <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
+                <button className="action" type="submit">{t('invoices.save_accounts')}</button>
+              </form>
+            ) : null}
             {mayApprove ? (
               <form action={approveArInvoice}>
                 <input name="id" type="hidden" value={invoice.id} />

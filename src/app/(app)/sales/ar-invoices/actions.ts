@@ -149,6 +149,24 @@ export async function approveArInvoice(formData: FormData): Promise<void> {
   await runAdminAndReturn((tx, ctx) => ar.approve(tx, ctx, text(formData, 'id')), record(invoiceNo));
 }
 
+/**
+ * The accounts this invoice posts to, chosen on the document.
+ *
+ * Blank means "as configured" — the mapping for the statement side, the
+ * item's own account then the mapping for the income — so clearing a field is
+ * how somebody takes the exception back off.
+ */
+export async function saveArInvoiceAccounts(formData: FormData): Promise<void> {
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      ar.setChosenAccounts(tx, ctx, text(formData, 'id'), {
+        receivableAccountId: text(formData, 'receivable_account_id').trim() || null,
+        revenueAccountId: text(formData, 'revenue_account_id').trim() || null,
+      }),
+    record(text(formData, 'invoice_no')),
+  );
+}
+
 export async function returnArInvoiceToDraft(formData: FormData): Promise<void> {
   await runAdminAndReturn(
     (tx, ctx) => ar.returnToDraft(tx, ctx, text(formData, 'id'), text(formData, 'reason')),

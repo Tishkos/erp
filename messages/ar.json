@@ -1773,7 +1773,16 @@
       "checking_stock": "جارٍ فحص المخزون…",
       "stock_unavailable": "تعذر معرفة المخزون المتاح.",
       "available_stock": "المخزون المتاح",
-      "availability_hint": "يُعاد فحص التوفر عند الترحيل."
+      "availability_hint": "يُعاد فحص التوفر عند الترحيل.",
+      "accounts": "المعالجة المحاسبية",
+      "accounts_hint": "اتركه فارغًا لاستخدام الربط المهيأ.",
+      "statement_account_customer": "حساب الذمم المدينة (كشف الحساب)",
+      "statement_account_supplier": "حساب الذمم الدائنة (كشف الحساب)",
+      "revenue_account": "حساب الإيراد",
+      "expense_account": "حساب المصروف (سطور الخدمات)",
+      "account_default": "حسب الإعداد",
+      "save_accounts": "حفظ الحسابات",
+      "posts_to": "يُرحّل إلى"
     },
     "ap_invoices": {
       "title": "فواتير الشراء",

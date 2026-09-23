@@ -1648,3 +1648,134 @@ describe('§3.3 · a mapping is refused when the account cannot answer for the l
     expect(rows[0].n).toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('ops 5 · the invoice may name the accounts it posts to', () => {
+  /*
+   * The sales side of the sponsor's ask (2026-09-22). The precedence is the
+   * one the posting engine already had, now reachable from the document:
+   *
+   *   the invoice's own account   an exception, typed here
+   *   the item's sales account    the routing block 1 configures
+   *   the mapping                 §3.3's configuration
+   *
+   * and the statement side is constrained to a customer control account for
+   * the same reason the purchase side is constrained to a supplier one.
+   */
+  const secondReceivable = async () => {
+    const { rows: parents } = await ownerPool.query(
+      `select id, account_type from chart_of_account where code = 'A000001'`,
+    );
+    const { rows } = await ownerPool.query(
+      `insert into chart_of_account
+         (code, name, account_type, parent_id, is_group, is_active, approval_status, level,
+          currency_restriction, control_account)
+       values ('A950001','Trade Receivables — Retail',$1,$2,false,true,'approved',1,'IQD','customer')
+       returning id`,
+      [parents[0].account_type, parents[0].id],
+    );
+    return rows[0].id as string;
+  };
+
+  const otherRevenue = async () => {
+    const { rows: parents } = await ownerPool.query(
+      `select id, account_type from chart_of_account where code = 'R000001'`,
+    );
+    const { rows } = await ownerPool.query(
+      `insert into chart_of_account
+         (code, name, account_type, parent_id, is_group, is_active, approval_status, level,
+          currency_restriction, control_account)
+       values ('R950001','Retail Sales',$1,$2,false,true,'approved',1,'IQD',null)
+       returning id`,
+      [parents[0].account_type, parents[0].id],
+    );
+    const id = rows[0].id as string;
+    await withScope(scope(manager), (tx) => coa.setRequiredDimensions(tx, manager, id, []));
+    return id;
+  };
+
+  it('posts the debt and the income where the invoice says', async () => {
+    const receivable = await secondReceivable();
+    const revenue = await otherRevenue();
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    const invoice = await sell([{ quantity: '5', unitPrice: '20' }]);
+
+    await withScope(scope(clerk), (tx) =>
+      ar.setChosenAccounts(tx, clerk, invoice.id, {
+        receivableAccountId: receivable,
+        revenueAccountId: revenue,
+      }),
+    );
+
+    const { journalEntryId } = await postSale(invoice.id);
+    const { rows } = await ownerPool.query(
+      `select a.code, l.debit_iqd::text as debit, l.credit_iqd::text as credit
+         from journal_line l join chart_of_account a on a.id = l.account_id
+        where l.journal_entry_id = $1 and a.code in ('A950001','R950001') order by a.code`,
+      [journalEntryId],
+    );
+    expect(rows).toEqual([
+      { code: 'A950001', debit: '100.0000', credit: '0.0000' },
+      { code: 'R950001', debit: '0.0000', credit: '100.0000' },
+    ]);
+  });
+
+  it('keeps the customer statement on the account the invoice named', async () => {
+    const receivable = await secondReceivable();
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    const invoice = await sell([{ quantity: '5', unitPrice: '20' }]);
+    await withScope(scope(clerk), (tx) =>
+      ar.setChosenAccounts(tx, clerk, invoice.id, { receivableAccountId: receivable }),
+    );
+    await postSale(invoice.id);
+
+    const statement = await withScope(scope(manager), (tx) =>
+      subledger.statementFor(tx, 'customer', 'CUST-001'),
+    );
+    expect(statement.at(-1)).toMatchObject({ debitIqd: '100.0000' });
+  });
+
+  it('refuses a receivable that keeps nobody’s balance', async () => {
+    const invoice = await sell([{ quantity: '1', unitPrice: '20' }]);
+    await expect(
+      withScope(scope(clerk), (tx) =>
+        ar.setChosenAccounts(tx, clerk, invoice.id, {
+          receivableAccountId: accounts.sales_revenue!,
+        }),
+      ),
+    ).rejects.toThrow(/never appear on the customer's statement/);
+  });
+
+  it('refuses income posted to a control account', async () => {
+    const invoice = await sell([{ quantity: '1', unitPrice: '20' }]);
+    await expect(
+      withScope(scope(clerk), (tx) =>
+        ar.setChosenAccounts(tx, clerk, invoice.id, {
+          revenueAccountId: accounts.customer_receivable!,
+        }),
+      ),
+    ).rejects.toThrow(/keeps a partner's balance/);
+  });
+
+  it('refuses an expense account for income', async () => {
+    const invoice = await sell([{ quantity: '1', unitPrice: '20' }]);
+    await expect(
+      withScope(scope(clerk), (tx) =>
+        ar.setChosenAccounts(tx, clerk, invoice.id, { revenueAccountId: accounts.cogs! }),
+      ),
+    ).rejects.toThrow(/Choose a revenue account/);
+  });
+
+  it('cannot be changed once the invoice has left draft', async () => {
+    const receivable = await secondReceivable();
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    const invoice = await sell([{ quantity: '5', unitPrice: '20' }]);
+    await withScope(scope(manager), (tx) => ar.approve(tx, manager, invoice.id));
+
+    await expect(
+      withScope(scope(clerk), (tx) =>
+        ar.setChosenAccounts(tx, clerk, invoice.id, { receivableAccountId: receivable }),
+      ),
+    ).rejects.toThrow(/no longer be changed/);
+  });
+});

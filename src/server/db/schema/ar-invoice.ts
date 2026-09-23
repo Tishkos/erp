@@ -38,6 +38,7 @@ import {
 import { appUser, branch, department } from './platform';
 import { businessLine, businessPartner, warehouse } from './organisation';
 import { item, unitOfMeasure } from './item';
+import { chartOfAccount } from './accounting';
 import { journalEntry } from './journal';
 import { salesOrder, salesOrderLine } from './sales-order';
 import { deliveryNote, deliveryNoteLine } from './delivery-note';
@@ -84,6 +85,17 @@ export const arInvoice = pgTable(
       .references(() => branch.code),
     businessLineCode: text('business_line_code').references(() => businessLine.code),
     departmentCode: text('department_code').references(() => department.code),
+
+    /*
+     * The accounts this invoice names for itself — by direction, 2026-09-22.
+     *
+     * Null is the ordinary case and means "as configured": the customer
+     * receivable mapping for the statement side, and the item's own sales
+     * account (then the mapping) for the income. A value is an exception
+     * somebody typed on the document, the way a journal entry names its own.
+     */
+    receivableAccountId: uuid('receivable_account_id').references(() => chartOfAccount.id),
+    revenueAccountId: uuid('revenue_account_id').references(() => chartOfAccount.id),
 
     /**
      * §7.4 — the same date as the delivery. Enforced by a trigger against the

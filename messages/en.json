@@ -1773,7 +1773,16 @@
       "checking_stock": "Checking stock…",
       "stock_unavailable": "Stock availability is unavailable.",
       "available_stock": "Available stock",
-      "availability_hint": "Availability is checked again when posting."
+      "availability_hint": "Availability is checked again when posting.",
+      "accounts": "Accounting",
+      "accounts_hint": "Leave blank to use the configured mapping.",
+      "statement_account_customer": "Receivable account (statement)",
+      "statement_account_supplier": "Payable account (statement)",
+      "revenue_account": "Revenue account",
+      "expense_account": "Expense account (service lines)",
+      "account_default": "As configured",
+      "save_accounts": "Save accounts",
+      "posts_to": "Posts to"
     },
     "ap_invoices": {
       "title": "Purchase Invoices",

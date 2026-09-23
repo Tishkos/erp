@@ -830,3 +830,98 @@ describe('ops 4 · the invoice posts through the mapping, and not without it', (
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('ops 4 · the invoice may name the accounts it posts to', () => {
+  /*
+   * By direction, 2026-09-22: name the accounts on the document, the way a
+   * journal entry names its own, rather than having them decided elsewhere.
+   *
+   * Two guardrails, and they are the interesting part. The statement side has
+   * to be a supplier control account, or the invoice posts a balanced journal
+   * and disappears from the supplier's statement — the failure that started
+   * all this. The cost side may not be a control account, because that is
+   * somebody's balance and a cost posted there makes the subledger disagree
+   * with the account it reconciles to.
+   */
+  const secondPayable = async () => {
+    const { rows: parents } = await ownerPool.query(
+      `select id, account_type from chart_of_account where code = 'L000001'`,
+    );
+    const { rows } = await ownerPool.query(
+      `insert into chart_of_account
+         (code, name, account_type, parent_id, is_group, is_active, approval_status, level,
+          currency_restriction, control_account)
+       values ('L950001','Trade Payables — Projects',$1,$2,false,true,'approved',1,'IQD','supplier')
+       returning id`,
+      [parents[0].account_type, parents[0].id],
+    );
+    return rows[0].id as string;
+  };
+
+  it('posts what is owed to the account the invoice names', async () => {
+    const chosen = await secondPayable();
+    const invoice = await purchaseInvoice({ quantity: '10', unitPrice: '100000' });
+
+    await withScope(scope(clerk), (tx) =>
+      ap.setChosenAccounts(tx, clerk, invoice.id, { payableAccountId: chosen }),
+    );
+    const { journalEntryId } = await postIt(invoice.id);
+
+    expect(await journalOf(journalEntryId)).toEqual([
+      { account: 'Inventory', debit: 1_000_000, credit: 0 },
+      { account: 'Trade Payables — Projects', debit: 0, credit: 1_000_000 },
+    ]);
+  });
+
+  it('keeps the supplier statement on the account the invoice named', async () => {
+    const chosen = await secondPayable();
+    const invoice = await purchaseInvoice({ quantity: '2', unitPrice: '50000' });
+    await withScope(scope(clerk), (tx) =>
+      ap.setChosenAccounts(tx, clerk, invoice.id, { payableAccountId: chosen }),
+    );
+    await postIt(invoice.id);
+
+    const statement = await withScope(scope(manager), (tx) =>
+      subledger.statementFor(tx, 'supplier', 'SUP-001'),
+    );
+    expect(statement.at(-1)).toMatchObject({ creditIqd: '100000.0000' });
+  });
+
+  it('refuses an account that is not the supplier control account', async () => {
+    const invoice = await purchaseInvoice();
+    await expect(
+      withScope(scope(clerk), (tx) =>
+        ap.setChosenAccounts(tx, clerk, invoice.id, { payableAccountId: accounts.expense! }),
+      ),
+    ).rejects.toThrow(/never appear on the supplier's statement/);
+  });
+
+  it('refuses a control account for the cost', async () => {
+    const invoice = await purchaseInvoice();
+    await expect(
+      withScope(scope(clerk), (tx) =>
+        ap.setChosenAccounts(tx, clerk, invoice.id, {
+          expenseAccountId: accounts.supplier_payable!,
+        }),
+      ),
+    ).rejects.toThrow(/keeps a partner's balance/);
+  });
+
+  it('goes back to the mapping when the field is cleared', async () => {
+    const chosen = await secondPayable();
+    const invoice = await purchaseInvoice({ quantity: '10', unitPrice: '100000' });
+    await withScope(scope(clerk), (tx) =>
+      ap.setChosenAccounts(tx, clerk, invoice.id, { payableAccountId: chosen }),
+    );
+    await withScope(scope(clerk), (tx) =>
+      ap.setChosenAccounts(tx, clerk, invoice.id, { payableAccountId: null }),
+    );
+
+    const { journalEntryId } = await postIt(invoice.id);
+    expect(await journalOf(journalEntryId)).toEqual([
+      { account: 'Inventory', debit: 1_000_000, credit: 0 },
+      { account: 'Trade Payables', debit: 0, credit: 1_000_000 },
+    ]);
+  });
+});

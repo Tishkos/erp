@@ -1892,6 +1892,26 @@
   gap: 0.5rem;
 }
 
+/*
+ * The document's own hierarchy.
+ *
+ * `.sapDoc button` gives every button in the window the same amber face, so
+ * "Save accounts" and "Approve" read as a pair of equals sitting side by side
+ * — which is how a person comes to press the wrong one. The forward verb keeps
+ * the amber; everything else in the foot goes quiet.
+ */
+.sapDoc.sapDoc .sapFootActions button:not(:global(.action--primary)) {
+  border-color: var(--w-line-strong);
+  background: linear-gradient(180deg, #fff, var(--w-field-ro));
+  color: var(--w-muted);
+  font-weight: 600;
+}
+
+.sapDoc.sapDoc .sapFootActions button:not(:global(.action--primary)):hover {
+  background: linear-gradient(180deg, #fff, #e4e9de);
+  color: inherit;
+}
+
 .sapFootActions > form input[type='text'] {
   inline-size: 16rem;
   max-inline-size: 40vw;

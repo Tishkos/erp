@@ -58,6 +58,8 @@ import * as inventory from './inventory';
 import * as shipments from './supplier-shipment';
 import * as statuses from './statuses';
 import * as terms from './payment-terms';
+import * as coa from './chart-of-accounts';
+import { assertResultAccount, assertStatementAccount } from '../domain/posting-map';
 import { allocateDocumentNumber } from './numbering';
 
 export const DOCUMENT_TYPE = 'ap_invoice';
@@ -569,6 +571,67 @@ async function restateOwnStock(tx: Tx, id: string, fallback: boolean): Promise<v
       updatedAt: new Date(),
     })
     .where(eq(apInvoice.id, id));
+}
+
+export interface ApInvoiceChosenAccounts {
+  /** The account this supplier's balance is kept on. Null returns it to the mapping. */
+  readonly payableAccountId?: string | null;
+  /** Where a service line's cost belongs. Null returns it to the mapping. */
+  readonly expenseAccountId?: string | null;
+}
+
+/**
+ * The accounts this invoice posts to, chosen on the document itself.
+ *
+ * The purchase side of the sponsor's ask (2026-09-22). The payable is the
+ * account the supplier's statement is kept on, so it must be a supplier
+ * control account or the statement loses the invoice; the expense account
+ * covers a service line only, because a stock line debits the item's own
+ * inventory account and the warehouse and the ledger must agree.
+ */
+export async function setChosenAccounts(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  input: ApInvoiceChosenAccounts,
+): Promise<void> {
+  const { invoice } = await editableDraft(tx, ctx, id);
+
+  const payableAccountId = input.payableAccountId?.trim() || null;
+  const expenseAccountId = input.expenseAccountId?.trim() || null;
+
+  if (payableAccountId) {
+    assertStatementAccount('supplier', await coa.loadAccount(tx, payableAccountId));
+  }
+  if (expenseAccountId) {
+    assertResultAccount('expense', await coa.loadAccount(tx, expenseAccountId));
+  }
+
+  if (
+    invoice.payableAccountId === payableAccountId &&
+    invoice.expenseAccountId === expenseAccountId
+  ) {
+    return;
+  }
+
+  await tx
+    .update(apInvoice)
+    .set({ payableAccountId, expenseAccountId, updatedAt: new Date() })
+    .where(eq(apInvoice.id, id));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'ap_invoice.accounts_chosen',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: invoice.branchCode,
+    before: {
+      payableAccountId: invoice.payableAccountId,
+      expenseAccountId: invoice.expenseAccountId,
+    },
+    after: { payableAccountId, expenseAccountId },
+    outcome: 'success',
+  });
 }
 
 export async function saveLine(
@@ -1118,7 +1181,16 @@ export async function post(
         postingLines.push({ role: 'grni', debit: amount(supported), criteria, dimensions });
       } else {
         expenseIqd += supported;
-        postingLines.push({ role: 'expense', debit: amount(supported), criteria, dimensions });
+        postingLines.push({
+          role: 'expense',
+          // A service line may say where its cost belongs. A stock line may
+          // not: its debit is the item's own inventory account, so that the
+          // warehouse and the ledger hold one figure rather than two.
+          ...(invoice.expenseAccountId ? { accountId: invoice.expenseAccountId } : {}),
+          debit: amount(supported),
+          criteria,
+          dimensions,
+        });
       }
     }
 
@@ -1136,6 +1208,9 @@ export async function post(
 
   postingLines.push({
     role: 'supplier_payable',
+    // The account the invoice names for itself, when it names one; the
+    // supplier_payable mapping otherwise.
+    ...(invoice.payableAccountId ? { accountId: invoice.payableAccountId } : {}),
     credit: amount(payableIqd),
     criteria,
     dimensions: base,

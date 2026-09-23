@@ -155,6 +155,25 @@ export async function removeApInvoiceLine(formData: FormData): Promise<LineOutco
   return outcome.ok ? { ok: true } : { ok: false, error: outcome.error! };
 }
 
+/**
+ * The accounts this invoice posts to, chosen on the document.
+ *
+ * Blank means "as configured": the supplier payable mapping, and the expense
+ * mapping for a service line. A stock line is not offered — its debit is the
+ * item's inventory account, so the warehouse and the ledger hold one figure.
+ */
+export async function saveApInvoiceAccounts(formData: FormData): Promise<void> {
+  const invoiceNo = text(formData, 'invoice_no');
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      ap.setChosenAccounts(tx, ctx, text(formData, 'id'), {
+        payableAccountId: text(formData, 'payable_account_id').trim() || null,
+        expenseAccountId: text(formData, 'expense_account_id').trim() || null,
+      }),
+    record(invoiceNo),
+  );
+}
+
 /** Appendix B's *Pending Approval* — the invoice leaves the clerk's hands. */
 export async function submitApInvoice(formData: FormData): Promise<void> {
   const invoiceNo = text(formData, 'invoice_no');

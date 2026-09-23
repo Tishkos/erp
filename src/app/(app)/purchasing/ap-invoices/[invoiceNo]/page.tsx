@@ -12,11 +12,13 @@ import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as ap from '@/server/services/ap-invoice';
 import * as items from '@/server/services/items';
+import * as coa from '@/server/services/chart-of-accounts';
 import * as partners from '@/server/services/partners';
 import * as warehouses from '@/server/services/warehouses';
 import {
   invoiceLineAvailability,
   postApInvoice,
+  saveApInvoiceAccounts,
   removeApInvoiceLine,
   saveApInvoiceLine,
   submitApInvoice,
@@ -85,6 +87,10 @@ export default async function ApInvoicePage({
       document,
       suppliers: await partners.listActiveInRole(tx, 'supplier'),
       stockItems: editable ? await items.invoiceChoices(tx, 'purchase') : [],
+      // What may be chosen on the document: the supplier control accounts the
+      // statement can be kept on, and the expense accounts a service line's
+      // cost may go to.
+      accounts: editable ? await coa.postableAccounts(tx) : [],
       houses: editable
         ? (await warehouses.listActive(tx)).filter(
             (house) => house.branchCode === document.invoice.branchCode,
@@ -96,6 +102,9 @@ export default async function ApInvoicePage({
   if (!found) notFound();
   const { invoice, lines, raisedBy, submittedBy, postedBy } = found.document;
   const supplier = found.suppliers.find((row) => row.id === invoice.supplierId);
+  // Named once: a `typeof found.…` in a type position is not narrowed by the
+  // `notFound()` above, and reads worse besides.
+  const accounts = found.accounts;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   // The sponsor's "Total Price" is not a stored column and should not be: it is
@@ -118,6 +127,33 @@ export default async function ApInvoicePage({
     invoice.purchaseOrderId === null &&
     can(principal, 'edit_draft', ap.PERMISSION_OBJECT);
   const maySubmit = invoice.status === 'draft' && can(principal, 'submit', ap.PERMISSION_OBJECT);
+  const mayChooseAccounts = mayEdit;
+  const accountLabel = (id: string | null) => {
+    if (!id) return t('invoices.account_default');
+    const account = accounts.find((row) => row.id === id);
+    return account ? `${account.code} · ${account.name}` : t('invoices.account_default');
+  };
+  const accountField = (
+    label: string,
+    name: string,
+    current: string | null,
+    eligible: (account: (typeof accounts)[number]) => boolean,
+  ): DocumentField => ({
+    label,
+    control: mayChooseAccounts,
+    value: mayChooseAccounts ? (
+      <select aria-label={label} defaultValue={current ?? ''} form="ap-invoice-accounts" name={name}>
+        <option value="">{t('invoices.account_default')}</option>
+        {accounts.filter(eligible).map((account) => (
+          <option key={account.id} value={account.id}>
+            {`${account.code} · ${account.name}`}
+          </option>
+        ))}
+      </select>
+    ) : (
+      <bdi dir="auto">{accountLabel(current)}</bdi>
+    ),
+  });
   const mayPost =
     invoice.status === 'submitted' &&
     can(principal, 'approve', ap.PERMISSION_OBJECT) &&
@@ -140,6 +176,19 @@ export default async function ApInvoicePage({
     // Who the document passed through. An empty box is an answer too: it says
     // that step has not happened.
     { label: t('ap_invoices.raised_by'), value: <bdi dir="auto">{raisedBy ?? '—'}</bdi> },
+    // The sponsor's ask (2026-09-22): the invoice names its own accounts.
+    accountField(
+      t('invoices.statement_account_supplier'),
+      'payable_account_id',
+      invoice.payableAccountId,
+      (account) => account.controlAccount === 'supplier',
+    ),
+    accountField(
+      t('invoices.expense_account'),
+      'expense_account_id',
+      invoice.expenseAccountId,
+      (account) => account.accountType === 'expense' && account.controlAccount === null,
+    ),
     { label: column('submitted_by'), value: <bdi dir="auto">{submittedBy ?? t('none')}</bdi> },
     { label: t('ap_invoices.posted_by'), value: <bdi dir="auto">{postedBy ?? t('none')}</bdi> },
   ];
@@ -161,6 +210,13 @@ export default async function ApInvoicePage({
       <DocumentWindow
         actions={
           <>
+            {mayChooseAccounts ? (
+              <form action={saveApInvoiceAccounts} id="ap-invoice-accounts">
+                <input name="id" type="hidden" value={invoice.id} />
+                <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
+                <button className="action" type="submit">{t('invoices.save_accounts')}</button>
+              </form>
+            ) : null}
             {maySubmit ? (
               <form action={submitApInvoice}>
                 <input name="id" type="hidden" value={invoice.id} />

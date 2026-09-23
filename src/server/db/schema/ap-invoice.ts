@@ -47,6 +47,7 @@ import { appUser, branch } from './platform';
 import { businessPartner, costCentre, warehouse } from './organisation';
 import { item, unitOfMeasure } from './item';
 import { documentStatus } from './workflow';
+import { chartOfAccount } from './accounting';
 import { journalEntry } from './journal';
 import { purchaseOrder, purchaseOrderLine } from './purchase-order';
 
@@ -134,6 +135,17 @@ export const apInvoice = pgTable(
     invoiceDate: date('invoice_date').notNull(),
     /** §4.3 — from the supplier's payment terms. */
     dueDate: date('due_date').notNull(),
+
+    /*
+     * The accounts this invoice names for itself — by direction, 2026-09-22.
+     *
+     * Null means "as configured": the supplier payable mapping for the
+     * statement side, and the expense mapping for a service line. A stock
+     * line is not covered — its debit is the item's inventory account, so the
+     * warehouse and the ledger hold one figure rather than two.
+     */
+    payableAccountId: uuid('payable_account_id').references(() => chartOfAccount.id),
+    expenseAccountId: uuid('expense_account_id').references(() => chartOfAccount.id),
     currency: text('currency').notNull().default('IQD'),
     note: text('note'),
 
