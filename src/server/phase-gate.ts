@@ -104,11 +104,11 @@ export const OPERATIONS: readonly string[] = [
   '/sales/customer-receipts',
   // Block 8 — Invoice Status Tracking.
   '/inventory/in-transit',
-  // Not a block, and here for the reason Phase 1 gave periods and rates:
-  // nothing above can post without it. §3.3 forbids the engine from choosing
-  // an account, so every document in this list stops at its first approval
-  // until the mapping exists.
-  '/finance/posting-mappings',
+  // Posting Mappings was here while it was the only way to tell the engine
+  // which account a document posts to. By direction (2026-09-23) that choice
+  // belongs on the invoice, where the invoice is made — so the screen comes
+  // off the tree. The mappings themselves stay: they are what the fields on
+  // those forms open on, and what every other document still posts through.
 ];
 
 const VISIBLE: ReadonlySet<string> = new Set([

@@ -190,8 +190,6 @@ describe('every screen has one address', () => {
       '/finance/income-statement',
       '/finance/journals',
       '/finance/periods',
-      // §3.3's mapping, which every posting document reads.
-      '/finance/posting-mappings',
       '/finance/reversals',
       '/finance/trial-balance',
       '/inventory/availability',

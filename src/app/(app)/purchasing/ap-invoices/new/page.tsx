@@ -12,7 +12,9 @@ import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as ap from '@/server/services/ap-invoice';
 import * as items from '@/server/services/items';
+import * as coa from '@/server/services/chart-of-accounts';
 import * as partners from '@/server/services/partners';
+import * as posting from '@/server/services/posting';
 import * as paymentTerms from '@/server/services/payment-terms';
 import * as warehouses from '@/server/services/warehouses';
 import { gapsFor } from '@domain/setup-gaps';
@@ -55,7 +57,7 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
     return <Denied object={page('ap_invoices')} />;
   }
 
-  const { suppliers, allSuppliers, stockItems, allItems, houses, schedules } =
+  const { suppliers, allSuppliers, stockItems, allItems, houses, schedules, accounts, mapped } =
     await withCurrentUser(async (tx) => ({
       suppliers: await partners.listActiveInRole(tx, 'supplier'),
       // The whole list too, so an empty picker can say which of the two things is
@@ -69,6 +71,24 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
       // The payment terms travel with the page so the due date can be worked
       // out while the invoice is being typed (§16).
       schedules: await paymentTerms.allWithSchedules(tx),
+      // Where this invoice will post, chosen on the form that raises it (by
+      // direction, 2026-09-23). The configured mapping opens as the chosen
+      // value, so the ordinary case is to leave it alone.
+      accounts: await coa.postableAccounts(tx),
+      mapped: {
+        payable: await posting.mappedAccountFor(
+          tx,
+          'purchasing.ap_invoice',
+          'supplier_payable',
+          context.scope.branchCode,
+        ),
+        expense: await posting.mappedAccountFor(
+          tx,
+          'purchasing.ap_invoice',
+          'expense',
+          context.scope.branchCode,
+        ),
+      },
     }),
   );
 
@@ -135,6 +155,48 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
           required
           terms={supplierTerms}
         />
+      ),
+    },
+    {
+      label: t('invoices.statement_account_supplier'),
+      control: true,
+      value: (
+        <select
+          aria-label={t('invoices.statement_account_supplier')}
+          defaultValue={mapped.payable ?? ''}
+          name="payable_account_id"
+        >
+          <option value="">{t('invoices.account_default')}</option>
+          {accounts
+            .filter((account) => account.controlAccount === 'supplier')
+            .map((account) => (
+              <option key={account.id} value={account.id}>
+                {`${account.code} · ${account.name}`}
+              </option>
+            ))}
+        </select>
+      ),
+    },
+    {
+      label: t('invoices.expense_account'),
+      control: true,
+      value: (
+        <select
+          aria-label={t('invoices.expense_account')}
+          defaultValue={mapped.expense ?? ''}
+          name="expense_account_id"
+        >
+          <option value="">{t('invoices.account_default')}</option>
+          {accounts
+            .filter(
+              (account) => account.accountType === 'expense' && account.controlAccount === null,
+            )
+            .map((account) => (
+              <option key={account.id} value={account.id}>
+                {`${account.code} · ${account.name}`}
+              </option>
+            ))}
+        </select>
       ),
     },
   ];

@@ -198,6 +198,9 @@ export interface CreateApInvoiceInput {
   /** §15 — a manager's decision that this repeated number is not a duplicate. */
   readonly duplicateApprovedBy?: string | null;
   readonly duplicateApprovalReason?: string | null;
+  /** Chosen on the form that raises it — see `setChosenAccounts`. */
+  readonly payableAccountId?: string | null;
+  readonly expenseAccountId?: string | null;
 }
 
 async function load(tx: Tx, id: string) {
@@ -396,6 +399,19 @@ export async function create(
     ? input.dueDate.trim()
     : await terms.dueDateOn(tx, supplier?.paymentTermsCode ?? null, input.invoiceDate);
 
+  /*
+   * The accounts the form chose, checked before anything is written — the
+   * same two rules `setChosenAccounts` applies to a draft.
+   */
+  const payableAccountId = input.payableAccountId?.trim() || null;
+  const expenseAccountId = input.expenseAccountId?.trim() || null;
+  if (payableAccountId) {
+    assertStatementAccount('supplier', await coa.loadAccount(tx, payableAccountId));
+  }
+  if (expenseAccountId) {
+    assertResultAccount('expense', await coa.loadAccount(tx, expenseAccountId));
+  }
+
   const allocated = await allocateDocumentNumber(
     tx,
     SEQUENCE_KEY,
@@ -421,6 +437,8 @@ export async function create(
       // The route this invoice took, recorded on the header so the §15 CHECK
       // can read one field rather than trust the application to have looked at
       // the lines.
+      payableAccountId,
+      expenseAccountId,
       receivesOwnStock: receivesItsOwnStock,
       nonPoJustification: input.nonPoJustification?.trim() ?? null,
       nonPoApprovedBy: input.nonPoApprovedBy ?? null,

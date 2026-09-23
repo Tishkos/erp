@@ -925,3 +925,116 @@ describe('ops 4 · the invoice may name the accounts it posts to', () => {
     ]);
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('ops 4 · two invoices, two accounts, and every ledger agrees', () => {
+  /*
+   * The sponsor's test, in the sponsor's words (2026-09-23): each invoice may
+   * select a different account, and the journals, the warehouse and the
+   * statements must all reflect it — the way an ERP is expected to behave.
+   *
+   * So: two invoices against one supplier, each naming its own payable
+   * account, raised the way the form raises them — the choice arrives with
+   * the document rather than being set afterwards.
+   */
+  const payableNamed = async (code: string, name: string) => {
+    const { rows: parents } = await ownerPool.query(
+      `select id, account_type from chart_of_account where code = 'L000001'`,
+    );
+    const { rows } = await ownerPool.query(
+      `insert into chart_of_account
+         (code, name, account_type, parent_id, is_group, is_active, approval_status, level,
+          currency_restriction, control_account)
+       values ($1,$2,$3,$4,false,true,'approved',1,'IQD','supplier') returning id`,
+      [code, name, parents[0].account_type, parents[0].id],
+    );
+    return rows[0].id as string;
+  };
+
+  const raise = async (payableAccountId: string, quantity: string, unitPrice: string) =>
+    withScope(scope(clerk), (tx) =>
+      ap.create(tx, clerk, {
+        supplierId,
+        supplierInvoiceNo: '',
+        purchaseOrderId: null,
+        branchCode: BAGHDAD,
+        invoiceDate: ON,
+        dueDate: '2026-05-01',
+        payableAccountId,
+        lines: [
+          {
+            itemCode: PANEL,
+            description: 'Solar Panel 550W',
+            quantity: qty(quantity),
+            unitPriceIqd: price(unitPrice),
+            uomCode: 'EA',
+            isInventory: true,
+            warehouseCode: WAREHOUSE,
+          },
+        ],
+      }),
+    );
+
+  it('posts each invoice to the account it chose, and the warehouse takes both', async () => {
+    const retail = await payableNamed('L970001', 'Payables — Retail');
+    const projects = await payableNamed('L970002', 'Payables — Projects');
+
+    const first = await raise(retail, '4', '100000');
+    const second = await raise(projects, '6', '100000');
+    const firstJournal = await postIt(first.id);
+    const secondJournal = await postIt(second.id);
+
+    expect(await journalOf(firstJournal.journalEntryId)).toEqual([
+      { account: 'Inventory', debit: 400_000, credit: 0 },
+      { account: 'Payables — Retail', debit: 0, credit: 400_000 },
+    ]);
+    expect(await journalOf(secondJournal.journalEntryId)).toEqual([
+      { account: 'Inventory', debit: 600_000, credit: 0 },
+      { account: 'Payables — Projects', debit: 0, credit: 600_000 },
+    ]);
+
+    // The warehouse does not care which account was chosen: ten arrived.
+    const position = await withScope(scope(manager), (tx) =>
+      inventory.positionOf(tx, PANEL, WAREHOUSE, BAGHDAD),
+    );
+    expect(Number(position.onHand) / 1_000_000).toBe(10);
+  });
+
+  it('shows both on the supplier statement, whichever account each was kept on', async () => {
+    const retail = await payableNamed('L970001', 'Payables — Retail');
+    const projects = await payableNamed('L970002', 'Payables — Projects');
+
+    await postIt((await raise(retail, '4', '100000')).id);
+    await postIt((await raise(projects, '6', '100000')).id);
+
+    // One supplier, one statement — §1.2's subledger is kept by party, and a
+    // second control account does not split the partner in two.
+    const statement = await withScope(scope(manager), (tx) =>
+      subledger.statementFor(tx, 'supplier', 'SUP-001'),
+    );
+    expect(statement.map((row) => row.creditIqd)).toEqual(['400000.0000', '600000.0000']);
+  });
+
+  it('reconciles each control account to its own subledger rows', async () => {
+    // §9.9's reconciliation, per account: what the ledger says an account
+    // holds is what the subledger rows that name it add up to.
+    const retail = await payableNamed('L970001', 'Payables — Retail');
+    const projects = await payableNamed('L970002', 'Payables — Projects');
+    await postIt((await raise(retail, '4', '100000')).id);
+    await postIt((await raise(projects, '6', '100000')).id);
+
+    const { rows } = await ownerPool.query(`
+      select a.code,
+             sum(l.credit_iqd - l.debit_iqd)::text as ledger,
+             (select coalesce(sum(s.credit_iqd - s.debit_iqd), 0)::text
+                from subledger_entry s where s.control_account_id = a.id) as subledger
+        from journal_line l join chart_of_account a on a.id = l.account_id
+       where a.control_account = 'supplier'
+       group by a.id, a.code order by a.code`);
+
+    expect(rows).toEqual([
+      { code: 'L970001', ledger: '400000.0000', subledger: '400000.0000' },
+      { code: 'L970002', ledger: '600000.0000', subledger: '600000.0000' },
+    ]);
+  });
+});

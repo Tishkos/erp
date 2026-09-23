@@ -669,6 +669,9 @@ export interface CreateDirectArInvoiceInput {
   readonly note?: string | null;
   readonly businessLineCode?: string | null;
   readonly departmentCode?: string | null;
+  /** Chosen on the form that raises it — see `setChosenAccounts`. */
+  readonly receivableAccountId?: string | null;
+  readonly revenueAccountId?: string | null;
   readonly lines: readonly DirectSalesLineInput[];
 }
 
@@ -710,6 +713,24 @@ export async function createDirect(
     ctx.principal.userId,
   );
 
+  /*
+   * The accounts the form chose, checked before anything is written.
+   *
+   * The same two rules the record page applies: a statement kept on an
+   * account that is nobody's control account disappears from the customer's
+   * statement, and income posted to a control account makes the subledger
+   * disagree with itself.
+   */
+  const receivableAccountId = input.receivableAccountId?.trim() || null;
+  const revenueAccountId = input.revenueAccountId?.trim() || null;
+  if (receivableAccountId) {
+    assertStatementAccount('customer', await coa.loadAccount(tx, receivableAccountId));
+  }
+  if (revenueAccountId) {
+    assertResultAccount('revenue', await coa.loadAccount(tx, revenueAccountId));
+  }
+  const chosen = { receivableAccountId, revenueAccountId };
+
   const [created] = await tx
     .insert(arInvoice)
     .values({
@@ -719,6 +740,7 @@ export async function createDirect(
       customerId: input.customerId,
       branchCode: input.branchCode,
       ...accounting,
+      ...chosen,
       invoiceDate: input.invoiceDate,
       paymentTermsCode: customer.paymentTermsCode ?? null,
       dueDate,

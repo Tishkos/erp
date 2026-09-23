@@ -11,7 +11,9 @@ import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as ar from '@/server/services/ar-invoice';
 import * as items from '@/server/services/items';
+import * as coa from '@/server/services/chart-of-accounts';
 import * as partners from '@/server/services/partners';
+import * as posting from '@/server/services/posting';
 import * as warehouses from '@/server/services/warehouses';
 import { gapsFor } from '@domain/setup-gaps';
 import { createArInvoice, invoiceLineAvailability } from '../actions';
@@ -61,7 +63,8 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
     return <Denied object={page('ar_invoices')} />;
   }
 
-  const { customers, allCustomers, options, allItems, houses } = await withCurrentUser(async (tx) => ({
+  const { customers, allCustomers, options, allItems, houses, accounts, mapped } =
+    await withCurrentUser(async (tx) => ({
     customers: await partners.listActiveInRole(tx, 'customer'),
     // The whole list too, so an empty picker can say which of the two things
     // is wrong: nobody has been added, or nobody added is active.
@@ -71,6 +74,25 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
     houses: (await warehouses.listActive(tx)).filter(
       (house) => house.branchCode === context.scope.branchCode,
     ),
+    // Where this invoice will post, shown on the form that raises it — by
+    // direction, 2026-09-23: the accounts are chosen here, not on a screen of
+    // their own. The configured mapping opens as the chosen value, so the
+    // ordinary case is "leave it alone" and the exception is one click.
+    accounts: await coa.postableAccounts(tx),
+    mapped: {
+      receivable: await posting.mappedAccountFor(
+        tx,
+        'sales.ar_invoice',
+        'customer_receivable',
+        context.scope.branchCode,
+      ),
+      revenue: await posting.mappedAccountFor(
+        tx,
+        'sales.ar_invoice',
+        'sales_revenue',
+        context.scope.branchCode,
+      ),
+    },
   }));
 
   const today = new Date().toISOString().slice(0, 10);
@@ -117,6 +139,48 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
       label: column('due_date'),
       control: true,
       value: <input aria-label={column('due_date')} name="due_date" type="date" />,
+    },
+    {
+      label: t('invoices.statement_account_customer'),
+      control: true,
+      value: (
+        <select
+          aria-label={t('invoices.statement_account_customer')}
+          defaultValue={mapped.receivable ?? ''}
+          name="receivable_account_id"
+        >
+          <option value="">{t('invoices.account_default')}</option>
+          {accounts
+            .filter((account) => account.controlAccount === 'customer')
+            .map((account) => (
+              <option key={account.id} value={account.id}>
+                {`${account.code} · ${account.name}`}
+              </option>
+            ))}
+        </select>
+      ),
+    },
+    {
+      label: t('invoices.revenue_account'),
+      control: true,
+      value: (
+        <select
+          aria-label={t('invoices.revenue_account')}
+          defaultValue={mapped.revenue ?? ''}
+          name="revenue_account_id"
+        >
+          <option value="">{t('invoices.account_default')}</option>
+          {accounts
+            .filter(
+              (account) => account.accountType === 'revenue' && account.controlAccount === null,
+            )
+            .map((account) => (
+              <option key={account.id} value={account.id}>
+                {`${account.code} · ${account.name}`}
+              </option>
+            ))}
+        </select>
+      ),
     },
   ];
 

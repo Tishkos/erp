@@ -94,6 +94,9 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       // supplier's terms itself, by the same arithmetic the form uses (§16).
       dueDate: text(formData, 'due_date').trim() || undefined,
       note: null,
+      // Where it posts, chosen on the form that raised it.
+      payableAccountId: text(formData, 'payable_account_id').trim() || null,
+      expenseAccountId: text(formData, 'expense_account_id').trim() || null,
       lines,
     });
   });

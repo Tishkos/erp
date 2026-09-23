@@ -108,36 +108,12 @@ async function controlAccount(
   return code;
 }
 
-/** Points one line of one document at an account, on the Posting Mappings row. */
-async function mapLine(page: Page, line: string, accountCode: string) {
-  await page.goto('/finance/posting-mappings');
-  const row = page.getByRole('row').filter({ hasText: line }).first();
-  const chooser = row.getByRole('combobox');
-  const option = await chooser
-    .locator('option')
-    .filter({ hasText: accountCode })
-    .first()
-    .getAttribute('value');
-  await chooser.selectOption(option!);
-  await row.getByRole('button', { name: 'Save' }).click();
-  await page.waitForURL(/posting-mappings/, { timeout: 60_000 });
-  await expect(
-    page.getByRole('row').filter({ hasText: line }).first().getByRole('combobox'),
-  ).toHaveValue(option!);
-}
-
 /**
- * The accounts an item carries itself — §3.3 maps what is *not* on a record,
- * and stock answers for its own: where it is held, and what it cost when sold.
- *
- * Set here rather than assumed, because the message a person gets when one is
- * missing ("names no COGS account, so its cost has nowhere to go") is the
- * product working, not the test failing.
+ * The accounts an item carries itself — where its stock is held, and what it
+ * cost when sold. §3.3 maps what is *not* on a record; these are.
  */
 async function itemAccounts(page: Page, code = 'ITM-SEED') {
   await page.goto(`/master-data/items/${code}`);
-  // By field name rather than by label: the record page carries several forms,
-  // and this one is identified by the fields being set.
   const form = page.locator('form:has(select[name="inventoryAccountId"])').first();
   await expect(form).toBeVisible({ timeout: 60_000 });
 
@@ -190,11 +166,6 @@ test.describe('a purchase invoice reaches the supplier statement', () => {
     expect(payableCode).toMatch(/^L\d+$/);
   });
 
-  test('the mapping sends what is owed to it', async ({ page }) => {
-    await signIn(page, MANAGER);
-    await mapLine(page, 'What the company owes the supplier', payableCode);
-  });
-
   test('the invoice posts, and the supplier statement shows it', async ({ page }) => {
     await signIn(page, ADMIN);
     await createPartner(page, '/master-data/suppliers', 'New supplier', supplierCode);
@@ -209,6 +180,17 @@ test.describe('a purchase invoice reaches the supplier statement', () => {
       timeout: 60_000,
     });
     await page.getByLabel('Supplier Code', { exact: true }).fill(supplierCode);
+
+    // The account this invoice keeps the supplier's balance on — chosen here,
+    // on the form that raises it (by direction, 2026-09-23).
+    const payable = page.locator('select[name="payable_account_id"]');
+    await payable.selectOption(
+      (await payable
+        .locator('option')
+        .filter({ hasText: payableCode })
+        .first()
+        .getAttribute('value'))!,
+    );
 
     // The grid names its item in a picker on one screen and a list on the
     // other; the test types where it can and chooses where it must.
@@ -262,27 +244,6 @@ test.describe('a sales invoice reaches the customer statement', () => {
     expect(receivableCode).toMatch(/^A\d+$/);
   });
 
-  test('the mappings send the sale and the debt to their accounts', async ({ page }) => {
-    await signIn(page, MANAGER);
-    await mapLine(page, 'What the customer owes the company', receivableCode);
-
-    // Revenue needs somewhere to go too, and any approved revenue account will
-    // do for the purpose of this test — which is the statement, not the chart.
-    await page.goto('/finance/posting-mappings');
-    const revenue = page.getByRole('row').filter({ hasText: 'The sale' }).first();
-    const chooser = revenue.getByRole('combobox');
-    if ((await chooser.inputValue()) === '') {
-      const first = await chooser
-        .locator('option:not([value=""])')
-        .filter({ hasText: /^R/ })
-        .first()
-        .getAttribute('value');
-      await chooser.selectOption(first!);
-      await revenue.getByRole('button', { name: 'Save' }).click();
-      await page.waitForURL(/posting-mappings/, { timeout: 60_000 });
-    }
-  });
-
   test('the invoice posts with no Business Line, and the statement shows it', async ({ page }) => {
     await signIn(page, ADMIN);
     await createPartner(page, '/master-data/customers', 'New customer', customerCode);
@@ -296,6 +257,23 @@ test.describe('a sales invoice reaches the customer statement', () => {
     await expect(page.locator('select[name="department_code"]')).toHaveCount(0);
 
     await page.getByLabel('Customer Code', { exact: true }).fill(customerCode);
+
+    // Both accounts, chosen on the form that raises the invoice.
+    const receivable = page.locator('select[name="receivable_account_id"]');
+    await receivable.selectOption(
+      (await receivable
+        .locator('option')
+        .filter({ hasText: receivableCode })
+        .first()
+        .getAttribute('value'))!,
+    );
+    const revenue = page.locator('select[name="revenue_account_id"]');
+    const revenueOption = await revenue
+      .locator('option:not([value=""])')
+      .first()
+      .getAttribute('value');
+    await revenue.selectOption(revenueOption!);
+
     await page.locator('input[name="item_code_0"]').fill('ITM-SEED');
     await page.locator('input[name="quantity_0"]').fill('1');
     await page.locator('input[name="unit_price_0"]').fill('4000');

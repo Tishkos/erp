@@ -33,6 +33,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
   assertRequestWellFormed,
   resolveLineAccount,
+  resolveRule,
   type PlannedLine,
   type PostingPlan,
   type PostingRequest,
@@ -750,6 +751,29 @@ async function plainRule(tx: Tx, eventType: string, lineRole: string) {
     )
     .limit(1);
   return row;
+}
+
+/**
+ * The account a document would post a line to as things stand.
+ *
+ * What the invoice forms open on: the mapping in force, shown as the chosen
+ * value so a person sees where the money is going before they raise anything,
+ * and changes it there rather than on a screen of its own (by direction,
+ * 2026-09-23). Null when nothing is mapped — the form then asks for a choice
+ * instead of pretending to have one.
+ */
+export async function mappedAccountFor(
+  tx: Tx,
+  eventType: string,
+  lineRole: string,
+  branchCode: string,
+): Promise<string | null> {
+  const rules = await rulesForEvent(tx, eventType);
+  try {
+    return resolveRule(rules, eventType, lineRole, { branchCode }).accountId;
+  } catch {
+    return null;
+  }
 }
 
 /** The mappings, for the Accounting Mapping screen (Appendix C). */

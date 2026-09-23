@@ -1779,3 +1779,75 @@ describe('ops 5 · the invoice may name the accounts it posts to', () => {
     ).rejects.toThrow(/no longer be changed/);
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('ops 5 · the accounts are chosen on the form that raises the invoice', () => {
+  /*
+   * By direction, 2026-09-23: *"posting should be in ar and a/p when making
+   * it, not in post mappings"*. The form carries the two accounts, the
+   * service takes them at creation, and the same guardrails apply there as
+   * on a draft — a statement kept on an account that answers for nobody is
+   * the failure this whole thread began with.
+   */
+  it('takes the accounts the form chose, at creation', async () => {
+    const { rows: parents } = await ownerPool.query(
+      `select id, account_type from chart_of_account where code = 'A000001'`,
+    );
+    const { rows } = await ownerPool.query(
+      `insert into chart_of_account
+         (code, name, account_type, parent_id, is_group, is_active, approval_status, level,
+          currency_restriction, control_account)
+       values ('A960001','Trade Receivables — Wholesale',$1,$2,false,true,'approved',1,'IQD','customer')
+       returning id`,
+      [parents[0].account_type, parents[0].id],
+    );
+    const receivable = rows[0].id as string;
+
+    await buy(jinko, { quantity: '10', unitPrice: '100' });
+    const invoice = await withScope(scope(clerk), (tx) =>
+      ar.createDirect(tx, clerk, {
+        customerId,
+        branchCode: BAGHDAD,
+        invoiceDate: SELL_ON,
+        receivableAccountId: receivable,
+        lines: [
+          {
+            itemCode: PANEL,
+            quantity: qty('5'),
+            unitPriceIqd: price('20'),
+            warehouseCode: WAREHOUSE,
+          },
+        ],
+      }),
+    );
+
+    const { journalEntryId } = await postSale(invoice.id);
+    const { rows: posted } = await ownerPool.query(
+      `select a.code from journal_line l join chart_of_account a on a.id = l.account_id
+        where l.journal_entry_id = $1 and l.line_role = 'customer_receivable'`,
+      [journalEntryId],
+    );
+    expect(posted[0].code).toBe('A960001');
+  });
+
+  it('refuses at creation what it would refuse on a draft', async () => {
+    await expect(
+      withScope(scope(clerk), (tx) =>
+        ar.createDirect(tx, clerk, {
+          customerId,
+          branchCode: BAGHDAD,
+          invoiceDate: SELL_ON,
+          receivableAccountId: accounts.sales_revenue!,
+          lines: [
+            {
+              itemCode: PANEL,
+              quantity: qty('1'),
+              unitPriceIqd: price('20'),
+              warehouseCode: WAREHOUSE,
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(/never appear on the customer's statement/);
+  });
+});
