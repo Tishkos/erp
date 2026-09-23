@@ -612,6 +612,20 @@ export async function resetTestData(): Promise<void> {
     // §4.2's own defaults, restored rather than assumed. A test that alters them
     // would otherwise poison every file that runs after it, and the failure would
     // appear far from its cause.
+    /*
+     * Master data outlives the reset by design — and a suite that borrows a
+     * business line leaves it for whoever runs next, which is how Phase 03's
+     * count of §2.2's six names came to fail depending on file order. Twice,
+     * from two different files. So the reset states the set rather than
+     * trusting each suite to put its own back; migration 0010 seeds these and
+     * phase03-master-data asserts them.
+     */
+    await client.query(`
+      delete from business_line
+       where code not in ('CONTRACTING','INVESTMENTS','LOGISTICS','MONEY_TRANSFER',
+                          'PRODUCT_SALES','PROJECTS')
+    `);
+
     await client.query('delete from account_type_dimension_default');
     await client.query(`
       insert into account_type_dimension_default (account_type, dimension)
