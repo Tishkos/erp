@@ -1946,14 +1946,20 @@
     },
     "posting_mappings": {
       "subtitle": "Which account each document posts to. The posting engine never chooses one on its own (§3.3).",
+      "side": "Dr/Cr",
+      "side_debit": "Dr",
+      "side_credit": "Cr",
+      "side_either": "Dr or Cr",
       "line": "Line",
       "not_set": "Not set",
       "always": "Required",
-      "missing": "{count, plural, one {One required line has no account yet, so the documents that post it cannot be posted.} other {# required lines have no account yet, so the documents that post them cannot be posted.}}",
-      "complete": "Every required line has an account.",
-      "setup_hint": "Choose accounts from your Chart of Accounts; no account numbers are fixed. Create and approve accounts there, then select them below. Inventory and COGS accounts are selected on each item.",
-      "control_required": "Select a {kind} control account. Set its designation in Chart of Accounts first.",
-      "invalid_account": "The saved account is not eligible for this line. Check its approval, active status and control-account designation."
+      "ready": "Ready",
+      "not_eligible": "Not eligible",
+      "not_eligible_hint": "The saved account is not eligible for this line. Check its approval, active status and control-account designation.",
+      "control_pill": "{kind} control",
+      "control_hint": "Only accounts designated as a {kind} control account are offered here. Set the designation in Chart of Accounts.",
+      "missing": "{count, plural, one {One required line has no account} other {# required lines have no account}}",
+      "complete": "Every required line has an account"
     }
   },
   "profile": {

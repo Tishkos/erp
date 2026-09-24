@@ -20,8 +20,10 @@ import {
 } from '@domain/posting';
 import {
   InvalidSalesRevenueAccountError,
+  POSTING_MAP,
   assertMappedAccount,
   assertMappedControlAccount,
+  eventKey,
   mappingAccountEligible,
   requiredControlAccount,
 } from '@domain/posting-map';
@@ -351,5 +353,77 @@ describe('the request a module makes', () => {
         }),
       ),
     ).toThrow(PostingRequestError);
+  });
+});
+
+/**
+ * The catalogue the Posting Mappings screen is drawn from.
+ *
+ * The screen shows each document as the journal it will post — the side, the
+ * line, the account — so the catalogue has to be able to answer for its own
+ * shape. A role listed twice under one event would render two rows writing to
+ * one mapping, where the second silently wins; a missing side would render a
+ * blank column an accountant reads as "neither".
+ *
+ * The sides themselves are read off the services in
+ * tests/integration/ops04-purchase-invoice.test.ts and its siblings, which
+ * post a real document and assert which way each line went. What is asserted
+ * here is only what can be known without a database.
+ */
+describe('the catalogue the mappings screen is drawn from', () => {
+  it('names every line once per document, and gives each one a side', () => {
+    for (const document of POSTING_MAP) {
+      const roles = document.lines.map((line) => line.role);
+      expect(new Set(roles).size, document.event).toBe(roles.length);
+      expect(document.lines.length, document.event).toBeGreaterThan(0);
+
+      for (const line of document.lines) {
+        expect(['debit', 'credit', 'either'], `${document.event} / ${line.role}`).toContain(
+          line.side,
+        );
+      }
+    }
+  });
+
+  it('names each event once, and derives a message key from it', () => {
+    const events = POSTING_MAP.map((document) => document.event);
+    expect(new Set(events).size).toBe(events.length);
+    for (const event of events) {
+      // The catalogue is indexed by this key at render time, so a character
+      // the key cannot carry would resolve to nothing on the screen.
+      expect(eventKey(event), event).toMatch(/^[a-z0-9_]+$/);
+    }
+  });
+
+  it('marks a control-account line only where the subledger needs one', () => {
+    for (const document of POSTING_MAP) {
+      for (const line of document.lines) {
+        if (!line.controlAccount) continue;
+        // Only the two party subledgers are designated from a mapping; the
+        // rest are decided by the record the posting names.
+        expect(['customer', 'supplier']).toContain(line.controlAccount);
+        expect(requiredControlAccount(document.event, line.role)).toBe(line.controlAccount);
+      }
+    }
+  });
+
+  it('holds the two entries a whole journal can be read from', () => {
+    const invoice = POSTING_MAP.find((d) => d.event === 'purchasing.ap_invoice')!;
+    expect(
+      invoice.lines.map((line) => [line.role, line.side, line.always]),
+    ).toEqual([
+      // What the company owes, credited — every purchase invoice posts it.
+      ['supplier_payable', 'credit', true],
+      ['grni', 'debit', false],
+      ['expense', 'debit', false],
+      // Over the order it is a debit, under it a credit.
+      ['purchase_variance', 'either', false],
+    ]);
+
+    const sale = POSTING_MAP.find((d) => d.event === 'sales.ar_invoice')!;
+    expect(sale.lines.map((line) => [line.role, line.side, line.always])).toEqual([
+      ['customer_receivable', 'debit', true],
+      ['sales_revenue', 'credit', false],
+    ]);
   });
 });

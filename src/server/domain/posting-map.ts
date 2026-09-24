@@ -20,9 +20,22 @@
  */
 import type { AccountNode } from './chart-of-accounts';
 
+/**
+ * Which way the line goes.
+ *
+ * Read off the service that posts it, not off the blueprint — `purchase_variance`
+ * is `either` because it genuinely is: billed above the order it is a debit,
+ * billed below it a credit, and a screen that claimed one would be wrong half
+ * the time. A reversal mirrors whatever is here, which is true of every line
+ * and so is not said again per row.
+ */
+export type PostingSide = 'debit' | 'credit' | 'either';
+
 export interface MappedLine {
   /** The role the posting engine names when it asks for an account. */
   readonly role: string;
+  /** Debit or credit, as the journal will carry it. */
+  readonly side: PostingSide;
   /**
    * True when no document of this kind can post without it.
    *
@@ -43,56 +56,72 @@ export interface MappedDocument {
 
 const line = (
   role: string,
+  side: PostingSide,
   always = false,
   controlAccount?: 'customer' | 'supplier',
-): MappedLine => ({ role, always, ...(controlAccount ? { controlAccount } : {}) });
+): MappedLine => ({ role, side, always, ...(controlAccount ? { controlAccount } : {}) });
 
 export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
   {
     event: 'purchasing.ap_invoice',
     lines: [
       // What the company now owes. Every purchase invoice credits it.
-      line('supplier_payable', true, 'supplier'),
+      line('supplier_payable', 'credit', true, 'supplier'),
       // The goods-receipt route: the receipt debited GRNI, the invoice clears
       // it. An invoice that receives its own stock debits the item's account
       // instead and never comes here.
-      line('grni'),
+      line('grni', 'debit'),
       // A service line — nothing was received into a warehouse.
-      line('expense'),
+      line('expense', 'debit'),
       // §8.4 — the difference between what was ordered and what was billed,
-      // which never goes into the value of the stock.
-      line('purchase_variance'),
+      // which never goes into the value of the stock. Either way round: over
+      // the order it is a debit, under it a credit.
+      line('purchase_variance', 'either'),
     ],
   },
   {
     event: 'sales.ar_invoice',
-    lines: [line('customer_receivable', true, 'customer'), line('sales_revenue')],
+    lines: [
+      line('customer_receivable', 'debit', true, 'customer'),
+      line('sales_revenue', 'credit'),
+    ],
   },
   {
     event: 'sales.customer_receipt',
     lines: [
       // Money in against a named customer.
-      line('customer_receivable', true),
+      line('customer_receivable', 'credit', true),
       // Money in that no customer has been put to yet — it waits here rather
       // than being guessed at.
-      line('customer_clearing'),
+      line('customer_clearing', 'credit'),
     ],
   },
   {
     event: 'sales.customer_receipt_identified',
-    lines: [line('customer_clearing', true), line('customer_receivable', true)],
+    // The clearing account is emptied and the customer credited: the money
+    // arrived earlier, and this is only the moment it found its owner.
+    lines: [
+      line('customer_clearing', 'debit', true),
+      line('customer_receivable', 'credit', true),
+    ],
   },
   {
     event: 'purchasing.supplier_payment',
-    lines: [line('supplier_payable', true)],
+    lines: [line('supplier_payable', 'debit', true)],
   },
   {
     event: 'purchasing.supplier_credit_memo',
-    lines: [line('supplier_payable', true), line('return_clearing', true)],
+    lines: [
+      line('supplier_payable', 'debit', true),
+      line('return_clearing', 'credit', true),
+    ],
   },
   {
     event: 'sales.customer_credit_memo',
-    lines: [line('customer_receivable', true), line('sales_returns', true)],
+    lines: [
+      line('customer_receivable', 'credit', true),
+      line('sales_returns', 'debit', true),
+    ],
   },
 ]);
 

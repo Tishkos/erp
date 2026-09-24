@@ -4336,3 +4336,149 @@
   border-block-start: 1px solid var(--w-line-strong);
   box-shadow: inset 0 4px 0 -3px var(--w-line-strong);
 }
+
+/* ── Posting Mappings ─────────────────────────────────────────────────────
+   The screen configures a journal entry, so it is drawn as one: a panel per
+   document, and inside it the lines that document posts with their side in
+   the first column. A reader who knows what a Purchase Invoice looks like on
+   paper recognises it here before reading a word.
+
+   Its own table rather than `table.list`, for one reason that matters: the
+   list table is `white-space: nowrap` and one row height, and these rows carry
+   a sentence, two labels and a control. Forced onto one line they either
+   overflow or squeeze, which is what made the screen feel cramped. Here the
+   line wraps and the row grows. */
+.mapStack {
+  display: grid;
+  gap: 1.15rem;
+}
+
+.mapStack > section {
+  margin-block-end: 0;
+}
+
+/* Fixed columns, so the seven documents line up as one page rather than seven
+   tables each sized to its own longest account name. Reading down the Dr/Cr
+   column is the point of the screen, and it only works if the column is in the
+   same place in every panel. */
+.mapTable {
+  inline-size: 100%;
+  min-inline-size: 46rem;
+  table-layout: fixed;
+  border-collapse: collapse;
+  color: var(--text-soft);
+}
+
+.mapTable th:nth-child(1) {
+  inline-size: 7rem;
+}
+
+.mapTable th:nth-child(2) {
+  inline-size: 32%;
+}
+
+.mapTable th:nth-child(3) {
+  inline-size: 34%;
+}
+
+.mapTable th,
+.mapTable td {
+  padding: 0.95rem 1.5rem;
+  border-block-end: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.mapTable th {
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.mapTable tbody tr:last-child td {
+  border-block-end: 0;
+}
+
+/* Dr and Cr, in the column an accountant's eye goes to first. Narrow, so the
+   two letters line up down the page and the shape of the entry is readable
+   without reading it. */
+.mapSide {
+  inline-size: 1%;
+  color: var(--text);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mapLine {
+  display: grid;
+  gap: 0.4rem;
+  min-inline-size: 14rem;
+  max-inline-size: 26rem;
+}
+
+.mapLineName {
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.mapPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.mapAccount select {
+  inline-size: 100%;
+  /* The chosen account is `CODE · Name`, and a select that truncates it to
+     "A000050 · E2E Trade Recei…" is a control the reader cannot check their
+     own work against. The column is wide enough for the codes this chart
+     issues; the full name is on the account itself. */
+  text-overflow: ellipsis;
+}
+
+.mapStatus {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+
+/* The count of what is still unmapped, beside the title. It is the reason
+   anybody opens this screen, so it is not buried in a paragraph above the
+   first panel where it scrolled away. */
+.mapReadiness {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.mapReadiness[data-ready='false'] {
+  border-color: color-mix(in srgb, var(--danger, #b42318) 45%, var(--border-strong));
+  color: var(--danger, #b42318);
+}
+
+@media (max-width: 40rem) {
+  .mapTable th,
+  .mapTable td {
+    padding: 0.8rem 0.9rem;
+  }
+
+  .mapTable {
+    min-inline-size: 40rem;
+  }
+}

@@ -63,6 +63,19 @@ async function createManager(): Promise<ActorContext> {
 
 const scope = () => ({ userId: manager.principal.userId, branchCode: BAGHDAD });
 
+/**
+ * An expense account with no §4.2 dimensions to satisfy.
+ *
+ * Department and Cost Centre are required of expense accounts by the chart's
+ * own rules, and the mapping blocks below are about the mapping rather than
+ * about dimensions — which the 02.4 tests already cover.
+ */
+const discountAccountFor = async (name: string) => {
+  const id = await approvedAccount('X000001', name);
+  await withScope(scope(), (tx) => coa.setRequiredDimensions(tx, manager, id, []));
+  return id;
+};
+
 async function approvedAccount(
   parentCode: string,
   name: string,
@@ -1166,5 +1179,85 @@ describe('§3.3 · the mapping is set from the Posting Mappings screen', () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].is_active).toBe(false);
+  });
+});
+
+/**
+ * §3.3 · one document's lines are mapped together, or not at all.
+ *
+ * The Posting Mappings screen saves a document, not a row (by direction,
+ * 2026-09-24): the lines of a journal are decided together, and a Save on
+ * every row made the screen a column of buttons rather than an entry.
+ *
+ * That turns a presentation choice into a transaction question, which is why
+ * it is asserted here rather than left to the screen. Half a Purchase Invoice
+ * mapped is the state nobody wants: the document still refuses to post, and
+ * the reader who saved it has been told it worked.
+ */
+describe('§3.3 · a document is mapped in one transaction', () => {
+  it('writes every line of one save', async () => {
+    const first = await discountAccountFor('Discount One');
+    const second = await discountAccountFor('Discount Two');
+
+    await withScope(scope(), async (tx) => {
+      await posting.setMapping(tx, manager, {
+        eventType: EVENT,
+        lineRole: 'settlement_discount',
+        accountId: first,
+      });
+      await posting.setMapping(tx, manager, {
+        eventType: EVENT,
+        lineRole: 'rounding',
+        accountId: second,
+      });
+    });
+
+    // Only the two this save wrote: the fixture maps the receivable and the
+    // revenue before every test, and they are not what is being asserted.
+    const { rows } = await ownerPool.query(
+      `select line_role, account_id from posting_rule
+        where event_type = $1 and is_active
+          and line_role in ('settlement_discount', 'rounding')
+        order by line_role`,
+      [EVENT],
+    );
+    expect(rows).toEqual([
+      { line_role: 'rounding', account_id: second },
+      { line_role: 'settlement_discount', account_id: first },
+    ]);
+  });
+
+  it('writes none of them when one line is refused', async () => {
+    const good = await discountAccountFor('Discount Kept');
+    // A group account: the chart refuses a posting to it, so the mapping is
+    // refused as well — the same refusal a stale designation would raise.
+    const { rows: groups } = await ownerPool.query(
+      `select id from chart_of_account where is_group and code = 'X000001'`,
+    );
+
+    await expect(
+      withScope(scope(), async (tx) => {
+        await posting.setMapping(tx, manager, {
+          eventType: EVENT,
+          lineRole: 'settlement_discount',
+          accountId: good,
+        });
+        await posting.setMapping(tx, manager, {
+          eventType: EVENT,
+          lineRole: 'rounding',
+          accountId: groups[0].id,
+        });
+      }),
+    ).rejects.toThrow();
+
+    // The first line was written and then rolled back with the second. A
+    // mapping that survived here would be the half-saved document.
+    const { rows } = await ownerPool.query(
+      `select line_role from posting_rule
+        where event_type = $1 and is_active
+          and line_role in ('settlement_discount', 'rounding')`,
+      [EVENT],
+    );
+    expect(rows).toEqual([]);
   });
 });

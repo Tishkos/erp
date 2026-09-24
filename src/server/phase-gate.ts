@@ -108,11 +108,18 @@ export const OPERATIONS: readonly string[] = [
   // the heading its partner already lives under.
   '/sales/customer-statements',
   '/purchasing/supplier-statements',
-  // Posting Mappings was here while it was the only way to tell the engine
-  // which account a document posts to. By direction (2026-09-23) that choice
-  // belongs on the invoice, where the invoice is made — so the screen comes
-  // off the tree. The mappings themselves stay: they are what the fields on
-  // those forms open on, and what every other document still posts through.
+  /*
+   * Posting Mappings came off this list on 2026-09-23, when the choice of
+   * account moved onto the invoice that posts it. That direction stands for
+   * the two invoices — and it never covered the rest. A receipt, a payment, a
+   * credit memo and a return have no such field, and each still asks the
+   * engine which account to post to; without this screen nobody can answer,
+   * and the document refuses with a message naming a page that 404s.
+   *
+   * So it is back (by direction, 2026-09-24), for the documents that have
+   * nowhere else to say it.
+   */
+  '/finance/posting-mappings',
 ];
 
 const VISIBLE: ReadonlySet<string> = new Set([

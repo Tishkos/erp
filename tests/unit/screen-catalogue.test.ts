@@ -190,6 +190,9 @@ describe('every screen has one address', () => {
       '/finance/income-statement',
       '/finance/journals',
       '/finance/periods',
+      // Back on the tree (by direction, 2026-09-24): the documents that cannot
+      // name their own account still have to name it somewhere.
+      '/finance/posting-mappings',
       '/finance/reversals',
       '/finance/trial-balance',
       '/inventory/availability',

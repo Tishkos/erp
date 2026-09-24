@@ -551,7 +551,7 @@ test.describe('the Operations Build screens open', () => {
     await expect(page.locator('input[name="unit_price_0"]')).toBeEnabled();
   });
 
-  test('§3.3 · an account is mapped to a document line, on the row', async ({
+  test('§3.3 · a document’s lines are mapped, and saved together', async ({
     browser,
     page,
   }) => {
@@ -633,27 +633,55 @@ test.describe('the Operations Build screens open', () => {
         administrator.getByRole('heading', { name: 'Posting Mappings' }).first(),
       ).toBeVisible();
 
-      // The line every purchase invoice credits, and the account it will go to.
+      // The Purchase Invoice reads as the entry it posts: the side first, then
+      // the line, then the account. The row this test drives is the one every
+      // purchase invoice credits.
+      const payableRow = administrator
+        .locator('form')
+        .filter({ hasText: 'What the company owes the supplier' })
+        .first()
+        .getByRole('row')
+        .filter({ hasText: 'What the company owes the supplier' })
+        .first();
+      await expect(payableRow).toContainText('Cr');
+      await expect(payableRow).toContainText('Required');
+
+      // Saved once for the document, not once for the row (by direction,
+      // 2026-09-24) — so the Save is the panel's, and it carries every line.
       for (const accountId of [first.accountId, second.accountId]) {
         await administrator.goto('/finance/posting-mappings');
-        const row = administrator
-          .getByRole('row')
+        const document = administrator
+          .locator('form')
           .filter({ hasText: 'What the company owes the supplier' })
           .first();
-        await row.getByRole('combobox').selectOption(accountId);
+        await document
+          .getByRole('row')
+          .filter({ hasText: 'What the company owes the supplier' })
+          .first()
+          .getByRole('combobox')
+          .selectOption(accountId);
         await Promise.all([
-          administrator.waitForURL(/posting-mappings\?saved=1/, { timeout: 60_000 }),
-          row.getByRole('button', { name: 'Save' }).click(),
+          // The outcome, not the address: the page is already *at*
+          // /posting-mappings, so a pattern matching only the path is
+          // satisfied before the click and the reload below races the
+          // navigation it was meant to follow.
+          administrator.waitForURL((url) => url.searchParams.get('saved') === '1', {
+            timeout: 60_000,
+          }),
+          document.getByRole('button', { name: 'Save', exact: true }).click(),
         ]);
         // Saved, and read back from the database rather than from the form.
         await administrator.reload();
-        await expect(
-          administrator
-            .getByRole('row')
-            .filter({ hasText: 'What the company owes the supplier' })
-            .first()
-            .getByRole('combobox'),
-        ).toHaveValue(accountId);
+        const saved = administrator
+          .locator('form')
+          .filter({ hasText: 'What the company owes the supplier' })
+          .first()
+          .getByRole('row')
+          .filter({ hasText: 'What the company owes the supplier' })
+          .first();
+        await expect(saved.getByRole('combobox')).toHaveValue(accountId);
+        // And the line says so without the reader opening the select.
+        await expect(saved).toContainText('Ready');
       }
     } finally {
       await administration.close();

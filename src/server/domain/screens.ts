@@ -420,6 +420,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   // Blocks 2 and 3 — the Account Statement, one screen on each side.
   '/sales/customer-statements',
   '/purchasing/supplier-statements',
+  // Where every document that cannot name its own account says which one.
+  '/finance/posting-mappings',
 ]);
 
 export function isDelivered(route: string): boolean {
