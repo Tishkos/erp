@@ -26,22 +26,55 @@
  * same reason: both are debit-normal, and what is owed to you and what you
  * hold are the same kind of number.
  */
-import { and, asc, eq, lte, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
-import { journalEntry, subledgerEntry } from '../db/schema';
+import {
+  apInvoice,
+  arInvoice,
+  customerCreditMemo,
+  customerReceipt,
+  goodsReturn,
+  journalEntry,
+  subledgerEntry,
+  supplierPayment,
+} from '../db/schema';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 
 /** Which side of the ledger the party sits on. */
 export type PartySide = 'customer' | 'supplier' | 'bank';
+
+/**
+ * Which currency the statement is read in.
+ *
+ * §2.3 — the ledger is kept in IQD and USD is a way of *reading* it: the same
+ * posted lines at the historical rate each one carried when it posted. Nothing
+ * is converted at report time, so both readings of one statement are the
+ * ledger rather than one of them an estimate.
+ */
+export type StatementCurrency = 'IQD' | 'USD';
+
+/** The operational documents that reach a party's account. */
+export type DocumentKind =
+  | 'ar_invoice'
+  | 'customer_receipt'
+  | 'customer_credit_memo'
+  | 'ap_invoice'
+  | 'supplier_payment'
+  | 'goods_return';
+
+/** The document a line came from, as the person who raised it knows it. */
+export interface StatementDocument {
+  readonly kind: DocumentKind;
+  readonly number: string;
+}
 
 export interface StatementLine {
   readonly postingDate: string;
   /** The journal this came from, for the drill-down. */
   readonly entryNo: string;
   readonly description: string | null;
-  /** The operational document, when the posting named one. */
-  readonly sourceModule: string | null;
-  readonly sourceDocId: string | null;
+  /** The invoice, receipt, payment or return behind it. Null for a manual journal. */
+  readonly document: StatementDocument | null;
   readonly debit: string;
   readonly credit: string;
   /** Running, in the direction that party's balance is owed. */
@@ -51,6 +84,7 @@ export interface StatementLine {
 export interface PartnerStatement {
   readonly partyCode: string;
   readonly side: PartySide;
+  readonly currency: StatementCurrency;
   readonly from: string | null;
   readonly to: string;
   /** What was outstanding before the first line shown. */
@@ -81,6 +115,111 @@ const owed = (side: PartySide, debit: bigint, credit: bigint) =>
   side === 'supplier' ? credit - debit : debit - credit;
 
 /**
+ * Which documents reach each side's account, and the number each is known by.
+ *
+ * The subledger keeps the journal's source reference — the module and the
+ * document's id — because that is what the posting engine knows at the moment
+ * it posts. Nobody reads their own statement by document id, so the id is
+ * turned back into the number the document was raised under, here, against the
+ * documents that side can raise.
+ *
+ * Keyed lookups, one per kind: a statement of a thousand lines still asks
+ * three questions, and each is answered from a primary key.
+ *
+ * A purchase return is here as the goods return itself, because that is the
+ * document the supplier credit memo posts against — the source reference is
+ * the return's id, not the memo's. A sales return posts under its credit memo,
+ * so that is the number the customer's side carries. Each side names what its
+ * own posting named; neither is translated into the other.
+ */
+interface DocumentSource {
+  readonly kind: DocumentKind;
+  readonly find: (
+    tx: Tx,
+    ids: string[],
+  ) => Promise<{ readonly id: string; readonly number: string }[]>;
+}
+
+const AR_INVOICE: DocumentSource = {
+  kind: 'ar_invoice',
+  find: (tx, ids) =>
+    tx
+      .select({ id: arInvoice.id, number: arInvoice.invoiceNo })
+      .from(arInvoice)
+      .where(inArray(arInvoice.id, ids)),
+};
+
+const CUSTOMER_RECEIPT: DocumentSource = {
+  kind: 'customer_receipt',
+  find: (tx, ids) =>
+    tx
+      .select({ id: customerReceipt.id, number: customerReceipt.receiptNo })
+      .from(customerReceipt)
+      .where(inArray(customerReceipt.id, ids)),
+};
+
+const CUSTOMER_CREDIT_MEMO: DocumentSource = {
+  kind: 'customer_credit_memo',
+  find: (tx, ids) =>
+    tx
+      .select({ id: customerCreditMemo.id, number: customerCreditMemo.memoNo })
+      .from(customerCreditMemo)
+      .where(inArray(customerCreditMemo.id, ids)),
+};
+
+const AP_INVOICE: DocumentSource = {
+  kind: 'ap_invoice',
+  find: (tx, ids) =>
+    tx
+      .select({ id: apInvoice.id, number: apInvoice.invoiceNo })
+      .from(apInvoice)
+      .where(inArray(apInvoice.id, ids)),
+};
+
+const SUPPLIER_PAYMENT: DocumentSource = {
+  kind: 'supplier_payment',
+  find: (tx, ids) =>
+    tx
+      .select({ id: supplierPayment.id, number: supplierPayment.paymentNo })
+      .from(supplierPayment)
+      .where(inArray(supplierPayment.id, ids)),
+};
+
+const GOODS_RETURN: DocumentSource = {
+  kind: 'goods_return',
+  find: (tx, ids) =>
+    tx
+      .select({ id: goodsReturn.id, number: goodsReturn.returnNo })
+      .from(goodsReturn)
+      .where(inArray(goodsReturn.id, ids)),
+};
+
+const RAISED_BY: Readonly<Record<PartySide, readonly DocumentSource[]>> = {
+  customer: [AR_INVOICE, CUSTOMER_RECEIPT, CUSTOMER_CREDIT_MEMO],
+  supplier: [AP_INVOICE, SUPPLIER_PAYMENT, GOODS_RETURN],
+  // Money arrives from a customer and leaves to a supplier; a bank account
+  // sees both halves and neither of its own.
+  bank: [CUSTOMER_RECEIPT, SUPPLIER_PAYMENT],
+};
+
+async function documentsFor(
+  tx: Tx,
+  side: PartySide,
+  ids: readonly string[],
+): Promise<ReadonlyMap<string, StatementDocument>> {
+  const found = new Map<string, StatementDocument>();
+  const wanted = [...new Set(ids)];
+  if (wanted.length === 0) return found;
+
+  for (const source of RAISED_BY[side]) {
+    for (const row of await source.find(tx, wanted)) {
+      found.set(row.id, { kind: source.kind, number: row.number });
+    }
+  }
+  return found;
+}
+
+/**
  * One party's account, in posting order, with a running balance.
  *
  * `from` is optional: without it the statement starts at the beginning and
@@ -91,8 +230,16 @@ export async function statementFor(
   tx: Tx,
   side: PartySide,
   partyCode: string,
-  window: { readonly from?: string | null; readonly to: string },
+  window: {
+    readonly from?: string | null;
+    readonly to: string;
+    readonly currency?: StatementCurrency;
+  },
 ): Promise<PartnerStatement> {
+  const currency: StatementCurrency = window.currency === 'USD' ? 'USD' : 'IQD';
+  const debitColumn = currency === 'USD' ? subledgerEntry.debitUsd : subledgerEntry.debitIqd;
+  const creditColumn = currency === 'USD' ? subledgerEntry.creditUsd : subledgerEntry.creditIqd;
+
   const mine = and(
     eq(subledgerEntry.subledgerType, SUBLEDGER[side]),
     eq(subledgerEntry.partyCode, partyCode),
@@ -101,8 +248,8 @@ export async function statementFor(
   const before = window.from
     ? await tx
         .select({
-          debit: sql<string>`coalesce(sum(${subledgerEntry.debitIqd}), 0)::text`,
-          credit: sql<string>`coalesce(sum(${subledgerEntry.creditIqd}), 0)::text`,
+          debit: sql<string>`coalesce(sum(${debitColumn}), 0)::text`,
+          credit: sql<string>`coalesce(sum(${creditColumn}), 0)::text`,
         })
         .from(subledgerEntry)
         .where(and(mine, sql`${subledgerEntry.postingDate} < ${window.from}::date`))
@@ -121,10 +268,9 @@ export async function statementFor(
       postingDate: subledgerEntry.postingDate,
       entryNo: journalEntry.entryNo,
       description: journalEntry.description,
-      sourceModule: subledgerEntry.sourceModule,
       sourceDocId: subledgerEntry.sourceDocId,
-      debit: subledgerEntry.debitIqd,
-      credit: subledgerEntry.creditIqd,
+      debit: debitColumn,
+      credit: creditColumn,
     })
     .from(subledgerEntry)
     .innerJoin(journalEntry, eq(journalEntry.id, subledgerEntry.journalEntryId))
@@ -136,6 +282,12 @@ export async function statementFor(
       ),
     )
     .orderBy(asc(subledgerEntry.postingDate), asc(subledgerEntry.id));
+
+  const documents = await documentsFor(
+    tx,
+    side,
+    rows.flatMap((row) => (row.sourceDocId ? [row.sourceDocId] : [])),
+  );
 
   let balance = opening;
   let totalDebit = 0n;
@@ -150,8 +302,7 @@ export async function statementFor(
       postingDate: row.postingDate,
       entryNo: row.entryNo,
       description: row.description,
-      sourceModule: row.sourceModule,
-      sourceDocId: row.sourceDocId,
+      document: (row.sourceDocId ? documents.get(row.sourceDocId) : undefined) ?? null,
       debit: decimal(debit),
       credit: decimal(credit),
       balance: decimal(balance),
@@ -161,6 +312,7 @@ export async function statementFor(
   return {
     partyCode,
     side,
+    currency,
     from: window.from ?? null,
     to: window.to,
     opening: decimal(opening),

@@ -85,13 +85,15 @@ export default async function BusinessPartnerPage({
     <AdminPage
       actions={
         <>
-          {/* Which side it opens on is the partner's own role; one who is both
-              is read as a customer unless the Suppliers side asked. */}
+          {/* The statement is one screen on each side, under Sales and under
+              Purchasing. This opens it with the partner already chosen, on the
+              side their own role puts them; one who is both is read as a
+              customer, the same answer the Customers list gives. */}
           <Link
             className={s.backButton}
-            href={`/master-data/business-partners/${encodeURIComponent(code)}/statement${
-              row.isCustomer ? '' : '?side=supplier'
-            }`}
+            href={`${
+              row.isCustomer ? '/sales/customer-statements' : '/purchasing/supplier-statements'
+            }?code=${encodeURIComponent(code)}`}
           >
             {t('partners.statement')}
           </Link>

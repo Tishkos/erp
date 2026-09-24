@@ -143,8 +143,13 @@ async function createPartner(page: Page, screen: string, button: string, code: s
 }
 
 /** The statement's own figures, read from the screen a person opens. */
+const STATEMENT = {
+  supplier: '/purchasing/supplier-statements',
+  customer: '/sales/customer-statements',
+} as const;
+
 async function statementOf(page: Page, code: string, side: 'supplier' | 'customer') {
-  await page.goto(`/master-data/business-partners/${code}/statement?side=${side}`);
+  await page.goto(`${STATEMENT[side]}?code=${code}`);
   await expect(page.getByRole('heading', { name: new RegExp(code) }).first()).toBeVisible({
     timeout: 60_000,
   });

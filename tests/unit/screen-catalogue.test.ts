@@ -219,10 +219,13 @@ describe('every screen has one address', () => {
       '/purchasing/goods-returns',
       // Block 6 — Payments and Receipts.
       '/purchasing/supplier-payments',
+      // Blocks 2 and 3 — the Account Statement, one screen on each side.
+      '/purchasing/supplier-statements',
       // Block 5 — the Sales Invoice.
       '/sales/ar-invoices',
       // Block 6 — Receipts.
       '/sales/customer-receipts',
+      '/sales/customer-statements',
       // Block 9 — Sales Returns.
       '/sales/sales-returns',
     ]);

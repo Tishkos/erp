@@ -104,6 +104,10 @@ export const OPERATIONS: readonly string[] = [
   '/sales/customer-receipts',
   // Block 8 — Invoice Status Tracking.
   '/inventory/in-transit',
+  // Blocks 2 and 3 — the customer and supplier Account Statement, each under
+  // the heading its partner already lives under.
+  '/sales/customer-statements',
+  '/purchasing/supplier-statements',
   // Posting Mappings was here while it was the only way to tell the engine
   // which account a document posts to. By direction (2026-09-23) that choice
   // belongs on the invoice, where the invoice is made — so the screen comes

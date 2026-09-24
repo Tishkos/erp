@@ -103,6 +103,15 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     items: [
       page('sales_dashboard', 'sales_dashboard', '06'),
       page('customers', 'business_partner', '02', '/master-data/customers'),
+      // A customer's account statement, beside the customer whose account it
+      // is. Appendix A filed it under Receivables; the sponsor asked for it
+      // here (2026-09-23), which is the same refinement that moved Customers
+      // out of Master Data — the screen sits under the heading whose work it
+      // belongs to, and still only once. It grants over `business_partner`
+      // because that is the record it reads and the object the page
+      // authorises on; an object nobody can hold would hide the screen from
+      // everyone but a Super User.
+      page('ar_statements', 'business_partner', '06', '/sales/customer-statements'),
       page('customer_price_lists', 'price_list', '03'),
       page('sales_orders', 'sales_order', '06'),
       page('reservations', 'stock_reservation', '06'),
@@ -125,6 +134,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     items: [
       page('procurement_dashboard', 'procurement_dashboard', '05'),
       page('suppliers', 'business_partner', '02', '/master-data/suppliers'),
+      // The supplier's side of the same mirror. See the note under Sales.
+      page('ap_statements', 'business_partner', '05', '/purchasing/supplier-statements'),
       page('purchase_orders', 'purchase_order', '05'),
       page('goods_receipts', 'goods_receipt', '05'),
       page('service_receipts', 'service_receipt', '05'),
@@ -265,7 +276,6 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('ar_allocations', 'ar_allocation', '06'),
       page('credit_limits', 'credit_limit', '06'),
       page('collections', 'collection', '06'),
-      page('ar_statements', 'ar_statement', '06'),
       page('ar_ageing', 'ar_ageing', '06'),
       page('ar_reconciliation', 'ar_reconciliation', '06'),
     ],
@@ -279,7 +289,6 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('ap_advances', 'supplier_advance', '05'),
       page('ap_payments', 'supplier_payment', '05'),
       page('ap_allocations', 'ap_allocation', '05'),
-      page('ap_statements', 'ap_statement', '05'),
       page('ap_ageing', 'ap_ageing', '05'),
       page('ap_reconciliation', 'ap_reconciliation', '05'),
     ],

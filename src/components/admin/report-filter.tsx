@@ -49,10 +49,15 @@ export function ReportWindow({
  *
  * A plain GET form: a report is a place, so running it puts the parameters
  * in the address bar and the result can be linked to and re-read.
+ *
+ * A report that is about one party rather than the whole ledger says so first,
+ * and passes that field as `children` — it stands at the head of the strip,
+ * before the period, because it is the first thing the reader chooses.
  */
 export async function ReportFilter({
   action,
   hiddenFields = {},
+  children,
   from,
   to,
   asAt,
@@ -62,6 +67,8 @@ export async function ReportFilter({
 }: {
   readonly action: string;
   readonly hiddenFields?: Readonly<Record<string, string>>;
+  /** What this report is about, when it is about one thing. */
+  readonly children?: ReactNode;
   /** A period report carries both; a position report carries `asAt` alone. */
   readonly from?: string;
   readonly to?: string;
@@ -78,6 +85,7 @@ export async function ReportFilter({
       {Object.entries(hiddenFields).map(([name, value]) => (
         <input key={name} name={name} type="hidden" value={value} />
       ))}
+      {children}
       {from !== undefined ? (
         <label className={s.sapFilterField}>
           <span className={s.sapLabel}>{t('reports.from')}</span>

@@ -72,6 +72,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   // 3 — Sales
   sales_dashboard: 'dashboard',
   customers: 'document',
+  ar_statements: 'report',
   customer_price_lists: 'document',
   sales_orders: 'document',
   reservations: 'document',
@@ -90,6 +91,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   // 4 — Purchasing
   procurement_dashboard: 'dashboard',
   suppliers: 'document',
+  ap_statements: 'report',
   purchase_orders: 'document',
   goods_receipts: 'document',
   service_receipts: 'document',
@@ -191,7 +193,6 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   ar_allocations: 'workspace',
   credit_limits: 'document',
   collections: 'workspace',
-  ar_statements: 'report',
   ar_ageing: 'report',
   ar_reconciliation: 'workspace',
 
@@ -201,7 +202,6 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   ap_advances: 'document',
   ap_payments: 'document',
   ap_allocations: 'workspace',
-  ap_statements: 'report',
   ap_ageing: 'report',
   ap_reconciliation: 'workspace',
 
@@ -417,6 +417,9 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/sales/customer-receipts',
   // Block 8 — Invoice Status Tracking.
   '/inventory/in-transit',
+  // Blocks 2 and 3 — the Account Statement, one screen on each side.
+  '/sales/customer-statements',
+  '/purchasing/supplier-statements',
 ]);
 
 export function isDelivered(route: string): boolean {

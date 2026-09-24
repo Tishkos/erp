@@ -194,6 +194,29 @@ describe('ops 2 · the customer statement', () => {
     expect(Number(s.closing)).toBe(700_000); // still owed by the customer
     expect(Number(s.totalDebit)).toBe(1_200_000);
     expect(Number(s.totalCredit)).toBe(500_000);
+    // Both were typed as journals, so there is no invoice to name and the
+    // statement says so rather than inventing a reference.
+    expect(s.lines.map((l) => l.document)).toEqual([null, null]);
+  });
+
+  it('reads the same account in USD, at the rate each line carried', async () => {
+    const code = await partner('CUST-7', 'Najaf Trading', 'customer');
+    await post('2026-03-01', 'Invoice', [
+      { account: receivables, debit: '1310000.0000', customer: code },
+      { account: revenue, credit: '1310000.0000' },
+    ]);
+
+    const iqd = await read('customer', code);
+    const usd = await withScope(scope(manager), (tx) =>
+      statement.statementFor(tx, 'customer', code, { ...YEAR, currency: 'USD' }),
+    );
+
+    expect(iqd.currency).toBe('IQD');
+    expect(Number(iqd.closing)).toBe(1_310_000);
+    // One thousand dollars, at the 1,310 the posting carried. Read from the
+    // line's own USD figure — nothing is converted when the report runs.
+    expect(usd.currency).toBe('USD');
+    expect(Number(usd.closing)).toBe(1_000);
   });
 
   it('shows a discount as Credit, the same as a payment', async () => {

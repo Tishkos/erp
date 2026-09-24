@@ -332,7 +332,17 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
   });
 });
 
-test('supplier statement keeps its side when filters run', async ({ page, baseURL }) => {
+/**
+ * The statement keeps the partner it was opened on when the period changes.
+ *
+ * Which side a statement reads used to be a hidden field on one shared page,
+ * and the test that lived here held it to that. The side is now the screen:
+ * a customer's account under Sales, a supplier's under Purchasing (by
+ * direction, 2026-09-23). What can still be lost between two runs is the
+ * partner, so that is what is asserted — the picker submits the code, not the
+ * text somebody typed, and it must survive a second Run.
+ */
+test('an account statement keeps its partner when the filters run', async ({ page, baseURL }) => {
   expect(['localhost', '127.0.0.1']).toContain(new URL(baseURL!).hostname);
   await signIn(page, ADMIN);
   const stamp = Date.now().toString(36).toUpperCase();
@@ -347,28 +357,38 @@ test('supplier statement keeps its side when filters run', async ({ page, baseUR
     await page.waitForURL(new RegExp(`/master-data/business-partners/${code}(?:\\?|$)`), {
       timeout: 60_000,
     });
-    return `/master-data/business-partners/${code}/statement`;
+    return code;
   };
-  const supplierStatement = await createPartner('supplier');
-  for (const side of ['supplier', 'customer'] as const) {
-    await page.goto(`${supplierStatement}?side=${side}`);
+
+  const sides = [
+    { kind: 'supplier', route: '/purchasing/supplier-statements' },
+    { kind: 'customer', route: '/sales/customer-statements' },
+  ] as const;
+
+  for (const { kind, route } of sides) {
+    const code = await createPartner(kind);
+    await page.goto(`${route}?code=${code}`);
+    await expect(page.getByRole('heading', { name: new RegExp(code) }).first()).toBeVisible({
+      timeout: 60_000,
+    });
+
     const filter = page.locator('form[method="get"]');
+    await expect(filter.locator('input[name="code"]')).toHaveValue(code);
     await filter.locator('input[name="from"]').fill(`${YEAR}-02-01`);
     await filter.locator('input[name="to"]').fill(`${YEAR}-12-31`);
     await Promise.all([
       page.waitForURL((url) => url.searchParams.get('from') === `${YEAR}-02-01`),
       filter.locator('button[type="submit"]').click(),
     ]);
-    expect(new URL(page.url()).searchParams.get('side')).toBe(side);
-    await expect(page.locator('input[name="side"]')).toHaveValue(side);
+    expect(new URL(page.url()).searchParams.get('code')).toBe(code);
+    await expect(filter.locator('input[name="code"]')).toHaveValue(code);
+
+    // Opened with nobody chosen, it says so rather than guessing a partner.
+    await page.goto(route);
+    await expect(page.getByText(`Choose a ${kind} to read their account.`).first()).toBeVisible({
+      timeout: 60_000,
+    });
   }
-  await page.goto(supplierStatement);
-  await expect(page.locator('input[name="side"]')).toHaveValue('supplier');
-  await page.goto(`${supplierStatement}?side=unknown`);
-  await expect(page.locator('input[name="side"]')).toHaveValue('supplier');
-  const customerStatement = await createPartner('customer');
-  await page.goto(customerStatement);
-  await expect(page.locator('input[name="side"]')).toHaveValue('customer');
 });
 test('item sales account appears in invoice account selection', async ({ page }) => {
   const stamp = Date.now().toString(36).toUpperCase();
@@ -467,7 +487,7 @@ test('a sales invoice header carries block 5 fields, and approves without dimens
   await dialog.getByLabel('Code', { exact: true }).fill(customerCode);
   await dialog.getByLabel(/^Legal name/).fill(`Dimension Customer ${stamp}`);
   await dialog.getByRole('button', { name: 'Create', exact: true }).click();
-  await page.waitForURL(new RegExp(`/master-data/business-partners/${customerCode}(?:\?saved=1)?$`), {
+  await page.waitForURL(new RegExp(`/master-data/business-partners/${customerCode}(?:\\?saved=1)?$`), {
     timeout: 60_000,
   });
 

@@ -24,6 +24,7 @@ import * as coa from '@/server/services/chart-of-accounts';
 import * as ap from '@/server/services/ap-invoice';
 import * as inventory from '@/server/services/inventory';
 import * as posting from '@/server/services/posting';
+import * as accountStatement from '@/server/services/partner-statement';
 import * as subledger from '@/server/services/subledger';
 import * as trialBalance from '@/server/services/trial-balance';
 import { parseDecimal } from '@/server/domain/money';
@@ -722,6 +723,22 @@ describe('ops 4 · the invoice posts through the mapping, and not without it', (
       sourceDocId: invoice.id,
     });
 
+    // Blocks 3 and 4 meet here: the supplier's own Account Statement, with the
+    // purchase as Credit and named by the invoice number the buyer raised —
+    // not by the journal it produced, and not by the document's id, neither of
+    // which anybody in Purchasing has ever seen.
+    const account = await withScope(scope(manager), (tx) =>
+      accountStatement.statementFor(tx, 'supplier', 'SUP-001', { from: ON, to: ON }),
+    );
+    expect(account.lines).toHaveLength(1);
+    expect(account.lines[0]).toMatchObject({
+      debit: '0.0000',
+      credit: '1000000.0000',
+      balance: '1000000.0000',
+      document: { kind: 'ap_invoice', number: invoice.invoiceNo },
+    });
+    expect(account.closing).toBe('1000000.0000');
+
     const balance = await withScope(scope(manager), (tx) =>
       trialBalance.trialBalance(tx, { from: ON, to: ON, branchCode: BAGHDAD }),
     );
@@ -812,6 +829,22 @@ describe('ops 4 · the invoice posts through the mapping, and not without it', (
       creditIqd: '1000000.0000',
       sourceDocId: invoice.id,
     });
+
+    // Blocks 3 and 4 meet here: the supplier's own Account Statement, with the
+    // purchase as Credit and named by the invoice number the buyer raised —
+    // not by the journal it produced, and not by the document's id, neither of
+    // which anybody in Purchasing has ever seen.
+    const account = await withScope(scope(manager), (tx) =>
+      accountStatement.statementFor(tx, 'supplier', 'SUP-001', { from: ON, to: ON }),
+    );
+    expect(account.lines).toHaveLength(1);
+    expect(account.lines[0]).toMatchObject({
+      debit: '0.0000',
+      credit: '1000000.0000',
+      balance: '1000000.0000',
+      document: { kind: 'ap_invoice', number: invoice.invoiceNo },
+    });
+    expect(account.closing).toBe('1000000.0000');
 
     const balance = await withScope(scope(manager), (tx) =>
       trialBalance.trialBalance(tx, { from: ON, to: ON, branchCode: BAGHDAD }),
