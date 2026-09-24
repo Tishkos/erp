@@ -3,8 +3,9 @@
 # Format the books on erp.qs-groups.com — take every document and everything it
 # left behind off the system, and leave the setup standing.
 #
-#   scripts/ops/format-live-database.sh            what would go, and what would stay
-#   scripts/ops/format-live-database.sh --yes      back up, then do it
+#   scripts/ops/format-live-database.sh                       what would go, what would stay
+#   scripts/ops/format-live-database.sh --yes                  back up, then do it
+#   scripts/ops/format-live-database.sh --yes --master-data    ...and the master data with it
 #
 # Run from the project root on your own machine. It reaches the server over ssh
 # the way deploy.sh does, so the preview can be read before anything is decided.
@@ -28,11 +29,20 @@ ERP_SSH="${ERP_SSH:-root@31.97.123.206}"
 APP="${APP:-/opt/qs-erp-next}"
 PM2_NAME="${PM2_NAME:-qs-erp}"
 MODE="${1:-}"
+MASTER="${2:-}"
+
+# The one warehouse --master-data leaves standing. One has to survive: a branch
+# defaults to a warehouse, and a company with none can receive nothing.
+KEEP_WAREHOUSE="${KEEP_WAREHOUSE:-WH-HQ}"
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 
 if [[ "$MODE" != "--yes" && -n "$MODE" ]]; then
-  echo "Usage: $0 [--yes]" >&2
+  echo "Usage: $0 [--yes [--master-data]]" >&2
+  exit 2
+fi
+if [[ -n "$MASTER" && "$MASTER" != "--master-data" ]]; then
+  echo "Usage: $0 [--yes [--master-data]]" >&2
   exit 2
 fi
 
@@ -159,6 +169,70 @@ delete from account_required_dimension
 delete from chart_of_account where name like 'E2E %' and not is_system;
 SQL
 
+# ── The master data itself, only under --master-data ───────────────────────
+# Asked for on 2026-09-25: the customers, the suppliers, the items and every
+# warehouse but one, so the lists open empty on a system nobody has used yet.
+#
+# This is a step beyond a format, which is why it is a flag rather than part of
+# it. A format leaves a company that can trade tomorrow; this leaves one that
+# has to be set up first. The chart of accounts, the branches, the users, the
+# payment terms, the calendar, the rates and the posting mappings all stay —
+# without them the first invoice has nowhere to post.
+#
+# The tables below are every one that keys on a partner, an item or a
+# warehouse and is not already emptied with the documents. Most belong to
+# phases that are not built and hold nothing; they are named anyway, because
+# the keys are down while this runs and a table left out leaves rows pointing
+# at a record that is gone.
+read -r -d '' MASTER_DATA_SQL <<SQL || true
+-- Items, and what hangs off one.
+delete from item_uom;
+delete from price_list_item;
+delete from purchase_receipt_tolerance;
+delete from item_supplier;
+delete from item;
+
+-- Partners, and what hangs off one. The unbuilt phases first.
+delete from client_kyc_document;
+delete from client_kyc_record;
+delete from client_import_file_reference;
+delete from client_import_payment;
+delete from client_import_file;
+delete from opportunity_item;
+delete from opportunity;
+delete from lead;
+delete from crm_activity;
+delete from crm_case;
+delete from crm_contact;
+delete from logistics_job_cost;
+delete from logistics_job_leg;
+delete from logistics_job_settlement;
+delete from logistics_job;
+delete from logistics_carrier;
+delete from money_transfer_deposit_usage;
+delete from money_transfer_deposit;
+delete from money_transfer_expense;
+delete from money_transfer;
+delete from money_transfer_client_account;
+delete from investment_proposal;
+delete from investment;
+delete from project_cost;
+delete from project_budget_line;
+delete from project;
+delete from ap_match_tolerance;
+delete from partner_bank_account;
+delete from business_partner;
+
+-- Warehouses, all but one. A branch may have no default warehouse; it may not
+-- point at one that is gone. Nulled rather than quietly repointed at the one
+-- that survives — which warehouse a branch works out of is the company's
+-- decision, not this script's.
+update branch set default_warehouse_code = null
+ where default_warehouse_code is distinct from '${KEEP_WAREHOUSE}';
+delete from bin where warehouse_code <> '${KEEP_WAREHOUSE}';
+delete from warehouse where code <> '${KEEP_WAREHOUSE}';
+SQL
+
 # ── The report, which is also the preview ──────────────────────────────────
 read -r -d '' REPORT_SQL <<'SQL' || true
 select 'DOCUMENTS';
@@ -234,6 +308,13 @@ fi
 # transaction — with the foreign keys back on — for every one of them.
 DELETE_SQL=$(printf 'delete from %s;\n' $DOCUMENT_TABLES)
 
+# Only when asked. Empty otherwise, so the transaction below is the same one
+# either way and there is no second path to get wrong.
+MASTER_SQL=""
+if [[ "$MASTER" == "--master-data" ]]; then
+  MASTER_SQL="$MASTER_DATA_SQL"
+fi
+
 say "Backing up, then formatting"
 ssh "$ERP_SSH" bash -euo pipefail -s <<REMOTE
 STAMP=\$(date -u +%Y%m%d-%H%M%S)
@@ -266,6 +347,7 @@ select set_config('app.is_super_user', 'true', true);
 
 $DELETE_SQL
 $TEST_DATA_SQL
+$MASTER_SQL
 
 -- Numbering starts again: there is nothing left for a number to collide with.
 -- doc_sequence itself stays — that is the pattern and the prefix, not a count.
