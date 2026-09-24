@@ -140,7 +140,7 @@ delete from item_supplier
  where supplier_id in (select id from business_partner where code like 'E2E-%')
     or item_id in (select id from item where code = 'ITM-SEED' or code like 'E2E%');
 delete from partner_bank_account
- where business_partner_id in (select id from business_partner where code like 'E2E-%');
+ where partner_id in (select id from business_partner where code like 'E2E-%');
 delete from item_uom
  where item_id in (select id from item where code = 'ITM-SEED' or code like 'E2E%');
 delete from price_list_item
@@ -222,6 +222,18 @@ REMOTE
   exit 0
 fi
 
+# ── The deletes, written here rather than looped over there ────────────────
+# The table list is a variable on this machine. Dropped into a `for` loop
+# inside the remote script it arrives as a column of words, and the remote
+# shell reads the second line as a command of its own — which is exactly how
+# the first attempt at this died, one line into the loop.
+#
+# So the statements are built here and travel as SQL. That also fixes the
+# thing that would have gone wrong next: `set local` lives only as long as the
+# transaction it is set in, and a loop calling psql once per table opened a new
+# transaction — with the foreign keys back on — for every one of them.
+DELETE_SQL=$(printf 'delete from %s;\n' $DOCUMENT_TABLES)
+
 say "Backing up, then formatting"
 ssh "$ERP_SSH" bash -euo pipefail -s <<REMOTE
 STAMP=\$(date -u +%Y%m%d-%H%M%S)
@@ -237,23 +249,26 @@ ls -la "/root/erp-backups/erp-before-format-\$STAMP.dump"
 
 psql -v ON_ERROR_STOP=1 <<'SQL'
 begin;
--- Lifted for this transaction only: the tables come apart children first, and
--- the keys would otherwise refuse an order that is correct overall. Lifting
--- them is also why the list above has to be complete — with the keys down,
--- nothing tells you what you forgot.
-set local session_replication_role = replica;
-SQL
 
-for table in $DOCUMENT_TABLES; do
-  psql -v ON_ERROR_STOP=1 -c "delete from \$table" >/dev/null
-done
-
-psql -v ON_ERROR_STOP=1 <<'SQL'
-begin;
+-- Triggers and foreign keys, off for this transaction and no longer. The
+-- tables come apart children first, and the keys would still refuse an order
+-- that is correct overall; the append-only trigger on the audit trail would
+-- refuse outright. Lifting them is also why the list has to be complete —
+-- with the keys down, nothing tells you what you forgot.
 set local session_replication_role = replica;
+
+-- Row-level security is not lifted by that, and a hundred and nine tables
+-- force it. A policy that cannot see the reader deletes nothing and says so
+-- with a row count of zero, which is the one failure a format can survive
+-- while appearing to have worked. The policies all begin with
+-- app_is_super_user(), so this is the system's own way past its own door.
+select set_config('app.is_super_user', 'true', true);
+
+$DELETE_SQL
 $TEST_DATA_SQL
 
 -- Numbering starts again: there is nothing left for a number to collide with.
+-- doc_sequence itself stays — that is the pattern and the prefix, not a count.
 do \$\$
 declare r record;
 begin
@@ -264,6 +279,7 @@ begin
     execute format('select setval(%L, 1, false)', r.relname);
   end loop;
 end \$\$;
+
 commit;
 SQL
 
