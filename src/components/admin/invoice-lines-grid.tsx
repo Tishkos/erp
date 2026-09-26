@@ -583,18 +583,20 @@ export function InvoiceLinesGrid({
         {/* Declared, not discovered. Every column but the item's name takes the
             width its own contents need; the name absorbs what is left, so the
             grid scales with the window rather than with the longest note in a
-            cell. Keep in step with `columns` above. */}
+            cell. The widths are classes rather than inline styles because they
+            change with the viewport, and a media query cannot reach past a
+            style attribute. Keep in step with `columns` above. */}
         <colgroup>
-          <col style={{ inlineSize: '2.75rem' }} />
-          <col style={{ inlineSize: '9rem' }} />
-          <col />
-          <col style={{ inlineSize: '7.5rem' }} />
-          <col style={{ inlineSize: '8.5rem' }} />
-          <col style={{ inlineSize: '7rem' }} />
-          <col style={{ inlineSize: '8.5rem' }} />
-          {showSupplier ? <col style={{ inlineSize: '12rem' }} /> : null}
-          <col style={{ inlineSize: '11rem' }} />
-          <col style={{ inlineSize: '1.9rem' }} />
+          <col className={styles.colIndex} />
+          <col className={styles.colCode} />
+          <col className={styles.colName} />
+          <col className={styles.colQty} />
+          <col className={styles.colPrice} />
+          <col className={styles.colDiscount} />
+          <col className={styles.colTotal} />
+          {showSupplier ? <col className={styles.colSupplier} /> : null}
+          <col className={styles.colWarehouse} />
+          <col className={styles.colRemove} />
         </colgroup>
         <thead>
           <tr>

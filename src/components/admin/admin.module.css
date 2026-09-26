@@ -1768,6 +1768,131 @@
    field look long and put a sentence between the quantity and the price. */
 .sapLineGrid {
   table-layout: fixed;
+  /* `.sapTable` floors every table at 76rem so the registers keep their shape.
+     The lines grid states its own floor, because it has to survive a laptop:
+     at 76rem it could not draw itself under 1216px and the wrap scrolled
+     sideways on any window narrower than that. */
+  min-inline-size: 60rem;
+}
+
+/* The ten columns, widest window first. Only the name is fluid — it takes
+   whatever the others leave, so the grid grows into a wide screen instead of
+   stranding empty space at the end of the row. */
+.sapLineGrid .colIndex {
+  inline-size: 2.75rem;
+}
+.sapLineGrid .colCode {
+  inline-size: 9rem;
+}
+.sapLineGrid .colName {
+  inline-size: auto;
+}
+.sapLineGrid .colQty {
+  inline-size: 7.5rem;
+}
+.sapLineGrid .colPrice {
+  inline-size: 8.5rem;
+}
+.sapLineGrid .colDiscount {
+  inline-size: 7rem;
+}
+.sapLineGrid .colTotal {
+  inline-size: 8.5rem;
+}
+.sapLineGrid .colSupplier {
+  inline-size: 12rem;
+}
+.sapLineGrid .colWarehouse {
+  inline-size: 11rem;
+}
+.sapLineGrid .colRemove {
+  inline-size: 1.9rem;
+}
+
+/* A laptop, or a half-width window on a desktop. The same ten columns, closer
+   together — none of them is dropped, because a line a person cannot finish
+   typing is worse than a line they have to read carefully. */
+@media (max-width: 90rem) {
+  .sapLineGrid {
+    min-inline-size: 52rem;
+    font-size: 0.74rem;
+  }
+  .sapLineGrid .colCode {
+    inline-size: 7.25rem;
+  }
+  .sapLineGrid .colQty {
+    inline-size: 5.5rem;
+  }
+  .sapLineGrid .colPrice {
+    inline-size: 6.5rem;
+  }
+  .sapLineGrid .colDiscount {
+    inline-size: 5.25rem;
+  }
+  .sapLineGrid .colTotal {
+    inline-size: 6.5rem;
+  }
+  .sapLineGrid .colSupplier {
+    inline-size: 9rem;
+  }
+  .sapLineGrid .colWarehouse {
+    inline-size: 8.5rem;
+  }
+}
+
+/* A tablet. Tighter again, and the padding goes with it. */
+@media (max-width: 64rem) {
+  .sapLineGrid {
+    min-inline-size: 44rem;
+    font-size: 0.72rem;
+  }
+  .sapLineGrid th,
+  .sapLineGrid td {
+    padding-inline: 0.28rem;
+  }
+  .sapLineGrid .colIndex {
+    inline-size: 2.25rem;
+  }
+  .sapLineGrid .colCode {
+    inline-size: 6.25rem;
+  }
+  .sapLineGrid .colQty {
+    inline-size: 4.5rem;
+  }
+  .sapLineGrid .colPrice {
+    inline-size: 5.5rem;
+  }
+  .sapLineGrid .colDiscount {
+    inline-size: 4.5rem;
+  }
+  .sapLineGrid .colTotal {
+    inline-size: 5.5rem;
+  }
+  .sapLineGrid .colSupplier {
+    inline-size: 7.5rem;
+  }
+  .sapLineGrid .colWarehouse {
+    inline-size: 7rem;
+  }
+}
+
+/* A phone. Ten columns of form fields do not honestly fit a handset, so the
+   grid stops shrinking here and the wrap scrolls it sideways — the page
+   itself never does. Shrinking further would mean fields too small to type
+   into, which reads as fitting without being usable. */
+@media (max-width: 48rem) {
+  .sapLineGrid {
+    min-inline-size: 40rem;
+  }
+  .sapLineGrid .colCode {
+    inline-size: 5.75rem;
+  }
+  .sapLineGrid .colSupplier {
+    inline-size: 6.5rem;
+  }
+  .sapLineGrid .colWarehouse {
+    inline-size: 6rem;
+  }
 }
 
 /* A number reads as a number: right-aligned under its right-aligned heading,
