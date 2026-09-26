@@ -12,7 +12,6 @@ import { can } from '@domain/permissions';
 import { levelFrom } from '@domain/report-levels';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
-import { incomeStatementRows } from '@/server/reports/finance-rows';
 import * as statements from '@/server/services/financial-statements';
 
 /**
@@ -66,6 +65,8 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
   const loss = Number(pl.result) < 0;
 
   // A section heading is always shown; its accounts unfold with the level.
+  const shown = pl.rows.filter((row) => row.kind === 'subtotal' || row.depth < level);
+
   return (
     <AdminPage
       actions={<ExportMenu exportKey="income_statement" query={params} />}
@@ -111,7 +112,24 @@ export default async function IncomeStatementPage({ searchParams }: { searchPara
             collapse: t('mapping.collapse'),
             empty: t('reports.nothing_posted'),
           }}
-          rows={incomeStatementRows(pl, level).map((row) => ({ ...row, cells: [money(row.amount)] }))}
+          rows={shown.map((row) => ({
+            key: row.key,
+            // Everything is named by the layout now, an account by the chart.
+            label: row.kind === 'account' ? `${row.code} \u00b7 ${row.name}` : (row.name ?? ''),
+            depth: row.depth,
+            // Banded where something sits beneath it: the statement's own
+            // top-level headings, and every grouping title inside them.
+            tone:
+              row.kind === 'subtotal'
+                ? ('subtotal' as const)
+                : row.kind === 'account'
+                  ? ('account' as const)
+                  : row.kind === 'section' || row.isHeader
+                    ? ('header' as const)
+                    : ('line' as const),
+            cells: [money(row.amount)],
+            rule: row.rule,
+          }))}
         />
       </ReportWindow>
     </AdminPage>

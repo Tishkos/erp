@@ -8,10 +8,10 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { ExportMenu } from '@/components/print/export-menu';
 import { PrintSheet } from '@/components/print/print-sheet';
+import { printSheet } from '@/server/print/sheet';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
-import { printSheet } from '@/server/print/sheet';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as ap from '@/server/services/ap-invoice';
 import * as items from '@/server/services/items';
@@ -94,19 +94,6 @@ export default async function ApInvoicePage({
       // statement can be kept on, and the expense accounts a service line's
       // cost may go to.
       accounts: editable ? await coa.postableAccounts(tx) : [],
-      // The accounts the invoice names, read whether or not it is still a
-      // draft: a posted invoice must say which account it posted to, not
-      // "as configured".
-      chosen: await Promise.all(
-        [document.invoice.payableAccountId, document.invoice.expenseAccountId]
-          .filter((id): id is string => Boolean(id))
-          .map((id) =>
-            coa
-              .loadAccount(tx, id)
-              .then((account) => ({ id, code: account.code, name: account.name }))
-              .catch(() => null),
-          ),
-      ),
       houses: editable
         ? (await warehouses.listActive(tx)).filter(
             (house) => house.branchCode === document.invoice.branchCode,
@@ -146,7 +133,7 @@ export default async function ApInvoicePage({
   const mayChooseAccounts = mayEdit;
   const accountLabel = (id: string | null) => {
     if (!id) return t('invoices.account_default');
-    const account = accounts.find((row) => row.id === id) ?? found.chosen.find((row) => row?.id === id);
+    const account = accounts.find((row) => row.id === id);
     return account ? `${account.code} · ${account.name}` : t('invoices.account_default');
   };
   const accountField = (
@@ -170,7 +157,6 @@ export default async function ApInvoicePage({
       <bdi dir="auto">{accountLabel(current)}</bdi>
     ),
   });
-  const sheet = await printSheet('purchase_invoice', invoice.invoiceNo);
   const mayPost =
     invoice.status === 'submitted' &&
     can(principal, 'approve', ap.PERMISSION_OBJECT) &&
@@ -210,14 +196,11 @@ export default async function ApInvoicePage({
     { label: t('ap_invoices.posted_by'), value: <bdi dir="auto">{postedBy ?? t('none')}</bdi> },
   ];
 
+  const sheet = await printSheet('purchase_invoice', invoice.invoiceNo);
+
   return (
     <AdminPage
-      actions={
-        <ExportMenu
-          exportKey="purchase_invoice"
-          id={invoice.invoiceNo}
-        />
-      }
+      actions={<ExportMenu exportKey="purchase_invoice" id={invoice.invoiceNo} />}
       back={{ href: '/purchasing/ap-invoices', label: t('back') }}
       title={invoice.invoiceNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}

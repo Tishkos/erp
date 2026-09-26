@@ -9,11 +9,11 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { ExportMenu } from '@/components/print/export-menu';
 import { PrintSheet } from '@/components/print/print-sheet';
+import { printSheet } from '@/server/print/sheet';
 import { Panel } from '@/components/ui';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
-import { printSheet } from '@/server/print/sheet';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as ar from '@/server/services/ar-invoice';
 import * as items from '@/server/services/items';
@@ -104,18 +104,6 @@ export default async function ArInvoicePage({
       // What may be chosen on the document: the customer control accounts the
       // statement can be kept on, and the revenue accounts income may go to.
       accounts: editable ? await coa.postableAccounts(tx) : [],
-      // The accounts the invoice names, read whether or not it is still a
-      // draft: a posted invoice must say which account it posted to.
-      chosen: await Promise.all(
-        [document.receivableAccountId, document.revenueAccountId]
-          .filter((id): id is string => Boolean(id))
-          .map((id) =>
-            coa
-              .loadAccount(tx, id)
-              .then((account) => ({ id, code: account.code, name: account.name }))
-              .catch(() => null),
-          ),
-      ),
     };
   });
 
@@ -148,7 +136,7 @@ export default async function ArInvoicePage({
   const mayChooseAccounts = mayEdit && can(principal, 'edit_draft', ar.PERMISSION_OBJECT);
   const accountLabel = (id: string | null) => {
     if (!id) return t('invoices.account_default');
-    const account = found.accounts.find((row) => row.id === id) ?? found.chosen.find((row) => row?.id === id);
+    const account = found.accounts.find((row) => row.id === id);
     return account ? `${account.code} · ${account.name}` : t('invoices.account_default');
   };
   const mayReturnToDraft =
@@ -159,8 +147,6 @@ export default async function ArInvoicePage({
     invoice.postedAt === null &&
     can(principal, 'approve', ar.PERMISSION_OBJECT) &&
     can(principal, 'edit_draft', ar.PERMISSION_OBJECT);
-
-  const sheet = await printSheet('sales_invoice', invoice.invoiceNo);
 
   const fields: DocumentField[] = [
     { label: column('invoice_no'), value: <bdi dir="ltr">{invoice.invoiceNo}</bdi> },
@@ -240,14 +226,11 @@ export default async function ArInvoicePage({
     },
   ];
 
+  const sheet = await printSheet('sales_invoice', invoice.invoiceNo);
+
   return (
     <AdminPage
-      actions={
-        <ExportMenu
-          exportKey="sales_invoice"
-          id={invoice.invoiceNo}
-        />
-      }
+      actions={<ExportMenu exportKey="sales_invoice" id={invoice.invoiceNo} />}
       back={{ href: '/sales/ar-invoices', label: t('back') }}
       title={invoice.invoiceNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}

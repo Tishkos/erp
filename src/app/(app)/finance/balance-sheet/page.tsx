@@ -12,7 +12,6 @@ import { can } from '@domain/permissions';
 import { levelFrom } from '@domain/report-levels';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
-import { BALANCE_SHEET_LEVELS, balanceSheetRows } from '@/server/reports/finance-rows';
 import * as statements from '@/server/services/financial-statements';
 
 /**
@@ -28,7 +27,7 @@ import * as statements from '@/server/services/financial-statements';
 export const dynamic = 'force-dynamic';
 
 /** Section, line, account. */
-const LEVELS = BALANCE_SHEET_LEVELS;
+const LEVELS = 3;
 
 export default async function BalanceSheetPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/finance/balance-sheet')) notFound();
@@ -54,6 +53,61 @@ export default async function BalanceSheetPage({ searchParams }: { searchParams:
     statements.financialPosition(tx, asAt, { currency, allPermittedBranches: true }),
   );
   const money = (amount: string) => formatStatementAmount(amount, currency, locale as Locale);
+
+  /**
+   * One side of the sheet: its heading, the branch of the mapping beneath it,
+   * and — under Equity — the result no year-end close has carried away yet.
+   */
+  const side = (
+    title: string,
+    total: string,
+    lines: readonly statements.StatementLineResult[],
+    extra?: {
+      readonly label: string;
+      readonly amount: string;
+      readonly accounts: readonly { readonly accountCode: string; readonly accountName: string; readonly amount: string }[];
+    },
+  ) => [
+    { key: `side:${title}`, label: title, depth: 0, tone: 'header' as const, cells: [money(total)] },
+    ...lines.flatMap((entry) => [
+      {
+        key: `line:${entry.line.code}`,
+        label: entry.line.name,
+        depth: entry.depth + 1,
+        tone: entry.line.isHeader ? ('header' as const) : ('line' as const),
+        cells: [money(entry.amount)],
+      },
+      ...(level >= 3
+        ? entry.accounts.map((account) => ({
+            key: `account:${entry.line.code}:${account.accountCode}`,
+            label: `${account.accountCode} \u00b7 ${account.accountName}`,
+            depth: entry.depth + 2,
+            tone: 'account' as const,
+            cells: [money(account.amount)],
+          }))
+        : []),
+    ]),
+    ...(extra
+      ? [
+          {
+            key: `extra:${title}`,
+            label: extra.label,
+            depth: 1,
+            tone: 'line' as const,
+            cells: [money(extra.amount)],
+          },
+          ...(level >= 3
+            ? extra.accounts.map((account) => ({
+                key: `extra:${title}:${account.accountCode}`,
+                label: `${account.accountCode} \u00b7 ${account.accountName}`,
+                depth: 2,
+                tone: 'account' as const,
+                cells: [money(account.amount)],
+              }))
+            : []),
+        ]
+      : []),
+  ];
 
   return (
     <AdminPage
@@ -103,12 +157,17 @@ export default async function BalanceSheetPage({ searchParams }: { searchParams:
             collapse: t('mapping.collapse'),
             empty: t('reports.nothing_posted'),
           }}
-          rows={balanceSheetRows(sfp, level, {
-            assets: t('reports.assets'),
-            equity: t('reports.equity'),
-            liabilities: t('reports.liabilities'),
-            resultForThePeriod: t('reports.result_for_the_period'),
-          }).map((row) => ({ ...row, cells: [money(row.amount)] }))}
+          rows={[
+            // Each side is a heading of its own, then the mapping's headers
+            // and lines beneath it, then the accounts on each line.
+            ...side(t('reports.assets'), sfp.totalAssets, sfp.assets),
+            ...side(t('reports.equity'), sfp.totalEquity, sfp.equity, {
+              label: t('reports.result_for_the_period'),
+              amount: sfp.unmappedResult,
+              accounts: sfp.resultAccounts,
+            }),
+            ...side(t('reports.liabilities'), sfp.totalLiabilities, sfp.liabilities),
+          ]}
         />
       </ReportWindow>
     </AdminPage>

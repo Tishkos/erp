@@ -17,6 +17,7 @@ import { formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
+import * as items from '@/server/services/items';
 import * as reports from '@/server/services/inventory-reports';
 import * as warehouses from '@/server/services/warehouses';
 
@@ -64,10 +65,14 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
       ...(warehouseCode ? { warehouseCode } : {}),
     }),
     pickers: {
-      // The warehouses stay a picker: it is a short, known list. The items do
-      // not — the search is served from the item table by an index, so the page
-      // no longer carries the whole catalogue down to the browser to build a
-      // drop-down out of it.
+      // The warehouses stay a picker: a short, known list a person chooses from.
+      //
+      // The items are searched, not chosen — but a box with no suggestions
+      // leaves somebody guessing at spelling, so the names are offered in a
+      // `datalist`. It suggests rather than constrains: a partial term is still
+      // a valid search, and the matching is done in SQL by the trigram indexes
+      // either way. Names only, so the list is the text a person is typing.
+      stockItems: (await items.listAll(tx)).filter((row) => row.isStock),
       houses: await warehouses.listActive(tx),
     },
   }));
@@ -103,9 +108,15 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
           <Field
             defaultValue={itemSearch}
             label={column('item_name')}
+            list="warehouses-report-items"
             name="item"
             placeholder={t('reports.search_item_hint')}
           />
+          <datalist id="warehouses-report-items">
+            {pickers.stockItems.map((row) => (
+              <option key={row.code} value={row.name} />
+            ))}
+          </datalist>
           <Select
             defaultValue={warehouseCode}
             emptyLabel={t('reports.all_warehouses')}

@@ -4,15 +4,14 @@ import { AdminPage, Flash, admin as s } from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
-import { Panel } from '@/components/ui';
 import { Denied } from '@/components/denied';
 import { ExportMenu } from '@/components/print/export-menu';
 import { PrintSheet } from '@/components/print/print-sheet';
+import { printSheet } from '@/server/print/sheet';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { toDecimalString } from '@domain/money';
 import { visibleRoute } from '@/server/phase-gate';
-import { printSheet } from '@/server/print/sheet';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as receipts from '@/server/services/customer-receipt';
 import { allocateReceipt, approveReceipt, postReceipt } from '../actions';
@@ -44,12 +43,11 @@ export default async function ReceiptPage({
 }) {
   if (!visibleRoute('/sales/customer-receipts')) notFound();
 
-  const [t, page, column, status, printT, locale, context, outcome, { receiptNo }] = await Promise.all([
+  const [t, page, column, status, locale, context, outcome, { receiptNo }] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('column'),
     getTranslations('status'),
-    getTranslations('print'),
     getLocale(),
     requireContext(),
     outcomeOf(searchParams),
@@ -70,17 +68,11 @@ export default async function ReceiptPage({
     // §16 — a receipt whose payer is unknown has no invoices to offer, and
     // asking for them by a null customer would be asking the wrong question.
     const open = seen.customerId ? await receipts.openInvoicesFor(tx, seen.customerId) : [];
-    return {
-      receipt: seen,
-      open,
-      parties: await receipts.partiesOf(tx, seen.id),
-      allocations: await receipts.allocationsOf(tx, seen.id),
-    };
+    return { receipt: seen, open };
   });
 
   if (!found) notFound();
-  const { receipt, open, parties, allocations } = found;
-  const sheet = await printSheet('customer_receipt', receipt.receiptNo);
+  const { receipt, open } = found;
   const unallocated = receipt.unappliedIqd;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
@@ -97,16 +89,10 @@ export default async function ReceiptPage({
   const fields: DocumentField[] = [
     { label: column('reference'), value: <bdi dir="ltr">{receipt.receiptNo}</bdi> },
     { label: column('status'), value: status(receipt.status), status: receipt.status },
-    // Operations block 6: the payment names who and from where — the
-    // partner's code and name, the Bank/Cash account's code and name.
-    { label: column('customer_code'), value: <bdi dir="ltr">{parties.customerCode ?? '—'}</bdi> },
-    { label: column('customer_name'), value: <bdi dir="auto">{parties.customerName ?? '—'}</bdi> },
     {
       label: column('posting_date'),
       value: <bdi dir="ltr">{formatBusinessDate(receipt.receiptDate, locale as Locale)}</bdi>,
     },
-    { label: column('bank_code'), value: <bdi dir="ltr">{parties.bankCode ?? '—'}</bdi> },
-    { label: column('bank_name'), value: <bdi dir="auto">{parties.bankName ?? '—'}</bdi> },
     { label: column('branch_code'), value: <bdi dir="ltr">{receipt.branchCode}</bdi> },
     {
       label: t('customer_receipts.amount'),
@@ -122,11 +108,11 @@ export default async function ReceiptPage({
     },
   ];
 
+  const sheet = await printSheet('customer_receipt', receipt.receiptNo);
+
   return (
     <AdminPage
-      actions={
-        <ExportMenu exportKey="customer_receipt" id={receipt.receiptNo} />
-      }
+      actions={<ExportMenu exportKey="customer_receipt" id={receipt.receiptNo} />}
       back={{ href: '/sales/customer-receipts', label: t('back') }}
       title={receipt.receiptNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -230,55 +216,6 @@ export default async function ReceiptPage({
           </tbody>
         </table>
       </DocumentWindow>
-
-      {/* What this receipt was put against — the allocations its printed copy lists. */}
-      <Panel title={printT('allocations')}>
-        <div className={s.sapTableWrap}>
-          {/* Three columns: none of the line grid's minimum width, which would
-              scroll the amounts out of view. */}
-          <table className={s.sapTable} style={{ minInlineSize: 0 }}>
-            <thead>
-              <tr>
-                <th scope="col">{column('invoice_no')}</th>
-                <th scope="col">{column('due_date')}</th>
-                <th className={s.sapNum} scope="col">
-                  {t('customer_receipts.allocated')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {allocations.length === 0 ? (
-                <tr>
-                  <td className={s.sapEmptyRow} colSpan={3}>
-                    {printT('no_allocations')}
-                  </td>
-                </tr>
-              ) : null}
-              {allocations.map((row, index) => (
-                <tr key={`${row.invoiceNo}-${index}`}>
-                  <td className={s.sapAccountCell}>
-                    <bdi dir="ltr">{row.invoiceNo}</bdi>
-                  </td>
-                  <td>
-                    <bdi dir="ltr">{row.dueDate ? formatBusinessDate(row.dueDate, locale as Locale) : '—'}</bdi>
-                  </td>
-                  <td className={s.sapNum}>
-                    <bdi dir="ltr">{money(row.amountIqd)}</bdi>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className={s.sapTotalRow}>
-                <td colSpan={2}>{t('reports.totals')}</td>
-                <td className={s.sapNum}>
-                  <bdi dir="ltr">{money(receipt.allocatedIqd)}</bdi>
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </Panel>
 
       <RecordHistory objectId={receipt.id} objectType={receipts.PERMISSION_OBJECT} />
       {sheet ? <PrintSheet {...sheet} /> : null}

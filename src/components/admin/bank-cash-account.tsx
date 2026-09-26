@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getLocale, getTranslations } from 'next-intl/server';
+import { getTranslations } from 'next-intl/server';
 import { Banknote, Landmark } from 'lucide-react';
 import { Panel } from '@/components/ui';
 import {
@@ -22,18 +22,14 @@ import {
   matches,
 } from './index';
 import { AuditLogButton, RecordHistory } from './history';
-import { StatementLines } from './account-statement';
-import { ReportFilter, ReportWindow, currencyFrom } from './report-filter';
 import { SectionTabs } from './section-tabs';
 import { outcomeOf, type SearchParams } from './params';
 import { Denied } from '@/components/denied';
 import { ExportMenu } from '@/components/print/export-menu';
-import { formatBusinessDate, formatStatementAmount, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { AdminNotFoundError } from '@/server/services/administration';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as accounts from '@/server/services/bank-cash-accounts';
-import * as statement from '@/server/services/partner-statement';
 import * as rates from '@/server/services/exchange-rates';
 import * as users from '@/server/services/users';
 import {
@@ -245,24 +241,15 @@ export async function AccountRecord({
   readonly params: Promise<{ code: string }>;
   readonly searchParams: SearchParams;
 }) {
-  const [t, page, column, printT, locale, context, outcome, query, { code: rawCode }] = await Promise.all([
+  const [t, page, column, context, outcome, { code: rawCode }] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('column'),
-    getTranslations('print'),
-    getLocale(),
     requireContext(),
     outcomeOf(searchParams),
-    searchParams,
     params,
   ]);
   const code = decodeURIComponent(rawCode);
-  // Block 6's statement, for the period chosen — this calendar year unless
-  // another is asked for, exactly as the customer and supplier statements.
-  const year = new Date().getFullYear();
-  const from = typeof query.from === 'string' ? query.from : `${year}-01-01`;
-  const to = typeof query.to === 'string' ? query.to : `${year}-12-31`;
-  const currency = currencyFrom(query.currency);
   const { principal } = context;
   if (!can(principal, 'view', accounts.PERMISSION_OBJECT)) {
     return <Denied object={page(PAGE_KEY[kind])} />;
@@ -279,7 +266,6 @@ export async function AccountRecord({
         gl: mayEdit ? await accounts.availableGlAccounts(tx, row.glAccountId) : [],
         people: mayEdit ? await users.listAll(tx) : [],
         moneys: mayEdit ? await rates.currencies(tx) : [],
-        account: await statement.ledgerStatementFor(tx, row, { from, to, currency }),
       };
     } catch (error) {
       if (error instanceof AdminNotFoundError) return null;
@@ -287,21 +273,18 @@ export async function AccountRecord({
     }
   });
   if (!data) notFound();
-  const { row, places, gl, people, moneys, account } = data;
+  const { row, places, gl, people, moneys } = data;
   // The address is the truth about which list this belongs on; a cash account
   // reached through the bank route is the wrong page for it.
   if (row.accountType !== kind) notFound();
 
   const Icon = kind === 'bank' ? Landmark : Banknote;
 
-  const recordHref = `${ROUTES[kind]}/${encodeURIComponent(row.code)}`;
-  const money = (amount: string) => formatStatementAmount(amount, currency, locale as Locale);
-
   return (
     <AdminPage
       actions={
         <>
-          <ExportMenu exportKey={kind === 'bank' ? 'bank_statement' : 'cash_statement'} id={row.code} query={query} />
+          <ExportMenu exportKey={`${kind}_statement`} id={row.code} />
           <AuditLogButton label={t('history')} />
         </>
       }
@@ -523,30 +506,6 @@ export async function AccountRecord({
           <RecordHistory objectId={row.code} objectType={accounts.PERMISSION_OBJECT} />
         </div>
       </div>
-
-      {/* Operations block 6 — "Incoming amounts are shown as Debit. Outgoing
-          amounts are shown as Credit." The same report as the customer's and
-          the supplier's, read for the account the money passes through. */}
-      <ReportWindow
-        filter={<ReportFilter action={recordHref} currency={currency} from={from} to={to} />}
-        foot={
-          <div className={s.sapFootTotals}>
-            <div className={s.sapFootTotal}>
-              <span>{t('partners.statement_closing')}</span>
-              <strong>
-                <bdi dir="ltr">{money(account.closing)}</bdi>
-              </strong>
-            </div>
-          </div>
-        }
-        meta={t('reports.for_the_period', {
-          from: formatBusinessDate(from, locale as Locale),
-          to: formatBusinessDate(to, locale as Locale),
-        })}
-        title={printT(kind === 'bank' ? 'titles.bank_statement' : 'titles.cash_statement')}
-      >
-        <StatementLines account={account} choose="" currency={currency} />
-      </ReportWindow>
     </AdminPage>
   );
 }

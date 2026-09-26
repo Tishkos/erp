@@ -2847,6 +2847,19 @@
   padding-block: 0.4rem;
 }
 
+/* A field and a button standing on the same row are the same height.
+   The rule above gives both a `min-block-size` of 2rem, but the application's
+   base rule also sets `block-size: var(--control-height)` on the boxes and
+   nothing on the buttons — so every box on a document-style page kept the
+   app's taller 2.55rem (41px) while every button took 2rem (32px), and a
+   filter row read as two different sizes standing next to each other. The
+   boxes are pinned to the same 2rem the buttons use. Not the textarea, which
+   is meant to be tall. */
+.sapPage.sapPage .input,
+.sapPage.sapPage .select {
+  block-size: 2rem;
+}
+
 .sapPage.sapPage .input:focus,
 .sapPage.sapPage .select:focus,
 .sapPage.sapPage .textarea:focus {

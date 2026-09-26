@@ -81,3 +81,11 @@ Word file and loaded by the print sheet.
   Windows and macOS.
 - The company's Arabic name is the one the application shell shows
   (`shell.company_name`); the company record has no Arabic name field.
+- **Screens are unchanged apart from the menu.** The record and report
+  screens keep their own layout; the menu (and, on a document page, the
+  hidden print sheet Ctrl+P uses) is the only addition. So a printed Supplier
+  Payment or Customer Receipt carries its supplier or customer, its
+  Bank/Cash account and its invoice allocations, which the screen itself
+  does not list. A Bank/Cash account's printed statement comes from its
+  ledger account, and is exported with the default period (1 January to
+  31 December of the current year).
