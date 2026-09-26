@@ -6,6 +6,9 @@ import { RecordHistory } from '@/components/admin/history';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
+import { PrintSheet } from '@/components/print/print-sheet';
+import { printSheet } from '@/server/print/sheet';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
@@ -193,8 +196,11 @@ export default async function ApInvoicePage({
     { label: t('ap_invoices.posted_by'), value: <bdi dir="auto">{postedBy ?? t('none')}</bdi> },
   ];
 
+  const sheet = await printSheet('purchase_invoice', invoice.invoiceNo);
+
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="purchase_invoice" id={invoice.invoiceNo} />}
       back={{ href: '/purchasing/ap-invoices', label: t('back') }}
       title={invoice.invoiceNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -371,6 +377,7 @@ export default async function ApInvoicePage({
       </DocumentWindow>
 
       <RecordHistory objectId={invoice.id} objectType={ap.PERMISSION_OBJECT} />
+      {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>
   );
 }

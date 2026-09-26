@@ -6,6 +6,7 @@ import { SearchablePicker } from './searchable-picker';
 import { SectionTabs } from './section-tabs';
 import type { SearchParams } from './params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { formatBusinessDate, formatStatementAmount, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
@@ -108,6 +109,7 @@ export async function AccountStatement({
 
   return (
     <AdminPage
+      actions={chosen ? <ExportMenu exportKey={`${side}_statement`} query={query} /> : undefined}
       back={{ href: screen.back, label: t('back') }}
       subtitle={t(`partners.statement_subtitle_${side}`)}
       tabs={<SectionTabs route={screen.route} />}

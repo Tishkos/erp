@@ -4,6 +4,7 @@ import { AdminPage, admin as s } from '@/components/admin';
 import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/report-filter';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { StatementTable } from '@/components/admin/statement-table';
 import { formatBusinessDate, formatStatementAmount, type Locale } from '@/i18n/config';
@@ -57,6 +58,7 @@ export default async function ChangesInEquityPage({ searchParams }: { searchPara
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="changes_in_equity" query={params} />}
       back={{ href: '/', label: t('dashboard_label') }}
       tabs={<SectionTabs route="/finance/changes-in-equity" />}
       subtitle={t('reports.changes_in_equity_subtitle')}

@@ -5,9 +5,12 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
+import { PrintSheet } from '@/components/print/print-sheet';
 import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
+import { printSheet } from '@/server/print/sheet';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as gr from '@/server/services/goods-return';
 import { approveGoodsReturn, postGoodsReturn } from '../actions';
@@ -56,6 +59,7 @@ export default async function GoodsReturnPage({
   const found = await withCurrentUser((tx) => gr.viewByNo(tx, decodeURIComponent(returnNo)));
   if (!found) notFound();
   const { document, lines } = found;
+  const sheet = await printSheet('purchase_return', document.returnNo);
 
   const mayApprove = document.status === 'draft' && can(principal, 'approve', gr.PERMISSION_OBJECT);
   const mayPost = document.status === 'approved' && can(principal, 'post', gr.PERMISSION_OBJECT);
@@ -84,6 +88,7 @@ export default async function GoodsReturnPage({
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="purchase_return" id={document.returnNo} />}
       back={{ href: '/purchasing/goods-returns', label: t('back') }}
       title={document.returnNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -161,6 +166,7 @@ export default async function GoodsReturnPage({
       </DocumentWindow>
 
       <RecordHistory objectId={document.id} objectType={gr.PERMISSION_OBJECT} />
+      {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>
   );
 }

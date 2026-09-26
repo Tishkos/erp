@@ -7,6 +7,9 @@ import { RecordHistory } from '@/components/admin/history';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
+import { PrintSheet } from '@/components/print/print-sheet';
+import { printSheet } from '@/server/print/sheet';
 import { Panel } from '@/components/ui';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -223,8 +226,11 @@ export default async function ArInvoicePage({
     },
   ];
 
+  const sheet = await printSheet('sales_invoice', invoice.invoiceNo);
+
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="sales_invoice" id={invoice.invoiceNo} />}
       back={{ href: '/sales/ar-invoices', label: t('back') }}
       title={invoice.invoiceNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -467,6 +473,7 @@ export default async function ArInvoicePage({
       </Panel>
 
       <RecordHistory objectId={invoice.id} objectType={ar.PERMISSION_OBJECT} />
+      {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>
   );
 }

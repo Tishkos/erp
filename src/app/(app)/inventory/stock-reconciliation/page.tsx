@@ -18,6 +18,7 @@ import { PairedPicker } from '@/components/admin/paired-picker';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { can } from '@domain/permissions';
 import { formatQuantity, parseQuantity } from '@domain/uom';
 import { visibleRoute } from '@/server/phase-gate';
@@ -41,10 +42,11 @@ export const dynamic = 'force-dynamic';
 export default async function ReconciliationPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/inventory/stock-reconciliation')) notFound();
 
-  const [t, page, column, context, outcome] = await Promise.all([
+  const [t, page, column, printT, context, outcome] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('column'),
+    getTranslations('print'),
     requireContext(),
     outcomeOf(searchParams),
   ]);
@@ -168,12 +170,13 @@ export default async function ReconciliationPage({ searchParams }: { searchParam
                 <th scope="col">{column('warehouse')}</th>
                 <th scope="col">{column('in_out')}</th>
                 <th scope="col">{column('adjustment_quantity')}</th>
+                <th scope="col">{printT('menu')}</th>
               </tr>
             </thead>
             <tbody>
               {shown.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>{t('reconciliation.none')}</td>
+                  <td colSpan={8}>{t('reconciliation.none')}</td>
                 </tr>
               ) : null}
               {shown.map((row) => (
@@ -196,6 +199,14 @@ export default async function ReconciliationPage({ searchParams }: { searchParam
                   <td>{row.direction === 'in' ? t('reconciliation.in') : t('reconciliation.out')}</td>
                   <td>
                     <bdi dir="ltr">{formatQuantity(parseQuantity(row.quantity))}</bdi>
+                  </td>
+                  <td>
+                    <ExportMenu
+                      exportKey="item_reconciliation"
+                      id={row.adjustmentNo}
+                      label={row.adjustmentNo}
+                      principal={principal}
+                    />
                   </td>
                 </tr>
               ))}

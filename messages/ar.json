@@ -2139,6 +2139,57 @@
     "fiscal_period": {
       "created": "فُتحت السنة المالية",
       "status_changed": "تغيّرت حالة الفترة"
+    },
+    "ap_invoice": {
+      "exported": "طُبع أو صُدّر"
+    },
+    "ar_invoice": {
+      "exported": "طُبع أو صُدّر"
+    },
+    "supplier_payment": {
+      "exported": "طُبع أو صُدّر"
+    },
+    "customer_receipt": {
+      "exported": "طُبع أو صُدّر"
+    },
+    "sales_return": {
+      "exported": "طُبع أو صُدّر"
+    },
+    "goods_return": {
+      "exported": "طُبع أو صُدّر"
+    },
+    "warehouse_transfer": {
+      "exported": "طُبع أو صُدّر"
+    },
+    "opening_stock": {
+      "exported": "طُبع أو صُدّر"
+    },
+    "stock_reconciliation": {
+      "exported": "طُبع أو صُدّر"
+    },
+    "stock_movement": {
+      "exported": "طُبع أو صُدّر"
+    },
+    "business_partner": {
+      "exported": "طُبع أو صُدّر"
+    },
+    "bank_account": {
+      "exported": "طُبع أو صُدّر"
+    },
+    "inventory_movement": {
+      "exported": "طُبع أو صُدّر"
+    },
+    "supplier_shipment": {
+      "exported": "طُبع أو صُدّر"
+    },
+    "trial_balance": {
+      "exported": "طُبع أو صُدّر"
+    },
+    "financial_statement": {
+      "exported": "طُبع أو صُدّر"
+    },
+    "gl_inquiry": {
+      "exported": "طُبع أو صُدّر"
     }
   },
   "statement_line": {
@@ -2179,6 +2230,69 @@
       "sales_returns": "عكس المبيعات",
       "opening_balance": "الحساب المقابل لرصيد أول المدة",
       "inventory_adjustment": "فروقات الجرد (زيادة أو عجز)"
+    }
+  },
+  "print": {
+    "menu": "طباعة / تصدير",
+    "menu_hint": "تنزيل {what} كملف",
+    "pdf": "PDF",
+    "excel": "Excel (.xlsx)",
+    "word": "Word (.docx)",
+    "language": "اللغة",
+    "english": "English",
+    "arabic": "العربية",
+    "branch": "الفرع",
+    "printed_at": "طُبع في",
+    "printed_by": "طبعه",
+    "filters": "عوامل التصفية",
+    "page_of": "صفحة {page} من {pages}",
+    "watermark": "مسودة / غير مرحّل",
+    "prepared_by": "أعدّه",
+    "approved_by": "اعتمده (المدير التنفيذي)",
+    "received_by": "استلمه",
+    "totals": "الإجماليات",
+    "all": "الكل",
+    "search": "بحث",
+    "allocated": "المخصص",
+    "allocations": "تخصيصات الفواتير",
+    "no_allocations": "لم يُخصص لأي فاتورة بعد.",
+    "history": "سجل المراحل",
+    "stage_from": "من",
+    "stage_to": "إلى",
+    "changed_at": "التاريخ والوقت",
+    "changed_by": "بواسطة",
+    "no_history": "لا توجد تغييرات مراحل مسجلة.",
+    "item": "الصنف",
+    "warehouse": "المخزن",
+    "period": "الفترة",
+    "as_at": "كما في",
+    "currency": "العملة",
+    "level": "المستوى",
+    "account": "الحساب",
+    "titles": {
+      "purchase_invoice": "فاتورة شراء",
+      "sales_invoice": "فاتورة مبيعات",
+      "supplier_payment": "دفعة مورد",
+      "customer_receipt": "مقبوض عميل",
+      "sales_return": "مرتجع مبيعات",
+      "purchase_return": "مرتجع مشتريات",
+      "transfer": "تحويل مخزني",
+      "opening_stock": "رصيد أول المدة",
+      "item_reconciliation": "تسوية صنف",
+      "customer_statement": "كشف حساب عميل",
+      "supplier_statement": "كشف حساب مورد",
+      "bank_statement": "كشف حساب بنكي",
+      "cash_statement": "كشف حساب نقدي",
+      "warehouses_report": "تقرير المخازن",
+      "stock_movement": "حركة المخزون",
+      "invoice_status_tracking": "تتبع حالة الفواتير",
+      "trial_balance": "ميزان المراجعة",
+      "income_statement": "قائمة الدخل",
+      "balance_sheet": "الميزانية العمومية",
+      "changes_in_equity": "قائمة التغيرات في حقوق الملكية",
+      "cash_flow": "قائمة التدفقات النقدية",
+      "gl_inquiry": "الأستاذ العام",
+      "gl_account": "دفتر أستاذ الحساب"
     }
   }
 }

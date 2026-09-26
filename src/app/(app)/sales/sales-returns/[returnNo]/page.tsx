@@ -5,9 +5,12 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
+import { PrintSheet } from '@/components/print/print-sheet';
 import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
+import { printSheet } from '@/server/print/sheet';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as sr from '@/server/services/sales-return';
 import * as warehouses from '@/server/services/warehouses';
@@ -74,6 +77,7 @@ export default async function SalesReturnPage({
 
   if (!found) notFound();
   const { lines, ...returnDoc } = found.document;
+  const sheet = await printSheet('sales_return', returnDoc.returnNo);
 
   const mayDecide =
     ['submitted', 'partially_executed', 'executed'].includes(returnDoc.status) &&
@@ -104,6 +108,7 @@ export default async function SalesReturnPage({
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="sales_return" id={returnDoc.returnNo} />}
       back={{ href: '/sales/sales-returns', label: t('back') }}
       title={returnDoc.returnNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -208,6 +213,7 @@ export default async function SalesReturnPage({
       </DocumentWindow>
 
       <RecordHistory objectId={returnDoc.id} objectType={sr.PERMISSION_OBJECT} />
+      {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>
   );
 }

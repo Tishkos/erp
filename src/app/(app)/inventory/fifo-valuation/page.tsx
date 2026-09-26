@@ -11,6 +11,7 @@ import {
 } from '@/components/admin';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -86,6 +87,7 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="warehouses_report" query={params} />}
       back={{ href: '/', label: t('dashboard_label') }}
       subtitle={t('reports.as_it_stands')}
       tabs={<SectionTabs route="/inventory/fifo-valuation" />}

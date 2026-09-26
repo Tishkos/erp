@@ -25,6 +25,7 @@ import { AuditLogButton, RecordHistory } from './history';
 import { SectionTabs } from './section-tabs';
 import { outcomeOf, type SearchParams } from './params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { can } from '@domain/permissions';
 import { AdminNotFoundError } from '@/server/services/administration';
 import { requireContext, withCurrentUser } from '@/server/session';
@@ -281,7 +282,12 @@ export async function AccountRecord({
 
   return (
     <AdminPage
-      actions={<AuditLogButton label={t('history')} />}
+      actions={
+        <>
+          <ExportMenu exportKey={`${kind}_statement`} id={row.code} />
+          <AuditLogButton label={t('history')} />
+        </>
+      }
       back={{ href: ROUTES[kind], label: t('back') }}
       title={`${row.code} · ${row.name}`}
       trail={[{ href: '/', label: t('dashboard_label') }]}

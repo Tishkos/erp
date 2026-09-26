@@ -5,6 +5,9 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
+import { PrintSheet } from '@/components/print/print-sheet';
+import { printSheet } from '@/server/print/sheet';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { toDecimalString } from '@domain/money';
@@ -105,8 +108,11 @@ export default async function ReceiptPage({
     },
   ];
 
+  const sheet = await printSheet('customer_receipt', receipt.receiptNo);
+
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="customer_receipt" id={receipt.receiptNo} />}
       back={{ href: '/sales/customer-receipts', label: t('back') }}
       title={receipt.receiptNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -212,6 +218,7 @@ export default async function ReceiptPage({
       </DocumentWindow>
 
       <RecordHistory objectId={receipt.id} objectType={receipts.PERMISSION_OBJECT} />
+      {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>
   );
 }

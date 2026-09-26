@@ -5,6 +5,7 @@ import { AdminPage, admin as s } from '@/components/admin';
 import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/report-filter';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
@@ -76,6 +77,7 @@ export default async function LedgerAccountPage({
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="gl_account" id={code} query={query} />}
       back={{ href: '/finance/gl-inquiry', label: t('back') }}
       title={`${account.code} · ${account.name}`}
       trail={[{ href: '/', label: t('dashboard_label') }]}

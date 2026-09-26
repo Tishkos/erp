@@ -559,6 +559,42 @@ export async function list(tx: Tx) {
     .orderBy(desc(customerReceipt.receiptDate), desc(customerReceipt.receiptNo));
 }
 
+/**
+ * Who paid and into which account — the build's Customer Name and Code and
+ * Bank/Cash Name and Code. The customer is null while the money is
+ * unidentified (§16).
+ */
+export async function partiesOf(tx: Tx, customerReceiptId: string) {
+  const [row] = await tx
+    .select({
+      customerCode: businessPartner.code,
+      customerName: businessPartner.legalName,
+      bankCode: bankCashAccount.code,
+      bankName: bankCashAccount.name,
+    })
+    .from(customerReceipt)
+    .leftJoin(businessPartner, eq(businessPartner.id, customerReceipt.customerId))
+    .leftJoin(bankCashAccount, eq(bankCashAccount.id, customerReceipt.bankCashAccountId))
+    .where(eq(customerReceipt.id, customerReceiptId))
+    .limit(1);
+  return row ?? { customerCode: null, customerName: null, bankCode: null, bankName: null };
+}
+
+/** The invoices this receipt settles, with what it put against each. */
+export async function allocationsOf(tx: Tx, customerReceiptId: string) {
+  return tx
+    .select({
+      invoiceNo: arInvoice.invoiceNo,
+      dueDate: arInvoice.dueDate,
+      amountIqd: customerReceiptAllocation.amountIqd,
+      allocatedAt: customerReceiptAllocation.allocatedAt,
+    })
+    .from(customerReceiptAllocation)
+    .innerJoin(arInvoice, eq(arInvoice.id, customerReceiptAllocation.arInvoiceId))
+    .where(eq(customerReceiptAllocation.customerReceiptId, customerReceiptId))
+    .orderBy(customerReceiptAllocation.allocatedAt);
+}
+
 export async function viewByNo(tx: Tx, receiptNo: string) {
   const [row] = await tx
     .select({ id: customerReceipt.id })

@@ -13,6 +13,7 @@ import {
 } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -92,6 +93,7 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="invoice_status_tracking" query={params} />}
       back={{ href: '/', label: t('dashboard_label') }}
       tabs={<SectionTabs route="/inventory/in-transit" />}
       subtitle={t('in_transit.subtitle')}

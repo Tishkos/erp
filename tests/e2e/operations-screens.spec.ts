@@ -893,8 +893,10 @@ test.describe('the Operations Build screens open', () => {
     await page.waitForURL(/\/purchasing\/supplier-payments\/PAY-/, { timeout: 60_000 });
 
     // The payment exists and says what is still unallocated, which is the whole
-    // of it until somebody puts it against an invoice.
-    await expect(page.getByText('Unallocated')).toBeVisible({ timeout: 30_000 });
+    // of it until somebody puts it against an invoice. Read in the document
+    // window: the page also carries its print sheet, hidden until printed,
+    // which names the same field.
+    await expect(page.locator('#payment-document').getByText('Unallocated')).toBeVisible({ timeout: 30_000 });
 
     // Every record carries its history, as the master-data screens do. A
     // document you cannot ask "who did this, and when" of is a document you
