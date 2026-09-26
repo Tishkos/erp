@@ -1786,7 +1786,6 @@
     },
     "invoices": {
       "save_failed": "The line could not be saved. Your changes are still here; leave the row again to retry.",
-      "no_default_price": "No default price is set. Enter a price or configure it on the item.",
       "checking_stock": "Checking stock…",
       "stock_unavailable": "Stock availability is unavailable.",
       "available_stock": "Available stock",

@@ -1756,6 +1756,36 @@
 .sapTable .sapNum {
   text-align: end;
 }
+
+/* ── The invoice lines grid ───────────────────────────────────────────────
+   A typed grid has known columns, so it declares them: the widths come from
+   the colgroup and `table-layout: fixed` holds them. Without that the widest
+   thing in a cell decided how wide its column was.
+
+   The notes under a field are blocks. Inline, in a `white-space: nowrap`
+   cell, each was added to the width of its own column — the quantity column
+   grew to fit "Available stock: 12 EA" beside the box, which is what made the
+   field look long and put a sentence between the quantity and the price. */
+.sapLineGrid {
+  table-layout: fixed;
+}
+
+/* A number reads as a number: right-aligned under its right-aligned heading,
+   rather than a left-aligned figure below an end-aligned label. */
+.sapLineGrid .sapNum input {
+  text-align: end;
+}
+
+.sapLineGrid .sapCellNote {
+  display: block;
+  margin-block-start: 0.15rem;
+  overflow-wrap: anywhere;
+  color: var(--w-muted);
+  font-size: 0.68rem;
+  line-height: 1.3;
+  text-align: start;
+  white-space: normal;
+}
 .sapTable .sapGroup {
   background: var(--w-head-strong);
   text-align: center;

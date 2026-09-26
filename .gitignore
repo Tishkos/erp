@@ -60,3 +60,7 @@ shots/
 # Agent worktrees and scratch space — tooling, not the product.
 .claude/worktrees/
 .devin/
+
+# dev server logs, captured by the npm script, not part of the app
+.dev-server.err
+.dev-server.out

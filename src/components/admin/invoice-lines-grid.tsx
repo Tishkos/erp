@@ -95,7 +95,6 @@ export interface InvoiceLineLabels {
   readonly documentTotal: string;
   readonly saving: string;
   readonly saveFailed: string;
-  readonly noDefaultPrice: string;
   readonly checkingStock: string;
   readonly stockUnavailable: string;
   readonly availableStock: string;
@@ -576,7 +575,27 @@ export function InvoiceLinesGrid({
 
   return (
     <>
-      <table aria-labelledby={headingId} className={styles.sapTable} ref={table}>
+      <table
+        aria-labelledby={headingId}
+        className={`${styles.sapTable} ${styles.sapLineGrid}`}
+        ref={table}
+      >
+        {/* Declared, not discovered. Every column but the item's name takes the
+            width its own contents need; the name absorbs what is left, so the
+            grid scales with the window rather than with the longest note in a
+            cell. Keep in step with `columns` above. */}
+        <colgroup>
+          <col style={{ inlineSize: '2.75rem' }} />
+          <col style={{ inlineSize: '9rem' }} />
+          <col />
+          <col style={{ inlineSize: '7.5rem' }} />
+          <col style={{ inlineSize: '8.5rem' }} />
+          <col style={{ inlineSize: '7rem' }} />
+          <col style={{ inlineSize: '8.5rem' }} />
+          {showSupplier ? <col style={{ inlineSize: '12rem' }} /> : null}
+          <col style={{ inlineSize: '11rem' }} />
+          <col style={{ inlineSize: '1.9rem' }} />
+        </colgroup>
         <thead>
           <tr>
             <th scope="col">#</th>
@@ -661,7 +680,7 @@ export function InvoiceLinesGrid({
                   {live ? null : (
                     <input name={`uom_code_${index}`} type="hidden" value={item?.uomCode ?? ''} />
                   )}
-                  {locked ? <span className={styles.sapNote}>{labels.saving}</span> : null}
+                  {locked ? <span className={styles.sapCellNote}>{labels.saving}</span> : null}
                   {row.error ? (
                     <span className={styles.sapRowError} role="alert">
                       {row.error}
@@ -685,7 +704,7 @@ export function InvoiceLinesGrid({
                     <bdi dir="auto">{item?.name ?? ''}</bdi>
                   )}
                 </td>
-                <td>
+                <td className={styles.sapNum}>
                   <input
                     aria-label={labels.quantity}
                     dir="ltr"
@@ -706,16 +725,16 @@ export function InvoiceLinesGrid({
                     {...field('quantity', index)}
                   />
                   {row.availabilityPending ? (
-                    <span className={styles.sapNote}>{labels.checkingStock}</span>
+                    <span className={styles.sapCellNote}>{labels.checkingStock}</span>
                   ) : row.availabilityError ? (
-                    <span className={styles.sapNote}>{labels.stockUnavailable}</span>
+                    <span className={styles.sapCellNote}>{labels.stockUnavailable}</span>
                   ) : row.availability !== null ? (
-                    <span className={styles.sapNote} title={labels.availabilityHint}>
+                    <span className={styles.sapCellNote} title={labels.availabilityHint}>
                       {labels.availableStock}: {row.availability} {item?.uomCode ?? ''}
                     </span>
                   ) : null}
                 </td>
-                <td>
+                <td className={styles.sapNum}>
                   <input
                     aria-label={labels.unitPrice}
                     dir="ltr"
@@ -734,11 +753,8 @@ export function InvoiceLinesGrid({
                     value={row.unitPrice}
                     {...field('unit_price', index)}
                   />
-                  {item && row.unitPrice.trim() === '' && !defaultPriceFor(item) ? (
-                    <span className={styles.sapNote}>{labels.noDefaultPrice}</span>
-                  ) : null}
                 </td>
-                <td>
+                <td className={styles.sapNum}>
                   <input
                     aria-label={labels.discount}
                     dir="ltr"

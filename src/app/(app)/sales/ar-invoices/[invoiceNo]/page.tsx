@@ -306,7 +306,6 @@ export default async function ArInvoicePage({
               documentTotal: t('reports.totals'),
               saving: t('journals.saving'),
               saveFailed: t('invoices.save_failed'),
-              noDefaultPrice: t('invoices.no_default_price'),
               checkingStock: t('invoices.checking_stock'),
               stockUnavailable: t('invoices.stock_unavailable'),
               availableStock: t('invoices.available_stock'),
