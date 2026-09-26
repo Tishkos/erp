@@ -8,6 +8,7 @@ import {
   Flash,
   Form,
   Grid,
+  Hidden,
   ListToolbar,
   NewRecordDialog,
   Pill,
@@ -24,7 +25,7 @@ import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { formatQuantity, parseQuantity } from '@domain/uom';
 import * as items from '@/server/services/items';
-import * as uom from '@/server/services/units-of-measure';
+import * as coa from '@/server/services/chart-of-accounts';
 import { createItem } from './actions';
 
 /**
@@ -53,10 +54,14 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
   }
   const mayCreate = can(principal, 'create', items.PERMISSION_OBJECT);
 
-  const { rows, units } = await withCurrentUser(async (tx) => ({
+  const { rows, accounts } = await withCurrentUser(async (tx) => ({
     rows: await items.listAll(tx),
-    units: mayCreate ? await uom.listActive(tx) : [],
+    accounts: mayCreate ? await coa.postableAccounts(tx) : [],
   }));
+  const accountOptions = (type: string) =>
+    accounts
+      .filter((a) => a.accountType === type)
+      .map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }));
   const shown = rows.filter((row) => matches(row, outcome.q));
 
   return (
@@ -75,34 +80,41 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
                 typed is a code that can be typed twice. */}
             <Form action={createItem}>
               <Grid>
-                <Field label={t('name')} name="name" required requiredLabel={t('required_hint')} />
-                <Select
-                  defaultValue="stock"
-                  hint={t('items.kind_hint')}
-                  label={t('items.kind')}
-                  name="isStock"
-                  options={[
-                    { value: 'stock', label: t('items.kind_stock') },
-                    { value: 'service', label: t('items.kind_service') },
-                  ]}
+                {/* Block 1: Item Code (the system's), Item Full Name, Related
+                    Supplier(s) — linked on the item once it exists — and the
+                    three accounts. Nothing else is asked. A build item is a
+                    stock item counted in each, identified by the invoice that
+                    brought it in (its batch), so those are set, not asked. */}
+                <Hidden name="isStock" value="stock" />
+                <Hidden name="baseUomCode" value="EA" />
+                <Hidden name="tracking" value="batch" />
+                <Field
+                  label={t('items.full_name')}
+                  name="name"
+                  required
+                  requiredLabel={t('required_hint')}
+                  wide
                 />
                 <Select
-                  label={t('items.base_uom')}
-                  name="baseUomCode"
-                  options={units.map((u) => ({ value: u.code, label: `${u.code} · ${u.name}` }))}
+                  emptyLabel=""
+                  label={t('items.inventory_account')}
+                  name="inventoryAccountId"
+                  options={accountOptions('asset')}
                   required
                 />
-                {/* §9.3 — a stock item must track serials, batches or both.
-                    A service tracks nothing, and the service ignores this. */}
                 <Select
-                  defaultValue="batch"
-                  hint={t('items.tracking_hint')}
-                  label={t('items.tracking')}
-                  name="tracking"
-                  options={items.ITEM_TRACKING.map((value) => ({
-                    value,
-                    label: t(`items.tracking_${value}`),
-                  }))}
+                  emptyLabel=""
+                  label={t('items.sales_account')}
+                  name="salesAccountId"
+                  options={accountOptions('revenue')}
+                  required
+                />
+                <Select
+                  emptyLabel=""
+                  label={t('items.cogs_account')}
+                  name="cogsAccountId"
+                  options={accountOptions('expense')}
+                  required
                 />
               </Grid>
               <SubmitRow>

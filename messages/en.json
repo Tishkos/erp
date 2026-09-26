@@ -48,7 +48,7 @@
     "reservations": "Reservations",
     "pick_lists": "Pick Lists",
     "delivery_notes": "Delivery Notes",
-    "ar_invoices": "A/R Invoices",
+    "ar_invoices": "Sales Invoices",
     "cash_sales": "Cash Sales",
     "customer_receipts": "Customer Receipts",
     "credit_control": "Credit Control",
@@ -61,26 +61,26 @@
     "purchase_orders": "Purchase Orders",
     "goods_receipts": "Goods Receipts",
     "service_receipts": "Service Receipt / Expense Confirmation",
-    "ap_invoices": "A/P Invoices",
+    "ap_invoices": "Purchase Invoices",
     "supplier_advances": "Supplier Advances",
     "supplier_payments": "Supplier Payments",
-    "goods_returns": "Goods Returns",
+    "goods_returns": "Purchase Returns",
     "supplier_credit_memos": "Supplier Credit Memos",
     "match_exceptions": "Match Exceptions",
     "purchasing_reports": "Reports",
     "purchasing_settings": "Settings",
     "availability": "Availability",
     "opening_stock": "Opening Stock",
-    "stock_movements": "Stock Movements",
-    "transfer_requests": "Transfer Requests",
-    "in_transit": "In-Transit",
+    "stock_movements": "Stock Movement",
+    "transfer_requests": "Transfer",
+    "in_transit": "Invoice Status Tracking",
     "quarantine": "Quarantine",
     "inventory_returns": "Returns",
     "damaged_goods": "Damaged Goods",
     "serial_batch_tracking": "Serial / Batch Tracking",
     "uom": "Units of Measure",
-    "stock_reconciliation": "Stock Reconciliation",
-    "fifo_valuation": "FIFO Valuation",
+    "stock_reconciliation": "Item Reconciliation",
+    "fifo_valuation": "Warehouses Report",
     "inventory_reports": "Reports",
     "inventory_settings": "Settings",
     "project_master": "Project Master",
@@ -410,7 +410,18 @@
     "customer_code": "Customer Code",
     "customer_name": "Customer Name",
     "bank_code": "Bank/Cash Code",
-    "bank_name": "Bank/Cash Name"
+    "bank_name": "Bank/Cash Name",
+    "document_no": "Number",
+    "date": "Date",
+    "average_unit_price": "Average Unit Price",
+    "from_warehouse": "From Warehouse",
+    "to_warehouse": "To Warehouse",
+    "in_out": "In/Out",
+    "adjustment_quantity": "Adjustment Quantity",
+    "movement": "Movement",
+    "stock_in": "In",
+    "stock_out": "Out",
+    "document": "Document"
   },
   "list": {
     "search": "Search",
@@ -1675,7 +1686,8 @@
       "inventory_account": "Inventory account",
       "inventory_account_hint": "Where this item’s stock is held. Debited when bought, credited when sold.",
       "cogs_account": "COGS account",
-      "cogs_account_hint": "What this item costs when it is sold."
+      "cogs_account_hint": "What this item costs when it is sold.",
+      "full_name": "Item Full Name"
     },
     "partners": {
       "subtitle_customer": "Who we sell to. One record per company, whatever else they are to us.",
@@ -1960,7 +1972,53 @@
       "control_hint": "Only accounts designated as a {kind} control account are offered here. Set the designation in Chart of Accounts.",
       "missing": "{count, plural, one {One required line has no account} other {# required lines have no account}}",
       "complete": "Every required line has an account"
-    }
+    },
+    "transfers": {
+      "subtitle": "Items moved from one warehouse to another",
+      "new": "New transfer",
+      "none": "No transfers yet.",
+      "created_note": "The system gives the transfer its number. The stock leaves the first warehouse and arrives in the second at the cost it already carries."
+    },
+    "reconciliation": {
+      "subtitle": "Bring the system's quantity to what is on the shelf",
+      "new": "New reconciliation",
+      "none": "No reconciliations yet.",
+      "created_note": "In adds stock that was found; Out removes stock that is missing. The system gives the reconciliation its number.",
+      "in": "In",
+      "out": "Out"
+    },
+    "opening_stock": {
+      "subtitle": "The stock the company starts with",
+      "new": "New opening stock",
+      "none": "No opening stock yet.",
+      "created_note": "The system gives the document its number. Save sends it for approval; approval brings the stock in.",
+      "approve": "Approve and post",
+      "awaiting": "Waiting for approval by someone other than the person who entered it.",
+      "approved_by": "Approved by",
+      "lines": "Lines",
+      "total": "Total"
+    },
+    "stock_movements": {
+      "subtitle": "Every movement of stock, In or Out",
+      "none": "No movements in this range.",
+      "filter": "Show",
+      "all_items": "All items",
+      "all_warehouses": "All warehouses",
+      "from": "From",
+      "to": "To",
+      "type": {
+        "opening": "Opening Stock",
+        "purchase": "Purchase",
+        "sale": "Sale",
+        "transfer": "Transfer",
+        "shipment": "Invoice Status Tracking",
+        "reconciliation": "Reconciliation",
+        "sales_return": "Sales Return",
+        "purchase_return": "Purchase Return",
+        "other": "Other"
+      }
+    },
+    "minted_code_note": "The system gives it its code when you save. The code cannot be typed or changed."
   },
   "profile": {
     "title": "My profile",
@@ -2102,7 +2160,9 @@
       "sales_customer_receipt_identified": "Customer Receipt — put to a customer",
       "purchasing_supplier_payment": "Supplier Payment",
       "purchasing_supplier_credit_memo": "Purchase Return",
-      "sales_customer_credit_memo": "Sales Return"
+      "sales_customer_credit_memo": "Sales Return",
+      "inventory_opening_stock": "Opening Stock",
+      "inventory_stock_adjustment": "Item Reconciliation"
     },
     "role": {
       "supplier_payable": "What the company owes the supplier",
@@ -2113,7 +2173,9 @@
       "sales_revenue": "The sale",
       "customer_clearing": "Money received, not yet put to a customer",
       "return_clearing": "Goods returned, not yet credited",
-      "sales_returns": "The sale reversed"
+      "sales_returns": "The sale reversed",
+      "opening_balance": "What the opening stock is opened against",
+      "inventory_adjustment": "Stock found or lost on reconciliation"
     }
   }
 }

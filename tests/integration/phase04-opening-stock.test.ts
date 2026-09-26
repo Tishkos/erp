@@ -264,27 +264,32 @@ describe('04.5 gate · cannot be entered without required tracking data', () => 
     ).toMatch(/needs a serial number/);
   });
 
-  it('refuses a batch-tracked item with no batch', async () => {
-    expect(
-      await rejection(
-        withScope(scope(officer), (tx) =>
-          opening.create(tx, officer, {
-            branchCode: BAGHDAD,
-            warehouseCode: STORES,
-            documentDate: '2026-01-31',
-            lines: [
-              {
-                itemCode: ITEM,
-                quantity: qty('10'),
-                uomCode: 'EA',
-                unitCostIqd: cost('10'),
-                costLayerDate: '2025-11-01',
-              },
-            ],
-          }),
-        ),
-      ),
-    ).toMatch(/needs a batch number/);
+  it('gives a batch-tracked item with no batch the document number as its batch', async () => {
+    // Operations block 7's Opening Stock asks for no batch. The document that
+    // put the units on the system is their batch, the way a Purchase
+    // Invoice's number is the batch of what it brings in (§9.3 still holds:
+    // every unit traces to the paper that brought it in).
+    const created = await withScope(scope(officer), (tx) =>
+      opening.create(tx, officer, {
+        branchCode: BAGHDAD,
+        warehouseCode: STORES,
+        documentDate: '2026-01-31',
+        lines: [
+          {
+            itemCode: ITEM,
+            quantity: qty('10'),
+            uomCode: 'EA',
+            unitCostIqd: cost('10'),
+            costLayerDate: '2025-11-01',
+          },
+        ],
+      }),
+    );
+    const { rows } = await ownerPool.query(
+      `select batch_number from opening_stock_line where opening_stock_id = $1`,
+      [created.id],
+    );
+    expect(rows[0].batch_number).toBe(created.documentNo);
   });
 
   it('refuses an item that does not exist', async () => {

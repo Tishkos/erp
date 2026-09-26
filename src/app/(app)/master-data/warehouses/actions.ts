@@ -9,10 +9,8 @@ const record = (code: string) => `${LIST}/${encodeURIComponent(code)}`;
 export async function createWarehouse(formData: FormData): Promise<void> {
   await runAdminAndReturn(
     (tx, ctx) =>
-      warehouses.create(tx, ctx, {
-        code: text(formData, 'code'),
-        name: text(formData, 'name'),
-      }),
+      // No code: the system mints it (Critical Rule 1).
+      warehouses.create(tx, ctx, { name: text(formData, 'name') }),
     LIST,
   );
 }

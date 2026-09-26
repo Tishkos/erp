@@ -29,14 +29,12 @@ import {
 import {
   AdminNotFoundError,
   AdminValidationError,
-  codeFromName,
-  normaliseCode,
   permit,
   recordChange,
   requireText,
-  uniqueCode,
   type ActorContext,
 } from './administration';
+import { allocateFreeCode } from './numbering';
 
 export const PERMISSION_OBJECT = 'payment_term';
 
@@ -269,29 +267,27 @@ async function writeInstalments(
   return rows;
 }
 
-export async function create(
-  tx: Tx,
-  ctx: ActorContext,
-  input: PaymentTermsInput & { readonly code?: string },
-) {
+/**
+ * A new payment term — blocks 2 and 3: "A new payment term can be defined
+ * whenever required." Its code is minted, never typed (Critical Rule 1,
+ * migration 0208); `create` takes none, so no screen or request can give one.
+ */
+export async function create(tx: Tx, ctx: ActorContext, input: PaymentTermsInput) {
   await permit(ctx, 'create', PERMISSION_OBJECT);
 
   const name = requireText(input.name, 'name');
-  const code = input.code?.trim()
-    ? normaliseCode(input.code)
-    : await uniqueCode(codeFromName(name), async (candidate) => {
-        const [row] = await tx
-          .select({ code: paymentTerms.code })
-          .from(paymentTerms)
-          .where(eq(paymentTerms.code, candidate));
-        return Boolean(row);
-      });
-
-  const [existing] = await tx
-    .select({ code: paymentTerms.code })
-    .from(paymentTerms)
-    .where(eq(paymentTerms.code, code));
-  if (existing) throw new AdminValidationError('code', `'${code}' is already a payment term`);
+  const code = await allocateFreeCode(
+    tx,
+    'PAYMENT_TERM_CODE',
+    async (candidate) => {
+      const [row] = await tx
+        .select({ code: paymentTerms.code })
+        .from(paymentTerms)
+        .where(eq(paymentTerms.code, candidate));
+      return Boolean(row);
+    },
+    ctx.principal.userId,
+  );
 
   const basis = assertBasis(input.basis);
   const dueDays = assertDays(input.dueDays, 'dueDays');

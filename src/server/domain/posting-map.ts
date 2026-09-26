@@ -123,6 +123,18 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
       line('sales_returns', 'debit', true),
     ],
   },
+  {
+    // Operations block 7 — Opening Stock. The stock side is each item's own
+    // inventory account; what it is opened against is asked here.
+    event: 'inventory.opening_stock',
+    lines: [line('opening_balance', 'credit', true)],
+  },
+  {
+    // Operations block 7 — Item Reconciliation. An Out debits it and an In
+    // credits it; the inventory side is the item's own account.
+    event: 'inventory.stock_adjustment',
+    lines: [line('inventory_adjustment', 'either', true)],
+  },
 ]);
 
 /** The catalogue as flat (event, role) pairs, in the order shown. */

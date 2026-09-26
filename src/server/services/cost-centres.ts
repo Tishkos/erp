@@ -25,14 +25,12 @@ import { appUser, branch, costCentre } from '../db/schema';
 import {
   AdminNotFoundError,
   AdminValidationError,
-  codeFromName,
-  normaliseCode,
   permit,
   recordChange,
   requireText,
-  uniqueCode,
   type ActorContext,
 } from './administration';
+import { allocateFreeCode } from './numbering';
 
 export const PERMISSION_OBJECT = 'cost_centre';
 
@@ -102,27 +100,21 @@ async function assertBranch(tx: Tx, code: string | null): Promise<string | null>
 export async function create(
   tx: Tx,
   ctx: ActorContext,
-  input: CostCentreInput & { readonly code?: string },
+  input: CostCentreInput,
 ) {
   await permit(ctx, 'create', PERMISSION_OBJECT);
 
   const name = requireText(input.name, 'name');
-  // The code follows the name unless one was typed: VEHICLE FLEET → VEHICLE_FLEET.
-  const code = input.code?.trim()
-    ? normaliseCode(input.code)
-    : await uniqueCode(codeFromName(name), async (candidate) => {
-        const [row] = await tx
-          .select({ code: costCentre.code })
-          .from(costCentre)
-          .where(eq(costCentre.code, candidate));
-        return Boolean(row);
-      });
-
-  const [existing] = await tx
-    .select({ code: costCentre.code })
-    .from(costCentre)
-    .where(eq(costCentre.code, code));
-  if (existing) throw new AdminValidationError('code', `'${code}' is already a cost centre`);
+  // Minted, never typed — Critical Rule 1 (migration 0208).
+  const code = await allocateFreeCode(
+    tx,
+    'COST_CENTRE_CODE',
+    async (candidate) => {
+      const [row] = await tx.select({ code: costCentre.code }).from(costCentre).where(eq(costCentre.code, candidate));
+      return Boolean(row);
+    },
+    ctx.principal.userId,
+  );
 
   const values = {
     code,

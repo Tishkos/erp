@@ -15,7 +15,6 @@ import {
   SubmitRow,
   matches,
 } from '@/components/admin';
-import { AutoCode } from '@/components/admin/auto-code';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -70,10 +69,11 @@ export default async function WarehousesPage({ searchParams }: { searchParams: S
             openOnLoad={Boolean(outcome.error)}
             title={t('warehouses.new')}
           >
-            <AutoCode codeId="f-code" mode="upper" nameId="f-name" />
+            {/* No Code field: the system gives the warehouse its code when it
+                is saved (Critical Rule 1). */}
+            <p className="muted">{t('minted_code_note')}</p>
             <Form action={createWarehouse}>
               <Grid>
-                <Field hint={t('code_auto_hint')} label={column('warehouse_code')} name="code" />
                 <Field
                   label={column('warehouse_name')}
                   name="name"

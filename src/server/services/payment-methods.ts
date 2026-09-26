@@ -27,14 +27,12 @@ import { chartOfAccount, paymentMethod } from '../db/schema';
 import {
   AdminNotFoundError,
   AdminValidationError,
-  codeFromName,
-  normaliseCode,
   permit,
   recordChange,
   requireText,
-  uniqueCode,
   type ActorContext,
 } from './administration';
+import { allocateFreeCode } from './numbering';
 
 export const PERMISSION_OBJECT = 'payment_method';
 
@@ -125,26 +123,21 @@ async function assertFee(tx: Tx, percent: string | null | undefined, accountId: 
 export async function create(
   tx: Tx,
   ctx: ActorContext,
-  input: PaymentMethodInput & { readonly code?: string },
+  input: PaymentMethodInput,
 ) {
   await permit(ctx, 'create', PERMISSION_OBJECT);
 
   const name = requireText(input.name, 'name');
-  const code = input.code?.trim()
-    ? normaliseCode(input.code)
-    : await uniqueCode(codeFromName(name), async (candidate) => {
-        const [row] = await tx
-          .select({ code: paymentMethod.code })
-          .from(paymentMethod)
-          .where(eq(paymentMethod.code, candidate));
-        return Boolean(row);
-      });
-
-  const [existing] = await tx
-    .select({ code: paymentMethod.code })
-    .from(paymentMethod)
-    .where(eq(paymentMethod.code, code));
-  if (existing) throw new AdminValidationError('code', `'${code}' is already a payment method`);
+  // Minted, never typed — Critical Rule 1 (migration 0208).
+  const code = await allocateFreeCode(
+    tx,
+    'PAYMENT_METHOD_CODE',
+    async (candidate) => {
+      const [row] = await tx.select({ code: paymentMethod.code }).from(paymentMethod).where(eq(paymentMethod.code, candidate));
+      return Boolean(row);
+    },
+    ctx.principal.userId,
+  );
 
   const kind = assertKind(input.kind);
   const fee = await assertFee(tx, input.feePercent, input.feeAccountId ?? null);

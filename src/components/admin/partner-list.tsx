@@ -16,7 +16,6 @@ import {
   SubmitRow,
   matches,
 } from './index';
-import { AutoCode } from './auto-code';
 import { SectionTabs } from './section-tabs';
 import { outcomeOf, type SearchParams } from './params';
 import { Denied } from '@/components/denied';
@@ -89,11 +88,10 @@ export async function PartnerList({
             title={t(`partners.new_${role}`)}
           >
             <p className="muted">{t(`partners.created_note_${role}`)}</p>
-            <AutoCode codeId="f-code" mode="upper" nameId="f-legalName" />
+            <p className="muted">{t('minted_code_note')}</p>
             <Form action={createPartnerInRole}>
               <Hidden name="role" value={role} />
               <Grid>
-                <Field hint={t('code_auto_hint')} label={t('code')} name="code" />
                 <Field
                   label={t('partners.legal_name')}
                   name="legalName"

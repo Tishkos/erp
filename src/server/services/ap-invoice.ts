@@ -479,12 +479,20 @@ export async function create(
       throw new NothingReceivedError(order!.orderNo, ordered.lineNo, isInventory);
     }
 
+    // A stock line is described by its item's name, as a draft line saved on
+    // the document already is (`saveLine`). The New form sends no description,
+    // and "Charge" then stood in for the Item Name on the return screen.
+    const lineItemCode = line.itemCode ?? ordered?.itemCode ?? null;
+    const [named] = lineItemCode
+      ? await tx.select({ name: item.name }).from(item).where(eq(item.code, lineItemCode)).limit(1)
+      : [];
+
     await tx.insert(apInvoiceLine).values({
       apInvoiceId: created!.id,
       lineNo: index + 1,
       purchaseOrderLineId: ordered?.id ?? null,
-      itemCode: line.itemCode ?? ordered?.itemCode ?? null,
-      description: line.description ?? ordered?.description ?? 'Charge',
+      itemCode: lineItemCode,
+      description: line.description ?? ordered?.description ?? named?.name ?? 'Charge',
       quantity: formatQuantity(line.quantity),
       uomCode: line.uomCode ?? ordered?.uomCode ?? 'EA',
       unitPrice: toDecimalString(line.unitPriceIqd, 4n),

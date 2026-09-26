@@ -18,12 +18,17 @@ const record = (returnNo: string) => `${LIST}/${encodeURIComponent(returnNo)}`;
  */
 export async function createGoodsReturn(formData: FormData): Promise<void> {
   const outcome = await runAdmin(async (tx, ctx) => {
-    const lines: { apInvoiceLineId: string; quantity: bigint }[] = [];
+    const lines: { apInvoiceLineId: string; quantity: bigint; warehouseCode: string | null }[] = [];
     for (let row = 0; row < LINE_ROWS; row += 1) {
       const lineId = text(formData, `ap_invoice_line_id_${row}`).trim();
       const quantity = text(formData, `quantity_${row}`).trim();
       if (!lineId || !quantity || Number(quantity) === 0) continue;
-      lines.push({ apInvoiceLineId: lineId, quantity: parseQuantity(quantity) });
+      lines.push({
+        apInvoiceLineId: lineId,
+        quantity: parseQuantity(quantity),
+        // Block 10 — the warehouse the goods go back out of.
+        warehouseCode: text(formData, `warehouse_code_${row}`).trim() || null,
+      });
     }
 
     const offsetKind = text(formData, 'offset_kind').trim() === 'bank' ? 'bank' : 'payable';

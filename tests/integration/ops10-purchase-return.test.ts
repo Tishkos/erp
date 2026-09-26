@@ -61,7 +61,11 @@ async function createUser(role: string): Promise<ActorContext> {
     `${id}@example.com`,
     'Test User',
   ]);
-  await ownerPool.query(`insert into user_role (user_id, role_code) values ($1,$2)`, [id, role]);
+  // 'accounting_manager+ceo' is a manager who also holds the CEO's invoice
+  // approval (Operations build, blocks 4 and 5).
+  for (const code of role.split('+')) {
+    await ownerPool.query(`insert into user_role (user_id, role_code) values ($1,$2)`, [id, code]);
+  }
   await ownerPool.query(`insert into user_branch_scope (user_id, branch_code) values ($1,$2)`, [
     id,
     BAGHDAD,
@@ -88,7 +92,7 @@ beforeEach(async () => {
   );
 
   clerk = await createUser('accounting_officer');
-  manager = await createUser('accounting_manager');
+  manager = await createUser('accounting_manager+ceo');
 
   accounts = {};
   for (const [role, parent, name] of [
@@ -471,15 +475,44 @@ describe('ops 10 · a return can be raised against the invoice itself', () => {
 
 // ---------------------------------------------------------------------------
 describe('ops 10 · the journal follows the offset that was chosen', () => {
+  /** The one journal a return posts with its goods: Payable or Bank Dr / Inventory Cr. */
+  const journalOfReturn = async (goodsReturnId: string) => {
+    const { rows } = await ownerPool.query(
+      `select journal_entry_id from goods_return where id = $1`,
+      [goodsReturnId],
+    );
+    expect(rows[0].journal_entry_id).toBeTruthy();
+    return journalOf(rows[0].journal_entry_id);
+  };
+
   it('debits Accounts Payable when the debt is reduced', async () => {
     const invoice = await buy({ quantity: '10', unitPrice: '100000' });
     const sent = await sendBack(invoice, '3');
-    const memo = await settle(sent.id, price('300000'));
 
-    expect(await journalOf(memo.journalEntryId)).toEqual([
-      { account: 'Return Clearing', debit: 0, credit: 300_000 },
+    // Block 10, whole, in one entry: "Accounts Payable or Bank Dr. / Inventory Cr."
+    expect(await journalOfReturn(sent.id)).toEqual([
+      { account: 'Inventory', debit: 0, credit: 300_000 },
       { account: 'Trade Payables', debit: 300_000, credit: 0 },
     ]);
+    expect(await balanceOf(accounts.supplier_payable!)).toBe(-700_000);
+  });
+
+  it('reduces what is still owed on the invoice', async () => {
+    const invoice = await buy({ quantity: '10', unitPrice: '100000' });
+    await sendBack(invoice, '3');
+
+    const { rows } = await ownerPool.query(
+      `select status, settled_amount_iqd::text as settled from ap_invoice where id = $1`,
+      [invoice.id],
+    );
+    expect(rows[0]).toEqual({ status: 'partially_executed', settled: '300000.0000' });
+  });
+
+  it('refuses a credit memo on top, which would reduce the same debt twice', async () => {
+    const invoice = await buy({ quantity: '10', unitPrice: '100000' });
+    const sent = await sendBack(invoice, '3');
+
+    await expect(settle(sent.id, price('300000'))).rejects.toThrow(/already debited/);
   });
 
   it('debits the bank when the supplier refunds the money', async () => {
@@ -488,21 +521,19 @@ describe('ops 10 · the journal follows the offset that was chosen', () => {
       offsetKind: 'bank',
       offsetBankAccountId: bankAccountId,
     });
-    const memo = await settle(sent.id, price('300000'));
 
-    expect(await journalOf(memo.journalEntryId)).toEqual([
+    expect(await journalOfReturn(sent.id)).toEqual([
       { account: 'Bank Current Account', debit: 300_000, credit: 0 },
-      { account: 'Return Clearing', debit: 0, credit: 300_000 },
+      { account: 'Inventory', debit: 0, credit: 300_000 },
     ]);
   });
 
   it('leaves the payable alone when the refund came into the bank', async () => {
     const invoice = await buy({ quantity: '10', unitPrice: '100000' });
-    const sent = await sendBack(invoice, '3', {
+    await sendBack(invoice, '3', {
       offsetKind: 'bank',
       offsetBankAccountId: bankAccountId,
     });
-    await settle(sent.id, price('300000'));
 
     // The company still owes the whole invoice: the supplier sent cash, not a
     // credit. Booking this to Accounts Payable would have written off a debt
@@ -510,17 +541,14 @@ describe('ops 10 · the journal follows the offset that was chosen', () => {
     expect(await balanceOf(accounts.supplier_payable!)).toBe(-1_000_000);
   });
 
-  it('empties the clearing account either way', async () => {
+  it('leaves nothing in the clearing account either way', async () => {
     const invoice = await buy({ quantity: '10', unitPrice: '100000' });
-    const sent = await sendBack(invoice, '3', {
+    await sendBack(invoice, '3', {
       offsetKind: 'bank',
       offsetBankAccountId: bankAccountId,
     });
-    await settle(sent.id, price('300000'));
+    await sendBack(invoice, '2');
 
-    // Dr Return Clearing when the goods shipped, Cr when the supplier settled.
-    // Anything left is a credit the supplier has not given, and it must be
-    // visible rather than absorbed.
     expect(await balanceOf(accounts.return_clearing!)).toBe(0);
   });
 });

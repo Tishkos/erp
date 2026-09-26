@@ -36,7 +36,6 @@ export async function createPartnerInRole(formData: FormData): Promise<void> {
   await runAdminAndReturn(
     (tx, ctx) =>
       partners.createInRole(tx, ctx, role, {
-        code: text(formData, 'code').trim().toUpperCase(),
         ...inputFrom(formData),
         // §4.4 — the duplicate search runs on every save; this is the answer
         // to it, given by a person who looked at what it found.

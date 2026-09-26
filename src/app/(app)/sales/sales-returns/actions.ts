@@ -88,7 +88,9 @@ export async function acceptReturn(formData: FormData): Promise<void> {
         destinationWarehouseCode: warehouseCode,
       })),
     );
-    return sr.accept(tx, ctx, id);
+    // The goods back on the shelf and the customer credited, together —
+    // block 9's journal is one act, not two.
+    return sr.acceptAndSettle(tx, ctx, id);
   }, record(returnNo));
 }
 

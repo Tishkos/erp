@@ -20,6 +20,7 @@ import { branch, warehouse } from '../db/schema';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
+import { allocateFreeCode } from './numbering';
 
 export const PERMISSION_OBJECT = 'warehouse';
 
@@ -62,8 +63,8 @@ export async function get(tx: Tx, code: string) {
   return row ?? null;
 }
 
+/** Block 7's Warehouse Setup asks for a name; the code is the system's (0208). */
 export interface WarehouseInput {
-  readonly code: string;
   readonly name: string;
 }
 
@@ -72,19 +73,17 @@ export async function create(tx: Tx, ctx: ActorContext, input: WarehouseInput) {
     branchCode: ctx.branchCode,
   });
 
-  const code = input.code.trim().toUpperCase();
   const name = input.name.trim();
-
-  if (!code) throw new WarehouseError('A warehouse needs a code.');
   if (!name) throw new WarehouseError('A warehouse needs a name.');
 
-  const existing = await get(tx, code);
-  if (existing) {
-    throw new WarehouseError(
-      `Warehouse ${code} already exists — it is '${existing.name}'. Codes are what every stock ` +
-        'movement names, so two warehouses cannot share one.',
-    );
-  }
+  // Minted, never typed — Critical Rule 1. Every stock movement names the
+  // warehouse by this code, so it must be one nobody else holds.
+  const code = await allocateFreeCode(
+    tx,
+    'WAREHOUSE_CODE',
+    async (candidate) => Boolean(await get(tx, candidate)),
+    ctx.principal.userId,
+  );
 
   await tx.insert(warehouse).values({
     code,

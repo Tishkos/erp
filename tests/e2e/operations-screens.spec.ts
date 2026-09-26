@@ -67,12 +67,13 @@ test.describe('the Operations Build screens open', () => {
     await expect(page.getByRole('heading', { name: 'Warehouses' })).toBeVisible();
 
     await page.getByRole('button', { name: 'New warehouse' }).click();
-    const code = `WH-E2E-${Date.now().toString().slice(-6)}`;
+    const name = `End To End Depot ${Date.now().toString().slice(-6)}`;
     // Scoped to the dialog: the list behind it renames warehouses in place, so
     // the page carries one name field per row as well as this one.
     const dialog = page.locator('dialog[open], [role="dialog"]').first();
-    await dialog.getByLabel('Warehouse Code').fill(code);
-    await dialog.getByLabel(/Warehouse Name/).fill('End To End Depot');
+    // Critical Rule 1: there is no code to type. The system mints it.
+    await expect(dialog.getByLabel('Warehouse Code')).toHaveCount(0);
+    await dialog.getByLabel(/Warehouse Name/).fill(name);
     await dialog.getByRole('button', { name: 'Create' }).click();
 
     // Wait for the redirect back to the list before looking for the row. The
@@ -80,16 +81,20 @@ test.describe('the Operations Build screens open', () => {
     // the flake this suite has already been bitten by twice.
     await page.waitForURL(/\/master-data\/warehouses(\?|$)/, { timeout: 60_000 });
 
-    // The row is on the list, and its code opens the warehouse's own record —
-    // where it is named, edited, and carries its history, like every other
-    // master record.
+    // The row is on the list with the code the system gave it, and that code
+    // opens the warehouse's own record — where it is named, edited, and carries
+    // its history, like every other master record.
+    const row = page.getByRole('row').filter({ hasText: name });
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    const code = (await row.getByRole('link').first().innerText()).trim();
+    expect(code).toMatch(/^WH-\d{4}$/);
     await expect(page.getByRole('link', { name: code })).toBeVisible({ timeout: 30_000 });
     await page.getByRole('link', { name: code }).click();
     await page.waitForURL(new RegExp(`/master-data/warehouses/${code}`), { timeout: 60_000 });
     await expect(page.getByRole('heading', { level: 1, name: new RegExp(code) })).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByLabel('Warehouse Name')).toHaveValue('End To End Depot');
+    await expect(page.getByLabel('Warehouse Name')).toHaveValue(name);
 
     // Laid out as a branch is: identity and facts on the left, editing and
     // history on the right.

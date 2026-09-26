@@ -22,6 +22,8 @@ import { sql } from 'drizzle-orm';
 const OFFICER_EMAIL = 'officer@example.com';
 const MANAGER_EMAIL = 'manager@example.com';
 const OUTSIDER_EMAIL = 'outsider@example.com';
+// The one who approves the invoices — Operations build, blocks 4 and 5.
+const CEO_EMAIL = 'ceo@example.com';
 /**
  * A super user, for reviewing screens rather than for testing permissions.
  *
@@ -96,6 +98,7 @@ async function main() {
     for (const [email, name, role] of [
       [OFFICER_EMAIL, 'Accounting Officer', 'accounting_officer'],
       [MANAGER_EMAIL, 'Accounting Manager', 'accounting_manager'],
+      [CEO_EMAIL, 'CEO', 'ceo'],
       // A signed-in user holding nothing. §25's deny-by-default is only
       // demonstrable if somebody is denied, and the 01.2 gate asks for a
       // denial on the direct URL rather than a hidden menu item.
@@ -205,7 +208,7 @@ async function main() {
   });
 
   console.log(
-    `seeded ${OFFICER_EMAIL}, ${MANAGER_EMAIL}, ${OUTSIDER_EMAIL} and ` +
+    `seeded ${OFFICER_EMAIL}, ${MANAGER_EMAIL}, ${CEO_EMAIL}, ${OUTSIDER_EMAIL} and ` +
       `${ADMIN_EMAIL} (super user) — password ${PASSWORD}`,
   );
   process.exit(0);

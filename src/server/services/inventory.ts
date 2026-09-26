@@ -193,6 +193,9 @@ export async function positionsOf(tx: Tx, itemCode: string): Promise<StockPositi
   }));
 }
 
+/** A FIFO layer as the service reads it: the domain's layer, and whose stock it is. */
+export type StockLayer = CostLayer & { readonly supplierId: string | null };
+
 /** The FIFO layers with stock left, oldest first. */
 export async function layersOf(
   tx: Tx,
@@ -203,7 +206,7 @@ export async function layersOf(
    * is read, which is the behaviour that came before.
    */
   supplierId?: string | null,
-): Promise<CostLayer[]> {
+): Promise<StockLayer[]> {
   const rows = await tx
     .select()
     .from(costLayer)
@@ -927,8 +930,30 @@ export async function postMovement(
   ctx: ActorContext,
   input: Parameters<typeof postingRequestFor>[0],
 ): Promise<{ journalEntryId: string } | null> {
-  const request = postingRequestFor(input);
-  if (!request) return null;
+  const planned = postingRequestFor(input);
+  if (!planned) return null;
+
+  // The item's own accounts answer the inventory and cost-of-sales lines —
+  // block 1 puts an Inventory Account and a COGS Account on every item, and the
+  // invoices already post to them. A movement that asked a mapping instead
+  // would hold the same goods in a second account, or refuse for want of a
+  // mapping nobody can set. A rule narrowed to this warehouse still wins
+  // (`resolveLineAccount`); a plain mapping does not.
+  const [accounts] = await tx
+    .select({ inventory: itemTable.inventoryAccountId, cogs: itemTable.cogsAccountId })
+    .from(itemTable)
+    .where(eq(itemTable.code, input.itemCode))
+    .limit(1);
+  const request: PostingRequest = {
+    ...planned,
+    lines: planned.lines.map((line) =>
+      line.role === 'inventory' && accounts?.inventory
+        ? { ...line, itemAccountId: accounts.inventory }
+        : line.role === 'cogs' && accounts?.cogs
+          ? { ...line, itemAccountId: accounts.cogs }
+          : line,
+    ),
+  };
 
   const result = await posting.post(tx, ctx, request);
 
@@ -1256,4 +1281,105 @@ export async function layerQuantityOf(
   warehouseCode: string,
 ): Promise<bigint> {
   return totalRemaining(await layersOf(tx, itemCode, warehouseCode));
+}
+
+// ---------------------------------------------------------------------------
+// Relocating stock between warehouses — Operations blocks 7 and 8
+// ---------------------------------------------------------------------------
+
+export interface RelocateInput {
+  readonly itemCode: string;
+  readonly fromWarehouseCode: string;
+  readonly toWarehouseCode: string;
+  readonly branchCode: string;
+  /** At most this much moves. Less moves when the layers given hold less. */
+  readonly quantity: bigint;
+  readonly movementDate: string;
+  /** The layers at the source to move from, in the order to take them. */
+  readonly layers: readonly StockLayer[];
+  readonly sourceDocumentType: string;
+  readonly sourceDocumentId: string;
+  readonly sourceLineId?: string | null;
+}
+
+/**
+ * Moves stock from one warehouse to another and changes nothing else about it.
+ *
+ * Each layer taken at the source arrives at the destination as the same layer
+ * would have been: the same unit cost, the same supplier, the same FIFO date.
+ * Block 5 sells by "item, supplier and warehouse stock", so a move that dropped
+ * the supplier — or that restamped the goods as bought today — would put stock
+ * where a sale that names its supplier cannot find it, or make the newest
+ * goods look like the oldest.
+ *
+ * No posting. The item carries its inventory account (block 1), so the same
+ * goods standing in another warehouse are the same balance in the same
+ * account; a journal here would debit and credit one account with one figure.
+ *
+ * Returns how much moved. Whether moving less than asked is an error is the
+ * caller's question: a transfer refuses it, a shipment moves what is left.
+ */
+export async function relocate(
+  tx: Tx,
+  ctx: ActorContext,
+  input: RelocateInput,
+): Promise<{ moved: bigint; costIqd: bigint }> {
+  if (input.fromWarehouseCode === input.toWarehouseCode) {
+    throw new Error('Stock moves between two different warehouses. Choose another destination.');
+  }
+
+  let outstanding = input.quantity;
+  let costIqd = 0n;
+
+  for (const layer of input.layers) {
+    if (outstanding === 0n) break;
+    if (layer.remainingQuantity <= 0n) continue;
+
+    const take = layer.remainingQuantity < outstanding ? layer.remainingQuantity : outstanding;
+
+    // The batch the goods carry is the one the movement that created the layer
+    // named — the same trace a sale reads (§9.3).
+    const [origin] = await tx
+      .select({ batchNumber: inventoryMovement.batchNumber })
+      .from(costLayer)
+      .innerJoin(inventoryMovement, eq(inventoryMovement.id, costLayer.createdByMovementId))
+      .where(eq(costLayer.id, layer.id))
+      .limit(1);
+    const batchNumber = origin?.batchNumber ?? null;
+
+    const issued = await issueFromLayer(tx, ctx, {
+      costLayerId: layer.id,
+      itemCode: input.itemCode,
+      warehouseCode: input.fromWarehouseCode,
+      branchCode: input.branchCode,
+      quantity: take,
+      movementDate: input.movementDate,
+      kind: 'transfer_issue',
+      batchNumber,
+      sourceDocumentType: input.sourceDocumentType,
+      sourceDocumentId: input.sourceDocumentId,
+      sourceLineId: input.sourceLineId ?? null,
+    });
+
+    await receive(tx, ctx, {
+      itemCode: input.itemCode,
+      warehouseCode: input.toWarehouseCode,
+      branchCode: input.branchCode,
+      quantity: take,
+      unitCostIqd: layer.unitCostIqd,
+      supplierId: layer.supplierId,
+      movementDate: input.movementDate,
+      layerDate: layer.layerDate,
+      kind: 'transfer_receipt',
+      batchNumber,
+      sourceDocumentType: input.sourceDocumentType,
+      sourceDocumentId: input.sourceDocumentId,
+      sourceLineId: input.sourceLineId ?? null,
+    });
+
+    costIqd += issued.costIqd ?? 0n;
+    outstanding -= take;
+  }
+
+  return { moved: input.quantity - outstanding, costIqd };
 }
