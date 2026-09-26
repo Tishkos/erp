@@ -30,6 +30,7 @@ import {
   warehouse,
 } from '../db/schema';
 import { availableQuantity } from '../domain/inventory';
+import { costOf } from '../domain/fifo';
 import { formatQuantity } from '../domain/uom';
 import { toDecimalString } from '../domain/money';
 import type { ActorContext } from './chart-of-accounts';
@@ -381,7 +382,9 @@ export async function adjust(
   } else {
     const unitCostIqd = await unitCostForFound(tx, input.itemCode, input.warehouseCode);
     await inventory.receive(tx, ctx, { ...movement, unitCostIqd, supplierId: null });
-    costIqd = (input.quantity * unitCostIqd) / 1_000_000n;
+    // The same arithmetic the layer is valued with, so the ledger and the
+    // warehouse agree to the last fils.
+    costIqd = costOf(input.quantity, unitCostIqd);
   }
 
   let journalEntryId: string | null = null;

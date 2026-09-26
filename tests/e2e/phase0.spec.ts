@@ -99,14 +99,15 @@ test.describe('Phase 0 · the administration screens read and write the database
   });
 
   test('3 · Departments — created, and given a Department Manager', async ({ page }) => {
-    const code = `DP${RUN}`;
     await page.goto('/master-data/departments');
     await page.getByRole('button', { name: 'New department' }).click();
     await page.waitForTimeout(800);
-    await page.getByRole('textbox', { name: 'Code', exact: true }).fill(code);
+    // No Code field: the system mints it (Critical Rule 1, 2026-09-26).
+    await expect(page.getByRole('textbox', { name: 'Code', exact: true })).toHaveCount(0);
     await page.getByRole('textbox', { name: 'Name', exact: true }).fill(`Department ${RUN}`);
     await page.getByRole('button', { name: 'Create' }).click();
-    await page.waitForURL(`**/master-data/departments/${code}?saved=1`, { timeout: 30_000 });
+    await page.waitForURL(/\/master-data\/departments\/DEP-\d{4}\?saved=1/, { timeout: 30_000 });
+    const code = new URL(page.url()).pathname.split('/').pop()!;
 
     await page
       .getByLabel('Users')

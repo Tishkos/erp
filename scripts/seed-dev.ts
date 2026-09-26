@@ -207,6 +207,106 @@ async function main() {
     `);
   });
 
+  // The Operations build, ready to post (2026-09-26 audit). Without these a
+  // seeded system can raise every document and post none of them: no
+  // inventory, revenue or cost account to put on an item, no mapping for the
+  // payable or the receivable, no open period and no USD rate. They are what
+  // an administrator sets up on the Chart of Accounts, Posting Mappings,
+  // Periods and Currencies screens — written here so a development database
+  // starts where a configured company does. Idempotent, like the rest.
+  await db.transaction(async (tx) => {
+    await applyScope(tx, { userId: randomUUID(), branchCode: 'HQ', isSuperUser: true });
+
+    const accounts: readonly [string, string, string, string | null][] = [
+      ['A100010', 'Inventory', 'A000001', null],
+      ['A100020', 'Trade Receivables', 'A000001', 'customer'],
+      ['A100030', 'Receipts Not Yet Identified', 'A000001', null],
+      ['L100010', 'Trade Payables', 'L000001', 'supplier'],
+      ['L100020', 'Goods Received Not Invoiced', 'L000001', null],
+      ['L100030', 'Return Clearing', 'L000001', null],
+      ['E100010', 'Opening Balance Equity', 'E000001', null],
+      ['R100010', 'Product Sales', 'R000001', null],
+      ['R100020', 'Sales Returns', 'R000001', null],
+      ['X100010', 'Cost of Goods Sold', 'X000001', null],
+      ['X100020', 'Service and Expense Cost', 'X000001', null],
+      ['X100030', 'Purchase Price Variance', 'X000001', null],
+      ['X100040', 'Inventory Adjustments', 'X000001', null],
+    ];
+    for (const [code, name, parent, control] of accounts) {
+      await tx.execute(sql`
+        INSERT INTO chart_of_account
+          (code, name, account_type, parent_id, is_group, is_active, approval_status, level,
+           currency_restriction, control_account)
+        SELECT ${code}, ${name}, account_type, id, false, true, 'approved', 1, 'IQD',
+               ${control}::control_account_kind
+          FROM chart_of_account WHERE code = ${parent}
+        ON CONFLICT DO NOTHING
+      `);
+    }
+
+    // Every mapping the Posting Mappings screen lists, and nothing else.
+    const mappings: readonly [string, string, string][] = [
+      ['purchasing.ap_invoice', 'supplier_payable', 'L100010'],
+      ['purchasing.ap_invoice', 'grni', 'L100020'],
+      ['purchasing.ap_invoice', 'expense', 'X100020'],
+      ['purchasing.ap_invoice', 'purchase_variance', 'X100030'],
+      ['sales.ar_invoice', 'customer_receivable', 'A100020'],
+      ['sales.ar_invoice', 'sales_revenue', 'R100010'],
+      ['sales.customer_receipt', 'customer_receivable', 'A100020'],
+      ['sales.customer_receipt', 'customer_clearing', 'A100030'],
+      ['sales.customer_receipt_identified', 'customer_clearing', 'A100030'],
+      ['sales.customer_receipt_identified', 'customer_receivable', 'A100020'],
+      ['purchasing.supplier_payment', 'supplier_payable', 'L100010'],
+      ['purchasing.supplier_credit_memo', 'supplier_payable', 'L100010'],
+      ['purchasing.supplier_credit_memo', 'return_clearing', 'L100030'],
+      ['sales.customer_credit_memo', 'customer_receivable', 'A100020'],
+      ['sales.customer_credit_memo', 'sales_returns', 'R100020'],
+      ['inventory.opening_stock', 'opening_balance', 'E100010'],
+      ['inventory.stock_adjustment', 'inventory_adjustment', 'X100040'],
+    ];
+    for (const [event, role, code] of mappings) {
+      await tx.execute(sql`
+        INSERT INTO posting_rule (event_type, line_role, account_id, is_active)
+        SELECT ${event}, ${role}, id, true FROM chart_of_account WHERE code = ${code}
+        ON CONFLICT DO NOTHING
+      `);
+    }
+
+    // This year, open, month by month — and a USD rate from its first day.
+    const year = new Date().getUTCFullYear();
+    await tx.execute(sql`
+      INSERT INTO fiscal_year (code, name, starts_on, ends_on, status)
+      VALUES (${`FY${year}`}, ${String(year)}, ${`${year}-01-01`}, ${`${year}-12-31`}, 'open')
+      ON CONFLICT DO NOTHING
+    `);
+    for (let month = 1; month <= 12; month += 1) {
+      const from = `${year}-${String(month).padStart(2, '0')}-01`;
+      const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      const to = `${year}-${String(month).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
+      await tx.execute(sql`
+        INSERT INTO fiscal_period (fiscal_year_id, period_no, name, starts_on, ends_on)
+        SELECT id, ${month}, ${`${year}-${String(month).padStart(2, '0')}`}, ${from}, ${to}
+          FROM fiscal_year WHERE code = ${`FY${year}`}
+        ON CONFLICT DO NOTHING
+      `);
+    }
+    await tx.execute(sql`
+      INSERT INTO exchange_rate (currency_code, rate_type, iqd_per_unit, effective_from, entered_by)
+      SELECT 'USD', 'accounting', 1310, ${`${year}-01-01`}, id
+        FROM app_user WHERE lower(email) = ${MANAGER_EMAIL}
+      ON CONFLICT DO NOTHING
+    `);
+
+    // Block 8's three stages, each a warehouse of its own.
+    await tx.execute(sql`
+      INSERT INTO warehouse (code, name, branch_code, warehouse_type, shipment_stage) VALUES
+        ('WH-INPROC', 'In Process', 'HQ', 'main', 'in_process'),
+        ('WH-BOARD', 'On Board', 'HQ', 'main', 'on_board'),
+        ('WH-PORT', 'On Port', 'HQ', 'main', 'on_port')
+      ON CONFLICT DO NOTHING
+    `);
+  });
+
   console.log(
     `seeded ${OFFICER_EMAIL}, ${MANAGER_EMAIL}, ${CEO_EMAIL}, ${OUTSIDER_EMAIL} and ` +
       `${ADMIN_EMAIL} (super user) — password ${PASSWORD}`,
