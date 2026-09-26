@@ -11,7 +11,7 @@ import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as sr from '@/server/services/sales-return';
 import * as warehouses from '@/server/services/warehouses';
-import { acceptReturn, receiveReturn, rejectReturn } from '../actions';
+import { acceptReturn, rejectReturn } from '../actions';
 
 /**
  * One Sales Return — Operations build, block 9.
@@ -75,12 +75,10 @@ export default async function SalesReturnPage({
   if (!found) notFound();
   const { lines, ...returnDoc } = found.document;
 
-  const today = new Date().toISOString().slice(0, 10);
-  const mayReceive =
-    returnDoc.status === 'submitted' && can(principal, 'execute', sr.PERMISSION_OBJECT);
   const mayDecide =
-    ['partially_executed', 'executed'].includes(returnDoc.status) &&
-    can(principal, 'approve', sr.PERMISSION_OBJECT);
+    ['submitted', 'partially_executed', 'executed'].includes(returnDoc.status) &&
+    can(principal, 'approve', sr.PERMISSION_OBJECT) &&
+    can(principal, 'execute', sr.PERMISSION_OBJECT);
 
   const fields: DocumentField[] = [
     { label: column('reference'), value: <bdi dir="ltr">{returnDoc.returnNo}</bdi> },
@@ -121,16 +119,6 @@ export default async function SalesReturnPage({
       <DocumentWindow
         actions={
           <>
-            {mayReceive ? (
-              <form action={receiveReturn}>
-                <input name="id" type="hidden" value={returnDoc.id} />
-                <input name="return_no" type="hidden" value={returnDoc.returnNo} />
-                <input name="received_on" type="hidden" value={today} />
-                <button className="action action--primary" type="submit">
-                  {t('sales_returns.receive')}
-                </button>
-              </form>
-            ) : null}
             {mayDecide ? (
               <>
                 <form action={acceptReturn} id="sales-return-accept">

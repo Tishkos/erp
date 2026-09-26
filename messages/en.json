@@ -1943,7 +1943,9 @@
       "advance": "Move to",
       "where": "Where the goods are",
       "all": "All",
-      "no_warehouse_for_stage": "No warehouse is set for the next stage."
+      "no_warehouse_for_stage": "No warehouse is set for the next stage.",
+      "notify_title": "Notify these users when a status changes",
+      "notify_save": "Save"
     },
     "setup": {
       "no_customers": "Add a customer first.",

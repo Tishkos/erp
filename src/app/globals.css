@@ -1261,6 +1261,36 @@ html[lang="ar"] .erp-module-section__title {
   text-decoration: none;
 }
 
+.erp-notifications__list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-block-size: 22rem;
+  overflow-y: auto;
+}
+
+.erp-notifications__list li {
+  padding: 0.5rem 0.625rem;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+}
+
+.erp-notifications__list li p {
+  margin: 0.25rem 0;
+}
+
+.erp-notifications__list li time {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.erp-notifications__unread {
+  border-inline-start: 3px solid var(--accent);
+}
+
 .erp-utility-popover__empty {
   margin: 0;
   padding: 1.3rem 0.7rem;

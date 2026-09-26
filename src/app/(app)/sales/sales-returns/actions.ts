@@ -75,6 +75,19 @@ export async function acceptReturn(formData: FormData): Promise<void> {
   const id = text(formData, 'id');
 
   await runAdminAndReturn(async (tx, ctx) => {
+    // One step for the person accepting: goods that were raised as a return
+    // and are being accepted have, by that act, been received. Block 9
+    // describes one return document, not a receive-then-accept workflow.
+    const raised = await sr.view(tx, id);
+    if (raised.status === 'submitted') {
+      await sr.receiveGoods(tx, ctx, id, {
+        receivedOn: new Date().toISOString().slice(0, 10),
+        lines: raised.lines.map((line) => ({
+          salesReturnLineId: line.id,
+          quantity: parseQuantity(line.requestedQuantity),
+        })),
+      });
+    }
     const document = await sr.view(tx, id);
     await sr.inspect(
       tx,

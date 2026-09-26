@@ -68,6 +68,14 @@ interface ModuleGroup extends ModuleDefinition {
   readonly sections: readonly MenuSection[];
 }
 
+export interface ShellNotification {
+  readonly id: string;
+  readonly subject: string;
+  readonly body: string;
+  readonly createdAt: string;
+  readonly read: boolean;
+}
+
 interface ErpShellProps {
   readonly brand: string;
   readonly branchCode: string;
@@ -79,6 +87,12 @@ interface ErpShellProps {
   readonly roleCodes: readonly string[];
   readonly isSuperUser: boolean;
   readonly sections: readonly MenuSection[];
+  /**
+   * The signed-in person's latest notifications, newest first — what the bell
+   * shows. Block 8's status changes land here for the users selected to be
+   * told.
+   */
+  readonly notifications?: readonly ShellNotification[];
   /** Rendered after the main region, so it always ends the page. */
   readonly footer?: ReactNode;
   readonly children: ReactNode;
@@ -288,6 +302,7 @@ export function ErpShell({
   roleCodes,
   isSuperUser,
   sections,
+  notifications = [],
   footer,
   children,
 }: ErpShellProps) {
@@ -660,7 +675,22 @@ export function ErpShell({
               <Bell aria-hidden="true" />
               <h2>{shell('notifications')}</h2>
             </div>
-            {notificationItem?.href ? (
+            {notifications.length > 0 ? (
+              <ul className="erp-notifications__list">
+                {notifications.map((note) => (
+                  <li key={note.id} className={note.read ? undefined : 'erp-notifications__unread'}>
+                    <strong>
+                      <bdi dir="auto">{note.subject}</bdi>
+                    </strong>
+                    <p>
+                      <bdi dir="auto">{note.body}</bdi>
+                    </p>
+                    <time dateTime={note.createdAt}>{note.createdAt.slice(0, 16).replace('T', ' ')}</time>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {notifications.length > 0 ? null : notificationItem?.href ? (
               <Link
                 className="erp-utility-popover__link"
                 href={notificationItem.href}

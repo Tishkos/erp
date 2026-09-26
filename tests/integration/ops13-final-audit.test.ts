@@ -718,6 +718,8 @@ describe('block 9 · a sales return settles the customer and restores stock at t
     await returnGoods(sale, '4');
 
     expect(await onHand(MAIN)).toBe(6);
+    // Back on the shelf as supplier A's, at the sale's own cost.
+    expect(await layersIn(MAIN)).toContainEqual({ supplier: supplierA, quantity: 4, cost: 107.5 });
     // COGS 860 less 4 × 107.5 = 430.
     expect(await ledger('cogs')).toBe(430);
     // Sales Return Dr 1,200 / Accounts Receivable Cr 1,200.

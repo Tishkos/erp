@@ -3,8 +3,8 @@ import { getTranslations } from 'next-intl/server';
 import { visibleMenu } from '@domain/menu';
 import { routeFor } from '@domain/screens';
 import { visibleRoute } from '@/server/phase-gate';
-import { eq } from 'drizzle-orm';
-import { appUser } from '@/server/db/schema';
+import { desc, eq } from 'drizzle-orm';
+import { appUser, notification } from '@/server/db/schema';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { AppFooter } from './app-footer';
 import { ErpShell } from './erp-shell';
@@ -30,13 +30,28 @@ export async function AppShell({ children }: { children: ReactNode }) {
       ),
     }))
     .filter((section) => section.items.length > 0);
-  const [me] = await withCurrentUser((tx) =>
-    tx
-      .select({ displayName: appUser.displayName, email: appUser.email, image: appUser.image })
-      .from(appUser)
-      .where(eq(appUser.id, principal.userId))
-      .limit(1),
-  );
+  const { me, notifications } = await withCurrentUser(async (tx) => ({
+    me: (
+      await tx
+        .select({ displayName: appUser.displayName, email: appUser.email, image: appUser.image })
+        .from(appUser)
+        .where(eq(appUser.id, principal.userId))
+        .limit(1)
+    )[0],
+    // What the bell shows: this person's ten latest, newest first.
+    notifications: await tx
+      .select({
+        id: notification.id,
+        subject: notification.subject,
+        body: notification.body,
+        createdAt: notification.createdAt,
+        readAt: notification.readAt,
+      })
+      .from(notification)
+      .where(eq(notification.recipientUserId, principal.userId))
+      .orderBy(desc(notification.createdAt))
+      .limit(10),
+  }));
 
   return (
     <ErpShell
@@ -50,6 +65,13 @@ export async function AppShell({ children }: { children: ReactNode }) {
       roleCodes={principal.roleCodes}
       isSuperUser={principal.isSuperUser}
       sections={sections}
+      notifications={notifications.map((note) => ({
+        id: String(note.id),
+        subject: note.subject ?? '',
+        body: note.body ?? '',
+        createdAt: new Date(note.createdAt).toISOString(),
+        read: note.readAt !== null,
+      }))}
       footer={<AppFooter />}
     >
       {children}

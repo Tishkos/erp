@@ -114,16 +114,6 @@ export async function PartnerList({
                     label: `${term.code} · ${term.name}`,
                   }))}
                 />
-                {role === 'customer' ? (
-                  <Field
-                    hint={t('partners.credit_limit_hint')}
-                    label={t('partners.credit_limit')}
-                    min={0}
-                    name="creditLimitIqd"
-                    step="0.0001"
-                    type="number"
-                  />
-                ) : null}
                 <Field label={t('partners.address')} name="address" type="textarea" wide />
               </Grid>
               <SubmitRow>

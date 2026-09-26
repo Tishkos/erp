@@ -212,10 +212,6 @@ export default async function BusinessPartnerPage({
                 </span>
               </li>
               <li>
-                <span>{t('partners.credit_limit')}</span>
-                <span>{row.creditLimitIqd ?? t('none')}</span>
-              </li>
-              <li>
                 <span>{t('partners.address')}</span>
                 <span>{row.address ?? t('none')}</span>
               </li>
@@ -283,22 +279,11 @@ export default async function BusinessPartnerPage({
                       label: `${term.code} · ${term.name}`,
                     }))}
                   />
-                  <Field
-                    defaultValue={row.creditLimitIqd}
-                    hint={t('partners.credit_limit_hint')}
-                    label={t('partners.credit_limit')}
-                    min={0}
-                    name="creditLimitIqd"
-                    step="0.0001"
-                    type="number"
-                  />
-                  <Field
-                    defaultValue={row.creditTermsDays}
-                    label={t('partners.credit_terms_days')}
-                    min={0}
-                    name="creditTermsDays"
-                    type="number"
-                  />
+                  {/* Blocks 2 and 3 ask for the name, the code, the payment
+                      terms and the contact information. The credit figures are
+                      none of them — carried through a save, not asked. */}
+                  <input name="creditLimitIqd" type="hidden" value={row.creditLimitIqd ?? ''} />
+                  <input name="creditTermsDays" type="hidden" value={row.creditTermsDays ?? ''} />
                   <Field
                     defaultValue={row.address}
                     label={t('partners.address')}

@@ -435,6 +435,37 @@ export async function unwatch(
 }
 
 /**
+ * Replaces who is told when a shipment moves in this branch — block 8's
+ * "the selected system users", selected on the Invoice Status Tracking screen.
+ */
+export async function setWatchers(
+  tx: Tx,
+  ctx: ActorContext,
+  branchCode: string,
+  userIds: readonly string[],
+): Promise<void> {
+  await authz.authorize(ctx.principal, 'configure', PERMISSION_OBJECT, { branchCode });
+  const wanted = new Set(userIds.filter(Boolean));
+  const current = new Set((await watchers(tx, branchCode)).map((row) => row.userId));
+  for (const userId of wanted) {
+    if (!current.has(userId)) await watch(tx, ctx, branchCode, userId);
+  }
+  for (const userId of current) {
+    if (!wanted.has(userId)) await unwatch(tx, ctx, branchCode, userId);
+  }
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'supplier_shipment.watchers_set',
+    objectType: PERMISSION_OBJECT,
+    objectId: branchCode,
+    branchCode,
+    before: { users: [...current] },
+    after: { users: [...wanted] },
+    outcome: 'success',
+  });
+}
+
+/**
  * The shipments, with the invoice each one is following.
  *
  * The invoice's details are read from the invoice, not held here — see the

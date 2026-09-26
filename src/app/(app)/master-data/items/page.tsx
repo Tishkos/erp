@@ -102,12 +102,15 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
                   options={accountOptions('asset')}
                   required
                 />
+                {/* Blank is a real answer here, as on the item's own page: the
+                    sale then posts to the revenue mapping. Inventory and COGS
+                    have no such fallback — a sale refuses an item without them —
+                    so those two are required. */}
                 <Select
-                  emptyLabel=""
+                  emptyLabel={t('items.account_by_rule')}
                   label={t('items.sales_account')}
                   name="salesAccountId"
                   options={accountOptions('revenue')}
-                  required
                 />
                 <Select
                   emptyLabel=""

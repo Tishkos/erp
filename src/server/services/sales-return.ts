@@ -743,6 +743,9 @@ export async function accept(
         branchCode: returnDoc.branchCode,
         quantity: accepted,
         unitCostIqd: unitCost,
+        // Whose stock it was when it was sold (block 5), so a later sale that
+        // names that supplier can sell it again.
+        supplierId: await soldSupplierOf(tx, line.arInvoiceLineId),
         movementDate: returnDoc.receivedOn ?? returnDoc.requestedOn,
         kind: 'sales_return',
         serialNumber: line.serialNumber,
@@ -960,6 +963,30 @@ export async function viewByNo(tx: Tx, returnNo: string) {
     .limit(1);
   if (!row) return null;
   return view(tx, row.id);
+}
+
+/**
+ * The supplier whose stock an invoice line sold: the one the line named, or —
+ * when it named none — the supplier of the first layer it consumed.
+ */
+async function soldSupplierOf(tx: Tx, arInvoiceLineId: string): Promise<string | null> {
+  const [line] = await tx
+    .select({ supplierId: arInvoiceLine.supplierId })
+    .from(arInvoiceLine)
+    .where(eq(arInvoiceLine.id, arInvoiceLineId))
+    .limit(1);
+  if (line?.supplierId) return line.supplierId;
+
+  const result = await tx.execute(sql`
+    select l.supplier_id
+      from inventory_movement m
+      join cost_layer_consumption c on c.movement_id = m.id
+      join cost_layer l on l.id = c.layer_id
+     where m.source_document_type = 'ar_invoice' and m.source_line_id = ${arInvoiceLineId}
+     order by m.created_at
+     limit 1
+  `);
+  return (result.rows[0] as { supplier_id: string | null } | undefined)?.supplier_id ?? null;
 }
 
 /** Where each invoice line took its stock from — a returned line's default home. */

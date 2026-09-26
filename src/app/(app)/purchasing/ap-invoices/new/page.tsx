@@ -82,12 +82,6 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
           'supplier_payable',
           context.scope.branchCode,
         ),
-        expense: await posting.mappedAccountFor(
-          tx,
-          'purchasing.ap_invoice',
-          'expense',
-          context.scope.branchCode,
-        ),
       },
     }),
   );
@@ -169,28 +163,6 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
           <option value="">{t('invoices.account_default')}</option>
           {accounts
             .filter((account) => account.controlAccount === 'supplier')
-            .map((account) => (
-              <option key={account.id} value={account.id}>
-                {`${account.code} · ${account.name}`}
-              </option>
-            ))}
-        </select>
-      ),
-    },
-    {
-      label: t('invoices.expense_account'),
-      control: true,
-      value: (
-        <select
-          aria-label={t('invoices.expense_account')}
-          defaultValue={mapped.expense ?? ''}
-          name="expense_account_id"
-        >
-          <option value="">{t('invoices.account_default')}</option>
-          {accounts
-            .filter(
-              (account) => account.accountType === 'expense' && account.controlAccount === null,
-            )
             .map((account) => (
               <option key={account.id} value={account.id}>
                 {`${account.code} · ${account.name}`}
