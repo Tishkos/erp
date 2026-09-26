@@ -583,13 +583,4 @@ export function ListToolbar({
   );
 }
 
-/** Case-insensitive match of a search phrase against every value of a row. */
-export function matches(row: Record<string, unknown>, q: string): boolean {
-  if (!q.trim()) return true;
-  const needle = q.trim().toLowerCase();
-  return Object.values(row).some((value) => {
-    if (value === null || value === undefined) return false;
-    if (value instanceof Date) return false;
-    return String(value).toLowerCase().includes(needle);
-  });
-}
+export { matches } from '@/lib/search';

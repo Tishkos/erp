@@ -5,12 +5,14 @@ import { AdminPage, admin as s } from '@/components/admin';
 import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/report-filter';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { StatementTable } from '@/components/admin/statement-table';
 import { formatBusinessDate, formatStatementAmount, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
+import { cashFlowRows } from '@/server/reports/finance-rows';
 import * as statements from '@/server/services/financial-statements';
 
 export default async function CashFlowPage({ searchParams }: { searchParams: SearchParams }) {
@@ -40,6 +42,7 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Sea
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="cash_flow" query={params} />}
       back={{ href: '/', label: t('dashboard_label') }}
       tabs={<SectionTabs route="/finance/cash-flow" />}
       subtitle={t('reports.cash_flow_subtitle')}
@@ -89,26 +92,7 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Sea
             collapse: t('mapping.collapse'),
             empty: t('reports.nothing_posted'),
           }}
-          rows={flow.rows.flatMap((row) => [
-            {
-              key: `row:${row.code}`,
-              label: row.name,
-              depth: row.depth,
-              tone: row.kind === 'header' ? ('header' as const) : ('line' as const),
-              rule: row.rule,
-              cells: [money(row.amount)],
-            },
-            // Only under "Not yet classified": that line exists to be acted
-            // on, and naming the accounts is the whole of the action. Every
-            // other line is one row and one number.
-            ...row.accounts.map((account) => ({
-              key: `account:${row.code}:${account.accountCode}`,
-              label: `${account.accountCode} · ${account.accountName}`,
-              depth: row.depth + 1,
-              tone: 'account' as const,
-              cells: [money(account.amount)],
-            })),
-          ])}
+          rows={cashFlowRows(flow).map((row) => ({ ...row, cells: [money(row.amount)] }))}
             />
       </ReportWindow>
     </AdminPage>

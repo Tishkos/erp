@@ -2138,6 +2138,57 @@
     "fiscal_period": {
       "created": "Fiscal year opened",
       "status_changed": "Period state changed"
+    },
+    "ap_invoice": {
+      "exported": "Printed or exported"
+    },
+    "ar_invoice": {
+      "exported": "Printed or exported"
+    },
+    "supplier_payment": {
+      "exported": "Printed or exported"
+    },
+    "customer_receipt": {
+      "exported": "Printed or exported"
+    },
+    "sales_return": {
+      "exported": "Printed or exported"
+    },
+    "goods_return": {
+      "exported": "Printed or exported"
+    },
+    "warehouse_transfer": {
+      "exported": "Printed or exported"
+    },
+    "opening_stock": {
+      "exported": "Printed or exported"
+    },
+    "stock_reconciliation": {
+      "exported": "Printed or exported"
+    },
+    "stock_movement": {
+      "exported": "Printed or exported"
+    },
+    "business_partner": {
+      "exported": "Printed or exported"
+    },
+    "bank_account": {
+      "exported": "Printed or exported"
+    },
+    "inventory_movement": {
+      "exported": "Printed or exported"
+    },
+    "supplier_shipment": {
+      "exported": "Printed or exported"
+    },
+    "trial_balance": {
+      "exported": "Printed or exported"
+    },
+    "financial_statement": {
+      "exported": "Printed or exported"
+    },
+    "gl_inquiry": {
+      "exported": "Printed or exported"
     }
   },
   "statement_line": {
@@ -2178,6 +2229,69 @@
       "sales_returns": "The sale reversed",
       "opening_balance": "What the opening stock is opened against",
       "inventory_adjustment": "Stock found or lost on reconciliation"
+    }
+  },
+  "print": {
+    "menu": "Print / Export",
+    "menu_hint": "Download this {what} as a file",
+    "pdf": "PDF",
+    "excel": "Excel (.xlsx)",
+    "word": "Word (.docx)",
+    "language": "Language",
+    "english": "English",
+    "arabic": "العربية",
+    "branch": "Branch",
+    "printed_at": "Printed",
+    "printed_by": "Printed by",
+    "filters": "Filters",
+    "page_of": "Page {page} of {pages}",
+    "watermark": "DRAFT / NOT POSTED",
+    "prepared_by": "Prepared by",
+    "approved_by": "Approved by (CEO)",
+    "received_by": "Received by",
+    "totals": "Totals",
+    "all": "All",
+    "search": "Search",
+    "allocated": "Allocated",
+    "allocations": "Invoice allocations",
+    "no_allocations": "Not allocated to any invoice yet.",
+    "history": "Stage history",
+    "stage_from": "From",
+    "stage_to": "To",
+    "changed_at": "Date and time",
+    "changed_by": "By",
+    "no_history": "No stage changes recorded.",
+    "item": "Item",
+    "warehouse": "Warehouse",
+    "period": "Period",
+    "as_at": "As at",
+    "currency": "Currency",
+    "level": "Level",
+    "account": "Account",
+    "titles": {
+      "purchase_invoice": "Purchase Invoice",
+      "sales_invoice": "Sales Invoice",
+      "supplier_payment": "Supplier Payment",
+      "customer_receipt": "Customer Receipt",
+      "sales_return": "Sales Return",
+      "purchase_return": "Purchase Return",
+      "transfer": "Transfer",
+      "opening_stock": "Opening Stock",
+      "item_reconciliation": "Item Reconciliation",
+      "customer_statement": "Customer Account Statement",
+      "supplier_statement": "Supplier Account Statement",
+      "bank_statement": "Bank Account Statement",
+      "cash_statement": "Cash Account Statement",
+      "warehouses_report": "Warehouses Report",
+      "stock_movement": "Stock Movement",
+      "invoice_status_tracking": "Invoice Status Tracking",
+      "trial_balance": "Trial Balance",
+      "income_statement": "Income Statement",
+      "balance_sheet": "Balance Sheet",
+      "changes_in_equity": "Statement of Changes in Equity",
+      "cash_flow": "Cash Flow Statement",
+      "gl_inquiry": "General Ledger",
+      "gl_account": "Account Ledger"
     }
   }
 }

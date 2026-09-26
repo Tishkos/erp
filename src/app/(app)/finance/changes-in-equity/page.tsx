@@ -4,12 +4,14 @@ import { AdminPage, admin as s } from '@/components/admin';
 import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/report-filter';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { StatementTable } from '@/components/admin/statement-table';
 import { formatBusinessDate, formatStatementAmount, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
+import { changesInEquityRows } from '@/server/reports/finance-rows';
 import * as statements from '@/server/services/financial-statements';
 
 /**
@@ -57,6 +59,7 @@ export default async function ChangesInEquityPage({ searchParams }: { searchPara
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="changes_in_equity" query={params} />}
       back={{ href: '/', label: t('dashboard_label') }}
       tabs={<SectionTabs route="/finance/changes-in-equity" />}
       subtitle={t('reports.changes_in_equity_subtitle')}
@@ -103,14 +106,7 @@ export default async function ChangesInEquityPage({ searchParams }: { searchPara
             collapse: t('mapping.collapse'),
             empty: t('reports.nothing_posted'),
           }}
-          rows={equity.rows.map((row) => ({
-            key: `row:${row.code}`,
-            label: row.name,
-            depth: row.depth,
-            tone: row.kind === 'header' ? ('header' as const) : ('line' as const),
-            rule: row.rule,
-            cells: [money(row.amount)],
-          }))}
+          rows={changesInEquityRows(equity).map((row) => ({ ...row, cells: [money(row.amount)] }))}
         />
       </ReportWindow>
     </AdminPage>

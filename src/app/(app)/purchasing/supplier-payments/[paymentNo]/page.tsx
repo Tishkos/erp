@@ -4,11 +4,15 @@ import { AdminPage, Flash, admin as s } from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { Panel } from '@/components/ui';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
+import { PrintSheet } from '@/components/print/print-sheet';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { toDecimalString } from '@domain/money';
 import { visibleRoute } from '@/server/phase-gate';
+import { printSheet } from '@/server/print/sheet';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as payments from '@/server/services/supplier-payment';
 import { allocatePayment, postPayment } from '../actions';
@@ -38,11 +42,12 @@ export default async function PaymentPage({
 }) {
   if (!visibleRoute('/purchasing/supplier-payments')) notFound();
 
-  const [t, page, column, status, locale, context, outcome, { paymentNo }] = await Promise.all([
+  const [t, page, column, status, printT, locale, context, outcome, { paymentNo }] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('column'),
     getTranslations('status'),
+    getTranslations('print'),
     getLocale(),
     requireContext(),
     outcomeOf(searchParams),
@@ -60,11 +65,17 @@ export default async function PaymentPage({
     // start to differ.
     const seen = await payments.viewByNo(tx, decodeURIComponent(paymentNo));
     if (!seen) return null;
-    return { ...seen, open: await payments.openInvoicesFor(tx, seen.payment.supplierId) };
+    return {
+      ...seen,
+      open: await payments.openInvoicesFor(tx, seen.payment.supplierId),
+      parties: await payments.partiesOf(tx, seen.payment.id),
+      allocations: await payments.allocationsOf(tx, seen.payment.id),
+    };
   });
 
   if (!found) notFound();
-  const { payment, unallocated, open } = found;
+  const { payment, unallocated, open, parties, allocations } = found;
+  const sheet = await printSheet('supplier_payment', payment.paymentNo);
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   const mayAllocate = unallocated > 0n && can(principal, 'post', payments.PERMISSION_OBJECT);
@@ -75,10 +86,16 @@ export default async function PaymentPage({
   const fields: DocumentField[] = [
     { label: column('reference'), value: <bdi dir="ltr">{payment.paymentNo}</bdi> },
     { label: column('status'), value: status(payment.status), status: payment.status },
+    // Operations block 6: the payment names who and from where — the
+    // partner's code and name, the Bank/Cash account's code and name.
+    { label: column('supplier_code'), value: <bdi dir="ltr">{parties.supplierCode ?? '—'}</bdi> },
+    { label: column('supplier_name'), value: <bdi dir="auto">{parties.supplierName ?? '—'}</bdi> },
     {
       label: column('posting_date'),
       value: <bdi dir="ltr">{formatBusinessDate(payment.paymentDate, locale as Locale)}</bdi>,
     },
+    { label: column('bank_code'), value: <bdi dir="ltr">{parties.bankCode ?? '—'}</bdi> },
+    { label: column('bank_name'), value: <bdi dir="auto">{parties.bankName ?? '—'}</bdi> },
     { label: column('branch_code'), value: <bdi dir="ltr">{payment.branchCode}</bdi> },
     {
       label: t('supplier_payments.amount'),
@@ -96,6 +113,9 @@ export default async function PaymentPage({
 
   return (
     <AdminPage
+      actions={
+        <ExportMenu exportKey="supplier_payment" id={payment.paymentNo} />
+      }
       back={{ href: '/purchasing/supplier-payments', label: t('back') }}
       title={payment.paymentNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -193,7 +213,57 @@ export default async function PaymentPage({
         </table>
       </DocumentWindow>
 
+      {/* What this payment was put against — the allocations its printed copy lists. */}
+      <Panel title={printT('allocations')}>
+        <div className={s.sapTableWrap}>
+          {/* Three columns: none of the line grid's minimum width, which would
+              scroll the amounts out of view. */}
+          <table className={s.sapTable} style={{ minInlineSize: 0 }}>
+            <thead>
+              <tr>
+                <th scope="col">{column('invoice_no')}</th>
+                <th scope="col">{column('due_date')}</th>
+                <th className={s.sapNum} scope="col">
+                  {t('supplier_payments.allocated')}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {allocations.length === 0 ? (
+                <tr>
+                  <td className={s.sapEmptyRow} colSpan={3}>
+                    {printT('no_allocations')}
+                  </td>
+                </tr>
+              ) : null}
+              {allocations.map((row, index) => (
+                <tr key={`${row.invoiceNo}-${index}`}>
+                  <td className={s.sapAccountCell}>
+                    <bdi dir="ltr">{row.invoiceNo}</bdi>
+                  </td>
+                  <td>
+                    <bdi dir="ltr">{row.dueDate ? formatBusinessDate(row.dueDate, locale as Locale) : '—'}</bdi>
+                  </td>
+                  <td className={s.sapNum}>
+                    <bdi dir="ltr">{money(row.amountIqd)}</bdi>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className={s.sapTotalRow}>
+                <td colSpan={2}>{t('reports.totals')}</td>
+                <td className={s.sapNum}>
+                  <bdi dir="ltr">{money(payment.allocatedAmountIqd)}</bdi>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </Panel>
+
       <RecordHistory objectId={payment.id} objectType={payments.PERMISSION_OBJECT} />
+      {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>
   );
 }

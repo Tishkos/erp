@@ -4,9 +4,12 @@ import { Panel } from '@/components/ui';
 import { AdminPage, Flash, Pill, admin as s } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
+import { PrintSheet } from '@/components/print/print-sheet';
 import { can } from '@domain/permissions';
 import { formatQuantity, parseQuantity } from '@domain/uom';
 import { visibleRoute } from '@/server/phase-gate';
+import { printSheet } from '@/server/print/sheet';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as opening from '@/server/services/opening-stock';
 import { approveOpeningStock } from '../actions';
@@ -47,6 +50,7 @@ export default async function OpeningStockRecordPage({
   const found = await withCurrentUser((tx) => opening.viewByNo(tx, decodeURIComponent(documentNo)));
   if (!found) notFound();
   const { document, lines } = found;
+  const sheet = await printSheet('opening_stock', document.documentNo);
 
   const mayApprove =
     document.status === 'submitted' &&
@@ -61,6 +65,7 @@ export default async function OpeningStockRecordPage({
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="opening_stock" id={document.documentNo} />}
       back={{ href: '/inventory/opening-stock', label: page('opening_stock') }}
       subtitle={`${document.warehouseCode} · ${document.warehouseName} — ${document.documentDate}`}
       title={document.documentNo}
@@ -141,6 +146,7 @@ export default async function OpeningStockRecordPage({
           </table>
         </div>
       </Panel>
+      {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>
   );
 }

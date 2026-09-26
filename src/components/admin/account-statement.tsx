@@ -6,6 +6,7 @@ import { SearchablePicker } from './searchable-picker';
 import { SectionTabs } from './section-tabs';
 import type { SearchParams } from './params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { formatBusinessDate, formatStatementAmount, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
@@ -108,6 +109,13 @@ export async function AccountStatement({
 
   return (
     <AdminPage
+      actions={
+        // A statement exists once a partner is chosen; before that there is
+        // nothing to print.
+        chosen ? (
+          <ExportMenu exportKey={`${side}_statement`} query={query} />
+        ) : undefined
+      }
       back={{ href: screen.back, label: t('back') }}
       subtitle={t(`partners.statement_subtitle_${side}`)}
       tabs={<SectionTabs route={screen.route} />}
@@ -152,110 +160,138 @@ export async function AccountStatement({
         meta={t('reports.for_the_period', { from: day(from), to: day(to) })}
         title={chosen ? `${chosen.code} · ${chosen.legalName}` : t('partners.statement')}
       >
-        <table className={`${s.sapTable} ${s.sapReportTable}`}>
-          <thead>
-            <tr>
-              <th scope="col">{t('partners.statement_date')}</th>
-              <th scope="col">{t('partners.statement_document')}</th>
-              <th scope="col">{t('journals.description')}</th>
-              <th className={s.sapNum} scope="col">
-                {`${t('partners.statement_debit')} · ${currency}`}
-              </th>
-              <th className={s.sapNum} scope="col">
-                {`${t('partners.statement_credit')} · ${currency}`}
-              </th>
-              <th className={s.sapNum} scope="col">
-                {`${t('partners.statement_balance')} · ${currency}`}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {account === null ? (
-              <tr>
-                <td className={s.sapEmptyRow} colSpan={6}>
-                  {t(`partners.statement_choose_${side}`)}
-                </td>
-              </tr>
-            ) : (
-              <>
-                {/* What was outstanding before the first line shown. Everything
-                    earlier is folded into it rather than dropped, so a window
-                    closes where the whole account does. */}
-                <tr>
-                  <td colSpan={3}>{t('partners.statement_opening')}</td>
-                  <td className={s.sapNum} />
-                  <td className={s.sapNum} />
-                  <td className={s.sapNum}>
-                    <bdi dir="ltr">{money(account.opening)}</bdi>
-                  </td>
-                </tr>
-                {account.lines.length === 0 ? (
-                  <tr>
-                    <td className={s.sapEmptyRow} colSpan={6}>
-                      {t('partners.statement_empty')}
-                    </td>
-                  </tr>
-                ) : null}
-                {account.lines.map((line, index) => {
-                  const route = line.document ? DOCUMENT_ROUTE[line.document.kind] : null;
-                  return (
-                    <tr key={`${line.entryNo}-${index}`}>
-                      <td>
-                        <bdi dir="ltr">{day(line.postingDate)}</bdi>
-                      </td>
-                      <td>
-                        {line.document === null ? (
-                          <Link
-                            className={s.sapLink}
-                            href={`/finance/journals/${encodeURIComponent(line.entryNo)}`}
-                          >
-                            <bdi dir="ltr">{line.entryNo}</bdi>
-                          </Link>
-                        ) : route === null ? (
-                          <bdi dir="ltr">{line.document.number}</bdi>
-                        ) : (
-                          <Link
-                            className={s.sapLink}
-                            href={`${route}/${encodeURIComponent(line.document.number)}`}
-                          >
-                            <bdi dir="ltr">{line.document.number}</bdi>
-                          </Link>
-                        )}
-                      </td>
-                      <td>
-                        <bdi dir="auto">{line.description ?? '—'}</bdi>
-                      </td>
-                      <td className={s.sapNum}>
-                        <bdi dir="ltr">{Number(line.debit) === 0 ? '' : money(line.debit)}</bdi>
-                      </td>
-                      <td className={s.sapNum}>
-                        <bdi dir="ltr">{Number(line.credit) === 0 ? '' : money(line.credit)}</bdi>
-                      </td>
-                      <td className={s.sapNum}>
-                        <bdi dir="ltr">{money(line.balance)}</bdi>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {/* The two totals and what the account stands at — ruled twice,
-                    the way a statement ends. */}
-                <tr data-rule="double">
-                  <td colSpan={3}>{t('partners.statement_closing')}</td>
-                  <td className={s.sapNum}>
-                    <bdi dir="ltr">{money(account.totalDebit)}</bdi>
-                  </td>
-                  <td className={s.sapNum}>
-                    <bdi dir="ltr">{money(account.totalCredit)}</bdi>
-                  </td>
-                  <td className={s.sapNum}>
-                    <bdi dir="ltr">{money(account.closing)}</bdi>
-                  </td>
-                </tr>
-              </>
-            )}
-          </tbody>
-        </table>
+        <StatementLines
+          account={account}
+          choose={t(`partners.statement_choose_${side}`)}
+          currency={currency}
+        />
       </ReportWindow>
     </AdminPage>
+  );
+}
+
+/**
+ * The statement's lines — opening balance, each posting with the balance it
+ * left, and the closing balance ruled twice. Shared by the customer and
+ * supplier statements and by a bank or cash account's own record, which are
+ * one report read three ways (blocks 2, 3 and 6).
+ */
+export async function StatementLines({
+  account,
+  currency,
+  choose,
+}: {
+  readonly account: statement.PartnerStatement | null;
+  readonly currency: 'IQD' | 'USD';
+  /** What to say before a party is chosen. */
+  readonly choose: string;
+}) {
+  const [t, locale] = await Promise.all([getTranslations('admin'), getLocale()]);
+  const money = (amount: string) => formatStatementAmount(amount, currency, locale as Locale);
+  const day = (date: string) => formatBusinessDate(date, locale as Locale);
+  return (
+    <table className={`${s.sapTable} ${s.sapReportTable}`}>
+      <thead>
+        <tr>
+          <th scope="col">{t('partners.statement_date')}</th>
+          <th scope="col">{t('partners.statement_document')}</th>
+          <th scope="col">{t('journals.description')}</th>
+          <th className={s.sapNum} scope="col">
+            {`${t('partners.statement_debit')} · ${currency}`}
+          </th>
+          <th className={s.sapNum} scope="col">
+            {`${t('partners.statement_credit')} · ${currency}`}
+          </th>
+          <th className={s.sapNum} scope="col">
+            {`${t('partners.statement_balance')} · ${currency}`}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {account === null ? (
+          <tr>
+            <td className={s.sapEmptyRow} colSpan={6}>
+              {choose}
+            </td>
+          </tr>
+        ) : (
+          <>
+            {/* What was outstanding before the first line shown. Everything
+                earlier is folded into it rather than dropped, so a window
+                closes where the whole account does. */}
+            <tr>
+              <td colSpan={3}>{t('partners.statement_opening')}</td>
+              <td className={s.sapNum} />
+              <td className={s.sapNum} />
+              <td className={s.sapNum}>
+                <bdi dir="ltr">{money(account.opening)}</bdi>
+              </td>
+            </tr>
+            {account.lines.length === 0 ? (
+              <tr>
+                <td className={s.sapEmptyRow} colSpan={6}>
+                  {t('partners.statement_empty')}
+                </td>
+              </tr>
+            ) : null}
+            {account.lines.map((line, index) => {
+              const route = line.document ? DOCUMENT_ROUTE[line.document.kind] : null;
+              return (
+                <tr key={`${line.entryNo}-${index}`}>
+                  <td>
+                    <bdi dir="ltr">{day(line.postingDate)}</bdi>
+                  </td>
+                  <td>
+                    {line.document === null ? (
+                      <Link
+                        className={s.sapLink}
+                        href={`/finance/journals/${encodeURIComponent(line.entryNo)}`}
+                      >
+                        <bdi dir="ltr">{line.entryNo}</bdi>
+                      </Link>
+                    ) : route === null ? (
+                      <bdi dir="ltr">{line.document.number}</bdi>
+                    ) : (
+                      <Link
+                        className={s.sapLink}
+                        href={`${route}/${encodeURIComponent(line.document.number)}`}
+                      >
+                        <bdi dir="ltr">{line.document.number}</bdi>
+                      </Link>
+                    )}
+                  </td>
+                  <td>
+                    <bdi dir="auto">{line.description ?? '—'}</bdi>
+                  </td>
+                  <td className={s.sapNum}>
+                    <bdi dir="ltr">{Number(line.debit) === 0 ? '' : money(line.debit)}</bdi>
+                  </td>
+                  <td className={s.sapNum}>
+                    <bdi dir="ltr">{Number(line.credit) === 0 ? '' : money(line.credit)}</bdi>
+                  </td>
+                  <td className={s.sapNum}>
+                    <bdi dir="ltr">{money(line.balance)}</bdi>
+                  </td>
+                </tr>
+              );
+            })}
+            {/* The two totals and what the account stands at — ruled twice,
+                the way a statement ends. */}
+            <tr data-rule="double">
+              <td colSpan={3}>{t('partners.statement_closing')}</td>
+              <td className={s.sapNum}>
+                <bdi dir="ltr">{money(account.totalDebit)}</bdi>
+              </td>
+              <td className={s.sapNum}>
+                <bdi dir="ltr">{money(account.totalCredit)}</bdi>
+              </td>
+              <td className={s.sapNum}>
+                <bdi dir="ltr">{money(account.closing)}</bdi>
+              </td>
+            </tr>
+          </>
+        )}
+      </tbody>
+    </table>
   );
 }

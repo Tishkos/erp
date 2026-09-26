@@ -5,6 +5,7 @@ import { AdminPage, admin as s } from '@/components/admin';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { can } from '@domain/permissions';
 import { formatQuantity, parseQuantity } from '@domain/uom';
 import { visibleRoute } from '@/server/phase-gate';
@@ -63,6 +64,7 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="stock_movement" query={params} />}
       back={{ href: '/', label: t('dashboard_label') }}
       tabs={<SectionTabs route="/inventory/stock-movements" />}
       subtitle={t('stock_movements.subtitle')}

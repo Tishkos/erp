@@ -39,6 +39,7 @@ import {
   supplierPayment,
 } from '../db/schema';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
+import * as trialBalance from './trial-balance';
 
 /** Which side of the ledger the party sits on. */
 export type PartySide = 'customer' | 'supplier' | 'bank';
@@ -312,6 +313,101 @@ export async function statementFor(
   return {
     partyCode,
     side,
+    currency,
+    from: window.from ?? null,
+    to: window.to,
+    opening: decimal(opening),
+    lines,
+    totalDebit: decimal(totalDebit),
+    totalCredit: decimal(totalCredit),
+    closing: decimal(balance),
+  };
+}
+
+/**
+ * A bank or cash account's statement, read from the ledger account it posts
+ * to — Operations block 6: "Incoming amounts are shown as Debit. Outgoing
+ * amounts are shown as Credit."
+ *
+ * Why not the bank subledger (`statementFor(tx, 'bank', …)`): the subledger
+ * is written only for a line that names its bank account, and the supplier
+ * payment and customer receipt postings do not name it. An account left
+ * unmarked keeps no subledger at all, so its statement would be empty; one
+ * marked as the bank control account refuses those postings outright. Each
+ * bank or cash account carries a ledger account no other one may carry, so
+ * that account's postings are exactly this account's movements — the same
+ * figures, from the posted lines themselves.
+ *
+ * The same shape as a partner's statement, so one table shows both: the
+ * opening balance folds in everything before `from`, and each line carries
+ * the balance it left, debits less credits.
+ */
+export async function ledgerStatementFor(
+  tx: Tx,
+  account: { readonly code: string; readonly glAccountCode: string | null },
+  window: {
+    readonly from?: string | null;
+    readonly to: string;
+    readonly currency?: StatementCurrency;
+  },
+): Promise<PartnerStatement> {
+  const currency: StatementCurrency = window.currency === 'USD' ? 'USD' : 'IQD';
+  const usd = currency === 'USD';
+  const debitOf = (row: { debitIqd: string; debitUsd: string }) => parseDecimal(usd ? row.debitUsd : row.debitIqd, MONEY_SCALE);
+  const creditOf = (row: { creditIqd: string; creditUsd: string }) =>
+    parseDecimal(usd ? row.creditUsd : row.creditIqd, MONEY_SCALE);
+
+  // An account with no ledger account has posted nothing.
+  const ledgerCode = account.glAccountCode ?? '';
+  let opening = 0n;
+  if (window.from && ledgerCode) {
+    const [y, m, d] = window.from.split('-').map(Number);
+    const dayBefore = new Date(Date.UTC(y!, m! - 1, d! - 1)).toISOString().slice(0, 10);
+    for (const row of await trialBalance.accountActivity(tx, ledgerCode, {
+      from: '0001-01-01',
+      to: dayBefore,
+      allPermittedBranches: true,
+    })) {
+      opening += debitOf(row) - creditOf(row);
+    }
+  }
+
+  const rows = ledgerCode
+    ? await trialBalance.accountActivity(tx, ledgerCode, {
+        from: window.from ?? '0001-01-01',
+        to: window.to,
+        allPermittedBranches: true,
+      })
+    : [];
+  const documents = await documentsFor(
+    tx,
+    'bank',
+    rows.flatMap((row) => (row.sourceDocId ? [String(row.sourceDocId)] : [])),
+  );
+
+  let balance = opening;
+  let totalDebit = 0n;
+  let totalCredit = 0n;
+  const lines: StatementLine[] = rows.map((row) => {
+    const debit = debitOf(row);
+    const credit = creditOf(row);
+    totalDebit += debit;
+    totalCredit += credit;
+    balance += debit - credit;
+    return {
+      postingDate: String(row.postingDate),
+      entryNo: row.entryNo,
+      description: row.description,
+      document: (row.sourceDocId ? documents.get(String(row.sourceDocId)) : undefined) ?? null,
+      debit: decimal(debit),
+      credit: decimal(credit),
+      balance: decimal(balance),
+    };
+  });
+
+  return {
+    partyCode: account.code,
+    side: 'bank',
     currency,
     from: window.from ?? null,
     to: window.to,

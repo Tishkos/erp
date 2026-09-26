@@ -18,6 +18,7 @@ import { PairedPicker } from '@/components/admin/paired-picker';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { can } from '@domain/permissions';
 import { formatQuantity, parseQuantity } from '@domain/uom';
 import { visibleRoute } from '@/server/phase-gate';
@@ -41,10 +42,11 @@ export const dynamic = 'force-dynamic';
 export default async function TransfersPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/inventory/transfers')) notFound();
 
-  const [t, page, column, context, outcome] = await Promise.all([
+  const [t, page, column, printT, context, outcome] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('column'),
+    getTranslations('print'),
     requireContext(),
     outcomeOf(searchParams),
   ]);
@@ -167,12 +169,13 @@ export default async function TransfersPage({ searchParams }: { searchParams: Se
                 <th scope="col">{column('from_warehouse')}</th>
                 <th scope="col">{column('to_warehouse')}</th>
                 <th scope="col">{column('quantity')}</th>
+                <th scope="col">{printT('menu')}</th>
               </tr>
             </thead>
             <tbody>
               {shown.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>{t('transfers.none')}</td>
+                  <td colSpan={8}>{t('transfers.none')}</td>
                 </tr>
               ) : null}
               {shown.map((row) => (
@@ -197,6 +200,14 @@ export default async function TransfersPage({ searchParams }: { searchParams: Se
                   </td>
                   <td>
                     <bdi dir="ltr">{formatQuantity(parseQuantity(row.quantity))}</bdi>
+                  </td>
+                  <td>
+                    <ExportMenu
+                      exportKey="transfer"
+                      id={row.transferNo}
+                      label={row.transferNo}
+                      principal={principal}
+                    />
                   </td>
                 </tr>
               ))}

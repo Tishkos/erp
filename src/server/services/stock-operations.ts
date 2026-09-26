@@ -207,7 +207,7 @@ export async function transfer(
   return { id, transferNo: documentNo };
 }
 
-export async function listTransfers(tx: Tx) {
+function transferRows(tx: Tx) {
   return tx
     .select({
       id: stockTransfer.id,
@@ -219,10 +219,20 @@ export async function listTransfers(tx: Tx) {
       toWarehouseCode: stockTransfer.toWarehouseCode,
       quantity: stockTransfer.quantity,
       costIqd: stockTransfer.costIqd,
+      branchCode: stockTransfer.branchCode,
     })
     .from(stockTransfer)
-    .innerJoin(itemTable, eq(itemTable.code, stockTransfer.itemCode))
-    .orderBy(desc(stockTransfer.transferDate), desc(stockTransfer.transferNo));
+    .innerJoin(itemTable, eq(itemTable.code, stockTransfer.itemCode));
+}
+
+export async function listTransfers(tx: Tx) {
+  return transferRows(tx).orderBy(desc(stockTransfer.transferDate), desc(stockTransfer.transferNo));
+}
+
+/** One transfer by its number — the row the list shows, for its printed copy. */
+export async function transferByNo(tx: Tx, transferNo: string) {
+  const [row] = await transferRows(tx).where(eq(stockTransfer.transferNo, transferNo)).limit(1);
+  return row ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -456,7 +466,7 @@ export async function adjust(
   return { id, adjustmentNo: documentNo };
 }
 
-export async function listAdjustments(tx: Tx) {
+function adjustmentRows(tx: Tx) {
   return tx
     .select({
       id: stockAdjustment.id,
@@ -469,11 +479,21 @@ export async function listAdjustments(tx: Tx) {
       direction: stockAdjustment.direction,
       quantity: stockAdjustment.quantity,
       costIqd: stockAdjustment.costIqd,
+      branchCode: stockAdjustment.branchCode,
     })
     .from(stockAdjustment)
     .innerJoin(itemTable, eq(itemTable.code, stockAdjustment.itemCode))
-    .innerJoin(warehouse, eq(warehouse.code, stockAdjustment.warehouseCode))
-    .orderBy(desc(stockAdjustment.adjustmentDate), desc(stockAdjustment.adjustmentNo));
+    .innerJoin(warehouse, eq(warehouse.code, stockAdjustment.warehouseCode));
+}
+
+export async function listAdjustments(tx: Tx) {
+  return adjustmentRows(tx).orderBy(desc(stockAdjustment.adjustmentDate), desc(stockAdjustment.adjustmentNo));
+}
+
+/** One Item Reconciliation by its number, for its printed copy. */
+export async function adjustmentByNo(tx: Tx, adjustmentNo: string) {
+  const [row] = await adjustmentRows(tx).where(eq(stockAdjustment.adjustmentNo, adjustmentNo)).limit(1);
+  return row ?? null;
 }
 
 // ---------------------------------------------------------------------------

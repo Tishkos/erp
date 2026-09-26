@@ -188,3 +188,147 @@
   size: A4;
   margin: 12mm;
 }
+
+/*
+ * The print sheet on a record page (print-sheet.tsx): invisible on screen,
+ * the whole page when printing. The global print rules (globals.css) hide
+ * everything around it.
+ */
+.printOnly {
+  display: none;
+}
+
+@media print {
+  .printOnly {
+    display: block;
+    color: #111;
+    background: #fff;
+  }
+
+  .printOnly .sheet {
+    font-family: inherit;
+  }
+}
+
+.landscape {
+  page: landscape;
+}
+
+@page landscape {
+  size: A4 landscape;
+  margin: 12mm;
+}
+
+/* "Page 2 of 5" in the page's own margin — the one place a count of pages exists. */
+@page {
+  @bottom-center {
+    content: counter(page) " / " counter(pages);
+    font-size: 8pt;
+    color: #444;
+  }
+}
+
+/* An unposted document says so behind every page: fixed, so it repeats. */
+.watermark {
+  position: fixed;
+  inset-block-start: 42%;
+  inset-inline: 0;
+  z-index: 0;
+  color: rgb(176 0 32 / 16%);
+  font-size: 54pt;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  transform: rotate(-30deg);
+  pointer-events: none;
+}
+
+.provenanceBlock {
+  display: grid;
+  gap: 0.6mm;
+  color: #444;
+  font-size: 8pt;
+  text-align: end;
+}
+
+.titleRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8mm;
+  margin-block: 4mm 2mm;
+}
+
+.title {
+  margin: 0;
+  font-size: 16pt;
+}
+
+.number {
+  font-size: 20pt;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.subTitle {
+  margin: 4mm 0 1mm;
+  font-size: 11pt;
+}
+
+.lines thead {
+  display: table-header-group;
+}
+
+.lines tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.lines tr[data-tone="header"] td,
+.lines tr[data-tone="subtotal"] td,
+.lines tr[data-tone="opening"] td,
+.lines tr[data-tone="closing"] td {
+  font-weight: 700;
+}
+
+.lines tr[data-tone="subtotal"] td,
+.lines tr[data-tone="opening"] td {
+  background: #f3f3f3;
+}
+
+.summary {
+  display: grid;
+  gap: 1mm;
+  inline-size: min(100%, 95mm);
+  margin: 4mm 0 0 auto;
+  margin-inline-start: auto;
+}
+
+.summary div {
+  display: flex;
+  justify-content: space-between;
+  gap: 4mm;
+  padding: 1.4mm 2mm;
+  background: #f3f3f3;
+  font-weight: 700;
+}
+
+.summary dd {
+  margin: 0;
+}
+
+.signatureBoxes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6mm;
+  margin-block-start: 10mm;
+  break-inside: avoid;
+}
+
+.signatureBoxes span {
+  min-block-size: 22mm;
+  padding: 2mm;
+  border: 0.7pt solid #444;
+  font-size: 9pt;
+  font-weight: 700;
+}

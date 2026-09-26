@@ -5,6 +5,7 @@ import { AdminPage, admin as s } from '@/components/admin';
 import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/report-filter';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -91,6 +92,7 @@ export default async function GeneralLedgerPage({ searchParams }: { searchParams
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="gl_inquiry" query={params} />}
       back={{ href: '/', label: t('dashboard_label') }}
       tabs={<SectionTabs route="/finance/gl-inquiry" />}
       subtitle={t('reports.gl_subtitle')}

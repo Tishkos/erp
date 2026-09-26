@@ -959,6 +959,46 @@ export async function list(tx: Tx) {
     .orderBy(desc(supplierPayment.paymentDate), desc(supplierPayment.paymentNo));
 }
 
+/**
+ * Who was paid and from which account — the build's Supplier Name and Code
+ * and Bank/Cash Name and Code, which the payment carries as references.
+ */
+export async function partiesOf(tx: Tx, supplierPaymentId: string) {
+  const [row] = await tx
+    .select({
+      supplierCode: businessPartner.code,
+      supplierName: businessPartner.legalName,
+      bankCode: bankCashAccount.code,
+      bankName: bankCashAccount.name,
+    })
+    .from(supplierPayment)
+    .leftJoin(businessPartner, eq(businessPartner.id, supplierPayment.supplierId))
+    .leftJoin(bankCashAccount, eq(bankCashAccount.id, supplierPayment.bankCashAccountId))
+    .where(eq(supplierPayment.id, supplierPaymentId))
+    .limit(1);
+  return row ?? { supplierCode: null, supplierName: null, bankCode: null, bankName: null };
+}
+
+/** The invoices this payment settles, with what it put against each. Live allocations only. */
+export async function allocationsOf(tx: Tx, supplierPaymentId: string) {
+  return tx
+    .select({
+      invoiceNo: apInvoice.invoiceNo,
+      dueDate: apInvoice.dueDate,
+      amountIqd: supplierPaymentAllocation.amountIqd,
+      allocatedAt: supplierPaymentAllocation.allocatedAt,
+    })
+    .from(supplierPaymentAllocation)
+    .innerJoin(apInvoice, eq(apInvoice.id, supplierPaymentAllocation.apInvoiceId))
+    .where(
+      and(
+        eq(supplierPaymentAllocation.supplierPaymentId, supplierPaymentId),
+        isNull(supplierPaymentAllocation.reversedAt),
+      ),
+    )
+    .orderBy(supplierPaymentAllocation.allocatedAt);
+}
+
 export async function viewByNo(tx: Tx, paymentNo: string) {
   const [row] = await tx
     .select({ id: supplierPayment.id })

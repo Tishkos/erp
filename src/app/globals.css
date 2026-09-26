@@ -4192,3 +4192,36 @@ html:has([data-palette]) body {
   min-block-size: 100vh;
   background: var(--w-canvas);
 }
+
+/*
+ * A page that carries a print sheet (src/components/print/print-sheet.tsx)
+ * prints the sheet and nothing else: every element that neither holds the
+ * sheet nor sits inside it is removed, and the sheet's ancestors are reduced
+ * to plain blocks so no sidebar column, card padding or scroll box of the
+ * screen layout squeezes the paper.
+ */
+@media print {
+  body:has([data-print-sheet]) *:not(:has([data-print-sheet])):not([data-print-sheet]):not([data-print-sheet] *) {
+    display: none !important;
+  }
+
+  body:has([data-print-sheet]),
+  body:has([data-print-sheet]) *:has([data-print-sheet]) {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    inline-size: auto !important;
+    max-inline-size: none !important;
+    min-inline-size: 0 !important;
+    block-size: auto !important;
+    min-block-size: 0 !important;
+    max-block-size: none !important;
+    overflow: visible !important;
+    transform: none !important;
+  }
+}
