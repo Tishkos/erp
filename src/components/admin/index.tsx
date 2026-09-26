@@ -217,6 +217,12 @@ export interface FieldProps {
   readonly pattern?: string | undefined;
   readonly autoComplete?: string | undefined;
   /**
+   * The id of a `datalist` to suggest from. A filter box that searches on what
+   * is typed still wants to offer the names it knows — and unlike a picker it
+   * accepts a partial term, so the list suggests rather than constrains.
+   */
+  readonly list?: string | undefined;
+  /**
    * The element id, when the field name is not unique on the page.
    *
    * Two forms on one screen may each have a `description`, and each is
@@ -245,6 +251,7 @@ export function Field({
   maxLength,
   pattern,
   autoComplete = 'off',
+  list,
   id: idOverride,
 }: FieldProps) {
   const id = idOverride ?? `f-${name}`;
@@ -277,6 +284,7 @@ export function Field({
           maxLength={maxLength}
           min={min}
           pattern={pattern}
+          list={list}
           step={type === 'number' ? (step ?? 'any') : undefined}
           type={type}
           {...common}

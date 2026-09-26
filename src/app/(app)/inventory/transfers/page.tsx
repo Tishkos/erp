@@ -14,7 +14,7 @@ import {
   SubmitRow,
   matches,
 } from '@/components/admin';
-import { PairedPicker } from '@/components/admin/paired-picker';
+import { SearchablePicker } from '@/components/admin/searchable-picker';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -84,16 +84,16 @@ export default async function TransfersPage({ searchParams }: { searchParams: Se
             <p className="muted">{t('transfers.created_note')}</p>
             <Form action={createTransfer}>
               <Grid>
-                <PairedPicker
-                  codeLabel={column('item_code')}
+                {/* The name alone. A transfer is raised by somebody who knows
+                    what is moving, not its code, and the pair asked for the
+                    same fact twice. The code still reaches the server — the
+                    picker carries it in a hidden field once what is typed
+                    matches an item exactly, so a half-typed name submits
+                    nothing rather than a guess. */}
+                <SearchablePicker
+                  label={column('item_name')}
                   name="item_code"
-                  nameLabel={column('item_name')}
-                  options={stockItems.map((row) => ({
-                    value: row.code,
-                    code: row.code,
-                    name: row.name,
-                  }))}
-                  plain
+                  options={stockItems.map((row) => ({ value: row.code, label: row.name }))}
                   required
                 />
                 <Select
