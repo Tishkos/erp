@@ -56,7 +56,8 @@ export function PairedPicker({
    * The application's own field chrome rather than the document window's.
    *
    * The two look different on purpose — a document is a form on paper, a
-   * settings screen is not — and this control is used on both.
+   * settings screen is not — and this control is used on both. Either way it
+   * is drawn in the same chrome as the fields beside it.
    */
   readonly plain?: boolean;
 }) {
@@ -97,9 +98,17 @@ export function PairedPicker({
     if (match) setCode(match.code);
   };
 
-  const field = plain ? 'field' : styles.sapField;
-  const caption = plain ? 'field__label' : styles.sapLabel;
-  const box = plain ? 'field__input' : undefined;
+  /*
+   * `plain` asks for the application's own field chrome instead of the
+   * document window's. It used to name `field` / `field__label` /
+   * `field__input`, which are in no stylesheet — so on every screen that asked
+   * for it the two boxes were drawn by the browser, unstyled, beside the
+   * `Field` and `Select` controls that were not. These are the classes `Field`
+   * itself uses, so the pair now matches the fields it stands among.
+   */
+  const field = plain ? styles.field : styles.sapField;
+  const caption = plain ? styles.label : styles.sapLabel;
+  const box = plain ? styles.input : undefined;
 
   return (
     <>

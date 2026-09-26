@@ -1,6 +1,14 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Grid, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
+import {
+  AdminPage,
+  Field,
+  FilterRow,
+  Select,
+  Submit,
+  SubmitRow,
+  admin as s,
+} from '@/components/admin';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -8,7 +16,6 @@ import { formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
-import * as items from '@/server/services/items';
 import * as reports from '@/server/services/inventory-reports';
 import * as warehouses from '@/server/services/warehouses';
 
@@ -46,17 +53,20 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
     return <Denied object={page('fifo_valuation')} />;
   }
 
-  const itemCode = typeof params.item === 'string' ? params.item.trim() : '';
+  const itemSearch = typeof params.item === 'string' ? params.item.trim() : '';
   const warehouseCode = typeof params.warehouse === 'string' ? params.warehouse.trim() : '';
 
   const { rows, pickers } = await withCurrentUser(async (tx) => ({
     rows: await reports.valuation(tx, context.principal, {
       allPermittedBranches: true,
-      ...(itemCode ? { itemCode } : {}),
+      ...(itemSearch ? { itemSearch } : {}),
       ...(warehouseCode ? { warehouseCode } : {}),
     }),
     pickers: {
-      items: (await items.listAll(tx)).filter((row) => row.isStock),
+      // The warehouses stay a picker: it is a short, known list. The items do
+      // not — the search is served from the item table by an index, so the page
+      // no longer carries the whole catalogue down to the browser to build a
+      // drop-down out of it.
       houses: await warehouses.listActive(tx),
     },
   }));
@@ -77,36 +87,37 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
       title={t('reports.warehouses_report')}
       variant="sap"
     >
-      {/* The report's own filters, in the form controls every other screen uses
-          rather than two bare search boxes. Pickers rather than free text: the
-          item and the warehouse are both known lists, and a typo in a text box
-          silently returns nothing. */}
+      {/* The report's own filters, on one line with their button.
+
+          The item is typed rather than chosen. A drop-down of every stock item
+          asked a person holding a name to read past the code to find it, and it
+          grew with the catalogue. What is typed is matched against the name and
+          the code, anywhere in either, and served by the trigram indexes in
+          migration 0212 — so it stays fast as the catalogue grows rather than
+          scanning the item table each time. The warehouse stays a picker: it is
+          a short list that a person chooses from, not one they search. */}
       <form method="get">
-        <Grid>
-          <Select
-            defaultValue={itemCode}
-            emptyLabel={t('reports.all_items')}
-            label={column('item_code')}
+        <FilterRow>
+          <Field
+            defaultValue={itemSearch}
+            label={column('item_name')}
             name="item"
-            options={pickers.items.map((row) => ({
-              value: row.code,
-              label: `${row.code} · ${row.name}`,
-            }))}
+            placeholder={t('reports.search_item_hint')}
           />
           <Select
             defaultValue={warehouseCode}
             emptyLabel={t('reports.all_warehouses')}
-            label={column('warehouse_code')}
+            label={column('warehouse_name')}
             name="warehouse"
             options={pickers.houses.map((row) => ({
               value: row.code,
-              label: `${row.code} · ${row.name}`,
+              label: `${row.name} · ${row.code}`,
             }))}
           />
-        </Grid>
-        <SubmitRow>
-          <Submit label={list('search')} />
-        </SubmitRow>
+          <SubmitRow>
+            <Submit label={list('search')} />
+          </SubmitRow>
+        </FilterRow>
       </form>
 
       <table className={`${s.sapTable} ${s.sapReportTable}`}>

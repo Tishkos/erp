@@ -27,7 +27,6 @@ import * as items from '@/server/services/items';
 import * as opening from '@/server/services/opening-stock';
 import * as warehouses from '@/server/services/warehouses';
 import { createOpeningStock } from './actions';
-import { OPENING_ROWS } from './rows';
 
 /**
  * Opening Stock — Operations build, block 7.
@@ -78,6 +77,7 @@ export default async function OpeningStockPage({ searchParams }: { searchParams:
             closeLabel={t('close')}
             openOnLoad={Boolean(outcome.error)}
             title={t('opening_stock.new')}
+            wide
           >
             <p className="muted">{t('opening_stock.created_note')}</p>
             <Form action={createOpeningStock}>
@@ -102,15 +102,18 @@ export default async function OpeningStockPage({ searchParams }: { searchParams:
                 />
               </Grid>
               <OpeningStockLines
-                items={stockItems.map((row) => ({ value: row.code, code: row.code, name: row.name }))}
+                items={stockItems.map((row) => ({ code: row.code, name: row.name }))}
                 labels={{
                   itemCode: column('item_code'),
                   itemName: column('item_name'),
                   quantity: column('quantity'),
                   total: column('total_price'),
                   average: column('average_unit_price'),
+                  remove: t('remove_line'),
+                  resizeColumn: t('invoices.resize_column'),
+                  documentTotal: t('reports.totals'),
                 }}
-                rows={OPENING_ROWS}
+                widthsKey={`erp.lines.opening.${context.principal.userId}`}
               />
               <SubmitRow>
                 <Submit label={t('save')} />

@@ -1469,6 +1469,7 @@
       "nothing_in_stock": "لا يوجد مخزون في أي مخزن.",
       "as_it_stands": "المخزون الحالي مقوّماً بتكلفته",
       "all_items": "كل الأصناف",
+      "search_item_hint": "الاسم أو الرمز",
       "all_warehouses": "كل المخازن"
     },
     "accounts": {

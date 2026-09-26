@@ -185,6 +185,14 @@ export function Inline({ children }: { readonly children: ReactNode }) {
   return <div className={styles.inline}>{children}</div>;
 }
 
+/**
+ * A screen's filters: the controls at their own width with the button beside
+ * them. `Grid` is for a form to fill in; a filter bar is one line to set.
+ */
+export function FilterRow({ children }: { readonly children: ReactNode }) {
+  return <div className={styles.filterRow}>{children}</div>;
+}
+
 export interface FieldProps {
   readonly label: string;
   readonly name: string;

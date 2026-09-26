@@ -1469,6 +1469,7 @@
       "nothing_in_stock": "No stock is held in any warehouse.",
       "as_it_stands": "Stock held now, valued at what it cost",
       "all_items": "All items",
+      "search_item_hint": "Name or code",
       "all_warehouses": "All warehouses"
     },
     "accounts": {

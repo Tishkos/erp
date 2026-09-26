@@ -159,6 +159,36 @@
   flex: 1 1 12rem;
 }
 
+/* A screen's own filters. `.grid` stretches one picker across the whole window
+   and drops its button onto a line of its own, which is what made a single
+   status filter read as the widest thing on the page. Here each control takes
+   its own width and the button stands on the same line, at the same baseline. */
+/* The band a filter row sits in when the panel around it is flush, so the
+   controls are not flattened against the panel's edge. */
+.filterBar {
+  padding: 0.7rem 0.8rem 0;
+  border-block-end: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.filterRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+  margin-block-end: 0.9rem;
+}
+
+.filterRow .field {
+  flex: 0 1 15rem;
+  min-inline-size: 9rem;
+}
+
+/* The submit sits in the row rather than under it. */
+.filterRow .submitRow {
+  margin: 0;
+}
+
 /* Buttons ---------------------------------------------------------------- */
 
 .button {
@@ -579,6 +609,12 @@
 }
 
 /* Dialog ------------------------------------------------------------------- */
+
+/* A dialog holding a grid of lines rather than a column of fields. Stated in
+   both classes so it beats `.dialog` whatever order the two land in. */
+.dialog.dialogWide {
+  inline-size: min(76rem, calc(100vw - 2rem));
+}
 
 .dialog {
   inline-size: min(44rem, calc(100vw - 2rem));
@@ -1496,12 +1532,21 @@
 .dateInput {
   composes: input;
 }
+/* The calendar is the point of a date box, so it is drawn in the accent
+   instead of at half opacity — at 55% grey on a grey field it read as
+   decoration and people could not find it. */
 .dateInput::-webkit-calendar-picker-indicator {
+  padding: 0.12rem;
+  border-radius: 0.25rem;
+  background-color: color-mix(in srgb, var(--accent) 22%, transparent);
   cursor: pointer;
-  opacity: 0.55;
-}
-.dateInput::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
+}
+
+.dateInput::-webkit-calendar-picker-indicator:hover,
+.dateInput:focus::-webkit-calendar-picker-indicator {
+  background-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 :global(:root[data-theme='dark']) .dateInput::-webkit-calendar-picker-indicator {
   filter: invert(1);
@@ -1911,6 +1956,102 @@
   .sapLineGrid .colWarehouse {
     inline-size: 5.25rem;
   }
+}
+
+/* ── A grid of document lines with fewer columns than an invoice ──────────
+   Opening stock and a count sheet are the same grid, and the same design, with
+   fewer columns. The floor is stated in both classes so it beats the
+   breakpoint rules above whatever order the rules land in — a seven-column
+   sheet must not be held open to the width of ten columns it does not have. */
+.sapLineGrid.sapLineGridCompact {
+  min-inline-size: 45rem; /* 30.9 fixed + 14.1 name */
+}
+
+@media (max-width: 64rem) {
+  .sapLineGrid.sapLineGridCompact {
+    min-inline-size: 38rem;
+  }
+}
+
+@media (max-width: 48rem) {
+  .sapLineGrid.sapLineGridCompact {
+    min-inline-size: 34rem;
+  }
+}
+
+/* Worked out rather than typed, so it is read like the figures either side. */
+.sapLineGrid .colAverage {
+  inline-size: 7rem;
+}
+
+@media (max-width: 90rem) {
+  .sapLineGrid .colAverage {
+    inline-size: 6rem;
+  }
+}
+
+@media (max-width: 64rem) {
+  .sapLineGrid .colAverage {
+    inline-size: 5.5rem;
+  }
+}
+
+/* A figure the grid works out: the same ink as a field's, without the box,
+   because there is nothing here to type into. */
+.sapLineGrid output {
+  display: block;
+  padding-inline: 0.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── The grid's own field chrome ──────────────────────────────────────────
+   `.sapDoc` dresses the fields inside a document window. A grid of lines is
+   also opened in a dialog, which is not one, and there the boxes fell back to
+   the browser's own — a different design in the same table. The grid therefore
+   dresses its own, so a line looks the same wherever it is opened. Where a
+   document window does surround it, `.sapDoc.sapDoc` is the more specific rule
+   and still wins. */
+.sapLineGrid input,
+.sapLineGrid select {
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 1.75rem;
+  block-size: auto;
+  padding: 0.18rem 0.35rem;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 0.12rem;
+  background: var(--w-field);
+  color: var(--w-text);
+  font: inherit;
+  font-size: 0.78rem;
+  box-shadow: none;
+}
+
+.sapLineGrid input:focus,
+.sapLineGrid select:focus {
+  background: var(--w-focus);
+  outline: 2px solid #9a760d;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 1px #fff;
+}
+
+.sapLineGrid .sapRowRemove button {
+  min-inline-size: 1.5rem;
+  min-block-size: 1.35rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 0.12rem;
+  background: transparent;
+  color: var(--w-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sapLineGrid .sapRowRemove button:hover {
+  border-color: #b03a2e;
+  background: #f8d7d2;
+  color: #7d201a;
 }
 
 /* ── Dragging a column boundary ───────────────────────────────────────────

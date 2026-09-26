@@ -11,6 +11,7 @@ import {
   useTransition,
 } from 'react';
 import styles from './admin.module.css';
+import { ColumnGrip, useColumnWidths } from './column-widths';
 import { PAIRED_CHOICE } from './paired-picker';
 
 /**
@@ -139,11 +140,7 @@ interface Row {
 /** Empty rows drawn under the lines — an accountant reads them as room left. */
 const FILLER_ROWS = 2;
 
-/**
- * The columns, in the order they are drawn. The keys are the grid's own — they
- * name a boundary a person can drag and a width that is remembered, so they
- * must stay stable even if a heading is renamed or translated.
- */
+/** This grid's columns, in the order they are drawn. */
 const COLUMN_KEYS = [
   'index',
   'code',
@@ -158,34 +155,9 @@ const COLUMN_KEYS = [
 ] as const;
 type ColumnKey = (typeof COLUMN_KEYS)[number];
 
-/** The line number and the ✕ are what they are; the rest are the person's. */
-const FIXED_COLUMNS: readonly ColumnKey[] = ['index', 'remove'];
 
-/** Narrow enough to tuck a column away, wide enough to still be a column. */
-const MIN_COLUMN_PX = 40;
 
-type ColumnWidths = Partial<Record<ColumnKey, number>>;
 
-/** Only keys this grid knows, only positive numbers — a stored preference is
- *  input like any other, and an old or hand-edited one must not break a
- *  screen. */
-function readWidths(raw: string | null): ColumnWidths {
-  if (!raw) return {};
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return {};
-    const out: ColumnWidths = {};
-    for (const key of COLUMN_KEYS) {
-      const value = (parsed as Record<string, unknown>)[key];
-      if (typeof value === 'number' && Number.isFinite(value) && value >= MIN_COLUMN_PX) {
-        out[key] = Math.round(value);
-      }
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
 
 let counter = 0;
 const blank = (warehouseCode: string): Row => ({
@@ -333,99 +305,9 @@ export function InvoiceLinesGrid({
   );
   const availabilityRequests = useRef(new Map<string, { key: string }>());
 
-  /* ── Column widths a person set by hand ─────────────────────────────────
-     Read after mount, never during render: the server has no localStorage, so
-     seeding state from it would render one width on the server and another in
-     the browser. The grid draws at its stylesheet widths for the first paint
-     and settles into the person's own straight after. */
-  const [widths, setWidths] = useState<ColumnWidths>({});
-  const liveWidths = useRef<ColumnWidths>({});
-  const [resizing, setResizing] = useState(false);
-  const drag = useRef<{ key: ColumnKey; from: number; was: number; rtl: boolean } | null>(null);
+  const { widthOf, gripProps, resizing } = useColumnWidths<ColumnKey>(COLUMN_KEYS, widthsKey);
 
-  useEffect(() => {
-    if (!widthsKey) return;
-    const stored = readWidths(window.localStorage.getItem(widthsKey));
-    liveWidths.current = stored;
-    setWidths(stored);
-  }, [widthsKey]);
 
-  const keepWidths = useCallback(
-    (next: ColumnWidths) => {
-      liveWidths.current = next;
-      setWidths(next);
-      if (!widthsKey) return;
-      // A refusal to store — a full or locked profile — must not cost the
-      // width on screen, so it is swallowed rather than surfaced.
-      try {
-        window.localStorage.setItem(widthsKey, JSON.stringify(next));
-      } catch {
-        /* the layout still holds for this visit */
-      }
-    },
-    [widthsKey],
-  );
-
-  const grip = (key: ColumnKey) => ({
-    onPointerDown: (event: React.PointerEvent<HTMLSpanElement>) => {
-      // Left button only, and never let the press reach the heading.
-      if (event.button !== 0) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const cell = event.currentTarget.closest('th');
-      const was = cell ? cell.getBoundingClientRect().width : MIN_COLUMN_PX;
-      drag.current = {
-        key,
-        from: event.clientX,
-        was,
-        // In Arabic the columns run the other way, so dragging right must
-        // narrow the column rather than widen it.
-        rtl: cell ? getComputedStyle(cell).direction === 'rtl' : false,
-      };
-      event.currentTarget.setPointerCapture(event.pointerId);
-      setResizing(true);
-    },
-    onPointerMove: (event: React.PointerEvent<HTMLSpanElement>) => {
-      const held = drag.current;
-      if (!held) return;
-      const travelled = event.clientX - held.from;
-      const next = Math.max(
-        MIN_COLUMN_PX,
-        Math.round(held.was + (held.rtl ? -travelled : travelled)),
-      );
-      // The pointer moves far more often than a width needs storing, so the
-      // drag paints from state and writes once, on release.
-      const merged = { ...liveWidths.current, [held.key]: next };
-      liveWidths.current = merged;
-      setWidths(merged);
-    },
-    onPointerUp: (event: React.PointerEvent<HTMLSpanElement>) => {
-      if (!drag.current) return;
-      drag.current = null;
-      setResizing(false);
-      try {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      } catch {
-        /* the capture was already surrendered */
-      }
-      keepWidths(liveWidths.current);
-    },
-    onPointerCancel: () => {
-      drag.current = null;
-      setResizing(false);
-      keepWidths(liveWidths.current);
-    },
-    /** A boundary put back: the column returns to the width the screen chose. */
-    onDoubleClick: () => {
-      const { [key]: _dropped, ...rest } = liveWidths.current;
-      keepWidths(rest);
-    },
-  });
-
-  const widthOf = (key: ColumnKey) => {
-    const set = widths[key];
-    return set === undefined ? undefined : { inlineSize: `${set}px` };
-  };
 
   useEffect(() => {
     if (!purchaseSupplierField) return;
@@ -757,85 +639,37 @@ export function InvoiceLinesGrid({
             <th scope="col">#</th>
             <th scope="col">
               {labels.itemCode}
-              <span
-                aria-hidden="true"
-                className={styles.sapColGrip}
-                data-dragging={resizing ? 'true' : undefined}
-                title={labels.resizeColumn}
-                {...grip('code')}
-              />
+              <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('code')} />
             </th>
             <th scope="col">
               {labels.itemName}
-              <span
-                aria-hidden="true"
-                className={styles.sapColGrip}
-                data-dragging={resizing ? 'true' : undefined}
-                title={labels.resizeColumn}
-                {...grip('name')}
-              />
+              <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('name')} />
             </th>
             <th className={styles.sapNum} scope="col">
               {labels.quantity}
-              <span
-                aria-hidden="true"
-                className={styles.sapColGrip}
-                data-dragging={resizing ? 'true' : undefined}
-                title={labels.resizeColumn}
-                {...grip('qty')}
-              />
+              <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('qty')} />
             </th>
             <th className={styles.sapNum} scope="col">
               {labels.unitPrice}
-              <span
-                aria-hidden="true"
-                className={styles.sapColGrip}
-                data-dragging={resizing ? 'true' : undefined}
-                title={labels.resizeColumn}
-                {...grip('price')}
-              />
+              <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('price')} />
             </th>
             <th className={styles.sapNum} scope="col">
               {labels.discount}
-              <span
-                aria-hidden="true"
-                className={styles.sapColGrip}
-                data-dragging={resizing ? 'true' : undefined}
-                title={labels.resizeColumn}
-                {...grip('discount')}
-              />
+              <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('discount')} />
             </th>
             <th className={styles.sapNum} scope="col">
               {labels.total}
-              <span
-                aria-hidden="true"
-                className={styles.sapColGrip}
-                data-dragging={resizing ? 'true' : undefined}
-                title={labels.resizeColumn}
-                {...grip('total')}
-              />
+              <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('total')} />
             </th>
             {showSupplier ? (
               <th scope="col">
                 {labels.supplier}
-                <span
-                  aria-hidden="true"
-                  className={styles.sapColGrip}
-                  data-dragging={resizing ? 'true' : undefined}
-                  title={labels.resizeColumn}
-                  {...grip('supplier')}
-                />
+                <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('supplier')} />
               </th>
             ) : null}
             <th scope="col">
               {labels.warehouse}
-              <span
-                aria-hidden="true"
-                className={styles.sapColGrip}
-                data-dragging={resizing ? 'true' : undefined}
-                title={labels.resizeColumn}
-                {...grip('warehouse')}
-              />
+              <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('warehouse')} />
             </th>
             <th aria-label={labels.remove} />
           </tr>

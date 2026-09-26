@@ -1,6 +1,6 @@
 'use server';
 
-import { runAdminAndReturn, text } from '@/server/admin-action';
+import { rowCount, runAdminAndReturn, text } from '@/server/admin-action';
 import { parseDecimal } from '@domain/money';
 import { parseQuantity } from '@domain/uom';
 import * as opening from '@/server/services/opening-stock';
@@ -21,7 +21,10 @@ export async function createOpeningStock(formData: FormData): Promise<void> {
     async (tx, ctx) => {
       const documentDate = text(formData, 'document_date').trim();
       const lines = [];
-      for (let row = 0; row < OPENING_ROWS; row += 1) {
+      // The grid grows as it is typed, so how many rows it sent travels with
+      // the form rather than being a number both sides had to agree in advance.
+      const claimed = rowCount(formData, OPENING_ROWS);
+      for (let row = 0; row < claimed; row += 1) {
         const itemCode = text(formData, `item_code_${row}`).trim();
         if (!itemCode) continue;
         const quantityText = text(formData, `quantity_${row}`).trim();
