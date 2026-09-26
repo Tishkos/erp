@@ -898,6 +898,10 @@ export function postingRequestFor(input: {
 
   return {
     eventType: `inventory.${input.kind}`,
+    // The document that moved the stock decides which dimensions it must
+    // carry (§4.2's document-type layer) — a sales return's credit to COGS is
+    // judged as a sales return, not as a bare movement.
+    ...(input.sourceDocumentType ? { documentTypeCode: input.sourceDocumentType } : {}),
     source: {
       module: 'inventory',
       // The movement, not the document that caused it: a goods receipt with ten

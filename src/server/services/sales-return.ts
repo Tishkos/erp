@@ -962,6 +962,19 @@ export async function viewByNo(tx: Tx, returnNo: string) {
   return view(tx, row.id);
 }
 
+/** Where each invoice line took its stock from — a returned line's default home. */
+export async function soldFromWarehouses(
+  tx: Tx,
+  arInvoiceLineIds: readonly string[],
+): Promise<Map<string, string | null>> {
+  if (arInvoiceLineIds.length === 0) return new Map();
+  const rows = await tx
+    .select({ id: arInvoiceLine.id, warehouseCode: arInvoiceLine.warehouseCode })
+    .from(arInvoiceLine)
+    .where(inArray(arInvoiceLine.id, [...arInvoiceLineIds]));
+  return new Map(rows.map((row) => [row.id, row.warehouseCode]));
+}
+
 /** Posted invoices a return can be raised against, newest first. */
 export async function returnableInvoices(tx: Tx) {
   return tx

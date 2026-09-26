@@ -65,15 +65,14 @@ export async function receiveReturn(formData: FormData): Promise<void> {
 /**
  * Appendix B — Inspected, then Accepted.
  *
- * The whole quantity, back to the warehouse it was sold from, because block 9
- * asks for one warehouse per line and nothing about splitting a return between
+ * The whole quantity, into the warehouse chosen on each line — block 9 asks
+ * for one warehouse per line and nothing about splitting a return between
  * dispositions. Quarantine and damaged-goods routing exists in the service for
  * §7.5 and is not part of what the sponsor asked for here.
  */
 export async function acceptReturn(formData: FormData): Promise<void> {
   const returnNo = text(formData, 'return_no');
   const id = text(formData, 'id');
-  const warehouseCode = text(formData, 'warehouse_code');
 
   await runAdminAndReturn(async (tx, ctx) => {
     const document = await sr.view(tx, id);
@@ -85,7 +84,8 @@ export async function acceptReturn(formData: FormData): Promise<void> {
         salesReturnLineId: line.id,
         acceptedQuantity: parseQuantity(line.receivedQuantity ?? line.requestedQuantity),
         disposition: 'saleable' as const,
-        destinationWarehouseCode: warehouseCode,
+        // The warehouse chosen on the line (block 9).
+        destinationWarehouseCode: text(formData, `warehouse_code_${line.id}`).trim(),
       })),
     );
     // The goods back on the shelf and the customer credited, together —

@@ -580,7 +580,9 @@ export async function openInvoicesFor(tx: Tx, customerId: string) {
       allocatedIqd: arInvoice.allocatedIqd,
     })
     .from(arInvoice)
-    .where(and(eq(arInvoice.customerId, customerId), inArray(arInvoice.status, ['posted', 'settled'])))
+    .where(and(eq(arInvoice.customerId, customerId), // Part-paid invoices too: block 6 allocates partial payments, and the rest
+      // of a part-paid invoice is still owed.
+      inArray(arInvoice.status, ['posted', 'partially_executed', 'settled'])))
     .orderBy(asc(arInvoice.dueDate));
 
   return rows

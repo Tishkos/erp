@@ -398,6 +398,7 @@ export async function adjust(
     const offsetLine = { role: 'inventory_adjustment', criteria, dimensions };
     const result = await posting.post(tx, ctx, {
       eventType: 'inventory.stock_adjustment',
+      documentTypeCode: 'stock_adjustment',
       source: { module: 'inventory', documentId: id, event: 'adjusted' },
       branchCode: ctx.branchCode,
       documentDate: input.adjustmentDate,

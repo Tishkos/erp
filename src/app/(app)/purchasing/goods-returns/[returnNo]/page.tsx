@@ -22,10 +22,9 @@ import { approveGoodsReturn, postGoodsReturn } from '../actions';
  *
  * Wearing the Journal Entry's window, like every other document here.
  *
- * Approved, then sent. The goods leave on the layer they arrived on, so they go
- * back out at what was paid for them rather than at today's price, and the
- * credit the supplier agrees is a separate act afterwards — it is their figure,
- * not the company's, and it sometimes differs.
+ * Approved, then sent. The goods leave at what the invoice paid for them rather
+ * than at today's price, and sending them posts the whole journal at once:
+ * Accounts Payable (or the bank the refund arrived in) Dr / Inventory Cr.
  */
 export const dynamic = 'force-dynamic';
 

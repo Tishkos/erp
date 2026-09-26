@@ -60,7 +60,16 @@ export default async function SalesReturnPage({
   const found = await withCurrentUser(async (tx) => {
     const document = await sr.viewByNo(tx, decodeURIComponent(returnNo));
     if (!document) return null;
-    return { document, houses: await warehouses.listActive(tx) };
+    return {
+      document,
+      houses: (await warehouses.listActive(tx)).filter(
+        (house) => house.branchCode === document.branchCode,
+      ),
+      soldFrom: await sr.soldFromWarehouses(
+        tx,
+        document.lines.map((line) => line.arInvoiceLineId),
+      ),
+    };
   });
 
   if (!found) notFound();
@@ -124,10 +133,9 @@ export default async function SalesReturnPage({
             ) : null}
             {mayDecide ? (
               <>
-                <form action={acceptReturn}>
+                <form action={acceptReturn} id="sales-return-accept">
                   <input name="id" type="hidden" value={returnDoc.id} />
                   <input name="return_no" type="hidden" value={returnDoc.returnNo} />
-                  <input name="warehouse_code" type="hidden" value={found.houses[0]?.code ?? ''} />
                   <button className="action action--primary" type="submit">
                     {t('sales_returns.accept')}
                   </button>
@@ -183,7 +191,27 @@ export default async function SalesReturnPage({
                   </bdi>
                 </td>
                 <td>
-                  <bdi dir="ltr">{line.destinationWarehouseCode ?? '—'}</bdi>
+                  {/* Block 9 — "Warehouse (where the returned stock will be
+                      allocated)", chosen per line before the goods are
+                      accepted; it opens on the warehouse the line was sold
+                      from. */}
+                  {mayDecide ? (
+                    <select
+                      aria-label={`${column('warehouse')} ${line.itemCode}`}
+                      defaultValue={found.soldFrom.get(line.arInvoiceLineId) ?? ''}
+                      form="sales-return-accept"
+                      name={`warehouse_code_${line.id}`}
+                      required
+                    >
+                      {found.houses.map((house) => (
+                        <option key={house.code} value={house.code}>
+                          {`${house.code} · ${house.name}`}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <bdi dir="ltr">{line.destinationWarehouseCode ?? '—'}</bdi>
+                  )}
                 </td>
               </tr>
             ))}
