@@ -1769,92 +1769,95 @@
 .sapLineGrid {
   table-layout: fixed;
   /* `.sapTable` floors every table at 76rem so the registers keep their shape.
-     The lines grid states its own floor, because it has to survive a laptop:
-     at 76rem it could not draw itself under 1216px and the wrap scrolled
-     sideways on any window narrower than that. */
-  min-inline-size: 60rem;
+     The lines grid states its own floor, and the floor is not a free number:
+     the item's name is the one fluid column, so it receives whatever the fixed
+     columns leave. Set the floor below their sum and the name receives nothing
+     and the column disappears. Every floor here is the sum of this
+     breakpoint's fixed columns plus the narrowest name worth reading. Change a
+     column width and the floor changes with it. */
+  min-inline-size: 68.5rem; /* 54.4 fixed + 14.1 name */
 }
 
-/* The ten columns, widest window first. Only the name is fluid — it takes
-   whatever the others leave, so the grid grows into a wide screen instead of
-   stranding empty space at the end of the row. */
+/* The ten columns, widest window first. Only the name is fluid: it takes what
+   the others leave, so the grid grows into a wide screen instead of stranding
+   empty space at the end of the row. */
 .sapLineGrid .colIndex {
-  inline-size: 2.75rem;
+  inline-size: 2.5rem;
 }
 .sapLineGrid .colCode {
-  inline-size: 9rem;
+  inline-size: 7.5rem;
 }
 .sapLineGrid .colName {
   inline-size: auto;
 }
 .sapLineGrid .colQty {
-  inline-size: 7.5rem;
+  inline-size: 5.5rem;
 }
 .sapLineGrid .colPrice {
-  inline-size: 8.5rem;
+  inline-size: 6.5rem;
 }
 .sapLineGrid .colDiscount {
-  inline-size: 7rem;
+  inline-size: 5.5rem;
 }
 .sapLineGrid .colTotal {
-  inline-size: 8.5rem;
+  inline-size: 6.5rem;
 }
 .sapLineGrid .colSupplier {
-  inline-size: 12rem;
+  inline-size: 9.5rem;
 }
 .sapLineGrid .colWarehouse {
-  inline-size: 11rem;
+  inline-size: 9rem;
 }
 .sapLineGrid .colRemove {
   inline-size: 1.9rem;
 }
 
 /* A laptop, or a half-width window on a desktop. The same ten columns, closer
-   together — none of them is dropped, because a line a person cannot finish
-   typing is worse than a line they have to read carefully. */
+   together — none is dropped, because a line a person cannot finish typing is
+   worse than a line they have to read carefully. */
 @media (max-width: 90rem) {
   .sapLineGrid {
-    min-inline-size: 52rem;
+    min-inline-size: 60.5rem; /* 49.4 fixed + 11.1 name */
     font-size: 0.74rem;
   }
+  .sapLineGrid .colIndex {
+    inline-size: 2.25rem;
+  }
   .sapLineGrid .colCode {
-    inline-size: 7.25rem;
+    inline-size: 6.75rem;
   }
   .sapLineGrid .colQty {
-    inline-size: 5.5rem;
+    inline-size: 5rem;
   }
   .sapLineGrid .colPrice {
-    inline-size: 6.5rem;
+    inline-size: 6rem;
   }
   .sapLineGrid .colDiscount {
-    inline-size: 5.25rem;
+    inline-size: 5rem;
   }
   .sapLineGrid .colTotal {
-    inline-size: 6.5rem;
+    inline-size: 6rem;
   }
   .sapLineGrid .colSupplier {
-    inline-size: 9rem;
+    inline-size: 8.5rem;
   }
   .sapLineGrid .colWarehouse {
-    inline-size: 8.5rem;
+    inline-size: 8rem;
   }
 }
 
 /* A tablet. Tighter again, and the padding goes with it. */
 @media (max-width: 64rem) {
   .sapLineGrid {
-    min-inline-size: 44rem;
+    min-inline-size: 52.75rem; /* 43.65 fixed + 9.1 name */
     font-size: 0.72rem;
   }
   .sapLineGrid th,
   .sapLineGrid td {
     padding-inline: 0.28rem;
   }
-  .sapLineGrid .colIndex {
-    inline-size: 2.25rem;
-  }
   .sapLineGrid .colCode {
-    inline-size: 6.25rem;
+    inline-size: 6rem;
   }
   .sapLineGrid .colQty {
     inline-size: 4.5rem;
@@ -1869,30 +1872,74 @@
     inline-size: 5.5rem;
   }
   .sapLineGrid .colSupplier {
-    inline-size: 7.5rem;
+    inline-size: 7rem;
   }
   .sapLineGrid .colWarehouse {
-    inline-size: 7rem;
+    inline-size: 6.5rem;
   }
 }
 
-/* A phone. Ten columns of form fields do not honestly fit a handset, so the
-   grid stops shrinking here and the wrap scrolls it sideways — the page
-   itself never does. Shrinking further would mean fields too small to type
-   into, which reads as fitting without being usable. */
+/* A handset. Ten columns of form fields do not honestly fit one, so the grid
+   stops shrinking here and the wrap scrolls it sideways — the page itself
+   never does, at any width. Shrinking further would mean fields too small to
+   type into, which reads as fitting without being usable. */
 @media (max-width: 48rem) {
   .sapLineGrid {
-    min-inline-size: 40rem;
+    min-inline-size: 45.25rem; /* 37.65 fixed + 7.6 name */
+  }
+  .sapLineGrid .colIndex {
+    inline-size: 2rem;
   }
   .sapLineGrid .colCode {
-    inline-size: 5.75rem;
+    inline-size: 5.25rem;
+  }
+  .sapLineGrid .colQty {
+    inline-size: 4rem;
+  }
+  .sapLineGrid .colPrice {
+    inline-size: 4.75rem;
+  }
+  .sapLineGrid .colDiscount {
+    inline-size: 4rem;
+  }
+  .sapLineGrid .colTotal {
+    inline-size: 4.75rem;
   }
   .sapLineGrid .colSupplier {
-    inline-size: 6.5rem;
+    inline-size: 5.75rem;
   }
   .sapLineGrid .colWarehouse {
-    inline-size: 6rem;
+    inline-size: 5.25rem;
   }
+}
+
+/* ── Dragging a column boundary ───────────────────────────────────────────
+   The grip lives in the heading, on the boundary it moves. The head is
+   sticky, which is already a positioned box, so the grip hangs off its inline
+   end without the heading needing `position: relative`. A width a person set
+   by hand is an inline style on the `col`, so it beats every rule above and
+   survives a change of breakpoint. */
+.sapColGrip {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: -1px;
+  z-index: 3;
+  inline-size: 0.45rem;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.sapColGrip:hover,
+.sapColGrip[data-dragging='true'] {
+  background: var(--w-line-strong);
+}
+
+/* While a boundary is moving, the pointer is a resize arrow everywhere — the
+   drag is not cancelled by leaving the 7px the grip occupies. */
+.sapLineGrid[data-resizing='true'] {
+  cursor: col-resize;
+  user-select: none;
 }
 
 /* A number reads as a number: right-aligned under its right-aligned heading,

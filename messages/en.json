@@ -1786,6 +1786,7 @@
     },
     "invoices": {
       "save_failed": "The line could not be saved. Your changes are still here; leave the row again to retry.",
+      "resize_column": "Drag to resize this column; double-click to reset it",
       "checking_stock": "Checking stock…",
       "stock_unavailable": "Stock availability is unavailable.",
       "available_stock": "Available stock",

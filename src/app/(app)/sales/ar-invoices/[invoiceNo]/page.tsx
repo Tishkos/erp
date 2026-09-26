@@ -291,6 +291,7 @@ export default async function ArInvoicePage({
             items={found.options}
             loadAvailability={invoiceLineAvailability}
             mode="sale"
+            widthsKey={`erp.lines.ar.${context.principal.userId}`}
             labels={{
               itemCode: column('item_code'),
               itemName: column('item_name'),
@@ -305,6 +306,7 @@ export default async function ArInvoicePage({
               remove: t('remove_line'),
               documentTotal: t('reports.totals'),
               saving: t('journals.saving'),
+              resizeColumn: t('invoices.resize_column'),
               saveFailed: t('invoices.save_failed'),
               checkingStock: t('invoices.checking_stock'),
               stockUnavailable: t('invoices.stock_unavailable'),
