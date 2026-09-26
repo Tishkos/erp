@@ -1,7 +1,16 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Flash, Grid, Select, Submit, SubmitRow, admin as s, matches } from '@/components/admin';
+import {
+  AdminPage,
+  FilterRow,
+  Flash,
+  Select,
+  Submit,
+  SubmitRow,
+  admin as s,
+  matches,
+} from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { ExportMenu } from '@/components/print/export-menu';
@@ -100,9 +109,14 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
 
       {/* One picker rather than five links. Four stages is a list, and a list
           belongs in a control the reader already knows — the same Select every
-          other screen filters with. */}
+          other screen filters with.
+
+          In a `Grid` that one picker was given a whole grid column and its
+          button a line of its own, so a single filter was the widest thing on
+          the screen. A filter is one line to set: the box at its own width and
+          the button beside it. */}
       <form method="get">
-        <Grid>
+        <FilterRow>
           <Select
             defaultValue={status ?? ''}
             emptyLabel={t('in_transit.all')}
@@ -113,10 +127,10 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
               label: label(value),
             }))}
           />
-        </Grid>
-        <SubmitRow>
-          <Submit label={list('search')} />
-        </SubmitRow>
+          <SubmitRow>
+            <Submit label={list('search')} />
+          </SubmitRow>
+        </FilterRow>
       </form>
 
       <div className={s.sapTableWrap}>

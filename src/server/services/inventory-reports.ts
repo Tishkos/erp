@@ -74,6 +74,17 @@ export async function valuation(
   filter: {
     warehouseCode?: string;
     itemCode?: string;
+    /**
+     * What a person typed into the item box: matched against the item's name
+     * and, for somebody who has one, its code.
+     *
+     * Case-insensitive and anywhere in the text, which needs a leading wildcard
+     * — so it is `lower(...)` on both sides to meet the trigram indexes added in
+     * migration 0212. Write it any other way (`ilike`, or the column without
+     * `lower`) and the planner cannot use them and the report goes back to
+     * reading every item.
+     */
+    itemSearch?: string;
     branchCode?: string;
     allPermittedBranches?: boolean;
   } = {},
@@ -83,6 +94,17 @@ export async function valuation(
   const conditions = [sql`l.remaining_quantity > 0`];
   if (filter.warehouseCode) conditions.push(sql`l.warehouse_code = ${filter.warehouseCode}`);
   if (filter.itemCode) conditions.push(sql`l.item_code = ${filter.itemCode}`);
+
+  const term = filter.itemSearch?.trim();
+  if (term) {
+    // The term is a value, never spliced into the statement: `%` and `_` are
+    // wildcards a person may legitimately type, and escaping them here keeps a
+    // search for "A_1" a search for "A_1".
+    const like = `%${term.toLowerCase().replace(/([%_\\])/g, '\\$1')}%`;
+    conditions.push(
+      sql`(lower(i.name) like ${like} escape '\\' or lower(l.item_code) like ${like} escape '\\')`,
+    );
+  }
 
   if (filter.branchCode) {
     conditions.push(sql`l.branch_code = ${filter.branchCode}`);

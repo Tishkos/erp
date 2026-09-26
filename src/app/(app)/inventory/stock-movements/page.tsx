@@ -1,7 +1,15 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
-import { AdminPage, admin as s } from '@/components/admin';
+import {
+  AdminPage,
+  Field,
+  FilterRow,
+  Select,
+  Submit,
+  SubmitRow,
+  admin as s,
+} from '@/components/admin';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -72,38 +80,47 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
       variant="sap"
     >
       <Panel flush>
-        <form className={s.toolbar} method="get">
-          <label>
-            {t('stock_movements.from')}{' '}
-            <input defaultValue={filter.from ?? ''} name="from" type="date" />
-          </label>
-          <label>
-            {t('stock_movements.to')}{' '}
-            <input defaultValue={filter.to ?? ''} name="to" type="date" />
-          </label>
-          <select aria-label={column('item_code')} defaultValue={filter.itemCode ?? ''} name="item">
-            <option value="">{t('stock_movements.all_items')}</option>
-            {itemList.map((row) => (
-              <option key={row.code} value={row.code}>
-                {`${row.code} · ${row.name}`}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label={column('warehouse')}
-            defaultValue={filter.warehouseCode ?? ''}
-            name="warehouse"
-          >
-            <option value="">{t('stock_movements.all_warehouses')}</option>
-            {houses.map((house) => (
-              <option key={house.code} value={house.code}>
-                {`${house.code} · ${house.name}`}
-              </option>
-            ))}
-          </select>
-          <button className="action" type="submit">
-            {t('stock_movements.filter')}
-          </button>
+        {/* The screen's own filters in the application's fields rather than
+            four bare boxes: the date controls then carry the app's calendar
+            button, which is what a person is looking for on this screen. */}
+        <form className={s.filterBar} method="get">
+          <FilterRow>
+            <Field
+              defaultValue={filter.from ?? ''}
+              label={t('stock_movements.from')}
+              name="from"
+              type="date"
+            />
+            <Field
+              defaultValue={filter.to ?? ''}
+              label={t('stock_movements.to')}
+              name="to"
+              type="date"
+            />
+            <Select
+              defaultValue={filter.itemCode ?? ''}
+              emptyLabel={t('stock_movements.all_items')}
+              label={column('item_name')}
+              name="item"
+              options={itemList.map((row) => ({
+                value: row.code,
+                label: `${row.name} · ${row.code}`,
+              }))}
+            />
+            <Select
+              defaultValue={filter.warehouseCode ?? ''}
+              emptyLabel={t('stock_movements.all_warehouses')}
+              label={column('warehouse')}
+              name="warehouse"
+              options={houses.map((house) => ({
+                value: house.code,
+                label: `${house.name} · ${house.code}`,
+              }))}
+            />
+            <SubmitRow>
+              <Submit label={t('stock_movements.filter')} />
+            </SubmitRow>
+          </FilterRow>
         </form>
         <div className="table-wrap">
           <table className="list">

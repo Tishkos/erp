@@ -214,6 +214,7 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
               items={options}
               loadAvailability={invoiceLineAvailability}
               mode="sale"
+              widthsKey={`erp.lines.ar.${context.principal.userId}`}
               labels={{
                 itemCode: column('item_code'),
                 itemName: column('item_name'),
@@ -228,8 +229,8 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
                 remove: t('remove_line'),
                 documentTotal: t('reports.totals'),
                 saving: t('journals.saving'),
+                resizeColumn: t('invoices.resize_column'),
                 saveFailed: t('invoices.save_failed'),
-                noDefaultPrice: t('invoices.no_default_price'),
                 checkingStock: t('invoices.checking_stock'),
                 stockUnavailable: t('invoices.stock_unavailable'),
                 availableStock: t('invoices.available_stock'),

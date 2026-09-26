@@ -1469,6 +1469,7 @@
       "nothing_in_stock": "No stock is held in any warehouse.",
       "as_it_stands": "Stock held now, valued at what it cost",
       "all_items": "All items",
+      "search_item_hint": "Name or code",
       "all_warehouses": "All warehouses"
     },
     "accounts": {
@@ -1786,7 +1787,7 @@
     },
     "invoices": {
       "save_failed": "The line could not be saved. Your changes are still here; leave the row again to retry.",
-      "no_default_price": "No default price is set. Enter a price or configure it on the item.",
+      "resize_column": "Drag to resize this column; double-click to reset it",
       "checking_stock": "Checking stock…",
       "stock_unavailable": "Stock availability is unavailable.",
       "available_stock": "Available stock",

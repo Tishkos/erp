@@ -205,6 +205,7 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
               loadAvailability={invoiceLineAvailability}
               mode="purchase"
               purchaseSupplierField="supplier_id"
+              widthsKey={`erp.lines.ap.${context.principal.userId}`}
               labels={{
                 itemCode: column('item_code'),
                 itemName: column('item_name'),
@@ -219,14 +220,15 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
                 remove: t('remove_line'),
                 documentTotal: t('reports.totals'),
                 saving: t('journals.saving'),
+                resizeColumn: t('invoices.resize_column'),
                 saveFailed: t('invoices.save_failed'),
-                noDefaultPrice: t('invoices.no_default_price'),
                 checkingStock: t('invoices.checking_stock'),
                 stockUnavailable: t('invoices.stock_unavailable'),
                 availableStock: t('invoices.available_stock'),
                 availabilityHint: t('invoices.availability_hint'),
               }}
               locale={locale}
+              searchItems
               warehouses={houses.map((house) => ({ code: house.code, name: house.name }))}
             />
           </DocumentWindow>

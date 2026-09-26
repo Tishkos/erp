@@ -19,12 +19,18 @@ export function NewRecordDialog({
   title,
   closeLabel,
   openOnLoad = false,
+  wide = false,
   children,
 }: {
   readonly buttonLabel: string;
   readonly title: string;
   readonly closeLabel: string;
   readonly openOnLoad?: boolean;
+  /**
+   * For a form built round a grid of lines rather than a column of fields. A
+   * document is read across as well as down, and 44rem cannot hold a line.
+   */
+  readonly wide?: boolean;
   readonly children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -45,7 +51,7 @@ export function NewRecordDialog({
       </button>
       <dialog
         aria-labelledby="admin-dialog-title"
-        className={styles.dialog}
+        className={wide ? `${styles.dialog} ${styles.dialogWide}` : styles.dialog}
         onClick={(event) => {
           // A click on the backdrop (the dialog element itself, not its content) closes it.
           if (event.target === ref.current) ref.current?.close();

@@ -11,6 +11,7 @@ import {
   useTransition,
 } from 'react';
 import styles from './admin.module.css';
+import { ColumnGrip, useColumnWidths } from './column-widths';
 import { PAIRED_CHOICE } from './paired-picker';
 
 /**
@@ -95,7 +96,7 @@ export interface InvoiceLineLabels {
   readonly documentTotal: string;
   readonly saving: string;
   readonly saveFailed: string;
-  readonly noDefaultPrice: string;
+  readonly resizeColumn: string;
   readonly checkingStock: string;
   readonly stockUnavailable: string;
   readonly availableStock: string;
@@ -138,6 +139,25 @@ interface Row {
 
 /** Empty rows drawn under the lines — an accountant reads them as room left. */
 const FILLER_ROWS = 2;
+
+/** This grid's columns, in the order they are drawn. */
+const COLUMN_KEYS = [
+  'index',
+  'code',
+  'name',
+  'qty',
+  'price',
+  'discount',
+  'total',
+  'supplier',
+  'warehouse',
+  'remove',
+] as const;
+type ColumnKey = (typeof COLUMN_KEYS)[number];
+
+
+
+
 
 let counter = 0;
 const blank = (warehouseCode: string): Row => ({
@@ -219,6 +239,7 @@ export function InvoiceLinesGrid({
   loadAvailability,
   showSupplier = false,
   searchItems = false,
+  widthsKey,
   labels,
   currency,
   locale,
@@ -244,6 +265,13 @@ export function InvoiceLinesGrid({
    * leaves this off and the name is shown rather than typed.
    */
   readonly searchItems?: boolean;
+  /**
+   * Where this grid's column widths are kept. It carries the user, so two
+   * people sharing a browser do not inherit each other's layout, and the
+   * document type, so a purchase invoice and a sales invoice are remembered
+   * apart. Omit it and the columns are still draggable — just not remembered.
+   */
+  readonly widthsKey?: string;
   readonly labels: InvoiceLineLabels;
   readonly currency: string;
   readonly locale: string;
@@ -276,6 +304,10 @@ export function InvoiceLinesGrid({
     purchaseSupplierId ?? '',
   );
   const availabilityRequests = useRef(new Map<string, { key: string }>());
+
+  const { widthOf, gripProps, resizing } = useColumnWidths<ColumnKey>(COLUMN_KEYS, widthsKey);
+
+
 
   useEffect(() => {
     if (!purchaseSupplierField) return;
@@ -576,26 +608,69 @@ export function InvoiceLinesGrid({
 
   return (
     <>
-      <table aria-labelledby={headingId} className={styles.sapTable} ref={table}>
+      <table
+        aria-labelledby={headingId}
+        className={`${styles.sapTable} ${styles.sapLineGrid}`}
+        data-resizing={resizing ? 'true' : undefined}
+        ref={table}
+      >
+        {/* Declared, not discovered. Every column but the item's name takes the
+            width its own contents need; the name absorbs what is left, so the
+            grid scales with the window rather than with the longest note in a
+            cell. The widths are classes rather than inline styles because they
+            change with the viewport, and a media query cannot reach past a
+            style attribute. Keep in step with `columns` above. */}
+        <colgroup>
+          <col className={styles.colIndex} style={widthOf('index')} />
+          <col className={styles.colCode} style={widthOf('code')} />
+          <col className={styles.colName} style={widthOf('name')} />
+          <col className={styles.colQty} style={widthOf('qty')} />
+          <col className={styles.colPrice} style={widthOf('price')} />
+          <col className={styles.colDiscount} style={widthOf('discount')} />
+          <col className={styles.colTotal} style={widthOf('total')} />
+          {showSupplier ? (
+            <col className={styles.colSupplier} style={widthOf('supplier')} />
+          ) : null}
+          <col className={styles.colWarehouse} style={widthOf('warehouse')} />
+          <col className={styles.colRemove} style={widthOf('remove')} />
+        </colgroup>
         <thead>
           <tr>
             <th scope="col">#</th>
-            <th scope="col">{labels.itemCode}</th>
-            <th scope="col">{labels.itemName}</th>
+            <th scope="col">
+              {labels.itemCode}
+              <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('code')} />
+            </th>
+            <th scope="col">
+              {labels.itemName}
+              <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('name')} />
+            </th>
             <th className={styles.sapNum} scope="col">
               {labels.quantity}
+              <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('qty')} />
             </th>
             <th className={styles.sapNum} scope="col">
               {labels.unitPrice}
+              <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('price')} />
             </th>
             <th className={styles.sapNum} scope="col">
               {labels.discount}
+              <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('discount')} />
             </th>
             <th className={styles.sapNum} scope="col">
               {labels.total}
+              <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('total')} />
             </th>
-            {showSupplier ? <th scope="col">{labels.supplier}</th> : null}
-            <th scope="col">{labels.warehouse}</th>
+            {showSupplier ? (
+              <th scope="col">
+                {labels.supplier}
+                <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('supplier')} />
+              </th>
+            ) : null}
+            <th scope="col">
+              {labels.warehouse}
+              <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('warehouse')} />
+            </th>
             <th aria-label={labels.remove} />
           </tr>
         </thead>
@@ -661,7 +736,7 @@ export function InvoiceLinesGrid({
                   {live ? null : (
                     <input name={`uom_code_${index}`} type="hidden" value={item?.uomCode ?? ''} />
                   )}
-                  {locked ? <span className={styles.sapNote}>{labels.saving}</span> : null}
+                  {locked ? <span className={styles.sapCellNote}>{labels.saving}</span> : null}
                   {row.error ? (
                     <span className={styles.sapRowError} role="alert">
                       {row.error}
@@ -685,7 +760,7 @@ export function InvoiceLinesGrid({
                     <bdi dir="auto">{item?.name ?? ''}</bdi>
                   )}
                 </td>
-                <td>
+                <td className={styles.sapNum}>
                   <input
                     aria-label={labels.quantity}
                     dir="ltr"
@@ -706,16 +781,16 @@ export function InvoiceLinesGrid({
                     {...field('quantity', index)}
                   />
                   {row.availabilityPending ? (
-                    <span className={styles.sapNote}>{labels.checkingStock}</span>
+                    <span className={styles.sapCellNote}>{labels.checkingStock}</span>
                   ) : row.availabilityError ? (
-                    <span className={styles.sapNote}>{labels.stockUnavailable}</span>
+                    <span className={styles.sapCellNote}>{labels.stockUnavailable}</span>
                   ) : row.availability !== null ? (
-                    <span className={styles.sapNote} title={labels.availabilityHint}>
+                    <span className={styles.sapCellNote} title={labels.availabilityHint}>
                       {labels.availableStock}: {row.availability} {item?.uomCode ?? ''}
                     </span>
                   ) : null}
                 </td>
-                <td>
+                <td className={styles.sapNum}>
                   <input
                     aria-label={labels.unitPrice}
                     dir="ltr"
@@ -734,11 +809,8 @@ export function InvoiceLinesGrid({
                     value={row.unitPrice}
                     {...field('unit_price', index)}
                   />
-                  {item && row.unitPrice.trim() === '' && !defaultPriceFor(item) ? (
-                    <span className={styles.sapNote}>{labels.noDefaultPrice}</span>
-                  ) : null}
                 </td>
-                <td>
+                <td className={styles.sapNum}>
                   <input
                     aria-label={labels.discount}
                     dir="ltr"
