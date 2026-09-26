@@ -11,7 +11,8 @@ import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as shipments from '@/server/services/supplier-shipment';
 import * as warehouses from '@/server/services/warehouses';
-import { advanceShipment } from './actions';
+import * as users from '@/server/services/users';
+import { advanceShipment, setShipmentWatchers } from './actions';
 
 /**
  * Invoice Status Tracking — Operations build, block 8.
@@ -66,9 +67,14 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
       ? (params.status as shipments.ShipmentStatus)
       : undefined;
 
-  const { rows, houses } = await withCurrentUser(async (tx) => ({
+  const mayChooseWatchers = can(principal, 'configure', shipments.PERMISSION_OBJECT);
+  const { rows, houses, people, watching } = await withCurrentUser(async (tx) => ({
     rows: await shipments.list(tx, status ? { status } : {}),
     houses: await warehouses.listActive(tx),
+    people: mayChooseWatchers ? (await users.listAll(tx)).filter((user) => user.isActive) : [],
+    watching: new Set(
+      (await shipments.watchers(tx, context.scope.branchCode)).map((row) => row.userId),
+    ),
   }));
 
   const shown = rows.filter((row) => matches(row, outcome.q));
@@ -203,6 +209,30 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
           </tbody>
         </table>
       </div>
+
+      {/* Block 8 — "Every status change sends a notification to the selected
+          system users." These are the users selected, for this branch. */}
+      {mayChooseWatchers ? (
+        <form action={setShipmentWatchers} className={s.toolbar}>
+          <fieldset>
+            <legend>{t('in_transit.notify_title')}</legend>
+            {people.map((user) => (
+              <label key={user.id} style={{ marginInlineEnd: '1rem' }}>
+                <input
+                  defaultChecked={watching.has(user.id)}
+                  name="watcher"
+                  type="checkbox"
+                  value={user.id}
+                />{' '}
+                <bdi dir="auto">{user.displayName}</bdi>
+              </label>
+            ))}
+          </fieldset>
+          <button className="action" type="submit">
+            {t('in_transit.notify_save')}
+          </button>
+        </form>
+      ) : null}
     </AdminPage>
   );
 }

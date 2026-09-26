@@ -974,7 +974,9 @@ export async function openInvoicesFor(tx: Tx, supplierId: string) {
   const rows = await tx
     .select()
     .from(apInvoice)
-    .where(and(eq(apInvoice.supplierId, supplierId), inArray(apInvoice.status, ['posted', 'settled'])))
+    .where(and(eq(apInvoice.supplierId, supplierId), // Part-paid invoices too: block 6 allocates partial payments, and the rest
+      // of a part-paid invoice is still owed.
+      inArray(apInvoice.status, ['posted', 'partially_executed', 'settled'])))
     .orderBy(asc(apInvoice.dueDate));
 
   return rows

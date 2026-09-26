@@ -72,3 +72,4 @@ export * from './crm';
 export * from './projects';
 export * from './fixed-assets';
 export * from './investments';
+export * from './stock-operations';

@@ -347,17 +347,14 @@ test('an account statement keeps its partner when the filters run', async ({ pag
   await signIn(page, ADMIN);
   const stamp = Date.now().toString(36).toUpperCase();
   const createPartner = async (kind: 'supplier' | 'customer') => {
-    const code = `E2E-STMT-${kind === 'supplier' ? 'S' : 'C'}-${stamp}`;
+    // The code is the system's (Critical Rule 1): read it off the new record.
     await page.goto(`/master-data/${kind}s`);
     await page.getByRole('button', { name: `New ${kind}`, exact: true }).click();
     const dialog = page.locator('dialog[open], [role="dialog"]').first();
-    await dialog.getByLabel('Code', { exact: true }).fill(code);
     await dialog.getByLabel(/^Legal name/).fill(`Statement ${kind} ${stamp}`);
     await dialog.getByRole('button', { name: 'Create', exact: true }).click();
-    await page.waitForURL(new RegExp(`/master-data/business-partners/${code}(?:\\?|$)`), {
-      timeout: 60_000,
-    });
-    return code;
+    await page.waitForURL(/\/master-data\/business-partners\/[^/?]+/, { timeout: 60_000 });
+    return decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!.split('?')[0]!);
   };
 
   const sides = [
@@ -411,16 +408,25 @@ test('item sales account appears in invoice account selection', async ({ page })
   await press(page, 'Approve', 'Approved');
 
   await signIn(page, ADMIN);
-  const itemCode = `E2E-ITEM-${stamp}`;
   await page.goto('/master-data/items');
   await page.getByRole('button', { name: 'New item' }).click();
   const itemDialog = page.locator('dialog[open], [role="dialog"]').first();
-  await itemDialog.getByLabel('Code', { exact: true }).fill(itemCode);
-  await itemDialog.getByLabel(/^Name/).fill(`E2E Routed Item ${stamp}`);
-  await itemDialog.getByLabel('Base unit', { exact: true }).selectOption('EA');
-  await itemDialog.getByLabel('Tracking', { exact: true }).selectOption('batch');
+  // Block 1's form: the full name and the accounts. The code is minted.
+  await itemDialog.getByLabel(/Item Full Name/).fill(`E2E Routed Item ${stamp}`);
+  for (const [label, wanted] of [
+    [/Inventory account/, 'Inventory'],
+    [/COGS account/, 'Cost of Goods Sold'],
+  ] as const) {
+    const select = itemDialog.getByLabel(label);
+    const value = await select.evaluate((element, text) => {
+      const options = [...(element as HTMLSelectElement).options].filter((o) => o.value);
+      return (options.find((o) => o.textContent?.includes(text)) ?? options[0])?.value ?? '';
+    }, wanted);
+    await select.selectOption(value);
+  }
   await itemDialog.getByRole('button', { name: 'Create' }).click();
-  await page.waitForURL(new RegExp(`/master-data/items/${itemCode}`), { timeout: 60_000 });
+  await page.waitForURL(/\/master-data\/items\/[^/?]+/, { timeout: 60_000 });
+  const itemCode = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!.split('?')[0]!);
   const salesAccount = page.getByLabel('Sales account', { exact: true });
   const salesAccountId = await salesAccount
     .locator('option')
@@ -436,16 +442,13 @@ test('item sales account appears in invoice account selection', async ({ page })
     .click();
   await page.waitForLoadState('networkidle');
 
-  const customerCode = `E2E-CUST-${stamp}`;
   await page.goto('/master-data/customers');
   await page.getByRole('button', { name: 'New customer', exact: true }).click();
   const customerDialog = page.locator('dialog[open], [role="dialog"]').first();
-  await customerDialog.getByLabel('Code', { exact: true }).fill(customerCode);
   await customerDialog.getByLabel(/^Legal name/).fill(`E2E Routed Customer ${stamp}`);
   await customerDialog.getByRole('button', { name: 'Create', exact: true }).click();
-  await page.waitForURL(new RegExp(`/master-data/business-partners/${customerCode}`), {
-    timeout: 60_000,
-  });
+  await page.waitForURL(/\/master-data\/business-partners\/[^/?]+/, { timeout: 60_000 });
+  const customerCode = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!.split('?')[0]!);
 
   await page.goto('/sales/ar-invoices/new');
   await expect(page.locator('input[name="item_code_0"]')).toBeVisible({ timeout: 60_000 });
@@ -480,16 +483,13 @@ test('a sales invoice header carries block 5 fields, and approves without dimens
   await signIn(page, ADMIN);
 
   const stamp = Date.now().toString(36).toUpperCase();
-  const customerCode = `E2E-DIM-${stamp}`;
   await page.goto('/master-data/customers');
   await page.getByRole('button', { name: 'New customer', exact: true }).click();
   const dialog = page.locator('dialog[open], [role="dialog"]').first();
-  await dialog.getByLabel('Code', { exact: true }).fill(customerCode);
   await dialog.getByLabel(/^Legal name/).fill(`Dimension Customer ${stamp}`);
   await dialog.getByRole('button', { name: 'Create', exact: true }).click();
-  await page.waitForURL(new RegExp(`/master-data/business-partners/${customerCode}(?:\\?saved=1)?$`), {
-    timeout: 60_000,
-  });
+  await page.waitForURL(/\/master-data\/business-partners\/[^/?]+/, { timeout: 60_000 });
+  const customerCode = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!.split('?')[0]!);
 
   await page.goto('/sales/ar-invoices/new');
   await expect(page.locator('input[name="item_code_0"]')).toBeVisible({ timeout: 60_000 });

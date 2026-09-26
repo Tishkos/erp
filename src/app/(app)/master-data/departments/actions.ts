@@ -7,16 +7,18 @@ const LIST = '/master-data/departments';
 const record = (code: string) => `${LIST}/${encodeURIComponent(code)}`;
 
 export async function createDepartment(formData: FormData): Promise<void> {
-  const code = text(formData, 'code').trim().toUpperCase();
+  // No code: the system mints it (Critical Rule 1).
   await runAdminAndReturn(
     (tx, ctx) =>
       departments.create(tx, ctx, {
-        code,
         name: text(formData, 'name'),
         parentCode: text(formData, 'parentCode') || null,
         isFinance: flag(formData, 'isFinance'),
       }),
-    (value) => (value ? record(code) : LIST),
+    (value) => {
+      const created = value as { code?: string } | null | undefined;
+      return created?.code ? record(created.code) : LIST;
+    },
   );
 }
 

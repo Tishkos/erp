@@ -48,11 +48,11 @@
     "reservations": "الحجوزات",
     "pick_lists": "قوائم الالتقاط",
     "delivery_notes": "إشعارات التسليم",
-    "ar_invoices": "فواتير الحسابات المدينة (A/R)",
+    "ar_invoices": "فواتير المبيعات",
     "cash_sales": "المبيعات النقدية",
     "customer_receipts": "مقبوضات العملاء",
     "credit_control": "مراقبة الائتمان",
-    "sales_returns": "مردودات المبيعات",
+    "sales_returns": "مرتجعات المبيعات",
     "customer_credit_memos": "الإشعارات الدائنة للعملاء",
     "warranty_inquiry": "الاستعلام عن الضمان",
     "sales_reports": "التقارير",
@@ -61,26 +61,26 @@
     "purchase_orders": "أوامر الشراء",
     "goods_receipts": "استلامات البضائع",
     "service_receipts": "استلام الخدمات / تأكيد المصروفات",
-    "ap_invoices": "فواتير الحسابات الدائنة (A/P)",
+    "ap_invoices": "فواتير المشتريات",
     "supplier_advances": "سلف الموردين",
     "supplier_payments": "مدفوعات الموردين",
-    "goods_returns": "مرتجعات البضائع",
+    "goods_returns": "مرتجعات المشتريات",
     "supplier_credit_memos": "الإشعارات الدائنة للموردين",
     "match_exceptions": "استثناءات المطابقة",
     "purchasing_reports": "التقارير",
     "purchasing_settings": "الإعدادات",
     "availability": "التوافر",
-    "opening_stock": "المخزون الافتتاحي",
-    "stock_movements": "حركات المخزون",
-    "transfer_requests": "طلبات التحويل",
-    "in_transit": "قيد النقل",
+    "opening_stock": "رصيد أول المدة",
+    "stock_movements": "حركة المخزون",
+    "transfer_requests": "التحويل",
+    "in_transit": "تتبع حالة الفواتير",
     "quarantine": "الحجر",
     "inventory_returns": "المرتجعات",
     "damaged_goods": "البضائع التالفة",
     "serial_batch_tracking": "تتبع الرقم التسلسلي / الدفعة",
     "uom": "وحدات القياس",
-    "stock_reconciliation": "تسوية المخزون",
-    "fifo_valuation": "تقييم الوارد أولًا صادر أولًا (FIFO)",
+    "stock_reconciliation": "تسوية الأصناف",
+    "fifo_valuation": "تقرير المستودعات",
     "inventory_reports": "التقارير",
     "inventory_settings": "الإعدادات",
     "project_master": "الملف الرئيسي للمشروع",
@@ -410,7 +410,18 @@
     "customer_code": "رمز العميل",
     "customer_name": "اسم العميل",
     "bank_code": "رمز البنك/الصندوق",
-    "bank_name": "اسم البنك/الصندوق"
+    "bank_name": "اسم البنك/الصندوق",
+    "document_no": "الرقم",
+    "date": "التاريخ",
+    "average_unit_price": "متوسط سعر الوحدة",
+    "from_warehouse": "من مستودع",
+    "to_warehouse": "إلى مستودع",
+    "in_out": "إدخال/إخراج",
+    "adjustment_quantity": "كمية التسوية",
+    "movement": "الحركة",
+    "stock_in": "إدخال",
+    "stock_out": "إخراج",
+    "document": "المستند"
   },
   "list": {
     "search": "بحث",
@@ -1675,7 +1686,8 @@
       "inventory_account": "حساب المخزون",
       "inventory_account_hint": "الحساب الذي يُحفظ فيه مخزون هذه المادة. يُدين عند الشراء ويُدائن عند البيع.",
       "cogs_account": "حساب تكلفة المبيعات",
-      "cogs_account_hint": "تكلفة هذه المادة عند بيعها."
+      "cogs_account_hint": "تكلفة هذه المادة عند بيعها.",
+      "full_name": "الاسم الكامل للصنف"
     },
     "partners": {
       "subtitle_customer": "من نبيع لهم. سجل واحد لكل شركة، مهما كانت صفتها الأخرى لدينا.",
@@ -1931,7 +1943,9 @@
       "advance": "نقل إلى",
       "where": "موقع البضاعة",
       "all": "الكل",
-      "no_warehouse_for_stage": "لم يُحدَّد مخزن للمرحلة التالية."
+      "no_warehouse_for_stage": "لم يُحدَّد مخزن للمرحلة التالية.",
+      "notify_title": "إشعار هؤلاء المستخدمين عند تغيّر الحالة",
+      "notify_save": "حفظ"
     },
     "setup": {
       "no_customers": "أضف عميلاً أولاً.",
@@ -1960,7 +1974,53 @@
       "control_hint": "لا تُعرض هنا إلا الحسابات المحددة كحساب رقابة من نوع {kind}. حدد النوع في دليل الحسابات.",
       "missing": "{count, plural, zero {لا يوجد} one {سطر مطلوب واحد بلا حساب} two {سطران مطلوبان بلا حساب} few {# أسطر مطلوبة بلا حساب} many {# سطرًا مطلوبًا بلا حساب} other {# سطر مطلوب بلا حساب}}",
       "complete": "كل سطر مطلوب له حساب"
-    }
+    },
+    "transfers": {
+      "subtitle": "أصناف منقولة من مستودع إلى آخر",
+      "new": "تحويل جديد",
+      "none": "لا توجد تحويلات بعد.",
+      "created_note": "يمنح النظام التحويل رقمه. تخرج البضاعة من المستودع الأول وتدخل الثاني بكلفتها نفسها."
+    },
+    "reconciliation": {
+      "subtitle": "مطابقة كمية النظام مع الكمية الفعلية",
+      "new": "تسوية جديدة",
+      "none": "لا توجد تسويات بعد.",
+      "created_note": "الإدخال يضيف مخزونًا وُجد، والإخراج يزيل مخزونًا مفقودًا. يمنح النظام التسوية رقمها.",
+      "in": "إدخال",
+      "out": "إخراج"
+    },
+    "opening_stock": {
+      "subtitle": "المخزون الذي تبدأ به الشركة",
+      "new": "رصيد أول مدة جديد",
+      "none": "لا يوجد رصيد أول مدة بعد.",
+      "created_note": "يمنح النظام المستند رقمه. الحفظ يرسله للموافقة، والموافقة تُدخل المخزون.",
+      "approve": "موافقة وترحيل",
+      "awaiting": "بانتظار موافقة شخص غير الذي أدخله.",
+      "approved_by": "وافق عليه",
+      "lines": "البنود",
+      "total": "المجموع"
+    },
+    "stock_movements": {
+      "subtitle": "كل حركات المخزون إدخالًا وإخراجًا",
+      "none": "لا توجد حركات في هذه الفترة.",
+      "filter": "عرض",
+      "all_items": "كل الأصناف",
+      "all_warehouses": "كل المستودعات",
+      "from": "من",
+      "to": "إلى",
+      "type": {
+        "opening": "رصيد أول المدة",
+        "purchase": "شراء",
+        "sale": "بيع",
+        "transfer": "تحويل",
+        "shipment": "تتبع حالة الفواتير",
+        "reconciliation": "تسوية",
+        "sales_return": "مرتجع مبيعات",
+        "purchase_return": "مرتجع مشتريات",
+        "other": "أخرى"
+      }
+    },
+    "minted_code_note": "يمنحه النظام رمزه عند الحفظ. لا يمكن كتابة الرمز أو تغييره."
   },
   "profile": {
     "title": "ملفي الشخصي",
@@ -2102,7 +2162,9 @@
       "sales_customer_receipt_identified": "سند قبض — عند تحديد العميل",
       "purchasing_supplier_payment": "دفعة لمورد",
       "purchasing_supplier_credit_memo": "مرتجع مشتريات",
-      "sales_customer_credit_memo": "مرتجع مبيعات"
+      "sales_customer_credit_memo": "مرتجع مبيعات",
+      "inventory_opening_stock": "رصيد أول المدة للمخزون",
+      "inventory_stock_adjustment": "تسوية الأصناف"
     },
     "role": {
       "supplier_payable": "ما على الشركة للمورد",
@@ -2113,7 +2175,9 @@
       "sales_revenue": "المبيعات",
       "customer_clearing": "مبالغ مقبوضة لم تُنسب إلى عميل",
       "return_clearing": "بضاعة مرتجعة لم يصدر بها إشعار",
-      "sales_returns": "عكس المبيعات"
+      "sales_returns": "عكس المبيعات",
+      "opening_balance": "الحساب المقابل لرصيد أول المدة",
+      "inventory_adjustment": "فروقات الجرد (زيادة أو عجز)"
     }
   }
 }

@@ -11,6 +11,7 @@ import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as banks from '@/server/services/bank-cash-accounts';
 import * as gr from '@/server/services/goods-return';
+import * as warehouses from '@/server/services/warehouses';
 import { createGoodsReturn } from '../actions';
 
 /**
@@ -54,10 +55,13 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
 
   const chosen = typeof params.invoice === 'string' ? params.invoice : '';
 
-  const { invoices, lines, accounts } = await withCurrentUser(async (tx) => ({
+  const { invoices, lines, accounts, houses } = await withCurrentUser(async (tx) => ({
     invoices: await gr.returnableInvoices(tx),
     lines: chosen ? await gr.returnableLinesFor(tx, chosen) : [],
     accounts: [...(await banks.listOfKind(tx, 'bank')), ...(await banks.listOfKind(tx, 'cash'))],
+    houses: (await warehouses.listActive(tx)).filter(
+      (house) => house.branchCode === context.scope.branchCode,
+    ),
   }));
 
   const invoice = invoices.find((row) => row.id === chosen);
@@ -198,7 +202,20 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
                           <bdi dir="ltr">{money(line.unitPrice)}</bdi>
                         </td>
                         <td>
-                          <bdi dir="ltr">{line.warehouseCode ?? '—'}</bdi>
+                          {/* Block 10 — "Warehouse (from which the item will
+                              be returned)". Opens on where the invoice booked
+                              it; the goods may have been moved since. */}
+                          <select
+                            aria-label={`${column('warehouse')} ${line.itemCode}`}
+                            defaultValue={line.warehouseCode ?? ''}
+                            name={`warehouse_code_${row}`}
+                          >
+                            {houses.map((house) => (
+                              <option key={house.code} value={house.code}>
+                                {`${house.code} · ${house.name}`}
+                              </option>
+                            ))}
+                          </select>
                         </td>
                         <td className={s.sapNum}>
                           <bdi dir="ltr">{String(Number(line.returnable))}</bdi>

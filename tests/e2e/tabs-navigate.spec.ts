@@ -27,13 +27,13 @@ test.describe('section tabs navigate without reloading', () => {
     await signIn(page);
 
     await page.goto('/master-data/suppliers');
-    await expect(page.getByRole('link', { name: 'A/P Invoices' })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole('link', { name: 'Purchase Invoices' })).toBeVisible({ timeout: 60_000 });
 
     await page.evaluate(() => {
       (window as unknown as { marker?: string }).marker = 'same-document';
     });
 
-    await page.getByRole('link', { name: 'A/P Invoices' }).click();
+    await page.getByRole('link', { name: 'Purchase Invoices' }).click();
     await page.waitForURL(/\/purchasing\/ap-invoices/, { timeout: 60_000 });
     await expect(page.getByRole('heading', { name: 'Purchase Invoices' }).first()).toBeVisible({
       timeout: 60_000,
@@ -49,10 +49,10 @@ test.describe('section tabs navigate without reloading', () => {
     // A second of blank screen reads as a reload even when the context proves
     // it was not one.
     await page.goto('/master-data/suppliers');
-    await expect(page.getByRole('link', { name: 'A/P Invoices' })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole('link', { name: 'Purchase Invoices' })).toBeVisible({ timeout: 60_000 });
 
     const started = Date.now();
-    await page.getByRole('link', { name: 'A/P Invoices' }).click();
+    await page.getByRole('link', { name: 'Purchase Invoices' }).click();
     await expect(page.getByRole('heading', { name: 'Purchase Invoices' }).first()).toBeVisible({
       timeout: 60_000,
     });

@@ -16,7 +16,6 @@ import {
   SubmitRow,
   matches,
 } from '@/components/admin';
-import { AutoCode } from '@/components/admin/auto-code';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -66,10 +65,9 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
             title={t('payment_methods.new')}
           >
             <p className="muted">{t('payment_methods.created_note')}</p>
-            <AutoCode codeId="f-code" mode="upper" nameId="f-name" />
+            <p className="muted">{t('minted_code_note')}</p>
             <Form action={createPaymentMethod}>
               <Grid>
-                <Field hint={t('code_auto_hint')} label={t('code')} name="code" />
                 <Field label={t('name')} name="name" required requiredLabel={t('required_hint')} />
                 <Select
                   defaultValue="bank"

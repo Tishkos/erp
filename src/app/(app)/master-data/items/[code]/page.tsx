@@ -29,7 +29,6 @@ import { formatQuantity, parseQuantity } from '@domain/uom';
 import { formatMoney, type Locale } from '@/i18n/config';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as items from '@/server/services/items';
-import * as uom from '@/server/services/units-of-measure';
 import {
   linkItemSupplier,
   makeDefaultSupplier,
@@ -82,7 +81,6 @@ export default async function ItemPage({
       const row = await items.detail(tx, code);
       return {
         row,
-        units: mayEdit ? await uom.listActive(tx) : [],
         accounts: mayEdit ? await coa.postableAccounts(tx) : [],
         suppliers: mayEdit ? await items.selectableSuppliers(tx) : [],
       };
@@ -92,7 +90,7 @@ export default async function ItemPage({
     }
   });
   if (!data) notFound();
-  const { row, units, accounts, suppliers } = data;
+  const { row, accounts, suppliers } = data;
 
   const revenue = accounts.filter((a) => a.accountType === 'revenue');
   const expense = accounts.filter((a) => a.accountType === 'expense');
@@ -128,27 +126,8 @@ export default async function ItemPage({
           <Panel title={t('details')}>
             <ul className={s.profileFacts}>
               <li>
-                <span>{t('items.kind')}</span>
-                <span>{row.isStock ? t('items.kind_stock') : t('items.kind_service')}</span>
-              </li>
-              <li>
-                <span>{t('items.base_uom')}</span>
-                <span>
-                  {row.baseUomCode}
-                  {row.baseUomName ? ` · ${row.baseUomName}` : ''}
-                </span>
-              </li>
-              <li>
-                <span>{t('items.tracking')}</span>
-                <span>{row.tracking ? t(`items.tracking_${row.tracking}`) : t('items.tracking_none')}</span>
-              </li>
-              <li>
                 <span>{t('items.sales_account')}</span>
                 <span>{row.salesAccount ?? t('none')}</span>
-              </li>
-              <li>
-                <span>{t('items.purchase_account')}</span>
-                <span>{row.purchaseAccount ?? t('none')}</span>
               </li>
               <li>
                 <span>{t('items.inventory_account')}</span>
@@ -157,10 +136,6 @@ export default async function ItemPage({
               <li>
                 <span>{t('items.cogs_account')}</span>
                 <span>{row.cogsAccount ?? t('none')}</span>
-              </li>
-              <li>
-                <span>{t('items.warranty_months')}</span>
-                <span>{row.warrantyMonths ?? t('none')}</span>
               </li>
               <li>
                 <span>{t('items.selling_price')}</span>
@@ -372,33 +347,19 @@ export default async function ItemPage({
                     required
                     requiredLabel={t('required_hint')}
                   />
-                  <Select
-                    defaultValue={row.isStock ? 'stock' : 'service'}
-                    hint={t('items.kind_hint')}
-                    label={t('items.kind')}
-                    name="isStock"
-                    options={[
-                      { value: 'stock', label: t('items.kind_stock') },
-                      { value: 'service', label: t('items.kind_service') },
-                    ]}
+                  {/* Not block 1's fields, so not on the screen — and carried
+                      through a save, so what is stored is not wiped by its
+                      absence. */}
+                  <input name="isStock" type="hidden" value={row.isStock ? 'stock' : 'service'} />
+                  <input name="baseUomCode" type="hidden" value={row.baseUomCode} />
+                  <input name="tracking" type="hidden" value={row.tracking ?? ''} />
+                  <input name="purchaseAccountId" type="hidden" value={row.purchaseAccountId ?? ''} />
+                  <input
+                    name="warrantyMonths"
+                    type="hidden"
+                    value={row.warrantyMonths === null ? '' : String(row.warrantyMonths)}
                   />
-                  <Select
-                    defaultValue={row.baseUomCode}
-                    label={t('items.base_uom')}
-                    name="baseUomCode"
-                    options={units.map((u) => ({ value: u.code, label: `${u.code} · ${u.name}` }))}
-                    required
-                  />
-                  <Select
-                    defaultValue={row.tracking ?? 'batch'}
-                    hint={t('items.tracking_hint')}
-                    label={t('items.tracking')}
-                    name="tracking"
-                    options={items.ITEM_TRACKING.map((value) => ({
-                      value,
-                      label: t(`items.tracking_${value}`),
-                    }))}
-                  />
+                  <input name="description" type="hidden" value={row.description ?? ''} />
                   {/* Block 1's fields are the code, the name, the suppliers
                       and the three accounts. The category is none of them, so
                       it is off the screen — and carried through a save, so
@@ -411,14 +372,6 @@ export default async function ItemPage({
                     label={t('items.sales_account')}
                     name="salesAccountId"
                     options={revenue.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
-                  />
-                  <Select
-                    defaultValue={row.purchaseAccountId ?? ''}
-                    emptyLabel={t('items.account_by_rule')}
-                    hint={t('items.purchase_account_hint')}
-                    label={t('items.purchase_account')}
-                    name="purchaseAccountId"
-                    options={expense.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
                   />
                   <Select
                     defaultValue={row.inventoryAccountId ?? ''}
@@ -435,21 +388,6 @@ export default async function ItemPage({
                     label={t('items.cogs_account')}
                     name="cogsAccountId"
                     options={expense.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
-                  />
-                  <Field
-                    defaultValue={row.warrantyMonths === null ? '' : String(row.warrantyMonths)}
-                    hint={t('items.warranty_hint')}
-                    label={t('items.warranty_months')}
-                    min={0}
-                    name="warrantyMonths"
-                    type="number"
-                  />
-                  <Field
-                    defaultValue={row.description}
-                    label={column('description')}
-                    name="description"
-                    type="textarea"
-                    wide
                   />
                 </Grid>
                 <SubmitRow>

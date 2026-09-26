@@ -32,14 +32,12 @@ import { businessPartner, itemSupplier, paymentTerms } from '../db/schema';
 import {
   AdminNotFoundError,
   AdminValidationError,
-  codeFromName,
-  normaliseCode,
   permit,
   recordChange,
   requireText,
-  uniqueCode,
   type ActorContext,
 } from './administration';
+import { allocateFreeCode } from './numbering';
 import { createPartner, loadPartner, updatePartner, PERMISSION_OBJECT } from './business-partner';
 
 export { PERMISSION_OBJECT };
@@ -166,32 +164,22 @@ export async function createInRole(
   tx: Tx,
   ctx: ActorContext,
   role: PartnerRole,
-  input: PartnerInput & { readonly code?: string; readonly confirmedNotDuplicate?: boolean },
+  input: PartnerInput & { readonly confirmedNotDuplicate?: boolean },
 ) {
   const legalName = requireText(input.legalName, 'legalName');
 
-  const code = input.code?.trim()
-    ? normaliseCode(input.code)
-    : await uniqueCode(codeFromName(legalName), async (candidate) => {
-        const [row] = await tx
-          .select({ code: businessPartner.code })
-          .from(businessPartner)
-          .where(eq(businessPartner.code, candidate));
-        return Boolean(row);
-      });
-
+  // The same name, exactly, is the same partner: a supplier typed in on the
+  // Customers screen is a supplier who is also a customer (§3.1).
   const [existing] = await tx
     .select({ id: businessPartner.id, code: businessPartner.code, isCustomer: businessPartner.isCustomer, isSupplier: businessPartner.isSupplier })
     .from(businessPartner)
-    .where(eq(businessPartner.code, code))
+    .where(sql`lower(btrim(${businessPartner.legalName})) = lower(${legalName})`)
     .limit(1);
 
   if (existing) {
-    // The code is taken. If it is taken by a partner that simply lacks this
-    // role, grant it; otherwise the person is trying to create a duplicate.
     const alreadyInRole = role === 'customer' ? existing.isCustomer : existing.isSupplier;
     if (alreadyInRole) {
-      throw new AdminValidationError('code', `'${code}' is already a ${role}`);
+      throw new AdminValidationError('legalName', `'${legalName}' is already a ${role} (${existing.code})`);
     }
     await updatePartner(
       tx,
@@ -202,6 +190,22 @@ export async function createInRole(
     );
     return { id: existing.id, code: existing.code };
   }
+
+  // Minted, never typed — Critical Rule 1 (migration 0208). CUS- for a
+  // customer, SUP- for a supplier; a partner that later takes the other role
+  // keeps the code it was given.
+  const code = await allocateFreeCode(
+    tx,
+    role === 'customer' ? 'CUSTOMER_CODE' : 'SUPPLIER_CODE',
+    async (candidate) => {
+      const [row] = await tx
+        .select({ code: businessPartner.code })
+        .from(businessPartner)
+        .where(eq(businessPartner.code, candidate));
+      return Boolean(row);
+    },
+    ctx.principal.userId,
+  );
 
   const created = await createPartner(tx, ctx, {
     code,

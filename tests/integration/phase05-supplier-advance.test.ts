@@ -40,7 +40,11 @@ async function createUser(role: string): Promise<ActorContext> {
     `${id}@example.com`,
     role,
   ]);
-  await ownerPool.query(`insert into user_role (user_id, role_code) values ($1,$2)`, [id, role]);
+  // 'accounting_manager+ceo' is a manager who also holds the CEO's invoice
+  // approval (Operations build, blocks 4 and 5).
+  for (const code of role.split('+')) {
+    await ownerPool.query(`insert into user_role (user_id, role_code) values ($1,$2)`, [id, code]);
+  }
   await ownerPool.query(`insert into user_branch_scope (user_id, branch_code) values ($1,$2)`, [
     id,
     BAGHDAD,
@@ -79,7 +83,7 @@ beforeEach(async () => {
   }
 
   clerk = await createUser('accounting_officer');
-  manager = await createUser('accounting_manager');
+  manager = await createUser('accounting_manager+ceo');
 
   const { rows: partner } = await ownerPool.query(
     `insert into business_partner (code, legal_name, is_supplier, status, active)

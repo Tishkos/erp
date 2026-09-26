@@ -19,11 +19,10 @@ const createdRecord = (value: unknown) => {
 };
 
 export async function createCostCentre(formData: FormData): Promise<void> {
-  const code = text(formData, 'code').trim().toUpperCase();
+  // No code: the system mints it (Critical Rule 1).
   await runAdminAndReturn(
     (tx, ctx) =>
       costCentres.create(tx, ctx, {
-        code,
         name: text(formData, 'name'),
         ownerUserId: text(formData, 'ownerUserId') || null,
         branchCode: text(formData, 'branchCode') || null,

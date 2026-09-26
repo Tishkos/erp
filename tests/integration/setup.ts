@@ -538,6 +538,10 @@ export async function resetTestData(): Promise<void> {
 
     await client.query('delete from warehouse_transfer_line');
     await client.query('delete from warehouse_transfer');
+    // Operations block 7's transfer and reconciliation records (migration
+    // 0207). Append-only in production; lifted here only.
+    await client.query('delete from stock_transfer');
+    await client.query('delete from stock_adjustment');
 
     // Opening stock likewise: an approved document is immutable in production
     // (§1.1) because its lines are the FIFO layers every margin rests on. The
@@ -706,6 +710,12 @@ export async function resetTestData(): Promise<void> {
                          -- migrations 0204 and 0205. Like the account codes
                          -- above, these survive the reset.
                          'ITEM_CODE', 'BANK_ACCOUNT_CODE', 'CASH_ACCOUNT_CODE',
+                         -- Operations block 7's reconciliation, migration 0207.
+                         'STOCK_ADJUSTMENT',
+                         -- Customer, supplier, warehouse and payment term
+                         -- codes, migration 0208.
+                         'CUSTOMER_CODE', 'SUPPLIER_CODE', 'WAREHOUSE_CODE', 'PAYMENT_TERM_CODE',
+                         'DEPARTMENT_CODE', 'COST_CENTRE_CODE', 'PAYMENT_METHOD_CODE',
                          -- Phase 00, seeded by migration 0160.
                          'INVOICE',
                          'JOURNAL_ENTRY', 'WAREHOUSE_TRANSFER', 'OPENING_STOCK', 'STOCK_COUNT',

@@ -13,14 +13,13 @@ import { appUser, department, userDepartmentScope } from '../db/schema';
 import {
   AdminNotFoundError,
   AdminValidationError,
-  codeFromName,
   normaliseCode,
-  uniqueCode,
   permit,
   recordChange,
   requireText,
   type ActorContext,
 } from './administration';
+import { allocateFreeCode } from './numbering';
 
 export const PERMISSION_OBJECT = 'department';
 
@@ -81,18 +80,20 @@ async function parentOrNull(tx: Tx, parentCode: string | null | undefined, self?
 export async function create(
   tx: Tx,
   ctx: ActorContext,
-  input: DepartmentInput & { readonly code?: string },
+  input: DepartmentInput,
 ) {
   await permit(ctx, 'create', PERMISSION_OBJECT);
   const name = requireText(input.name, 'name');
-  const code = input.code?.trim()
-    ? normaliseCode(input.code)
-    : await uniqueCode(codeFromName(name), async (candidate) => {
-        const [row] = await tx.select({ code: department.code }).from(department).where(eq(department.code, candidate));
-        return Boolean(row);
-      });
-  const [existing] = await tx.select({ code: department.code }).from(department).where(eq(department.code, code));
-  if (existing) throw new AdminValidationError('code', `'${code}' is already a department`);
+  // Minted, never typed — Critical Rule 1 (migration 0208).
+  const code = await allocateFreeCode(
+    tx,
+    'DEPARTMENT_CODE',
+    async (candidate) => {
+      const [row] = await tx.select({ code: department.code }).from(department).where(eq(department.code, candidate));
+      return Boolean(row);
+    },
+    ctx.principal.userId,
+  );
 
   const values = {
     code,

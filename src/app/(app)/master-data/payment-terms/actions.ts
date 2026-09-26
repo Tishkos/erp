@@ -33,8 +33,8 @@ function instalmentsFrom(formData: FormData) {
 export async function createPaymentTerm(formData: FormData): Promise<void> {
   await runAdminAndReturn(
     (tx, ctx) =>
+      // No code: the system mints it (Critical Rule 1).
       terms.create(tx, ctx, {
-        code: text(formData, 'code').trim().toUpperCase(),
         name: text(formData, 'name'),
         basis: text(formData, 'basis'),
         dueDays: Number(text(formData, 'dueDays') || '0'),

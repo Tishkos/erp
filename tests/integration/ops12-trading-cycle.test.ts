@@ -71,7 +71,11 @@ async function createUser(role: string): Promise<ActorContext> {
     `${id}@example.com`,
     'Test User',
   ]);
-  await ownerPool.query(`insert into user_role (user_id, role_code) values ($1,$2)`, [id, role]);
+  // 'accounting_manager+ceo' is a manager who also holds the CEO's invoice
+  // approval (Operations build, blocks 4 and 5).
+  for (const code of role.split('+')) {
+    await ownerPool.query(`insert into user_role (user_id, role_code) values ($1,$2)`, [id, code]);
+  }
   await ownerPool.query(`insert into user_branch_scope (user_id, branch_code) values ($1,$2)`, [
     id,
     BAGHDAD,
@@ -110,9 +114,10 @@ beforeEach(async () => {
   );
 
   clerk = await createUser('accounting_officer');
-  manager = await createUser('accounting_manager');
+  manager = await createUser('accounting_manager+ceo');
 
   accounts = {};
+  let serial = 0;
   for (const [role, parent, name, control] of [
     ['inventory', 'A000001', 'Inventory', null],
     ['customer_receivable', 'A000001', 'Trade Receivables', 'customer'],
@@ -137,7 +142,9 @@ beforeEach(async () => {
           currency_restriction, control_account)
        values ($1,$2,$3,$4,false,true,'approved',1,'IQD',$5) returning id`,
       [
-        `${parent.slice(0, 1)}9${String(name.length * 7).padStart(5, '0')}`,
+        // A serial, not the name's length: two names of one length ("Product
+        // Sales", "Sales Returns") collided on the unique code.
+        `${parent.slice(0, 1)}9${String((serial += 1)).padStart(5, '0')}`,
         name,
         parents[0].account_type,
         parents[0].id,
@@ -315,7 +322,7 @@ const onHand = async () =>
   Number(
     (await withScope(scope(manager), (tx) => inventory.positionOf(tx, PANEL, WAREHOUSE, BAGHDAD)))
       .onHand,
-  );
+  ) / 1_000_000; // a position is held at six decimal places
 
 /** What one account's journals come to, debit less credit. */
 async function ledger(role: string): Promise<number> {

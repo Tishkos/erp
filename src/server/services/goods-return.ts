@@ -29,7 +29,10 @@ import {
   apInvoiceLine,
   bankCashAccount,
   businessPartner,
+  costLayer,
   inventoryMovement,
+  item as itemTable,
+  warehouse,
   goodsReceipt,
   goodsReceiptLine,
   goodsReturn,
@@ -377,6 +380,11 @@ export async function availableToReturnFromInvoice(
 export interface InvoiceReturnLineInput {
   readonly apInvoiceLineId: string;
   readonly quantity: bigint;
+  /**
+   * Block 10 — *"Warehouse (from which the item will be returned)"*. Blank
+   * means where the invoice booked it; the goods may have moved since.
+   */
+  readonly warehouseCode?: string | null;
 }
 
 export interface CreateFromInvoiceInput extends OffsetChoice {
@@ -427,8 +435,9 @@ export async function createFromInvoice(
     );
   }
 
-  // Stock that has not been booked in cannot be sent back out.
-  if (!['posted', 'settled'].includes(invoice.status)) {
+  // Stock that has not been booked in cannot be sent back out. Posted means
+  // any of the three: paid in part or in full, the goods still came in.
+  if (!['posted', 'partially_executed', 'settled'].includes(invoice.status)) {
     throw new Error(
       `Purchase invoice ${invoice.invoiceNo} is '${invoice.status}'. Until it posts, nothing it ` +
         'names is in a warehouse to return.',
@@ -502,7 +511,7 @@ export async function createFromInvoice(
       itemCode: invoiceLine.itemCode!,
       quantity: formatQuantity(line.quantity),
       uomCode: invoiceLine.uomCode,
-      warehouseCode: invoiceLine.warehouseCode,
+      warehouseCode: await returnWarehouse(tx, line.warehouseCode, invoiceLine.warehouseCode, invoice.branchCode),
     });
   }
 
@@ -645,7 +654,33 @@ export async function post(
   const movementIds: string[] = [];
   let costIqd = 0n;
 
+  // Raised against a Purchase Invoice that booked its own stock — Operations
+  // block 10. Everything about it is settled here, in one journal; see below.
+  const direct = Boolean(document.apInvoiceId) && lines.every((line) => !line.goodsReceiptLineId);
+  /** Each line's inventory credit, by the item's own inventory account. */
+  const inventoryCredits: { accountId: string | null; costIqd: bigint; warehouseCode: string }[] = [];
+
   for (const line of lines) {
+    if (direct) {
+      const moved = await returnInvoicedGoods(tx, ctx, document, line);
+      movementIds.push(...moved.movementIds);
+      costIqd += moved.costIqd;
+      inventoryCredits.push({
+        accountId: await itemInventoryAccount(tx, line.itemCode),
+        costIqd: moved.costIqd,
+        warehouseCode: line.warehouseCode,
+      });
+      await tx
+        .update(goodsReturnLine)
+        .set({
+          movementId: moved.movementIds[0] ?? null,
+          costLayerId: moved.firstLayerId,
+          costIqd: toDecimalString(moved.costIqd, 4n),
+        })
+        .where(eq(goodsReturnLine.id, line.id));
+      continue;
+    }
+
     // The movement that put these goods into the warehouse. Usually the goods
     // receipt's; on a return against a Purchase Invoice that booked its own
     // stock — Operations block 4 — it is the invoice's, and there is no receipt
@@ -699,12 +734,101 @@ export async function post(
       .where(eq(goodsReturnLine.id, line.id));
   }
 
+  /*
+   * Block 10's journal, whole: *"Accounts Payable or Bank Dr. / Inventory Cr."*
+   *
+   * One entry, posted with the goods. It used to be two — the stock left into
+   * Return Clearing here, and the payable or the bank was only debited by a
+   * Supplier Credit Memo that no screen ever raised — so a return posted from
+   * the screen took the goods out of the warehouse and never reduced what the
+   * company owed, and the supplier's statement never showed it.
+   *
+   * The debit is the payable the invoice credited (the account it chose, or the
+   * purchase-invoice mapping), or the bank the refund arrived in. The credit is
+   * each item's own inventory account (block 1). Both are the return's value
+   * at what the invoice paid for these goods, so they balance by construction.
+   */
+  let journalEntryId: string | null = null;
+  if (direct && costIqd > 0n) {
+    const [invoice] = await tx
+      .select({ payableAccountId: apInvoice.payableAccountId, invoiceNo: apInvoice.invoiceNo })
+      .from(apInvoice)
+      .where(eq(apInvoice.id, document.apInvoiceId!))
+      .limit(1);
+    const criteria = { branchCode: document.branchCode };
+    const dimensions = { branch: document.branchCode, business_partner: supplier?.code ?? null };
+    const amount = toDecimalString(costIqd, 4n);
+    const debitAccount =
+      document.offsetKind === 'bank'
+        ? await bankGlAccount(tx, document.offsetBankAccountId!)
+        : (invoice?.payableAccountId ??
+          (await posting.mappedAccountFor(
+            tx,
+            'purchasing.ap_invoice',
+            'supplier_payable',
+            document.branchCode,
+          )));
+
+    const result = await posting.post(tx, ctx, {
+      eventType: 'purchasing.goods_return',
+      documentTypeCode: DOCUMENT_TYPE,
+      source: { module: 'purchasing', documentId: id, event: 'posted' },
+      branchCode: document.branchCode,
+      documentDate: document.returnDate,
+      postingDate: document.returnDate,
+      description: `Purchase return ${document.returnNo} against ${invoice?.invoiceNo ?? 'invoice'}`,
+      lines: [
+        {
+          role: document.offsetKind === 'bank' ? 'bank' : 'supplier_payable',
+          ...(debitAccount ? { accountId: debitAccount } : {}),
+          debit: amount,
+          criteria,
+          dimensions,
+        },
+        ...inventoryCredits
+          .filter((credit) => credit.costIqd > 0n)
+          .map((credit) => ({
+            role: 'inventory',
+            ...(credit.accountId ? { accountId: credit.accountId } : {}),
+            credit: toDecimalString(credit.costIqd, 4n),
+            criteria: { ...criteria, warehouseCode: credit.warehouseCode },
+            dimensions: { ...dimensions, warehouse: credit.warehouseCode },
+          })),
+      ],
+    });
+    journalEntryId = result.journalEntryId;
+
+    // Goods sent back against the debt reduce what is still owed on the
+    // invoice, the way a payment does. A refund into the bank does not: the
+    // money came back, and the invoice was already paid.
+    if (document.offsetKind !== 'bank') {
+      await tx
+        .update(apInvoice)
+        .set({
+          settledAmountIqd: sql`${apInvoice.settledAmountIqd} + ${amount}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(apInvoice.id, document.apInvoiceId!));
+      const [after] = await tx
+        .select({ totalIqd: apInvoice.totalIqd, settledAmountIqd: apInvoice.settledAmountIqd })
+        .from(apInvoice)
+        .where(eq(apInvoice.id, document.apInvoiceId!))
+        .limit(1);
+      const owed = parseDecimal(after!.totalIqd, 4n) - parseDecimal(after!.settledAmountIqd, 4n);
+      await tx
+        .update(apInvoice)
+        .set({ status: owed <= 0n ? 'settled' : 'partially_executed', updatedAt: new Date() })
+        .where(eq(apInvoice.id, document.apInvoiceId!));
+    }
+  }
+
   await statuses.assertTransitionAllowed(tx, DOCUMENT_TYPE, document.status, 'posted');
 
   await tx
     .update(goodsReturn)
     .set({
       status: 'posted',
+      ...(journalEntryId ? { journalEntryId } : {}),
       postedBy: ctx.principal.userId,
       postedAt: new Date(),
       updatedAt: new Date(),
@@ -718,11 +842,129 @@ export async function post(
     objectId: id,
     branchCode: document.branchCode,
     before: { status: 'approved' },
-    after: { status: 'posted', movements: movementIds.length, costIqd: toDecimalString(costIqd, 4n) },
+    after: {
+      status: 'posted',
+      movements: movementIds.length,
+      costIqd: toDecimalString(costIqd, 4n),
+      journalEntryId,
+    },
     outcome: 'success',
   });
 
   return { movementIds, costIqd };
+}
+
+/**
+ * Takes one return line's goods out of the warehouse it names — block 10.
+ *
+ * The goods are the ones that invoice line bought: the same supplier, the same
+ * unit cost and the same FIFO date as the layer the invoice created. Matching
+ * on those rather than on that one layer is what lets a return follow the goods
+ * after they have moved — through the shipment stages (block 8) or a transfer
+ * (block 7) — because a move keeps all three (`inventory.relocate`) while the
+ * layer the invoice first created is left empty behind it.
+ *
+ * Posts nothing itself: the return's one journal is written by `post`.
+ */
+async function returnInvoicedGoods(
+  tx: Tx,
+  ctx: ActorContext,
+  document: typeof goodsReturn.$inferSelect,
+  line: typeof goodsReturnLine.$inferSelect,
+): Promise<{ movementIds: string[]; costIqd: bigint; firstLayerId: string | null }> {
+  const source = await invoiceSource(tx, line.apInvoiceLineId);
+  const originLayerId = source.movementId
+    ? await inventory.layerForMovement(tx, source.movementId)
+    : null;
+  if (!originLayerId) {
+    throw new Error(
+      `The invoice line behind return ${document.returnNo} brought no stock in, so nothing can be sent back on it.`,
+    );
+  }
+  const [origin] = await tx
+    .select({
+      supplierId: costLayer.supplierId,
+      unitCostIqd: costLayer.unitCostIqd,
+      layerDate: costLayer.layerDate,
+    })
+    .from(costLayer)
+    .where(eq(costLayer.id, originLayerId))
+    .limit(1);
+  const originCost = parseDecimal(origin!.unitCostIqd, 4n);
+
+  const pool = (
+    await inventory.layersOf(tx, line.itemCode, line.warehouseCode, origin!.supplierId)
+  ).filter(
+    (layer) =>
+      layer.remainingQuantity > 0n &&
+      layer.unitCostIqd === originCost &&
+      layer.layerDate === origin!.layerDate,
+  );
+
+  let outstanding = parseQuantity(line.quantity);
+  const held = pool.reduce((sum, layer) => sum + layer.remainingQuantity, 0n);
+  if (held < outstanding) {
+    throw new Error(
+      `Only ${formatQuantity(held)} of the ${line.itemCode} on this invoice are in ${line.warehouseCode}, ` +
+        `and the return sends back ${formatQuantity(outstanding)}. Return them from the warehouse they are in. ` +
+        'Negative stock is not allowed.',
+    );
+  }
+
+  const movementIds: string[] = [];
+  let costIqd = 0n;
+  for (const layer of pool) {
+    if (outstanding === 0n) break;
+    const take = layer.remainingQuantity < outstanding ? layer.remainingQuantity : outstanding;
+    const movement = await inventory.issueFromLayer(tx, ctx, {
+      itemCode: line.itemCode,
+      warehouseCode: line.warehouseCode,
+      branchCode: document.branchCode,
+      costLayerId: layer.id,
+      quantity: take,
+      movementDate: document.returnDate,
+      kind: 'goods_return',
+      sourceDocumentType: PERMISSION_OBJECT,
+      sourceDocumentId: document.id,
+      sourceLineId: line.id,
+      serialNumber: source.serialNumber,
+      batchNumber: source.batchNumber,
+    });
+    movementIds.push(movement.movementId);
+    costIqd += movement.costIqd ?? 0n;
+    outstanding -= take;
+  }
+  return { movementIds, costIqd, firstLayerId: pool[0]?.id ?? null };
+}
+
+/** The warehouse a return line sends goods back from: the one chosen, else the invoice's. */
+async function returnWarehouse(
+  tx: Tx,
+  chosen: string | null | undefined,
+  booked: string,
+  branchCode: string,
+): Promise<string> {
+  const code = chosen?.trim() || booked;
+  if (code === booked) return booked;
+  const [row] = await tx
+    .select({ branchCode: warehouse.branchCode, active: warehouse.active })
+    .from(warehouse)
+    .where(eq(warehouse.code, code))
+    .limit(1);
+  if (!row || !row.active || row.branchCode !== branchCode) {
+    throw new Error(`Choose an active warehouse of this branch to return the goods from; '${code}' is not one.`);
+  }
+  return code;
+}
+
+/** The inventory account an item names for itself (block 1), if it names one. */
+async function itemInventoryAccount(tx: Tx, itemCode: string): Promise<string | null> {
+  const [row] = await tx
+    .select({ accountId: itemTable.inventoryAccountId })
+    .from(itemTable)
+    .where(eq(itemTable.code, itemCode))
+    .limit(1);
+  return row?.accountId ?? null;
 }
 
 /** What a return is worth — the FIFO cost of what went back. */
@@ -789,6 +1031,16 @@ export async function creditMemo(
       document.returnNo,
       document.status,
       'a credit memo follows a return that has actually shipped (§8.2).',
+    );
+  }
+
+  if (document.journalEntryId) {
+    // A return raised from a Purchase Invoice settles the supplier itself when
+    // it posts (block 10). A memo on top would reduce the same debt twice.
+    throw new GoodsReturnStateError(
+      document.returnNo,
+      document.status,
+      'it already debited the payable or the bank when it posted, so there is nothing left to credit.',
     );
   }
 
@@ -1002,7 +1254,7 @@ export async function returnableInvoices(tx: Tx) {
     .leftJoin(businessPartner, eq(businessPartner.id, apInvoice.supplierId))
     .where(
       and(
-        inArray(apInvoice.status, ['posted', 'settled']),
+        inArray(apInvoice.status, ['posted', 'partially_executed', 'settled']),
         isNotNull(apInvoiceLine.warehouseCode),
       ),
     )
@@ -1016,12 +1268,14 @@ export async function returnableLinesFor(tx: Tx, apInvoiceId: string) {
       id: apInvoiceLine.id,
       lineNo: apInvoiceLine.lineNo,
       itemCode: apInvoiceLine.itemCode,
-      description: apInvoiceLine.description,
+      // The item's own name — block 10's "Item Name" — not the line's text.
+      description: sql<string>`coalesce(${itemTable.name}, ${apInvoiceLine.description})`,
       quantity: apInvoiceLine.quantity,
       unitPrice: apInvoiceLine.unitPrice,
       warehouseCode: apInvoiceLine.warehouseCode,
     })
     .from(apInvoiceLine)
+    .leftJoin(itemTable, eq(itemTable.code, apInvoiceLine.itemCode))
     .where(eq(apInvoiceLine.apInvoiceId, apInvoiceId))
     .orderBy(apInvoiceLine.lineNo);
 

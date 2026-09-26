@@ -200,6 +200,11 @@ describe('every screen has one address', () => {
       '/inventory/fifo-valuation',
       // Block 8 — Invoice Status Tracking.
       '/inventory/in-transit',
+      // Block 7 — Opening Stock, Item Reconciliation, Stock Movement, Transfer.
+      '/inventory/opening-stock',
+      '/inventory/stock-movements',
+      '/inventory/stock-reconciliation',
+      '/inventory/transfers',
       '/master-data/bank-accounts',
       '/master-data/branches',
       '/master-data/cash-accounts',

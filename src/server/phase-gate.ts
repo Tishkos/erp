@@ -91,6 +91,11 @@ export const OPERATIONS: readonly string[] = [
   // Block 7 — the Warehouses Report and Warehouse Setup.
   '/inventory/fifo-valuation',
   '/master-data/warehouses',
+  // Block 7 — Transfer, Opening Stock, Item Reconciliation and Stock Movement.
+  '/inventory/transfers',
+  '/inventory/opening-stock',
+  '/inventory/stock-reconciliation',
+  '/inventory/stock-movements',
   // Block 4 — the Purchase Invoice.
   '/purchasing/ap-invoices',
   // Block 5 — the Sales Invoice.

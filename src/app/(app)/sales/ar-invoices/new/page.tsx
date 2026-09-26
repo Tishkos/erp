@@ -76,20 +76,15 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
     ),
     // Where this invoice will post, shown on the form that raises it — by
     // direction, 2026-09-23: the accounts are chosen here, not on a screen of
-    // their own. The configured mapping opens as the chosen value, so the
-    // ordinary case is "leave it alone" and the exception is one click.
+    // their own. The receivable opens on the configured mapping, so the
+    // ordinary case is "leave it alone"; revenue opens on "as configured"
+    // (see the field) so each item's own Sales Account still applies.
     accounts: await coa.postableAccounts(tx),
     mapped: {
       receivable: await posting.mappedAccountFor(
         tx,
         'sales.ar_invoice',
         'customer_receivable',
-        context.scope.branchCode,
-      ),
-      revenue: await posting.mappedAccountFor(
-        tx,
-        'sales.ar_invoice',
-        'sales_revenue',
         context.scope.branchCode,
       ),
     },
@@ -164,9 +159,13 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
       label: t('invoices.revenue_account'),
       control: true,
       value: (
+        // Opens on "as configured", not on the mapping: an account chosen
+        // here outranks every item's own Sales Account (block 1), so opening
+        // on the mapping silently overrode them all. Blank means each line
+        // posts to its item's account, then the mapping.
         <select
           aria-label={t('invoices.revenue_account')}
-          defaultValue={mapped.revenue ?? ''}
+          defaultValue=""
           name="revenue_account_id"
         >
           <option value="">{t('invoices.account_default')}</option>

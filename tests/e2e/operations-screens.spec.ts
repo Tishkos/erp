@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
  * The Operations Build screens open.
@@ -28,6 +28,30 @@ const OFFICER = { email: 'officer@example.com', password: 'Ledger-Trial-Balance-
  * a session of their own — and the invoice is still raised as the manager.
  */
 const ADMIN = { email: 'admin@example.com', password: 'Ledger-Trial-Balance-7' };
+
+/**
+ * The code the system gave a record — read off the page the create redirected
+ * to. Critical Rule 1 (2026-09-26): codes are minted, never typed, so a test
+ * learns them the way a person does, from the record it just made.
+ */
+const mintedCode = (page: Page) =>
+  decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!);
+
+/** Chooses the option whose text names `wanted`, else the first real one. */
+async function chooseAccount(select: Locator, wanted: string) {
+  const value = await select.evaluate((element, text) => {
+    const options = [...(element as HTMLSelectElement).options].filter((o) => o.value);
+    return (options.find((o) => o.textContent?.includes(text)) ?? options[0])?.value ?? '';
+  }, wanted);
+  await select.selectOption(value);
+}
+
+/** Block 1's item form: the full name and the accounts a sale cannot do without. */
+async function fillNewItem(dialog: Locator, name: string) {
+  await dialog.getByLabel(/Item Full Name/).fill(name);
+  await chooseAccount(dialog.getByLabel(/Inventory account/), 'Inventory');
+  await chooseAccount(dialog.getByLabel(/COGS account/), 'Cost of Goods Sold');
+}
 
 async function signIn(page: Page, who: { email: string; password: string } = MANAGER) {
   await page.goto('/sign-in');
@@ -67,12 +91,13 @@ test.describe('the Operations Build screens open', () => {
     await expect(page.getByRole('heading', { name: 'Warehouses' })).toBeVisible();
 
     await page.getByRole('button', { name: 'New warehouse' }).click();
-    const code = `WH-E2E-${Date.now().toString().slice(-6)}`;
+    const name = `End To End Depot ${Date.now().toString().slice(-6)}`;
     // Scoped to the dialog: the list behind it renames warehouses in place, so
     // the page carries one name field per row as well as this one.
     const dialog = page.locator('dialog[open], [role="dialog"]').first();
-    await dialog.getByLabel('Warehouse Code').fill(code);
-    await dialog.getByLabel(/Warehouse Name/).fill('End To End Depot');
+    // Critical Rule 1: there is no code to type. The system mints it.
+    await expect(dialog.getByLabel('Warehouse Code')).toHaveCount(0);
+    await dialog.getByLabel(/Warehouse Name/).fill(name);
     await dialog.getByRole('button', { name: 'Create' }).click();
 
     // Wait for the redirect back to the list before looking for the row. The
@@ -80,16 +105,20 @@ test.describe('the Operations Build screens open', () => {
     // the flake this suite has already been bitten by twice.
     await page.waitForURL(/\/master-data\/warehouses(\?|$)/, { timeout: 60_000 });
 
-    // The row is on the list, and its code opens the warehouse's own record —
-    // where it is named, edited, and carries its history, like every other
-    // master record.
+    // The row is on the list with the code the system gave it, and that code
+    // opens the warehouse's own record — where it is named, edited, and carries
+    // its history, like every other master record.
+    const row = page.getByRole('row').filter({ hasText: name });
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    const code = (await row.getByRole('link').first().innerText()).trim();
+    expect(code).toMatch(/^WH-\d{4}$/);
     await expect(page.getByRole('link', { name: code })).toBeVisible({ timeout: 30_000 });
     await page.getByRole('link', { name: code }).click();
     await page.waitForURL(new RegExp(`/master-data/warehouses/${code}`), { timeout: 60_000 });
     await expect(page.getByRole('heading', { level: 1, name: new RegExp(code) })).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByLabel('Warehouse Name')).toHaveValue('End To End Depot');
+    await expect(page.getByLabel('Warehouse Name')).toHaveValue(name);
 
     // Laid out as a branch is: identity and facts on the left, editing and
     // history on the right.
@@ -155,8 +184,8 @@ test.describe('the Operations Build screens open', () => {
      * form before anything is saved.
      */
     const stamp = Date.now().toString().slice(-6);
-    const termsCode = `E2ET${stamp}`;
-    const supplierCode = `E2ESUP${stamp}`;
+    let termsCode = '';
+    let supplierCode = '';
 
     const administration = await browser.newContext();
     const administrator = await administration.newPage();
@@ -165,14 +194,12 @@ test.describe('the Operations Build screens open', () => {
       await administrator.goto('/master-data/payment-terms');
       await administrator.getByRole('button', { name: 'New payment term' }).click();
       const term = administrator.locator('dialog[open], [role="dialog"]').first();
-      await term.getByLabel('Code', { exact: true }).fill(termsCode);
-      await term.getByLabel(/^Name/).fill('Thirty days');
+      await term.getByLabel(/^Name/).fill(`Thirty days ${stamp}`);
       await term.getByLabel('Days to pay').fill('30');
       await term.getByRole('button', { name: 'Create' }).click();
       // A new term opens its own record, where its worked example is.
-      await administrator.waitForURL(new RegExp(`/master-data/payment-terms/${termsCode}`), {
-        timeout: 60_000,
-      });
+      await administrator.waitForURL(/\/master-data\/payment-terms\/[^/?]+/, { timeout: 60_000 });
+      termsCode = mintedCode(administrator);
     } finally {
       await administration.close();
     }
@@ -180,13 +207,11 @@ test.describe('the Operations Build screens open', () => {
     await page.goto('/master-data/suppliers');
     await page.getByRole('button', { name: 'New supplier' }).click();
     const supplier = page.locator('dialog[open], [role="dialog"]').first();
-    await supplier.getByLabel('Code', { exact: true }).fill(supplierCode);
     await supplier.getByLabel(/^Legal name/).fill(`Terms Test ${stamp}`);
     await supplier.getByLabel(/^Payment terms/).selectOption(termsCode);
     await supplier.getByRole('button', { name: 'Create' }).click();
-    await page.waitForURL(new RegExp(`/master-data/business-partners/${supplierCode}`), {
-      timeout: 60_000,
-    });
+    await page.waitForURL(/\/master-data\/business-partners\/[^/?]+/, { timeout: 60_000 });
+    supplierCode = mintedCode(page);
 
     await page.goto('/purchasing/ap-invoices/new');
     await expect(page.getByRole('heading', { name: 'New invoice' })).toBeVisible();
@@ -221,8 +246,8 @@ test.describe('the Operations Build screens open', () => {
   test('draft quantity remains reliable while a row saves', async ({ browser, page }) => {
     test.setTimeout(180_000);
     const stamp = Date.now().toString(36).toUpperCase();
-    const supplierCode = `E2E-SUP-${stamp}`;
-    const itemCode = `E2E-ITM-${stamp}`;
+    let supplierCode = '';
+    let itemCode = '';
     const administration = await browser.newContext();
     const administrator = await administration.newPage();
 
@@ -231,27 +256,20 @@ test.describe('the Operations Build screens open', () => {
       await administrator.goto('/master-data/suppliers');
       await administrator.getByRole('button', { name: 'New supplier' }).click();
       const supplier = administrator.locator('dialog[open], [role="dialog"]').first();
-      await supplier.getByLabel('Code', { exact: true }).fill(supplierCode);
       await supplier.getByLabel(/^Legal name/).fill(`Draft Save ${stamp}`);
       await supplier.getByRole('button', { name: 'Create' }).click();
-      await administrator.waitForURL(
-        new RegExp(`/master-data/business-partners/${supplierCode}`),
-        { timeout: 60_000 },
-      );
+      await administrator.waitForURL(/\/master-data\/business-partners\/[^/?]+/, {
+        timeout: 60_000,
+      });
+      supplierCode = mintedCode(administrator);
 
       await administrator.goto('/master-data/items');
       await administrator.getByRole('button', { name: 'New item' }).click();
       const item = administrator.locator('dialog[open], [role="dialog"]').first();
-      await item.getByLabel('Code', { exact: true }).fill(itemCode);
-      await item.getByLabel(/^Name/).fill(`Draft Save Item ${stamp}`);
-      const uom = item.getByLabel('Base unit', { exact: true });
-      await uom.selectOption(
-        (await uom.locator('option:not([value=""])').first().getAttribute('value'))!,
-      );
+      await fillNewItem(item, `Draft Save Item ${stamp}`);
       await item.getByRole('button', { name: 'Create' }).click();
-      await administrator.waitForURL(new RegExp(`/master-data/items/${itemCode}`), {
-        timeout: 60_000,
-      });
+      await administrator.waitForURL(/\/master-data\/items\/[^/?]+/, { timeout: 60_000 });
+      itemCode = mintedCode(administrator);
     } finally {
       await administration.close();
     }
@@ -388,10 +406,10 @@ test.describe('the Operations Build screens open', () => {
   test('invoice prices follow user-maintained defaults', async ({ browser, page }) => {
     test.setTimeout(180_000);
     const stamp = Date.now().toString(36).toUpperCase();
-    const supplierACode = `E2E-PA-${stamp}`;
-    const supplierBCode = `E2E-PB-${stamp}`;
-    const customerCode = `E2E-C-${stamp}`;
-    const itemCode = `E2E-P-${stamp}`;
+    let supplierACode = '';
+    let supplierBCode = '';
+    let customerCode = '';
+    let itemCode = '';
     const administration = await browser.newContext();
     const administrator = await administration.newPage();
 
@@ -413,36 +431,29 @@ test.describe('the Operations Build screens open', () => {
       const makePartner = async (
         list: 'suppliers' | 'customers',
         buttonName: string,
-        code: string,
         name: string,
       ) => {
         await administrator.goto(`/master-data/${list}`);
         await administrator.getByRole('button', { name: buttonName }).click();
         const dialog = administrator.locator('dialog[open], [role="dialog"]').first();
-        await dialog.getByLabel('Code', { exact: true }).fill(code);
         await dialog.getByLabel(/^Legal name/).fill(name);
         await dialog.getByRole('button', { name: 'Create' }).click();
-        await administrator.waitForURL(new RegExp(`/master-data/business-partners/${code}`), {
+        await administrator.waitForURL(/\/master-data\/business-partners\/[^/?]+/, {
           timeout: 60_000,
         });
+        return mintedCode(administrator);
       };
-      await makePartner('suppliers', 'New supplier', supplierACode, `Price Supplier A ${stamp}`);
-      await makePartner('suppliers', 'New supplier', supplierBCode, `Price Supplier B ${stamp}`);
-      await makePartner('customers', 'New customer', customerCode, `Price Customer ${stamp}`);
+      supplierACode = await makePartner('suppliers', 'New supplier', `Price Supplier A ${stamp}`);
+      supplierBCode = await makePartner('suppliers', 'New supplier', `Price Supplier B ${stamp}`);
+      customerCode = await makePartner('customers', 'New customer', `Price Customer ${stamp}`);
 
       await administrator.goto('/master-data/items');
       await administrator.getByRole('button', { name: 'New item' }).click();
       const item = administrator.locator('dialog[open], [role="dialog"]').first();
-      await item.getByLabel('Code', { exact: true }).fill(itemCode);
-      await item.getByLabel(/^Name/).fill(`Priced Item ${stamp}`);
-      const uom = item.getByLabel('Base unit', { exact: true });
-      await uom.selectOption(
-        (await uom.locator('option:not([value=""])').first().getAttribute('value'))!,
-      );
+      await fillNewItem(item, `Priced Item ${stamp}`);
       await item.getByRole('button', { name: 'Create' }).click();
-      await administrator.waitForURL(new RegExp(`/master-data/items/${itemCode}`), {
-        timeout: 60_000,
-      });
+      await administrator.waitForURL(/\/master-data\/items\/[^/?]+/, { timeout: 60_000 });
+      itemCode = mintedCode(administrator);
 
       for (const [code, name, price] of [
         [supplierACode, `Price Supplier A ${stamp}`, '80'],
