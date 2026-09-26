@@ -16,7 +16,6 @@ import {
   SubmitRow,
   matches,
 } from '@/components/admin';
-import { AutoCode } from '@/components/admin/auto-code';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -71,10 +70,11 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
             title={t('items.new')}
           >
             <p className="muted">{t('items.created_note')}</p>
-            <AutoCode codeId="f-code" mode="upper" nameId="f-name" />
+            {/* No Code field, and no slug following the name into one. The
+                system mints it (by direction, 2026-09-26): a code that can be
+                typed is a code that can be typed twice. */}
             <Form action={createItem}>
               <Grid>
-                <Field hint={t('code_auto_hint')} label={t('code')} name="code" />
                 <Field label={t('name')} name="name" required requiredLabel={t('required_hint')} />
                 <Select
                   defaultValue="stock"

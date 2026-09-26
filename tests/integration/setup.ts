@@ -702,7 +702,11 @@ export async function resetTestData(): Promise<void> {
     await client.query(`
       delete from doc_sequence
        where key not like 'ACCOUNT_CODE_%'
-         and key not in (-- Phase 00, seeded by migration 0160.
+         and key not in (-- A master record's own identity, seeded by
+                         -- migrations 0204 and 0205. Like the account codes
+                         -- above, these survive the reset.
+                         'ITEM_CODE', 'BANK_ACCOUNT_CODE', 'CASH_ACCOUNT_CODE',
+                         -- Phase 00, seeded by migration 0160.
                          'INVOICE',
                          'JOURNAL_ENTRY', 'WAREHOUSE_TRANSFER', 'OPENING_STOCK', 'STOCK_COUNT',
                          'PURCHASE_ORDER', 'GOODS_RECEIPT', 'SERVICE_RECEIPT', 'AP_INVOICE',

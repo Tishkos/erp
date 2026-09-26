@@ -34,14 +34,16 @@ function inputFrom(formData: FormData) {
   };
 }
 
+/**
+ * A new bank or cash account. The form carries no number and this reads none.
+ *
+ * Block 6 calls it "automatically generated", so the system gives it. Reading
+ * a `code` field here would be the one line that let a typed one back in.
+ */
 export async function createAccount(formData: FormData): Promise<void> {
   const kind = kindOf(formData);
   await runAdminAndReturn(
-    (tx, ctx) =>
-      accounts.create(tx, ctx, kind, {
-        code: text(formData, 'code').trim().toUpperCase(),
-        ...inputFrom(formData),
-      }),
+    (tx, ctx) => accounts.create(tx, ctx, kind, inputFrom(formData)),
     (value) => {
       const created = value as { code?: string } | null | undefined;
       return created?.code ? recordFor(kind, created.code) : listFor(kind);

@@ -897,6 +897,20 @@
       "when": 1795900000007,
       "tag": "0203_invoice_chosen_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1795900000008,
+      "tag": "0204_item_code_generated",
+      "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1795900000009,
+      "tag": "0205_bank_cash_number_generated",
+      "breakpoints": true
     }
   ]
 }

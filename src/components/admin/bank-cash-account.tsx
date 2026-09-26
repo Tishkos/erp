@@ -21,7 +21,6 @@ import {
   admin as s,
   matches,
 } from './index';
-import { AutoCode } from './auto-code';
 import { AuditLogButton, RecordHistory } from './history';
 import { SectionTabs } from './section-tabs';
 import { outcomeOf, type SearchParams } from './params';
@@ -103,11 +102,11 @@ export async function AccountList({
             title={t(`${kind}_accounts.new`)}
           >
             <p className="muted">{t(`${kind}_accounts.created_note`)}</p>
-            <AutoCode codeId="f-code" mode="upper" nameId="f-name" />
+            {/* No number field. Block 6 lists it as "Bank Number
+                (automatically generated)", so the system gives it. */}
             <Form action={createAccount}>
               <Hidden name="kind" value={kind} />
               <Grid>
-                <Field hint={t('code_auto_hint')} label={t('code')} name="code" />
                 <Field label={t('name')} name="name" required requiredLabel={t('required_hint')} />
                 <Select
                   label={column('branch_code')}

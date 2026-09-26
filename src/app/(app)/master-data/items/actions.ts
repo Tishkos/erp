@@ -29,15 +29,16 @@ function inputFrom(formData: FormData) {
   };
 }
 
+/**
+ * A new item. The form carries no code and this reads none.
+ *
+ * By direction (2026-09-26) the Item Code is the system's to mint. Reading a
+ * `code` field here would be the one line that let a hand-typed code back in —
+ * through a form somebody had altered, or a request made directly — so it is
+ * not read at all rather than read and ignored.
+ */
 export async function createItem(formData: FormData): Promise<void> {
-  await runAdminAndReturn(
-    (tx, ctx) =>
-      items.create(tx, ctx, {
-        code: text(formData, 'code').trim().toUpperCase(),
-        ...inputFrom(formData),
-      }),
-    createdRecord,
-  );
+  await runAdminAndReturn((tx, ctx) => items.create(tx, ctx, inputFrom(formData)), createdRecord);
 }
 
 export async function updateItem(formData: FormData): Promise<void> {

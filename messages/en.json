@@ -1626,7 +1626,7 @@
     "items": {
       "subtitle": "The one item record Purchasing, Inventory and Sales all use.",
       "new": "New item",
-      "created_note": "The code is the identity every document selects by, so it does not change afterwards.",
+      "created_note": "The system gives the item its code when you save. It is the identity every document selects by, and it does not change afterwards.",
       "none": "No items yet.",
       "kind": "Kind",
       "kind_hint": "A service has no stock, so it tracks nothing.",

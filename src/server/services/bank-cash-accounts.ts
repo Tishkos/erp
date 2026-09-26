@@ -29,15 +29,13 @@ import { appUser, bankCashAccount, branch, chartOfAccount } from '../db/schema';
 import {
   AdminNotFoundError,
   AdminValidationError,
-  codeFromName,
-  normaliseCode,
   optionalText,
   permit,
   recordChange,
   requireText,
-  uniqueCode,
   type ActorContext,
 } from './administration';
+import { allocateDocumentNumber } from './numbering';
 
 export const PERMISSION_OBJECT = 'bank_account';
 
@@ -244,31 +242,47 @@ async function shapeFor(tx: Tx, kind: AccountKind, input: AccountInput) {
   };
 }
 
-export async function create(
-  tx: Tx,
-  ctx: ActorContext,
-  kind: AccountKind,
-  input: AccountInput & { readonly code?: string },
-) {
+/** Where each kind's number comes from — configurable on the Numbering screen. */
+const CODE_SEQUENCE: Readonly<Record<AccountKind, string>> = {
+  bank: 'BANK_ACCOUNT_CODE',
+  cash: 'CASH_ACCOUNT_CODE',
+};
+
+/**
+ * The next number of this kind that nothing already holds.
+ *
+ * Bounded like the chart's: a hundred consecutive numbers all taken means the
+ * counter is behind and somebody should look, rather than the loop spinning.
+ */
+async function allocateFreeCode(tx: Tx, kind: AccountKind, userId: string): Promise<string> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const { documentNo } = await allocateDocumentNumber(tx, CODE_SEQUENCE[kind], {}, userId);
+    const [taken] = await tx
+      .select({ code: bankCashAccount.code })
+      .from(bankCashAccount)
+      .where(eq(bankCashAccount.code, documentNo))
+      .limit(1);
+    if (!taken) return documentNo;
+  }
+  throw new Error(
+    `The ${kind} account counter is a hundred numbers behind the register. ` +
+      'Set it past the highest code in use on the Numbering screen before adding another.',
+  );
+}
+
+/**
+ * A new bank or cash account. Its number is minted, never given.
+ *
+ * Operations build, block 6: *"Bank/Cash Name; Bank Number (automatically
+ * generated); Type (Cash or Bank); Related Account."* It used to be a slug of
+ * the name that anybody could type over, which is not what "automatically
+ * generated" describes.
+ */
+export async function create(tx: Tx, ctx: ActorContext, kind: AccountKind, input: AccountInput) {
   await permit(ctx, 'create', PERMISSION_OBJECT);
 
   const name = requireText(input.name, 'name');
-  const prefix = kind === 'bank' ? 'BANK' : 'CASH';
-  const code = input.code?.trim()
-    ? normaliseCode(input.code)
-    : await uniqueCode(`${prefix}_${codeFromName(name)}`.slice(0, 32), async (candidate) => {
-        const [row] = await tx
-          .select({ code: bankCashAccount.code })
-          .from(bankCashAccount)
-          .where(eq(bankCashAccount.code, candidate));
-        return Boolean(row);
-      });
-
-  const [existing] = await tx
-    .select({ code: bankCashAccount.code })
-    .from(bankCashAccount)
-    .where(eq(bankCashAccount.code, code));
-  if (existing) throw new AdminValidationError('code', `'${code}' is already an account`);
+  const code = await allocateFreeCode(tx, kind, ctx.principal.userId);
 
   const values = {
     code,

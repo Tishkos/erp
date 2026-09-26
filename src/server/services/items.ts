@@ -35,17 +35,18 @@ import { parseDecimal, toDecimalString } from '../domain/money';
 import {
   AdminNotFoundError,
   AdminValidationError,
-  codeFromName,
-  normaliseCode,
   optionalText,
   permit,
   recordChange,
   requireText,
-  uniqueCode,
   type ActorContext,
 } from './administration';
+import { allocateDocumentNumber } from './numbering';
 
 export const PERMISSION_OBJECT = 'item';
+
+/** Where an item's code comes from — configurable on the Numbering screen. */
+const ITEM_CODE_SEQUENCE = 'ITEM_CODE';
 
 export const ITEM_TRACKING = ['serial', 'batch', 'serial_and_batch'] as const;
 export type ItemTracking = (typeof ITEM_TRACKING)[number];
@@ -430,19 +431,49 @@ async function registerBaseUnit(tx: Tx, itemId: string, baseUomCode: string) {
   });
 }
 
-export async function create(tx: Tx, ctx: ActorContext, input: ItemInput & { readonly code?: string }) {
+/**
+ * The next item code nothing already holds.
+ *
+ * Bounded the way the chart of accounts bounds its own: if a hundred
+ * consecutive numbers are all taken, the counter is not merely behind and
+ * somebody should look at it rather than the loop spinning. In practice it
+ * returns on the first attempt — the migration set the counter past anything
+ * already in the minted shape.
+ */
+async function allocateFreeCode(tx: Tx, userId: string): Promise<string> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const { documentNo } = await allocateDocumentNumber(tx, ITEM_CODE_SEQUENCE, {}, userId);
+    const [taken] = await tx
+      .select({ code: item.code })
+      .from(item)
+      .where(eq(item.code, documentNo))
+      .limit(1);
+    if (!taken) return documentNo;
+  }
+  throw new Error(
+    'The item counter is a hundred numbers behind the catalogue. ' +
+      'Set it past the highest code in use on the Numbering screen before adding another item.',
+  );
+}
+
+/**
+ * A new item. Its code is minted, never given.
+ *
+ * By direction (2026-09-26): *"All Item Codes must be automatically generated
+ * by the system... because we need to completely avoid duplicate codes,
+ * incorrect entries, and human errors."* So `create` takes no code, and there
+ * is no argument a caller could pass one through — a screen, an import or a
+ * script all reach the same allocator.
+ *
+ * What it replaced was a slug of the name with a suffix when the slug was
+ * taken: SOLAR, then SOLAR_2. Two people entering the same panel produced two
+ * codes for one thing, which is the duplicate §3.1 exists to prevent.
+ */
+export async function create(tx: Tx, ctx: ActorContext, input: ItemInput) {
   await permit(ctx, 'create', PERMISSION_OBJECT);
 
-  const name = requireText(input.name, 'name');
-  const code = input.code?.trim()
-    ? normaliseCode(input.code)
-    : await uniqueCode(codeFromName(name), async (candidate) => {
-        const [row] = await tx.select({ id: item.id }).from(item).where(eq(item.code, candidate));
-        return Boolean(row);
-      });
-
-  const [existing] = await tx.select({ id: item.id }).from(item).where(eq(item.code, code));
-  if (existing) throw new AdminValidationError('code', `'${code}' is already an item`);
+  requireText(input.name, 'name');
+  const code = await allocateFreeCode(tx, ctx.principal.userId);
 
   const values = await valuesFor(tx, input);
   const [created] = await tx
