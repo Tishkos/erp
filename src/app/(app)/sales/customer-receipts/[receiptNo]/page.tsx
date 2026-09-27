@@ -187,16 +187,24 @@ export default async function ReceiptPage({
                 </td>
                 {mayAllocate ? (
                   <td>
-                    <form action={allocateReceipt} className="row-form">
+                    <form action={allocateReceipt} className={s.fieldWithAction}>
                       <input name="id" type="hidden" value={receipt.id} />
                       <input name="receipt_no" type="hidden" value={receipt.receiptNo} />
                       <input name="ar_invoice_id" type="hidden" value={invoice.id} />
                       <input
                         aria-label={`${t('customer_receipts.allocate')} ${invoice.invoiceNo}`}
-                        className="list__search"
-                        defaultValue={toDecimalString(
-                          invoice.outstanding < unallocated ? invoice.outstanding : unallocated,
-                          4n,
+                        className={s.sapCellField}
+                        // A whole dinar. `toDecimalString(_, 4n)` put "50000.0000"
+                        // in the box: the dinar has no minor unit, and four
+                        // decimal places in a figure somebody is about to
+                        // retype reads as a fault in the amount.
+                        defaultValue={String(
+                          Number(
+                            toDecimalString(
+                              invoice.outstanding < unallocated ? invoice.outstanding : unallocated,
+                              4n,
+                            ),
+                          ),
                         )}
                         inputMode="decimal"
                         name="amount_iqd"

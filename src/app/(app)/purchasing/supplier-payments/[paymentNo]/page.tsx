@@ -167,20 +167,28 @@ export default async function PaymentPage({
                 </td>
                 {mayAllocate ? (
                   <td>
-                    <form action={allocatePayment} className="row-form">
+                    <form action={allocatePayment} className={s.fieldWithAction}>
                       <input name="id" type="hidden" value={payment.id} />
                       <input name="payment_no" type="hidden" value={payment.paymentNo} />
                       <input name="ap_invoice_id" type="hidden" value={invoice.id} />
                       <input
                         aria-label={`${t('supplier_payments.allocate')} ${invoice.invoiceNo}`}
-                        className="list__search"
+                        className={s.sapCellField}
                         // Whatever is left of the payment, or the whole of what
                         // this invoice owes — whichever is smaller. A starting
                         // point, not a decision: the box is editable because
                         // partial payment is the ordinary case.
-                        defaultValue={toDecimalString(
-                          invoice.outstanding < unallocated ? invoice.outstanding : unallocated,
-                          4n,
+                        // A whole dinar. `toDecimalString(_, 4n)` put "50000.0000"
+                        // in the box: the dinar has no minor unit, and four
+                        // decimal places in a figure somebody is about to
+                        // retype reads as a fault in the amount.
+                        defaultValue={String(
+                          Number(
+                            toDecimalString(
+                              invoice.outstanding < unallocated ? invoice.outstanding : unallocated,
+                              4n,
+                            ),
+                          ),
                         )}
                         inputMode="decimal"
                         name="amount_iqd"

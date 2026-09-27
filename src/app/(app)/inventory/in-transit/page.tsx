@@ -192,7 +192,7 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
                   {mayMove ? (
                     <td>
                       {next === null ? null : (
-                        <form action={advanceShipment} className="row-form">
+                        <form action={advanceShipment} className={s.fieldWithAction}>
                           <input name="id" type="hidden" value={row.id} />
                           <input name="to" type="hidden" value={next} />
                           {next === 'in_bounded' ? (
@@ -201,7 +201,7 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
                             // there is exactly one of each.
                             <select
                               aria-label={column('warehouse_name')}
-                              className="list__search"
+                              className={s.sapCellField}
                               name="warehouse_code"
                               required
                             >
