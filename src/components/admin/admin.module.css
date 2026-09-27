@@ -171,6 +171,20 @@
   background: var(--surface);
 }
 
+/* A fact read off the document rather than typed into it — a supplier's code
+   on a return, say. It stands in the row of fields, so it is the same box as a
+   field's, in the ink of something you cannot change. Previously these were
+   spans carrying class names that are in no stylesheet, which is why they were
+   the one unstyled thing in a styled row. */
+.readOnlyBox {
+  composes: input;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  background: var(--surface-sunken, var(--surface));
+  cursor: default;
+}
+
 .filterRow {
   display: flex;
   flex-wrap: wrap;
@@ -2012,7 +2026,8 @@
    document window does surround it, `.sapDoc.sapDoc` is the more specific rule
    and still wins. */
 .sapLineGrid input,
-.sapLineGrid select {
+.sapLineGrid select,
+.sapCellField {
   inline-size: 100%;
   min-inline-size: 0;
   min-block-size: 1.75rem;
@@ -2028,7 +2043,8 @@
 }
 
 .sapLineGrid input:focus,
-.sapLineGrid select:focus {
+.sapLineGrid select:focus,
+.sapCellField:focus {
   background: var(--w-focus);
   outline: 2px solid #9a760d;
   outline-offset: 1px;

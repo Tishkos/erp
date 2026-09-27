@@ -193,6 +193,30 @@ export function FilterRow({ children }: { readonly children: ReactNode }) {
   return <div className={styles.filterRow}>{children}</div>;
 }
 
+/**
+ * A fact the document already knows, shown in the row of fields it belongs to.
+ *
+ * Not a disabled `Field`: there is nothing to submit and nothing to edit, so
+ * there is no input. It wears the same box as the fields beside it, in the ink
+ * of something that cannot be changed.
+ */
+export function ReadOnlyField({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: ReactNode;
+}) {
+  return (
+    <div className={styles.field}>
+      <span className={styles.label}>{label}</span>
+      <span aria-readonly="true" className={styles.readOnlyBox}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
 export interface FieldProps {
   readonly label: string;
   readonly name: string;

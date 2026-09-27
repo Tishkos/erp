@@ -110,9 +110,12 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: S
             />
             <Field
               label={t('supplier_payments.amount')}
+              min={0}
               name="amount_iqd"
               required
               requiredLabel={t('required_hint')}
+              step="0.0001"
+              type="number"
             />
             <Field label={t('supplier_payments.reference')} name="reference" />
           </Grid>

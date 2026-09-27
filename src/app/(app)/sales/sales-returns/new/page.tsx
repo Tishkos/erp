@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Field, Flash, Form, Grid, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { AdminPage, Field, Flash, Form, Grid, ReadOnlyField, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -80,9 +80,9 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
       ) : (
         <>
           <form className="list__toolbar" method="get">
-            <label className="field">
-              <span className="field__label">{t('sales_returns.invoice')}</span>
-              <select className="field__input" defaultValue={chosen} name="invoice" required>
+            <label className={s.field}>
+              <span className={s.label}>{t('sales_returns.invoice')}</span>
+              <select className={s.select} defaultValue={chosen} name="invoice" required>
                 <option value="" />
                 {invoices.map((row) => (
                   <option key={row.id} value={row.id}>
@@ -103,18 +103,8 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
               <Grid>
                 {/* The sponsor lists the code and the name as two fields, and
                     both are read from the invoice this return is against. */}
-                <label className="field">
-                  <span className="field__label">{column('customer_code')}</span>
-                  <span className="field__input" aria-readonly>
-                    {invoice.customerCode}
-                  </span>
-                </label>
-                <label className="field">
-                  <span className="field__label">{column('customer_name')}</span>
-                  <span className="field__input" aria-readonly>
-                    {invoice.customerName}
-                  </span>
-                </label>
+                <ReadOnlyField label={column('customer_code')} value={invoice.customerCode} />
+                <ReadOnlyField label={column('customer_name')} value={invoice.customerName} />
                 <Field
                   defaultValue={today}
                   label={column('posting_date')}
@@ -123,16 +113,16 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
                   requiredLabel={t('required_hint')}
                   type="date"
                 />
-                <label className="field">
-                  <span className="field__label">{t('sales_returns.offset')}</span>
-                  <select className="field__input" name="offset_kind" required>
+                <label className={s.field}>
+                  <span className={s.label}>{t('sales_returns.offset')}</span>
+                  <select className={s.select} name="offset_kind" required>
                     <option value="receivable">{t('sales_returns.offset_receivable')}</option>
                     <option value="bank">{t('sales_returns.offset_bank')}</option>
                   </select>
                 </label>
-                <label className="field">
-                  <span className="field__label">{t('sales_returns.bank_account')}</span>
-                  <select className="field__input" name="offset_bank_account_id">
+                <label className={s.field}>
+                  <span className={s.label}>{t('sales_returns.bank_account')}</span>
+                  <select className={s.select} name="offset_bank_account_id">
                     <option value="" />
                     {accounts
                       .filter((account) => account.active)
@@ -205,7 +195,7 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
                         <td className={s.sapNum}>
                           <input
                             aria-label={`${t('sales_returns.return_quantity')} ${line.itemCode}`}
-                            className="field__input"
+                            className={s.sapCellField}
                             inputMode="decimal"
                             max={Number(line.returnable)}
                             name={`quantity_${row}`}

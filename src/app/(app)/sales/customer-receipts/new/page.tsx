@@ -107,9 +107,12 @@ export default async function NewReceiptPage({ searchParams }: { searchParams: S
             />
             <Field
               label={t('customer_receipts.amount')}
+              min={0}
               name="amount_iqd"
               required
               requiredLabel={t('required_hint')}
+              step="0.0001"
+              type="number"
             />
             <Field label={t('customer_receipts.reference')} name="bank_reference" />
           </Grid>
