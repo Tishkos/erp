@@ -163,6 +163,23 @@
    and drops its button onto a line of its own, which is what made a single
    status filter read as the widest thing on the page. Here each control takes
    its own width and the button stands on the same line, at the same baseline. */
+/* A control with a button beside it, inside one field.
+   `.filterRow` aligns on `flex-end`, which is the bottom of each field — and a
+   field carrying a hint is taller than its own box, so the button landed below
+   the picker rather than level with it. The pair is a row of its own now, and
+   the hint sits under both. */
+.fieldWithAction {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
+.fieldWithAction > select,
+.fieldWithAction > input {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
 /* The band a filter row sits in when the panel around it is flush, so the
    controls are not flattened against the panel's edge. */
 .filterBar {
@@ -4044,9 +4061,12 @@
   font-size: 0.78rem;
 }
 
+/* The same 2rem the fields and `.button` stand at. At 1.75rem with 0.6rem of
+   inset this was the one control on a document that was shorter and tighter
+   than everything beside it, which read as a button with no padding. */
 .sapPage :global(.action) {
-  min-block-size: 1.75rem;
-  padding-inline: 0.6rem;
+  min-block-size: 2rem;
+  padding-inline: 0.85rem;
   border-radius: 0.12rem;
   font-size: 0.76rem;
   font-weight: 700;

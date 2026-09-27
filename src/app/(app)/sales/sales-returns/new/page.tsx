@@ -84,19 +84,27 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
               returned against." on a control beside a picker and made the two
               read as different sizes of thing. */}
           <form className={s.filterRow} method="get">
-            <label className={s.field}>
+            <div className={s.field}>
               <span className={s.label}>{t('sales_returns.invoice')}</span>
-              <select className={s.select} defaultValue={chosen} name="invoice" required>
+              <span className={s.fieldWithAction}>
+                <select
+                  aria-label={t('sales_returns.invoice')}
+                  className={s.select}
+                  defaultValue={chosen}
+                  name="invoice"
+                  required
+                >
                 <option value="" />
                 {invoices.map((row) => (
                   <option key={row.id} value={row.id}>
                     {row.invoiceNo} · {row.customerCode} · {row.customerName}
                   </option>
                 ))}
-              </select>
+                </select>
+                <Submit label={t('choose')} tone="secondary" variant="document" />
+              </span>
               <span className={s.hint}>{t('sales_returns.pick_invoice')}</span>
-            </label>
-            <Submit label={t('choose')} tone="secondary" variant="document" />
+            </div>
           </form>
 
           {!invoice ? null : (

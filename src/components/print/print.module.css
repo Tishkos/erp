@@ -29,17 +29,33 @@
   background: #f4f4ee;
 }
 
+/* The toolbar is screen furniture, not paper, so its buttons are the
+   application's: the same 2rem height, the same inset and corner, the same
+   amber. They were shorter and squarer than every other button in the system,
+   which is what made the Print button look like it came from somewhere else. */
 .toolbar a,
 .toolbar button {
-  padding: 0.3rem 0.8rem;
+  display: inline-flex;
+  min-block-size: 2rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding-block: 0;
+  padding-inline: 0.85rem;
   border: 1px solid #b77d0b;
+  border-radius: 0.12rem;
   background: linear-gradient(180deg, #ffd978, #e9aa24);
   color: #3a2600;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 700;
   text-decoration: none;
   cursor: pointer;
+}
+
+.toolbar a:hover,
+.toolbar button:hover {
+  background: linear-gradient(180deg, #fff0c2, #f0c45c);
 }
 
 .toolbar .quiet {
