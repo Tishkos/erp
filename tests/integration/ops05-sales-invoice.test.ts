@@ -24,6 +24,7 @@ import * as coa from '@/server/services/chart-of-accounts';
 import * as ap from '@/server/services/ap-invoice';
 import * as ar from '@/server/services/ar-invoice';
 import * as inventory from '@/server/services/inventory';
+import * as receipts from '@/server/services/customer-receipt';
 import * as journal from '@/server/services/journal';
 import * as audit from '@/server/services/audit';
 import * as posting from '@/server/services/posting';
@@ -1853,5 +1854,94 @@ describe('ops 5 · the accounts are chosen on the form that raises the invoice',
         }),
       ),
     ).rejects.toThrow(/never appear on the customer's statement/);
+  });
+});
+
+/**
+ * §6 — "one record serves CRM, Sales, Finance, Projects, Logistics and Money
+ * Transfer", and a partner is a customer, a supplier, or both.
+ *
+ * A supplier who buys from us is the second half of that sentence: the same
+ * legal person, one record, both roles. So the answer is never a second
+ * partner and never a supplier billed as if the role did not matter — it is
+ * the Customer role granted on the record that already exists.
+ *
+ * The Sales Order asked this question from the start. The direct Sales
+ * Invoice did not, and until it did, a supplier-only partner could be
+ * invoiced, the stock left the warehouse and a receivable appeared on their
+ * customer statement while `is_customer` was still false.
+ */
+describe('ops 5 · only a customer can be sold to', () => {
+  const grantCustomerRole = (partnerId: string) =>
+    ownerPool.query(`update business_partner set is_customer = true where id = $1`, [partnerId]);
+
+  const sellTo = (buyerId: string) =>
+    withScope(scope(clerk), (tx) =>
+      ar.createDirect(tx, clerk, {
+        customerId: buyerId,
+        branchCode: BAGHDAD,
+        invoiceDate: SELL_ON,
+        dueDate: '2026-05-20',
+        lines: [
+          {
+            itemCode: PANEL,
+            quantity: qty('3'),
+            unitPriceIqd: price('150000'),
+            warehouseCode: WAREHOUSE,
+          },
+        ],
+      }),
+    );
+
+  it('refuses a sales invoice for a partner who is only a supplier', async () => {
+    await buy(jinko);
+    const before = await onHand();
+
+    await expect(sellTo(jinko)).rejects.toThrow(/does not hold the Customer role/);
+
+    // Nothing was raised, so nothing left the warehouse.
+    expect(await onHand()).toBe(before);
+    const { rows } = await ownerPool.query(
+      `select count(*)::int n from ar_invoice where customer_id = $1`,
+      [jinko],
+    );
+    expect(rows[0].n).toBe(0);
+  });
+
+  it('sells to that same supplier once they also hold the customer role', async () => {
+    await buy(jinko);
+    await grantCustomerRole(jinko);
+
+    const invoice = await sellTo(jinko);
+    await postSale(invoice.id);
+
+    // The stock goes out exactly as it would for any other buyer.
+    expect(await onHand()).toBe(7);
+
+    // One record, two sides: what they owe us and what we owe them, under the
+    // one partner code, each on its own statement.
+    const { rows } = await ownerPool.query(
+      `select subledger_type, sum(debit_iqd)::numeric debit, sum(credit_iqd)::numeric credit
+         from subledger_entry where party_code = 'SUP-JINKO'
+        group by subledger_type order by subledger_type`,
+    );
+    expect(rows).toEqual([
+      { subledger_type: 'customer', debit: '450000.0000', credit: '0.0000' },
+      { subledger_type: 'supplier', debit: '0.0000', credit: '1000000.0000' },
+    ]);
+  });
+
+  it('refuses a customer receipt from a partner who is only a supplier', async () => {
+    await expect(
+      withScope(scope(clerk), (tx) =>
+        receipts.create(tx, clerk, {
+          customerId: jinko,
+          branchCode: BAGHDAD,
+          receiptDate: SELL_ON,
+          bankCashAccountId: accounts.inventory!,
+          amountIqd: price('1000'),
+        }),
+      ),
+    ).rejects.toThrow(/does not hold the Customer role/);
   });
 });

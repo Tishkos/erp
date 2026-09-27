@@ -91,6 +91,19 @@ export class DeliveryNotInvoiceableError extends Error {
   }
 }
 
+export class BuyerNotACustomerError extends Error {
+  readonly code = 'BUYER_NOT_A_CUSTOMER';
+
+  constructor(readonly partnerCode: string) {
+    super(
+      `${partnerCode} does not hold the Customer role, so a Sales Invoice cannot be raised for them (§6). ` +
+        'A supplier who buys from us is the same record with both roles — grant the Customer role on the ' +
+        'partner record and the sale goes through as any other.',
+    );
+    this.name = 'BuyerNotACustomerError';
+  }
+}
+
 export class AlreadyInvoicedError extends Error {
   readonly code = 'DELIVERY_ALREADY_INVOICED';
 
@@ -696,11 +709,30 @@ export async function createDirect(
   }
 
   const [customer] = await tx
-    .select({ id: businessPartner.id, paymentTermsCode: businessPartner.paymentTermsCode })
+    .select({
+      id: businessPartner.id,
+      code: businessPartner.code,
+      isCustomer: businessPartner.isCustomer,
+      paymentTermsCode: businessPartner.paymentTermsCode,
+    })
     .from(businessPartner)
     .where(eq(businessPartner.id, input.customerId))
     .limit(1);
   if (!customer) throw new Error(`No customer with id '${input.customerId}'.`);
+
+  /*
+   * §6 — whoever is being billed is being sold to, and only a Customer can be
+   * sold to. The Sales Order asks the same question before it will take an
+   * order; this document is the first in its own chain, so it has to ask it
+   * itself rather than inherit the answer.
+   *
+   * A supplier buying from us is not an exception to the rule, it is the case
+   * the rule is written for: one record, both roles. Without this the invoice
+   * posted, the stock left the warehouse, and the partner appeared on a
+   * customer statement while `is_customer` was still false — a receivable
+   * against somebody the master data says we never sell to.
+   */
+  if (!customer.isCustomer) throw new BuyerNotACustomerError(customer.code);
 
   const dueDate =
     input.dueDate ?? (await terms.dueDateOn(tx, customer.paymentTermsCode ?? null, input.invoiceDate));

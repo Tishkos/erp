@@ -84,6 +84,20 @@ export class WrongCustomerError extends Error {
   }
 }
 
+export class PayerNotACustomerError extends Error {
+  readonly code = 'PAYER_NOT_A_CUSTOMER';
+
+  constructor(readonly partnerCode: string) {
+    super(
+      `${partnerCode} does not hold the Customer role, so money cannot be received against their ` +
+        'customer account (§6). A supplier who also buys from us is one record with both roles — ' +
+        'grant the Customer role on the partner record. Money from a supplier that is not a sale ' +
+        'is a refund, and belongs on an Other Receipt.',
+    );
+    this.name = 'PayerNotACustomerError';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Create
 // ---------------------------------------------------------------------------
@@ -115,6 +129,23 @@ export async function create(
     throw new RangeError(
       'A receipt records money that arrived, so its amount is positive. Money going out is a payment or a refund.',
     );
+  }
+
+  /*
+   * §6 — a named payer is being credited on their customer account, and only
+   * a Customer has one. Left unchecked, a posted receipt put a supplier-only
+   * partner on the customer subledger, which is the same gap the Sales
+   * Invoice had. Money with no payer yet is still allowed: that is what the
+   * nullable column is for.
+   */
+  if (input.customerId) {
+    const [payer] = await tx
+      .select({ code: businessPartner.code, isCustomer: businessPartner.isCustomer })
+      .from(businessPartner)
+      .where(eq(businessPartner.id, input.customerId))
+      .limit(1);
+    if (!payer) throw new Error(`No business partner with id '${input.customerId}'.`);
+    if (!payer.isCustomer) throw new PayerNotACustomerError(payer.code);
   }
 
   const allocated = await allocateDocumentNumber(
