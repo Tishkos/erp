@@ -203,8 +203,19 @@ export interface CreateApInvoiceInput {
   readonly expenseAccountId?: string | null;
 }
 
-async function load(tx: Tx, id: string) {
-  const [invoice] = await tx.select().from(apInvoice).where(eq(apInvoice.id, id)).limit(1);
+/**
+ * The invoice and its lines.
+ *
+ * `lock` takes the header row `for update` for the rest of the transaction.
+ * The posting path asks for it: two posts of one invoice arriving together
+ * would each read `submitted`, each receive the goods, and the second's
+ * journal would come back as the first's (the engine is idempotent by source)
+ * — so the stock would be in the warehouse twice and the ledger once. Held
+ * on the row, the second waits, reads `posted`, and is refused.
+ */
+async function load(tx: Tx, id: string, options: { lock?: boolean } = {}) {
+  const header = tx.select().from(apInvoice).where(eq(apInvoice.id, id)).limit(1);
+  const [invoice] = await (options.lock ? header.for('update') : header);
   if (!invoice) throw new ApInvoiceNotFoundError(id);
 
   const lines = await tx
@@ -1087,7 +1098,9 @@ export async function post(
   ctx: ActorContext,
   id: string,
 ): Promise<{ journalEntryId: string; varianceValueIqd: bigint }> {
-  const { invoice, lines } = await load(tx, id);
+  // Locked first, status read second: the goods are received once per invoice
+  // however many times the post is asked for (§23).
+  const { invoice, lines } = await load(tx, id, { lock: true });
 
   await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, {
     branchCode: invoice.branchCode,

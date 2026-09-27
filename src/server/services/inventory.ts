@@ -127,17 +127,29 @@ export async function positionOf(
   warehouseCode: string,
   branchCode: string,
 ): Promise<StockPosition> {
+  // The view groups by branch as well as by item and warehouse. A warehouse
+  // belongs to one branch, so this is one row — unless a movement was ever
+  // written under another branch code, and then it is two, and reading the
+  // first would show part of the stock and hide the rest. The negative-stock
+  // trigger and the Stock Movement page both read the warehouse whole, so the
+  // position does too: whatever rows there are, summed. `reserved` is not
+  // summed, because the view already counts it once per row.
   const result = await tx.execute(sql`
-    select on_hand, reserved, in_quarantine, damaged, returns_stock, in_transit
+    select sum(on_hand)::text        as on_hand,
+           max(reserved)::text       as reserved,
+           sum(in_quarantine)::text  as in_quarantine,
+           sum(damaged)::text        as damaged,
+           sum(returns_stock)::text  as returns_stock,
+           max(in_transit)::text     as in_transit
       from stock_position
      where item_code = ${itemCode} and warehouse_code = ${warehouseCode}
   `);
 
-  const row = (result as unknown as { rows: Record<string, string>[] }).rows[0];
+  const row = (result as unknown as { rows: Record<string, string | null>[] }).rows[0];
 
   // No movements yet is a real position of zero, not a missing record — a
   // caller asking "how much do we have?" must never get null.
-  if (!row) {
+  if (!row || row.on_hand === null) {
     return {
       itemCode,
       warehouseCode,
@@ -170,12 +182,22 @@ export async function positionOf(
 
 /** Every position for an item, across warehouses — §9.5's four view levels. */
 export async function positionsOf(tx: Tx, itemCode: string): Promise<StockPosition[]> {
+  // One row per warehouse, whatever branch codes its movements carry — see
+  // `positionOf`. The branch is the warehouse's own, not a movement's.
   const result = await tx.execute(sql`
-    select warehouse_code, branch_code, on_hand, reserved, in_quarantine,
-           damaged, returns_stock, in_transit
-      from stock_position
-     where item_code = ${itemCode}
-     order by warehouse_code
+    select p.warehouse_code,
+           w.branch_code,
+           sum(p.on_hand)::text        as on_hand,
+           max(p.reserved)::text       as reserved,
+           sum(p.in_quarantine)::text  as in_quarantine,
+           sum(p.damaged)::text        as damaged,
+           sum(p.returns_stock)::text  as returns_stock,
+           max(p.in_transit)::text     as in_transit
+      from stock_position p
+      join warehouse w on w.code = p.warehouse_code
+     where p.item_code = ${itemCode}
+     group by p.warehouse_code, w.branch_code
+     order by p.warehouse_code
   `);
 
   return (result as unknown as { rows: Record<string, string>[] }).rows.map((row) => ({
@@ -1007,6 +1029,24 @@ export async function reverseMovement(
     .from(costLayerConsumption)
     .where(eq(costLayerConsumption.movementId, movementId));
 
+  // A receipt made a layer, and reversing the receipt must take the layer
+  // back out — or the Warehouses Report, which values the layers, would keep
+  // showing stock the ledger says has gone. Only a layer nobody has drawn on
+  // can go: goods already issued from it are somewhere, and the correction
+  // for that is a return or a reconciliation, not an undo.
+  const layerId = await layerForMovement(tx, movementId);
+  const [layer] = layerId
+    ? await tx.select().from(costLayer).where(eq(costLayer.id, layerId)).limit(1).for('update')
+    : [];
+  if (layer && parseQuantity(layer.remainingQuantity) !== parseQuantity(layer.originalQuantity)) {
+    throw new Error(
+      `Movement ${movementId} received ${formatQuantity(parseQuantity(layer.originalQuantity))} of ${original.itemCode} ` +
+        `into ${original.warehouseCode}, and ${formatQuantity(parseQuantity(layer.originalQuantity) - parseQuantity(layer.remainingQuantity))} ` +
+        'of that has since been issued. A receipt that stock has left cannot be reversed (§9.2); ' +
+        'take the rest out with a return or a reconciliation.',
+    );
+  }
+
   const [reversal] = await tx
     .insert(inventoryMovement)
     .values({
@@ -1063,6 +1103,25 @@ export async function reverseMovement(
         .set({ remainingQuantity: formatQuantity(layer.remainingQuantity) })
         .where(eq(costLayer.id, layer.id));
     }
+  }
+
+  if (layer) {
+    // The whole layer, consumed by the reversal and recorded as such, so that
+    // remaining = original − consumed still holds (0025's deferred trigger) and
+    // the layers agree with the ledger they value.
+    const quantity = parseQuantity(layer.originalQuantity);
+    const unitCostIqd = BigInt(layer.unitCostIqd.replace('.', ''));
+    await tx.insert(costLayerConsumption).values({
+      movementId: reversal!.id,
+      layerId: layer.id,
+      quantity: formatQuantity(quantity),
+      unitCostIqd: layer.unitCostIqd,
+      costIqd: toDecimalString(fifoCostOf(quantity, unitCostIqd), 4n),
+    });
+    await tx
+      .update(costLayer)
+      .set({ remainingQuantity: formatQuantity(0n) })
+      .where(eq(costLayer.id, layer.id));
   }
 
   await audit.record(tx, {

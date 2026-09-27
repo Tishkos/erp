@@ -175,11 +175,17 @@ export async function advance(
   /** Required for `in_bounded`: the warehouse the goods finally land in. */
   destinationWarehouseCode?: string | null,
 ): Promise<void> {
+  // Held `for update` until the move commits. Two advances of one shipment
+  // arriving together would each read the same stage and each try to carry
+  // the goods on; the inventory lock would stop the second, but late and with
+  // a message about stock rather than about the stage. Held here, the second
+  // waits, reads the new stage, and is told the goods have already moved.
   const [shipment] = await tx
     .select()
     .from(supplierShipment)
     .where(eq(supplierShipment.id, id))
-    .limit(1);
+    .limit(1)
+    .for('update');
   if (!shipment) throw new ShipmentError(`No shipment '${id}'.`);
 
   await authz.authorize(ctx.principal, 'execute', PERMISSION_OBJECT, {

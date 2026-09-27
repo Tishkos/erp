@@ -192,12 +192,14 @@ async function assertLineUsable(tx: Tx, line: OpeningStockLineInput): Promise<vo
   });
 }
 
-async function load(tx: Tx, id: string) {
-  const [document] = await tx
-    .select()
-    .from(openingStock)
-    .where(eq(openingStock.id, id))
-    .limit(1);
+/**
+ * The document and its lines. `lock` holds the header `for update` so that two
+ * approvals of one document serialise: the second reads `approved` and is
+ * refused, rather than opening the same stock twice (§9.7).
+ */
+async function load(tx: Tx, id: string, options: { lock?: boolean } = {}) {
+  const header = tx.select().from(openingStock).where(eq(openingStock.id, id)).limit(1);
+  const [document] = await (options.lock ? header.for('update') : header);
 
   if (!document) throw new OpeningStockNotFoundError(id);
 
@@ -263,7 +265,7 @@ export async function approve(
   id: string,
   input: ApproveInput = {},
 ): Promise<{ movementIds: readonly string[]; journalEntryId: string | null }> {
-  const { document, lines } = await load(tx, id);
+  const { document, lines } = await load(tx, id, { lock: true });
 
   await authz.authorize(ctx.principal, 'approve', PERMISSION_OBJECT, {
     branchCode: document.branchCode,

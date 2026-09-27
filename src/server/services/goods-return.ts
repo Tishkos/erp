@@ -176,8 +176,14 @@ async function resolveOffset(
   return { offsetKind: 'bank', offsetBankAccountId: account.id };
 }
 
-async function load(tx: Tx, id: string) {
-  const [document] = await tx.select().from(goodsReturn).where(eq(goodsReturn.id, id)).limit(1);
+/**
+ * The return and its lines. `lock` holds the header `for update` so that two
+ * posts of one return serialise: the second reads `posted` and is refused,
+ * rather than taking the goods out of the warehouse a second time.
+ */
+async function load(tx: Tx, id: string, options: { lock?: boolean } = {}) {
+  const header = tx.select().from(goodsReturn).where(eq(goodsReturn.id, id)).limit(1);
+  const [document] = await (options.lock ? header.for('update') : header);
   if (!document) throw new GoodsReturnNotFoundError(id);
 
   const lines = await tx
@@ -631,7 +637,7 @@ export async function post(
   ctx: ActorContext,
   id: string,
 ): Promise<{ movementIds: readonly string[]; costIqd: bigint }> {
-  const { document, lines } = await load(tx, id);
+  const { document, lines } = await load(tx, id, { lock: true });
 
   await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, {
     branchCode: document.branchCode,

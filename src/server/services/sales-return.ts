@@ -691,7 +691,7 @@ export async function accept(
   ctx: ActorContext,
   id: string,
 ): Promise<{ movementIds: string[]; valueIqd: bigint }> {
-  const returnDoc = await load(tx, id);
+  const returnDoc = await load(tx, id, { lock: true });
 
   await authz.authorize(ctx.principal, 'approve', PERMISSION_OBJECT, {
     branchCode: returnDoc.branchCode,
@@ -924,12 +924,14 @@ export async function close(tx: Tx, ctx: ActorContext, id: string): Promise<void
 // Reading
 // ---------------------------------------------------------------------------
 
-async function load(tx: Tx, id: string) {
-  const [returnDoc] = await tx
-    .select()
-    .from(salesReturn)
-    .where(eq(salesReturn.id, id))
-    .limit(1);
+/**
+ * The return. `lock` holds its row `for update` so that two acceptances of one
+ * return serialise: the second reads `approved` and is refused by the status
+ * machine, rather than putting the goods back on the shelf a second time.
+ */
+async function load(tx: Tx, id: string, options: { lock?: boolean } = {}) {
+  const header = tx.select().from(salesReturn).where(eq(salesReturn.id, id)).limit(1);
+  const [returnDoc] = await (options.lock ? header.for('update') : header);
   if (!returnDoc) throw new Error(`No sales return with id '${id}'.`);
   return returnDoc;
 }

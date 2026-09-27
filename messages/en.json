@@ -1473,6 +1473,7 @@
       "warehouses_report": "Warehouses Report",
       "nothing_in_stock": "No stock is held in any warehouse.",
       "as_it_stands": "Stock held now, valued at what it cost",
+      "units_and_value": "Quantity is in units. Total Price is what that stock cost in IQD (FIFO), not a quantity and not a selling price.",
       "all_items": "All items",
       "search_item_hint": "Name or code",
       "all_warehouses": "All warehouses"
@@ -1997,7 +1998,11 @@
       "subtitle": "Items moved from one warehouse to another",
       "new": "New transfer",
       "none": "No transfers yet.",
-      "created_note": "The system gives the transfer its number. The stock leaves the first warehouse and arrives in the second at the cost it already carries."
+      "created_note": "The system gives the transfer its number. The stock leaves the first warehouse and arrives in the second at the cost it already carries.",
+      "ledger": "Stock Movement",
+      "ledger_recorded": "Recorded",
+      "ledger_missing": "No ledger entry",
+      "ledger_missing_hint": "This transfer has no rows in the Stock Movement ledger, so it moved nothing the system can see. It is a remnant of data that was removed outside the application; report it rather than re-entering it."
     },
     "reconciliation": {
       "subtitle": "Bring the system's quantity to what is on the shelf",

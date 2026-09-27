@@ -9,6 +9,7 @@ import {
   Grid,
   ListToolbar,
   NewRecordDialog,
+  Pill,
   Select,
   Submit,
   SubmitRow,
@@ -169,13 +170,19 @@ export default async function TransfersPage({ searchParams }: { searchParams: Se
                 <th scope="col">{column('from_warehouse')}</th>
                 <th scope="col">{column('to_warehouse')}</th>
                 <th scope="col">{column('quantity')}</th>
+                {/* Whether the Stock Movement ledger holds this transfer. It
+                    always does for a transfer the application wrote; the
+                    column exists so that one it does not hold is seen here,
+                    beside the figure it failed to move, rather than found by
+                    somebody's arithmetic on another page. */}
+                <th scope="col">{t('transfers.ledger')}</th>
                 <th scope="col">{printT('menu')}</th>
               </tr>
             </thead>
             <tbody>
               {shown.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>{t('transfers.none')}</td>
+                  <td colSpan={9}>{t('transfers.none')}</td>
                 </tr>
               ) : null}
               {shown.map((row) => (
@@ -200,6 +207,15 @@ export default async function TransfersPage({ searchParams }: { searchParams: Se
                   </td>
                   <td>
                     <bdi dir="ltr">{formatQuantity(parseQuantity(row.quantity))}</bdi>
+                  </td>
+                  <td>
+                    {parseQuantity(row.ledgerQuantity) === parseQuantity(row.quantity) ? (
+                      <Pill label={t('transfers.ledger_recorded')} on />
+                    ) : (
+                      <span title={t('transfers.ledger_missing_hint')}>
+                        <Pill label={t('transfers.ledger_missing')} on={false} />
+                      </span>
+                    )}
                   </td>
                   <td>
                     <ExportMenu

@@ -228,6 +228,19 @@ function transferRows(tx: Tx) {
       quantity: stockTransfer.quantity,
       costIqd: stockTransfer.costIqd,
       branchCode: stockTransfer.branchCode,
+      /**
+       * What the Stock Movement ledger holds for this transfer: the quantity
+       * that left the source. Equal to `quantity` for every transfer the
+       * application wrote — the document and its movements are one
+       * transaction. Zero names a document whose movements were removed
+       * outside the application (2026-09-27), which the page says out loud
+       * rather than listing beside the others as if it had moved something.
+       */
+      ledgerQuantity: sql<string>`coalesce((
+        select sum(-m.quantity) from inventory_movement m
+         where m.source_document_type = 'stock_transfer'
+           and m.source_document_id = ${stockTransfer.id}::text
+           and m.kind = 'transfer_issue'), 0)::text`,
     })
     .from(stockTransfer)
     .innerJoin(itemTable, eq(itemTable.code, stockTransfer.itemCode));

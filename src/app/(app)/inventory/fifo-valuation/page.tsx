@@ -89,7 +89,10 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
     <AdminPage
       actions={<ExportMenu exportKey="warehouses_report" query={params} />}
       back={{ href: '/', label: t('dashboard_label') }}
-      subtitle={t('reports.as_it_stands')}
+      // Two figures side by side, one in units and one in dinars, and the
+      // second was read as the first on 2026-09-27 — 250,350 IQD of stock at
+      // cost taken for 250,350 units. The subtitle says which is which.
+      subtitle={`${t('reports.as_it_stands')} — ${t('reports.units_and_value')}`}
       tabs={<SectionTabs route="/inventory/fifo-valuation" />}
       title={t('reports.warehouses_report')}
       variant="sap"

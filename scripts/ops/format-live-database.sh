@@ -23,6 +23,18 @@
 # below is children before parents for the same reason: with the keys lifted,
 # nothing warns you when it is wrong.
 #
+# ── And why it was amended (2026-09-27) ───────────────────────────────────
+# Operations block 7 added stock_transfer and stock_adjustment (migration 0207)
+# after this list was written, and the list was not updated. Five formats that
+# morning deleted every inventory_movement, cost_layer and journal on the box
+# and left TRF-HQ-2026-000001, TRF-HQ-2026-000002 and ADJ-HQ-2026-000001
+# standing: documents on the Transfer page with no rows in the Stock Movement
+# ledger, and a number sequence reset underneath them. tests/integration/
+# setup.ts already deleted both tables; this script did not. The two tables are
+# in the list now, and the report at the end names any document left without
+# its ledger rows, so the next omission is seen the moment it happens rather
+# than when somebody's arithmetic disagrees with a screen.
+#
 set -euo pipefail
 
 ERP_SSH="${ERP_SSH:-root@31.97.123.206}"
@@ -102,6 +114,8 @@ stock_count_line
 stock_count
 warehouse_transfer_line
 warehouse_transfer
+stock_transfer
+stock_adjustment
 bank_statement_rejected_line
 bank_statement_line
 bank_statement
@@ -251,12 +265,54 @@ select rpad(t.table_name, 28) || lpad(t.n::text, 8)
     union all select 'supplier_credit_memo', count(*) from supplier_credit_memo
     union all select 'inventory_movement', count(*) from inventory_movement
     union all select 'cost_layer', count(*) from cost_layer
+    union all select 'stock_transfer', count(*) from stock_transfer
+    union all select 'stock_adjustment', count(*) from stock_adjustment
+    union all select 'supplier_shipment', count(*) from supplier_shipment
+    union all select 'opening_stock', count(*) from opening_stock
     union all select 'workflow_instance', count(*) from workflow_instance
     union all select 'attachment', count(*) from attachment
     union all select 'audit_event', count(*) from audit_event
   ) t
  where t.n > 0
  order by 1;
+
+select '';
+select 'DOCUMENTS WITHOUT THEIR LEDGER ROWS (must be empty)';
+-- A stock document whose movements are gone is exactly what an incomplete
+-- table list leaves behind. Listed here, before and after, so it is seen.
+select rpad(kind, 18) || rpad(document_no, 22) || ' movements: 0'
+  from (
+    select 'stock_transfer' as kind, t.transfer_no as document_no
+      from stock_transfer t
+     where not exists (select 1 from inventory_movement m
+                        where m.source_document_type = 'stock_transfer'
+                          and m.source_document_id = t.id::text)
+    union all
+    select 'stock_adjustment', a.adjustment_no
+      from stock_adjustment a
+     where not exists (select 1 from inventory_movement m
+                        where m.source_document_type = 'stock_adjustment'
+                          and m.source_document_id = a.id::text)
+    union all
+    select 'ap_invoice', i.invoice_no
+      from ap_invoice i
+     where i.posted_at is not null
+       and exists (select 1 from ap_invoice_line l
+                    where l.ap_invoice_id = i.id and l.warehouse_code is not null)
+       and not exists (select 1 from inventory_movement m
+                        where m.source_document_type = 'ap_invoice'
+                          and m.source_document_id = i.id::text)
+    union all
+    select 'ar_invoice', i.invoice_no
+      from ar_invoice i
+     where i.posted_at is not null
+       and exists (select 1 from ar_invoice_line l
+                    where l.ar_invoice_id = i.id and l.warehouse_code is not null)
+       and not exists (select 1 from inventory_movement m
+                        where m.source_document_type = 'ar_invoice'
+                          and m.source_document_id = i.id::text)
+  ) o
+ order by o.kind, o.document_no;
 
 select '';
 select 'MASTER DATA THE TESTS LEFT';
