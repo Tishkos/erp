@@ -1746,7 +1746,9 @@
       "statement_balance": "الرصيد",
       "statement_opening": "الرصيد الافتتاحي",
       "statement_closing": "الرصيد الختامي",
-      "statement_empty": "لا يوجد قيد على هذا الحساب خلال الفترة."
+      "statement_empty": "لا يوجد قيد على هذا الحساب خلال الفترة.",
+      "statement_party_unknown": "لا يوجد ما يطابق ذلك. أدخل رمزًا أو اسمًا، أو اختر من القائمة.",
+      "statement_party_ambiguous": "قد يكون أكثر من جهة. أدخل المزيد من الرمز أو الاسم."
     },
     "actions": "إجراءات",
     "remove_line": "حذف البند",

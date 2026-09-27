@@ -10,6 +10,7 @@ import { ExportMenu } from '@/components/print/export-menu';
 import { formatBusinessDate, formatStatementAmount, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
+import { pickOne, pickOutcome } from '@domain/pick';
 import * as partners from '@/server/services/partners';
 import * as statement from '@/server/services/partner-statement';
 
@@ -94,7 +95,15 @@ export async function AccountStatement({
   // long before their account stops needing to be read.
   const { roll, chosen, account } = await withCurrentUser(async (tx) => {
     const roll = await partners.listByRole(tx, side);
-    const chosen = roll.find((row) => row.code === asked) ?? null;
+    /* Resolved from what was typed, not matched against the whole label.
+       The box used to carry the partner's code in a hidden field, set only when
+       the text matched "CODE · Legal Name" exactly — so typing the name, or the
+       code, or picking from the list and then editing it, left nothing to submit
+       and the screen said "choose a customer" with no reason given. A code wins
+       outright; short of that, anything that can only be one partner names them. */
+    const chosen =
+      pickOne(roll, asked, (row) => row.code, (row) => [row.code, row.legalName, row.tradeName]) ??
+      null;
     return {
       roll,
       chosen,
@@ -103,6 +112,13 @@ export async function AccountStatement({
         : null,
     };
   });
+
+  const outcome = pickOutcome(
+    roll,
+    asked,
+    (row) => row.code,
+    (row) => [row.code, row.legalName, row.tradeName],
+  );
 
   const money = (amount: string) => formatStatementAmount(amount, currency, locale as Locale);
   const day = (date: string) => formatBusinessDate(date, locale as Locale);
@@ -121,16 +137,20 @@ export async function AccountStatement({
           <ReportFilter action={screen.route} currency={currency} from={from} to={to}>
             <label className={s.sapFilterField}>
               <span className={s.sapLabel}>{t(`partners.role_${side}`)}</span>
-              <SearchablePicker
-                bare
-                label={t(`partners.role_${side}`)}
+              <input
+                aria-label={t(`partners.role_${side}`)}
+                autoComplete="off"
+                defaultValue={asked}
+                list={`${side}-statement-parties`}
                 name="code"
-                options={roll.map((row) => ({
-                  value: row.code,
-                  label: `${row.code} · ${row.legalName}`,
-                }))}
-                {...(chosen ? { defaultValue: chosen.code } : {})}
               />
+              <datalist id={`${side}-statement-parties`}>
+                {roll.map((row) => (
+                  <option key={row.code} value={row.code}>
+                    {row.legalName}
+                  </option>
+                ))}
+              </datalist>
             </label>
           </ReportFilter>
         }
@@ -175,7 +195,15 @@ export async function AccountStatement({
             {account === null ? (
               <tr>
                 <td className={s.sapEmptyRow} colSpan={6}>
-                  {t(`partners.statement_choose_${side}`)}
+                  {/* Which of the three it is: nothing typed, nothing found, or
+                      too much found. "Choose a customer" for a name that was
+                      typed and not recognised reads as though the box had been
+                      ignored. */}
+                  {outcome === 'none'
+                    ? t('partners.statement_party_unknown', { side: t(`partners.role_${side}`) })
+                    : outcome === 'ambiguous'
+                      ? t('partners.statement_party_ambiguous', { side: t(`partners.role_${side}`) })
+                      : t(`partners.statement_choose_${side}`)}
                 </td>
               </tr>
             ) : (

@@ -1746,7 +1746,9 @@
       "statement_balance": "Balance",
       "statement_opening": "Opening balance",
       "statement_closing": "Closing balance",
-      "statement_empty": "Nothing posted to this account in the period."
+      "statement_empty": "Nothing posted to this account in the period.",
+      "statement_party_unknown": "No {side} matches that. Type a code or a name, or pick one from the list.",
+      "statement_party_ambiguous": "That could be more than one {side}. Type more of the code or the name."
     },
     "actions": "Actions",
     "remove_line": "Remove line",
