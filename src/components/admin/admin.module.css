@@ -5,15 +5,16 @@
  */
 
 .flash {
+  --flash-tone: var(--status-posted);
   display: flex;
   align-items: flex-start;
   gap: 0.6rem;
   margin: 0 0 var(--space-4);
   padding: 0.7rem 0.9rem;
-  border: 1px solid var(--accent-border);
+  border: 1px solid color-mix(in srgb, var(--flash-tone) 45%, var(--w-bg, var(--surface)));
   border-radius: var(--radius-sm);
-  background: var(--accent-soft);
-  color: var(--text);
+  background: color-mix(in srgb, var(--flash-tone) 9%, var(--w-bg, var(--surface)));
+  color: var(--w-text, var(--text));
   font-size: 0.85rem;
 }
 
@@ -22,16 +23,11 @@
   block-size: 1rem;
   flex: 0 0 auto;
   margin-block-start: 0.1rem;
-  color: var(--accent);
+  color: var(--flash-tone);
 }
 
 .flashError {
-  border-color: color-mix(in srgb, var(--status-rejected) 40%, transparent);
-  background: color-mix(in srgb, var(--status-rejected) 9%, var(--surface));
-}
-
-.flashError svg {
-  color: var(--status-rejected);
+  --flash-tone: var(--status-rejected);
 }
 
 .flash strong {
@@ -1625,7 +1621,7 @@
    and if it read its colours from the theme it would come apart the moment
    somebody flipped it. Scoped to the journal's .sapDoc and route-owned
    .sapPage classes so none of it escapes onto the rest of the application. */
-:global(html:has([data-palette])),
+:global(html:has(.erp-root[data-palette])),
 :global([data-palette]) {
   --w-bg: #fbfbf4;
   --w-canvas: #f3f2e9;
@@ -1686,14 +1682,14 @@
   padding: 0.4rem 0.75rem 0.35rem;
   border-block-end: 4px solid var(--w-title-line);
   background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
-  color: #21362e;
+  color: var(--w-label);
   font-size: 0.92rem;
   font-weight: 700;
   line-height: 1.15;
 }
 
 .sapTitleMeta {
-  color: #3b5046;
+  color: var(--w-muted);
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.015em;
@@ -1751,6 +1747,7 @@
   justify-content: center;
   border-color: #c1aa67;
   background: #fff3bd;
+  color: #654b06;
   font-weight: 700;
 }
 
@@ -1793,7 +1790,7 @@
 }
 
 .sapDisclosure {
-  color: #765b0b;
+  color: var(--w-label);
   font-size: 0.82rem;
 }
 
@@ -2094,7 +2091,7 @@
 .sapLineGrid select:focus,
 .sapCellField:focus {
   background: var(--w-focus);
-  outline: 2px solid #9a760d;
+  outline: 2px solid var(--w-title-line);
   outline-offset: 1px;
   box-shadow: 0 0 0 1px #fff;
 }
@@ -2169,11 +2166,11 @@
 }
 
 .sapTable tbody tr:not(.sapFiller):not(.sapEntryRow):hover > td {
-  background: #fff8d9;
+  background: var(--w-selected);
 }
 
 .sapAccountCell {
-  color: #284e3f;
+  color: var(--w-label);
   font-weight: 650;
 }
 /* The row being typed. */
@@ -2218,7 +2215,7 @@
 .sapDoc.sapDoc select:focus,
 .sapDoc.sapDoc textarea:focus {
   background: var(--w-focus);
-  outline: 2px solid #9a760d;
+  outline: 2px solid var(--w-title-line);
   outline-offset: 1px;
   box-shadow: 0 0 0 1px #fff;
 }
@@ -2246,7 +2243,7 @@
   background: linear-gradient(180deg, #ffdf95, color-mix(in srgb, var(--w-amber-b) 88%, #fff));
 }
 .sapDoc.sapDoc button:focus-visible {
-  outline: 2px solid #745807;
+  outline: 2px solid var(--w-title-line);
   outline-offset: 2px;
 }
 .sapDoc.sapDoc .danger {
@@ -2309,14 +2306,14 @@
  */
 .sapDoc.sapDoc .sapFootActions button:not(:global(.action--primary)) {
   border-color: var(--w-line-strong);
-  background: linear-gradient(180deg, #fff, var(--w-field-ro));
+  background: linear-gradient(180deg, var(--w-bg), var(--w-field-ro));
   color: var(--w-muted);
   font-weight: 600;
 }
 
 .sapDoc.sapDoc .sapFootActions button:not(:global(.action--primary)):hover {
-  background: linear-gradient(180deg, #fff, #e4e9de);
-  color: inherit;
+  background: var(--w-selected);
+  color: var(--w-label);
 }
 
 .sapFootActions > form input[type='text'] {
@@ -2388,12 +2385,12 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  color: #274f3f;
+  color: var(--w-label);
   font-weight: 700;
   text-decoration: none;
 }
 .sapLink:hover {
-  color: #183c2f;
+  color: var(--w-label);
   text-decoration: underline;
   text-underline-offset: 0.15rem;
 }
@@ -2430,7 +2427,7 @@
   background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
 }
 .sapDoc.sapDoc section > header h2 {
-  color: #21362e;
+  color: var(--w-label);
   font-size: 0.85rem;
   font-weight: 700;
 }
@@ -2453,7 +2450,7 @@
 }
 
 .sapRegister .toolbarClear {
-  color: #315f4d;
+  color: var(--w-label);
 }
 
 .sapRegister .toolbarSearch input {
@@ -2639,7 +2636,7 @@
     linear-gradient(rgb(255 255 255 / 18%), rgb(255 255 255 / 0%)),
     var(--w-canvas);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 65%);
-  color-scheme: light;
+  color-scheme: var(--w-color-scheme, light);
 }
 
 .sapPage .sapPageHeader {
@@ -2651,12 +2648,12 @@
   border: 1px solid var(--w-line-strong);
   border-block-end: 5px solid var(--w-title-line);
   border-radius: 0.18rem 0.18rem 0 0;
-  background: linear-gradient(180deg, #e8ece9, #cbd4cf);
+  background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
   box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
 }
 
 .sapPage .sapPageHeader h1 {
-  color: #1d3129;
+  color: var(--w-label);
   font-family: Tahoma, "Segoe UI", Arial, sans-serif;
   font-size: 1.05rem;
   font-weight: 700;
@@ -2666,7 +2663,7 @@
 
 .sapPage .sapPageHeader p {
   margin-block-start: 0.2rem;
-  color: #51645b;
+  color: var(--w-muted);
   font-size: 0.73rem;
 }
 
@@ -2700,7 +2697,7 @@
 }
 
 .sapPage .crumbTrail a:hover {
-  color: #315f4d;
+  color: var(--w-label);
 }
 
 .sapPage .crumbTrail strong {
@@ -2729,37 +2726,28 @@
   padding-inline: 0.8rem;
   border-inline-end: 1px solid var(--w-rule);
   border-radius: 0;
-  color: #3f534a;
+  color: var(--w-label);
   background: transparent;
   font-size: 0.73rem;
   font-weight: 650;
 }
 
 .sapPage .tabItem:hover {
-  color: #213c31;
-  background: #fff7d4;
+  color: var(--w-label);
+  background: var(--w-selected);
 }
 
 .sapPage .tabItem[aria-current='page'] {
-  color: #493400;
-  background: linear-gradient(180deg, #ffe59c, #efb737);
-  box-shadow: inset 0 -3px 0 #b97e08;
+  color: var(--w-accent-ink);
+  background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
+  box-shadow: inset 0 -3px 0 var(--w-amber-line);
 }
 
 .sapPage .flash {
   margin-block-end: 0.7rem;
   padding: 0.55rem 0.7rem;
-  border-color: #93a58f;
   border-radius: 0.15rem;
-  background: #edf4e9;
-  color: #284b33;
   font-size: 0.76rem;
-}
-
-.sapPage .flashError {
-  border-color: #bd746a;
-  background: #f8e5e1;
-  color: #782f28;
 }
 
 .sapPage .sectionHint {
@@ -2767,8 +2755,8 @@
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--w-line);
   border-inline-start: 3px solid var(--w-title-line);
-  background: #fff9dc;
-  color: #5f593f;
+  background: var(--w-selected);
+  color: var(--w-label);
   font-size: 0.75rem;
 }
 
@@ -2777,8 +2765,8 @@
   padding-inline: 0.8rem;
   border: 1px solid var(--w-line-strong);
   border-radius: 0.14rem;
-  color: #293a33;
-  background: linear-gradient(180deg, #fffef7, #e6e9e1);
+  color: var(--w-label);
+  background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
   font-family: Tahoma, "Segoe UI", Arial, sans-serif;
   font-size: 0.75rem;
@@ -2786,9 +2774,9 @@
 }
 
 .sapPage.sapPage .button:hover {
-  border-color: #8b751f;
-  color: #3f3007;
-  background: linear-gradient(180deg, #fff9dc, #eadb9b);
+  border-color: var(--w-amber-line);
+  color: var(--w-label);
+  background: var(--w-selected);
 }
 
 .sapPage.sapPage .primary {
@@ -2798,9 +2786,9 @@
 }
 
 .sapPage.sapPage .primary:hover {
-  border-color: #966707;
-  color: #2e2000;
-  background: linear-gradient(180deg, #ffe5a0, #efa91d);
+  border-color: var(--w-amber-line);
+  color: var(--w-accent-ink);
+  background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
 }
 
 .sapPage.sapPage .danger {
@@ -2818,7 +2806,7 @@
 .sapPage.sapPage .button:focus-visible,
 .sapPage .backButton:focus-visible,
 .sapPage .tabItem:focus-visible {
-  outline: 2px solid #745807;
+  outline: 2px solid var(--w-title-line);
   outline-offset: 2px;
 }
 
@@ -2850,7 +2838,7 @@
 }
 
 .sapPage .dialogHeader h2 {
-  color: #21362e;
+  color: var(--w-label);
   font-size: 0.9rem;
   font-weight: 700;
 }
@@ -2863,13 +2851,13 @@
   padding: 0;
   border-color: var(--w-line-strong);
   border-radius: 0.12rem;
-  color: #42564c;
+  color: var(--w-muted);
   background: var(--w-field-ro);
 }
 
 .sapPage.sapPage .dialogClose:hover {
-  border-color: #8b751f;
-  color: #3f3007;
+  border-color: var(--w-amber-line);
+  color: var(--w-label);
   background: var(--w-focus);
 }
 
@@ -2927,9 +2915,9 @@
 .sapPage.sapPage .input:focus,
 .sapPage.sapPage .select:focus,
 .sapPage.sapPage .textarea:focus {
-  border-color: #8b751f;
+  border-color: var(--w-amber-line);
   background: var(--w-focus);
-  outline: 2px solid #9a760d;
+  outline: 2px solid var(--w-title-line);
   outline-offset: 1px;
   box-shadow: 0 0 0 1px #fff;
 }
@@ -2978,7 +2966,7 @@
 }
 
 .sapDoc .timelineMeta code {
-  color: #43574d;
+  color: var(--w-muted);
 }
 
 .sapDoc .emptyState {
@@ -3011,7 +2999,7 @@
 }
 
 .sapDoc .fileBody a {
-  color: #274f3f;
+  color: var(--w-label);
   font-size: 0.78rem;
 }
 
@@ -3037,8 +3025,8 @@
 }
 
 .sapDoc .uploadPicker:hover {
-  border-color: #8b751f;
-  color: #3f3007;
+  border-color: var(--w-amber-line);
+  color: var(--w-label);
   background: var(--w-focus);
 }
 
@@ -3218,7 +3206,7 @@
 }
 
 .sapPage :global(section[class*='panel']) > header h2 {
-  color: #0f3350;
+  color: var(--w-label);
   font-size: 0.85rem;
   font-weight: 700;
   letter-spacing: 0;
@@ -3304,7 +3292,8 @@
 }
 
 .sapPage :global(table.list) a {
-  color: #14507d;
+  color: var(--w-label);
+  text-decoration: underline;
   font-weight: 700;
 }
 
@@ -3438,7 +3427,7 @@
 .sapPage :global(.coa-title),
 .sapPage :global(.panel__title),
 .sapPage :global(.page__title) {
-  color: #0f3350;
+  color: var(--w-label);
   font-size: 0.85rem;
   font-weight: 700;
   letter-spacing: 0;
@@ -3498,7 +3487,8 @@
 .sapPage :global(.coa-account-link),
 .sapPage :global(.coa-detail-link),
 .sapPage :global(.coa-inline-link) {
-  color: #14507d;
+  color: var(--w-label);
+  text-decoration: underline;
   font-weight: 700;
 }
 
@@ -3590,7 +3580,7 @@
 
 /* The accounting package as most people first met it: cool blue-grey chrome,
    a blue title bar, amber buttons. */
-:global(html:has([data-palette='classic'])),
+:global(html:has(.erp-root[data-palette='classic'])),
 :global([data-palette='classic']) {
   --w-bg: #eef2f7;
   --w-canvas: #dfe6ee;
@@ -3621,7 +3611,7 @@
 }
 
 /* Cooler and quieter than classic, for a room with a lot of screens in it. */
-:global(html:has([data-palette='slate'])),
+:global(html:has(.erp-root[data-palette='slate'])),
 :global([data-palette='slate']) {
   --w-bg: #f4f6f8;
   --w-canvas: #e3e8ed;
@@ -3653,7 +3643,7 @@
 
 /* Near-neutral chrome, white paper. The one to pick when the company's own
    colours are doing the talking elsewhere. */
-:global(html:has([data-palette='graphite'])),
+:global(html:has(.erp-root[data-palette='graphite'])),
 :global([data-palette='graphite']) {
   --w-bg: #f7f7f6;
   --w-canvas: #e6e6e4;
@@ -3960,8 +3950,9 @@
    wins over a palette's own amber by source order, never by specificity
    games. The picker's dots carry these attributes too, which is how a dot is
    painted by the very tokens it selects. */
-:global(html:has([data-accent='red'])),
-:global([data-accent='red']) {
+:global(html:has(.erp-root[data-palette][data-accent='red'])),
+:global([data-palette][data-accent='red']),
+:global([data-accent='red']:not(html)) {
   --w-amber-a: #f2b6a6;
   --w-amber-b: #d96a50;
   --w-amber-line: #a63d26;
@@ -3972,8 +3963,9 @@
   --w-focus: #ffe9e2;
 }
 
-:global(html:has([data-accent='blue'])),
-:global([data-accent='blue']) {
+:global(html:has(.erp-root[data-palette][data-accent='blue'])),
+:global([data-palette][data-accent='blue']),
+:global([data-accent='blue']:not(html)) {
   --w-amber-a: #c6ddf3;
   --w-amber-b: #6f9fce;
   --w-amber-line: #37678f;
@@ -3984,8 +3976,9 @@
   --w-focus: #e9f3fd;
 }
 
-:global(html:has([data-accent='green'])),
-:global([data-accent='green']) {
+:global(html:has(.erp-root[data-palette][data-accent='green'])),
+:global([data-palette][data-accent='green']),
+:global([data-accent='green']:not(html)) {
   --w-amber-a: #c4e3bd;
   --w-amber-b: #6da868;
   --w-amber-line: #39702f;
@@ -3996,8 +3989,9 @@
   --w-focus: #edf7e9;
 }
 
-:global(html:has([data-accent='purple'])),
-:global([data-accent='purple']) {
+:global(html:has(.erp-root[data-palette][data-accent='purple'])),
+:global([data-palette][data-accent='purple']),
+:global([data-accent='purple']:not(html)) {
   --w-amber-a: #d9ccee;
   --w-amber-b: #977bc9;
   --w-amber-line: #644a99;
@@ -4263,7 +4257,7 @@
    light one always has a corner nobody inverted. The gold accent stays gold
    — the light amber pair reads on a dark ground, and the accents override it
    the same way they do in the light. */
-:global(html:has([data-palette='midnight'])),
+:global(html:has(.erp-root[data-palette='midnight'])),
 :global([data-palette='midnight']) {
   --w-bg: #1d232a;
   --w-canvas: #151a20;
@@ -4295,7 +4289,7 @@
   --w-band: #222932;
 }
 
-:global(html:has([data-palette='carbon'])),
+:global(html:has(.erp-root[data-palette='carbon'])),
 :global([data-palette='carbon']) {
   --w-bg: #222220;
   --w-canvas: #191918;
@@ -4325,6 +4319,481 @@
   --w-chrome-text: #e4e4df;
   --w-paper: #2c2c29;
   --w-band: #272724;
+}
+
+:global(html:has(.erp-root[data-palette='pearl'])),
+:global([data-palette='pearl']) {
+  --w-bg: #ffffff;
+  --w-canvas: #f3f5f9;
+  --w-line: #c8d2df;
+  --w-line-strong: #8b9cb2;
+  --w-rule: #dce3ed;
+  --w-field: #ffffff;
+  --w-field-ro: #f1f4f8;
+  --w-label: #30415a;
+  --w-text: #1c2940;
+  --w-muted: #607087;
+  --w-title-a: #ffffff;
+  --w-title-b: #e8edf5;
+  --w-title-line: #e0a415;
+  --w-head: #edf1f7;
+  --w-head-strong: #e3eaf3;
+  --w-filler: #f8fafd;
+  --w-selected: #fff2af;
+  --w-selected-strong: #f7cf7a;
+  --w-amber-a: #ffd978;
+  --w-amber-b: #e9aa24;
+  --w-amber-line: #b77d0b;
+  --w-focus: #fff5b8;
+  --w-chrome-a: #ffffff;
+  --w-chrome-b: #edf1f7;
+  --w-chrome-line: #c8d2df;
+  --w-chrome-text: #30415a;
+  --w-paper: #ffffff;
+  --w-band: #f6f8fc;
+}
+
+:global(html:has(.erp-root[data-palette='ocean'])),
+:global([data-palette='ocean']) {
+  --w-bg: #142b3b;
+  --w-canvas: #0b1b29;
+  --w-line: #35546a;
+  --w-line-strong: #52748b;
+  --w-rule: #294557;
+  --w-field: #193447;
+  --w-field-ro: #172e3f;
+  --w-label: #d2e7f2;
+  --w-text: #edf7fc;
+  --w-muted: #9cb9ca;
+  --w-title-a: #23465a;
+  --w-title-b: #183748;
+  --w-title-line: #e9aa24;
+  --w-head: #1e3c4f;
+  --w-head-strong: #284b60;
+  --w-filler: #102635;
+  --w-selected: #394334;
+  --w-selected-strong: #57593a;
+  --w-amber-a: #ffd978;
+  --w-amber-b: #e9aa24;
+  --w-amber-line: #b77d0b;
+  --w-focus: #354433;
+  --w-chrome-a: #1b384b;
+  --w-chrome-b: #102738;
+  --w-chrome-line: #294b61;
+  --w-chrome-text: #dceef7;
+  --w-paper: #193244;
+  --w-band: #173041;
+}
+
+:global(html:has(.erp-root[data-palette='obsidian_plum'])),
+:global([data-palette='obsidian_plum']) {
+  --w-canvas: #1b1622;
+  --w-bg: #292131;
+  --w-line: #53445f;
+  --w-line-strong: #786484;
+  --w-rule: #493b54;
+  --w-field: #342b3e;
+  --w-field-ro: #2d2535;
+  --w-text: #f4eef7;
+  --w-label: #e8dcef;
+  --w-muted: #bcabc7;
+  --w-title-a: #43334e;
+  --w-title-b: #34283e;
+  --w-head: #3a2e44;
+  --w-head-strong: #4a3956;
+  --w-filler: #251d2d;
+  --w-chrome-a: #392b44;
+  --w-chrome-b: #251d2d;
+  --w-chrome-line: #51405e;
+  --w-chrome-text: #efe4f5;
+  --w-paper: #2e2537;
+  --w-band: #31273a;
+}
+
+:global(html:has(.erp-root[data-palette='evergreen'])),
+:global([data-palette='evergreen']) {
+  --w-canvas: #101e19;
+  --w-bg: #1c2e25;
+  --w-line: #3d594a;
+  --w-line-strong: #62816f;
+  --w-rule: #344e40;
+  --w-field: #263c30;
+  --w-field-ro: #213328;
+  --w-text: #edf6ee;
+  --w-label: #d7e9da;
+  --w-muted: #a7c1ad;
+  --w-title-a: #304d3c;
+  --w-title-b: #243c2e;
+  --w-head: #2a4434;
+  --w-head-strong: #365440;
+  --w-filler: #18291f;
+  --w-chrome-a: #284434;
+  --w-chrome-b: #182b21;
+  --w-chrome-line: #395544;
+  --w-chrome-text: #e2f0e5;
+  --w-paper: #20372a;
+  --w-band: #243a2d;
+}
+
+:global(html:has(.erp-root[data-palette='espresso'])),
+:global([data-palette='espresso']) {
+  --w-canvas: #211914;
+  --w-bg: #30251e;
+  --w-line: #605044;
+  --w-line-strong: #897262;
+  --w-rule: #534337;
+  --w-field: #3d3027;
+  --w-field-ro: #362a22;
+  --w-text: #f7efe3;
+  --w-label: #ecddca;
+  --w-muted: #c7b29b;
+  --w-title-a: #4d3a2c;
+  --w-title-b: #3b2d23;
+  --w-head: #433326;
+  --w-head-strong: #554031;
+  --w-filler: #2a2019;
+  --w-chrome-a: #443225;
+  --w-chrome-b: #2c211a;
+  --w-chrome-line: #5b4636;
+  --w-chrome-text: #f1e4d1;
+  --w-paper: #362a22;
+  --w-band: #3a2d24;
+}
+
+:global(html:has(.erp-root[data-palette='lunar_slate'])),
+:global([data-palette='lunar_slate']) {
+  --w-canvas: #222935;
+  --w-bg: #2e3745;
+  --w-line: #55647a;
+  --w-line-strong: #8190a5;
+  --w-rule: #48576b;
+  --w-field: #394555;
+  --w-field-ro: #323d4c;
+  --w-text: #f3f6fb;
+  --w-label: #e0e8f3;
+  --w-muted: #b4c2d4;
+  --w-title-a: #455369;
+  --w-title-b: #354154;
+  --w-head: #3b485b;
+  --w-head-strong: #4a5970;
+  --w-filler: #293240;
+  --w-chrome-a: #3c495e;
+  --w-chrome-b: #2b3545;
+  --w-chrome-line: #526177;
+  --w-chrome-text: #e6edf8;
+  --w-paper: #333f50;
+  --w-band: #354153;
+}
+
+:global(html:has(.erp-root[data-palette='ivory_linen'])),
+:global([data-palette='ivory_linen']) {
+  --w-canvas: #f2ece0;
+  --w-bg: #fffcf5;
+  --w-line: #cec2ae;
+  --w-line-strong: #a7977e;
+  --w-rule: #e1d7c6;
+  --w-field: #fffef9;
+  --w-field-ro: #f1eadc;
+  --w-text: #302a21;
+  --w-label: #4b4031;
+  --w-muted: #665642;
+  --w-title-a: #faf4e7;
+  --w-title-b: #e7dcc7;
+  --w-head: #f0e7d6;
+  --w-head-strong: #e7dbc5;
+  --w-filler: #f9f4ea;
+  --w-chrome-a: #faf4e9;
+  --w-chrome-b: #e8ddc9;
+  --w-chrome-line: #cbbda4;
+  --w-chrome-text: #4b4031;
+  --w-paper: #fffdf8;
+  --w-band: #f7f1e6;
+}
+
+:global(html:has(.erp-root[data-palette='glacier'])),
+:global([data-palette='glacier']) {
+  --w-canvas: #eaf3f8;
+  --w-bg: #ffffff;
+  --w-line: #bed1df;
+  --w-line-strong: #829eb2;
+  --w-rule: #d4e4ed;
+  --w-field: #ffffff;
+  --w-field-ro: #eaf2f8;
+  --w-text: #1b3044;
+  --w-label: #29495f;
+  --w-muted: #496175;
+  --w-title-a: #f3faff;
+  --w-title-b: #d5e8f4;
+  --w-head: #e3f0f8;
+  --w-head-strong: #d3e6f2;
+  --w-filler: #f5fafe;
+  --w-chrome-a: #f5fbff;
+  --w-chrome-b: #d9eaf5;
+  --w-chrome-line: #b9cfdc;
+  --w-chrome-text: #29495f;
+  --w-paper: #ffffff;
+  --w-band: #f1f7fc;
+}
+
+:global(html:has(.erp-root[data-palette='sage_white'])),
+:global([data-palette='sage_white']) {
+  --w-canvas: #edf3ec;
+  --w-bg: #fcfefb;
+  --w-line: #c1d0be;
+  --w-line-strong: #899f86;
+  --w-rule: #d9e3d6;
+  --w-field: #ffffff;
+  --w-field-ro: #eaf1e7;
+  --w-text: #25352a;
+  --w-label: #354e3b;
+  --w-muted: #4e6651;
+  --w-title-a: #f4f8f0;
+  --w-title-b: #dbe7d4;
+  --w-head: #e7efdf;
+  --w-head-strong: #d8e4cf;
+  --w-filler: #f5f8f1;
+  --w-chrome-a: #f3f8ef;
+  --w-chrome-b: #dfe9d7;
+  --w-chrome-line: #bacdb5;
+  --w-chrome-text: #354e3b;
+  --w-paper: #fefffc;
+  --w-band: #f1f6ec;
+}
+
+:global(html:has(.erp-root[data-palette='porcelain_rose'])),
+:global([data-palette='porcelain_rose']) {
+  --w-canvas: #f5eff1;
+  --w-bg: #fffcfd;
+  --w-line: #d7c3cb;
+  --w-line-strong: #ab8b98;
+  --w-rule: #e8d8df;
+  --w-field: #ffffff;
+  --w-field-ro: #f4eaf0;
+  --w-text: #392b36;
+  --w-label: #573e50;
+  --w-muted: #715568;
+  --w-title-a: #fff6f9;
+  --w-title-b: #edd8e1;
+  --w-head: #f3e5eb;
+  --w-head-strong: #e9d3de;
+  --w-filler: #fcf6f8;
+  --w-chrome-a: #fff8fa;
+  --w-chrome-b: #efdee5;
+  --w-chrome-line: #d5bfc9;
+  --w-chrome-text: #573e50;
+  --w-paper: #fffefe;
+  --w-band: #faf0f4;
+}
+
+:global(html:has(.erp-root[data-palette='dune_bronze'])),
+:global([data-palette='dune_bronze']) {
+  --w-canvas: #c8b99f;
+  --w-bg: #e0d5c2;
+  --w-line: #ab997d;
+  --w-line-strong: #806e51;
+  --w-rule: #c0af94;
+  --w-field: #eee4d2;
+  --w-field-ro: #d4c7b0;
+  --w-text: #30291f;
+  --w-label: #3d3324;
+  --w-muted: #473b29;
+  --w-title-a: #cbbb9e;
+  --w-title-b: #b5a58a;
+  --w-head: #d0c1a6;
+  --w-head-strong: #c3b191;
+  --w-filler: #d7cbb5;
+  --w-chrome-a: #cdbda1;
+  --w-chrome-b: #b5a58a;
+  --w-chrome-line: #948165;
+  --w-chrome-text: #30291f;
+  --w-paper: #e8decb;
+  --w-band: #dbcfb7;
+}
+
+:global(html:has(.erp-root[data-palette='harbor_mist'])),
+:global([data-palette='harbor_mist']) {
+  --w-canvas: #a5b5be;
+  --w-bg: #ccd6db;
+  --w-line: #8da1ad;
+  --w-line-strong: #637e8c;
+  --w-rule: #a5b8c1;
+  --w-field: #dde6eb;
+  --w-field-ro: #bfccd3;
+  --w-text: #1d303b;
+  --w-label: #213641;
+  --w-muted: #293a44;
+  --w-title-a: #b3c3cc;
+  --w-title-b: #91a5b0;
+  --w-head: #b8c9d2;
+  --w-head-strong: #a7bbc7;
+  --w-filler: #c2cfd6;
+  --w-chrome-a: #b5c6d0;
+  --w-chrome-b: #91a5b0;
+  --w-chrome-line: #738e9e;
+  --w-chrome-text: #1d303b;
+  --w-paper: #d4dee4;
+  --w-band: #c3d0d8;
+}
+
+:global(html:has(.erp-root[data-palette][data-accent='gold'])),
+:global([data-palette][data-accent='gold']),
+:global([data-accent='gold']:not(html)) {
+  --w-amber-a: #ffd978;
+  --w-amber-b: #e9aa24;
+  --w-amber-line: #b77d0b;
+  --w-accent-ink: #3a2600;
+  --w-selected: #fff2af;
+  --w-selected-strong: #f7cf7a;
+  --w-title-line: #e0a415;
+  --w-focus: #fff5b8;
+}
+
+:global(html:has(.erp-root[data-palette])),
+:global([data-palette]) {
+  --surface: var(--w-bg);
+  --surface-raised: var(--w-bg);
+  --surface-sunken: var(--w-canvas);
+  --surface-muted: var(--w-head);
+  --surface-overlay: var(--w-bg);
+  --border: var(--w-rule);
+  --border-strong: var(--w-line-strong);
+  --text: var(--w-text);
+  --text-soft: var(--w-label);
+  --text-muted: var(--w-muted);
+  --accent: var(--w-label);
+  --accent-hover: var(--w-text);
+  --accent-soft: var(--w-selected);
+  --accent-border: var(--w-amber-line);
+  --accent-contrast: var(--w-bg);
+  --accent-foreground: var(--w-bg);
+  --status-rejected: #c62845;
+  --status-posted: #14804a;
+  --status-approved: #2563eb;
+  --status-submitted: #b45309;
+  --destructive: var(--status-rejected);
+  --background: var(--w-canvas);
+  --foreground: var(--w-text);
+  --card: var(--w-bg);
+  --card-foreground: var(--w-text);
+  --popover: var(--w-bg);
+  --popover-foreground: var(--w-text);
+  --primary: var(--w-label);
+  --primary-foreground: var(--w-bg);
+  --secondary: var(--w-head);
+  --secondary-foreground: var(--w-label);
+  --muted: var(--w-head);
+  --muted-foreground: var(--w-muted);
+  --input: var(--w-line-strong);
+  --ring: var(--w-title-line);
+  --focus-ring: 0 0 0 2px var(--w-title-line);
+  --w-check: #e9aa24;
+  --w-check-ink: #ffffff;
+  --w-color-scheme: light;
+  color-scheme: var(--w-color-scheme);
+}
+
+:global(html:has(.erp-root[data-palette='midnight'][data-accent])),
+:global(html:has(.erp-root[data-palette='carbon'][data-accent])),
+:global(html:has(.erp-root[data-palette='ocean'][data-accent])),
+:global(.erp-root[data-palette='midnight'][data-accent]),
+:global(.erp-root[data-palette='carbon'][data-accent]),
+:global(.erp-root[data-palette='ocean'][data-accent]),
+:global([data-palette='midnight']),
+:global([data-palette='carbon']),
+:global([data-palette='ocean']),
+:global(html:has(.erp-root[data-palette='obsidian_plum'][data-accent])),
+:global(html:has(.erp-root[data-palette='evergreen'][data-accent])),
+:global(html:has(.erp-root[data-palette='espresso'][data-accent])),
+:global(html:has(.erp-root[data-palette='lunar_slate'][data-accent])),
+:global(.erp-root[data-palette='obsidian_plum'][data-accent]),
+:global(.erp-root[data-palette='evergreen'][data-accent]),
+:global(.erp-root[data-palette='espresso'][data-accent]),
+:global(.erp-root[data-palette='lunar_slate'][data-accent]),
+:global([data-palette='obsidian_plum']),
+:global([data-palette='evergreen']),
+:global([data-palette='espresso']),
+:global([data-palette='lunar_slate']) {
+  --w-color-scheme: dark;
+  --w-check-ink: #17241f;
+  --w-selected: color-mix(in srgb, var(--w-amber-b) 18%, var(--w-bg));
+  --w-selected-strong: color-mix(in srgb, var(--w-amber-b) 28%, var(--w-bg));
+  --w-focus: color-mix(in srgb, var(--w-amber-b) 16%, var(--w-field));
+  --w-title-line: var(--w-amber-b);
+  --status-rejected: #ff9b9b;
+  --status-posted: #75d7a1;
+  --status-approved: #9cbfff;
+  --status-submitted: #f4c568;
+}
+
+:global([data-palette] input[type='checkbox']),
+:global([data-palette] input[type='radio']) {
+  accent-color: var(--w-check);
+}
+
+:global([data-palette] input[type='checkbox']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  box-sizing: border-box;
+  inline-size: 1rem;
+  block-size: 1rem;
+  min-inline-size: 1rem;
+  min-block-size: 1rem;
+  padding: 0;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 0.15rem;
+  background: var(--w-field);
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+:global([data-palette] input[type='checkbox'])::before {
+  content: '';
+  inline-size: 0.8rem;
+  block-size: 0.8rem;
+  background: var(--w-check-ink);
+  clip-path: polygon(8% 43%, 20% 31%, 40% 53%, 79% 13%, 92% 26%, 40% 80%);
+  visibility: hidden;
+}
+
+:global([data-palette] input[type='checkbox']:checked),
+:global([data-palette] input[type='checkbox']:indeterminate) {
+  background: var(--w-check);
+  border-color: #b77d0b;
+}
+
+:global([data-palette] input[type='checkbox']:checked)::before,
+:global([data-palette] input[type='checkbox']:indeterminate)::before {
+  visibility: visible;
+}
+
+:global([data-palette] input[type='checkbox']:indeterminate)::before {
+  clip-path: inset(40% 12%);
+}
+
+:global([data-palette] input[type='checkbox']:focus-visible) {
+  outline: 2px solid var(--w-title-line);
+  outline-offset: 2px;
+}
+
+:global([data-palette] input[type='checkbox']:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (forced-colors: active) {
+  :global([data-palette] input[type='checkbox']) {
+    appearance: auto;
+  }
+
+  :global([data-palette] input[type='checkbox'])::before {
+    display: none;
+  }
+}
+
+:global([data-palette]) ::selection {
+  color: var(--w-accent-ink);
+  background: var(--w-amber-a);
 }
 
 /* ── Phones ───────────────────────────────────────────────────────────────
@@ -4377,7 +4846,8 @@
 /* A file on a document is a door: it looks like one. */
 .sapDoc .fileList a,
 .sapPage .fileList a {
-  color: #14507d;
+  color: var(--w-label);
+  text-decoration: underline;
   font-weight: 700;
   text-decoration: underline;
 }
@@ -4678,7 +5148,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: #765b0b;
+  color: var(--w-label);
   font-size: 0.8rem;
   box-shadow: none;
 }

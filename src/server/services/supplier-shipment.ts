@@ -193,6 +193,19 @@ export async function advance(
     objectId: id,
   });
 
+  // An invoice reversed after it opened tracking took its goods with it —
+  // the receipt was undone, so there is nothing on this shipment to move.
+  const [behind] = await tx
+    .select({ status: apInvoice.status, invoiceNo: apInvoice.invoiceNo })
+    .from(apInvoice)
+    .where(eq(apInvoice.id, shipment.apInvoiceId))
+    .limit(1);
+  if (behind?.status === 'reversed') {
+    throw new ShipmentError(
+      `Purchase invoice ${behind.invoiceNo} was reversed, so this shipment carries nothing. There is no stage to move it to.`,
+    );
+  }
+
   const from = shipment.status as ShipmentStatus;
   const next = SHIPMENT_STATUSES[SHIPMENT_STATUSES.indexOf(from) + 1];
   if (to !== next) {
@@ -496,7 +509,13 @@ export async function list(tx: Tx, filter: { status?: ShipmentStatus } = {}) {
     .innerJoin(apInvoice, eq(apInvoice.id, supplierShipment.apInvoiceId))
     .innerJoin(businessPartner, eq(businessPartner.id, apInvoice.supplierId))
     .innerJoin(warehouse, eq(warehouse.code, supplierShipment.warehouseCode))
-    .where(filter.status ? eq(supplierShipment.status, filter.status) : sql`true`)
+    .where(
+      and(
+        // A reversed invoice's shipment is history, not a container to follow.
+        sql`${apInvoice.status} <> 'reversed'`,
+        filter.status ? eq(supplierShipment.status, filter.status) : sql`true`,
+      ),
+    )
     .orderBy(asc(apInvoice.invoiceDate), asc(apInvoice.invoiceNo));
 }
 

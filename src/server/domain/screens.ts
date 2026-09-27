@@ -108,6 +108,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   availability: 'workspace',
   opening_stock: 'document',
   stock_movements: 'document',
+  stock_ledger: 'report',
   transfer_requests: 'document',
   in_transit: 'list',
   quarantine: 'workspace',
@@ -409,6 +410,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/inventory/opening-stock',
   '/inventory/stock-reconciliation',
   '/inventory/stock-movements',
+  // The Stock Ledger — the movements with a running balance (2026-09-27).
+  '/inventory/stock-ledger',
   // Block 4 — the Purchase Invoice.
   '/purchasing/ap-invoices',
   // Block 5 — the Sales Invoice.

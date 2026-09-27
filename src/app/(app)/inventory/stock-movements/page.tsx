@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
@@ -10,6 +11,8 @@ import {
   SubmitRow,
   admin as s,
 } from '@/components/admin';
+import { documentHref } from '@/components/admin/document-link';
+import { IntegrityBanner } from '@/components/admin/integrity-banner';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -58,19 +61,47 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
     to: one('to') || null,
     itemSearch: one('item') || null,
     warehouseCode: one('warehouse') || null,
+    documentNo: one('document') || null,
   };
+  // A page at a time, and the page says so. The list used to stop at a
+  // thousand rows without a word, which at real volume is a ledger with its
+  // oldest months missing.
+  const PAGE_SIZE = 200;
+  const pageNo = Math.max(1, Number.parseInt(one('page') || '1', 10) || 1);
 
-  const { rows, itemList, houses } = await withCurrentUser(async (tx, request) => ({
-    rows: await stock.movements(
-      tx,
-      { principal: request.principal, branchCode: request.scope.branchCode },
-      filter,
-    ),
-    itemList: (await items.listAll(tx)).filter((row) => row.isStock),
-    houses: (await warehouses.listActive(tx)).filter(
-      (house) => house.branchCode === context.scope.branchCode,
-    ),
-  }));
+  const { rows, total, itemList, houses } = await withCurrentUser(async (tx, request) => {
+    const actor = { principal: request.principal, branchCode: request.scope.branchCode };
+    return {
+      rows: await stock.movements(tx, actor, {
+        ...filter,
+        limit: PAGE_SIZE,
+        offset: (pageNo - 1) * PAGE_SIZE,
+      }),
+      total: await stock.countMovements(tx, actor, filter),
+      itemList: (await items.listAll(tx)).filter((row) => row.isStock),
+      houses: (await warehouses.listActive(tx)).filter(
+        (house) => house.branchCode === context.scope.branchCode,
+      ),
+    };
+  });
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const first = total === 0 ? 0 : (pageNo - 1) * PAGE_SIZE + 1;
+  const last = Math.min(total, pageNo * PAGE_SIZE);
+  const pageHref = (n: number) => {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries({
+      from: filter.from,
+      to: filter.to,
+      item: filter.itemSearch,
+      warehouse: filter.warehouseCode,
+      document: filter.documentNo,
+    })) {
+      if (value) query.set(key, value);
+    }
+    if (n > 1) query.set('page', String(n));
+    const text = query.toString();
+    return `/inventory/stock-movements${text ? `?${text}` : ''}`;
+  };
 
   return (
     <AdminPage
@@ -81,6 +112,7 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
       title={page('stock_movements')}
       variant="sap"
     >
+      <IntegrityBanner />
       <Panel flush>
         {/* The screen's own filters in the application's fields rather than
             four bare boxes: the date controls then carry the app's calendar
@@ -126,11 +158,30 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
                 label: `${house.name} · ${house.code}`,
               }))}
             />
+            {/* The document behind the movement — the number a person is
+                holding when they ask "where did this go?". */}
+            <Field
+              defaultValue={filter.documentNo ?? ''}
+              label={column('document')}
+              name="document"
+              placeholder={t('stock_movements.document_hint')}
+            />
             <SubmitRow>
               <Submit label={t('stock_movements.filter')} />
             </SubmitRow>
           </FilterRow>
         </form>
+        <p className="muted" style={{ padding: '0 1rem' }}>
+          {t('stock_movements.showing', { first, last, total })}
+          {pages > 1 ? (
+            <>
+              {' · '}
+              {pageNo > 1 ? <Link href={pageHref(pageNo - 1)}>{t('stock_movements.newer')}</Link> : null}
+              {pageNo > 1 && pageNo < pages ? ' · ' : null}
+              {pageNo < pages ? <Link href={pageHref(pageNo + 1)}>{t('stock_movements.older')}</Link> : null}
+            </>
+          ) : null}
+        </p>
         <div className="table-wrap">
           <table className="list">
             <thead>
@@ -146,6 +197,7 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
                 <th scope="col">{column('movement')}</th>
                 <th scope="col">{column('stock_in')}</th>
                 <th scope="col">{column('stock_out')}</th>
+                <th scope="col">{column('unit')}</th>
                 <th scope="col">{column('document')}</th>
                 <th scope="col">{column('raised_by')}</th>
               </tr>
@@ -153,7 +205,7 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={13}>{t('stock_movements.none')}</td>
+                  <td colSpan={14}>{t('stock_movements.none')}</td>
                 </tr>
               ) : null}
               {rows.map((row) => {
@@ -196,7 +248,19 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
                       <bdi dir="ltr">{row.direction === 'out' ? quantity : ''}</bdi>
                     </td>
                     <td>
-                      <bdi dir="ltr">{row.documentNo ?? ''}</bdi>
+                      <bdi dir="ltr">{row.uomCode}</bdi>
+                    </td>
+                    <td>
+                      {(() => {
+                        const href = documentHref(row.documentType, row.documentNo);
+                        return href ? (
+                          <Link href={href}>
+                            <bdi dir="ltr">{row.documentNo}</bdi>
+                          </Link>
+                        ) : (
+                          <bdi dir="ltr">{row.documentNo ?? ''}</bdi>
+                        );
+                      })()}
                     </td>
                     <td>
                       <bdi dir="auto">{row.raisedBy ?? '—'}</bdi>

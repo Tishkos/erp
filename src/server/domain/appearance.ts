@@ -18,7 +18,13 @@
  * by eye.
  */
 
-export const PALETTES = ['sand', 'classic', 'slate', 'graphite', 'midnight', 'carbon'] as const;
+export const PALETTES = [
+  'sand', 'classic', 'slate', 'graphite', 'pearl',
+  'ivory_linen', 'glacier', 'sage_white', 'porcelain_rose',
+  'dune_bronze', 'harbor_mist',
+  'midnight', 'carbon', 'ocean',
+  'obsidian_plum', 'evergreen', 'espresso', 'lunar_slate',
+] as const;
 export type Palette = (typeof PALETTES)[number];
 
 /** What the installation wears until somebody chooses otherwise. */

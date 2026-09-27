@@ -196,3 +196,16 @@ export async function postApInvoice(formData: FormData): Promise<void> {
   const invoiceNo = text(formData, 'invoice_no');
   await runAdminAndReturn((tx, ctx) => ap.post(tx, ctx, text(formData, 'id')), record(invoiceNo));
 }
+
+/**
+ * Undo a posted invoice — journal, stock and status together, with a reason
+ * (decided 2026-09-27). Refused while anything rests on it; the service says
+ * what, and the message is shown as it is.
+ */
+export async function reverseApInvoice(formData: FormData): Promise<void> {
+  const invoiceNo = text(formData, 'invoice_no');
+  await runAdminAndReturn(
+    (tx, ctx) => ap.reverse(tx, ctx, text(formData, 'id'), { reason: text(formData, 'reason') }),
+    record(invoiceNo),
+  );
+}

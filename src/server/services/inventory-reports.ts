@@ -44,7 +44,18 @@ export interface ValuationRow {
   readonly warehouseName: string;
   readonly branchCode: string;
   readonly quantity: string;
+  /**
+   * What the quantity is counted in — the item's base unit — so a figure
+   * never stands beside a sum of dinars as a bare number (2026-09-27).
+   */
+  readonly uomCode: string;
   readonly valueIqd: string;
+  /**
+   * Value ÷ quantity: what one unit of what is left cost, on average across
+   * its layers. Shown so a reader can see quantity × cost = value on the row
+   * rather than take the third figure for one of the other two.
+   */
+  readonly averageUnitCostIqd: string;
   /** §22 — the part of the value whose movements have reached the ledger. */
   readonly postedValueIqd: string;
   readonly provisionalValueIqd: string;
@@ -152,7 +163,10 @@ export async function valuation(
            w.name                                         as "warehouseName",
            g.branch_code                                  as "branchCode",
            g.quantity::text                               as "quantity",
+           i.base_uom_code                                as "uomCode",
            coalesce(v.value_iqd, 0)::text                 as "valueIqd",
+           coalesce(round(coalesce(v.value_iqd, 0) / nullif(g.quantity, 0), 4), 0)::text
+                                                          as "averageUnitCostIqd",
            coalesce(v.posted_value_iqd, 0)::text          as "postedValueIqd",
            coalesce(v.provisional_value_iqd, 0)::text     as "provisionalValueIqd"
       from ledger g

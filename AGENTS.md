@@ -32,4 +32,32 @@ To check a live database: `npx tsx scripts/ops/stock-movement-trace.ts [warehous
 
 The Warehouses Report's *Total Price* is IQD at FIFO cost, not a quantity and not a selling price: 507 units bought as 10 @ 50 and 500 @ 500 less 3 sold is 250,350 IQD.
 
-Integration suites: `npx vitest run --project integration tests/integration/ops15-inventory-ledger.test.ts` (≈2 min) covers the lifecycle, warehouse isolation, returns, transfers, shipment stages, concurrent double-posting, negative stock and the integrity checks.
+Integration suites: `npx vitest run --project integration tests/integration/ops15-inventory-ledger.test.ts` (≈3 min) covers the lifecycle, warehouse isolation, returns, transfers, shipment stages, concurrent double-posting, negative stock, the integrity checks, invoice reversal, the form-id idempotency key, the warehouse-branch rule, the Stock Ledger and paging. `ops16-document-table-lists.test.ts` derives the document tables from the schema and fails if `format-live-database.sh` or `resetTestData` omits one.
+
+**Two test runs must not share a database.** Another worktree running `test:integration` against `erp_test` at the same time resets it under you — every test fails with "not found" and RLS 42501 errors that look like real bugs. Point `DATABASE_URL_TEST` at your own database (e.g. `erp_test_ledger`; create it as `erp_owner` with `template0`, `lc_collate 'C'`, and `grant connect … to erp_app`).
+
+## Live server (2026-09-27 onward)
+
+* `/opt/qs-erp-next/var/LIVE` marks the database as live; `format-live-database.sh` refuses while it exists. Do not remove it for a trial.
+* Cron: nightly 02:15 `inventory-integrity-check.ts` (notifies accounting managers in-app; log `/var/log/qs-erp/inventory-integrity.log`); weekly Sunday 03:00 `restore-drill.sh --local` (log `/var/log/qs-erp/restore-drill.log`). A red drill is a defect in the live data, not in the backup — see `docs/RUNBOOK-database-recovery.md`.
+* Known open item: `CASH-ACCOUNTANT_ERBIL` points at a deleted `chart_of_account`; until it is re-linked on the Bank/Cash Accounts screen the restore drill fails on that foreign key.
+* `deploy.sh` runs the integration suite; `SKIP_INTEGRATION=<reason>` skips it and records the reason in `var/deploy-skips.log`.
+* Server notes and credentials live in `~/.config/qs-erp/vps.md`, outside the tree.
+
+## Correcting a posted invoice
+
+A posted AP or AR invoice is **reversed** (`ap.reverse` / `ar.reverse`, the Reverse action on its page), never edited: the journal is mirrored through `journal.reverse`, every stock movement is put back through `inventory.reverseMovement` (onto its own FIFO layers), status → `reversed` with `reversal_reason`. Refused while a payment, return, credit memo or payment run rests on it, or while stock from a purchase has been sold or moved on. The reversal is dated the day it is made, so the current period must be open. A Sales/Goods Return is for goods that come back; a reversal is for an invoice that should not have been posted.
+
+## Stock movements carry the warehouse's branch
+
+`inventory.receive/issue/issueFromLayer` refuse a `branchCode` that is not the warehouse's, and migration 0215 holds the same rule by trigger on `inventory_movement` and `cost_layer`. Pass the warehouse's branch (the actor's, after `usableWarehouse`, is the same thing).
+
+## Transfer and Reconciliation forms carry a one-time id
+
+The page mints a UUID into `document_id`; `stock.transfer` / `stock.adjust` take it as the document's id and answer with the existing document on a repeat. New forms that create a stock-moving document on submit should do the same.
+
+## Theme verification
+
+The active appearance belongs to `.erp-root[data-palette][data-accent]`. Palette and accent previews also carry those data attributes, so root-level `:has()` selectors must target `.erp-root`, not arbitrary descendants. Window tokens (`--w-*`) and the generic UI tokens are connected in `src/components/admin/admin.module.css`; dark selection/focus colors must remain readable when an accent changes. Checkboxes use the yellow `--w-check` token and `--w-check-ink` for white marks on light palettes or dark marks on dark palettes. Forced-colors mode restores native checkbox rendering.
+
+Run `npx playwright test tests/e2e/theme-readability.spec.ts --workers=1` against the seeded local development server. It checks all 90 palette/accent combinations without saving appearance settings, along with checkbox keyboard behavior, notifications, shared route-state styling, and the export menu at mobile LTR/RTL widths. Pearl (`pearl`) and Deep Ocean (`ocean`) require migration 0216. Migration 0217 adds Obsidian Plum, Evergreen, Espresso, Lunar Slate, Ivory Linen, Glacier, Sage White, Porcelain Rose, Dune Bronze, and Harbor Mist; `tests/integration/appearance-palettes.test.ts` checks personal and company persistence for every palette and rejection of unknown names.

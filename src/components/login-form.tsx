@@ -1,6 +1,8 @@
 import { getTranslations } from 'next-intl/server';
 import { TriangleAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import admin from '@/components/admin/admin.module.css';
+import styles from '@/app/sign-in/sign-in.module.css';
 import {
   EmailField,
   PasswordField,
@@ -34,21 +36,15 @@ export async function LoginForm({
   const t = await getTranslations('auth');
 
   return (
-    <div className={cn('flex flex-col gap-5', className)} {...props}>
-      <div className="relative overflow-hidden rounded-[28px] border border-border/80 bg-card shadow-[0_1px_2px_rgb(0_0_0_/_10%),0_40px_80px_-30px_rgb(0_0_0_/_55%)]">
-        <div className="px-8 pt-8 pb-2">
-          <p className="m-0 text-[11px] font-semibold tracking-[0.14em] text-primary uppercase">
-            {t('eyebrow')}
-          </p>
-          <h1 className="m-0 mt-1.5 text-[26px] leading-tight font-semibold tracking-tight text-foreground">
-            {t('welcome')}
-          </h1>
-        </div>
+    <div className={cn(className)} {...props}>
+      <div className={cn(admin.sapWindow, styles.window)}>
+        <div className={admin.sapTitle}>{t('eyebrow')}</div>
 
-        <div className="px-8 pt-3 pb-8">
-          <p className="m-0 mb-6 text-sm text-muted-foreground">{t('welcome_hint')}</p>
+        <div className={styles.body}>
+          <h1 className={styles.heading}>{t('welcome')}</h1>
+          <p className={styles.hint}>{t('welcome_hint')}</p>
 
-          <form action={action} className="grid gap-5">
+          <form action={action} className={styles.form}>
             <EmailField id="email" label={t('email')} placeholder={t('email_placeholder')} />
             <PasswordField
               capsLockLabel={t('caps_lock')}
@@ -65,7 +61,7 @@ export async function LoginForm({
             */}
             {failed ? (
               <p
-                className="m-0 flex items-start gap-2.5 rounded-xl border border-destructive/30 bg-destructive/6 px-3.5 py-3 text-[13px] leading-snug text-destructive"
+                className={styles.error}
                 role="alert"
               >
                 <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
@@ -78,7 +74,7 @@ export async function LoginForm({
             <SubmitButton label={t('sign_in')} pendingLabel={t('signing_in')} />
           </form>
 
-          <p className="m-0 mt-6 text-center text-xs text-muted-foreground">{t('need_access')}</p>
+          <p className={styles.support}>{t('need_access')}</p>
         </div>
       </div>
     </div>

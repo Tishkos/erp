@@ -73,7 +73,7 @@ export const company = pgTable(
     // failure shows on every screen at once with nothing to explain it.
     check(
       'company_ui_palette_known',
-      sql`${t.uiPalette} in ('sand', 'classic', 'slate', 'graphite', 'midnight', 'carbon')`,
+      sql`${t.uiPalette} in ('sand', 'classic', 'slate', 'graphite', 'pearl', 'midnight', 'carbon', 'ocean', 'obsidian_plum', 'evergreen', 'espresso', 'lunar_slate', 'ivory_linen', 'glacier', 'sage_white', 'porcelain_rose', 'dune_bronze', 'harbor_mist')`,
     ),
     check(
       'company_ui_accent_known',

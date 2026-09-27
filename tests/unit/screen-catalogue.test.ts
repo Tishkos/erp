@@ -94,9 +94,10 @@ describe('the screen catalogue covers the approved tree', () => {
   // one of them is still reachable, once.
   // Plus one more, by direction (2026-09-03): the Statement Mapping, where
   // Finance defines the headers and lines of its own reports.
-  it('classifies all 221 items in the approved tree', () => {
-    expect(allMenuItems()).toHaveLength(221);
-    expect(Object.keys(SCREENS)).toHaveLength(221);
+  it('classifies all 222 items in the approved tree', () => {
+    // 221 from the approved tree, plus the Stock Ledger added 2026-09-27.
+    expect(allMenuItems()).toHaveLength(222);
+    expect(Object.keys(SCREENS)).toHaveLength(222);
   });
 
   it('uses only declared archetypes', () => {
@@ -113,7 +114,7 @@ describe('the screen catalogue covers the approved tree', () => {
       (sum, item) => sum + screenCount(archetypeOf(item.key)!),
       0,
     );
-    expect(total).toBe(328);
+    expect(total).toBe(329);
   });
 });
 
@@ -166,7 +167,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(221);
+    expect(screenRoutes().size).toBe(222);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -202,6 +203,8 @@ describe('every screen has one address', () => {
       '/inventory/in-transit',
       // Block 7 — Opening Stock, Item Reconciliation, Stock Movement, Transfer.
       '/inventory/opening-stock',
+      // The Stock Ledger (2026-09-27).
+      '/inventory/stock-ledger',
       '/inventory/stock-movements',
       '/inventory/stock-reconciliation',
       '/inventory/transfers',
@@ -265,7 +268,7 @@ describe('the build tracker reports what each phase owes the frontend', () => {
   it('attributes every screen to the phase that delivers it', () => {
     const byPhase = screensByPhase();
     const counted = [...byPhase.values()].reduce((sum, screens) => sum + screens.length, 0);
-    expect(counted).toBe(221);
+    expect(counted).toBe(222);
     for (const phase of byPhase.keys()) expect(phase).toMatch(/^\d\d$/);
   });
 });

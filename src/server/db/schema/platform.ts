@@ -126,6 +126,10 @@ export const appUser = pgTable(
   (t) => [
     uniqueIndex('app_user_email_uniq').on(sql`lower(${t.email})`),
     check('app_user_email_shape', sql`position('@' in ${t.email}) > 1`),
+    check(
+      'app_user_ui_palette_known',
+      sql`${t.uiPalette} is null or ${t.uiPalette} in ('sand', 'classic', 'slate', 'graphite', 'pearl', 'midnight', 'carbon', 'ocean', 'obsidian_plum', 'evergreen', 'espresso', 'lunar_slate', 'ivory_linen', 'glacier', 'sage_white', 'porcelain_rose', 'dune_bronze', 'harbor_mist')`,
+    ),
   ],
 );
 

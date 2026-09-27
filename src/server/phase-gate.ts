@@ -96,6 +96,8 @@ export const OPERATIONS: readonly string[] = [
   '/inventory/opening-stock',
   '/inventory/stock-reconciliation',
   '/inventory/stock-movements',
+  // The Stock Ledger: opening, every movement, closing, per warehouse (2026-09-27).
+  '/inventory/stock-ledger',
   // Block 4 — the Purchase Invoice.
   '/purchasing/ap-invoices',
   // Block 5 — the Sales Invoice.

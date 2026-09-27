@@ -31,7 +31,11 @@ import {
   businessPartner,
   goodsReceipt,
   goodsReceiptLine,
+  goodsReturn,
+  inventoryMovement,
   journalEntry,
+  paymentProposalItem,
+  supplierCreditMemo,
   warehouse,
   purchaseOrder,
   purchaseOrderLine,
@@ -55,6 +59,7 @@ import * as authz from './authorization';
 import * as audit from './audit';
 import * as posting from './posting';
 import * as inventory from './inventory';
+import * as journal from './journal';
 import * as shipments from './supplier-shipment';
 import * as statuses from './statuses';
 import * as terms from './payment-terms';
@@ -1322,6 +1327,172 @@ export async function post(
   });
 
   return { journalEntryId: result.journalEntryId, varianceValueIqd: varianceIqd };
+}
+
+// ---------------------------------------------------------------------------
+// Reverse — posted → reversed (§3.2, §14.3; decided 2026-09-27)
+// ---------------------------------------------------------------------------
+
+export class ApInvoiceNotReversibleError extends Error {
+  readonly code = 'AP_INVOICE_NOT_REVERSIBLE';
+  constructor(
+    readonly invoiceNo: string,
+    detail: string,
+  ) {
+    super(`${invoiceNo} cannot be reversed: ${detail}`);
+    this.name = 'ApInvoiceNotReversibleError';
+  }
+}
+
+/**
+ * Undoes a posted Purchase Invoice, whole.
+ *
+ * The mirror of `ar-invoice.reverse`, and for the same reason: a Goods Return
+ * is the document for goods going back to the supplier, not for an invoice
+ * that should never have been posted. The journal is mirrored and linked, the
+ * goods the invoice received leave the warehouse by the very layers they made
+ * — at the cost they arrived at, and only if nothing has been taken from those
+ * layers since — and the document is marked reversed with the reason.
+ *
+ * Refused when anything rests on the invoice: a payment or an advance settled
+ * against it, a return or a credit memo raised from it, a payment run that
+ * has picked it up, or stock from it that has been sold or moved on (the
+ * inventory engine says so, layer by layer). Each of those is a document of
+ * its own and is undone through its own document first.
+ */
+export async function reverse(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  input: { readonly reason: string },
+): Promise<{ reversalEntryNo: string; movementsReversed: number }> {
+  const { invoice, lines } = await load(tx, id, { lock: true });
+
+  await authz.authorize(ctx.principal, 'reverse_cancel', PERMISSION_OBJECT, {
+    branchCode: invoice.branchCode,
+    objectId: id,
+  });
+
+  const reason = input.reason.trim();
+  if (!reason) {
+    throw new ApInvoiceNotReversibleError(
+      invoice.invoiceNo,
+      'a reversal records why the invoice was wrong (§14.3). Give a reason.',
+    );
+  }
+
+  // The specific refusals first, the status machine last — see `ar-invoice`.
+  if (parseDecimal(invoice.settledAmountIqd, 4n) !== 0n) {
+    throw new ApInvoiceNotReversibleError(
+      invoice.invoiceNo,
+      `${invoice.settledAmountIqd} IQD has been paid or settled against it. Reverse the payment first; the invoice can then be reversed.`,
+    );
+  }
+
+  const [returned] = await tx
+    .select({ returnNo: goodsReturn.returnNo })
+    .from(goodsReturn)
+    .where(
+      and(eq(goodsReturn.apInvoiceId, id), sql`${goodsReturn.status} not in ('rejected', 'cancelled')`),
+    )
+    .limit(1);
+  if (returned) {
+    throw new ApInvoiceNotReversibleError(
+      invoice.invoiceNo,
+      `Goods Return ${returned.returnNo} was raised against it. An invoice with a return behind it is corrected through the return, not undone.`,
+    );
+  }
+
+  const [credited] = await tx
+    .select({ memoNo: supplierCreditMemo.memoNo })
+    .from(supplierCreditMemo)
+    .where(eq(supplierCreditMemo.apInvoiceId, id))
+    .limit(1);
+  if (credited) {
+    throw new ApInvoiceNotReversibleError(
+      invoice.invoiceNo,
+      `Supplier Credit Memo ${credited.memoNo} was raised against it.`,
+    );
+  }
+
+  const [proposed] = await tx
+    .select({ id: paymentProposalItem.id })
+    .from(paymentProposalItem)
+    .where(eq(paymentProposalItem.apInvoiceId, id))
+    .limit(1);
+  if (proposed) {
+    throw new ApInvoiceNotReversibleError(
+      invoice.invoiceNo,
+      'a payment run has selected it. Take it out of the proposal first.',
+    );
+  }
+
+  await statuses.assertTransitionAllowed(tx, DOCUMENT_TYPE, invoice.status, 'reversed', reason);
+  if (!invoice.journalEntryId) {
+    throw new ApInvoiceNotReversibleError(invoice.invoiceNo, 'it has no journal to reverse.');
+  }
+
+  // The goods first. A layer that has been sold from, returned from or
+  // carried to another warehouse cannot be taken back, and the inventory
+  // engine refuses it with the figures — before any journal is touched.
+  const receipts = await tx
+    .select({ id: inventoryMovement.id })
+    .from(inventoryMovement)
+    .where(
+      and(
+        eq(inventoryMovement.sourceDocumentType, DOCUMENT_TYPE),
+        eq(inventoryMovement.sourceDocumentId, id),
+        eq(inventoryMovement.kind, 'goods_receipt'),
+      ),
+    )
+    .orderBy(inventoryMovement.createdAt);
+
+  for (const movement of receipts) {
+    await inventory.reverseMovement(tx, ctx, movement.id, reason);
+  }
+
+  const reversal = await journal.reverse(tx, ctx, invoice.journalEntryId, { reason });
+
+  // The ordered lines were credited with this invoice's quantity when it
+  // posted; they give it back, so a later invoice can bill the order again.
+  for (const line of lines) {
+    if (!line.purchaseOrderLineId) continue;
+    await tx
+      .update(purchaseOrderLine)
+      .set({ invoicedQuantity: sql`${purchaseOrderLine.invoicedQuantity} - ${line.quantity}` })
+      .where(eq(purchaseOrderLine.id, line.purchaseOrderLineId));
+  }
+
+  const now = new Date();
+  await tx
+    .update(apInvoice)
+    .set({
+      status: 'reversed',
+      reversedBy: ctx.principal.userId,
+      reversedAt: now,
+      reversalReason: reason,
+      updatedAt: now,
+    })
+    .where(eq(apInvoice.id, id));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'ap_invoice.reversed',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: invoice.branchCode,
+    outcome: 'success',
+    before: { status: invoice.status, journalEntryId: invoice.journalEntryId },
+    after: {
+      status: 'reversed',
+      reversalEntryNo: reversal.entryNo,
+      movementsReversed: receipts.length,
+    },
+    reason,
+    relatedObjectId: reversal.id,
+  });
+
+  return { reversalEntryNo: reversal.entryNo, movementsReversed: receipts.length };
 }
 
 /**

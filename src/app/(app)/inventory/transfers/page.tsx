@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
@@ -7,6 +8,7 @@ import {
   Flash,
   Form,
   Grid,
+  Hidden,
   ListToolbar,
   NewRecordDialog,
   Pill,
@@ -16,6 +18,7 @@ import {
   matches,
 } from '@/components/admin';
 import { SearchablePicker } from '@/components/admin/searchable-picker';
+import { IntegrityBanner } from '@/components/admin/integrity-banner';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -86,6 +89,9 @@ export default async function TransfersPage({ searchParams }: { searchParams: Se
           >
             <p className="muted">{t('transfers.created_note')}</p>
             <Form action={createTransfer}>
+              {/* Minted when the page is drawn. Two presses of this form send
+                  one id, and the second finds the first's transfer saved. */}
+              <Hidden name="document_id" value={randomUUID()} />
               <Grid>
                 {/* The name alone. A transfer is raised by somebody who knows
                     what is moving, not its code, and the pair asked for the
@@ -143,6 +149,7 @@ export default async function TransfersPage({ searchParams }: { searchParams: Se
       title={page('transfer_requests')}
       variant="sap"
     >
+      <IntegrityBanner />
       <Flash
         error={outcome.error}
         errorTitle={t('error_title')}

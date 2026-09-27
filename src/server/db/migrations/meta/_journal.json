@@ -974,6 +974,27 @@
       "when": 1795900000018,
       "tag": "0214_serial_catches_up",
       "breakpoints": true
+    },
+    {
+      "idx": 139,
+      "version": "7",
+      "when": 1795900000019,
+      "tag": "0215_movement_branch_is_warehouse_branch",
+      "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1795900000020,
+      "tag": "0216_pearl_ocean_palettes",
+      "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1795900000021,
+      "tag": "0217_extended_appearance_palettes",
+      "breakpoints": true
     }
   ]
 }

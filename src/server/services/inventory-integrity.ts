@@ -20,11 +20,14 @@
  *   2. Is there a ledger row whose document no longer exists?
  *   3. Does every transfer leave one place by exactly what arrives at the other?
  *
- * The fourth question — do the FIFO layers still hold what the movements say
- * is there — is `inventory-reports.integrity`, the §9.9 check that predates
- * this file; it is asked alongside these, not repeated here.
+ * And the §9.9 question that predates this file — do the FIFO layers still
+ * hold what the movements say is there, and is any warehouse below zero —
+ * asked here without a principal so the nightly run and the page banner can
+ * ask it too (`inventory-reports.integrity` is the same query behind a
+ * permission check).
  *
- * Read-only. Safe to run against a live system; it changes nothing.
+ * `check` is read-only and safe against a live system. `notifyFindings` writes
+ * notifications and nothing else.
  */
 import { sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
@@ -64,6 +67,7 @@ export interface IntegrityReport {
   readonly documentsWithoutLedger: readonly OrphanDocument[];
   readonly ledgerWithoutDocument: readonly OrphanMovement[];
   readonly unbalancedTransfers: readonly UnbalancedTransfer[];
+  readonly adriftPositions: readonly AdriftPosition[];
   /** True when every list above is empty. */
   readonly clean: boolean;
 }
@@ -218,17 +222,146 @@ export async function unbalancedTransfers(tx: Tx): Promise<UnbalancedTransfer[]>
   );
 }
 
-/** The three questions, asked together. */
+/**
+ * Positions where the FIFO layers and the movement ledger disagree, or where
+ * a warehouse is negative — `inventory-reports.integrity` asked without a
+ * principal, for the nightly run and the banner.
+ */
+export interface AdriftPosition {
+  readonly issue: string;
+  readonly itemCode: string;
+  readonly warehouseCode: string;
+  readonly detail: string;
+}
+
+export async function adriftPositions(tx: Tx): Promise<AdriftPosition[]> {
+  return rowsOf<AdriftPosition>(
+    await tx.execute(sql`
+      with positions as (
+        select item_code, warehouse_code, sum(quantity) as on_hand
+          from inventory_movement group by item_code, warehouse_code
+      ),
+      layers as (
+        select item_code, warehouse_code, sum(remaining_quantity) as remaining
+          from cost_layer group by item_code, warehouse_code
+      )
+      select 'negative_position' as "issue", p.item_code as "itemCode",
+             p.warehouse_code as "warehouseCode", p.on_hand::text as "detail"
+        from positions p where p.on_hand < 0
+      union all
+      select 'ledger_layer_mismatch', p.item_code, p.warehouse_code,
+             (p.on_hand - coalesce(l.remaining, 0))::text
+        from positions p
+        left join layers l on l.item_code = p.item_code and l.warehouse_code = p.warehouse_code
+       where p.on_hand <> coalesce(l.remaining, 0)
+       order by 1, 2, 3
+    `),
+  );
+}
+
+/** The four questions, asked together. */
 export async function check(tx: Tx): Promise<IntegrityReport> {
   // One after another: they share the caller's connection, and pg queues a
   // second query on a busy client rather than running it alongside.
   const documents = await documentsWithoutLedger(tx);
   const movements = await ledgerWithoutDocument(tx);
   const transfers = await unbalancedTransfers(tx);
+  const positions = await adriftPositions(tx);
   return {
     documentsWithoutLedger: documents,
     ledgerWithoutDocument: movements,
     unbalancedTransfers: transfers,
-    clean: documents.length === 0 && movements.length === 0 && transfers.length === 0,
+    adriftPositions: positions,
+    clean:
+      documents.length === 0 &&
+      movements.length === 0 &&
+      transfers.length === 0 &&
+      positions.length === 0,
   };
+}
+
+/** How many things a report names, across its four lists. */
+export function findingCount(report: IntegrityReport): number {
+  return (
+    report.documentsWithoutLedger.length +
+    report.ledgerWithoutDocument.length +
+    report.unbalancedTransfers.length +
+    report.adriftPositions.length
+  );
+}
+
+/** The findings, one line each, in the order a reader would want them. */
+export function describe(report: IntegrityReport): string[] {
+  return [
+    ...report.documentsWithoutLedger.map(
+      (d) => `${d.documentType} ${d.documentNo} (${d.branchCode}) has no rows in the stock ledger.`,
+    ),
+    ...report.ledgerWithoutDocument.map(
+      (m) =>
+        `Movement ${m.movementId} (${m.kind} ${m.quantity} of ${m.itemCode} in ${m.warehouseCode}) ` +
+        `names ${m.sourceDocumentType} ${m.sourceDocumentId}, which no longer exists.`,
+    ),
+    ...report.unbalancedTransfers.map(
+      (t) =>
+        `${t.sourceDocumentType} ${t.documentNo ?? t.sourceDocumentId}: ${t.issued} of ${t.itemCode} left ` +
+        `and ${t.received} arrived${t.documented ? `; the document says ${t.documented}` : ''}.`,
+    ),
+    ...report.adriftPositions.map((p) =>
+      p.issue === 'negative_position'
+        ? `${p.itemCode} in ${p.warehouseCode} stands at ${p.detail}, below zero.`
+        : `${p.itemCode} in ${p.warehouseCode}: the ledger and the FIFO layers differ by ${p.detail}.`,
+    ),
+  ];
+}
+
+/**
+ * Tells the accounting managers what the check found — one in-app
+ * notification per manager per day, keyed on the day and the count so a
+ * check that finds the same thing twice in one night says it once, and one
+ * that finds something new says so again.
+ *
+ * Rows are written straight to `notification`, as Invoice Status Tracking
+ * does: there is no configurable rule for this event because there is no
+ * decision in it — a ledger that disagrees with its documents is always told
+ * to the people who keep the books.
+ */
+export async function notifyFindings(
+  tx: Tx,
+  report: IntegrityReport,
+  today: string,
+): Promise<{ notified: number }> {
+  if (report.clean) return { notified: 0 };
+
+  const lines = describe(report);
+  const count = findingCount(report);
+  const recipients = rowsOf<{ user_id: string }>(
+    await tx.execute(sql`
+      select distinct u.id as user_id
+        from app_user u
+        left join user_role r on r.user_id = u.id
+       where u.is_active
+         and (u.is_super_user or r.role_code = 'accounting_manager')
+    `),
+  );
+
+  let notified = 0;
+  for (const { user_id } of recipients) {
+    const inserted = rowsOf<{ id: string }>(
+      await tx.execute(sql`
+        insert into notification
+          (rule_code, event_type, object_type, object_id, recipient_user_id, subject, body,
+           context, dedupe_key, branch_code)
+        values
+          (null, 'inventory.integrity_failed', 'inventory_movement', ${today}, ${user_id},
+           ${`Stock ledger check: ${count} thing(s) to look at`},
+           ${lines.slice(0, 20).join('\n') + (lines.length > 20 ? `\n… and ${lines.length - 20} more.` : '')},
+           ${JSON.stringify({ day: today, count })}::jsonb,
+           ${`inventory-integrity:${today}:${count}:${user_id}`}, null)
+        on conflict (dedupe_key) do nothing
+        returning id
+      `),
+    );
+    notified += inserted.length;
+  }
+  return { notified };
 }

@@ -21,6 +21,7 @@ import * as warehouses from '@/server/services/warehouses';
 import {
   invoiceLineAvailability,
   postApInvoice,
+  reverseApInvoice,
   saveApInvoiceAccounts,
   removeApInvoiceLine,
   saveApInvoiceLine,
@@ -161,6 +162,12 @@ export default async function ApInvoicePage({
     invoice.status === 'submitted' &&
     can(principal, 'approve', ap.PERMISSION_OBJECT) &&
     can(principal, 'post', ap.PERMISSION_OBJECT);
+  // A posted invoice is undone, never edited (§3.2). Offered while nothing has
+  // been paid against it; the service refuses the rest and says why.
+  const mayReverse =
+    invoice.status === 'posted' &&
+    Number(invoice.settledAmountIqd) === 0 &&
+    can(principal, 'reverse_cancel', ap.PERMISSION_OBJECT);
 
   const fields: DocumentField[] = [
     { label: column('invoice_no'), value: <bdi dir="ltr">{invoice.invoiceNo}</bdi> },
@@ -236,6 +243,14 @@ export default async function ApInvoicePage({
                 <input name="id" type="hidden" value={invoice.id} />
                 <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
                 <Submit label={t('ap_invoices.approve_and_post')} variant="document" />
+              </form>
+            ) : null}
+            {mayReverse ? (
+              <form action={reverseApInvoice} title={t('invoices.reverse_hint')}>
+                <input name="id" type="hidden" value={invoice.id} />
+                <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
+                <input aria-label={t('reason')} name="reason" placeholder={t('invoices.reverse_reason')} required type="text" />
+                <Submit label={t('invoices.reverse')} tone="secondary" variant="document" />
               </form>
             ) : null}
           </>

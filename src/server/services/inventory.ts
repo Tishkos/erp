@@ -279,6 +279,47 @@ async function loadItem(tx: Tx, itemCode: string) {
   return row;
 }
 
+export class WarehouseBranchMismatchError extends Error {
+  readonly code = 'WAREHOUSE_BRANCH_MISMATCH';
+  constructor(
+    readonly warehouseCode: string,
+    readonly warehouseBranch: string,
+    readonly requestedBranch: string,
+  ) {
+    super(
+      `${warehouseCode} belongs to branch ${warehouseBranch}, and this movement was raised under ${requestedBranch}. ` +
+        'Stock is recorded under the branch of the warehouse that holds it, so the two must agree. ' +
+        'Choose a warehouse of the current branch, or switch branch first.',
+    );
+    this.name = 'WarehouseBranchMismatchError';
+  }
+}
+
+/**
+ * The branch a movement is recorded under is the warehouse's, not the actor's.
+ *
+ * `stock_position` groups by branch, row-level security scopes by branch, and
+ * a warehouse belongs to exactly one. A movement written under any other
+ * branch code would be stock that the warehouse's own branch cannot see and
+ * that the position view splits into two rows. Rather than quietly rewriting
+ * the caller's branch, the mismatch is refused: a caller that names the wrong
+ * branch has usually chosen the wrong warehouse (2026-09-27). Migration 0215
+ * holds the same rule in the database for anything that does not come through
+ * here.
+ */
+async function branchOfWarehouse(tx: Tx, warehouseCode: string, requested: string): Promise<string> {
+  const [house] = await tx
+    .select({ branchCode: warehouse.branchCode })
+    .from(warehouse)
+    .where(eq(warehouse.code, warehouseCode))
+    .limit(1);
+  if (!house) throw new Error(`No warehouse '${warehouseCode}'.`);
+  if (house.branchCode !== requested) {
+    throw new WarehouseBranchMismatchError(warehouseCode, house.branchCode, requested);
+  }
+  return house.branchCode;
+}
+
 /**
  * §9.3 — *"tracking is mandatory; no-tracking is not allowed"* for stock items.
  *
@@ -394,6 +435,7 @@ export async function receive(
 
   const stockItem = await loadItem(tx, input.itemCode);
   if (!stockItem.isStock) throw new ItemNotStockedError(input.itemCode);
+  await branchOfWarehouse(tx, input.warehouseCode, input.branchCode);
 
   assertTrackingSupplied(input.itemCode, stockItem.tracking, input);
 
@@ -577,6 +619,7 @@ export async function issue(
 
   const stockItem = await loadItem(tx, input.itemCode);
   if (!stockItem.isStock) throw new ItemNotStockedError(input.itemCode);
+  await branchOfWarehouse(tx, input.warehouseCode, input.branchCode);
   assertTrackingSupplied(input.itemCode, stockItem.tracking, input);
 
   // §9.2 — the layers for this item and warehouse are locked for the duration
@@ -723,6 +766,7 @@ export async function issueFromLayer(
 
   const stockItem = await loadItem(tx, input.itemCode);
   if (!stockItem.isStock) throw new ItemNotStockedError(input.itemCode);
+  await branchOfWarehouse(tx, input.warehouseCode, input.branchCode);
   assertTrackingSupplied(input.itemCode, stockItem.tracking, input);
 
   await tx.execute(sql`

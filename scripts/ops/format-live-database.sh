@@ -58,6 +58,26 @@ if [[ -n "$MASTER" && "$MASTER" != "--master-data" ]]; then
   exit 2
 fi
 
+# ── The books are open: this script no longer applies ──────────────────────
+# Once real trading has begun, a format destroys history that the audit trail,
+# the document numbers and every backup assume is permanent. The marker file
+# below is placed on the server the day the company starts trading for real
+# (2026-09-27), and while it stands this script does nothing but say so.
+# Lifting it is a deliberate act by a person, not a flag on the command line:
+# there is no --force, because the one time somebody reaches for --force is
+# the one time it must not exist.
+LIVE_MARKER="$APP/var/LIVE"
+if ssh "$ERP_SSH" test -e "$LIVE_MARKER"; then
+  say "Refusing to format a live database"
+  ssh "$ERP_SSH" cat "$LIVE_MARKER"
+  echo
+  echo "The books on this server are live. A format would erase real invoices, real" >&2
+  echo "stock movements and the audit trail behind them, as it did on 2026-09-27." >&2
+  echo "Trials and demos belong on a separate database. If this really is not a live" >&2
+  echo "system any more, remove $LIVE_MARKER on the server by hand and run again." >&2
+  exit 3
+fi
+
 # ── What a document is, in the order it has to be taken apart ──────────────
 # Every table a posted document touches, children first. Tables belonging to
 # phases that are not built yet are here too: they are empty, deleting from
@@ -132,6 +152,41 @@ payment_proposal_item
 payment_proposal
 bank_execution_batch_line
 bank_execution_batch
+money_transfer_expense
+money_transfer_deposit_usage
+money_transfer
+logistics_delivery_evidence
+logistics_claim
+logistics_job_cost
+logistics_client_charge
+logistics_client_funding
+logistics_job_settlement
+logistics_job_leg
+logistics_job
+client_goods_delivery
+client_import_payment
+client_import_file_reference
+client_import_file
+money_transfer_deposit
+project_balance_movement
+project_certificate
+project_progress
+project_variation
+project_cost
+project_commitment
+asset_verification
+asset_impairment
+asset_transfer
+asset_depreciation
+fixed_asset
+investment_capital_call
+investment_disposal
+investment_impairment
+investment_valuation
+investment_income
+investment_funding
+investment
+investment_proposal
 invoice_line
 invoice
 subledger_entry
@@ -180,6 +235,43 @@ delete from posting_rule
  where account_id in (select id from chart_of_account where name like 'E2E %');
 delete from account_required_dimension
  where account_id in (select id from chart_of_account where name like 'E2E %');
+
+-- A bank or cash account carries exactly one G/L account and the database has
+-- the foreign key for it. This runs with the keys down, so deleting an account
+-- something still points at does not fail — it leaves a bank account naming a
+-- row that is not there.
+--
+-- That is what happened to CASH-ACCOUNTANT_ERBIL on 2026-09-27: its G/L
+-- account was named "E2E ..." and went out with this statement. The account
+-- then vanished from its own screen (the list inner-joined the chart until
+-- bbe05f1), so the one place that could repair the link was the place the
+-- break had hidden it from, and it was reported as "I can't link the cash
+-- account to a G/L account".
+--
+-- Refused rather than cascaded. Deleting the bank account too would destroy
+-- something nobody asked to lose, and re-pointing it is a choice about which
+-- account the money sits in — the person running the format is the one to
+-- make it. Named here, before anything is deleted, so the transaction rolls
+-- back whole.
+do $fmt$
+declare
+  v_names text;
+begin
+  select string_agg(b.code || ' -> ' || a.code || ' ' || a.name, ', ' order by b.code)
+    into v_names
+    from bank_cash_account b
+    join chart_of_account a on a.id = b.gl_account_id
+   where a.name like 'E2E %' and not a.is_system;
+
+  if v_names is not null then
+    raise exception
+      'These bank/cash accounts still carry a G/L account this format would delete: %. '
+      'Point them at another account first (Master data -> Bank/Cash accounts), '
+      'or remove them. Nothing has been changed.', v_names;
+  end if;
+end
+$fmt$;
+
 delete from chart_of_account where name like 'E2E %' and not is_system;
 SQL
 
@@ -275,6 +367,18 @@ select rpad(t.table_name, 28) || lpad(t.n::text, 8)
   ) t
  where t.n > 0
  order by 1;
+
+select '';
+select 'MASTER DATA POINTING AT SOMETHING GONE (must be empty)';
+-- The keys are down while this script runs, so a delete can leave a master
+-- record naming a row that no longer exists — and unlike a document, a master
+-- record is not re-created by the next day's trading. Reported before and
+-- after, because a break that arrives some other way (a restore of one table,
+-- a hand-run delete) reads exactly the same from here.
+select rpad('bank/cash -> G/L', 22) || b.code || ' names a chart_of_account that is not there'
+  from bank_cash_account b
+ where not exists (select 1 from chart_of_account a where a.id = b.gl_account_id)
+ order by b.code;
 
 select '';
 select 'DOCUMENTS WITHOUT THEIR LEDGER ROWS (must be empty)';

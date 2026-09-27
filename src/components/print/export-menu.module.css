@@ -10,14 +10,16 @@
 
 .trigger {
   display: inline-flex;
-  min-block-size: var(--control-height);
+  min-block-size: 2rem;
   align-items: center;
   gap: 0.45rem;
   padding-inline: 0.85rem;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  color: var(--text-soft);
-  background: var(--surface);
+  border: 1px solid var(--w-amber-line, var(--border-strong));
+  border-radius: 0.15rem;
+  color: var(--w-accent-ink, var(--text));
+  background: linear-gradient(180deg, var(--w-amber-a, var(--surface)), var(--w-amber-b, var(--surface-muted)));
+  font-family: inherit;
+  font-size: 0.78rem;
   font-weight: 700;
   list-style: none;
   cursor: pointer;
@@ -35,9 +37,9 @@
 
 .trigger:hover,
 .menu[open] > .trigger {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--w-amber-line, var(--accent));
+  color: var(--w-label, var(--text));
+  background: var(--w-selected, var(--accent-soft));
 }
 
 .trigger:focus-visible {
@@ -70,15 +72,19 @@
   gap: 0.35rem;
   min-inline-size: 16rem;
   padding: 0.55rem;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface-raised);
-  box-shadow: 0 12px 28px rgb(25 43 84 / 16%);
+  max-inline-size: calc(100vw - 2rem);
+  box-sizing: border-box;
+  border: 1px solid var(--w-line-strong, var(--border-strong));
+  border-radius: 0.2rem;
+  background: var(--w-bg, var(--surface-raised));
+  color: var(--w-text, var(--text));
+  box-shadow: 0 2px 6px rgb(24 39 31 / 18%);
 }
 
 @supports (anchor-name: --a) {
   .menu {
     anchor-name: --exportMenu;
+    anchor-scope: --exportMenu;
   }
 
   .panel {
@@ -111,10 +117,10 @@
 
 .format {
   padding: 0.3rem 0.6rem;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  background: var(--surface);
+  border: 1px solid var(--w-line-strong, var(--border-strong));
+  border-radius: 0.12rem;
+  color: var(--w-text, var(--text));
+  background: var(--w-field, var(--surface));
   font-size: 0.82rem;
   font-weight: 600;
   text-decoration: none;
@@ -122,10 +128,22 @@
 
 .format:hover,
 .format:focus-visible {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--w-amber-line, var(--accent));
+  color: var(--w-label, var(--text));
+  background: var(--w-selected, var(--accent-soft));
   outline: none;
+}
+
+@media (max-width: 40rem) {
+  .panel {
+    position-anchor: auto;
+    inset-block-start: auto;
+    inset-block-end: 1rem;
+    inset-inline: 1rem;
+    min-inline-size: 0;
+    max-block-size: calc(100dvh - 2rem);
+    overflow: auto;
+  }
 }
 
 @media print {

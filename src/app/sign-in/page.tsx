@@ -7,6 +7,7 @@ import { db, applyScope } from '@/server/db/client';
 import { createSession, verifyCredentials } from '@/server/services/authentication';
 import { optionalContext, SESSION_COOKIE } from '@/server/session';
 import { LoginForm } from '@/components/login-form';
+import { DEFAULT_ACCENT, DEFAULT_PALETTE } from '@domain/appearance';
 import mainLogo from '../../../mainLogo.png';
 import styles from './sign-in.module.css';
 
@@ -74,7 +75,7 @@ export default async function SignInPage({
   const failed = (await searchParams).error !== undefined;
 
   return (
-    <main className={styles.page}>
+    <main className={`erp-root ${styles.page}`} data-palette={DEFAULT_PALETTE} data-accent={DEFAULT_ACCENT}>
       {/*
         The brand panel. The grid and concentric rings are pseudo-elements on
         this section; the lockup already carries the company name and
@@ -86,7 +87,7 @@ export default async function SignInPage({
             alt={t('shell.logo_alt')}
             className={styles.brandLogo}
             preload
-            sizes="(max-width: 52rem) 96px, 132px"
+            sizes="72px"
             src={mainLogo}
           />
           <p className={styles.brandStrapline}>{t('app.tagline')}</p>

@@ -156,6 +156,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('availability', 'inventory_movement', '04', '/inventory/availability'),
       page('opening_stock', 'opening_stock', '04', '/inventory/opening-stock'),
       page('stock_movements', 'stock_movement', '04', '/inventory/stock-movements'),
+      page('stock_ledger', 'stock_movement', '04', '/inventory/stock-ledger'),
       page('transfer_requests', 'warehouse_transfer', '04', '/inventory/transfers'),
       page('in_transit', 'in_transit', '04'),
       page('quarantine', 'quarantine', '04'),

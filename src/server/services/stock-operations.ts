@@ -31,7 +31,7 @@ import {
 } from '../db/schema';
 import { availableQuantity } from '../domain/inventory';
 import { costOf } from '../domain/fifo';
-import { formatQuantity } from '../domain/uom';
+import { formatQuantity, parseQuantity } from '../domain/uom';
 import { toDecimalString } from '../domain/money';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
@@ -98,6 +98,29 @@ function assertDate(value: string): void {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new StockOperationError('Enter the date.');
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The document's identity, chosen before it is saved — the form's one-time key.
+ *
+ * A Transfer and a Reconciliation are new documents on every submit: there is
+ * no draft to re-post, so nothing about the second press of a button looked
+ * like a repeat. It moved the stock again. The form now mints the id when it
+ * is drawn and sends it with the fields; two presses of one form carry one
+ * id, and the second finds the first already saved. An id nobody supplied is
+ * minted here, so a caller that has no form is unaffected.
+ *
+ * The id is locked for the length of the transaction, so two presses arriving
+ * together serialise — the second reads the first's document rather than
+ * racing it to the primary key.
+ */
+async function claimDocumentId(tx: Tx, supplied: string | null | undefined): Promise<string> {
+  if (!supplied) return randomUUID();
+  if (!UUID.test(supplied)) throw new StockOperationError('The form is stale. Open it again.');
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${supplied}))`);
+  return supplied.toLowerCase();
+}
+
 // ---------------------------------------------------------------------------
 // Transfer
 // ---------------------------------------------------------------------------
@@ -108,12 +131,17 @@ export interface TransferInput {
   readonly toWarehouseCode: string;
   readonly quantity: bigint;
   readonly transferDate: string;
+  /** The form's one-time key — see `claimDocumentId`. */
+  readonly id?: string | null;
 }
 
 /**
  * Moves stock from one warehouse to another — Out of the first, In to the
  * second, in one transaction. What leaves is what arrives: the same quantity,
  * and the same layers at the same cost. The oldest stock goes first.
+ *
+ * Asked twice with the same `id`, it moves the stock once and answers with the
+ * transfer the first call made.
  */
 export async function transfer(
   tx: Tx,
@@ -121,6 +149,14 @@ export async function transfer(
   input: TransferInput,
 ): Promise<{ id: string; transferNo: string }> {
   await authz.authorize(ctx.principal, 'create', TRANSFER_OBJECT, { branchCode: ctx.branchCode });
+
+  const id = await claimDocumentId(tx, input.id);
+  const [already] = await tx
+    .select({ id: stockTransfer.id, transferNo: stockTransfer.transferNo })
+    .from(stockTransfer)
+    .where(eq(stockTransfer.id, id))
+    .limit(1);
+  if (already) return already;
 
   assertPositive(input.quantity);
   assertDate(input.transferDate);
@@ -161,7 +197,6 @@ export async function transfer(
     },
     ctx.principal.userId,
   );
-  const id = randomUUID();
 
   const moved = await inventory.relocate(tx, ctx, {
     itemCode: input.itemCode,
@@ -266,6 +301,8 @@ export interface AdjustmentInput {
   readonly direction: AdjustmentDirection;
   readonly quantity: bigint;
   readonly adjustmentDate: string;
+  /** The form's one-time key — see `claimDocumentId`. */
+  readonly id?: string | null;
 }
 
 /**
@@ -339,6 +376,14 @@ export async function adjust(
     branchCode: ctx.branchCode,
   });
 
+  const id = await claimDocumentId(tx, input.id);
+  const [already] = await tx
+    .select({ id: stockAdjustment.id, adjustmentNo: stockAdjustment.adjustmentNo })
+    .from(stockAdjustment)
+    .where(eq(stockAdjustment.id, id))
+    .limit(1);
+  if (already) return already;
+
   if (input.direction !== 'in' && input.direction !== 'out') {
     throw new StockOperationError('Choose In or Out.');
   }
@@ -358,7 +403,6 @@ export async function adjust(
     { branchCode: ctx.branchCode, year: Number(input.adjustmentDate.slice(0, 4)) },
     ctx.principal.userId,
   );
-  const id = randomUUID();
   const movement = {
     itemCode: input.itemCode,
     warehouseCode: input.warehouseCode,
@@ -561,129 +605,301 @@ export interface MovementFilter {
    */
   readonly itemSearch?: string | null;
   readonly warehouseCode?: string | null;
+  /** The number of the document behind the movement, anywhere in it. */
+  readonly documentNo?: string | null;
+  /**
+   * A page of the list. The page used to stop silently at a thousand rows;
+   * now the caller says how many and from where, and `countMovements` says how
+   * many there are in all, so the screen can say "1–200 of 4,312".
+   */
+  readonly limit?: number;
+  readonly offset?: number;
 }
 
+/** What a movement row carries, before it is shaped for a screen. */
+interface MovementRow {
+  readonly id: string;
+  readonly movement_date: string;
+  readonly created_at: string | null;
+  readonly item_code: string;
+  readonly item_name: string;
+  readonly uom_code: string;
+  readonly warehouse_code: string;
+  readonly warehouse_name: string;
+  readonly from_warehouse_code: string | null;
+  readonly from_warehouse_name: string | null;
+  readonly to_warehouse_code: string | null;
+  readonly to_warehouse_name: string | null;
+  readonly raised_by: string | null;
+  readonly kind: string;
+  readonly source_document_type: string | null;
+  readonly source_document_id: string | null;
+  readonly quantity: string;
+  readonly document_no: string | null;
+}
+
+const like = (term: string) => '%' + term.trim().toLowerCase().replace(/([%_\\])/g, '\\$1') + '%';
+
 /**
- * Every movement of stock, In or Out, with the document that made it.
+ * The movements a filter selects, as one relation the list, the count and the
+ * ledger all read. Written once so the three cannot disagree about which rows
+ * are in.
+ */
+function movementRows(ctx: ActorContext, filter: MovementFilter) {
+  return sql`
+    with rows as (
+      select m.id,
+             m.movement_date::text as movement_date,
+             -- When it was entered, not only the day it is dated: two movements on
+             -- one date are read in the order they happened.
+             m.created_at::text    as created_at,
+             m.item_code, i.name as item_name, i.base_uom_code as uom_code,
+             m.warehouse_code, w.name as warehouse_name,
+             -- Where the stock came from and where it went.
+             --
+             -- Anything that carries stock between warehouses -- a Transfer, and
+             -- every stage of Invoice Status Tracking -- goes through
+             -- inventory.relocate, which writes a transfer_issue where the goods
+             -- left and a transfer_receipt where they arrived. Each row therefore
+             -- has a counterpart, and the pair is found rather than read off one
+             -- document type: an earlier version joined stock_transfer, so a
+             -- shipment moving from In Process to On Board showed no origin.
+             --
+             -- The pair is the same source document and line at the same instant.
+             -- created_at defaults to now(), which Postgres holds still for the
+             -- length of a transaction, so both sides of one move share it exactly
+             -- while a later stage of the same invoice does not. Several cost
+             -- layers may be carried in one move; they all share the one origin
+             -- and destination, so any counterpart answers.
+             case when m.kind = 'transfer_issue'   then m.warehouse_code
+                  when m.kind = 'transfer_receipt' then pair.warehouse_code end as from_warehouse_code,
+             case when m.kind = 'transfer_issue'   then w.name
+                  when m.kind = 'transfer_receipt' then pair.warehouse_name end as from_warehouse_name,
+             case when m.kind = 'transfer_issue'   then pair.warehouse_code
+                  when m.kind = 'transfer_receipt' then m.warehouse_code end as to_warehouse_code,
+             case when m.kind = 'transfer_issue'   then pair.warehouse_name
+                  when m.kind = 'transfer_receipt' then w.name end as to_warehouse_name,
+             -- Who entered it.
+             coalesce(u.display_name, u.email) as raised_by,
+             m.kind::text as kind, m.source_document_type, m.source_document_id,
+             m.quantity::text as quantity,
+             coalesce(
+               (select invoice_no from ap_invoice where id::text = m.source_document_id
+                  and m.source_document_type in ('ap_invoice', 'supplier_shipment')),
+               (select invoice_no from ar_invoice where id::text = m.source_document_id
+                  and m.source_document_type = 'ar_invoice'),
+               (select return_no from sales_return where id::text = m.source_document_id
+                  and m.source_document_type = 'sales_return'),
+               (select return_no from goods_return where id::text = m.source_document_id
+                  and m.source_document_type = 'goods_return'),
+               (select transfer_no from stock_transfer where id::text = m.source_document_id
+                  and m.source_document_type = 'stock_transfer'),
+               (select adjustment_no from stock_adjustment where id::text = m.source_document_id
+                  and m.source_document_type = 'stock_adjustment'),
+               (select document_no from opening_stock where id::text = m.source_document_id
+                  and m.source_document_type = 'opening_stock')
+             ) as document_no
+        from inventory_movement m
+        join item i on i.code = m.item_code
+        join warehouse w on w.code = m.warehouse_code
+        left join app_user u on u.id = m.created_by
+        left join lateral (
+          select o.warehouse_code, pw.name as warehouse_name
+            from inventory_movement o
+            join warehouse pw on pw.code = o.warehouse_code
+           where m.kind in ('transfer_issue', 'transfer_receipt')
+             -- Compared as text: kind is an enum, and an enum does not compare
+             -- to the text a CASE returns without being told to.
+             and o.kind::text = case when m.kind::text = 'transfer_issue' then 'transfer_receipt'
+                                     else 'transfer_issue' end
+             and o.item_code = m.item_code
+             and o.created_at = m.created_at
+             and o.source_document_type is not distinct from m.source_document_type
+             and o.source_document_id   is not distinct from m.source_document_id
+             and o.source_line_id       is not distinct from m.source_line_id
+           limit 1
+        ) pair on true
+       where m.branch_code = ${ctx.branchCode}
+         ${filter.from ? sql`and m.movement_date >= ${filter.from}::date` : sql``}
+         ${filter.to ? sql`and m.movement_date <= ${filter.to}::date` : sql``}
+         ${filter.itemCode ? sql`and m.item_code = ${filter.itemCode}` : sql``}
+         ${
+           filter.itemSearch?.trim()
+             ? sql`and (lower(i.name) like ${like(filter.itemSearch)} escape '\\'
+                     or lower(m.item_code) like ${like(filter.itemSearch)} escape '\\')`
+             : sql``
+         }
+         ${filter.warehouseCode ? sql`and m.warehouse_code = ${filter.warehouseCode}` : sql``}
+    )
+    select * from rows
+     where true
+       ${
+         filter.documentNo?.trim()
+           ? sql`and lower(coalesce(document_no, '')) like ${like(filter.documentNo)} escape '\\'`
+           : sql``
+       }
+  `;
+}
+
+function shapeMovement(row: MovementRow) {
+  const negative = row.quantity.startsWith('-');
+  return {
+    id: row.id,
+    movementDate: row.movement_date,
+    itemCode: row.item_code,
+    itemName: row.item_name,
+    /** The item's base unit — what the quantity is counted in. */
+    uomCode: row.uom_code,
+    warehouseCode: row.warehouse_code,
+    warehouseName: row.warehouse_name,
+    createdAt: row.created_at,
+    raisedBy: row.raised_by,
+    /* A transfer knows both ends. Read from the row's own side so the two
+       movements of one transfer each say where the stock came from and where
+       it went, rather than only naming the warehouse they touched. */
+    fromWarehouseCode: row.from_warehouse_code,
+    fromWarehouseName: row.from_warehouse_name,
+    toWarehouseCode: row.to_warehouse_code,
+    toWarehouseName: row.to_warehouse_name,
+    type: movementType(row.kind, row.source_document_type),
+    direction: negative ? ('out' as const) : ('in' as const),
+    quantity: negative ? row.quantity.slice(1) : row.quantity,
+    /** Signed, as the ledger holds it: positive in, negative out. */
+    signedQuantity: row.quantity,
+    documentType: row.source_document_type,
+    documentNo: row.document_no,
+  };
+}
+
+export type Movement = ReturnType<typeof shapeMovement>;
+
+/**
+ * Every movement of stock, In or Out, with the document that made it — newest
+ * first, a page at a time.
  *
  * Read straight from the movements, so it cannot disagree with the Warehouses
  * Report: that report is these rows summed.
  */
-export async function movements(tx: Tx, ctx: ActorContext, filter: MovementFilter = {}) {
+export async function movements(
+  tx: Tx,
+  ctx: ActorContext,
+  filter: MovementFilter = {},
+): Promise<Movement[]> {
   await authz.authorize(ctx.principal, 'view', MOVEMENT_OBJECT, { branchCode: ctx.branchCode });
 
+  const limit = Math.max(1, Math.min(filter.limit ?? 1000, 10_000));
+  const offset = Math.max(0, filter.offset ?? 0);
   const result = await tx.execute(sql`
-    select m.id,
-           m.movement_date::text as movement_date,
-           -- When it was entered, not only the day it is dated: two movements on
-           -- one date are read in the order they happened.
-           m.created_at::text    as created_at,
-           m.item_code, i.name as item_name,
-           m.warehouse_code, w.name as warehouse_name,
-           -- Where the stock came from and where it went.
-           --
-           -- Anything that carries stock between warehouses -- a Transfer, and
-           -- every stage of Invoice Status Tracking -- goes through
-           -- inventory.relocate, which writes a transfer_issue where the goods
-           -- left and a transfer_receipt where they arrived. Each row therefore
-           -- has a counterpart, and the pair is found rather than read off one
-           -- document type: an earlier version joined stock_transfer, so a
-           -- shipment moving from In Process to On Board showed no origin.
-           --
-           -- The pair is the same source document and line at the same instant.
-           -- created_at defaults to now(), which Postgres holds still for the
-           -- length of a transaction, so both sides of one move share it exactly
-           -- while a later stage of the same invoice does not. Several cost
-           -- layers may be carried in one move; they all share the one origin
-           -- and destination, so any counterpart answers.
-           case when m.kind = 'transfer_issue'   then m.warehouse_code
-                when m.kind = 'transfer_receipt' then pair.warehouse_code end as from_warehouse_code,
-           case when m.kind = 'transfer_issue'   then w.name
-                when m.kind = 'transfer_receipt' then pair.warehouse_name end as from_warehouse_name,
-           case when m.kind = 'transfer_issue'   then pair.warehouse_code
-                when m.kind = 'transfer_receipt' then m.warehouse_code end as to_warehouse_code,
-           case when m.kind = 'transfer_issue'   then pair.warehouse_name
-                when m.kind = 'transfer_receipt' then w.name end as to_warehouse_name,
-           -- Who entered it.
-           coalesce(u.display_name, u.email) as raised_by,
-           m.kind, m.source_document_type, m.quantity::text as quantity,
-           coalesce(
-             (select invoice_no from ap_invoice where id::text = m.source_document_id
-                and m.source_document_type in ('ap_invoice', 'supplier_shipment')),
-             (select invoice_no from ar_invoice where id::text = m.source_document_id
-                and m.source_document_type = 'ar_invoice'),
-             (select return_no from sales_return where id::text = m.source_document_id
-                and m.source_document_type = 'sales_return'),
-             (select return_no from goods_return where id::text = m.source_document_id
-                and m.source_document_type = 'goods_return'),
-             (select transfer_no from stock_transfer where id::text = m.source_document_id
-                and m.source_document_type = 'stock_transfer'),
-             (select adjustment_no from stock_adjustment where id::text = m.source_document_id
-                and m.source_document_type = 'stock_adjustment'),
-             (select document_no from opening_stock where id::text = m.source_document_id
-                and m.source_document_type = 'opening_stock')
-           ) as document_no
-      from inventory_movement m
-      join item i on i.code = m.item_code
-      join warehouse w on w.code = m.warehouse_code
-      left join app_user u on u.id = m.created_by
-      left join lateral (
-        select o.warehouse_code, pw.name as warehouse_name
-          from inventory_movement o
-          join warehouse pw on pw.code = o.warehouse_code
-         where m.kind in ('transfer_issue', 'transfer_receipt')
-           -- Compared as text: kind is an enum, and an enum does not compare
-           -- to the text a CASE returns without being told to.
-           and o.kind::text = case when m.kind::text = 'transfer_issue' then 'transfer_receipt'
-                                   else 'transfer_issue' end
-           and o.item_code = m.item_code
-           and o.created_at = m.created_at
-           and o.source_document_type is not distinct from m.source_document_type
-           and o.source_document_id   is not distinct from m.source_document_id
-           and o.source_line_id       is not distinct from m.source_line_id
-         limit 1
-      ) pair on true
-     where m.branch_code = ${ctx.branchCode}
-       ${filter.from ? sql`and m.movement_date >= ${filter.from}::date` : sql``}
-       ${filter.to ? sql`and m.movement_date <= ${filter.to}::date` : sql``}
-       ${filter.itemCode ? sql`and m.item_code = ${filter.itemCode}` : sql``}
-       ${
-         filter.itemSearch?.trim()
-           ? sql`and (lower(i.name) like ${
-               '%' + filter.itemSearch.trim().toLowerCase().replace(/([%_\\])/g, '\\$1') + '%'
-             } escape '\\' or lower(m.item_code) like ${
-               '%' + filter.itemSearch.trim().toLowerCase().replace(/([%_\\])/g, '\\$1') + '%'
-             } escape '\\')`
-           : sql``
-       }
-       ${filter.warehouseCode ? sql`and m.warehouse_code = ${filter.warehouseCode}` : sql``}
-     order by m.movement_date desc, m.created_at desc, m.id desc
-     limit 1000
+    ${movementRows(ctx, filter)}
+     order by movement_date desc, created_at desc, id desc
+     limit ${limit} offset ${offset}
   `);
 
-  return (result as unknown as { rows: Record<string, string | null>[] }).rows.map((row) => {
-    const quantity = row.quantity!;
-    const negative = quantity.startsWith('-');
-    return {
-      id: row.id!,
-      movementDate: row.movement_date!,
-      itemCode: row.item_code!,
-      itemName: row.item_name!,
-      warehouseCode: row.warehouse_code!,
-      warehouseName: row.warehouse_name!,
-      createdAt: row.created_at,
-      raisedBy: row.raised_by,
-      /* A transfer knows both ends. Read from the row's own side so the two
-         movements of one transfer each say where the stock came from and where
-         it went, rather than only naming the warehouse they touched. */
-      fromWarehouseCode: row.from_warehouse_code,
-      fromWarehouseName: row.from_warehouse_name,
-      toWarehouseCode: row.to_warehouse_code,
-      toWarehouseName: row.to_warehouse_name,
-      type: movementType(row.kind!, row.source_document_type ?? null),
-      direction: negative ? ('out' as const) : ('in' as const),
-      quantity: negative ? quantity.slice(1) : quantity,
-      documentNo: row.document_no,
-    };
-  });
+  return (result as unknown as { rows: MovementRow[] }).rows.map(shapeMovement);
+}
+
+/** How many movements the filter selects in all — the page's "of N". */
+export async function countMovements(
+  tx: Tx,
+  ctx: ActorContext,
+  filter: MovementFilter = {},
+): Promise<number> {
+  await authz.authorize(ctx.principal, 'view', MOVEMENT_OBJECT, { branchCode: ctx.branchCode });
+  const result = await tx.execute(sql`
+    select count(*)::int as n from (${movementRows(ctx, filter)}) counted
+  `);
+  return (result as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0;
+}
+
+/** One warehouse's ledger of an item: opening, every movement carried down, closing. */
+export interface LedgerAccount {
+  readonly warehouseCode: string;
+  readonly warehouseName: string;
+  /** What the warehouse held before `from` — zero when the ledger is read from the start. */
+  readonly opening: string;
+  readonly rows: readonly (Movement & { readonly balance: string })[];
+  readonly closing: string;
+}
+
+/**
+ * The stock ledger — the answer to "the screen says X and my arithmetic says
+ * Y" (2026-09-27), as a screen.
+ *
+ * For one item, per warehouse: the opening balance before the period, every
+ * movement in the period oldest first with the balance carried down each one,
+ * and the closing balance. The closing figure is the same sum the Warehouses
+ * Report and `stock_position` show, because it is made of the same rows; the
+ * difference is that here each step to it can be read, and the document
+ * behind each step opened.
+ */
+export async function ledger(
+  tx: Tx,
+  ctx: ActorContext,
+  filter: {
+    itemCode: string;
+    warehouseCode?: string | null;
+    from?: string | null;
+    to?: string | null;
+  },
+): Promise<LedgerAccount[]> {
+  await authz.authorize(ctx.principal, 'view', MOVEMENT_OBJECT, { branchCode: ctx.branchCode });
+
+  // Everything for the item in the period, oldest first, in every warehouse
+  // the filter allows. No page: a ledger with a page missing does not add up.
+  const inPeriod = await tx.execute(sql`
+    ${movementRows(ctx, {
+      itemCode: filter.itemCode,
+      warehouseCode: filter.warehouseCode ?? null,
+      from: filter.from ?? null,
+      to: filter.to ?? null,
+    })}
+     order by warehouse_code, movement_date, created_at, id
+  `);
+  const rows = (inPeriod as unknown as { rows: MovementRow[] }).rows.map(shapeMovement);
+
+  // What each warehouse held on the morning of `from`: the movements before it.
+  const before = await tx.execute(sql`
+    select m.warehouse_code, w.name as warehouse_name, sum(m.quantity)::text as opening
+      from inventory_movement m
+      join warehouse w on w.code = m.warehouse_code
+     where m.branch_code = ${ctx.branchCode}
+       and m.item_code = ${filter.itemCode}
+       ${filter.warehouseCode ? sql`and m.warehouse_code = ${filter.warehouseCode}` : sql``}
+       ${filter.from ? sql`and m.movement_date < ${filter.from}::date` : sql`and false`}
+     group by m.warehouse_code, w.name
+  `);
+  type Opening = { warehouse_code: string; warehouse_name: string; opening: string };
+  const openings = (before as unknown as { rows: Opening[] }).rows;
+
+  const houses = new Map<
+    string,
+    { name: string; opening: bigint; rows: (Movement & { balance: string })[] }
+  >();
+  for (const row of openings) {
+    houses.set(row.warehouse_code, {
+      name: row.warehouse_name,
+      opening: parseQuantity(row.opening),
+      rows: [],
+    });
+  }
+  for (const row of rows) {
+    const house = houses.get(row.warehouseCode) ?? { name: row.warehouseName, opening: 0n, rows: [] };
+    houses.set(row.warehouseCode, house);
+    const last = house.rows[house.rows.length - 1];
+    const previous = last ? parseQuantity(last.balance) : house.opening;
+    house.rows.push({ ...row, balance: formatQuantity(previous + parseQuantity(row.signedQuantity)) });
+  }
+
+  return [...houses]
+    .map(([warehouseCode, house]) => {
+      const last = house.rows[house.rows.length - 1];
+      return {
+        warehouseCode,
+        warehouseName: house.name,
+        opening: formatQuantity(house.opening),
+        rows: house.rows,
+        closing: last ? last.balance : formatQuantity(house.opening),
+      };
+    })
+    .sort((a, b) => a.warehouseCode.localeCompare(b.warehouseCode));
 }

@@ -12,6 +12,7 @@ import {
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { ExportMenu } from '@/components/print/export-menu';
+import { IntegrityBanner } from '@/components/admin/integrity-banner';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -97,6 +98,7 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
       title={t('reports.warehouses_report')}
       variant="sap"
     >
+      <IntegrityBanner />
       {/* The report's own filters, on one line with their button.
 
           The item is typed rather than chosen. A drop-down of every stock item
@@ -146,6 +148,15 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
             <th className={s.sapNum} scope="col">
               {column('quantity')}
             </th>
+            {/* The sponsor's six columns, and two the 2026-09-27 reading
+                asked for: the unit the quantity is counted in, and what one
+                of those units cost — so quantity × cost = value can be seen
+                on the row rather than the third figure taken for one of the
+                other two. */}
+            <th scope="col">{column('unit')}</th>
+            <th className={s.sapNum} scope="col">
+              {column('average_unit_cost')}
+            </th>
             <th className={s.sapNum} scope="col">
               {column('total_price')}
             </th>
@@ -154,7 +165,7 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td className={s.sapEmptyRow} colSpan={6}>
+              <td className={s.sapEmptyRow} colSpan={8}>
                 {t('reports.nothing_in_stock')}
               </td>
             </tr>
@@ -176,6 +187,12 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
                 <td className={s.sapNum}>
                   <bdi dir="ltr">{units(row.quantity)}</bdi>
                 </td>
+                <td>
+                  <bdi dir="ltr">{row.uomCode}</bdi>
+                </td>
+                <td className={s.sapNum}>
+                  <bdi dir="ltr">{money(row.averageUnitCostIqd)}</bdi>
+                </td>
                 <td className={s.sapNum}>
                   <bdi dir="ltr">{money(row.valueIqd)}</bdi>
                 </td>
@@ -186,7 +203,7 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
         {rows.length > 0 && (
           <tfoot>
             <tr className={s.sapTotalRow}>
-              <td colSpan={5}>{t('reports.totals')}</td>
+              <td colSpan={7}>{t('reports.totals')}</td>
               <td className={s.sapNum}>
                 <bdi dir="ltr">{money(String(total))}</bdi>
               </td>

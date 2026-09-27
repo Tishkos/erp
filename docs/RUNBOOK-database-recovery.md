@@ -1,166 +1,120 @@
-# Runbook — database backup and recovery
+# Runbook — the live database: backups, checks, recovery
 
-**Phase 00.3 gate:** *"The documented recovery procedure is executed once and
-succeeds."*
-**Blueprint §25:** backup and recovery are named non-functional requirements;
-**§26** makes a proven restore a go-live gate.
-
-A backup that has never been restored is not a backup. This procedure exists to
-be rehearsed, and the rehearsal is scripted (`scripts/verify-recovery.ts`) so
-that "we tested it once in 2026" does not become the answer.
+The live books are the PostgreSQL database `erp` on the VPS (port 5434,
+owner role `erp_owner`, application role `erp_app`). This is what protects
+them, what watches them, and what to do when something is wrong. Written to be
+followed at 2 a.m. by someone who did not write it.
 
 ---
 
-## What is protected
+## What runs by itself
 
-| | |
-|---|---|
-| **Database** | PostgreSQL 17, database `erp` |
-| **Contains** | every posted journal, subledger, document, attachment reference and audit event |
-| **Does not contain** | attachment *content* — that lives in object storage and has its own lifecycle (§21, Phase 01.8) |
-| **Recovery point objective (RPO)** | **15 minutes** for the database, **1 hour** for attachments — D4, decided 2026-08-17. |
-| **Recovery time objective (RTO)** | **2 hours** for critical services — D4. |
-| **Service availability** | 99.9% monthly, excluding authorised maintenance — D4. |
+| When | What | Where it writes |
+|---|---|---|
+| Every deploy, format or repair | `pg_dump -Fc` of `erp` before anything changes | `/root/erp-backups/*.dump` |
+| Nightly, 02:15 server time | `scripts/ops/inventory-integrity-check.ts` — documents without ledger rows, rows without documents, transfers out of balance, layers adrift from the ledger, warehouses below zero. Findings go to every accounting manager and super user as an in-app notification. | `/var/log/qs-erp/inventory-integrity.log` |
+| Weekly, Sunday 03:00 | `scripts/ops/restore-drill.sh --local` — restores the **newest** dump into a throwaway database, checks the table count, the ledger and how far behind live it is, drops it. | `/var/log/qs-erp/restore-drill.log` |
 
-**The 15-minute RPO changes this procedure, and the change is not yet made.**
+Both are in root's crontab (`crontab -l`). A non-zero exit is written to the
+log; read the logs when you read the inbox.
 
-A nightly `pg_dump` — which is what the rest of this runbook describes — risks up
-to 24 hours of posted transactions. Reaching 15 minutes needs continuous
-archiving: WAL archiving to independent storage, or streaming replication to a
-standby, so that recovery can roll forward to a point in time rather than back to
-last night.
-
-That is Phase 20.3 work. Until it is done, **this runbook's actual RPO is one
-day, not fifteen minutes**, and anyone relying on it should know that. The dump
-and restore below remain correct and remain the fallback; they are not yet
-sufficient for the target the Business Process Owner has set.
-
-Attachment content lives in object storage, not in the database (§21, Phase
-01.8), so the 1-hour attachment RPO is a separate mechanism with its own
-schedule — it cannot be met by backing up Postgres more often.
+**Gap, stated plainly:** there is no *scheduled* backup independent of a
+deploy. The dumps exist because deploys and repairs make them. A nightly
+`pg_dump` to the same folder, and a copy off the machine, are the next two
+things to add; until then the recovery point is "the last time somebody
+deployed".
 
 ---
 
-## Taking a backup
+## Reading the drill log
 
-```bash
-# Logical backup — portable across versions, and restorable table by table.
-docker exec erp-postgres pg_dump -U erp_owner -Fc -d erp > erp-$(date +%Y%m%d-%H%M).dump
+```
+== Restore drill 20260927-030000 — /root/erp-backups/erp-before-...dump (1.6M, ...)
+== Tables: live 205, restored 205
+== Ledger in the copy: 0 document(s) without rows, 0 position(s) adrift
+== Restored copy holds journals 14, movements 18, invoices 9; newest posting 2026-09-27 10:12:42+00
+== Restore drill 20260927-030000 PASSED — ... restores cleanly and its ledger agrees with its documents.
 ```
 
-`-Fc` (custom format) rather than plain SQL: it compresses, it restores in
-parallel, and `pg_restore --list` can show exactly what is in it before anything
-is written.
+`DRILL FAILED: pg_restore reported errors` means the dump cannot be restored
+as it stands. The first drill (2026-09-27) failed this way: a `bank_cash_account`
+row pointed at a `chart_of_account` row that no longer existed, and
+`pg_restore` could not recreate the foreign key. **A failed drill is a defect
+in the live database, not in the backup** — the dump is a faithful copy of a
+database that has an inconsistency the constraints would never have allowed
+the application to create. Find the dangling row (the error names the
+constraint), correct it through the application where a screen exists, and
+run the drill again by hand:
 
-**What the dump does not carry:** roles. `erp_owner` and `erp_app` are cluster
-objects, created by `scripts/sql/00-init-roles.sql`. A restore into a fresh
-cluster runs that first, or every `GRANT` in the dump fails and the application
-connects to a database it has no rights on.
-
----
-
-## Restoring
-
-Into a **new** database, never over a live one. Restoring over the top leaves a
-half-old, half-new schema if it fails midway, and the failure mode is a system
-that starts and serves wrong figures.
-
-```bash
-# 1. Roles, if the cluster is new.
-docker exec -i erp-postgres psql -U postgres -f - < scripts/sql/00-init-roles.sql
-
-# 2. An empty target.
-docker exec erp-postgres psql -U erp_owner -d postgres -c 'CREATE DATABASE erp_restored'
-
-# 3. The data.
-docker exec -i erp-postgres pg_restore -U erp_owner -d erp_restored --no-owner < erp-YYYYMMDD-HHMM.dump
-
-# 4. Prove it before trusting it — see below.
-npx tsx scripts/verify-recovery.ts erp_restored
-
-# 5. Only then, swap.
+```
+scripts/ops/restore-drill.sh          # from your machine
 ```
 
 ---
 
-## Proving a restore
+## Checking the ledger by hand
 
-A restore that completed without error is not yet a restore that worked.
-`scripts/verify-recovery.ts` asserts the things that would be silently wrong:
+```
+npx tsx scripts/ops/stock-movement-trace.ts [warehouse] [item]
+```
 
-1. **Schema is at head** — the `drizzle.__drizzle_migrations` journal matches the
-   migration files, so the restored database is not a version behind the code
-   that will connect to it.
-2. **Row-level security is still enforced** — `relrowsecurity` **and**
-   `relforcerowsecurity` on every table that had them. A dump/restore that lost
-   `FORCE` would leave a database that looks right and leaks across branches.
-3. **The append-only triggers exist** — audit events and posted journals are
-   still immutable.
-4. **The application role holds no `DELETE`** on the document tables. `--no-owner`
-   changes ownership; if grants did not come through, the application would
-   either fail to start or, worse, run with the owner's rights.
-5. **The ledger balances** — total debits equal total credits in IQD across every
-   posted journal. This is the one check that would catch a partial restore that
-   passed every structural test.
-
-Any failure exits non-zero and names what is wrong.
+Every movement of the item in the warehouse with a running balance, the
+position the screen reports, and the integrity findings company-wide. Run it
+with `DATABASE_URL_OWNER` pointing at the database in question. The same
+questions are asked live by the banner on every stock screen and by the
+Stock Ledger page (`/inventory/stock-ledger`).
 
 ---
 
-## Rehearsal record
+## Recovering for real
 
-| Date | Performed by | Dump taken | Restore target | Result |
-|---|---|---|---|---|
-| 2026-08-17 | Implementation team | development `erp` | `erp_restored` | **Pass** — all five checks; see below |
+Only after the reason for the loss is understood — restoring over a database
+that is being corrupted by something still running loses the evidence and
+the new data both.
 
-The 2026-08-17 rehearsal was run against the development database as the first
-exercise of this procedure.
+1. **Stop the application** so nothing posts during the restore:
+   `pm2 stop qs-erp`.
+2. **Take a dump of what is there now**, even if it is broken. It is the only
+   record of anything posted since the backup you are about to restore:
+   `pg_dump -h 127.0.0.1 -p 5434 -U erp_owner -d erp -Fc -f /root/erp-backups/erp-before-recovery-$(date -u +%Y%m%d-%H%M%S).dump`
+3. **Choose the dump to restore.** The newest that the drill has passed, or
+   the newest that predates the damage. `ls -lt /root/erp-backups/*.dump`.
+4. **Restore into a fresh database first**, never over the live one:
+   `createdb -h 127.0.0.1 -p 5434 -U erp_owner erp_recovered`
+   `pg_restore -h 127.0.0.1 -p 5434 -U erp_owner -d erp_recovered --exit-on-error <dump>`
+   If this fails, the dump is not restorable as-is; go back to step 3 with an
+   older one, or fix the named constraint in the restored copy by hand and
+   write down what you did.
+5. **Look at the copy.** Row counts, the newest posting, the ledger check
+   (`DATABASE_URL_OWNER=postgres://erp_owner:<pw>@127.0.0.1:5434/erp_recovered npx tsx scripts/ops/stock-movement-trace.ts`).
+   Decide, with the owner, whether what was posted after the dump is re-entered
+   by hand or accepted as lost.
+6. **Swap.** Rename the databases so the live name points at the good copy:
+   `psql -d postgres -c "alter database erp rename to erp_damaged_$(date -u +%Y%m%d)"`
+   `psql -d postgres -c "alter database erp_recovered rename to erp"`
+   The application's `.env` does not change.
+7. **Start the application** (`pm2 start qs-erp`) and run the nightly check by
+   hand: `cd /opt/qs-erp-next && node_modules/.bin/tsx scripts/ops/inventory-integrity-check.ts`.
+8. **Write it up** in `docs/INCIDENTS.md`: what was lost, what was restored,
+   what was re-entered, and what is being changed so it does not happen again.
 
-**D4 sets the schedule** — a backup job reporting success is not evidence of a
-usable backup:
-
-| Frequency | Test |
-|---|---|
-| Monthly | Automated or sample restoration |
-| Quarterly | Full database restoration |
-| Every 6 months | Disaster-recovery exercise |
-| After a major infrastructure change | Additional recovery test |
-
-Each test records the backup used, the start and completion time, **whether the
-2-hour RTO was met**, whether the integrity checks passed, any problems found,
-and the corrective actions taken.
-
-It must also be repeated against a **production-sized** dataset before go-live
-(§26 gate). A rehearsal against 5 seeded accounts proves the procedure is
-correct; it proves nothing about the RTO, because nothing here takes long enough
-to measure.
-
-## Retention — D4
-
-| Backup | Retention |
-|---|---|
-| Transaction logs / continuous recovery | 35 days |
-| Daily | 30 days |
-| Weekly | 12 weeks |
-| Monthly | 12 months |
-| Year-end | 7 years, subject to Finance and Legal |
-
-All copies encrypted. At least one copy independent of the production
-environment — a failure, deletion or destructive security incident affecting
-production must not be able to destroy every recovery copy.
+Keep `erp_damaged_*` until the owner has looked at the recovered system and
+said it is right. Then drop it.
 
 ---
 
-## If the restore fails
+## Things that must not be done to the live database
 
-1. **Do not** delete the failed target — it is evidence.
-2. `pg_restore --list` the dump to confirm the object is present at all.
-3. Restore schema and data separately (`--schema-only`, then `--data-only`) to
-   find which half fails.
-4. If the dump itself is damaged, go to the previous one and accept the larger
-   data loss — then record the incident, because two consecutive damaged dumps
-   is a backup process that is not working rather than bad luck.
-
-Escalation: Business Process Owner, per the §28.2 clarification route. A
-recovery decision that trades data loss against downtime is a business decision,
-not a technical one.
+* **Do not run `format-live-database.sh`.** It refuses while
+  `/opt/qs-erp-next/var/LIVE` exists, and that file is there because the books
+  are live. Trials and demos belong on a database that is not this one.
+* **Do not delete with triggers or foreign keys disabled** (`set
+  session_replication_role = replica`) unless you have the complete list of
+  dependent tables in front of you. Both incidents on 2026-09-27 came from
+  exactly this: rows left pointing at rows that were gone.
+* **Do not point a test suite at it.** `DATABASE_URL_TEST` must name a database
+  the suite may destroy.
+* **Do not edit a posted document's rows.** A posted invoice is corrected by
+  reversing it (the Reverse action on its page); stock is corrected by a
+  return, a reconciliation or a reversal — every one of them a new row, never a
+  changed one.

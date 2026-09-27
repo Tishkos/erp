@@ -193,11 +193,15 @@ describe('§9.7 · the document', () => {
     ).toMatch(/brings nothing onto the system/);
   });
 
-  it('refuses the raiser approving their own opening stock (§14.4)', async () => {
-    // Raised by the *manager*, who does hold `approve` — so it is the
-    // maker-checker rule that refuses, not the permission check. An officer
-    // attempting it is refused earlier and for a different reason, which the
-    // test below covers.
+  it('lets the raiser approve their own opening stock (§14.4 lifted, 2026-09-27)', async () => {
+    // §14.4 asked that the person who typed the opening figures not be the
+    // person who confirms them. The owner removed that requirement on
+    // 2026-09-27: the company runs this with one person who holds both roles,
+    // and a control nobody can satisfy stops the books being opened at all.
+    // `approve` is still a permission — the test below shows an officer is
+    // refused — but holding it is enough. This test used to assert the old
+    // rule and sat red for a day after the rule changed; a rule and the test
+    // that describes it now land together.
     const { id } = await withScope(scope(manager), (tx) =>
       opening.create(tx, manager, {
         branchCode: BAGHDAD,
@@ -217,9 +221,8 @@ describe('§9.7 · the document', () => {
     );
     await withScope(scope(manager), (tx) => opening.submit(tx, manager, id));
 
-    expect(
-      await rejection(withScope(scope(manager), (tx) => opening.approve(tx, manager, id))),
-    ).toMatch(/cannot approve it/);
+    const approved = await withScope(scope(manager), (tx) => opening.approve(tx, manager, id));
+    expect(approved.movementIds).toHaveLength(1);
   });
 
   it('refuses an officer approving at all — they do not hold the verb', async () => {

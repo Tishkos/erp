@@ -216,9 +216,14 @@ beforeEach(async () => {
      values ('FY2026','2026','2026-01-01','2026-12-31','open') on conflict do nothing`,
   );
   const { rows: years } = await ownerPool.query(`select id from fiscal_year where code='FY2026'`);
+  // The whole year, open: the documents are dated in April, and a reversal is
+  // dated the day it is made, which has to fall in an open period too.
   await ownerPool.query(
     `insert into fiscal_period (fiscal_year_id, period_no, name, starts_on, ends_on)
-     values ($1,4,'April 2026','2026-04-01','2026-04-30') on conflict do nothing`,
+     select $1, m, to_char(make_date(2026, m, 1), 'FMMonth 2026'),
+            make_date(2026, m, 1), (make_date(2026, m, 1) + interval '1 month - 1 day')::date
+       from generate_series(1, 12) m
+     on conflict do nothing`,
     [years[0].id],
   );
   await ownerPool.query(
@@ -1134,5 +1139,356 @@ describe('ops 15 · the ledger and the documents are held to each other', () => 
       ['opening', 'in', 120],
     ]);
     await everythingAgrees();
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('ops 15 · a posted invoice is undone whole, or not at all (decided 2026-09-27)', () => {
+  const journalBalance = async (role: string) =>
+    Number(
+      (
+        await ownerPool.query(
+          `select coalesce(sum(l.debit_iqd) - sum(l.credit_iqd), 0)::float as balance
+             from journal_line l join journal_entry e on e.id = l.journal_entry_id
+            where l.account_id = $1 and e.status in ('posted', 'reversed')`,
+          [accounts[role]],
+        )
+      ).rows[0].balance,
+    );
+
+  it('reverses a sales invoice: the stock comes back on its own layers, the journal is mirrored', async () => {
+    await buy(AIKO, BAGHDAD, '10', '500');
+    await buy(AIKO, BAGHDAD, '10', '700');
+    const sale = await sell(AIKO, BAGHDAD, '15', '1000'); // 10 at 500 + 5 at 700 = 8,500 of cost
+    expect(await onHand(AIKO, BAGHDAD)).toBe(5);
+    expect(await journalBalance('cogs')).toBe(8_500);
+    expect(await journalBalance('customer_receivable')).toBe(15_000);
+
+    const undone = await withScope(scope(manager), (tx) =>
+      ar.reverse(tx, manager, sale.id, { reason: 'Sold from the wrong warehouse.' }),
+    );
+    expect(undone.movementsReversed).toBe(2); // one per layer consumed
+
+    // The warehouse holds what it held, on the layers it held it on.
+    expect(await onHand(AIKO, BAGHDAD)).toBe(20);
+    const layers = await withScope(scope(manager), (tx) => inventory.layersOf(tx, AIKO, BAGHDAD));
+    expect(layers.map((l) => [units(l.remainingQuantity), Number(l.unitCostIqd) / 10_000])).toEqual([
+      [10, 500],
+      [10, 700],
+    ]);
+
+    // Every account is back where it was, and the two journals point at each other.
+    expect(await journalBalance('cogs')).toBe(0);
+    expect(await journalBalance('customer_receivable')).toBe(0);
+    expect(await journalBalance('sales_revenue')).toBe(0);
+    const { rows } = await ownerPool.query(
+      `select e.status, e.reversed_by_id is not null as linked, i.status as invoice_status, i.reversal_reason
+         from ar_invoice i join journal_entry e on e.id = i.journal_entry_id where i.id = $1`,
+      [sale.id],
+    );
+    expect(rows[0]).toMatchObject({
+      status: 'reversed',
+      linked: true,
+      invoice_status: 'reversed',
+      reversal_reason: 'Sold from the wrong warehouse.',
+    });
+
+    // The ledger says so too: the deliveries and their reversals, nothing else.
+    const shown = (await movementsOf(AIKO)).filter((m) => m.documentNo === sale.invoiceNo);
+    expect(shown.map((m) => [m.type, m.direction]).sort()).toEqual(
+      [['sale', 'out'], ['sale', 'out'], ['other', 'in'], ['other', 'in']].sort(),
+    );
+    await everythingAgrees();
+  });
+
+  it('reverses a purchase invoice while its goods are still all there', async () => {
+    const bought = await buy(AIKO, HQ, '40', '500');
+    expect(await journalBalance('inventory')).toBe(20_000);
+    expect(await journalBalance('supplier_payable')).toBe(-20_000);
+
+    await withScope(scope(manager), (tx) =>
+      ap.reverse(tx, manager, bought.id, { reason: 'Duplicate of an invoice already entered.' }),
+    );
+
+    expect(await onHand(AIKO, HQ)).toBe(0);
+    expect(
+      units(await withScope(scope(manager), (tx) => inventory.layerQuantityOf(tx, AIKO, HQ))),
+    ).toBe(0);
+    expect(await journalBalance('inventory')).toBe(0);
+    expect(await journalBalance('supplier_payable')).toBe(0);
+    const { rows } = await ownerPool.query(`select status from ap_invoice where id = $1`, [bought.id]);
+    expect(rows[0].status).toBe('reversed');
+    await everythingAgrees();
+  });
+
+  it('refuses to reverse a purchase invoice whose goods have been sold or moved', async () => {
+    const bought = await buy(AIKO, HQ, '40', '500');
+    await sell(AIKO, HQ, '1', '900');
+    expect(
+      await rejection(
+        withScope(scope(manager), (tx) => ap.reverse(tx, manager, bought.id, { reason: 'Try.' })),
+      ),
+    ).toMatch(/has since been issued|cannot be reversed/);
+    expect(await onHand(AIKO, HQ)).toBe(39);
+
+    const moved = await buy(AIKO, BAGHDAD, '10', '500');
+    await transfer(AIKO, BAGHDAD, HQ, '4');
+    expect(
+      await rejection(
+        withScope(scope(manager), (tx) => ap.reverse(tx, manager, moved.id, { reason: 'Try.' })),
+      ),
+    ).toMatch(/has since been issued|cannot be reversed/);
+    expect(await onHand(AIKO, BAGHDAD)).toBe(6);
+  });
+
+  it('refuses to reverse a sales invoice with a return behind it, and needs a reason', async () => {
+    await buy(AIKO, HQ, '20', '500');
+    const sale = await sell(AIKO, HQ, '10', '900');
+    expect(
+      await rejection(withScope(scope(manager), (tx) => ar.reverse(tx, manager, sale.id, { reason: '  ' }))),
+    ).toMatch(/reason/);
+
+    const back = await returnSale(sale, '2', HQ);
+    await withScope(scope(manager), (tx) => sr.acceptAndSettle(tx, manager, back.id));
+    expect(
+      await rejection(
+        withScope(scope(manager), (tx) => ar.reverse(tx, manager, sale.id, { reason: 'Wrong.' })),
+      ),
+    ).toMatch(/Sales Return .* was raised against it/);
+    expect(await onHand(AIKO, HQ)).toBe(12);
+  });
+
+  it('reverses once: a second reversal, or a reversal of a draft, is refused', async () => {
+    await buy(AIKO, HQ, '5', '500');
+    const sale = await sell(AIKO, HQ, '2', '900');
+    await withScope(scope(manager), (tx) => ar.reverse(tx, manager, sale.id, { reason: 'Once.' }));
+    expect(
+      await rejection(withScope(scope(manager), (tx) => ar.reverse(tx, manager, sale.id, { reason: 'Twice.' }))),
+    ).toMatch(/reversed|transition|status/i);
+    expect(await onHand(AIKO, HQ)).toBe(5);
+  });
+
+  it('a shipment whose invoice was reversed cannot be moved on, and leaves the tracking list', async () => {
+    const invoice = await buy(AIKO, IN_PROCESS, '12', '500');
+    const before = await withScope(scope(manager), (tx) => shipments.list(tx));
+    expect(before.map((row) => row.invoiceNo)).toContain(invoice.invoiceNo);
+
+    await withScope(scope(manager), (tx) => ap.reverse(tx, manager, invoice.id, { reason: 'Never shipped.' }));
+
+    const after = await withScope(scope(manager), (tx) => shipments.list(tx));
+    expect(after.map((row) => row.invoiceNo)).not.toContain(invoice.invoiceNo);
+    expect(
+      await rejection(
+        withScope(scope(manager), (tx) => shipments.advance(tx, manager, before[0]!.id, 'on_board')),
+      ),
+    ).toMatch(/was reversed/);
+    expect(await onHand(AIKO, IN_PROCESS)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('ops 15 · a form pressed twice makes one document', () => {
+  it('two transfers with the same form id are one transfer', async () => {
+    await buy(AIKO, HQ, '50', '500');
+    const formId = randomUUID();
+    const twice = () =>
+      withScope(scope(clerk), (tx) =>
+        stock.transfer(tx, clerk, {
+          id: formId,
+          itemCode: AIKO,
+          fromWarehouseCode: HQ,
+          toWarehouseCode: BAGHDAD,
+          quantity: qty('10'),
+          transferDate: ON,
+        }),
+      );
+    const [first, second] = await Promise.all([twice(), twice()]);
+    expect(second).toEqual(first);
+    expect(await onHand(AIKO, HQ)).toBe(40);
+    expect(await onHand(AIKO, BAGHDAD)).toBe(10);
+    expect(await transferPage()).toHaveLength(1);
+
+    // A third press, later, still finds the same document.
+    expect(await twice()).toEqual(first);
+    expect(await onHand(AIKO, BAGHDAD)).toBe(10);
+  });
+
+  it('two reconciliations with the same form id are one reconciliation', async () => {
+    await buy(AIKO, HQ, '50', '500');
+    const formId = randomUUID();
+    const twice = () =>
+      withScope(scope(manager), (tx) =>
+        stock.adjust(tx, manager, {
+          id: formId,
+          itemCode: AIKO,
+          warehouseCode: HQ,
+          direction: 'out',
+          quantity: qty('3'),
+          adjustmentDate: ON,
+        }),
+      );
+    const [first, second] = await Promise.all([twice(), twice()]);
+    expect(second).toEqual(first);
+    expect(await onHand(AIKO, HQ)).toBe(47);
+  });
+
+  it('two different forms are two transfers, as before', async () => {
+    await buy(AIKO, HQ, '50', '500');
+    await transfer(AIKO, HQ, BAGHDAD, '10');
+    await transfer(AIKO, HQ, BAGHDAD, '10');
+    expect(await onHand(AIKO, BAGHDAD)).toBe(20);
+    expect(await transferPage()).toHaveLength(2);
+  });
+
+  it('refuses a form id that is not one', async () => {
+    await buy(AIKO, HQ, '5', '500');
+    expect(
+      await rejection(
+        withScope(scope(clerk), (tx) =>
+          stock.transfer(tx, clerk, {
+            id: 'not-a-uuid',
+            itemCode: AIKO,
+            fromWarehouseCode: HQ,
+            toWarehouseCode: BAGHDAD,
+            quantity: qty('1'),
+            transferDate: ON,
+          }),
+        ),
+      ),
+    ).toMatch(/stale/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('ops 15 · a movement carries the branch of its warehouse', () => {
+  it('refuses a movement raised under another branch, in the service and in the database', async () => {
+    // A second branch with its main warehouse, WH-ERB.
+    await seedBranch('ERB', 'Erbil');
+
+    // The service, with the actor's own branch: refused with the two names.
+    expect(
+      await rejection(
+        withScope(scope(manager), (tx) =>
+          inventory.receive(tx, manager, {
+            itemCode: AIKO,
+            warehouseCode: 'WH-ERB',
+            branchCode: BRANCH,
+            quantity: qty('1'),
+            unitCostIqd: price('1'),
+            movementDate: ON,
+            kind: 'goods_receipt',
+            batchNumber: 'B',
+          }),
+        ),
+      ),
+    ).toMatch(/WH-ERB belongs to branch ERB/);
+
+    // The database, for anything that does not come through the service.
+    const client = await ownerPool.connect();
+    try {
+      await client.query(`select set_config('app.is_super_user', 'true', false)`);
+      await expect(
+        client.query(
+          `insert into inventory_movement (item_code, warehouse_code, branch_code, kind, quantity, movement_date, created_by)
+           values ($1, 'WH-ERB', $2, 'goods_receipt', 1, $3, $4)`,
+          [AIKO, BRANCH, ON, manager.principal.userId],
+        ),
+      ).rejects.toThrow(/recorded under branch ERB, not HQ/);
+    } finally {
+      client.release();
+    }
+    expect(await onHand(AIKO, 'WH-ERB')).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('ops 15 · the Stock Ledger and the paged Stock Movement page', () => {
+  it('carries the balance down every row, per warehouse, and closes at the position', async () => {
+    await buy(AIKO, HQ, '100', '500');
+    await sell(AIKO, HQ, '30', '900');
+    await transfer(AIKO, HQ, BAGHDAD, '20');
+    await sell(AIKO, BAGHDAD, '5', '900');
+
+    const accounts = await withScope(scope(manager), (tx) =>
+      stock.ledger(tx, manager, { itemCode: AIKO }),
+    );
+    expect(accounts.map((a) => [a.warehouseCode, Number(a.opening), Number(a.closing)])).toEqual([
+      [BAGHDAD, 0, 15],
+      [HQ, 0, 50],
+    ]);
+    const hq = accounts.find((a) => a.warehouseCode === HQ)!;
+    expect(hq.rows.map((r) => [r.type, Number(r.signedQuantity), Number(r.balance)])).toEqual([
+      ['purchase', 100, 100],
+      ['sale', -30, 70],
+      ['transfer', -20, 50],
+    ]);
+    for (const account of accounts) {
+      expect(Number(account.closing)).toBe(await onHand(AIKO, account.warehouseCode));
+      // Every row names its document, and the type the page links by.
+      for (const row of account.rows) {
+        expect(row.documentNo).toBeTruthy();
+        expect(row.documentType).toBeTruthy();
+      }
+    }
+  });
+
+  it('opens on what the warehouse held before the period', async () => {
+    await buy(AIKO, HQ, '100', '500'); // dated ON = 2026-04-01
+    await ownerPool.query(
+      `insert into fiscal_period (fiscal_year_id, period_no, name, starts_on, ends_on)
+       select id, 5, 'May 2026', '2026-05-01', '2026-05-31' from fiscal_year where code = 'FY2026'
+       on conflict do nothing`,
+    );
+    await withScope(scope(clerk), (tx) =>
+      stock.transfer(tx, clerk, {
+        itemCode: AIKO,
+        fromWarehouseCode: HQ,
+        toWarehouseCode: BAGHDAD,
+        quantity: qty('10'),
+        transferDate: '2026-05-02',
+      }),
+    );
+
+    const [hq] = await withScope(scope(manager), (tx) =>
+      stock.ledger(tx, manager, {
+        itemCode: AIKO,
+        warehouseCode: HQ,
+        from: '2026-05-01',
+        to: '2026-05-31',
+      }),
+    );
+    expect(hq).toMatchObject({ warehouseCode: HQ, opening: '100', closing: '90' });
+    expect(hq!.rows).toHaveLength(1);
+  });
+
+  it('pages the movements and counts them all, and finds a document by number', async () => {
+    await buy(AIKO, HQ, '10', '500');
+    for (let i = 0; i < 5; i += 1) await sell(AIKO, HQ, '1', '900');
+
+    const total = await withScope(scope(manager), (tx) =>
+      stock.countMovements(tx, manager, { itemCode: AIKO }),
+    );
+    expect(total).toBe(6);
+    const first = await withScope(scope(manager), (tx) =>
+      stock.movements(tx, manager, { itemCode: AIKO, limit: 4, offset: 0 }),
+    );
+    const second = await withScope(scope(manager), (tx) =>
+      stock.movements(tx, manager, { itemCode: AIKO, limit: 4, offset: 4 }),
+    );
+    expect(first).toHaveLength(4);
+    expect(second).toHaveLength(2);
+    expect(new Set([...first, ...second].map((m) => m.id)).size).toBe(6);
+    expect(first.every((m) => m.uomCode === 'EA')).toBe(true);
+
+    const [sale] = second.filter((m) => m.type === 'sale');
+    const found = await withScope(scope(manager), (tx) =>
+      stock.movements(tx, manager, { documentNo: sale!.documentNo!.toLowerCase() }),
+    );
+    expect(found.map((m) => m.documentNo)).toEqual([sale!.documentNo]);
+    // And a fragment matches anywhere in the number, across document types.
+    const fragment = await withScope(scope(manager), (tx) =>
+      stock.movements(tx, manager, { documentNo: '2026-0000' }),
+    );
+    expect(fragment).toHaveLength(6);
   });
 });

@@ -14,6 +14,10 @@ export async function createTransfer(formData: FormData): Promise<void> {
   await runAdminAndReturn(
     (tx, ctx) =>
       stock.transfer(tx, ctx, {
+        // The key the form was drawn with: a second press of the same form
+        // finds the transfer the first press made rather than moving the
+        // stock again.
+        id: text(formData, 'document_id').trim() || null,
         itemCode: text(formData, 'item_code').trim(),
         fromWarehouseCode: text(formData, 'from_warehouse_code').trim(),
         toWarehouseCode: text(formData, 'to_warehouse_code').trim(),

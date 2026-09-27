@@ -15,6 +15,8 @@ export async function createAdjustment(formData: FormData): Promise<void> {
   await runAdminAndReturn(
     (tx, ctx) =>
       stock.adjust(tx, ctx, {
+        // The key the form was drawn with — see stock-operations.claimDocumentId.
+        id: text(formData, 'document_id').trim() || null,
         itemCode: text(formData, 'item_code').trim(),
         warehouseCode: text(formData, 'warehouse_code').trim(),
         direction: text(formData, 'direction').trim() === 'out' ? 'out' : 'in',

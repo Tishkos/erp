@@ -59,6 +59,25 @@ say "Type check and unit tests"
 npm run typecheck
 npm run test:unit
 
+# ── The ledger rules, proved before the code reaches the books ────────────
+# The integration suite is what holds the stock ledger, the journals and the
+# permissions to their rules against a real PostgreSQL. Until 2026-09-27 a
+# deploy ran only the type check and the unit tests, and a stale test sat in
+# the suite unnoticed while the code it described had changed. It runs here
+# now, against the local database named in .env (DATABASE_URL_TEST), and a
+# red suite stops the deploy. It takes a while; that is the price of knowing.
+#
+# SKIP_INTEGRATION=<reason> skips it — for a hotfix whose suite is already
+# green in CI — and the reason is printed and recorded so the shortcut is a
+# decision somebody made, not a habit nobody noticed.
+if [[ -n "${SKIP_INTEGRATION:-}" ]]; then
+  say "Integration tests SKIPPED: $SKIP_INTEGRATION"
+  printf '%s  %s  skipped integration tests: %s\n' "$STAMP" "$COMMIT" "$SKIP_INTEGRATION" >> var/deploy-skips.log
+else
+  say "Integration tests"
+  npm run test:integration
+fi
+
 # ── Upload tracked files only ─────────────────────────────────────────────
 # This is what keeps vps.md, var/attachments and the reference images out of
 # the upload without anyone having to remember they exist.

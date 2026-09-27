@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
@@ -7,6 +8,7 @@ import {
   Flash,
   Form,
   Grid,
+  Hidden,
   ListToolbar,
   NewRecordDialog,
   Select,
@@ -81,6 +83,9 @@ export default async function ReconciliationPage({ searchParams }: { searchParam
           >
             <p className="muted">{t('reconciliation.created_note')}</p>
             <Form action={createAdjustment}>
+              {/* Minted when the page is drawn. Two presses of this form send
+                  one id, and the second finds the first's reconciliation saved. */}
+              <Hidden name="document_id" value={randomUUID()} />
               <Grid>
                 <PairedPicker
                   codeLabel={column('item_code')}

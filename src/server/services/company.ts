@@ -166,18 +166,14 @@ export async function appearanceFor(
   tx: Tx,
   userId: string,
 ): Promise<{ palette: Palette; accent: Accent }> {
-  const [c] = await tx
-    .select({ palette: company.uiPalette, accent: company.uiAccent })
-    .from(company)
-    .limit(1);
   const [u] = await tx
     .select({ palette: appUser.uiPalette, accent: appUser.uiAccent })
     .from(appUser)
     .where(eq(appUser.id, userId))
     .limit(1);
   return {
-    palette: paletteOrDefault(u?.palette ?? c?.palette),
-    accent: accentOrDefault(u?.accent ?? c?.accent),
+    palette: paletteOrDefault(u?.palette),
+    accent: accentOrDefault(u?.accent),
   };
 }
 
@@ -193,16 +189,9 @@ export async function setMyAppearance(
   ctx: ActorContext,
   input: { readonly palette: string; readonly accent: string },
 ): Promise<void> {
-  let palette: string | null = null;
-  if (input.palette !== 'company') {
-    assertPalette(input.palette);
-    palette = input.palette;
-  }
-  let accent: string | null = null;
-  if (input.accent !== 'company') {
-    assertAccent(input.accent);
-    accent = input.accent;
-  }
+  const { palette, accent } = input;
+  assertPalette(palette);
+  assertAccent(accent);
 
   await tx
     .update(appUser)

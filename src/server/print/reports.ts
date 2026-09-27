@@ -246,6 +246,10 @@ export async function warehousesReport(ctx: BuildContext, query: Query): Promise
             { key: 'warehouse_name', label: m.column('warehouse_name'), kind: 'text' },
             { key: 'warehouse_code', label: m.column('warehouse_code'), kind: 'code' },
             { key: 'quantity', label: m.column('quantity'), kind: 'quantity' },
+            // The unit and the unit cost travel with the export: a spreadsheet
+            // has no currency symbol beside 250,350 (2026-09-27).
+            { key: 'unit', label: m.column('unit'), kind: 'code' },
+            { key: 'average_unit_cost', label: m.column('average_unit_cost'), kind: 'money', decimals: 4 },
             { key: 'total_price', label: m.column('total_price'), kind: 'money' },
           ],
           rows: rows.map((row) => ({
@@ -255,6 +259,8 @@ export async function warehousesReport(ctx: BuildContext, query: Query): Promise
               warehouse_name: row.warehouseName,
               warehouse_code: row.warehouseCode,
               quantity: row.quantity,
+              unit: row.uomCode,
+              average_unit_cost: row.averageUnitCostIqd,
               total_price: row.valueIqd,
             },
           })),

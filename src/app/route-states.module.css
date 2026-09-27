@@ -276,10 +276,13 @@
   max-inline-size: 30rem;
   gap: 0.45rem;
   padding: 2rem 1.75rem;
-  border: 1px solid var(--w-rule, var(--border));
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--w-line-strong, var(--border));
+  border-block-start: 4px solid var(--w-title-line, var(--accent));
+  border-radius: 0.2rem;
   background: var(--w-bg, var(--surface-raised));
-  box-shadow: var(--shadow-card);
+  color: var(--w-text, var(--text));
+  font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+  box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
   text-align: center;
 }
 
@@ -289,9 +292,9 @@
   block-size: 2.6rem;
   place-items: center;
   margin-block-end: 0.35rem;
-  border-radius: 50%;
-  color: var(--w-amber-b, var(--accent));
-  background: var(--accent-soft);
+  border-radius: 0.15rem;
+  color: var(--w-label, var(--text));
+  background: var(--w-selected, var(--accent-soft));
 }
 
 .stateIconAlert {
@@ -306,7 +309,7 @@
 
 .stateCard h1 {
   margin: 0;
-  color: var(--text);
+  color: var(--w-label, var(--text));
   font-size: 1.1rem;
   font-weight: var(--weight-strong);
   letter-spacing: -0.02em;
@@ -314,7 +317,7 @@
 
 .stateCard p {
   margin: 0;
-  color: var(--text-muted);
+  color: var(--w-muted, var(--text-muted));
   font-size: var(--font-body);
 }
 
@@ -324,10 +327,10 @@
   align-items: center;
   margin-block-start: 0.75rem;
   padding-inline: 1rem;
-  border: 1px solid var(--w-amber-b, var(--accent));
-  border-radius: var(--radius-sm);
-  color: var(--accent-contrast);
-  background: var(--w-amber-b, var(--accent));
+  border: 1px solid var(--w-amber-line, var(--accent));
+  border-radius: 0.15rem;
+  color: var(--w-accent-ink, var(--accent-contrast));
+  background: linear-gradient(180deg, var(--w-amber-a, var(--accent)), var(--w-amber-b, var(--accent)));
   font-size: var(--font-button);
   font-weight: var(--weight-button);
   text-decoration: none;
@@ -335,8 +338,14 @@
 }
 
 .stateAction:hover {
-  border-color: var(--accent-hover);
-  background: var(--accent-hover);
+  border-color: var(--w-amber-line, var(--accent-hover));
+  color: var(--w-label, var(--accent-contrast));
+  background: var(--w-selected, var(--accent-hover));
+}
+
+.stateAction:focus-visible {
+  outline: 2px solid var(--w-title-line, var(--accent));
+  outline-offset: 2px;
 }
 
 .srOnly {

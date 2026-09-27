@@ -161,6 +161,9 @@ export async function lookupBySerial(
       join ar_invoice i       on i.id = w.ar_invoice_id
       join business_partner p on p.id = w.customer_id
      where w.serial_number = ${serialNumber}
+       -- A warranty starts on the invoice (§7.4); an invoice that was reversed
+       -- never sold the unit, so it covers nothing.
+       and i.status <> 'reversed'
      limit 1
   `);
 
@@ -192,6 +195,9 @@ export async function expiringBetween(tx: Tx, from: string, to: string) {
       and(
         sql`${warrantyRegistration.endsOn} >= ${from}::date`,
         sql`${warrantyRegistration.endsOn} <= ${to}::date`,
+        // Not the warranties of a sale that was undone.
+        sql`${warrantyRegistration.arInvoiceId} not in
+              (select id from ar_invoice where status = 'reversed')`,
       ),
     )
     .orderBy(warrantyRegistration.endsOn);
