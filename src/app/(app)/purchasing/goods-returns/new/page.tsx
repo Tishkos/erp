@@ -5,8 +5,13 @@ import { AdminPage, Field, Flash, Form, Grid, ReadOnlyField, Submit, SubmitRow, 
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
-import { formatMoney, type Locale } from '@/i18n/config';
+import {
+  formatMoney,
+  formatQuantity as formatLocaleQuantity,
+  type Locale,
+} from '@/i18n/config';
 import { can } from '@domain/permissions';
+import { formatQuantity as formatScaledQuantity } from '@domain/uom';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as banks from '@/server/services/bank-cash-accounts';
@@ -66,7 +71,9 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
 
   const invoice = invoices.find((row) => row.id === chosen);
   const today = new Date().toISOString().slice(0, 10);
-  const open = lines.filter((line) => Number(line.returnable) > 0);
+  const open = lines
+    .filter((line) => line.returnable > 0n)
+    .map((line) => ({ ...line, maxQuantity: formatScaledQuantity(line.returnable) }));
 
   return (
     <AdminPage
@@ -220,14 +227,16 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
                           </select>
                         </td>
                         <td className={s.sapNum}>
-                          <bdi dir="ltr">{String(Number(line.returnable))}</bdi>
+                          <bdi dir="ltr">
+                            {formatLocaleQuantity(line.maxQuantity, locale as Locale)}
+                          </bdi>
                         </td>
                         <td className={s.sapNum}>
                           <input
                             aria-label={`${t('goods_returns.return_quantity')} ${line.itemCode}`}
                             className={s.sapCellField}
                             inputMode="decimal"
-                            max={Number(line.returnable)}
+                            max={line.maxQuantity}
                             name={`quantity_${row}`}
                           />
                         </td>
