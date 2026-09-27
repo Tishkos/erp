@@ -559,15 +559,30 @@ export async function movements(tx: Tx, ctx: ActorContext, filter: MovementFilte
            m.created_at::text    as created_at,
            m.item_code, i.name as item_name,
            m.warehouse_code, w.name as warehouse_name,
-           -- Where the stock came from and where it went. A transfer writes two
-           -- movements — one Out of the first warehouse, one In to the second —
-           -- so each row can name its counterpart by reading the transfer both
-           -- belong to. Everything else moves in or out of one place, and the
-           -- other side is the document rather than a warehouse.
-           t.from_warehouse_code as from_warehouse_code,
-           fw.name               as from_warehouse_name,
-           t.to_warehouse_code   as to_warehouse_code,
-           tw.name               as to_warehouse_name,
+           -- Where the stock came from and where it went.
+           --
+           -- Anything that carries stock between warehouses -- a Transfer, and
+           -- every stage of Invoice Status Tracking -- goes through
+           -- inventory.relocate, which writes a transfer_issue where the goods
+           -- left and a transfer_receipt where they arrived. Each row therefore
+           -- has a counterpart, and the pair is found rather than read off one
+           -- document type: an earlier version joined stock_transfer, so a
+           -- shipment moving from In Process to On Board showed no origin.
+           --
+           -- The pair is the same source document and line at the same instant.
+           -- created_at defaults to now(), which Postgres holds still for the
+           -- length of a transaction, so both sides of one move share it exactly
+           -- while a later stage of the same invoice does not. Several cost
+           -- layers may be carried in one move; they all share the one origin
+           -- and destination, so any counterpart answers.
+           case when m.kind = 'transfer_issue'   then m.warehouse_code
+                when m.kind = 'transfer_receipt' then pair.warehouse_code end as from_warehouse_code,
+           case when m.kind = 'transfer_issue'   then w.name
+                when m.kind = 'transfer_receipt' then pair.warehouse_name end as from_warehouse_name,
+           case when m.kind = 'transfer_issue'   then pair.warehouse_code
+                when m.kind = 'transfer_receipt' then m.warehouse_code end as to_warehouse_code,
+           case when m.kind = 'transfer_issue'   then pair.warehouse_name
+                when m.kind = 'transfer_receipt' then w.name end as to_warehouse_name,
            -- Who entered it.
            coalesce(u.display_name, u.email) as raised_by,
            m.kind, m.source_document_type, m.quantity::text as quantity,
@@ -591,11 +606,22 @@ export async function movements(tx: Tx, ctx: ActorContext, filter: MovementFilte
       join item i on i.code = m.item_code
       join warehouse w on w.code = m.warehouse_code
       left join app_user u on u.id = m.created_by
-      left join stock_transfer t
-             on m.source_document_type = 'stock_transfer'
-            and t.id::text = m.source_document_id
-      left join warehouse fw on fw.code = t.from_warehouse_code
-      left join warehouse tw on tw.code = t.to_warehouse_code
+      left join lateral (
+        select o.warehouse_code, pw.name as warehouse_name
+          from inventory_movement o
+          join warehouse pw on pw.code = o.warehouse_code
+         where m.kind in ('transfer_issue', 'transfer_receipt')
+           -- Compared as text: kind is an enum, and an enum does not compare
+           -- to the text a CASE returns without being told to.
+           and o.kind::text = case when m.kind::text = 'transfer_issue' then 'transfer_receipt'
+                                   else 'transfer_issue' end
+           and o.item_code = m.item_code
+           and o.created_at = m.created_at
+           and o.source_document_type is not distinct from m.source_document_type
+           and o.source_document_id   is not distinct from m.source_document_id
+           and o.source_line_id       is not distinct from m.source_line_id
+         limit 1
+      ) pair on true
      where m.branch_code = ${ctx.branchCode}
        ${filter.from ? sql`and m.movement_date >= ${filter.from}::date` : sql``}
        ${filter.to ? sql`and m.movement_date <= ${filter.to}::date` : sql``}
