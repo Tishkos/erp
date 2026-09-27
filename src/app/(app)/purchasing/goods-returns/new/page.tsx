@@ -120,7 +120,7 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
               its number, or by anything that can only be one invoice. Both
               suggest from a `datalist`, which offers without constraining — a
               partial number is still a search. */}
-          <form className={s.filterRow} method="get">
+          <form className={s.pickRow} method="get">
             <div className={s.field}>
               <span className={s.label}>{column('supplier_name')}</span>
               <input

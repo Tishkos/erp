@@ -163,6 +163,37 @@
    and drops its button onto a line of its own, which is what made a single
    status filter read as the widest thing on the page. Here each control takes
    its own width and the button stands on the same line, at the same baseline. */
+/* ── Naming a document by typing it ──────────────────────────────────────
+   Two search boxes — the partner, then the document — and the button that
+   loads what was named.
+
+   Not `.filterRow`: that aligns on `flex-end`, which is the bottom of each
+   field, and these two fields carry hints of different lengths, so their
+   bottoms line up while their boxes do not. Aligned on the top instead, where
+   the labels are one line each and the boxes therefore agree.
+
+   Wider, too. A filter takes a status or a date; these take an invoice number
+   and a company's name, and 15rem cut both off. */
+.pickRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 0.75rem;
+  margin-block-end: 0.9rem;
+}
+
+.pickRow .field {
+  flex: 1 1 22rem;
+  min-inline-size: 16rem;
+  max-inline-size: 34rem;
+}
+
+/* The button keeps its own width; only the boxes grow. */
+.pickRow .fieldWithAction > input {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
 /* A control with a button beside it, inside one field.
    `.filterRow` aligns on `flex-end`, which is the bottom of each field — and a
    field carrying a hint is taller than its own box, so the button landed below

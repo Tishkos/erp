@@ -111,7 +111,7 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
         <>
           {/* Two typed boxes, not two drop-downs — see the Purchase Return.
               The customer is optional and only narrows the suggestions. */}
-          <form className={s.filterRow} method="get">
+          <form className={s.pickRow} method="get">
             <div className={s.field}>
               <span className={s.label}>{column('customer_name')}</span>
               <input
