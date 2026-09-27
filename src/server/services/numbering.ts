@@ -142,3 +142,26 @@ export async function allocateFreeCode(
       'Set it past the highest code in use on the Numbering screen, then try again.',
   );
 }
+
+/**
+ * Allocates a document number that is not already present in its document
+ * table. This is a final guard for tables that may contain older/imported rows
+ * which predate their entries in `doc_number_allocation`.
+ */
+export async function allocateFreeDocumentNumber(
+  tx: Tx,
+  key: string,
+  context: NumberingContext,
+  taken: (candidate: string) => Promise<boolean>,
+  allocatedBy: string | null,
+): Promise<string> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const { documentNo } = await allocateDocumentNumber(tx, key, context, allocatedBy);
+    if (!(await taken(documentNo))) return documentNo;
+  }
+
+  throw new Error(
+    `Could not find a free ${key} number after 100 attempts. ` +
+      `Ask an administrator to check the ${key} counter on the Numbering screen, then retry.`,
+  );
+}

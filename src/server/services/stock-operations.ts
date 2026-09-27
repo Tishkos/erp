@@ -38,7 +38,7 @@ import * as authz from './authorization';
 import * as audit from './audit';
 import * as inventory from './inventory';
 import * as posting from './posting';
-import { allocateDocumentNumber } from './numbering';
+import { allocateDocumentNumber, allocateFreeDocumentNumber } from './numbering';
 
 export const TRANSFER_OBJECT = 'warehouse_transfer';
 export const RECONCILIATION_OBJECT = 'stock_reconciliation';
@@ -147,10 +147,18 @@ export async function transfer(
     );
   }
 
-  const { documentNo } = await allocateDocumentNumber(
+  const documentNo = await allocateFreeDocumentNumber(
     tx,
     TRANSFER_SEQUENCE,
     { branchCode: ctx.branchCode, year: Number(input.transferDate.slice(0, 4)) },
+    async (candidate) => {
+      const [existing] = await tx
+        .select({ id: stockTransfer.id })
+        .from(stockTransfer)
+        .where(eq(stockTransfer.transferNo, candidate))
+        .limit(1);
+      return existing !== undefined;
+    },
     ctx.principal.userId,
   );
   const id = randomUUID();
@@ -666,4 +674,3 @@ export async function movements(tx: Tx, ctx: ActorContext, filter: MovementFilte
     };
   });
 }
-
