@@ -2021,7 +2021,8 @@
         "other": "Other"
       }
     },
-    "minted_code_note": "The system gives it its code when you save. The code cannot be typed or changed."
+    "minted_code_note": "The system gives it its code when you save. The code cannot be typed or changed.",
+    "choose": "Choose"
   },
   "profile": {
     "title": "My profile",

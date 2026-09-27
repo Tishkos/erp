@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
-import { AdminPage, Flash, Pill, admin as s } from '@/components/admin';
+import { AdminPage, Flash, Pill, admin as s, Submit} from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { ExportMenu } from '@/components/print/export-menu';
@@ -88,9 +88,7 @@ export default async function OpeningStockRecordPage({
             <form action={approveOpeningStock}>
               <input name="id" type="hidden" value={document.id} />
               <input name="document_no" type="hidden" value={document.documentNo} />
-              <button className="action action--primary" type="submit">
-                {t('opening_stock.approve')}
-              </button>
+              <Submit label={t('opening_stock.approve')} variant="document" />
             </form>
           ) : null}
         </div>

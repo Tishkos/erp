@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Flash, admin as s } from '@/components/admin';
+import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
@@ -220,16 +220,14 @@ export default async function ApInvoicePage({
               <form action={saveApInvoiceAccounts} id="ap-invoice-accounts">
                 <input name="id" type="hidden" value={invoice.id} />
                 <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-                <button className="action" type="submit">{t('invoices.save_accounts')}</button>
+                <Submit label={t('invoices.save_accounts')} tone="secondary" variant="document" />
               </form>
             ) : null}
             {maySubmit ? (
               <form action={submitApInvoice}>
                 <input name="id" type="hidden" value={invoice.id} />
                 <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-                <button className="action action--primary" type="submit">
-                  {t('ap_invoices.submit')}
-                </button>
+                <Submit label={t('ap_invoices.submit')} variant="document" />
               </form>
             ) : null}
             {/* "The invoice is not posted until CEO approval." */}
@@ -237,9 +235,7 @@ export default async function ApInvoicePage({
               <form action={postApInvoice}>
                 <input name="id" type="hidden" value={invoice.id} />
                 <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-                <button className="action action--primary" type="submit">
-                  {t('ap_invoices.approve_and_post')}
-                </button>
+                <Submit label={t('ap_invoices.approve_and_post')} variant="document" />
               </form>
             ) : null}
           </>

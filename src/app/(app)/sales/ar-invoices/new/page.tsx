@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Flash, admin as s } from '@/components/admin';
+import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { PairedPicker } from '@/components/admin/paired-picker';
@@ -198,9 +198,7 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
         <form action={createArInvoice}>
           <DocumentWindow
             actions={
-              <button className="action action--primary" type="submit">
-                {t('create')}
-              </button>
+              <Submit label={t('create')} variant="document" />
             }
             documentType={page('ar_invoice')}
             fields={fields}

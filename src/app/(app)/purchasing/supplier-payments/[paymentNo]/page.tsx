@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Flash, admin as s } from '@/components/admin';
+import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
@@ -120,9 +120,7 @@ export default async function PaymentPage({
             <form action={postPayment}>
               <input name="id" type="hidden" value={payment.id} />
               <input name="payment_no" type="hidden" value={payment.paymentNo} />
-              <button className="action action--primary" type="submit">
-                {t('supplier_payments.post')}
-              </button>
+              <Submit label={t('supplier_payments.post')} variant="document" />
             </form>
           ) : null
         }
@@ -187,9 +185,7 @@ export default async function PaymentPage({
                         inputMode="decimal"
                         name="amount_iqd"
                       />
-                      <button className="action" type="submit">
-                        {t('supplier_payments.allocate')}
-                      </button>
+                      <Submit label={t('supplier_payments.allocate')} tone="secondary" variant="document" />
                     </form>
                   </td>
                 ) : null}

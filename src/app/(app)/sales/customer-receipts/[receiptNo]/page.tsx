@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Flash, admin as s } from '@/components/admin';
+import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
@@ -132,18 +132,14 @@ export default async function ReceiptPage({
               <form action={approveReceipt}>
                 <input name="id" type="hidden" value={receipt.id} />
                 <input name="receipt_no" type="hidden" value={receipt.receiptNo} />
-                <button className="action action--primary" type="submit">
-                  {t('customer_receipts.approve')}
-                </button>
+                <Submit label={t('customer_receipts.approve')} variant="document" />
               </form>
             ) : null}
             {mayPost ? (
               <form action={postReceipt}>
                 <input name="id" type="hidden" value={receipt.id} />
                 <input name="receipt_no" type="hidden" value={receipt.receiptNo} />
-                <button className="action action--primary" type="submit">
-                  {t('customer_receipts.post')}
-                </button>
+                <Submit label={t('customer_receipts.post')} variant="document" />
               </form>
             ) : null}
           </>
@@ -205,9 +201,7 @@ export default async function ReceiptPage({
                         inputMode="decimal"
                         name="amount_iqd"
                       />
-                      <button className="action" type="submit">
-                        {t('customer_receipts.allocate')}
-                      </button>
+                      <Submit label={t('customer_receipts.allocate')} tone="secondary" variant="document" />
                     </form>
                   </td>
                 ) : null}

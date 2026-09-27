@@ -54,7 +54,7 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
   const filter = {
     from: one('from') || null,
     to: one('to') || null,
-    itemCode: one('item') || null,
+    itemSearch: one('item') || null,
     warehouseCode: one('warehouse') || null,
   };
 
@@ -97,16 +97,23 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
               name="to"
               type="date"
             />
-            <Select
-              defaultValue={filter.itemCode ?? ''}
-              emptyLabel={t('stock_movements.all_items')}
+            {/* Typed, not chosen. The catalogue will run to thousands and
+                nobody picks an item out of a list that long; what is typed is
+                matched against the name and the code in SQL, by the trigram
+                indexes from migration 0212. The names are offered as
+                suggestions so a person need not know the spelling. */}
+            <Field
+              defaultValue={filter.itemSearch ?? ''}
               label={column('item_name')}
+              list="stock-movements-items"
               name="item"
-              options={itemList.map((row) => ({
-                value: row.code,
-                label: `${row.name} · ${row.code}`,
-              }))}
+              placeholder={t('reports.search_item_hint')}
             />
+            <datalist id="stock-movements-items">
+              {itemList.map((row) => (
+                <option key={row.code} value={row.name} />
+              ))}
+            </datalist>
             <Select
               defaultValue={filter.warehouseCode ?? ''}
               emptyLabel={t('stock_movements.all_warehouses')}

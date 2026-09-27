@@ -529,6 +529,16 @@ export interface MovementFilter {
   readonly from?: string | null;
   readonly to?: string | null;
   readonly itemCode?: string | null;
+  /**
+   * What a person typed into the item box, matched against the item's name and
+   * its code, anywhere in either.
+   *
+   * A drop-down cannot serve a catalogue of thousands — a person cannot pick an
+   * item out of a list that long, they have to search for it. Written to meet
+   * the trigram indexes from migration 0212: `lower(...)` on both sides, or the
+   * planner reads every item instead.
+   */
+  readonly itemSearch?: string | null;
   readonly warehouseCode?: string | null;
 }
 
@@ -570,6 +580,15 @@ export async function movements(tx: Tx, ctx: ActorContext, filter: MovementFilte
        ${filter.from ? sql`and m.movement_date >= ${filter.from}::date` : sql``}
        ${filter.to ? sql`and m.movement_date <= ${filter.to}::date` : sql``}
        ${filter.itemCode ? sql`and m.item_code = ${filter.itemCode}` : sql``}
+       ${
+         filter.itemSearch?.trim()
+           ? sql`and (lower(i.name) like ${
+               '%' + filter.itemSearch.trim().toLowerCase().replace(/([%_\\])/g, '\\$1') + '%'
+             } escape '\\' or lower(m.item_code) like ${
+               '%' + filter.itemSearch.trim().toLowerCase().replace(/([%_\\])/g, '\\$1') + '%'
+             } escape '\\')`
+           : sql``
+       }
        ${filter.warehouseCode ? sql`and m.warehouse_code = ${filter.warehouseCode}` : sql``}
      order by m.movement_date desc, m.created_at desc
      limit 1000

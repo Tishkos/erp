@@ -212,9 +212,7 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
                               ))}
                             </select>
                           ) : null}
-                          <button className="action" type="submit">
-                            {t('in_transit.advance')} {label(next)}
-                          </button>
+                          <Submit label={`${t('in_transit.advance')} ${label(next)}`} tone="secondary" variant="document" />
                         </form>
                       )}
                     </td>
@@ -244,9 +242,7 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
               </label>
             ))}
           </fieldset>
-          <button className="action" type="submit">
-            {t('in_transit.notify_save')}
-          </button>
+          <Submit label={t('in_transit.notify_save')} tone="secondary" variant="document" />
         </form>
       ) : null}
     </AdminPage>

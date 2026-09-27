@@ -83,7 +83,11 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
         <p className={s.sectionHint}>{t('goods_returns.no_invoices')}</p>
       ) : (
         <>
-          <form className="list__toolbar" method="get">
+          {/* The sentence is the field's hint, not the button's name. It had
+              been the button's label, which put "Choose the invoice being
+              returned against." on a control beside a picker and made the two
+              read as different sizes of thing. */}
+          <form className={s.filterRow} method="get">
             <label className={s.field}>
               <span className={s.label}>{t('goods_returns.invoice')}</span>
               <select className={s.select} defaultValue={chosen} name="invoice" required>
@@ -94,10 +98,9 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
                   </option>
                 ))}
               </select>
+              <span className={s.hint}>{t('goods_returns.pick_invoice')}</span>
             </label>
-            <button className="action" type="submit">
-              {t('goods_returns.pick_invoice')}
-            </button>
+            <Submit label={t('choose')} tone="secondary" variant="document" />
           </form>
 
           {!invoice ? null : (

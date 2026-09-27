@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Flash, admin as s } from '@/components/admin';
+import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { DueDateField } from '@/components/admin/due-date-field';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
@@ -188,9 +188,7 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
         <form action={createApInvoice}>
           <DocumentWindow
             actions={
-              <button className="action action--primary" type="submit">
-                {t('create')}
-              </button>
+              <Submit label={t('create')} variant="document" />
             }
             documentType={page('ap_invoice')}
             fields={fields}

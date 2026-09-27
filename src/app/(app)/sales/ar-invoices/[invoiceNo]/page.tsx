@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Flash, admin as s } from '@/components/admin';
+import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
@@ -250,14 +250,14 @@ export default async function ArInvoicePage({
               <form action={saveArInvoiceAccounts} id="ar-invoice-accounts">
                 <input name="id" type="hidden" value={invoice.id} />
                 <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-                <button className="action" type="submit">{t('invoices.save_accounts')}</button>
+                <Submit label={t('invoices.save_accounts')} tone="secondary" variant="document" />
               </form>
             ) : null}
             {mayApprove ? (
               <form action={approveArInvoice}>
                 <input name="id" type="hidden" value={invoice.id} />
                 <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-                <button className="action action--primary" type="submit">{t('ar_invoices.approve')}</button>
+                <Submit label={t('ar_invoices.approve')} variant="document" />
               </form>
             ) : null}
             {/* "The invoice is not posted until CEO approval." */}
@@ -265,9 +265,7 @@ export default async function ArInvoicePage({
               <form action={postArInvoice}>
                 <input name="id" type="hidden" value={invoice.id} />
                 <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-                <button className="action action--primary" type="submit">
-                  {t('ar_invoices.post')}
-                </button>
+                <Submit label={t('ar_invoices.post')} variant="document" />
               </form>
             ) : null}
             {mayReturnToDraft ? (
@@ -275,7 +273,7 @@ export default async function ArInvoicePage({
                 <input name="id" type="hidden" value={invoice.id} />
                 <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
                 <input aria-label={t('reason')} name="reason" placeholder={t('reason_placeholder')} required type="text" />
-                <button className="action" type="submit">{t('ar_invoices.return_to_draft')}</button>
+                <Submit label={t('ar_invoices.return_to_draft')} tone="secondary" variant="document" />
               </form>
             ) : null}
           </>

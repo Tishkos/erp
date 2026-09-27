@@ -1,4 +1,5 @@
 import { getTranslations } from 'next-intl/server';
+import { Submit } from '@/components/admin';
 import { visibleRoute } from '@/server/phase-gate';
 import { notFound } from 'next/navigation';
 import { redirect } from 'next/navigation';
@@ -121,9 +122,7 @@ export default async function AvailabilityPage({
           placeholder={t('list.search_placeholder')}
           aria-label={t('list.search')}
         />
-        <button className="action" type="submit">
-          {t('list.search')}
-        </button>
+        <Submit label={t('list.search')} tone="secondary" variant="document" />
       </form>
 
       <DataList
@@ -164,9 +163,7 @@ export default async function AvailabilityPage({
             placeholder={t('column.quantity')}
             aria-label={t('column.quantity')}
           />
-          <button className="action action--primary" type="submit">
-            {t('inventory.issue')}
-          </button>
+          <Submit label={t('inventory.issue')} variant="document" />
         </form>
       </section>
     </>

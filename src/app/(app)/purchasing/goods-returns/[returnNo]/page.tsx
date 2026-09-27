@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Flash, admin as s } from '@/components/admin';
+import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
@@ -108,18 +108,14 @@ export default async function GoodsReturnPage({
               <form action={approveGoodsReturn}>
                 <input name="id" type="hidden" value={document.id} />
                 <input name="return_no" type="hidden" value={document.returnNo} />
-                <button className="action action--primary" type="submit">
-                  {t('goods_returns.approve')}
-                </button>
+                <Submit label={t('goods_returns.approve')} variant="document" />
               </form>
             ) : null}
             {mayPost ? (
               <form action={postGoodsReturn}>
                 <input name="id" type="hidden" value={document.id} />
                 <input name="return_no" type="hidden" value={document.returnNo} />
-                <button className="action action--primary" type="submit">
-                  {t('goods_returns.ship')}
-                </button>
+                <Submit label={t('goods_returns.ship')} variant="document" />
               </form>
             ) : null}
           </>
