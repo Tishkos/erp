@@ -421,7 +421,12 @@
     "movement": "Movement",
     "stock_in": "In",
     "stock_out": "Out",
-    "document": "Document"
+    "document": "Document",
+    "invoiced_quantity": "Invoiced",
+    "from_warehouse_name": "From",
+    "to_warehouse_name": "To",
+    "entered_at": "Entered",
+    "raised_by": "Raised by"
   },
   "list": {
     "search": "Search",

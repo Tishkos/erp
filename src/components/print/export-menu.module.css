@@ -45,11 +45,27 @@
   box-shadow: var(--focus-ring);
 }
 
+/*
+ * The panel escapes its ancestors' clipping.
+ *
+ * It used to be `position: absolute`, which any scrolling or hidden ancestor
+ * clips — and `z-index` cannot lift anything out of an overflow clip. On the
+ * Transfer and Item Reconciliation lists the menu sits in a row inside
+ * `.table-wrap` (`overflow: auto`) inside a flush `Panel` (`overflow: hidden`),
+ * so the panel opened into the clipped region and was never drawn: the button
+ * looked broken while no request was ever made (reported 2026-09-27). Every
+ * menu that did work sits in a page header, outside both.
+ *
+ * `fixed` is positioned against the viewport, so no ancestor clips it. Anchor
+ * positioning keeps it on its trigger; where that is unavailable it is pinned
+ * to the corner instead — plainly worse to look at, and still usable, which is
+ * the right way round for a menu that otherwise cannot be opened at all.
+ */
 .panel {
-  position: absolute;
-  z-index: 40;
-  inset-block-start: calc(100% + 0.3rem);
-  inset-inline-end: 0;
+  position: fixed;
+  z-index: 60;
+  inset-block-end: 1rem;
+  inset-inline-end: 1rem;
   display: grid;
   gap: 0.35rem;
   min-inline-size: 16rem;
@@ -58,6 +74,20 @@
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
   box-shadow: 0 12px 28px rgb(25 43 84 / 16%);
+}
+
+@supports (anchor-name: --a) {
+  .menu {
+    anchor-name: --exportMenu;
+  }
+
+  .panel {
+    position-anchor: --exportMenu;
+    inset-block-start: calc(anchor(bottom) + 0.3rem);
+    inset-block-end: auto;
+    inset-inline-end: anchor(right);
+    position-try-fallbacks: flip-block;
+  }
 }
 
 .language {

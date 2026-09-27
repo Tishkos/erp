@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
 import {
   AdminPage,
@@ -16,6 +16,7 @@ import { Denied } from '@/components/denied';
 import { ExportMenu } from '@/components/print/export-menu';
 import { can } from '@domain/permissions';
 import { formatQuantity, parseQuantity } from '@domain/uom';
+import { formatTimestamp, type Locale } from '@/i18n/config';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as items from '@/server/services/items';
@@ -38,10 +39,11 @@ export const dynamic = 'force-dynamic';
 export default async function StockMovementsPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/inventory/stock-movements')) notFound();
 
-  const [t, page, column, context, params] = await Promise.all([
+  const [t, page, column, locale, context, params] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('column'),
+    getLocale(),
     requireContext(),
     searchParams,
   ]);
@@ -136,18 +138,22 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
                 <th scope="col">{column('date')}</th>
                 <th scope="col">{column('item_code')}</th>
                 <th scope="col">{column('item_name')}</th>
+                <th scope="col">{column('entered_at')}</th>
                 <th scope="col">{column('warehouse_code')}</th>
                 <th scope="col">{column('warehouse_name')}</th>
+                <th scope="col">{column('from_warehouse_name')}</th>
+                <th scope="col">{column('to_warehouse_name')}</th>
                 <th scope="col">{column('movement')}</th>
                 <th scope="col">{column('stock_in')}</th>
                 <th scope="col">{column('stock_out')}</th>
                 <th scope="col">{column('document')}</th>
+                <th scope="col">{column('raised_by')}</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9}>{t('stock_movements.none')}</td>
+                  <td colSpan={13}>{t('stock_movements.none')}</td>
                 </tr>
               ) : null}
               {rows.map((row) => {
@@ -163,11 +169,24 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
                     <td>
                       <bdi dir="auto">{row.itemName}</bdi>
                     </td>
+                      {/* When it was entered, so two movements on one date read in
+                        the order they happened. */}
+                    <td>
+                      <bdi dir="ltr">{row.createdAt ? formatTimestamp(row.createdAt, locale as Locale) : '—'}</bdi>
+                    </td>
                     <td>
                       <bdi dir="ltr">{row.warehouseCode}</bdi>
                     </td>
                     <td>
                       <bdi dir="auto">{row.warehouseName}</bdi>
+                    </td>
+                    {/* Both ends of a transfer; a dash where the other side is a
+                        document rather than a warehouse. */}
+                    <td>
+                      <bdi dir="auto">{row.fromWarehouseName ?? row.fromWarehouseCode ?? '—'}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="auto">{row.toWarehouseName ?? row.toWarehouseCode ?? '—'}</bdi>
                     </td>
                     <td>{t(`stock_movements.type.${row.type}`)}</td>
                     <td>
@@ -178,6 +197,9 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
                     </td>
                     <td>
                       <bdi dir="ltr">{row.documentNo ?? ''}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="auto">{row.raisedBy ?? '—'}</bdi>
                     </td>
                   </tr>
                 );

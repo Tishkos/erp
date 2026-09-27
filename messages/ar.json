@@ -421,7 +421,12 @@
     "movement": "الحركة",
     "stock_in": "إدخال",
     "stock_out": "إخراج",
-    "document": "المستند"
+    "document": "المستند",
+    "invoiced_quantity": "المفوتر",
+    "from_warehouse_name": "من",
+    "to_warehouse_name": "إلى",
+    "entered_at": "أُدخل",
+    "raised_by": "أدخله"
   },
   "list": {
     "search": "بحث",

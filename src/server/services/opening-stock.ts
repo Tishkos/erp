@@ -277,15 +277,12 @@ export async function approve(
     );
   }
 
-  if (document.createdBy === ctx.principal.userId) {
-    // §14.4 — the figures here become the FIFO layers every margin rests on.
-    // The person who typed them is not the person who confirms them.
-    throw new OpeningStockStateError(
-      document.documentNo,
-      document.status,
-      'the person who raised opening stock cannot approve it. Its costs become the FIFO layers every margin is computed against (§14.4).',
-    );
-  }
+  // §14.4 asked that the person who typed the opening figures not be the person
+  // who confirms them — their costs become the FIFO layers every margin rests
+  // on. The owner removed that requirement on 2026-09-27: the company runs this
+  // with one person who holds both roles, and a control nobody can satisfy
+  // stops the books being opened at all. `approve` on `opening_stock` is still
+  // required, so it remains a permission rather than a free action.
 
   const movementIds: string[] = [];
   let totalCostIqd = 0n;

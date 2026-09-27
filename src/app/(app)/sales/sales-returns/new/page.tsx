@@ -5,7 +5,11 @@ import { AdminPage, Field, Flash, Form, Grid, ReadOnlyField, Submit, SubmitRow, 
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
-import { formatMoney, type Locale } from '@/i18n/config';
+import {
+  formatMoney,
+  formatQuantity as formatLocaleQuantity,
+  type Locale,
+} from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
@@ -164,6 +168,9 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
                       </th>
                       <th scope="col">{column('warehouse')}</th>
                       <th className={s.sapNum} scope="col">
+                        {column('invoiced_quantity')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
                         {t('sales_returns.returnable')}
                       </th>
                       <th className={s.sapNum} scope="col">
@@ -174,7 +181,7 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
                   <tbody>
                     {open.length === 0 ? (
                       <tr>
-                        <td className={s.sapEmptyRow} colSpan={6}>
+                        <td className={s.sapEmptyRow} colSpan={7}>
                           {t('sales_returns.none')}
                         </td>
                       </tr>
@@ -200,15 +207,24 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
                         <td>
                           <bdi dir="ltr">{line.warehouseCode ?? '—'}</bdi>
                         </td>
+                        {/* What the invoice billed — `invoiced` comes back from the
+                            same query as the returnable figure. */}
                         <td className={s.sapNum}>
-                          <bdi dir="ltr">{String(Number(line.returnable))}</bdi>
+                          <bdi dir="ltr">
+                            {formatLocaleQuantity(line.invoiced ?? '0', locale as Locale)}
+                          </bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">
+                            {formatLocaleQuantity(line.returnable ?? '0', locale as Locale)}
+                          </bdi>
                         </td>
                         <td className={s.sapNum}>
                           <input
                             aria-label={`${t('sales_returns.return_quantity')} ${line.itemCode}`}
                             className={s.sapCellField}
                             inputMode="decimal"
-                            max={Number(line.returnable)}
+                            max={line.returnable ?? '0'}
                             name={`quantity_${row}`}
                           />
                         </td>

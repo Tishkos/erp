@@ -554,8 +554,22 @@ export async function movements(tx: Tx, ctx: ActorContext, filter: MovementFilte
   const result = await tx.execute(sql`
     select m.id,
            m.movement_date::text as movement_date,
+           -- When it was entered, not only the day it is dated: two movements on
+           -- one date are read in the order they happened.
+           m.created_at::text    as created_at,
            m.item_code, i.name as item_name,
            m.warehouse_code, w.name as warehouse_name,
+           -- Where the stock came from and where it went. A transfer writes two
+           -- movements — one Out of the first warehouse, one In to the second —
+           -- so each row can name its counterpart by reading the transfer both
+           -- belong to. Everything else moves in or out of one place, and the
+           -- other side is the document rather than a warehouse.
+           t.from_warehouse_code as from_warehouse_code,
+           fw.name               as from_warehouse_name,
+           t.to_warehouse_code   as to_warehouse_code,
+           tw.name               as to_warehouse_name,
+           -- Who entered it.
+           coalesce(u.display_name, u.email) as raised_by,
            m.kind, m.source_document_type, m.quantity::text as quantity,
            coalesce(
              (select invoice_no from ap_invoice where id::text = m.source_document_id
@@ -576,6 +590,12 @@ export async function movements(tx: Tx, ctx: ActorContext, filter: MovementFilte
       from inventory_movement m
       join item i on i.code = m.item_code
       join warehouse w on w.code = m.warehouse_code
+      left join app_user u on u.id = m.created_by
+      left join stock_transfer t
+             on m.source_document_type = 'stock_transfer'
+            and t.id::text = m.source_document_id
+      left join warehouse fw on fw.code = t.from_warehouse_code
+      left join warehouse tw on tw.code = t.to_warehouse_code
      where m.branch_code = ${ctx.branchCode}
        ${filter.from ? sql`and m.movement_date >= ${filter.from}::date` : sql``}
        ${filter.to ? sql`and m.movement_date <= ${filter.to}::date` : sql``}
@@ -590,7 +610,7 @@ export async function movements(tx: Tx, ctx: ActorContext, filter: MovementFilte
            : sql``
        }
        ${filter.warehouseCode ? sql`and m.warehouse_code = ${filter.warehouseCode}` : sql``}
-     order by m.movement_date desc, m.created_at desc
+     order by m.movement_date desc, m.created_at desc, m.id desc
      limit 1000
   `);
 
@@ -604,6 +624,15 @@ export async function movements(tx: Tx, ctx: ActorContext, filter: MovementFilte
       itemName: row.item_name!,
       warehouseCode: row.warehouse_code!,
       warehouseName: row.warehouse_name!,
+      createdAt: row.created_at,
+      raisedBy: row.raised_by,
+      /* A transfer knows both ends. Read from the row's own side so the two
+         movements of one transfer each say where the stock came from and where
+         it went, rather than only naming the warehouse they touched. */
+      fromWarehouseCode: row.from_warehouse_code,
+      fromWarehouseName: row.from_warehouse_name,
+      toWarehouseCode: row.to_warehouse_code,
+      toWarehouseName: row.to_warehouse_name,
       type: movementType(row.kind!, row.source_document_type ?? null),
       direction: negative ? ('out' as const) : ('in' as const),
       quantity: negative ? quantity.slice(1) : quantity,

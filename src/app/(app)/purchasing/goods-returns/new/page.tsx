@@ -11,7 +11,7 @@ import {
   type Locale,
 } from '@/i18n/config';
 import { can } from '@domain/permissions';
-import { formatQuantity as formatScaledQuantity } from '@domain/uom';
+import { formatQuantity as formatScaledQuantity, parseQuantity } from '@domain/uom';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as banks from '@/server/services/bank-cash-accounts';
@@ -175,6 +175,9 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
                       </th>
                       <th scope="col">{column('warehouse')}</th>
                       <th className={s.sapNum} scope="col">
+                        {column('invoiced_quantity')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
                         {t('goods_returns.returnable')}
                       </th>
                       <th className={s.sapNum} scope="col">
@@ -185,7 +188,7 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
                   <tbody>
                     {open.length === 0 ? (
                       <tr>
-                        <td className={s.sapEmptyRow} colSpan={6}>
+                        <td className={s.sapEmptyRow} colSpan={7}>
                           {t('goods_returns.none')}
                         </td>
                       </tr>
@@ -225,6 +228,16 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
                               </option>
                             ))}
                           </select>
+                        </td>
+                        {/* What the invoice billed, so the figure the return is
+                            measured against is on the row rather than remembered. */}
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">
+                            {formatLocaleQuantity(
+                              formatScaledQuantity(parseQuantity(line.quantity)),
+                              locale as Locale,
+                            )}
+                          </bdi>
                         </td>
                         <td className={s.sapNum}>
                           <bdi dir="ltr">
