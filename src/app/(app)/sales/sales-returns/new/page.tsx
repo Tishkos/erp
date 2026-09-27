@@ -224,7 +224,10 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
                             aria-label={`${t('sales_returns.return_quantity')} ${line.itemCode}`}
                             className={s.sapCellField}
                             inputMode="decimal"
-                            max={line.returnable ?? '0'}
+                            // The column comes back as numeric text
+                            // ("1.000000"); the ceiling on a box reads as a
+                            // quantity, not as six decimal places.
+                            max={String(Number(line.returnable ?? '0'))}
                             name={`quantity_${row}`}
                           />
                         </td>

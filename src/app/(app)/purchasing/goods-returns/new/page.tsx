@@ -16,7 +16,6 @@ import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as banks from '@/server/services/bank-cash-accounts';
 import * as gr from '@/server/services/goods-return';
-import * as warehouses from '@/server/services/warehouses';
 import { createGoodsReturn } from '../actions';
 
 /**
@@ -60,13 +59,10 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
 
   const chosen = typeof params.invoice === 'string' ? params.invoice : '';
 
-  const { invoices, lines, accounts, houses } = await withCurrentUser(async (tx) => ({
+  const { invoices, lines, accounts } = await withCurrentUser(async (tx) => ({
     invoices: await gr.returnableInvoices(tx),
     lines: chosen ? await gr.returnableLinesFor(tx, chosen) : [],
     accounts: [...(await banks.listOfKind(tx, 'bank')), ...(await banks.listOfKind(tx, 'cash'))],
-    houses: (await warehouses.listActive(tx)).filter(
-      (house) => house.branchCode === context.scope.branchCode,
-    ),
   }));
 
   const invoice = invoices.find((row) => row.id === chosen);
@@ -213,21 +209,22 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
                           <bdi dir="ltr">{money(line.unitPrice)}</bdi>
                         </td>
                         <td>
-                          {/* Block 10 — "Warehouse (from which the item will
-                              be returned)". Opens on where the invoice booked
-                              it; the goods may have been moved since. */}
-                          <select
-                            aria-label={`${column('warehouse')} ${line.itemCode}`}
-                            className={s.sapCellField}
-                            defaultValue={line.warehouseCode ?? ''}
+                          {/* Block 10 — "Warehouse (from which the item will be
+                              returned)": the warehouse the invoice booked this
+                              line into, and not a choice. A return is measured against the
+                              invoice, and the stock it sends back is the stock
+                              that invoice brought in — offering every warehouse
+                              let a person pick one the goods were never in, and
+                              the refusal came from the stock ledger a step later
+                              ("only 0 of ITM-000001 on this invoice are in
+                              WH-BOARD"). It travels in a hidden field so the
+                              action reads it exactly as before. */}
+                          <bdi dir="ltr">{line.warehouseCode ?? '—'}</bdi>
+                          <input
                             name={`warehouse_code_${row}`}
-                          >
-                            {houses.map((house) => (
-                              <option key={house.code} value={house.code}>
-                                {`${house.code} · ${house.name}`}
-                              </option>
-                            ))}
-                          </select>
+                            type="hidden"
+                            value={line.warehouseCode ?? ''}
+                          />
                         </td>
                         {/* What the invoice billed, so the figure the return is
                             measured against is on the row rather than remembered. */}
