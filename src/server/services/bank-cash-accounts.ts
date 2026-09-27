@@ -43,7 +43,6 @@ export type AccountKind = 'bank' | 'cash';
 
 export interface AccountInput {
   readonly name: string;
-  readonly branchCode: string;
   readonly glAccountId: string;
   readonly currency?: string | null;
   /** Bank only. */
@@ -77,7 +76,25 @@ export async function listOfKind(tx: Tx, kind: AccountKind) {
       active: bankCashAccount.active,
     })
     .from(bankCashAccount)
-    .innerJoin(chartOfAccount, eq(chartOfAccount.id, bankCashAccount.glAccountId))
+    /*
+     * Left, not inner.
+     *
+     * The G/L account is required and the database has the foreign key for
+     * it, so every account has one — until something goes around the
+     * application. `format-live-database.sh` deletes with the triggers
+     * disabled, and on 2026-09-27 it took `chart_of_account` rows while
+     * leaving `bank_cash_account` standing: CASH-ACCOUNTANT_ERBIL kept an id
+     * pointing at an account that no longer existed.
+     *
+     * Under an inner join that row simply stopped being listed. The account
+     * was not shown as broken, it was not shown at all — so the one screen
+     * that could repair the link was the screen the link had removed it from,
+     * and the report was "I cannot link the cash account to a G/L account".
+     *
+     * A missing G/L account is a thing to say out loud, never a reason to
+     * hide the record that needs it.
+     */
+    .leftJoin(chartOfAccount, eq(chartOfAccount.id, bankCashAccount.glAccountId))
     .leftJoin(appUser, eq(appUser.id, bankCashAccount.custodianUserId))
     .where(eq(bankCashAccount.accountType, kind))
     .orderBy(asc(bankCashAccount.code));
@@ -290,7 +307,18 @@ export async function create(tx: Tx, ctx: ActorContext, kind: AccountKind, input
     accountType: kind,
     currency: assertCurrency(input.currency),
     glAccountId: await assertGlAccount(tx, input.glAccountId),
-    branchCode: await assertBranch(tx, input.branchCode),
+    /*
+     * Not asked for, by direction (2026-09-27): "remove linking the account
+     * to branch, we don't need this". A bank account is the company's, not a
+     * branch's — the branch that matters is the one on the payment or the
+     * receipt, which carries its own.
+     *
+     * The column is `not null` and the table has a foreign key to `branch`,
+     * so the value still has to be *a* branch until a migration lifts that.
+     * The actor's own is the honest answer to "who opened this account" and
+     * the one nobody has to be asked for.
+     */
+    branchCode: await assertBranch(tx, ctx.branchCode),
     approvalLimitIqd: assertAmount(input.approvalLimitIqd, 'approvalLimitIqd'),
     ...(await shapeFor(tx, kind, input)),
     active: true,
@@ -316,7 +344,8 @@ export async function update(tx: Tx, ctx: ActorContext, code: string, input: Acc
     name: requireText(input.name, 'name'),
     currency: assertCurrency(input.currency),
     glAccountId: await assertGlAccount(tx, input.glAccountId, before.glAccountId),
-    branchCode: await assertBranch(tx, input.branchCode),
+    // Left where it was. The form no longer asks, so an edit must not silently
+    // move an existing account to whichever branch the editor happens to be in.
     approvalLimitIqd: assertAmount(input.approvalLimitIqd, 'approvalLimitIqd'),
     ...(await shapeFor(tx, kind, input)),
   };
@@ -330,12 +359,14 @@ export async function update(tx: Tx, ctx: ActorContext, code: string, input: Acc
       name: before.name,
       currency: before.currency,
       glAccountId: before.glAccountId,
-      branchCode: before.branchCode,
       accountNumber: before.accountNumber,
       custodianUserId: before.custodianUserId,
     },
     after: values,
-    branchCode: values.branchCode,
+    // The audit row is filed under the branch the account already carries —
+    // the edit did not change it, and an entry filed somewhere else would be
+    // invisible to whoever reads that branch's history.
+    branchCode: before.branchCode,
   });
   return get(tx, code);
 }

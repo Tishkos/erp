@@ -20,7 +20,8 @@ const kindOf = (formData: FormData): accounts.AccountKind =>
 function inputFrom(formData: FormData) {
   return {
     name: text(formData, 'name'),
-    branchCode: text(formData, 'branchCode'),
+    // No branch. The form stopped asking (2026-09-27) and the service fills
+    // the column itself until a migration can drop it.
     glAccountId: text(formData, 'glAccountId'),
     currency: text(formData, 'currency') || null,
     bankName: text(formData, 'bankName') || null,

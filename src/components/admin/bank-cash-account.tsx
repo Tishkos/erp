@@ -80,9 +80,8 @@ export async function AccountList({
   const mayCreate = can(principal, 'create', accounts.PERMISSION_OBJECT);
   const route = ROUTES[kind];
 
-  const { rows, places, gl, people, moneys } = await withCurrentUser(async (tx) => ({
+  const { rows, gl, people, moneys } = await withCurrentUser(async (tx) => ({
     rows: await accounts.listOfKind(tx, kind),
-    places: mayCreate ? await accounts.listBranches(tx) : [],
     gl: mayCreate ? await accounts.availableGlAccounts(tx) : [],
     people: mayCreate && kind === 'cash' ? await users.listAll(tx) : [],
     // The currencies Finance has configured. An account's currency is one of
@@ -109,12 +108,9 @@ export async function AccountList({
               <Hidden name="kind" value={kind} />
               <Grid>
                 <Field label={t('name')} name="name" required requiredLabel={t('required_hint')} />
-                <Select
-                  label={column('branch_code')}
-                  name="branchCode"
-                  options={places.map((b) => ({ value: b.code, label: `${b.code} · ${b.name}` }))}
-                  required
-                />
+                {/* No branch. By direction, 2026-09-27: an account is the
+                    company's, and the branch that matters is the one on the
+                    payment or the receipt. */}
                 {/* One G/L account each, and no two accounts share one — the
                     picker only offers those not already carried. */}
                 <Select
@@ -195,7 +191,6 @@ export async function AccountList({
                 <th scope="col">
                   {kind === 'bank' ? t('bank_accounts.bank_name') : t('cash_accounts.custodian')}
                 </th>
-                <th scope="col">{column('branch_code')}</th>
                 <th scope="col">{t('accounts_shared.gl_account')}</th>
                 <th scope="col">{t('accounts_shared.currency')}</th>
                 <th scope="col">{column('active')}</th>
@@ -204,7 +199,7 @@ export async function AccountList({
             <tbody>
               {shown.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>{t(`${kind}_accounts.none`)}</td>
+                  <td colSpan={6}>{t(`${kind}_accounts.none`)}</td>
                 </tr>
               ) : null}
               {shown.map((row) => (
@@ -214,9 +209,15 @@ export async function AccountList({
                   </td>
                   <td>{row.name}</td>
                   <td>{(kind === 'bank' ? row.bankName : row.custodianName) ?? t('none')}</td>
-                  <td>{row.branchCode}</td>
                   <td>
-                    {row.glAccountCode} · {row.glAccountName}
+                    {/* Null when the G/L account this once pointed at is no
+                        longer there. Said plainly, and the row stays on the
+                        list, because this is the screen that repairs it. */}
+                    {row.glAccountCode ? (
+                      `${row.glAccountCode} · ${row.glAccountName}`
+                    ) : (
+                      <Pill label={t('accounts_shared.gl_missing')} on={false} />
+                    )}
                   </td>
                   <td>{row.currency}</td>
                   <td>
@@ -262,7 +263,6 @@ export async function AccountRecord({
       const row = await accounts.detail(tx, code);
       return {
         row,
-        places: mayEdit ? await accounts.listBranches(tx) : [],
         gl: mayEdit ? await accounts.availableGlAccounts(tx, row.glAccountId) : [],
         people: mayEdit ? await users.listAll(tx) : [],
         moneys: mayEdit ? await rates.currencies(tx) : [],
@@ -273,7 +273,7 @@ export async function AccountRecord({
     }
   });
   if (!data) notFound();
-  const { row, places, gl, people, moneys } = data;
+  const { row, gl, people, moneys } = data;
   // The address is the truth about which list this belongs on; a cash account
   // reached through the bank route is the wrong page for it.
   if (row.accountType !== kind) notFound();
@@ -315,14 +315,11 @@ export async function AccountRecord({
               <li>
                 <span>{t('accounts_shared.gl_account')}</span>
                 <span>
-                  {row.glAccountCode} · {row.glAccountName}
-                </span>
-              </li>
-              <li>
-                <span>{column('branch_code')}</span>
-                <span>
-                  {row.branchCode}
-                  {row.branchName ? ` · ${row.branchName}` : ''}
+                  {row.glAccountCode ? (
+                    `${row.glAccountCode} · ${row.glAccountName}`
+                  ) : (
+                    <Pill label={t('accounts_shared.gl_missing')} on={false} />
+                  )}
                 </span>
               </li>
               <li>
@@ -408,21 +405,32 @@ export async function AccountRecord({
                     required
                     requiredLabel={t('required_hint')}
                   />
+                  {/* No branch — see the note on the New form. An edit leaves
+                      whatever the account already carries untouched. */}
                   <Select
-                    defaultValue={row.branchCode}
-                    label={column('branch_code')}
-                    name="branchCode"
-                    options={places.map((b) => ({ value: b.code, label: `${b.code} · ${b.name}` }))}
-                    required
-                  />
-                  <Select
-                    defaultValue={row.glAccountId}
+                    /*
+                     * Offered — and preselected — only when the account it
+                     * names is really there. A dangling id left in the list
+                     * would sit selected under a "null · null" label, and
+                     * saving the form would write it straight back: the one
+                     * screen that repairs the link quietly preserving the
+                     * break instead. With it gone the field is empty and
+                     * `required`, so the form asks for a real account.
+                     */
+                    defaultValue={row.glAccountCode ? row.glAccountId : undefined}
                     hint={t('accounts_shared.gl_hint')}
                     label={t('accounts_shared.gl_account')}
                     name="glAccountId"
                     options={[
                       // The one it already holds, so the picker can show it.
-                      { value: row.glAccountId, label: `${row.glAccountCode} · ${row.glAccountName}` },
+                      ...(row.glAccountCode
+                        ? [
+                            {
+                              value: row.glAccountId,
+                              label: `${row.glAccountCode} · ${row.glAccountName}`,
+                            },
+                          ]
+                        : []),
                       ...gl
                         .filter((a) => a.id !== row.glAccountId)
                         .map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` })),

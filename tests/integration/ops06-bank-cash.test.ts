@@ -185,7 +185,6 @@ describe('ops 6 · the bank and cash master', () => {
       banks.create(tx, manager, 'bank', {
         name: 'Al Rafidain — Current',
         glAccountId: bankGl,
-        branchCode: BAGHDAD,
         currency: 'IQD',
         bankName: 'Al Rafidain',
         accountNumber: '0011-22334455',
@@ -205,7 +204,6 @@ describe('ops 6 · the bank and cash master', () => {
       banks.create(tx, manager, 'cash', {
         name: 'Head Office Petty Cash',
         glAccountId: cashGl,
-        branchCode: BAGHDAD,
         currency: 'IQD',
         // §17 — a float without a custodian is nobody's responsibility.
         custodianUserId: manager.principal.userId,
@@ -221,7 +219,6 @@ describe('ops 6 · the bank and cash master', () => {
       banks.create(tx, manager, 'bank', {
         name: 'First',
         glAccountId: bankGl,
-        branchCode: BAGHDAD,
         currency: 'IQD',
         bankName: 'Al Rafidain',
         accountNumber: '0011-1',
@@ -232,7 +229,6 @@ describe('ops 6 · the bank and cash master', () => {
         banks.create(tx, manager, 'bank', {
           name: 'Second',
           glAccountId: bankGl,
-          branchCode: BAGHDAD,
           currency: 'IQD',
           bankName: 'Al Rafidain',
           accountNumber: '0011-2',

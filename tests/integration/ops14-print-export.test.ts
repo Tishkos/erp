@@ -309,7 +309,6 @@ beforeAll(async () => {
       accountNumber: 'RF-9001',
       currency: 'IQD',
       glAccountId: accounts.bank!,
-      branchCode: BAGHDAD,
     }),
   );
   bankCode = bank.code;

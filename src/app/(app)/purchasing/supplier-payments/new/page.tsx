@@ -52,7 +52,11 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: S
     accounts: [...(await banks.listOfKind(tx, 'bank')), ...(await banks.listOfKind(tx, 'cash'))],
   }));
 
-  const open = accounts.filter((account) => account.active);
+  // Active, and with a G/L account still behind it. A bank or cash account
+  // whose G/L account was deleted outside the application cannot post, so
+  // offering it here would only produce a document that fails on posting;
+  // the count above still sees it, so the setup hint says one is unusable.
+  const open = accounts.filter((account) => account.active && account.glAccountCode);
   const today = new Date().toISOString().slice(0, 10);
 
   const missing = gapsFor([

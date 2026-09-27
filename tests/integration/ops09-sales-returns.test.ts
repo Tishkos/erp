@@ -192,7 +192,6 @@ beforeEach(async () => {
       accountNumber: 'RF-9001',
       currency: 'IQD',
       glAccountId: bankGlAccountId,
-      branchCode: BAGHDAD,
     }),
   );
   const { rows: banked } = await ownerPool.query(

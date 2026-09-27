@@ -190,7 +190,9 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
                   <select className={s.select} name="offset_bank_account_id">
                     <option value="" />
                     {accounts
-                      .filter((account) => account.active)
+                      // Active, and its G/L account still there — one deleted
+                      // outside the application leaves an account that cannot post.
+                      .filter((account) => account.active && account.glAccountCode)
                       .map((account) => (
                         <option key={account.id} value={account.id}>
                           {account.code} · {account.name}

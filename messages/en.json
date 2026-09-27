@@ -1612,6 +1612,7 @@
     "accounts_shared": {
       "gl_account": "G/L account",
       "gl_hint": "One G/L account each, and no two accounts share one — a statement only reconciles against a balance that belongs to one account.",
+      "gl_missing": "No G/L account — the account it named is gone. Choose one.",
       "currency": "Currency",
       "currency_hint": "Three letters. The account can only hold this currency.",
       "approval_limit": "Approval limit",
