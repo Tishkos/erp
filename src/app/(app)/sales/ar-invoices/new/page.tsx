@@ -3,6 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
+import { DueDateField } from '@/components/admin/due-date-field';
 import { PairedPicker } from '@/components/admin/paired-picker';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -12,6 +13,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as ar from '@/server/services/ar-invoice';
 import * as items from '@/server/services/items';
 import * as coa from '@/server/services/chart-of-accounts';
+import * as paymentTerms from '@/server/services/payment-terms';
 import * as partners from '@/server/services/partners';
 import * as posting from '@/server/services/posting';
 import * as warehouses from '@/server/services/warehouses';
@@ -63,7 +65,7 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
     return <Denied object={page('ar_invoices')} />;
   }
 
-  const { customers, allCustomers, options, allItems, houses, accounts, mapped } =
+  const { customers, allCustomers, options, allItems, houses, schedules, accounts, mapped } =
     await withCurrentUser(async (tx) => ({
     customers: await partners.listActiveInRole(tx, 'customer'),
     // The whole list too, so an empty picker can say which of the two things
@@ -79,6 +81,7 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
     // their own. The receivable opens on the configured mapping, so the
     // ordinary case is "leave it alone"; revenue opens on "as configured"
     // (see the field) so each item's own Sales Account still applies.
+    schedules: await paymentTerms.allWithSchedules(tx),
     accounts: await coa.postableAccounts(tx),
     mapped: {
       receivable: await posting.mappedAccountFor(
@@ -91,6 +94,14 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
   }));
 
   const today = new Date().toISOString().slice(0, 10);
+
+  // Each customer beside the terms they are on, which is all the due date
+  // needs: the partner chosen in the header decides which schedule applies.
+  const termsByCode = new Map(schedules.map((terms) => [terms.code, terms]));
+  const customerTerms = customers.map((customer) => ({
+    partnerId: customer.id,
+    terms: (customer.paymentTermsCode ? termsByCode.get(customer.paymentTermsCode) : null) ?? null,
+  }));
 
   const missing = gapsFor([
     { kind: 'customers', total: allCustomers.length, usable: customers.length },
@@ -133,7 +144,21 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
     {
       label: column('due_date'),
       control: true,
-      value: <input aria-label={column('due_date')} name="due_date" type="date" />,
+      // Filled from the customer's payment terms the moment the customer is
+      // chosen, and editable after — §16's default, not a lock. It had been a
+      // bare date box: the terms were applied by the service on save, so the
+      // stored date was right while the form showed nothing, and a person
+      // reading the screen could not tell the invoice had a due date at all.
+      value: (
+        <DueDateField
+          dateField="invoice_date"
+          label={column('due_date')}
+          name="due_date"
+          partnerField="customer_id"
+          required
+          terms={customerTerms}
+        />
+      ),
     },
     {
       label: t('invoices.statement_account_customer'),
