@@ -11,6 +11,7 @@ import {
   type Locale,
 } from '@/i18n/config';
 import { can } from '@domain/permissions';
+import { matching, pickOne, pickOutcome } from '@domain/pick';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as banks from '@/server/services/bank-cash-accounts';
@@ -56,15 +57,40 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
     return <Denied object={page('sales_returns')} />;
   }
 
-  const chosen = typeof params.invoice === 'string' ? params.invoice : '';
+  /* Typed, not chosen — the same two steps as the Purchase Return: the customer
+     narrows what the invoice box suggests, and the invoice is named by its
+     number or by anything that can only be one invoice. */
+  const typedPartner = typeof params.partner === 'string' ? params.partner : '';
+  const typedInvoice = typeof params.invoice === 'string' ? params.invoice : '';
 
-  const { invoices, lines, accounts } = await withCurrentUser(async (tx) => ({
-    invoices: await sr.returnableInvoices(tx),
-    lines: chosen ? await sr.returnableFor(tx, chosen) : [],
-    accounts: [...(await banks.listOfKind(tx, 'bank')), ...(await banks.listOfKind(tx, 'cash'))],
-  }));
+  const { invoices, suggestions, invoice, lines, accounts } = await withCurrentUser(async (tx) => {
+    const all = await sr.returnableInvoices(tx);
+    const fields = (row: (typeof all)[number]) => [
+      row.invoiceNo,
+      row.customerCode,
+      row.customerName,
+      row.invoiceDate,
+    ];
+    const narrowed = typedPartner
+      ? matching(all, typedPartner, (row) => [row.customerCode, row.customerName])
+      : all;
+    const picked = pickOne(narrowed, typedInvoice, (row) => row.invoiceNo, fields);
+    return {
+      invoices: all,
+      suggestions: narrowed,
+      invoice: picked,
+      lines: picked ? await sr.returnableFor(tx, picked.id) : [],
+      accounts: [...(await banks.listOfKind(tx, 'bank')), ...(await banks.listOfKind(tx, 'cash'))],
+    };
+  });
 
-  const invoice = invoices.find((row) => row.id === chosen);
+  const outcome_ = pickOutcome(
+    suggestions,
+    typedInvoice,
+    (row) => row.invoiceNo,
+    (row) => [row.invoiceNo, row.customerCode, row.customerName, row.invoiceDate],
+  );
+  const partners = [...new Map(invoices.map((row) => [row.customerCode, row])).values()];
   const today = new Date().toISOString().slice(0, 10);
   const open = lines.filter((line) => Number(line.returnable) > 0);
 
@@ -83,31 +109,55 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
         <p className={s.sectionHint}>{t('sales_returns.no_invoices')}</p>
       ) : (
         <>
-          {/* The sentence is the field's hint, not the button's name. It had
-              been the button's label, which put "Choose the invoice being
-              returned against." on a control beside a picker and made the two
-              read as different sizes of thing. */}
+          {/* Two typed boxes, not two drop-downs — see the Purchase Return.
+              The customer is optional and only narrows the suggestions. */}
           <form className={s.filterRow} method="get">
+            <div className={s.field}>
+              <span className={s.label}>{column('customer_name')}</span>
+              <input
+                className={s.input}
+                defaultValue={typedPartner}
+                list="sales-return-customers"
+                name="partner"
+                placeholder={t('sales_returns.partner_hint')}
+              />
+              <datalist id="sales-return-customers">
+                {partners.map((row) => (
+                  <option key={row.customerCode ?? row.id} value={row.customerName ?? ''}>
+                    {row.customerCode}
+                  </option>
+                ))}
+              </datalist>
+              <span className={s.hint}>{t('sales_returns.partner_optional')}</span>
+            </div>
+
             <div className={s.field}>
               <span className={s.label}>{t('sales_returns.invoice')}</span>
               <span className={s.fieldWithAction}>
-                <select
-                  aria-label={t('sales_returns.invoice')}
-                  className={s.select}
-                  defaultValue={chosen}
+                <input
+                  className={s.input}
+                  defaultValue={typedInvoice}
+                  list="sales-return-invoices"
                   name="invoice"
+                  placeholder={t('sales_returns.invoice_hint')}
                   required
-                >
-                <option value="" />
-                {invoices.map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {row.invoiceNo} · {row.customerCode} · {row.customerName}
-                  </option>
-                ))}
-                </select>
+                />
                 <Submit label={t('choose')} tone="secondary" variant="document" />
               </span>
-              <span className={s.hint}>{t('sales_returns.pick_invoice')}</span>
+              <datalist id="sales-return-invoices">
+                {suggestions.map((row) => (
+                  <option key={row.id} value={row.invoiceNo}>
+                    {`${row.customerCode ?? ''} · ${row.customerName ?? ''} · ${row.invoiceDate}`}
+                  </option>
+                ))}
+              </datalist>
+              <span className={s.hint}>
+                {outcome_ === 'ambiguous'
+                  ? t('sales_returns.invoice_ambiguous')
+                  : outcome_ === 'none'
+                    ? t('sales_returns.invoice_unknown')
+                    : t('sales_returns.pick_invoice')}
+              </span>
             </div>
           </form>
 

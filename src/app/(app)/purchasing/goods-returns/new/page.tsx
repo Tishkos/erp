@@ -11,6 +11,7 @@ import {
   type Locale,
 } from '@/i18n/config';
 import { can } from '@domain/permissions';
+import { matching, pickOne, pickOutcome } from '@domain/pick';
 import { formatQuantity as formatScaledQuantity, parseQuantity } from '@domain/uom';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
@@ -57,15 +58,43 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
     return <Denied object={page('goods_returns')} />;
   }
 
-  const chosen = typeof params.invoice === 'string' ? params.invoice : '';
+  /* Both boxes are typed rather than chosen from — there will be a year of
+     invoices and nobody scrolls to one. The supplier is optional and only
+     narrows what the invoice box suggests; the invoice itself is named by its
+     number, or by anything that can only be one invoice. */
+  const typedPartner = typeof params.partner === 'string' ? params.partner : '';
+  const typedInvoice = typeof params.invoice === 'string' ? params.invoice : '';
 
-  const { invoices, lines, accounts } = await withCurrentUser(async (tx) => ({
-    invoices: await gr.returnableInvoices(tx),
-    lines: chosen ? await gr.returnableLinesFor(tx, chosen) : [],
-    accounts: [...(await banks.listOfKind(tx, 'bank')), ...(await banks.listOfKind(tx, 'cash'))],
-  }));
+  const { invoices, suggestions, invoice, lines, accounts } = await withCurrentUser(async (tx) => {
+    const all = await gr.returnableInvoices(tx);
+    const fields = (row: (typeof all)[number]) => [
+      row.invoiceNo,
+      row.supplierCode,
+      row.supplierName,
+      row.invoiceDate,
+    ];
+    const narrowed = typedPartner
+      ? matching(all, typedPartner, (row) => [row.supplierCode, row.supplierName])
+      : all;
+    const picked = pickOne(narrowed, typedInvoice, (row) => row.invoiceNo, fields);
+    return {
+      invoices: all,
+      suggestions: narrowed,
+      invoice: picked,
+      lines: picked ? await gr.returnableLinesFor(tx, picked.id) : [],
+      accounts: [...(await banks.listOfKind(tx, 'bank')), ...(await banks.listOfKind(tx, 'cash'))],
+    };
+  });
 
-  const invoice = invoices.find((row) => row.id === chosen);
+  const outcome_ = pickOutcome(
+    suggestions,
+    typedInvoice,
+    (row) => row.invoiceNo,
+    (row) => [row.invoiceNo, row.supplierCode, row.supplierName, row.invoiceDate],
+  );
+  const partners = [
+    ...new Map(invoices.map((row) => [row.supplierCode, row])).values(),
+  ];
   const today = new Date().toISOString().slice(0, 10);
   const open = lines
     .filter((line) => line.returnable > 0n)
@@ -86,31 +115,58 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
         <p className={s.sectionHint}>{t('goods_returns.no_invoices')}</p>
       ) : (
         <>
-          {/* The sentence is the field's hint, not the button's name. It had
-              been the button's label, which put "Choose the invoice being
-              returned against." on a control beside a picker and made the two
-              read as different sizes of thing. */}
+          {/* Two typed boxes, not two drop-downs. The supplier narrows what
+              the invoice box suggests and is optional; the invoice is named by
+              its number, or by anything that can only be one invoice. Both
+              suggest from a `datalist`, which offers without constraining — a
+              partial number is still a search. */}
           <form className={s.filterRow} method="get">
+            <div className={s.field}>
+              <span className={s.label}>{column('supplier_name')}</span>
+              <input
+                className={s.input}
+                defaultValue={typedPartner}
+                list="goods-return-suppliers"
+                name="partner"
+                placeholder={t('goods_returns.partner_hint')}
+              />
+              <datalist id="goods-return-suppliers">
+                {partners.map((row) => (
+                  <option key={row.supplierCode ?? row.id} value={row.supplierName ?? ''}>
+                    {row.supplierCode}
+                  </option>
+                ))}
+              </datalist>
+              <span className={s.hint}>{t('goods_returns.partner_optional')}</span>
+            </div>
+
             <div className={s.field}>
               <span className={s.label}>{t('goods_returns.invoice')}</span>
               <span className={s.fieldWithAction}>
-                <select
-                  aria-label={t('goods_returns.invoice')}
-                  className={s.select}
-                  defaultValue={chosen}
+                <input
+                  className={s.input}
+                  defaultValue={typedInvoice}
+                  list="goods-return-invoices"
                   name="invoice"
+                  placeholder={t('goods_returns.invoice_hint')}
                   required
-                >
-                <option value="" />
-                {invoices.map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {row.invoiceNo} · {row.supplierCode} · {row.supplierName}
-                  </option>
-                ))}
-                </select>
+                />
                 <Submit label={t('choose')} tone="secondary" variant="document" />
               </span>
-              <span className={s.hint}>{t('goods_returns.pick_invoice')}</span>
+              <datalist id="goods-return-invoices">
+                {suggestions.map((row) => (
+                  <option key={row.id} value={row.invoiceNo}>
+                    {`${row.supplierCode ?? ''} · ${row.supplierName ?? ''} · ${row.invoiceDate}`}
+                  </option>
+                ))}
+              </datalist>
+              <span className={s.hint}>
+                {outcome_ === 'ambiguous'
+                  ? t('goods_returns.invoice_ambiguous')
+                  : outcome_ === 'none'
+                    ? t('goods_returns.invoice_unknown')
+                    : t('goods_returns.pick_invoice')}
+              </span>
             </div>
           </form>
 
