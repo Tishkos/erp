@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, admin as s } from './index';
 import { ReportFilter, ReportWindow, currencyFrom } from './report-filter';
-import { SearchablePicker } from './searchable-picker';
 import { SectionTabs } from './section-tabs';
 import type { SearchParams } from './params';
 import { Denied } from '@/components/denied';

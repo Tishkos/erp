@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useMemo, useState } from 'react';
+import { pickOne } from '@domain/pick';
 import styles from './admin.module.css';
 
 /**
@@ -55,9 +56,19 @@ export function SearchablePicker({
   );
   const [text, setText] = useState(initial);
 
-  // Exact match only. "Smart" is not a customer; "SMART_ELECTRICO · Smart
-  // Electrico" is, and until the text says so there is nothing to submit.
-  const chosen = options.find((option) => option.label === text)?.value ?? '';
+  /*
+   * The one option the text names, or nothing.
+   *
+   * It used to be equality against the whole label, which meant a person had to
+   * reproduce it character for character: typing the name when the label read
+   * "CODE · Name", or editing a character after picking from the list, left
+   * nothing to submit and the form was refused without saying why (reported on
+   * the statement screens, 2026-09-27). A label typed in full still wins
+   * outright; short of that, a phrase that can only be one option names it, and
+   * anything still ambiguous submits nothing — which is the right way round when
+   * the alternative is guessing which record was meant.
+   */
+  const chosen = pickOne(options, text, (option) => option.label)?.value ?? '';
 
   const control = (
     <>
