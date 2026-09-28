@@ -31,6 +31,7 @@ async function createUser(options: {
   email?: string;
   isSuperUser?: boolean;
   roleCode?: string;
+  branchScoped?: boolean;
 } = {}): Promise<string> {
   const id = randomUUID();
   await ownerPool.query(
@@ -43,10 +44,12 @@ async function createUser(options: {
       options.roleCode,
     ]);
   }
-  await ownerPool.query(`insert into user_branch_scope (user_id, branch_code) values ($1,$2)`, [
-    id,
-    BAGHDAD,
-  ]);
+  if (options.branchScoped !== false) {
+    await ownerPool.query(`insert into user_branch_scope (user_id, branch_code) values ($1,$2)`, [
+      id,
+      BAGHDAD,
+    ]);
+  }
   return id;
 }
 
@@ -310,6 +313,27 @@ describe('§25 · sessions expire and are revoked immediately', () => {
       `select action, reason from audit_event where action = 'authentication.session_revoked'`,
     );
     expect(rows[0].reason).toBe('Laptop lost');
+  });
+
+  it('allows a branchless user to sign out and records a company-wide audit event', async () => {
+    const userId = await createUser({ branchScoped: false });
+    const branchlessScope = { userId, branchCode: '', isSuperUser: false };
+    const principal = await withScope(branchlessScope, (tx) => authz.loadPrincipal(tx, userId));
+    const session = await withScope(scope(admin), (tx) => authn.createSession(tx, userId));
+
+    await withScope(branchlessScope, (tx) =>
+      authn.revokeSession(tx, { principal, branchCode: '' }, session.sessionId, 'User signed out'),
+    );
+
+    const { rows } = await ownerPool.query(
+      `select s.revoked_reason, a.branch_code
+         from auth_session s
+         join audit_event a on a.object_id = s.id
+        where s.id = $1 and a.action = 'authentication.session_revoked'`,
+      [session.sessionId],
+    );
+    expect(rows[0].revoked_reason).toBe('User signed out');
+    expect(rows[0].branch_code).toBeNull();
   });
 });
 

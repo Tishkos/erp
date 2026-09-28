@@ -85,6 +85,11 @@ describe('§5.4 · the event shape', () => {
     expect(event.outcome).toBe('success');
   });
 
+  it('stores an unselected branch as null', () => {
+    const event = buildAuditEvent({ ...base, action: 'user.signed_out', branchCode: '' });
+    expect(event.branchCode).toBeNull();
+  });
+
   it('records before and after values, redacted', () => {
     const event = buildAuditEvent({
       ...base,
