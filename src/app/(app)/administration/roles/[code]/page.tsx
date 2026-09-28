@@ -15,7 +15,7 @@ import { GrantMatrix } from '@/components/admin/grant-matrix';
 import { AuditLogButton, RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { can } from '@domain/permissions';
+import { can, isCeo } from '@domain/permissions';
 import { AdminNotFoundError } from '@/server/services/administration';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as roles from '@/server/services/roles';
@@ -42,8 +42,8 @@ export default async function RolePage({
   if (!can(principal, 'view', roles.PERMISSION_OBJECT)) {
     return <Denied object={page('roles')} />;
   }
-  const mayEdit = can(principal, 'configure', roles.PERMISSION_OBJECT);
-  const mayGrant = can(principal, 'administer', 'permission');
+  const mayEdit = isCeo(principal) && can(principal, 'configure', roles.PERMISSION_OBJECT);
+  const mayGrant = isCeo(principal) && can(principal, 'administer', 'permission');
 
   const row = await withCurrentUser(async (tx) => {
     try {

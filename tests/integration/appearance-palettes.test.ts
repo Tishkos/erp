@@ -50,15 +50,43 @@ describe('appearance palettes', () => {
     }
   });
 
-  it.each(PALETTES)('persists %s as personal appearance and company default', async (palette) => {
+  it.each(PALETTES)('persists %s as an independent user appearance', async (palette) => {
     await withScope(scope(), (tx) => company.setMyAppearance(tx, ctx, { palette, accent: 'blue' }));
     expect(await withScope(scope(), (tx) => company.appearanceFor(tx, userId))).toEqual({ palette, accent: 'blue' });
     expect((await ownerPool.query('select ui_palette from app_user where id = $1', [userId])).rows[0].ui_palette).toBe(palette);
 
     await withScope(scope(), (tx) => company.setAppearance(tx, ctx, { palette, accent: 'gold' }));
-    await withScope(scope(), (tx) => company.setMyAppearance(tx, ctx, { palette: 'company', accent: 'company' }));
-    expect(await withScope(scope(), (tx) => company.appearanceFor(tx, userId))).toEqual({ palette, accent: 'gold' });
-    expect((await ownerPool.query('select ui_palette from app_user where id = $1', [userId])).rows[0].ui_palette).toBeNull();
+    expect(await withScope(scope(), (tx) => company.appearanceFor(tx, userId))).toEqual({ palette, accent: 'blue' });
+    expect((await ownerPool.query('select ui_palette from app_user where id = $1', [userId])).rows[0].ui_palette).toBe(palette);
+  });
+
+  it('keeps two users on their own choices', async () => {
+    const otherId = randomUUID();
+    await ownerPool.query(
+      `insert into app_user (id, email, display_name) values ($1, $2, 'Second User')`,
+      [otherId, `${otherId}@example.com`],
+    );
+    const other = {
+      branchCode: 'HQ',
+      principal: await withScope({ userId: otherId, branchCode: 'HQ', isSuperUser: true }, (tx) =>
+        authorization.loadPrincipal(tx, otherId),
+      ),
+    } satisfies ActorContext;
+
+    await withScope(scope(), (tx) => company.setMyAppearance(tx, ctx, { palette: 'midnight', accent: 'purple' }));
+    await withScope({ userId: otherId, branchCode: 'HQ', isSuperUser: true }, (tx) =>
+      company.setMyAppearance(tx, other, { palette: 'sand', accent: 'gold' }),
+    );
+
+    expect(await withScope(scope(), (tx) => company.appearanceFor(tx, userId))).toEqual({
+      palette: 'midnight',
+      accent: 'purple',
+    });
+    expect(
+      await withScope({ userId: otherId, branchCode: 'HQ', isSuperUser: true }, (tx) =>
+        company.appearanceFor(tx, otherId),
+      ),
+    ).toEqual({ palette: 'sand', accent: 'gold' });
   });
 
   it('continues to accept all existing palettes and rejects unknown names', async () => {

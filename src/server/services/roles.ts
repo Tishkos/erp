@@ -24,6 +24,7 @@ import {
   uniqueCode,
   optionalText,
   permit,
+  permitCeo,
   recordChange,
   requireText,
   type ActorContext,
@@ -83,6 +84,7 @@ export function grantableObjects(): readonly string[] {
 }
 
 export async function create(tx: Tx, ctx: ActorContext, input: RoleInput & { readonly code?: string }) {
+  await permitCeo(ctx);
   await permit(ctx, 'create', PERMISSION_OBJECT);
   const name = requireText(input.name, 'name', 120);
   // "Accountant Branch" becomes accountant_branch.
@@ -106,6 +108,7 @@ export async function create(tx: Tx, ctx: ActorContext, input: RoleInput & { rea
 }
 
 export async function update(tx: Tx, ctx: ActorContext, code: string, input: RoleInput) {
+  await permitCeo(ctx);
   await permit(ctx, 'configure', PERMISSION_OBJECT, code);
   const before = await get(tx, code);
   if (before.isSystem) throw new AdminValidationError('role', 'a system role keeps its name');
@@ -131,6 +134,7 @@ export async function setGrants(
   grants: readonly GrantInput[],
   options?: { readonly offeredObjects?: readonly string[] },
 ) {
+  await permitCeo(ctx);
   await permit(ctx, 'administer', 'permission', code);
   const before = await get(tx, code);
 

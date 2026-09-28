@@ -20,7 +20,7 @@ import {
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { can } from '@domain/permissions';
+import { can, isCeo } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as branches from '@/server/services/branches';
 import * as departments from '@/server/services/departments';
@@ -47,7 +47,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Search
 
   const data = await withCurrentUser(async (tx) => ({
     rows: await users.listAll(tx),
-    roles: mayCreate ? await roles.listAll(tx) : [],
+    roles: isCeo(principal) ? await roles.listAll(tx) : [],
     branches: mayCreate ? await branches.listAll(tx) : [],
     departments: mayCreate ? await departments.listAll(tx) : [],
   }));

@@ -22,6 +22,7 @@ import * as journal from '@/server/services/journal';
 import * as periods from '@/server/services/periods';
 import * as rates from '@/server/services/exchange-rates';
 import * as roles from '@/server/services/roles';
+import * as users from '@/server/services/users';
 import * as trialBalance from '@/server/services/trial-balance';
 import { can, PermissionDeniedError } from '@/server/domain/permissions';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
@@ -47,12 +48,13 @@ beforeEach(async () => {
   await resetTestData();
   await seedBranch(BRANCH, 'Head Office');
 
-  // The company as it is handed over: one Super User, nothing else configured.
+  // The company as it is handed over: one CEO with full access.
   const id = randomUUID();
   await ownerPool.query(
     `insert into app_user (id, email, display_name, is_super_user) values ($1,$2,$3,true)`,
     [id, `${id}@example.com`, 'System Administrator'],
   );
+  await ownerPool.query(`insert into user_role (user_id, role_code) values ($1,'ceo')`, [id]);
   await ownerPool.query(`insert into user_branch_scope (user_id, branch_code) values ($1,$2)`, [
     id,
     BRANCH,
@@ -197,16 +199,55 @@ describe('role permissions can be edited safely', () => {
     const stored = await withScope(scope(), (tx) => roles.get(tx, code));
     expect(stored.grants).toEqual([{ object: 'ap_invoice', verb: 'view' }]);
   });
+
+  it('allows only the CEO to create roles, change grants, or assign a role', async () => {
+    const code = `invoice_approver_${randomUUID().slice(0, 8)}`;
+    const officer = await roleHolder('accounting_officer');
+    await expect(
+      withScope(
+        { userId: officer.principal.userId, branchCode: BRANCH },
+        (tx) => roles.create(tx, officer, { name: 'Blocked role', code }),
+      ),
+    ).rejects.toThrow(PermissionDeniedError);
+
+    await createRole(code);
+    await withScope(scope(), (tx) =>
+      roles.setGrants(tx, admin, code, [{ object: 'ap_invoice', verb: 'view' }], {
+        offeredObjects: ['ap_invoice'],
+      }),
+    );
+    await expect(
+      withScope(
+        { userId: officer.principal.userId, branchCode: BRANCH },
+        (tx) =>
+          roles.setGrants(tx, officer, code, [{ object: 'ap_invoice', verb: 'post' }], {
+            offeredObjects: ['ap_invoice'],
+          }),
+      ),
+    ).rejects.toThrow(PermissionDeniedError);
+
+    const targetId = randomUUID();
+    await ownerPool.query(`insert into app_user (id, email, display_name) values ($1,$2,'Target')`, [
+      targetId,
+      `${targetId}@example.com`,
+    ]);
+    await expect(
+      withScope(
+        { userId: officer.principal.userId, branchCode: BRANCH },
+        (tx) => users.setRole(tx, officer, targetId, code, true),
+      ),
+    ).rejects.toThrow(PermissionDeniedError);
+  });
 });
 
 // ---------------------------------------------------------------------------
 describe('the four things that stop a fresh company posting', () => {
-  it('being Super User is not the same as holding an approval role', async () => {
+  it('being CEO and a Super User is not the same as holding an approval role', async () => {
     // This is the one that reads like a bug. Every screen lets this person in,
     // every permission check says yes — and then approval asks for a role they
     // were never granted, because a role is authority to decide, not access.
     expect(admin.principal.isSuperUser).toBe(true);
-    expect(admin.principal.roleCodes).toEqual([]);
+    expect(admin.principal.roleCodes).toEqual(['ceo']);
 
     await ownerPool.query(
       `insert into department (code, name, is_finance) values ('FIN','Finance',true)`,

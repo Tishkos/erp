@@ -135,11 +135,11 @@ beforeEach(async () => {
 
   const { rows: float } = await ownerPool.query(
     `insert into bank_cash_account
-       (code, name, account_type, currency, gl_account_id, branch_code, custodian_user_id,
+       (code, name, account_type, currency, gl_account_id, custodian_user_id,
         cash_limit_iqd, approval_limit_iqd)
-     values ('PC-BGW','Baghdad Petty Cash','cash','IQD',$1,$2,$3,100000.0000,1000000.0000)
+     values ('PC-BGW','Baghdad Petty Cash','cash','IQD',$1,$2,100000.0000,1000000.0000)
      returning id`,
-    [gl[0].id, BAGHDAD, manager.principal.userId],
+    [gl[0].id, manager.principal.userId],
   );
   floatAccountId = float[0].id;
 
@@ -266,8 +266,7 @@ describe('07.5 · an advance is a receivable, not an expense (§17)', () => {
 
   it('refuses an advance out of a bank account — that would be a payment', async () => {
     const { rows: bank } = await ownerPool.query(
-      `select id from bank_cash_account where branch_code = $1 and account_type = 'bank' limit 1`,
-      [BAGHDAD],
+      `select id from bank_cash_account where account_type = 'bank' limit 1`,
     );
 
     expect(

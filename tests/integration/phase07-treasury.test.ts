@@ -80,9 +80,9 @@ async function makeAccount(input: {
 
   const { rows } = await ownerPool.query(
     `insert into bank_cash_account
-       (code, name, account_type, bank_name, account_number, currency, gl_account_id, branch_code,
+       (code, name, account_type, bank_name, account_number, currency, gl_account_id,
         custodian_user_id, cash_limit_iqd, approval_limit_iqd)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id`,
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
     [
       input.code,
       input.name,
@@ -91,7 +91,6 @@ async function makeAccount(input: {
       input.type === 'bank' ? `ACC-${input.code}` : null,
       input.currency,
       gl[0].id,
-      BAGHDAD,
       input.custodian ?? null,
       input.cashLimit ?? null,
       input.approvalLimit ?? null,

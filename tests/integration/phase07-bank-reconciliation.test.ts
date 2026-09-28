@@ -182,8 +182,7 @@ beforeEach(async () => {
 
   const { rows: bank } = await ownerPool.query(
     `select b.id, b.gl_account_id from bank_cash_account b
-      where b.branch_code = $1 and b.account_type = 'bank' limit 1`,
-    [BAGHDAD],
+      where b.account_type = 'bank' limit 1`,
   );
   bankAccountId = bank[0].id;
   bankGlId = bank[0].gl_account_id;

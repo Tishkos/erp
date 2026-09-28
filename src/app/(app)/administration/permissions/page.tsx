@@ -6,7 +6,7 @@ import { SectionTabs } from '@/components/admin/section-tabs';
 import { GrantMatrix } from '@/components/admin/grant-matrix';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { PERMISSION_VERBS, can } from '@domain/permissions';
+import { PERMISSION_VERBS, can, isCeo } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as roles from '@/server/services/roles';
 import { savePermissions } from './actions';
@@ -32,7 +32,7 @@ export default async function PermissionsPage({ searchParams }: { searchParams: 
   if (!can(context.principal, 'view', 'permission')) {
     return <Denied object={page('permissions')} />;
   }
-  const mayGrant = can(context.principal, 'administer', 'permission');
+  const mayGrant = isCeo(context.principal) && can(context.principal, 'administer', 'permission');
 
   const all = await withCurrentUser((tx) => roles.listAll(tx));
   const requested = typeof params.role === 'string' ? params.role : null;

@@ -147,11 +147,8 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
         </div>
 
         <div className={s.profileStack}>
-          {/* The look is personal — the person staring at this screen all day
-              chooses it. 'company' stores null: follow the default, and move
-              when the company moves. The swatches carry their own data-palette
-              so each is painted by the tokens it would apply; the company one
-              carries none and shows the look now in force. */}
+          {/* Each account saves its own palette and accent, independently of
+              other users and of the company record. */}
           <Panel title={admin('company.appearance')}>
             <p className={s.sectionHint}>{admin('company.appearance_profile_hint')}</p>
             <Form action={saveMyAppearance}>
@@ -185,11 +182,11 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
                 {admin('company.accent_hint')}
               </p>
               <div className={s.accentChoices}>
-                {['company', ...ACCENTS].map((name) => (
+                {ACCENTS.map((name) => (
                   <label
                     key={name}
                     className={s.accentChoice}
-                    data-accent={name === 'company' ? undefined : name}
+                    data-accent={name}
                   >
                     <input
                       defaultChecked={name === own.accent}
@@ -199,9 +196,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
                     />
                     <span className={s.accentDot} />
                     <span className={s.paletteName}>
-                      {name === 'company'
-                        ? admin('company.company_default')
-                        : admin(`company.accent_${name}`)}
+                      {admin(`company.accent_${name}`)}
                     </span>
                   </label>
                 ))}

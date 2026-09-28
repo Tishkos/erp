@@ -195,8 +195,7 @@ beforeEach(async () => {
 
   const { rows: iqd } = await ownerPool.query(
     `select a.code from bank_cash_account b join chart_of_account a on a.id = b.gl_account_id
-      where b.branch_code = $1 and b.account_type = 'bank' limit 1`,
-    [BAGHDAD],
+      where b.account_type = 'bank' limit 1`,
   );
   iqdGlCode = iqd[0].code;
 
@@ -220,9 +219,9 @@ beforeEach(async () => {
 
   const { rows: usdAccount } = await ownerPool.query(
     `insert into bank_cash_account
-       (code, name, account_type, bank_name, account_number, currency, gl_account_id, branch_code)
-     values ('BNK-USD','Baghdad USD Account','bank','Seed Bank','ACC-USD','USD',$1,$2) returning id`,
-    [usdGl[0].id, BAGHDAD],
+       (code, name, account_type, bank_name, account_number, currency, gl_account_id)
+     values ('BNK-USD','Baghdad USD Account','bank','Seed Bank','ACC-USD','USD',$1) returning id`,
+    [usdGl[0].id],
   );
   usdAccountId = usdAccount[0].id;
 
@@ -286,7 +285,7 @@ describe('07.8 gate · the daily position ties to the G/L for the same date (§1
          from journal_line l
          join journal_entry e on e.id = l.journal_entry_id
          join bank_cash_account b on b.gl_account_id = l.account_id
-        where b.branch_code = $1 and e.status in ('posted','reversed')
+        where e.branch_code = $1 and e.status in ('posted','reversed')
           and e.posting_date <= '2026-01-31'`,
       [BAGHDAD],
     );

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { History, Printer } from 'lucide-react';
+import { History } from 'lucide-react';
 import { AdminPage, Flash, ReasonForm, admin as s } from '@/components/admin';
 import { ActionReadyButton } from '@/components/admin/action-ready-button';
 import { Attachments } from '@/components/admin/attachments';
@@ -9,6 +9,10 @@ import { AttachmentsButton } from '@/components/admin/icon-dialog';
 import { JournalHeaderForm } from '@/components/admin/journal-header-form';
 import { JournalLinesGrid } from '@/components/admin/journal-lines-grid';
 import { ConfirmButton } from '@/components/admin/confirm-button';
+import { ConfirmReasonForm } from '@/components/admin/confirm-reason-form';
+import { ExportMenu } from '@/components/print/export-menu';
+import { PrintSheet } from '@/components/print/print-sheet';
+import { printSheet } from '@/server/print/sheet';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
@@ -87,6 +91,7 @@ export default async function JournalPage({
   });
   if (!data) notFound();
   const { header, lines, raisedBy, approvedBy, linked, accounts, depts, attached } = data;
+  const sheet = await printSheet('journal_entry', header.entryNo);
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   const entered = (amount: string, currency: string) => formatMoney(amount, currency, locale as Locale);
@@ -112,6 +117,7 @@ export default async function JournalPage({
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="journal_entry" id={header.entryNo} principal={principal} />}
       back={{ href: '/finance/journals', label: t('back') }}
       title={header.entryNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -148,10 +154,6 @@ export default async function JournalPage({
               <Link className={s.sapIconButton} href={`${address}/audit`} title={t('journals.audit_log')}>
                 <History aria-hidden="true" />
                 <span>{t('journals.audit_log')}</span>
-              </Link>
-              <Link className={s.sapIconButton} href={`${address}/print`} target="_blank" title={t('journals.print')}>
-                <Printer aria-hidden="true" />
-                <span>{t('journals.print')}</span>
               </Link>
             </span>
           </div>
@@ -391,11 +393,15 @@ export default async function JournalPage({
               {/* Correcting a posted entry: the reason is typed here, beside
                   the button, and the reversal opens in this same window. */}
               {mayReverse ? (
-                <ReasonForm
+                <ConfirmReasonForm
                   action={reverseJournal}
+                  body={t('journals.reverse_confirm_body', { entryNo: header.entryNo })}
+                  cancelLabel={t('cancel')}
+                  confirmLabel={t('journals.reverse_confirm_yes')}
                   hidden={hidden}
                   label={t('journals.reverse')}
                   reasonLabel={t('journals.reverse_reason')}
+                  title={t('journals.reverse_confirm_title')}
                 />
               ) : null}
               {/* Only ever on a draft. Once submitted the entry is a document
@@ -434,6 +440,7 @@ export default async function JournalPage({
           </div>
         </div>
       </div>
+      {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>
   );
 }

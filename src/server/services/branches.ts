@@ -154,7 +154,6 @@ export async function create(
       // otherwise the administrator who opened the branch, until changed.
       custodianUserId: managerUserId ?? ctx.principal.userId,
       glAccountId: glAccount!.id,
-      branchCode: code,
     })
     .returning({ id: bankCashAccount.id });
 

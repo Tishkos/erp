@@ -189,8 +189,7 @@ beforeEach(async () => {
     `select b.id, a.code as gl_code
        from bank_cash_account b
        join chart_of_account a on a.id = b.gl_account_id
-      where b.branch_code = $1 limit 1`,
-    [BAGHDAD],
+      where b.account_type = 'bank' limit 1`,
   );
   bankAccountId = bank[0].id;
   bankGlCode = bank[0].gl_code;

@@ -102,8 +102,7 @@ beforeEach(async () => {
   supplierId = partner[0].id;
 
   const { rows: bank } = await ownerPool.query(
-    `select id from bank_cash_account where branch_code = $1 limit 1`,
-    [BAGHDAD],
+    `select id from bank_cash_account where account_type = 'bank' limit 1`,
   );
   bankAccountId = bank[0].id;
 
@@ -846,9 +845,9 @@ describe('05.10 gate · the ledger reconciles after payment', () => {
   it('refuses a payment from an account in another currency (§17)', async () => {
     const { rows } = await ownerPool.query(
       `insert into bank_cash_account
-         (code, name, account_type, bank_name, account_number, currency, gl_account_id, branch_code)
-       values ('BANK-USD','USD Account','bank','Seed Bank','ACC-USD','USD',$1,$2) returning id`,
-      [accounts.bank, BAGHDAD],
+         (code, name, account_type, bank_name, account_number, currency, gl_account_id)
+       values ('BANK-USD','USD Account','bank','Seed Bank','ACC-USD','USD',$1) returning id`,
+      [accounts.bank],
     );
 
     const error = await rejection(

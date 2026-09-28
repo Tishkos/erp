@@ -20,7 +20,7 @@ import { DEFAULT_ACCENT, DEFAULT_PALETTE } from '@domain/appearance';
  * form before any child renders.
  *
  * ── The palette ────────────────────────────────────────────────────────────
- * `data-palette` carries the company's choice, and every colour in the
+ * `data-palette` carries this user's saved choice, and every colour in the
  * application is read from the tokens it selects — the navigation and footer
  * as much as the screens inside them.
  *
@@ -30,12 +30,12 @@ import { DEFAULT_ACCENT, DEFAULT_PALETTE } from '@domain/appearance';
  * setting they will not see. Custom properties inherit, so one attribute here
  * dresses everything below it.
  *
- * It falls back rather than failing: an installation with no company row yet
- * gets the default palette and an ordinary-looking system, not an unstyled one.
+ * It falls back rather than failing: an account with no saved preference gets
+ * its own Sand and Gold defaults, not an unstyled system.
  */
 export default async function AuthenticatedLayout({ children }: { children: ReactNode }) {
-  // The person's own look where they chose one, the company default where
-  // they did not. optionalContext rather than require: a signed-out visitor
+  // This user's saved look or the per-user default. optionalContext rather
+  // than require: a signed-out visitor
   // is redirected by AppShell below, and must not be answered with a palette
   // read that throws first.
   const context = await optionalContext();

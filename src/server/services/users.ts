@@ -16,6 +16,7 @@ import { and, asc, eq } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   appUser,
+  authAccount,
   branch,
   department,
   role,
@@ -27,6 +28,7 @@ import {
   AdminNotFoundError,
   AdminValidationError,
   permit,
+  permitCeo,
   recordChange,
   requireText,
   type ActorContext,
@@ -63,13 +65,25 @@ export async function listAll(tx: Tx) {
       createdAt: appUser.createdAt,
     })
     .from(appUser)
+    .innerJoin(
+      authAccount,
+      and(eq(authAccount.userId, appUser.id), eq(authAccount.providerId, 'credential')),
+    )
     .orderBy(asc(appUser.displayName));
 }
 
 export async function get(tx: Tx, id: string) {
-  const [row] = await tx.select().from(appUser).where(eq(appUser.id, id)).limit(1);
-  if (!row) throw new AdminNotFoundError('user', id);
-  return row;
+  const [row] = await tx
+    .select({ user: appUser })
+    .from(appUser)
+    .innerJoin(
+      authAccount,
+      and(eq(authAccount.userId, appUser.id), eq(authAccount.providerId, 'credential')),
+    )
+    .where(eq(appUser.id, id))
+    .limit(1);
+  if (!row) throw new AdminNotFoundError('account', id);
+  return row.user;
 }
 
 /** Everything the Users record page shows: roles, scopes, sessions. */
@@ -241,7 +255,9 @@ export async function setRole(
   on: boolean,
   options: Quiet = {},
 ) {
+  await permitCeo(ctx);
   await permit(ctx, 'configure', PERMISSION_OBJECT, id);
+  await get(tx, id);
   const [known] = await tx.select({ code: role.code }).from(role).where(eq(role.code, roleCode));
   if (!known) throw new AdminValidationError('roleCode', `'${roleCode}' is not a role`);
   if (on) {

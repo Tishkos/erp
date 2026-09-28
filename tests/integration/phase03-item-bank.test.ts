@@ -281,15 +281,14 @@ describe('03.5 · bank and cash accounts (§4.3, §17)', () => {
       account_number: '1234567890',
       currency: 'IQD',
       gl_account_id: bankGlAccountId,
-      branch_code: BAGHDAD,
       ...overrides,
     };
 
     return ownerPool.query(
       `insert into bank_cash_account
          (code, name, account_type, bank_name, account_number, currency, gl_account_id,
-          branch_code, custodian_user_id, cash_limit_iqd, approval_limit_iqd)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id`,
+          custodian_user_id, cash_limit_iqd, approval_limit_iqd)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
       [
         values.code,
         values.name,
@@ -298,7 +297,6 @@ describe('03.5 · bank and cash accounts (§4.3, §17)', () => {
         values.account_number,
         values.currency,
         values.gl_account_id,
-        values.branch_code,
         (values as Record<string, unknown>).custodian_user_id ?? null,
         (values as Record<string, unknown>).cash_limit_iqd ?? null,
         (values as Record<string, unknown>).approval_limit_iqd ?? null,

@@ -19,6 +19,7 @@ export const EXPORT_ACCESS = {
   purchase_return: { kind: 'document', route: '/purchasing/goods-returns', object: 'goods_return' },
   transfer: { kind: 'document', route: '/inventory/transfers', object: 'warehouse_transfer' },
   opening_stock: { kind: 'document', route: '/inventory/opening-stock', object: 'opening_stock' },
+  journal_entry: { kind: 'document', route: '/finance/journals', object: 'journal_entry' },
   item_reconciliation: { kind: 'document', route: '/inventory/stock-reconciliation', object: 'stock_reconciliation' },
   customer_statement: { kind: 'report', route: '/sales/customer-statements', object: 'business_partner' },
   supplier_statement: { kind: 'report', route: '/purchasing/supplier-statements', object: 'business_partner' },

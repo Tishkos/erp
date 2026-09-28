@@ -50,7 +50,7 @@ export async function saveAvatar(formData: FormData): Promise<void> {
   );
 }
 
-/** My own look — palette and accent, or back to the company default. */
+/** Save this account's own palette and accent. */
 export async function saveMyAppearance(formData: FormData): Promise<void> {
   await runAdminAndReturn(
     (tx, ctx) =>

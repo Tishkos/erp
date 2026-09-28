@@ -147,8 +147,7 @@ beforeEach(async () => {
   customerId = partner[0].id;
 
   const { rows: cash } = await ownerPool.query(
-    `select id from bank_cash_account where branch_code = $1 limit 1`,
-    [BAGHDAD],
+    `select id from bank_cash_account where account_type = 'bank' limit 1`,
   );
   cashAccountId = cash[0].id;
 

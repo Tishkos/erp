@@ -405,8 +405,8 @@ export async function AccountRecord({
                     required
                     requiredLabel={t('required_hint')}
                   />
-                  {/* No branch — see the note on the New form. An edit leaves
-                      whatever the account already carries untouched. */}
+                  {/* Bank and cash accounts are company-wide. Transactions
+                      carry the branch they belong to. */}
                   <Select
                     /*
                      * Offered — and preselected — only when the account it

@@ -20,8 +20,7 @@ const kindOf = (formData: FormData): accounts.AccountKind =>
 function inputFrom(formData: FormData) {
   return {
     name: text(formData, 'name'),
-    // No branch. The form stopped asking (2026-09-27) and the service fills
-    // the column itself until a migration can drop it.
+    // Bank and cash accounts belong to the company; documents carry their branch.
     glAccountId: text(formData, 'glAccountId'),
     currency: text(formData, 'currency') || null,
     bankName: text(formData, 'bankName') || null,

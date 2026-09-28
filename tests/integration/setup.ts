@@ -151,9 +151,9 @@ export async function seedBranch(code: string, name: string): Promise<void> {
 
     const { rows: cash } = await client.query(
       `insert into bank_cash_account
-         (code, name, account_type, bank_name, account_number, gl_account_id, branch_code)
-       values ($1, $2, 'bank', 'Seed Bank', $3, $4, $5) returning id`,
-      [`CASH-${code}`, `${name} Cash Account`, `ACC-${code}`, account[0].id, code],
+         (code, name, account_type, bank_name, account_number, gl_account_id)
+       values ($1, $2, 'bank', 'Seed Bank', $3, $4) returning id`,
+      [`CASH-${code}`, `${name} Cash Account`, `ACC-${code}`, account[0].id],
     );
 
     await client.query(

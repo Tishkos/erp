@@ -69,8 +69,7 @@ beforeEach(async () => {
 
   const { rows: bank } = await ownerPool.query(
     `select b.id, a.code from bank_cash_account b join chart_of_account a on a.id = b.gl_account_id
-      where b.branch_code = $1 and b.account_type = 'bank' limit 1`,
-    [BAGHDAD],
+      where b.account_type = 'bank' limit 1`,
   );
   bankAccountId = bank[0].id;
   bankGlCode = bank[0].code;
@@ -240,8 +239,8 @@ describe('§16 · an Other Receipt cannot touch a subledger', () => {
   });
 });
 
-describe('§17 · the receipt belongs to its account', () => {
-  it('refuses a branch that is not the account’s', async () => {
+describe('§17 · company-wide bank accounts', () => {
+  it('allows the account to be used from another branch', async () => {
     await seedBranch('BSR', 'Basra');
     await ownerPool.query(`insert into user_branch_scope (user_id, branch_code) values ($1,'BSR')`, [
       clerk.principal.userId,
@@ -256,7 +255,7 @@ describe('§17 · the receipt belongs to its account', () => {
       branchCode: BAGHDAD,
     };
 
-    expect(await rejection(receipt({ branchCode: 'BSR' }))).toMatch(/belongs to/);
+    await expect(receipt({ branchCode: 'BSR' })).resolves.toBeDefined();
   });
 
   it('records the account’s own currency rather than one typed in', async () => {

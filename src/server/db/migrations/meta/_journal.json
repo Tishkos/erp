@@ -995,6 +995,13 @@
       "when": 1795900000021,
       "tag": "0217_extended_appearance_palettes",
       "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "7",
+      "when": 1795900000022,
+      "tag": "0218_company_wide_bank_cash_accounts",
+      "breakpoints": true
     }
   ]
 }

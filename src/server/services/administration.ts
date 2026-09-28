@@ -47,6 +47,25 @@ export async function permit(
   });
 }
 
+/** A system-wide guard for actions reserved to a user holding the CEO role. */
+export async function permitCeo(ctx: ActorContext): Promise<void> {
+  if (!ctx.principal.roleCodes.includes('ceo')) {
+    // Force the normal authorization path to record a durable denial even if
+    // a different role was mistakenly given a broad administration grant.
+    await authz.authorize(
+      { ...ctx.principal, isSuperUser: false, grants: [] },
+      'administer',
+      'permission',
+      {
+        branchCode: ctx.branchCode,
+        objectId: null,
+        requestId: ctx.requestId ?? null,
+      },
+    );
+  }
+  await permit(ctx, 'administer', 'permission');
+}
+
 /** Record a successful administration change, in the caller's transaction. */
 export async function recordChange(
   tx: Tx,

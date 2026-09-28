@@ -465,6 +465,7 @@ export async function currencyExposure(
               where l.account_id = b.gl_account_id
                 and e.posting_date <= ${asOf}::date
                 and e.status in ('posted', 'reversed')
+                and (${scoped}::text is null or e.branch_code = ${scoped})
            ), 0)), 0)::text                             as "balanceIqd",
            coalesce(sum(coalesce((
              select sum(l.debit_usd - l.credit_usd)
@@ -473,10 +474,19 @@ export async function currencyExposure(
               where l.account_id = b.gl_account_id
                 and e.posting_date <= ${asOf}::date
                 and e.status in ('posted', 'reversed')
+                and (${scoped}::text is null or e.branch_code = ${scoped})
            ), 0)), 0)::text                             as "balanceUsd"
-      from bank_cash_account b
+     from bank_cash_account b
      where b.active
-       and (${scoped}::text is null or b.branch_code = ${scoped})
+       and (${scoped}::text is null or exists (
+         select 1
+           from journal_line jl
+           join journal_entry je on je.id = jl.journal_entry_id
+          where jl.account_id = b.gl_account_id
+            and je.branch_code = ${scoped}
+            and je.posting_date <= ${asOf}::date
+            and je.status in ('posted', 'reversed')
+       ))
      group by b.currency
      order by b.currency
   `)) as unknown as { rows: CurrencyExposure[] };

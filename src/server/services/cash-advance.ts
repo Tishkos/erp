@@ -597,16 +597,12 @@ export async function custodianPositions(
           from cash_advance a
          where a.bank_cash_account_id = ${bankCashAccount.id}
            and a.status in ('posted', 'partially_executed')
+           and (${branchCode ?? null}::text is null or a.branch_code = ${branchCode ?? null})
       ), 0::numeric(19,4))`,
     })
     .from(bankCashAccount)
     .leftJoin(appUser, eq(appUser.id, bankCashAccount.custodianUserId))
-    .where(
-      and(
-        eq(bankCashAccount.accountType, 'cash'),
-        branchCode ? eq(bankCashAccount.branchCode, branchCode) : sql`true`,
-      ),
-    )
+    .where(eq(bankCashAccount.accountType, 'cash'))
     .orderBy(bankCashAccount.code);
 
   const balanceByCode = new Map(balances.map((row) => [row.accountCode, row.balanceIqd]));

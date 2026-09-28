@@ -159,8 +159,8 @@ export async function setAppearance(
 }
 
 /**
- * The look this person actually sees: their own choice where they made one,
- * the company's default where they did not. Read on every authenticated page.
+ * The look this person actually sees: their own saved choice, or the shared
+ * Sand and Gold application defaults. Company preferences never affect users.
  */
 export async function appearanceFor(
   tx: Tx,
@@ -181,8 +181,8 @@ export async function appearanceFor(
  * A person chooses their own look — or hands the choice back.
  *
  * Self-service by construction: it writes only the caller's row, so the only
- * permission needed is being signed in. 'company' is the sentinel for "follow
- * the default"; it stores null, which is what appearanceFor reads it as.
+ * permission needed is being signed in. Users always have a saved preference;
+ * there is no company-wide appearance fallback.
  */
 export async function setMyAppearance(
   tx: Tx,

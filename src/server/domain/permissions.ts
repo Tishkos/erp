@@ -99,6 +99,11 @@ export interface Principal {
   readonly departments: readonly DepartmentAssignment[];
 }
 
+/** Role and permission administration belongs to the CEO account. */
+export function isCeo(principal: Principal): boolean {
+  return principal.isActive && principal.roleCodes.includes('ceo');
+}
+
 export class PermissionDeniedError extends Error {
   readonly code = 'PERMISSION_DENIED';
 

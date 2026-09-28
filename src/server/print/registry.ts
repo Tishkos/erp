@@ -40,6 +40,7 @@ const BUILDERS = {
   purchase_return: byId(documents.purchaseReturn),
   transfer: byId(documents.transfer),
   opening_stock: byId(documents.openingStock),
+  journal_entry: byId(documents.journalEntry),
   item_reconciliation: byId(documents.itemReconciliation),
   customer_statement: (ctx, input) => reports.partnerStatement(ctx, 'customer', input.query),
   supplier_statement: (ctx, input) => reports.partnerStatement(ctx, 'supplier', input.query),

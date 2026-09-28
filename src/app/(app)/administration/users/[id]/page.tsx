@@ -21,7 +21,7 @@ import { AuditLogButton, RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatTimestamp, type Locale } from '@/i18n/config';
-import { can } from '@domain/permissions';
+import { can, isCeo } from '@domain/permissions';
 import { FLASH_COOKIE } from '@/server/admin-action';
 import { AdminNotFoundError } from '@/server/services/administration';
 import { requireContext, withCurrentUser } from '@/server/session';
@@ -73,6 +73,7 @@ export default async function UserPage({
     return <Denied object={page('users')} />;
   }
   const mayEdit = can(principal, 'configure', users.PERMISSION_OBJECT);
+  const mayAssignRoles = isCeo(principal) && mayEdit;
   const mayAdminister = can(principal, 'administer', users.PERMISSION_OBJECT);
   const secret = outcome.saved ? (jar.get(FLASH_COOKIE)?.value ?? null) : null;
   const mailed = query.mailed === '1';
@@ -82,7 +83,7 @@ export default async function UserPage({
     try {
       return {
         ...(await users.detail(tx, id)),
-        allRoles: mayEdit ? await roles.listAll(tx) : [],
+        allRoles: mayAssignRoles ? await roles.listAll(tx) : [],
         allBranches: mayEdit ? await branches.listAll(tx) : [],
         allDepartments: mayEdit ? await departments.listAll(tx) : [],
       };
@@ -197,7 +198,7 @@ export default async function UserPage({
           <div className={s.assignGrid}>
             <AssignCard
               add={
-                mayEdit && otherRoles.length > 0
+                mayAssignRoles && otherRoles.length > 0
                   ? {
                       action: setUserRole,
                       hidden: { id: user.id, on: '1' },
@@ -213,7 +214,7 @@ export default async function UserPage({
                 key: r.code,
                 label: r.name,
                 sub: r.code,
-                remove: mayEdit ? { action: setUserRole, hidden: { id: user.id, roleCode: r.code } } : null,
+                remove: mayAssignRoles ? { action: setUserRole, hidden: { id: user.id, roleCode: r.code } } : null,
               }))}
               revokeLabel={t('users.revoke')}
               title={t('users.roles')}

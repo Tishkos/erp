@@ -2,7 +2,8 @@
  * Bank and cash accounts — Phase 2 requirements 5 and 6.
  *
  * *"Company bank accounts can be created and maintained and linked to the
- *  correct branch and G/L account…"* and the same for cash accounts.
+ *  correct G/L account…"* and the same for cash accounts. Branch belongs to
+ *  each payment, receipt, count, and statement; the account is company-wide.
  *
  * One table, two kinds, two screens. They are one table because both are a
  * place company money sits, and every later payment, receipt and transfer
@@ -68,7 +69,6 @@ export async function listOfKind(tx: Tx, kind: AccountKind) {
       bankName: bankCashAccount.bankName,
       accountNumber: bankCashAccount.accountNumber,
       currency: bankCashAccount.currency,
-      branchCode: bankCashAccount.branchCode,
       glAccountCode: chartOfAccount.code,
       glAccountName: chartOfAccount.name,
       custodianName: appUser.displayName,
@@ -113,11 +113,6 @@ export async function detail(tx: Tx, code: string) {
     .from(chartOfAccount)
     .where(eq(chartOfAccount.id, row.glAccountId))
     .limit(1);
-  const [place] = await tx
-    .select({ name: branch.name })
-    .from(branch)
-    .where(eq(branch.code, row.branchCode))
-    .limit(1);
   const [custodian] = row.custodianUserId
     ? await tx
         .select({ name: appUser.displayName, email: appUser.email })
@@ -129,7 +124,6 @@ export async function detail(tx: Tx, code: string) {
     ...row,
     glAccountCode: gl?.code ?? null,
     glAccountName: gl?.name ?? null,
-    branchName: place?.name ?? null,
     custodianName: custodian?.name ?? null,
     custodianEmail: custodian?.email ?? null,
   };
@@ -198,12 +192,6 @@ async function assertGlAccount(tx: Tx, id: string, keep?: string | null): Promis
     throw new AdminValidationError('glAccountId', `is already carried by account ${claimed.code}`);
   }
   return account.id;
-}
-
-async function assertBranch(tx: Tx, code: string): Promise<string> {
-  const [row] = await tx.select({ code: branch.code }).from(branch).where(eq(branch.code, code)).limit(1);
-  if (!row) throw new AdminValidationError('branchCode', 'is not a known branch');
-  return row.code;
 }
 
 async function assertCustodian(tx: Tx, userId: string | null): Promise<string | null> {
@@ -307,18 +295,6 @@ export async function create(tx: Tx, ctx: ActorContext, kind: AccountKind, input
     accountType: kind,
     currency: assertCurrency(input.currency),
     glAccountId: await assertGlAccount(tx, input.glAccountId),
-    /*
-     * Not asked for, by direction (2026-09-27): "remove linking the account
-     * to branch, we don't need this". A bank account is the company's, not a
-     * branch's — the branch that matters is the one on the payment or the
-     * receipt, which carries its own.
-     *
-     * The column is `not null` and the table has a foreign key to `branch`,
-     * so the value still has to be *a* branch until a migration lifts that.
-     * The actor's own is the honest answer to "who opened this account" and
-     * the one nobody has to be asked for.
-     */
-    branchCode: await assertBranch(tx, ctx.branchCode),
     approvalLimitIqd: assertAmount(input.approvalLimitIqd, 'approvalLimitIqd'),
     ...(await shapeFor(tx, kind, input)),
     active: true,
@@ -330,7 +306,7 @@ export async function create(tx: Tx, ctx: ActorContext, kind: AccountKind, input
     objectType: PERMISSION_OBJECT,
     objectId: code,
     after: values,
-    branchCode: values.branchCode,
+    branchCode: ctx.branchCode,
   });
   return get(tx, code);
 }
@@ -344,8 +320,6 @@ export async function update(tx: Tx, ctx: ActorContext, code: string, input: Acc
     name: requireText(input.name, 'name'),
     currency: assertCurrency(input.currency),
     glAccountId: await assertGlAccount(tx, input.glAccountId, before.glAccountId),
-    // Left where it was. The form no longer asks, so an edit must not silently
-    // move an existing account to whichever branch the editor happens to be in.
     approvalLimitIqd: assertAmount(input.approvalLimitIqd, 'approvalLimitIqd'),
     ...(await shapeFor(tx, kind, input)),
   };
@@ -363,10 +337,7 @@ export async function update(tx: Tx, ctx: ActorContext, code: string, input: Acc
       custodianUserId: before.custodianUserId,
     },
     after: values,
-    // The audit row is filed under the branch the account already carries —
-    // the edit did not change it, and an entry filed somewhere else would be
-    // invisible to whoever reads that branch's history.
-    branchCode: before.branchCode,
+    branchCode: ctx.branchCode,
   });
   return get(tx, code);
 }
@@ -407,7 +378,7 @@ export async function setActive(
     before: { active: before.active },
     after: { active },
     reason: reason?.trim() || null,
-    branchCode: before.branchCode,
+    branchCode: ctx.branchCode,
   });
   return get(tx, code);
 }

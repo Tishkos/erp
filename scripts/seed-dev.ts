@@ -75,9 +75,9 @@ async function main() {
 
       const cash = await tx.execute(sql`
         INSERT INTO bank_cash_account
-          (code, name, account_type, bank_name, account_number, gl_account_id, branch_code)
+          (code, name, account_type, bank_name, account_number, gl_account_id)
         VALUES ('CASH-HQ', 'Head Office Cash Account', 'bank', 'Seed Bank', 'ACC-HQ',
-                ${glAccountId}, 'HQ')
+                ${glAccountId})
         RETURNING id
       `);
 

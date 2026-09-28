@@ -1,17 +1,14 @@
 /**
- * How the application looks — the company's choice, not a personal one.
+ * The available appearance presets for individual user accounts.
  *
  * The screens are drawn as the document windows of the accounting package the
- * company already reads. Which palette those windows wear is decided once, for
- * everybody, because two people describing the same screen to each other
- * should be looking at the same screen.
+ * company already reads. Each user chooses their own palette, so two people
+ * can use different looks on the same system and on the same device.
  *
  * Presets rather than free colours, deliberately. Every palette here has been
  * checked as a whole — a title bar against the text on it, a grid rule against
  * the row behind it — and a person choosing at random cannot produce a
- * combination that nobody can read. On a company-wide setting one illegible
- * choice is everybody's problem, and the person who made it is rarely the one
- * who has to work in it all day.
+ * combination that nobody can read.
  *
  * No framework imports: the list is the same one the migration's check
  * constraint enforces and the stylesheet defines, so all three can be compared

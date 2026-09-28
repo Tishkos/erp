@@ -259,10 +259,6 @@ export const bankCashAccount = pgTable(
       .notNull()
       .references(() => chartOfAccount.id),
 
-    branchCode: text('branch_code')
-      .notNull()
-      .references(() => branch.code),
-
     /** §17 — a cash account without a custodian is nobody's responsibility. */
     custodianUserId: uuid('custodian_user_id').references(() => appUser.id),
     /** §17 — the ceiling a cash float may hold. */

@@ -164,9 +164,9 @@ beforeEach(async () => {
 
   const { rows: bank } = await ownerPool.query(
     `insert into bank_cash_account
-       (code, name, account_type, account_number, branch_code, currency, gl_account_id)
-     values ('BANK-INV','Investment bank','bank','ACC-INV-1',$1,'IQD',$2) returning id`,
-    [BAGHDAD, accounts.bank],
+       (code, name, account_type, account_number, currency, gl_account_id)
+     values ('BANK-INV','Investment bank','bank','ACC-INV-1','IQD',$1) returning id`,
+    [accounts.bank],
   );
   bankAccountId = bank[0].id;
 

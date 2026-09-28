@@ -312,6 +312,11 @@
   margin-block-start: 1.25rem;
 }
 
+.confirmReasonForm {
+  display: grid;
+  gap: 0.9rem;
+}
+
 .small {
   min-block-size: 1.9rem;
   padding-inline: 0.6rem;

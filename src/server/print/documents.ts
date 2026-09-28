@@ -12,6 +12,7 @@ import * as receipts from '../services/customer-receipt';
 import * as salesReturns from '../services/sales-return';
 import * as stock from '../services/stock-operations';
 import * as payments from '../services/supplier-payment';
+import * as journals from '../services/journal';
 import { average, lineTotal, sumMoney, sumQuantity } from './decimal';
 import type { Messages } from './i18n';
 import type { Column, Fact, PrintModel, Row } from './model';
@@ -92,6 +93,88 @@ const base = (
   sheetName: input.title,
   ...input,
 });
+
+/** Journal Entry — the same print/export model used by every other document. */
+export async function journalEntry(ctx: BuildContext, entryNo: string): Promise<Built | null> {
+  const { tx, m, locale } = ctx;
+  let document: Awaited<ReturnType<typeof journals.detail>>;
+  try {
+    document = await journals.detail(tx, entryNo);
+  } catch {
+    return null;
+  }
+
+  const { header, lines, raisedBy, approvedBy } = document;
+  const debitUsd = sumMoney(lines.map((line) => line.debitUsd));
+  const creditUsd = sumMoney(lines.map((line) => line.creditUsd));
+  const fields: Fact[] = [
+    { label: m.admin('journals.entry_no'), value: header.entryNo, ltr: true },
+    { label: m.column('status'), value: m.status(header.status) },
+    { label: m.admin('journals.posting_date'), value: date(header.postingDate, locale), ltr: true },
+    { label: m.admin('journals.document_date'), value: date(header.documentDate, locale), ltr: true },
+    { label: m.admin('journals.raised_by'), value: raisedBy ?? '—' },
+    { label: m.admin('journals.approved_by'), value: approvedBy ?? '—' },
+    { label: m.admin('journals.description'), value: header.description ?? '—' },
+  ];
+  const columns: Column[] = [
+    { key: 'line_no', label: '#', kind: 'code', weight: 0.45 },
+    { key: 'account', label: m.admin('journals.account'), kind: 'text', weight: 2 },
+    { key: 'currency', label: m.admin('journals.currency'), kind: 'code', weight: 0.65 },
+    { key: 'debit_txn', label: m.admin('journals.debit'), kind: 'text' },
+    { key: 'credit_txn', label: m.admin('journals.credit'), kind: 'text' },
+    { key: 'debit_iqd', label: `${m.admin('journals.debit')} — IQD`, kind: 'money' },
+    { key: 'credit_iqd', label: `${m.admin('journals.credit')} — IQD`, kind: 'money' },
+    { key: 'debit_usd', label: `${m.admin('journals.debit')} — USD`, kind: 'text' },
+    { key: 'credit_usd', label: `${m.admin('journals.credit')} — USD`, kind: 'text' },
+  ];
+  const rows: Row[] = lines.map((line) => ({
+    cells: {
+      line_no: String(line.lineNo),
+      account: `${line.accountCode} · ${line.accountName}`,
+      currency: line.currency,
+      debit_txn: Number(line.debitTxn) === 0 ? null : formatMoney(line.debitTxn, line.currency, locale),
+      credit_txn: Number(line.creditTxn) === 0 ? null : formatMoney(line.creditTxn, line.currency, locale),
+      debit_iqd: Number(line.debitIqd) === 0 ? null : line.debitIqd,
+      credit_iqd: Number(line.creditIqd) === 0 ? null : line.creditIqd,
+      debit_usd: Number(line.debitUsd) === 0 ? null : formatMoney(line.debitUsd, 'USD', locale),
+      credit_usd: Number(line.creditUsd) === 0 ? null : formatMoney(line.creditUsd, 'USD', locale),
+    },
+  }));
+  const title = m.admin('journals.print_title');
+  const model = base({
+    title,
+    number: header.entryNo,
+    status: m.status(header.status),
+    posted: header.status === 'posted' || header.status === 'reversed',
+    fields,
+    tables: [
+      {
+        columns,
+        rows,
+        empty: m.admin('journals.no_lines'),
+        totals: {
+          label: m.admin('journals.total'),
+          cells: {
+            debit_iqd: header.totalDebitIqd,
+            credit_iqd: header.totalCreditIqd,
+          },
+          sum: ['debit_iqd', 'credit_iqd'],
+        },
+      },
+    ],
+    summary: [
+      {
+        label: m.admin('journals.amount_usd'),
+        value: `${m.admin('journals.debit')}: ${formatMoney(debitUsd, 'USD', locale)} · ${m.admin('journals.credit')}: ${formatMoney(creditUsd, 'USD', locale)}`,
+        ltr: true,
+      },
+    ],
+    signatures: true,
+    fileName: header.entryNo,
+  });
+
+  return { model, branchCode: header.branchCode, objectId: header.id };
+}
 
 // ------------------------------------------------------------------ block 4
 

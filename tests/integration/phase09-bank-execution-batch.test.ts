@@ -639,9 +639,8 @@ describe('09.6 — reconciliation to one bank statement line (§12.5, §12.7)', 
 
     const { rows: other } = await ownerPool.query(
       `insert into bank_cash_account
-         (code, name, account_type, account_number, branch_code, currency, gl_account_id)
-       select 'BANK-OTHER', 'Other bank', account_type, 'ACC-OTHER-1', branch_code,
-              currency, $2
+         (code, name, account_type, account_number, currency, gl_account_id)
+       select 'BANK-OTHER', 'Other bank', account_type, 'ACC-OTHER-1', currency, $2
          from bank_cash_account where id = $1
        returning id`,
       [world.bankAccountId, gl[0].id],
