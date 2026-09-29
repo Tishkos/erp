@@ -276,12 +276,8 @@ async function allocateFreeCode(tx: Tx, kind: AccountKind, userId: string): Prom
 }
 
 /**
- * A new bank or cash account. Its number is minted, never given.
- *
- * Operations build, block 6: *"Bank/Cash Name; Bank Number (automatically
- * generated); Type (Cash or Bank); Related Account."* It used to be a slug of
- * the name that anybody could type over, which is not what "automatically
- * generated" describes.
+ * A new bank or cash master. Its ERP code is minted, never given. A bank's
+ * actual account number is provided by the user for statement matching.
  */
 export async function create(tx: Tx, ctx: ActorContext, kind: AccountKind, input: AccountInput) {
   await permit(ctx, 'create', PERMISSION_OBJECT);
@@ -354,21 +350,6 @@ export async function setActive(
   if (before.active === active) return before;
   if (!active && !reason?.trim()) {
     throw new AdminValidationError('reason', 'is required to deactivate an account');
-  }
-  // §4.1 — a branch's default cash account is part of what makes the branch
-  // operable. Retiring it would leave the branch unable to take cash.
-  if (!active) {
-    const [defaulted] = await tx
-      .select({ code: branch.code })
-      .from(branch)
-      .where(eq(branch.defaultCashAccountId, before.id))
-      .limit(1);
-    if (defaulted) {
-      throw new AdminValidationError(
-        'code',
-        `is the default cash account of branch ${defaulted.code}`,
-      );
-    }
   }
   await tx.update(bankCashAccount).set({ active }).where(eq(bankCashAccount.code, code));
   await recordChange(tx, ctx, {

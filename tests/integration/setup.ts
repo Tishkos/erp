@@ -110,21 +110,7 @@ export async function rejection(promise: Promise<unknown>): Promise<string> {
   throw new Error('Expected the operation to be rejected, but it succeeded.');
 }
 
-/**
- * Creates a branch with the default warehouse and default cash account §4.1
- * requires, in one transaction.
- *
- * The three cannot be created separately: a warehouse belongs to a branch and a
- * branch has a default warehouse, so neither can exist first. The constraint
- * that enforces it is DEFERRED and judged at COMMIT, which is exactly what lets
- * this work — and is why every fixture goes through here rather than inserting
- * a bare branch row that production would refuse.
- *
- * The G/L account is written directly rather than raised through the Chart of
- * Accounts service: the maker-checker route is proved in its own tests, and a
- * fixture that had to approve an account before it could make a branch would
- * test the wrong thing.
- */
+/** Creates a branch, its default warehouse and an independent fixture bank account. */
 export async function seedBranch(code: string, name: string): Promise<void> {
   const client = await ownerPool.connect();
   try {
@@ -149,17 +135,17 @@ export async function seedBranch(code: string, name: string): Promise<void> {
       [`CASH-${code}`, `${name} Cash at Bank`, roots[0].id],
     );
 
-    const { rows: cash } = await client.query(
+    await client.query(
       `insert into bank_cash_account
          (code, name, account_type, bank_name, account_number, gl_account_id)
-       values ($1, $2, 'bank', 'Seed Bank', $3, $4) returning id`,
+       values ($1, $2, 'bank', 'Seed Bank', $3, $4)`,
       [`CASH-${code}`, `${name} Cash Account`, `ACC-${code}`, account[0].id],
     );
 
-    await client.query(
-      `update branch set default_warehouse_code = $1, default_cash_account_id = $2 where code = $3`,
-      [`WH-${code}`, cash[0].id, code],
-    );
+    await client.query(`update branch set default_warehouse_code = $1 where code = $2`, [
+      `WH-${code}`,
+      code,
+    ]);
 
     await client.query('commit');
   } catch (error) {
@@ -585,7 +571,6 @@ export async function resetTestData(): Promise<void> {
 
     await client.query('delete from item_uom');
     await client.query('delete from item');
-    await client.query('update branch set default_cash_account_id = null');
     await client.query('delete from bank_cash_account');
     await client.query(`
     `);

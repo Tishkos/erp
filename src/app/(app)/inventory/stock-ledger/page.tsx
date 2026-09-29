@@ -17,6 +17,7 @@ import { IntegrityBanner } from '@/components/admin/integrity-banner';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { can } from '@domain/permissions';
 import { formatQuantity, parseQuantity } from '@domain/uom';
 import { formatTimestamp, type Locale } from '@/i18n/config';
@@ -88,6 +89,7 @@ export default async function StockLedgerPage({ searchParams }: { searchParams: 
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="stock_ledger" query={params} />}
       back={{ href: '/', label: t('dashboard_label') }}
       subtitle={t('stock_ledger.subtitle')}
       tabs={<SectionTabs route="/inventory/stock-ledger" />}

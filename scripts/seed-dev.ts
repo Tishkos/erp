@@ -48,10 +48,8 @@ async function main() {
   await db.transaction(async (tx) => {
     await applyScope(tx, { userId: randomUUID(), branchCode: 'HQ', isSuperUser: true });
 
-    // §4.1 — a branch, its default warehouse and its default cash account are
-    // created together. The deferred constraint that enforces this fires at
-    // COMMIT, so all three must be in this one transaction; a branch left
-    // without them is exactly the half-configured state it exists to prevent.
+    // A branch gets a default warehouse. Its example bank/cash account is a
+    // separate company-wide master and has no branch assignment.
     const existing = await tx.execute(sql`SELECT 1 FROM branch WHERE code = 'HQ'`);
 
     if (existing.rows.length === 0) {
@@ -73,19 +71,15 @@ async function main() {
       `);
       const glAccountId = (account.rows[0] as { id: string }).id;
 
-      const cash = await tx.execute(sql`
+      await tx.execute(sql`
         INSERT INTO bank_cash_account
           (code, name, account_type, bank_name, account_number, gl_account_id)
         VALUES ('CASH-HQ', 'Head Office Cash Account', 'bank', 'Seed Bank', 'ACC-HQ',
                 ${glAccountId})
-        RETURNING id
       `);
 
       await tx.execute(sql`
-        UPDATE branch
-           SET default_warehouse_code = 'WH-HQ',
-               default_cash_account_id = ${(cash.rows[0] as { id: string }).id}
-         WHERE code = 'HQ'
+        UPDATE branch SET default_warehouse_code = 'WH-HQ' WHERE code = 'HQ'
       `);
     }
 

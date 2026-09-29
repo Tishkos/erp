@@ -63,11 +63,15 @@ export default async function PaymentPage({
     // start to differ.
     const seen = await payments.viewByNo(tx, decodeURIComponent(paymentNo));
     if (!seen) return null;
-    return { ...seen, open: await payments.openInvoicesFor(tx, seen.payment.supplierId) };
+    return {
+      ...seen,
+      open: await payments.openInvoicesFor(tx, seen.payment.supplierId),
+      parties: await payments.partiesOf(tx, seen.payment.id),
+    };
   });
 
   if (!found) notFound();
-  const { payment, unallocated, open } = found;
+  const { payment, unallocated, open, parties } = found;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   const mayAllocate = unallocated > 0n && can(principal, 'post', payments.PERMISSION_OBJECT);
@@ -76,12 +80,22 @@ export default async function PaymentPage({
     can(principal, 'post', payments.PERMISSION_OBJECT);
 
   const fields: DocumentField[] = [
-    { label: column('reference'), value: <bdi dir="ltr">{payment.paymentNo}</bdi> },
+    // The number, not "Reference" — the reference is the field below, and two
+    // boxes with one label read as one of them being wrong (and were one React
+    // key, which is how the duplication was found).
+    { label: column('document_no'), value: <bdi dir="ltr">{payment.paymentNo}</bdi> },
     { label: column('status'), value: status(payment.status), status: payment.status },
+    // Who was paid and out of which account: the two things the form asked for
+    // and the document did not say back. The printed copy has carried them all
+    // along, so the screen was the odd one out.
+    { label: column('supplier_code'), value: <bdi dir="ltr">{parties.supplierCode ?? '—'}</bdi> },
+    { label: column('supplier_name'), value: <bdi dir="auto">{parties.supplierName ?? '—'}</bdi> },
     {
       label: column('posting_date'),
       value: <bdi dir="ltr">{formatBusinessDate(payment.paymentDate, locale as Locale)}</bdi>,
     },
+    { label: column('bank_code'), value: <bdi dir="ltr">{parties.bankCode ?? '—'}</bdi> },
+    { label: column('bank_name'), value: <bdi dir="auto">{parties.bankName ?? '—'}</bdi> },
     { label: column('branch_code'), value: <bdi dir="ltr">{payment.branchCode}</bdi> },
     {
       label: t('supplier_payments.amount'),

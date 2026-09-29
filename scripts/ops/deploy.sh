@@ -116,17 +116,28 @@ rm -f "$TARBALL"
 
 npm ci
 
-# Migrations before the restart. Drizzle records what it has applied, so this
-# is a no-op on a database already at head rather than an error.
 set -a; . ./.env; set +a
-npm run db:migrate
-
+# Build while the old schema and old application are both still live. The
+# branch/cash decoupling migration removes a column, so stop the old process
+# only for the short migration window; otherwise an old request could query a
+# column after it has been dropped.
 npm run build
 
 # The standalone bundle ships server.js and its node_modules, but not these.
 rm -rf .next/standalone/.next/static
 cp -r .next/static .next/standalone/.next/static
 [ -d public ] && cp -r public .next/standalone/public
+
+# Apply migrations with no application requests in flight. Migrations run in
+# one transaction. If one fails, restore the previous app archive and bring it
+# back against the unchanged schema.
+pm2 stop "\$PM2_NAME"
+if ! npm run db:migrate; then
+  echo "Migration failed; restoring the previous application and restarting it." >&2
+  tar -xzf "/root/erp-backups/app-before-\$STAMP.tgz" -C /opt
+  pm2 restart "\$PM2_NAME" --update-env
+  exit 1
+fi
 
 pm2 restart "\$PM2_NAME" --update-env
 pm2 save

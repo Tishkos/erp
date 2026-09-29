@@ -365,7 +365,7 @@ export async function supplierPayment(ctx: BuildContext, paymentNo: string): Pro
     payments.allocationsOf(tx, payment.id),
   ]);
   const fields: Fact[] = [
-    { label: m.column('reference'), value: payment.paymentNo, ltr: true },
+    { label: m.column('document_no'), value: payment.paymentNo, ltr: true },
     { label: m.column('status'), value: m.status(payment.status) },
     { label: m.column('supplier_code'), value: parties.supplierCode ?? '—', ltr: true },
     { label: m.column('supplier_name'), value: parties.supplierName ?? '—' },
@@ -409,7 +409,7 @@ export async function customerReceipt(ctx: BuildContext, receiptNo: string): Pro
     receipts.allocationsOf(tx, receipt.id),
   ]);
   const fields: Fact[] = [
-    { label: m.column('reference'), value: receipt.receiptNo, ltr: true },
+    { label: m.column('document_no'), value: receipt.receiptNo, ltr: true },
     { label: m.column('status'), value: m.status(receipt.status) },
     { label: m.column('customer_code'), value: parties.customerCode ?? '—', ltr: true },
     { label: m.column('customer_name'), value: parties.customerName ?? '—' },

@@ -104,10 +104,6 @@ export default async function BranchPage({
                 <span>{row.defaultWarehouseCode ?? t('none')}</span>
               </li>
               <li>
-                <span>{t('branches.default_cash_account')}</span>
-                <span>{row.defaultCashAccount ?? t('none')}</span>
-              </li>
-              <li>
                 <span>{t('branches.address')}</span>
                 <span>{row.address ?? t('none')}</span>
               </li>

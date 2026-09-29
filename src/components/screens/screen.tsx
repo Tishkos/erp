@@ -393,7 +393,7 @@ interface ShapeProps {
  * ---------------------------------------------------------------------- */
 
 /**
- * A module dashboard — the Dashboard.png shape, generalised.
+ * A module dashboard for summary charts and module rows.
  *
  * Three panels across, each carrying a different job: change over time, the
  * composition behind it, and two measures compared per period. Then a ranked

@@ -347,6 +347,109 @@ export async function stockMovement(ctx: BuildContext, query: Query): Promise<Bu
   );
 }
 
+/**
+ * The Stock Ledger — block 7: one item, warehouse by warehouse, with the
+ * balance carried down each movement.
+ *
+ * One table per warehouse, because that is what the screen shows and what
+ * the figure being checked belongs to: an opening balance, the movements in
+ * the period, and the closing balance the Warehouses Report also states. The
+ * closing figure is written as the service's own — it is where the running
+ * balance ends, not a sum of the column above it.
+ *
+ * A ledger is of one thing, so no item means no copy: the screen asks for one
+ * before it shows anything, and a copy of that screen would be a copy of the
+ * question.
+ */
+export async function stockLedger(ctx: BuildContext, query: Query): Promise<Built | null> {
+  const { tx, m, locale } = ctx;
+  const one = (key: string) => (query.get(key) ?? '').trim();
+  const itemCode = one('item');
+  if (!itemCode) return null;
+  const filter = {
+    itemCode,
+    warehouseCode: one('warehouse') || null,
+    from: one('from') || null,
+    to: one('to') || null,
+  };
+
+  const accounts = await stock.ledger(tx, { principal: ctx.principal, branchCode: ctx.branchCode }, filter);
+  const all = m.print('all');
+  const item = await itemLabel(ctx, itemCode, all);
+  const columns: Column[] = [
+    { key: 'date', label: m.column('date'), kind: 'date' },
+    { key: 'movement', label: m.column('movement'), kind: 'text', weight: 1.4 },
+    { key: 'document', label: m.column('document'), kind: 'code', weight: 1.6 },
+    { key: 'from_warehouse', label: m.column('from_warehouse_name'), kind: 'text' },
+    { key: 'to_warehouse', label: m.column('to_warehouse_name'), kind: 'text' },
+    { key: 'stock_in', label: m.column('stock_in'), kind: 'quantity' },
+    { key: 'stock_out', label: m.column('stock_out'), kind: 'quantity' },
+    { key: 'balance', label: m.column('running_balance'), kind: 'quantity' },
+    { key: 'raised_by', label: m.column('raised_by'), kind: 'text' },
+  ];
+
+  const tables: Table[] = accounts.map((account) => ({
+    title: `${account.warehouseName} · ${account.warehouseCode}`,
+    columns,
+    rows: [
+      // What the warehouse held before the first row shown. Zero when the
+      // ledger is read from the beginning, which is a real figure and prints.
+      {
+        tone: 'opening' as const,
+        cells: { date: filter.from, movement: m.column('opening_balance'), balance: account.opening },
+      },
+      ...account.rows.map((row) => ({
+        cells: {
+          date: row.movementDate,
+          movement: m.admin(`stock_movements.type.${row.type}`),
+          document: row.documentNo ?? '',
+          from_warehouse: row.fromWarehouseName ?? row.fromWarehouseCode ?? '',
+          to_warehouse: row.toWarehouseName ?? row.toWarehouseCode ?? '',
+          stock_in: row.direction === 'in' ? row.quantity : null,
+          stock_out: row.direction === 'out' ? row.quantity : null,
+          balance: row.balance,
+          raised_by: row.raisedBy ?? '',
+        },
+      })),
+    ],
+    empty: m.admin('stock_ledger.none', { item }),
+    totals: {
+      label: m.column('closing_balance'),
+      cells: {
+        stock_in: sumQuantity(account.rows.filter((row) => row.direction === 'in').map((row) => row.quantity)),
+        stock_out: sumQuantity(account.rows.filter((row) => row.direction === 'out').map((row) => row.quantity)),
+        balance: account.closing,
+      },
+      // The closing balance is where the running balance ends, not a sum.
+      sum: ['stock_in', 'stock_out'],
+    },
+  }));
+
+  const title = m.print('titles.stock_ledger');
+  return built(
+    ctx,
+    report({
+      title,
+      currency: 'IQD',
+      orientation: 'landscape',
+      filters: [
+        { label: m.print('item'), value: item },
+        {
+          label: m.column('warehouse'),
+          value: await warehouseLabel(ctx, filter.warehouseCode ?? '', m.admin('stock_movements.all_warehouses')),
+        },
+        { label: m.admin('stock_movements.from'), value: filter.from ? day(filter.from, locale) : all, ltr: Boolean(filter.from) },
+        { label: m.admin('stock_movements.to'), value: filter.to ? day(filter.to, locale) : all, ltr: Boolean(filter.to) },
+      ],
+      // Nothing has moved anywhere is still a sheet of paper that says so,
+      // rather than a 404: the item exists, its ledger is empty.
+      tables: tables.length > 0 ? tables : [{ columns, rows: [], empty: m.admin('stock_ledger.none', { item }) }],
+      fileName: `stock-ledger_${itemCode}_${filter.from ?? 'all'}_${filter.to ?? 'all'}`,
+    }),
+    `stock_ledger:${itemCode}`,
+  );
+}
+
 // ------------------------------------------------------------------ block 8
 
 /** Invoice Status Tracking — block 8: the stage, where the goods are, and how they got there. */

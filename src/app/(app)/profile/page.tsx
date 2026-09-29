@@ -81,7 +81,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
               <p>{user.email}</p>
               <Pill label={roleLabel} on={true} />
 
-              <form action={saveAvatar} className={s.profileActions} encType="multipart/form-data">
+              <form action={saveAvatar} className={s.profileActions}>
                 <label className={s.label} htmlFor="f-avatar">
                   {t('avatar_choose')}
                 </label>

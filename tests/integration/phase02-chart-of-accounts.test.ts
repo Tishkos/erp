@@ -669,7 +669,7 @@ describe('account settings that govern posting', () => {
     const codes = postable.map((a) => a.code);
 
     // The approved leaf is postable; the group above it and the unapproved
-    // sibling are not. (The branch fixture's own cash account is postable too,
+    // sibling are not. (The fixture's company cash account is postable too,
     // which is why this asserts membership rather than the whole list.)
     expect(codes).toContain(cash.code);
     expect(codes).not.toContain(group.code);

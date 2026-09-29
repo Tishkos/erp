@@ -43,19 +43,16 @@ npm-debug.log*
 # password in plaintext.
 vps.md
 
-# Runtime attachment storage — uploaded documents, not source.
-var/
-
-# Design references and phase PDFs kept beside the project, not part of it.
-Dashboard.png
-DashboardNew.png
+# Local reference images and PDFs, not application assets.
+Dashboard*.png
 UI.png
 *.jpeg
+ERP Build Map*.pdf
 QS ERP Phase*.pdf
-
-# Working briefs from the sponsor — read, acted on, and kept out of the repo.
-cleandesign.md
 shots/
+
+# Runtime attachment storage — uploaded documents, not source.
+var/
 
 # Agent worktrees and scratch space — tooling, not the product.
 .claude/worktrees/

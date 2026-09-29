@@ -1,5 +1,5 @@
 /**
- * Account types and normal balances — the Phase 02.1 rule, landed early.
+ * Account types and normal balances.
  *
  * Blueprint §1.2: "The Chart of Accounts shall remain hierarchical and
  * configurable." Configurable means the *accounts* are chosen by the Business
@@ -19,8 +19,8 @@
  * journal is only meaningful if every account agrees which side it is on.
  *
  * ── Why this module exists at all ───────────────────────────────────────────
- * The Chart of Accounts extract received on 2026-08-16 (phases/chartsofaccount.md)
- * lists the Expense group as "0 IQD Cr". Expenses are debit-normal. Whether
+ * One imported Chart of Accounts extract listed the Expense group as "0 IQD Cr".
+ * Expenses are debit-normal. Whether
  * that is an export artefact or a misconfiguration in the source system is a
  * question for the Business Process Owner (D7), but either way it must not be
  * able to enter this system: the normal balance is derived here from the

@@ -12,7 +12,7 @@
  * | Client refund | Dr Client Clearing / Cr Company Bank Account | §12.6 — *"full refund"* |
  * | Recognised service result | Dr Client Clearing / Cr Service Revenue | §12.6 refers to it; §12.4 makes the account a mapping |
  *
- * Every one of them goes through the Phase 02 posting engine **by line role**.
+ * Every one of them goes through the accounting posting engine **by line role**.
  * No account code appears anywhere in this file, which is §12.4's own
  * requirement — *"Account names are configured through Accounting Mapping; they
  * are not hard-coded"* — and §3.3's. Changing the mapping changes the posting,
@@ -21,8 +21,8 @@
  * ── What is deliberately *not* automatic ────────────────────────────────────
  * The recognised service result. §22 defines transfer margin *"according to
  * finance policy"*, and the policy — whether a residual client balance is the
- * company's margin or the client's money — has not been decided (D9;
- * `docs/open-questions-phase-09.md`). So `recogniseServiceResult` takes the
+ * company's margin or the client's money — has not been decided. So
+ * `recogniseServiceResult` takes the
  * amount from Finance and refuses more than the computed Net Service Margin. The
  * mechanism is built, the number is theirs. Choosing it here would be the
  * implementation team settling an accounting outcome, which §28.1 forbids.

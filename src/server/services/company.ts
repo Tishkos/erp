@@ -202,6 +202,7 @@ export async function setMyAppearance(
     action: 'user.appearance_changed',
     objectType: 'app_user',
     objectId: ctx.principal.userId,
+    branchCode: ctx.branchCode,
     after: { uiPalette: palette, uiAccent: accent },
   });
 }

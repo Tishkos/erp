@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -35,7 +35,22 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { MenuItem, MenuSection } from '@domain/menu';
+import {
+  APPEARANCE_PRESETS,
+  APPEARANCE_PRESET_SETTINGS,
+  BORDER_STYLES,
+  COMPONENT_SIZES,
+  CONTENT_WIDTHS,
+  CORNER_STYLES,
+  DEFAULT_USER_APPEARANCE,
+  DENSITIES,
+  SHADOW_STYLES,
+  type AppearancePreset,
+  type UserAppearanceSettings,
+} from '@domain/appearance';
 import { routeFor } from '@domain/screens';
+import { saveMyAppearanceSettings } from '@/app/(app)/appearance-actions';
+import { Button, Panel } from '@/components/ui';
 import mainLogo from '../../mainLogo.png';
 import { GlobalSearch } from './global-search';
 import { switchBranch } from '@/app/(app)/actions';
@@ -87,6 +102,8 @@ interface ErpShellProps {
   readonly roleCodes: readonly string[];
   readonly isSuperUser: boolean;
   readonly sections: readonly MenuSection[];
+  readonly initialAppearanceSettings: UserAppearanceSettings;
+  readonly appearanceSettingsSaved: boolean;
   /**
    * The signed-in person's latest notifications, newest first — what the bell
    * shows. Block 8's status changes land here for the users selected to be
@@ -98,18 +115,19 @@ interface ErpShellProps {
   readonly children: ReactNode;
 }
 
-type Density = 'comfortable' | 'compact';
 type Accent = 'blue' | 'indigo' | 'teal' | 'orange';
-type Radius = 'soft' | 'rounded';
-type ContentWidth = 'fluid' | 'contained';
 type Theme = 'light' | 'dark';
 
 interface AppearancePreferences {
   readonly theme: Theme;
-  readonly density: Density;
   readonly accent: Accent;
-  readonly radius: Radius;
-  readonly width: ContentWidth;
+  readonly appearance: UserAppearanceSettings['appearance'];
+  readonly density: UserAppearanceSettings['density'];
+  readonly cornerStyle: UserAppearanceSettings['cornerStyle'];
+  readonly contentWidth: UserAppearanceSettings['contentWidth'];
+  readonly borderStyle: UserAppearanceSettings['borderStyle'];
+  readonly shadow: UserAppearanceSettings['shadow'];
+  readonly componentSize: UserAppearanceSettings['componentSize'];
 }
 
 type PreferenceName = keyof AppearancePreferences;
@@ -157,20 +175,37 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
 
 const DEFAULT_APPEARANCE: AppearancePreferences = {
   theme: 'light',
-  density: 'comfortable',
+  ...DEFAULT_USER_APPEARANCE,
   accent: 'blue',
-  radius: 'soft',
-  width: 'fluid',
 };
 
-const APPEARANCE_OPTIONS = {
+const LEGACY_APPEARANCE_OPTIONS = {
   theme: ['light', 'dark'],
-  density: ['comfortable', 'compact'],
   accent: ['blue', 'indigo', 'teal', 'orange'],
-  radius: ['soft', 'rounded'],
-  width: ['fluid', 'contained'],
+} as const;
+
+const SETTING_OPTIONS = {
+  density: DENSITIES,
+  cornerStyle: CORNER_STYLES,
+  contentWidth: CONTENT_WIDTHS,
+  borderStyle: BORDER_STYLES,
+  shadow: SHADOW_STYLES,
+  componentSize: COMPONENT_SIZES,
 } as const satisfies {
-  readonly [Name in PreferenceName]: readonly AppearancePreferences[Name][];
+  readonly [Name in Exclude<keyof UserAppearanceSettings, 'appearance'>]: readonly string[];
+};
+
+const ADVANCED_SETTING_NAMES = ['borderStyle', 'shadow', 'componentSize'] as const;
+const BASIC_SETTING_NAMES = ['density', 'cornerStyle', 'contentWidth'] as const;
+
+const PRESET_DESCRIPTIONS: Readonly<Record<AppearancePreset, string>> = {
+  current: 'preset_current_description',
+  standard: 'preset_standard_description',
+  enterprise: 'preset_enterprise_description',
+  minimal: 'preset_minimal_description',
+  modern: 'preset_modern_description',
+  command: 'preset_command_description',
+  studio: 'preset_studio_description',
 };
 
 function groupSections(sections: readonly MenuSection[]): readonly ModuleGroup[] {
@@ -207,7 +242,7 @@ function firstModuleHref(module: ModuleGroup): string | null {
 }
 
 function readStoredPreference<T extends string>(
-  attribute: `data-${PreferenceName}`,
+  attribute: `data-${string}`,
   allowed: readonly T[],
   fallback: T,
 ): T {
@@ -220,13 +255,33 @@ function readStoredPreference<T extends string>(
 }
 
 function applyPreference(name: PreferenceName, value: PreferenceValue): void {
-  const attribute = `data-${name}` as const;
-  document.documentElement.setAttribute(attribute, value);
+  const attribute =
+    name === 'cornerStyle'
+      ? 'data-radius'
+      : name === 'contentWidth'
+        ? 'data-width'
+        : `data-${name}`;
+  const target = name === 'theme' || name === 'accent'
+    ? document.documentElement
+    : document.querySelector<HTMLElement>('.erp-root');
+  target?.setAttribute(attribute, value);
   try {
     window.localStorage.setItem(attribute, value);
   } catch {
     // The visual preference still applies when storage is unavailable.
   }
+}
+
+function savedSettingsFrom(value: AppearancePreferences): UserAppearanceSettings {
+  return {
+    appearance: value.appearance,
+    density: value.density,
+    cornerStyle: value.cornerStyle,
+    contentWidth: value.contentWidth,
+    borderStyle: value.borderStyle,
+    shadow: value.shadow,
+    componentSize: value.componentSize,
+  };
 }
 
 function PendingItem({ item }: { readonly item: MenuItem }) {
@@ -302,6 +357,8 @@ export function ErpShell({
   roleCodes,
   isSuperUser,
   sections,
+  initialAppearanceSettings,
+  appearanceSettingsSaved,
   notifications = [],
   footer,
   children,
@@ -318,7 +375,13 @@ export function ErpShell({
   const [openMobileModules, setOpenMobileModules] = useState<readonly ModuleKey[]>([]);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [currentLocale, setCurrentLocale] = useState(locale === 'ar' ? 'ar' : 'en');
-  const [appearance, setAppearance] = useState<AppearancePreferences>(DEFAULT_APPEARANCE);
+  const [appearance, setAppearance] = useState<AppearancePreferences>({
+    ...DEFAULT_APPEARANCE,
+    ...initialAppearanceSettings,
+  });
+  const [appearanceSaveState, setAppearanceSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>(
+    appearanceSettingsSaved ? 'saved' : 'idle',
+  );
 
   const shortUserId = userId.slice(0, 8);
   const initials = displayName
@@ -337,36 +400,47 @@ export function ErpShell({
     .flatMap((section) => section.items)
     .find((item) => item.key === 'notifications');
 
+  const persistAppearanceSettings = async (settings: UserAppearanceSettings) => {
+    setAppearanceSaveState('saving');
+    try {
+      const result = await saveMyAppearanceSettings(settings);
+      setAppearanceSaveState(result.ok ? 'saved' : 'error');
+    } catch {
+      setAppearanceSaveState('error');
+    }
+  };
+
   useLayoutEffect(() => {
+    // Existing choices lived in this browser. Adopt them once for this
+    // account, then the database is authoritative across devices and logins.
+    const settings: UserAppearanceSettings = appearanceSettingsSaved
+      ? initialAppearanceSettings
+      : {
+          appearance: readStoredPreference('data-appearance', APPEARANCE_PRESETS, initialAppearanceSettings.appearance),
+          density: readStoredPreference('data-density', DENSITIES, initialAppearanceSettings.density),
+          cornerStyle: readStoredPreference('data-radius', CORNER_STYLES, initialAppearanceSettings.cornerStyle),
+          contentWidth: readStoredPreference('data-width', CONTENT_WIDTHS, initialAppearanceSettings.contentWidth),
+          borderStyle: readStoredPreference('data-border-style', BORDER_STYLES, initialAppearanceSettings.borderStyle),
+          shadow: readStoredPreference('data-shadow', SHADOW_STYLES, initialAppearanceSettings.shadow),
+          componentSize: readStoredPreference('data-component-size', COMPONENT_SIZES, initialAppearanceSettings.componentSize),
+        };
     const stored: AppearancePreferences = {
-      theme: readStoredPreference(
-        'data-theme',
-        APPEARANCE_OPTIONS.theme,
-        DEFAULT_APPEARANCE.theme,
-      ),
-      density: readStoredPreference(
-        'data-density',
-        APPEARANCE_OPTIONS.density,
-        DEFAULT_APPEARANCE.density,
-      ),
-      accent: readStoredPreference(
-        'data-accent',
-        APPEARANCE_OPTIONS.accent,
-        DEFAULT_APPEARANCE.accent,
-      ),
-      radius: readStoredPreference(
-        'data-radius',
-        APPEARANCE_OPTIONS.radius,
-        DEFAULT_APPEARANCE.radius,
-      ),
-      width: readStoredPreference('data-width', APPEARANCE_OPTIONS.width, DEFAULT_APPEARANCE.width),
+      ...settings,
+      theme: readStoredPreference('data-theme', LEGACY_APPEARANCE_OPTIONS.theme, DEFAULT_APPEARANCE.theme),
+      accent: readStoredPreference('data-accent', LEGACY_APPEARANCE_OPTIONS.accent, DEFAULT_APPEARANCE.accent),
     };
 
     setAppearance(stored);
     (Object.keys(stored) as PreferenceName[]).forEach((name) => {
       applyPreference(name, stored[name]);
     });
-  }, []);
+    if (!appearanceSettingsSaved) {
+      setAppearanceSaveState('saving');
+      void saveMyAppearanceSettings(settings).then((result) => {
+        setAppearanceSaveState(result.ok ? 'saved' : 'error');
+      }).catch(() => setAppearanceSaveState('error'));
+    }
+  }, [appearanceSettingsSaved, initialAppearanceSettings]);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -407,9 +481,24 @@ export function ErpShell({
     window.location.reload();
   };
 
-  const changeAppearance = (name: PreferenceName, value: PreferenceValue) => {
-    setAppearance((current) => ({ ...current, [name]: value }) as AppearancePreferences);
-    applyPreference(name, value);
+  const changeAppearanceSetting = (name: keyof UserAppearanceSettings, value: string) => {
+    const next = { ...appearance, [name]: value } as AppearancePreferences;
+    setAppearance(next);
+    applyPreference(name, value as PreferenceValue);
+    void persistAppearanceSettings(savedSettingsFrom(next));
+  };
+
+  const chooseAppearancePreset = (preset: AppearancePreset) => {
+    const next: AppearancePreferences = {
+      ...appearance,
+      appearance: preset,
+      ...APPEARANCE_PRESET_SETTINGS[preset],
+    };
+    setAppearance(next);
+    (Object.keys(savedSettingsFrom(next)) as (keyof UserAppearanceSettings)[]).forEach((name) => {
+      applyPreference(name, next[name]);
+    });
+    void persistAppearanceSettings(savedSettingsFrom(next));
   };
 
   const openAppearance = () => {
@@ -449,6 +538,43 @@ export function ErpShell({
       </span>
     </div>
   );
+
+  const renderAppearanceSetting = (name: keyof typeof SETTING_OPTIONS) => {
+    const titleKey = {
+      density: 'density',
+      cornerStyle: 'radius',
+      contentWidth: 'width',
+      borderStyle: 'border_style',
+      shadow: 'shadow_style',
+      componentSize: 'component_size',
+    }[name];
+    const values = SETTING_OPTIONS[name];
+
+    return (
+      <fieldset className="erp-preference" key={name}>
+        <legend className="erp-preference__legend">{shell(titleKey)}</legend>
+        <div className={`erp-preference__options erp-preference__options--${name}`}>
+          {values.map((value) => {
+            const selected = appearance[name] === value;
+            return (
+              <button
+                aria-pressed={selected}
+                className="erp-preference__option"
+                data-selected={selected ? 'true' : 'false'}
+                data-value={value}
+                key={value}
+                onClick={() => changeAppearanceSetting(name, value)}
+                type="button"
+              >
+                <span>{shell(value)}</span>
+                {selected ? <Check aria-hidden="true" /> : null}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+    );
+  };
 
   return (
     <div className="erp-shell">
@@ -905,32 +1031,109 @@ export function ErpShell({
             </div>
 
             <div className="erp-appearance-drawer__body">
-              {(Object.keys(APPEARANCE_OPTIONS) as PreferenceName[])
-                .filter((name) => name !== 'theme' && name !== 'accent')
-                .map((name) => (
-                <fieldset className="erp-preference" key={name}>
-                  <legend className="erp-preference__legend">{shell(name)}</legend>
-                  <div className={`erp-preference__options erp-preference__options--${name}`}>
-                    {APPEARANCE_OPTIONS[name].map((value) => {
-                      const selected = appearance[name] === value;
-                      return (
-                        <button
-                          className="erp-preference__option"
-                          type="button"
-                          data-value={value}
-                          data-selected={selected ? 'true' : 'false'}
-                          aria-pressed={selected}
-                          key={value}
-                          onClick={() => changeAppearance(name, value)}
-                        >
-                          <span>{shell(value)}</span>
+              <section aria-labelledby="erp-appearance-preset-title" className="erp-appearance-section">
+                <div className="erp-appearance-section__heading">
+                  <h3 id="erp-appearance-preset-title">{shell('interface_style')}</h3>
+                  <p>{shell('interface_style_hint')}</p>
+                </div>
+                <div aria-label={shell('interface_style')} className="erp-appearance-cards" role="radiogroup">
+                  {APPEARANCE_PRESETS.map((preset) => {
+                    const selected = appearance.appearance === preset;
+                    const settings = APPEARANCE_PRESET_SETTINGS[preset];
+                    const selectWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        chooseAppearancePreset(preset);
+                        return;
+                      }
+                      const direction =
+                        event.key === 'ArrowRight' || event.key === 'ArrowDown'
+                          ? 1
+                          : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+                            ? -1
+                            : 0;
+                      if (!direction) return;
+                      event.preventDefault();
+                      const cards = event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="radio"]');
+                      if (!cards?.length) return;
+                      const currentIndex = Array.from(cards).indexOf(event.currentTarget);
+                      const nextIndex = (currentIndex + direction + cards.length) % cards.length;
+                      chooseAppearancePreset(APPEARANCE_PRESETS[nextIndex]!);
+                      cards[nextIndex]?.focus();
+                    };
+                    return (
+                      <div
+                        aria-checked={selected}
+                        className="erp-appearance-card"
+                        key={preset}
+                        onClick={() => chooseAppearancePreset(preset)}
+                        onKeyDown={selectWithKeyboard}
+                        role="radio"
+                        tabIndex={selected ? 0 : -1}
+                      >
+                        <span className="erp-appearance-card__heading">
+                          <strong>{shell(`preset_${preset}`)}</strong>
                           {selected ? <Check aria-hidden="true" /> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </fieldset>
-              ))}
+                        </span>
+                        <span className="erp-appearance-card__description">
+                          {shell(PRESET_DESCRIPTIONS[preset])}
+                        </span>
+                        <span
+                          aria-hidden="true"
+                          className="erp-appearance-preview"
+                          data-appearance={preset}
+                          data-border-style={settings.borderStyle}
+                          data-component-size={settings.componentSize}
+                          data-density={settings.density}
+                          data-radius={settings.cornerStyle}
+                          data-shadow={settings.shadow}
+                          data-width={settings.contentWidth}
+                        >
+                          <span className="erp-appearance-preview__bar">
+                            <span />
+                            <span />
+                            <span />
+                          </span>
+                          <Panel>
+                            <span className="erp-appearance-preview__title" />
+                            <span className="erp-appearance-preview__lines">
+                              <span />
+                              <span />
+                            </span>
+                            <table className="erp-appearance-preview__table">
+                              <tbody>
+                                <tr><td /><td /></tr>
+                                <tr><td /><td /></tr>
+                              </tbody>
+                            </table>
+                            <Button disabled label={shell('preview_action')} tone="primary" />
+                          </Panel>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section aria-labelledby="erp-appearance-controls-title" className="erp-appearance-section">
+                <div className="erp-appearance-section__heading">
+                  <h3 id="erp-appearance-controls-title">{shell('layout_settings')}</h3>
+                </div>
+                <div className="erp-appearance-settings-grid">
+                  {BASIC_SETTING_NAMES.map(renderAppearanceSetting)}
+                </div>
+              </section>
+
+              <details className="erp-advanced-appearance">
+                <summary>{shell('advanced_appearance')}</summary>
+                <div className="erp-appearance-settings-grid">
+                  {ADVANCED_SETTING_NAMES.map(renderAppearanceSetting)}
+                </div>
+              </details>
+
+              <p aria-live="polite" className="erp-appearance-save-state" role="status">
+                {shell(`appearance_save_${appearanceSaveState}`)}
+              </p>
             </div>
           </aside>
         </div>

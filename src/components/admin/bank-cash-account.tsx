@@ -102,8 +102,8 @@ export async function AccountList({
             title={t(`${kind}_accounts.new`)}
           >
             <p className="muted">{t(`${kind}_accounts.created_note`)}</p>
-            {/* No number field. Block 6 lists it as "Bank Number
-                (automatically generated)", so the system gives it. */}
+            {/* The ERP code is generated. For banks, the number field below
+                asks for the real account number assigned by the bank. */}
             <Form action={createAccount}>
               <Hidden name="kind" value={kind} />
               <Grid>

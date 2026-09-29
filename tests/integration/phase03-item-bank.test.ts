@@ -391,17 +391,14 @@ describe('03.5 · bank and cash accounts (§4.3, §17)', () => {
     ).toMatch(/deactivated, never deleted/);
   });
 
-  it('can be set as a branch’s default cash account (§4.1)', async () => {
-    const { rows } = await createBankAccount();
-    await ownerPool.query(`update branch set default_cash_account_id = $1 where code = $2`, [
-      rows[0].id,
-      BAGHDAD,
-    ]);
-
-    const branch = await ownerPool.query(
-      `select default_cash_account_id from branch where code = $1`,
-      [BAGHDAD],
+  it('keeps bank and cash masters independent of branches', async () => {
+    await createBankAccount();
+    const { rows } = await ownerPool.query(
+      `select table_name, column_name from information_schema.columns
+        where table_schema = 'public'
+          and ((table_name = 'bank_cash_account' and column_name = 'branch_code')
+            or (table_name = 'branch' and column_name = 'default_cash_account_id'))`,
     );
-    expect(branch.rows[0].default_cash_account_id).toBe(rows[0].id);
+    expect(rows).toHaveLength(0);
   });
 });

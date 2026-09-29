@@ -8,6 +8,7 @@ import { appUser, notification } from '@/server/db/schema';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { AppFooter } from './app-footer';
 import { ErpShell } from './erp-shell';
+import type { UserAppearanceSettings } from '@/server/domain/appearance';
 
 /**
  * The authenticated application shell.
@@ -15,7 +16,15 @@ import { ErpShell } from './erp-shell';
  * Identity, scope, and menu visibility remain server-resolved and deny by
  * default. Only the interactive presentation is delegated to the client shell.
  */
-export async function AppShell({ children }: { children: ReactNode }) {
+export async function AppShell({
+  children,
+  initialAppearanceSettings,
+  appearanceSettingsSaved,
+}: {
+  readonly children: ReactNode;
+  readonly initialAppearanceSettings: UserAppearanceSettings;
+  readonly appearanceSettingsSaved: boolean;
+}) {
   const t = await getTranslations();
   const { principal, scope } = await requireContext();
   // The phase gate: only the accepted phase's screens exist, on every surface.
@@ -65,6 +74,8 @@ export async function AppShell({ children }: { children: ReactNode }) {
       roleCodes={principal.roleCodes}
       isSuperUser={principal.isSuperUser}
       sections={sections}
+      initialAppearanceSettings={initialAppearanceSettings}
+      appearanceSettingsSaved={appearanceSettingsSaved}
       notifications={notifications.map((note) => ({
         id: String(note.id),
         subject: note.subject ?? '',

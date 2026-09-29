@@ -86,6 +86,18 @@ test.describe('the Operations Build screens open', () => {
     }
   });
 
+  test('block 7 · the Stock Ledger opens and carries the Print / Export menu', async ({ page }) => {
+    await page.goto('/inventory/stock-ledger');
+    await expect(page.getByRole('heading', { name: 'Stock Ledger' })).toBeVisible();
+
+    // The same menu every other document and report carries — asked for on
+    // 2026-09-29, and the one thing this screen was missing.
+    const menu = page.locator('[data-export-menu="stock_ledger"]').first();
+    await expect(menu).toBeVisible();
+    await menu.getByText('Print / Export').click();
+    await expect(menu.getByRole('link', { name: 'PDF' }).first()).toBeVisible();
+  });
+
   test('block 7 · a warehouse can be set up', async ({ page }) => {
     await page.goto('/master-data/warehouses');
     await expect(page.getByRole('heading', { name: 'Warehouses' })).toBeVisible();
@@ -856,11 +868,30 @@ test.describe('the Operations Build screens open', () => {
     for (const column of ['Customer Code', 'Customer Name', 'Bank/Cash Code', 'Bank/Cash Name']) {
       await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
     }
+
+    // Both drafts wear the document window their document wears, rather than
+    // the settings form they used to be (2026-09-29).
+    await page.goto('/sales/customer-receipts/new');
+    const draft = page.locator('#receipt-new');
+    await expect(draft).toBeVisible();
+    await expect(draft.getByText('Customer Receipts', { exact: false }).first()).toBeVisible();
+    await expect(draft.getByText('Customer Invoice', { exact: true })).toBeVisible();
+    await expect(draft.getByRole('button', { name: 'Create' })).toBeVisible();
   });
 
   test('block 6 · a payment can be recorded against a bank account', async ({ page }) => {
     await page.goto('/purchasing/supplier-payments/new');
     await expect(page.getByRole('heading', { name: 'New payment' })).toBeVisible();
+
+    // The draft wears the document window the payment will wear — the same
+    // title bar, the same field boxes, the same lines section, Create in the
+    // foot. Asked for on 2026-09-29: pressing Create used to change the design
+    // under the person who pressed it.
+    const draft = page.locator('#payment-new');
+    await expect(draft).toBeVisible();
+    await expect(draft.getByText('Supplier Payments', { exact: false }).first()).toBeVisible();
+    await expect(draft.getByText('Supplier Invoice', { exact: true })).toBeVisible();
+    await expect(draft.getByRole('button', { name: 'Create' })).toBeVisible();
 
     // Both pickers have something in them, or the screen is built and unusable.
     // Supplier and bank are both code-and-name pairs now — inputs over

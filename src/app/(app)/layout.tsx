@@ -2,7 +2,12 @@ import type { ReactNode } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { optionalContext, withCurrentUser } from '@/server/session';
 import * as companyService from '@/server/services/company';
-import { DEFAULT_ACCENT, DEFAULT_PALETTE } from '@domain/appearance';
+import * as userAppearance from '@/server/services/user-appearance';
+import {
+  DEFAULT_ACCENT,
+  DEFAULT_PALETTE,
+  DEFAULT_USER_APPEARANCE,
+} from '@domain/appearance';
 
 /**
  * The authenticated application — every screen except sign-in lives in this
@@ -40,15 +45,34 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
   // read that throws first.
   const context = await optionalContext();
   const fallback = { palette: DEFAULT_PALETTE, accent: DEFAULT_ACCENT };
-  const { palette, accent } = context
-    ? await withCurrentUser((tx) =>
-        companyService.appearanceFor(tx, context.principal.userId),
-      ).catch(() => fallback)
-    : fallback;
+  const appearance = context
+    ? await withCurrentUser(async (tx) => ({
+        colors: await companyService.appearanceFor(tx, context.principal.userId),
+        settings: await userAppearance.settingsFor(tx, context.principal.userId),
+      })).catch(() => ({
+        colors: fallback,
+        settings: { settings: DEFAULT_USER_APPEARANCE, saved: true },
+      }))
+    : { colors: fallback, settings: { settings: DEFAULT_USER_APPEARANCE, saved: true } };
+  const { palette, accent } = appearance.colors;
+  const { settings, saved } = appearance.settings;
 
   return (
-    <div className="erp-root" data-accent={accent} data-palette={palette}>
-      <AppShell>{children}</AppShell>
+    <div
+      className="erp-root"
+      data-accent={accent}
+      data-appearance={settings.appearance}
+      data-border-style={settings.borderStyle}
+      data-component-size={settings.componentSize}
+      data-density={settings.density}
+      data-palette={palette}
+      data-radius={settings.cornerStyle}
+      data-shadow={settings.shadow}
+      data-width={settings.contentWidth}
+    >
+      <AppShell initialAppearanceSettings={settings} appearanceSettingsSaved={saved}>
+        {children}
+      </AppShell>
     </div>
   );
 }

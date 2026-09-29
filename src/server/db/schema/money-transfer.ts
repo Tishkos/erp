@@ -82,8 +82,8 @@ export const moneyTransferDeposit = pgTable(
      * cleared funds by the time they are recorded, so there is no moment at
      * which the money has reached client clearing and is not yet usable. If
      * Finance means something narrower by "Available" (uncleared cheques, a
-     * compliance hold), that is a business decision and is raised in
-     * docs/open-questions-phase-09.md rather than guessed at here.
+     * compliance hold), that is a business decision and is left to Finance
+     * policy rather than guessed at here.
      */
     status: documentStatus('status').notNull().default('draft'),
 

@@ -103,16 +103,19 @@ export function DocumentWindow({
 
         <div className={admin.sapBody}>
           <div className={admin.sapFields}>
-            {fields.map((field) =>
+            {/* Keyed by position, not by label: two fields may legitimately
+                share a caption, and a duplicate key silently drops one of them
+                (the payment carried two "Reference" boxes, 2026-09-29). */}
+            {fields.map((field, index) =>
               field.bare ? (
-                <Fragment key={field.label}>{field.value}</Fragment>
+                <Fragment key={index}>{field.value}</Fragment>
               ) : (
               <div
                 // `sapWide` rather than an inline grid span: the Journal Entry
                 // marks a full-width field with that class, and a second way of
                 // saying the same thing is a second thing to keep in step.
                 className={field.wide ? `${admin.sapField} ${admin.sapWide}` : admin.sapField}
-                key={field.label}
+                key={index}
               >
                 <span className={admin.sapLabel}>{field.label}</span>
                 {field.control ? (

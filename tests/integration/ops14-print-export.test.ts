@@ -708,6 +708,40 @@ describe('reports · the filters on the screen, and the figures', () => {
     expect(tracking.docx.text).toContain('On Board');
   });
 
+  it('Stock Ledger: a table per warehouse, the service’s closing figure, and no copy without an item', async () => {
+    const ledger = await withScope(scope(manager), (tx) =>
+      stock.ledger(tx, { principal: manager.principal, branchCode: BAGHDAD }, { itemCode: PANEL, from: YEAR.from, to: YEAR.to }),
+    );
+    // The panel moved in both warehouses, so the copy has two ledgers in it.
+    expect(ledger.length).toBeGreaterThan(1);
+    const titleOf = (account: (typeof ledger)[number]) => `${account.warehouseName} · ${account.warehouseCode}`;
+
+    const files = await takeAll('stock_ledger', { query: { item: PANEL, ...YEAR } });
+    const figures = [...files.xlsx.cells.values()].flatMap((cell) => (cell.number === undefined ? [] : [cell.number]));
+    for (const account of ledger) {
+      // Each warehouse is its own named table, closing where the service says
+      // it closes — the figure the Warehouses Report states.
+      expect(files.pdf.text).toContain(account.warehouseName);
+      expect(files.xlsx.strings).toContain(titleOf(account));
+      expect(files.docx.text).toContain(account.warehouseName);
+      expect(figures).toContain(Number(account.closing));
+    }
+    expect(files.pdf.text).toContain(doc.transfer!.no);
+    expect(files.pdf.unmappedGlyphs).toBe(0);
+
+    // One warehouse asked for is one ledger printed. The other warehouse's
+    // name still appears in the From column of the transfer — that is the
+    // row saying where the stock came from, not a second ledger.
+    const second = ledger.find((account) => account.warehouseCode === SECOND)!;
+    const main = ledger.find((account) => account.warehouseCode === MAIN)!;
+    const one = await takeAll('stock_ledger', { query: { item: PANEL, warehouse: SECOND, ...YEAR } });
+    expect(one.xlsx.strings).toContain(titleOf(second));
+    expect(one.xlsx.strings).not.toContain(titleOf(main));
+
+    // A ledger is of one thing: without an item there is nothing to copy.
+    expect((await take(manager, 'stock_ledger', 'pdf', { query: { ...YEAR } })).status).toBe(404);
+  });
+
   it('the financial statements and the General Ledger export with their own figures', async () => {
     for (const key of ['income_statement', 'balance_sheet', 'changes_in_equity', 'cash_flow', 'gl_inquiry'] as const) {
       const files = await takeAll(key, { query: { ...YEAR, currency: 'IQD' } });

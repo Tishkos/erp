@@ -329,8 +329,8 @@ describe('03.7 · payment terms (§16)', () => {
 });
 
 // ---------------------------------------------------------------------------
-describe('03.1 · a branch cannot exist without its defaults (§4.1)', () => {
-  it('refuses a branch with no default warehouse or cash account', async () => {
+describe('03.1 · a branch cannot exist without its default warehouse (§4.1)', () => {
+  it('refuses a branch with no default warehouse', async () => {
     // The rule is DEFERRED, so this fails at COMMIT rather than at INSERT —
     // which is exactly what lets the legitimate case work.
     const message = await rejection(
@@ -339,17 +339,16 @@ describe('03.1 · a branch cannot exist without its defaults (§4.1)', () => {
     expect(message).toMatch(/has no default warehouse/);
   });
 
-  it('accepts a branch created together with its warehouse and cash account', async () => {
+  it('accepts a branch created together with its warehouse and no cash account assignment', async () => {
     // A warehouse belongs to a branch and a branch has a default warehouse, so
     // neither can exist first. They are created in one transaction and judged
     // at COMMIT.
     await expect(seedBranch('BSR', 'Basra')).resolves.toBeUndefined();
 
     const { rows } = await ownerPool.query(
-      `select default_warehouse_code, default_cash_account_id from branch where code = 'BSR'`,
+      `select default_warehouse_code from branch where code = 'BSR'`,
     );
     expect(rows[0].default_warehouse_code).toBe('WH-BSR');
-    expect(rows[0].default_cash_account_id).not.toBeNull();
   });
 
   it('refuses to clear a branch’s defaults afterwards', async () => {

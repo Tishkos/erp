@@ -77,7 +77,7 @@ The Erbil cash account is left for the screen that now shows it
 |---|---|
 | One truth for quantity | Warehouses Report quantity now comes from `inventory_movement`; value from the layers. `positionOf` sums all rows of a warehouse. |
 | Ledger ↔ documents | `services/inventory-integrity.ts`: documents without rows, rows without documents, transfers out of balance, layers adrift, negative positions. Run nightly by cron (02:15), findings notified to accounting managers in-app; shown live as a banner on every stock screen; printed by `stock-movement-trace.ts`. |
-| The format script | Lists `stock_transfer`, `stock_adjustment` and every later-phase document table; reports documents without ledger rows before and after; **refuses to run while `/opt/qs-erp-next/var/LIVE` exists** — placed 2026-09-27. Trials belong on a separate database. |
+| The format script | Lists `stock_transfer`, `stock_adjustment` and every document table; reports documents without ledger rows before and after; **refuses to run while `/opt/qs-erp-next/var/LIVE` exists** — placed 2026-09-27. Trials belong on a separate database. |
 | The two table lists | `tests/integration/ops16-document-table-lists.test.ts` derives the document tables from the schema's foreign keys and fails if either the format script or `resetTestData` omits one. |
 | Branch of a movement | Derived from the warehouse and refused on mismatch, in the service and by trigger (migration 0215). |
 | Posting once | Row locks before the status check on AP post, goods-return post, sales-return accept, opening-stock approve, shipment advance. Transfer and Reconciliation take a one-time form id, so a double press finds the first document. |
@@ -87,7 +87,7 @@ The Erbil cash account is left for the screen that now shows it
 | The Stock Ledger | `/inventory/stock-ledger`: one item, per warehouse, opening → every movement with a running balance → closing; every row opens its document. Stock Movement pages at 200 rows and says "x–y of N"; filters by document number. |
 | Deploys | `deploy.sh` runs the integration suite; skipping needs a stated reason, recorded in `var/deploy-skips.log`. |
 | Backups | Weekly restore drill (Sunday 03:00) restores the newest dump into a throwaway database and checks it — `scripts/ops/restore-drill.sh`, `/var/log/qs-erp/restore-drill.log`. |
-| The stale test | `phase04-opening-stock` asserted the §14.4 maker-checker rule a day after the owner lifted it; updated with the rule. |
+| The stale test | The opening-stock test asserted the §14.4 maker-checker rule a day after the owner lifted it; updated with the rule. |
 
 ### Decisions taken (owner, 2026-09-27)
 

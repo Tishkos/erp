@@ -68,11 +68,11 @@ export default async function ReceiptPage({
     // §16 — a receipt whose payer is unknown has no invoices to offer, and
     // asking for them by a null customer would be asking the wrong question.
     const open = seen.customerId ? await receipts.openInvoicesFor(tx, seen.customerId) : [];
-    return { receipt: seen, open };
+    return { receipt: seen, open, parties: await receipts.partiesOf(tx, seen.id) };
   });
 
   if (!found) notFound();
-  const { receipt, open } = found;
+  const { receipt, open, parties } = found;
   const unallocated = receipt.unappliedIqd;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
@@ -87,12 +87,23 @@ export default async function ReceiptPage({
     receipt.status === 'approved' && can(principal, 'post', receipts.PERMISSION_OBJECT);
 
   const fields: DocumentField[] = [
-    { label: column('reference'), value: <bdi dir="ltr">{receipt.receiptNo}</bdi> },
+    // The number, not "Reference" — the reference is the field below, and two
+    // boxes with one label read as one of them being wrong (and were one React
+    // key, which is how the duplication was found).
+    { label: column('document_no'), value: <bdi dir="ltr">{receipt.receiptNo}</bdi> },
     { label: column('status'), value: status(receipt.status), status: receipt.status },
+    // Who paid and into which account: the two things the form asked for and
+    // the document did not say back. The printed copy has carried them all
+    // along, so the screen was the odd one out. §16 — a receipt whose payer is
+    // unknown says so rather than naming nobody.
+    { label: column('customer_code'), value: <bdi dir="ltr">{parties.customerCode ?? '—'}</bdi> },
+    { label: column('customer_name'), value: <bdi dir="auto">{parties.customerName ?? '—'}</bdi> },
     {
       label: column('posting_date'),
       value: <bdi dir="ltr">{formatBusinessDate(receipt.receiptDate, locale as Locale)}</bdi>,
     },
+    { label: column('bank_code'), value: <bdi dir="ltr">{parties.bankCode ?? '—'}</bdi> },
+    { label: column('bank_name'), value: <bdi dir="auto">{parties.bankName ?? '—'}</bdi> },
     { label: column('branch_code'), value: <bdi dir="ltr">{receipt.branchCode}</bdi> },
     {
       label: t('customer_receipts.amount'),

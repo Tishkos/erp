@@ -1002,6 +1002,20 @@
       "when": 1795900000022,
       "tag": "0218_company_wide_bank_cash_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "7",
+      "when": 1795900000023,
+      "tag": "0219_remove_branch_cash_account_link",
+      "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "7",
+      "when": 1795900000024,
+      "tag": "0220_user_appearance_settings",
+      "breakpoints": true
     }
   ]
 }
