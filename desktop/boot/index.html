@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Qimah Al-Safinah ERP</title>
+    <style>
+      /* Deliberately close to the application's own sand palette, so the two
+         seconds before the server answers do not look like a different
+         program. No web fonts: this page has to render with no network. */
+      :root {
+        color-scheme: light;
+        --bg: #f3f2e9;
+        --panel: #fbfbf4;
+        --line: #aeb8ad;
+        --text: #17241f;
+        --muted: #68766e;
+        --accent: #e9aa24;
+        --accent-ink: #3a2600;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          color-scheme: dark;
+          --bg: #151a20;
+          --panel: #1d232a;
+          --line: #4d5a66;
+          --text: #e6edf3;
+          --muted: #8b98a5;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        display: grid;
+        min-height: 100vh;
+        margin: 0;
+        place-items: center;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+      }
+      main {
+        width: min(30rem, 90vw);
+        padding: 2rem;
+        border: 1px solid var(--line);
+        border-radius: 0.3rem;
+        background: var(--panel);
+        text-align: center;
+      }
+      h1 { margin: 0 0 0.35rem; font-size: 1.05rem; }
+      p { margin: 0.35rem 0; color: var(--muted); font-size: 0.82rem; line-height: 1.5; }
+      code {
+        color: var(--text);
+        font-size: 0.78rem;
+        overflow-wrap: anywhere;
+      }
+      .spinner {
+        width: 1.6rem;
+        height: 1.6rem;
+        margin: 0 auto 1rem;
+        border: 2px solid var(--line);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+      button {
+        margin-top: 1.1rem;
+        padding: 0.45rem 1.4rem;
+        border: 1px solid #b77d0b;
+        border-radius: 0.15rem;
+        background: linear-gradient(180deg, #ffd978, var(--accent));
+        color: var(--accent-ink);
+        font: inherit;
+        font-size: 0.8rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="spinner" id="spinner"></div>
+      <h1 id="heading">Connecting…</h1>
+      <p id="detail">Reaching the ERP server.</p>
+      <p><code id="target"></code></p>
+      <button hidden id="retry" type="button">Try again</button>
+    </main>
+
+    <script type="module">
+      /*
+       * The probe, and why it is written this way.
+       *
+       * `mode: 'no-cors'` gives an opaque response that tells us nothing about
+       * the reply — which is all we need. We are not reading the server, we are
+       * asking whether it is there. A cross-origin fetch that *reaches* a host
+       * resolves opaquely; one that cannot resolve DNS, cannot open a socket or
+       * times out rejects. That is the signal, and it needs no CORS header on
+       * the server and no HTTP client compiled into the shell.
+       *
+       * The navigation that follows is a normal top-level navigation, so no
+       * cross-origin rule applies to it at all — and the session cookie
+       * better-auth sets belongs to the server's own origin, where the WebView2
+       * profile keeps it across restarts.
+       */
+      const heading = document.getElementById('heading');
+      const detail = document.getElementById('detail');
+      const retry = document.getElementById('retry');
+      const spinner = document.getElementById('spinner');
+      const target = document.getElementById('target');
+
+      const invoke = window.__TAURI__?.core?.invoke;
+      const url = invoke ? await invoke('erp_url') : 'https://erp.qs-groups.com';
+      target.textContent = url;
+
+      const offline = (why) => {
+        spinner.hidden = true;
+        heading.textContent = 'The ERP server cannot be reached';
+        detail.textContent =
+          'Nothing is wrong with your data. Check the connection, then try again. ' +
+          (why ? `(${why})` : '');
+        retry.hidden = false;
+      };
+
+      async function connect() {
+        retry.hidden = true;
+        spinner.hidden = false;
+        heading.textContent = 'Connecting…';
+        detail.textContent = 'Reaching the ERP server.';
+
+        // A bounded wait: a server that is restarting should not leave the
+        // window spinning indefinitely with no way out.
+        const stop = new AbortController();
+        const timer = setTimeout(() => stop.abort(), 12_000);
+        try {
+          await fetch(`${url}/sign-in`, {
+            method: 'HEAD',
+            mode: 'no-cors',
+            cache: 'no-store',
+            signal: stop.signal,
+          });
+          clearTimeout(timer);
+          // `replace`, not `assign`: the boot page must not sit in the history
+          // where Back would return to it from inside the application.
+          window.location.replace(url);
+        } catch (error) {
+          clearTimeout(timer);
+          offline(stop.signal.aborted ? 'timed out' : 'no connection');
+        }
+      }
+
+      retry.addEventListener('click', connect);
+      connect();
+    </script>
+  </body>
+</html>

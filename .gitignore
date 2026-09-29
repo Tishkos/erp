@@ -61,3 +61,7 @@ var/
 # dev server logs, captured by the npm script, not part of the app
 .dev-server.err
 .dev-server.out
+
+# Tauri desktop shell — build output only; the source lives in src-tauri/
+src-tauri/target/
+src-tauri/gen/
