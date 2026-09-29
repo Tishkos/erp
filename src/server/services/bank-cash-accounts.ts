@@ -24,7 +24,7 @@
  * asset; a header carries the sum of what is beneath it and nothing posts to
  * it; and an account already spoken for by another cash account is not free.
  */
-import { and, asc, eq, inArray, not, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, not, or, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { appUser, bankCashAccount, branch, chartOfAccount } from '../db/schema';
 import {
@@ -152,6 +152,17 @@ export async function availableGlAccounts(tx: Tx, keep?: string | null) {
         eq(chartOfAccount.isGroup, false),
         eq(chartOfAccount.isActive, true),
         eq(chartOfAccount.approvalStatus, 'approved'),
+        // Not another subledger's control account. "An unused asset posting
+        // account" was the whole rule, and Accounts Receivable satisfies it —
+        // so on the live books a cash account had been pointed at exactly
+        // that, and a 5,000,000 receipt posted through it (2026-09-29).
+        //
+        // `bank` is the one control role that belongs here: it is what an
+        // account carrying a bank or cash balance is *for*, and the test
+        // fixtures have always flagged their ledger accounts with it. An
+        // unflagged asset account is still allowed, because most charts never
+        // set the flag and refusing them would offer nobody anything.
+        or(isNull(chartOfAccount.controlAccount), eq(chartOfAccount.controlAccount, 'bank')),
         takenIds.length > 0 ? not(inArray(chartOfAccount.id, takenIds)) : sql`true`,
       ),
     )
@@ -165,6 +176,7 @@ async function assertGlAccount(tx: Tx, id: string, keep?: string | null): Promis
       isGroup: chartOfAccount.isGroup,
       accountType: chartOfAccount.accountType,
       isActive: chartOfAccount.isActive,
+      controlAccount: chartOfAccount.controlAccount,
     })
     .from(chartOfAccount)
     .where(eq(chartOfAccount.id, id))
@@ -177,6 +189,17 @@ async function assertGlAccount(tx: Tx, id: string, keep?: string | null): Promis
     throw new AdminValidationError('glAccountId', 'must be an asset account — cash is an asset');
   }
   if (!account.isActive) throw new AdminValidationError('glAccountId', 'is not active');
+  // Refused when it is being *chosen*; allowed when it is the one the record
+  // already carries, so a bank or cash account that was mis-linked before this
+  // rule existed can still be opened and renamed. The dashboard's attention
+  // band is what says it is wrong; refusing the whole record would only make
+  // the mistake harder to correct.
+  if (account.controlAccount && account.controlAccount !== 'bank' && id !== keep) {
+    throw new AdminValidationError(
+      'glAccountId',
+      `is the ${account.controlAccount} control account, which its own subledger maintains — choose a cash or bank account`,
+    );
+  }
 
   const [claimed] = await tx
     .select({ code: bankCashAccount.code })

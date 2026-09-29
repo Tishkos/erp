@@ -268,6 +268,31 @@ describe('ops 6 · the bank and cash master', () => {
       ),
     ).rejects.toThrow(/already carried/);
   });
+
+  it('refuses another subledger’s control account, and keeps offering the plain ones', async () => {
+    // The live mistake this rule exists for (2026-09-29): three cash accounts
+    // had been pointed at Accounts Receivable, Inventory and Equipment, and a
+    // 5,000,000 customer receipt posted through one of them.
+    const receivable = await account('A000001', 'Accounts Receivable', 'customer');
+
+    await expect(
+      withScope(scope(manager), (tx) =>
+        banks.create(tx, manager, 'cash', {
+          name: 'Petty cash',
+          glAccountId: receivable,
+          currency: 'IQD',
+        }),
+      ),
+    ).rejects.toThrow(/customer control account/);
+
+    // And it is not offered in the first place, so nobody reaches that refusal
+    // by choosing from the list.
+    const offered = await withScope(scope(manager), (tx) => banks.availableGlAccounts(tx));
+    expect(offered.map((row) => row.id)).not.toContain(receivable);
+    // A `bank` control account is the one that does belong here, and an
+    // unflagged asset account still does: most charts never set the flag.
+    expect(offered.map((row) => row.id)).toContain(bankGl);
+  });
 });
 
 // ---------------------------------------------------------------------------

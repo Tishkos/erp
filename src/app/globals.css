@@ -315,6 +315,45 @@
   --radius-lg: 1rem;
 }
 
+/* ── The document window's own corners ────────────────────────────────────
+   `--radius` is the application's scale — panels, cards, the shell. The SAP
+   document windows are drawn much tighter than that on purpose (a document is
+   a form on paper), so they were written with their corners as literals:
+   0.2rem for a window, 0.12rem for a box or a control.
+
+   That is why choosing Pill or Sharp appeared to do nothing (reported
+   2026-09-29). The setting was stored, the attribute was on `.erp-root`, and
+   `--radius` changed — but the screens people actually look at are drawn by
+   admin.module.css, and a literal cannot follow a token. These two carry the
+   window scale instead, defaulting to exactly the values that were hard-coded,
+   so "Soft" is pixel-for-pixel what the application already looked like. */
+:is(.erp-root, .erp-appearance-preview) {
+  --w-radius: 0.2rem;
+  --w-radius-sm: 0.12rem;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-radius="sharp"] {
+  --w-radius: 0;
+  --w-radius-sm: 0;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-radius="subtle"] {
+  --w-radius: 0.3rem;
+  --w-radius-sm: 0.18rem;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-radius="rounded"] {
+  --w-radius: 0.7rem;
+  --w-radius-sm: 0.45rem;
+}
+
+/* A pill's controls go fully round; its windows do not — a rounded rectangle
+   is still a window, and a window with 999px corners is a lozenge. */
+:is(.erp-root, .erp-appearance-preview)[data-radius="pill"] {
+  --w-radius: 1rem;
+  --w-radius-sm: 999px;
+}
+
 .erp-root[data-width="contained"] {
   --content-max: 90rem;
 }
@@ -1764,10 +1803,6 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
     display: none;
   }
 
-  .erp-header__utilities > :is(.erp-appearance-trigger, .erp-locale-toggle) {
-    display: none;
-  }
-
   html[lang="ar"] .erp-brand {
     min-inline-size: 11.5rem;
   }
@@ -1789,6 +1824,19 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
 
   .erp-user-trigger__identity,
   .erp-user-trigger__chevron {
+    display: none;
+  }
+}
+
+/* Appearance and Language leave the header only when it is genuinely narrow.
+   They used to go at 108rem — 1728px — which is wider than almost every
+   laptop, so for nearly everybody the palette button simply was not there and
+   the appearance settings could not be reached at all except through the user
+   menu (reported 2026-09-29: "appearance doesn't work in production"). The
+   user menu still carries both, which is what makes hiding them safe here and
+   what made hiding them at 1728px invisible rather than obviously wrong. */
+@media (max-width: 60rem) {
+  .erp-header__utilities > :is(.erp-appearance-trigger, .erp-locale-toggle) {
     display: none;
   }
 }

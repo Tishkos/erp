@@ -68,7 +68,11 @@ test('preview swatches do not recolor the workspace and dark text stays readable
   test.setTimeout(120_000);
   await signIn(page);
   await page.goto('/profile');
-  await expect(page.locator('input[name="uiPalette"]')).toHaveCount(palettes.length + 1);
+  // One radio per palette and no more. The `+ 1` this used to carry was for a
+  // "follow the company" choice the profile screen no longer offers, so the
+  // count could never be met and the whole palette sweep below never ran —
+  // the assertion that was meant to guard the screen was hiding it.
+  await expect(page.locator('input[name="uiPalette"]')).toHaveCount(palettes.length);
   for (const palette of palettes) {
     for (const accent of accents) {
       await setAppearance(page, palette, accent);

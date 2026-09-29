@@ -1016,6 +1016,13 @@
       "when": 1795900000024,
       "tag": "0220_user_appearance_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1795900000025,
+      "tag": "0221_ceo_executive_view",
+      "breakpoints": true
     }
   ]
 }

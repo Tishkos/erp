@@ -254,13 +254,33 @@ function readStoredPreference<T extends string>(
   }
 }
 
+/**
+ * The attribute each preference is written to — one table, used by the write
+ * below and by every `readStoredPreference` call above.
+ *
+ * It was a conditional that special-cased `cornerStyle` and `contentWidth` and
+ * fell through to `data-${name}` for the rest. An HTML attribute name is
+ * case-insensitive, so `borderStyle` became `data-borderstyle` and
+ * `componentSize` became `data-componentsize` — attributes no stylesheet
+ * matches, while the server rendered the hyphenated ones and the read side
+ * looked for those too. Border style and Component size therefore did nothing
+ * at all, silently, and the panel showed the choice as taken (reported
+ * 2026-09-29). The names now exist in exactly one place.
+ */
+const PREFERENCE_ATTRIBUTE = {
+  theme: 'data-theme',
+  accent: 'data-accent',
+  appearance: 'data-appearance',
+  density: 'data-density',
+  cornerStyle: 'data-radius',
+  contentWidth: 'data-width',
+  borderStyle: 'data-border-style',
+  shadow: 'data-shadow',
+  componentSize: 'data-component-size',
+} as const satisfies Record<PreferenceName, `data-${string}`>;
+
 function applyPreference(name: PreferenceName, value: PreferenceValue): void {
-  const attribute =
-    name === 'cornerStyle'
-      ? 'data-radius'
-      : name === 'contentWidth'
-        ? 'data-width'
-        : `data-${name}`;
+  const attribute = PREFERENCE_ATTRIBUTE[name];
   const target = name === 'theme' || name === 'accent'
     ? document.documentElement
     : document.querySelector<HTMLElement>('.erp-root');

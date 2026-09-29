@@ -1600,7 +1600,7 @@
    decoration and people could not find it. */
 .dateInput::-webkit-calendar-picker-indicator {
   padding: 0.12rem;
-  border-radius: 0.25rem;
+  border-radius: var(--w-radius);
   background-color: color-mix(in srgb, var(--accent) 22%, transparent);
   cursor: pointer;
   opacity: 1;
@@ -1657,6 +1657,28 @@
   --w-accent-ink: #3a2600;
   --w-paper: #ffffff;
   --w-band: #f6f7f0;
+
+  /* The chips — a document's status, and a figure that is a problem.
+     These were four sets of hard-coded pastels, which is why every dark
+     palette still drew a Draft chip in cream on a near-black window
+     (reported 2026-09-29): a colour written as a hex cannot follow a theme.
+     Light values first, the same ones they always were; the dark palettes
+     override the whole set below, in one place. */
+  --chip-line: #c1aa67;
+  --chip-bg: #fff3bd;
+  --chip-ink: #654b06;
+  --chip-good-line: #86a28c;
+  --chip-good-bg: #e2f0df;
+  --chip-good-ink: #235b32;
+  --chip-info-line: #91a8bb;
+  --chip-info-bg: #e5eef5;
+  --chip-info-ink: #294f6d;
+  --chip-bad-line: #ca9b94;
+  --chip-bad-bg: #f7e5e2;
+  --chip-bad-ink: #7e332c;
+  --chip-warn-line: #b03a2e;
+  --chip-warn-bg: #f8d7d2;
+  --chip-warn-ink: #7d201a;
 }
 
 .sapDoc,
@@ -1671,7 +1693,7 @@
   margin-block-end: 0.85rem;
   overflow: hidden;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background: var(--w-bg);
   box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
 }
@@ -1735,7 +1757,7 @@
   padding: 0.25rem 0.45rem;
   overflow: hidden;
   border: 1px solid var(--w-line);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-field-ro);
   color: var(--w-text);
   font-size: 0.8rem;
@@ -1750,9 +1772,9 @@
   inline-size: fit-content;
   min-inline-size: 5.5rem;
   justify-content: center;
-  border-color: #c1aa67;
-  background: #fff3bd;
-  color: #654b06;
+  border-color: var(--chip-line);
+  background: var(--chip-bg);
+  color: var(--chip-ink);
   font-weight: 700;
 }
 
@@ -1761,24 +1783,24 @@
 .sapStatus[data-status='matched'],
 .sapStatus[data-status='posted'],
 .sapStatus[data-status='approved'] {
-  border-color: #86a28c;
-  background: #e2f0df;
-  color: #235b32;
+  border-color: var(--chip-good-line);
+  background: var(--chip-good-bg);
+  color: var(--chip-good-ink);
 }
 
 .sapStatus[data-status='submitted'] {
-  border-color: #91a8bb;
-  background: #e5eef5;
-  color: #294f6d;
+  border-color: var(--chip-info-line);
+  background: var(--chip-info-bg);
+  color: var(--chip-info-ink);
 }
 
 .sapStatus[data-status='exception'],
 .sapStatus[data-status='rejected'],
 .sapStatus[data-status='cancelled'],
 .sapStatus[data-status='reversed'] {
-  border-color: #ca9b94;
-  background: #f7e5e2;
-  color: #7e332c;
+  border-color: var(--chip-bad-line);
+  background: var(--chip-bad-bg);
+  color: var(--chip-bad-ink);
 }
 
 .sapGridCaption {
@@ -2084,7 +2106,7 @@
   block-size: auto;
   padding: 0.18rem 0.35rem;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-field);
   color: var(--w-text);
   font: inherit;
@@ -2106,7 +2128,7 @@
   min-block-size: 1.35rem;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: transparent;
   color: var(--w-muted);
   font-size: 0.72rem;
@@ -2208,7 +2230,7 @@
   block-size: auto;
   padding: 0.18rem 0.35rem;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-field);
   color: var(--w-text);
   font: inherit;
@@ -2237,7 +2259,7 @@
   min-block-size: 2rem;
   padding: 0.28rem 0.9rem;
   border: 1px solid var(--w-amber-line);
-  border-radius: 0.14rem;
+  border-radius: var(--w-radius-sm);
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
   color: var(--w-accent-ink, #3a2600);
   font-size: 0.78rem;
@@ -2345,7 +2367,7 @@
   min-inline-size: 6rem;
   padding: 0.24rem 0.4rem;
   border: 1px solid var(--w-line);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-field-ro);
   font-size: 0.78rem;
   font-weight: 700;
@@ -2377,10 +2399,10 @@
 /* An out-of-balance document says so where the totals are. */
 .sapWarn {
   padding: 0.28rem 0.5rem;
-  border: 1px solid #b03a2e;
-  border-radius: 0.12rem;
-  background: #f8d7d2;
-  color: #7d201a;
+  border: 1px solid var(--chip-warn-line);
+  border-radius: var(--w-radius-sm);
+  background: var(--chip-warn-bg);
+  color: var(--chip-warn-ink);
   font-size: 0.72rem;
   font-weight: 700;
 }
@@ -2420,7 +2442,7 @@
      written next to each other than guessed from another stylesheet. */
   padding: 1rem;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background: var(--w-bg);
   box-shadow: 0 1px 2px rgb(24 39 31 / 8%);
 }
@@ -2428,7 +2450,7 @@
   margin: -1rem -1rem 0.8rem;
   padding: 0.4rem 0.7rem 0.35rem;
   border-block-end: 4px solid var(--w-title-line);
-  border-radius: 0.15rem 0.15rem 0 0;
+  border-radius: var(--w-radius-sm) var(--w-radius-sm) 0 0;
   background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
 }
 .sapDoc.sapDoc section > header h2 {
@@ -2463,7 +2485,7 @@
   block-size: 2.05rem;
   border-color: var(--w-line-strong);
   border-inline-end: 0;
-  border-radius: 0.12rem 0 0 0.12rem;
+  border-radius: var(--w-radius-sm) 0 0 var(--w-radius-sm);
   background: var(--w-field);
 }
 
@@ -2473,17 +2495,17 @@
   min-block-size: 2.05rem;
   block-size: 2.05rem;
   padding: 0;
-  border-radius: 0 0.12rem 0.12rem 0;
+  border-radius: 0 var(--w-radius-sm) var(--w-radius-sm) 0;
 }
 
 :global(html[dir='rtl']) .sapRegister .toolbarSearch input {
   border-inline-start: 1px solid var(--w-line-strong);
   border-inline-end: 0;
-  border-radius: 0 0.12rem 0.12rem 0;
+  border-radius: 0 var(--w-radius-sm) var(--w-radius-sm) 0;
 }
 
 :global(html[dir='rtl']) .sapRegister.sapRegister .toolbarSearch button {
-  border-radius: 0.12rem 0 0 0.12rem;
+  border-radius: var(--w-radius-sm) 0 0 var(--w-radius-sm);
 }
 
 .sapRegisterTableWrap {
@@ -2636,7 +2658,7 @@
   margin: -0.25rem;
   padding: 0.75rem;
   border: 1px solid var(--w-line);
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background:
     linear-gradient(rgb(255 255 255 / 18%), rgb(255 255 255 / 0%)),
     var(--w-canvas);
@@ -2652,7 +2674,7 @@
   padding: 0.55rem 0.75rem 0.5rem;
   border: 1px solid var(--w-line-strong);
   border-block-end: 5px solid var(--w-title-line);
-  border-radius: 0.18rem 0.18rem 0 0;
+  border-radius: var(--w-radius) var(--w-radius) 0 0;
   background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
   box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
 }
@@ -2683,7 +2705,7 @@
   min-block-size: 1.9rem;
   padding-inline: 0.55rem 0.7rem;
   border-color: #557890;
-  border-radius: 0.18rem;
+  border-radius: var(--w-radius);
   color: #f8fbfd;
   background: linear-gradient(180deg, #7299b4, #456f8c);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 35%);
@@ -2719,7 +2741,7 @@
   padding: 0;
   overflow-x: auto;
   border-color: var(--w-line-strong);
-  border-radius: 0.15rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-head);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 55%);
   scrollbar-color: var(--w-line-strong) var(--w-canvas);
@@ -2751,7 +2773,7 @@
 .sapPage .flash {
   margin-block-end: 0.7rem;
   padding: 0.55rem 0.7rem;
-  border-radius: 0.15rem;
+  border-radius: var(--w-radius-sm);
   font-size: 0.76rem;
 }
 
@@ -2769,7 +2791,7 @@
   min-block-size: 2rem;
   padding-inline: 0.8rem;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.14rem;
+  border-radius: var(--w-radius-sm);
   color: var(--w-label);
   background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
@@ -2819,7 +2841,7 @@
   max-block-size: calc(100dvh - 2rem);
   overflow-y: auto;
   border-color: var(--w-line-strong);
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   color: var(--w-text);
   background: var(--w-bg);
   box-shadow: 0 22px 60px -20px rgb(15 27 21 / 55%);
@@ -2855,7 +2877,7 @@
   min-block-size: 1.7rem;
   padding: 0;
   border-color: var(--w-line-strong);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   color: var(--w-muted);
   background: var(--w-field-ro);
 }
@@ -2891,7 +2913,7 @@
   min-block-size: 2rem;
   padding-inline: 0.45rem;
   border-color: var(--w-line-strong);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   color: var(--w-text);
   background: var(--w-field);
   font-family: Tahoma, "Segoe UI", Arial, sans-serif;
@@ -2998,7 +3020,7 @@
   inline-size: 1.9rem;
   block-size: 1.9rem;
   border: 1px solid var(--w-line);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   color: #9a6d0b;
   background: var(--w-field-ro);
 }
@@ -3023,7 +3045,7 @@
 .sapDoc .uploadPicker {
   padding: 0.4rem 0.6rem;
   border-color: var(--w-line-strong);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   color: var(--w-label);
   background: var(--w-field-ro);
   font-size: 0.73rem;
@@ -3196,7 +3218,7 @@
 .sapPage :global(section[class*='panel']) {
   padding: 1rem;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background: var(--w-bg);
   box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
 }
@@ -3243,7 +3265,7 @@
   min-block-size: 2.05rem;
   block-size: 2.05rem;
   border-color: var(--w-line-strong);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-field);
 }
 
@@ -3367,7 +3389,7 @@
   block-size: 2.05rem;
   padding: 0;
   border: 1px solid var(--w-amber-line);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
   color: var(--w-accent-ink, #3a2600);
 }
@@ -3415,7 +3437,7 @@
 .sapPage :global(.coa-kpi-card),
 .sapPage :global(.panel) {
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background: var(--w-bg);
   box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
 }
@@ -3505,7 +3527,7 @@
 .sapPage :global(.coa-page-button),
 .sapPage :global(.action) {
   border: 1px solid var(--w-amber-line);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
   color: var(--w-accent-ink, #3a2600);
   font-weight: 700;
@@ -3534,7 +3556,7 @@
 .sapPage :global(.coa-select),
 .sapPage :global(.coa-context-field) {
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-field);
   color: var(--w-text);
   font-size: 0.78rem;
@@ -3544,7 +3566,7 @@
 .sapPage :global(.page__header) {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
   box-shadow: inset 0 -2px 0 var(--w-title-line);
 }
@@ -3694,7 +3716,7 @@
   justify-items: center;
   padding: 0.6rem;
   border: 1px solid var(--w-line, var(--border));
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background: var(--w-bg, var(--surface));
   cursor: pointer;
 }
@@ -3727,7 +3749,7 @@
   inline-size: 100%;
   overflow: hidden;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.15rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-canvas);
 }
 
@@ -3771,7 +3793,7 @@
   min-block-size: 1.75rem;
   padding-inline: 0.5rem 0.65rem;
   border: 1px solid var(--w-amber-line);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
   color: var(--w-accent-ink, #3a2600);
   font-size: 0.76rem;
@@ -3899,14 +3921,14 @@
    otherwise ruled screen that still read as a different product. */
 .sapPage .stat {
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background: var(--w-bg);
   box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
 }
 
 .sapPage .statIcon {
   border: 1px solid var(--w-line);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-head-strong);
   color: var(--w-label);
 }
@@ -4023,7 +4045,7 @@
   gap: 0.45rem;
   padding: 0.35rem 0.6rem;
   border: 1px solid var(--w-line, var(--border));
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background: var(--w-bg, var(--surface));
   cursor: pointer;
 }
@@ -4051,7 +4073,7 @@
   inline-size: 1.05rem;
   block-size: 1.05rem;
   border: 1px solid var(--w-amber-line);
-  border-radius: 0.15rem;
+  border-radius: var(--w-radius-sm);
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
 }
 
@@ -4097,7 +4119,7 @@
 .sapPage :global(.action) {
   min-block-size: 2rem;
   padding-inline: 0.85rem;
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   font-size: 0.76rem;
   font-weight: 700;
 }
@@ -4128,7 +4150,7 @@
 .sapPage .avatarLarge,
 .sapPage .avatarSmall {
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.15rem;
+  border-radius: var(--w-radius-sm);
   color: var(--w-label);
   background: var(--w-head-strong);
 }
@@ -4190,7 +4212,7 @@
 .sapDoc .timeline li::before,
 .sapPage .timeline li::before {
   border: 1px solid var(--w-amber-line);
-  border-radius: 0.1rem;
+  border-radius: var(--w-radius-sm);
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
 }
 
@@ -4227,7 +4249,7 @@
   min-inline-size: 1.8rem;
   min-block-size: 1.7rem;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-bg);
   color: var(--w-label);
   font-size: 0.76rem;
@@ -4728,6 +4750,29 @@
   --status-posted: #75d7a1;
   --status-approved: #9cbfff;
   --status-submitted: #f4c568;
+
+  /* The chips, on a dark ground. Built from the `--status-*` tokens this block
+     already sets rather than from a second set of hand-picked colours: the ink
+     is the status colour itself — light, because these are the dark variants —
+     over a low tint of it mixed into the window's own field colour, so a chip
+     belongs to whichever dark palette is on and not to a generic "dark mode".
+     The mix is against `--w-field`, so Espresso's chips are warm and Ocean's
+     are cool without either being written down. */
+  --chip-line: color-mix(in srgb, var(--status-submitted) 55%, var(--w-line-strong));
+  --chip-bg: color-mix(in srgb, var(--status-submitted) 16%, var(--w-field));
+  --chip-ink: var(--status-submitted);
+  --chip-good-line: color-mix(in srgb, var(--status-posted) 55%, var(--w-line-strong));
+  --chip-good-bg: color-mix(in srgb, var(--status-posted) 16%, var(--w-field));
+  --chip-good-ink: var(--status-posted);
+  --chip-info-line: color-mix(in srgb, var(--status-approved) 55%, var(--w-line-strong));
+  --chip-info-bg: color-mix(in srgb, var(--status-approved) 16%, var(--w-field));
+  --chip-info-ink: var(--status-approved);
+  --chip-bad-line: color-mix(in srgb, var(--status-rejected) 55%, var(--w-line-strong));
+  --chip-bad-bg: color-mix(in srgb, var(--status-rejected) 16%, var(--w-field));
+  --chip-bad-ink: var(--status-rejected);
+  --chip-warn-line: color-mix(in srgb, var(--status-rejected) 60%, var(--w-line-strong));
+  --chip-warn-bg: color-mix(in srgb, var(--status-rejected) 18%, var(--w-field));
+  --chip-warn-ink: var(--status-rejected);
 }
 
 :global([data-palette] input[type='checkbox']),
@@ -4746,7 +4791,7 @@
   min-block-size: 1rem;
   padding: 0;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.15rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-field);
   vertical-align: middle;
   cursor: pointer;
@@ -4931,7 +4976,7 @@
   min-block-size: 1.7rem;
   padding: 0.15rem 0.55rem;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.14rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-bg);
   color: var(--w-label);
   font-size: 0.72rem;
@@ -4985,7 +5030,7 @@
 .sapBalanced {
   padding: 0.28rem 0.5rem;
   border: 1px solid #86a28c;
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: #e2f0df;
   color: #235b32;
   font-size: 0.72rem;
