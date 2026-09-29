@@ -239,6 +239,8 @@ describe('every screen has one address', () => {
       '/sales/customer-statements',
       // Block 9 — Sales Returns.
       '/sales/sales-returns',
+      // §17 — Bank and Cash Reporting, beside the accounts it reports on.
+      '/treasury/reporting',
     ]);
   });
 });

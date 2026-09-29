@@ -20,6 +20,7 @@ import * as partners from '../services/partners';
 import * as statement from '../services/partner-statement';
 import * as stock from '../services/stock-operations';
 import * as shipments from '../services/supplier-shipment';
+import * as treasuryReports from '../services/treasury-reports';
 import * as trialBalanceService from '../services/trial-balance';
 import { decimalString, isZero, scaled, sumMoney, sumQuantity } from './decimal';
 import type { BuildContext, Built } from './documents';
@@ -447,6 +448,129 @@ export async function stockLedger(ctx: BuildContext, query: Query): Promise<Buil
       fileName: `stock-ledger_${itemCode}_${filter.from ?? 'all'}_${filter.to ?? 'all'}`,
     }),
     `stock_ledger:${itemCode}`,
+  );
+}
+
+/**
+ * Bank and Cash Reporting — §17, the printed copy.
+ *
+ * The positions table always; one account's transactions as a second table
+ * when the screen was looking at one, because the copy must be the screen and
+ * a reader who printed a drill-down expects the drill-down.
+ */
+export async function treasuryReporting(ctx: BuildContext, query: Query): Promise<Built | null> {
+  const { m, locale } = ctx;
+  const year = thisYear();
+  const from = param(query, 'from', `${year}-01-01`);
+  const to = param(query, 'to', today());
+  const asked = (query.get('kind') ?? '').trim();
+  const kind = asked === 'bank' || asked === 'cash' ? (asked as 'bank' | 'cash') : null;
+  const account = (query.get('account') ?? '').trim();
+  const actor = { principal: ctx.principal, branchCode: ctx.branchCode };
+
+  const positions = await treasuryReports.positions(ctx.tx, actor, { from, to }, { kind });
+  const money = (value: string) => value;
+
+  const tables: Table[] = [
+    {
+      title: m.admin('treasury_reporting.closing'),
+      columns: [
+        { key: 'account', label: m.column('account'), kind: 'text', weight: 1.6 },
+        { key: 'type', label: m.column('account_type'), kind: 'text' },
+        { key: 'currency', label: m.column('currency'), kind: 'code' },
+        { key: 'opening', label: m.admin('treasury_reporting.opening'), kind: 'money' },
+        { key: 'in', label: m.admin('treasury_reporting.money_in'), kind: 'money' },
+        { key: 'out', label: m.admin('treasury_reporting.money_out'), kind: 'money' },
+        { key: 'transfer_in', label: m.admin('treasury_reporting.transfers_in'), kind: 'money' },
+        { key: 'transfer_out', label: m.admin('treasury_reporting.transfers_out'), kind: 'money' },
+        { key: 'closing', label: m.admin('treasury_reporting.closing'), kind: 'money' },
+      ],
+      rows: positions.map((row) => ({
+        cells: {
+          account: `${row.accountName} · ${row.accountCode}`,
+          type: m.admin(`treasury_reporting.kind_${row.kind}`),
+          currency: row.currency,
+          opening: money(row.openingIqd),
+          in: money(row.moneyInIqd),
+          out: money(row.moneyOutIqd),
+          transfer_in: money(row.transfersInIqd),
+          transfer_out: money(row.transfersOutIqd),
+          closing: money(row.closingIqd),
+        },
+      })),
+      empty: m.admin('treasury_reporting.no_accounts'),
+      totals: {
+        label: m.admin('reports.totals'),
+        cells: {
+          opening: sumMoney(positions.map((row) => row.openingIqd)),
+          in: sumMoney(positions.map((row) => row.moneyInIqd)),
+          out: sumMoney(positions.map((row) => row.moneyOutIqd)),
+          transfer_in: sumMoney(positions.map((row) => row.transfersInIqd)),
+          transfer_out: sumMoney(positions.map((row) => row.transfersOutIqd)),
+          closing: sumMoney(positions.map((row) => row.closingIqd)),
+        },
+      },
+    },
+  ];
+
+  const ledger = account ? await treasuryReports.ledger(ctx.tx, actor, account, { from, to }) : null;
+  if (ledger) {
+    tables.push({
+      title: `${ledger.accountName} · ${ledger.accountCode}`,
+      columns: [
+        { key: 'date', label: m.column('date'), kind: 'date' },
+        { key: 'reference', label: m.column('reference'), kind: 'code', weight: 1.4 },
+        { key: 'movement', label: m.column('movement'), kind: 'text' },
+        { key: 'party', label: m.admin('treasury_reporting.party'), kind: 'text', weight: 1.4 },
+        { key: 'in', label: m.admin('treasury_reporting.money_in'), kind: 'money' },
+        { key: 'out', label: m.admin('treasury_reporting.money_out'), kind: 'money' },
+        { key: 'balance', label: m.admin('treasury_reporting.running_balance'), kind: 'money' },
+      ],
+      rows: [
+        {
+          tone: 'opening' as const,
+          cells: { date: ledger.from, movement: m.admin('treasury_reporting.opening'), balance: ledger.openingIqd },
+        },
+        ...ledger.lines.map((line) => ({
+          cells: {
+            date: line.postingDate,
+            reference: line.entryNo,
+            movement: m.admin(`treasury_reporting.movement_${line.kind}`),
+            party: line.partyName ?? '',
+            in: Number(line.debitIqd) === 0 ? null : line.debitIqd,
+            out: Number(line.creditIqd) === 0 ? null : line.creditIqd,
+            balance: line.balanceIqd,
+          },
+        })),
+      ],
+      empty: m.admin('treasury_reporting.no_movements'),
+      totals: {
+        label: m.admin('treasury_reporting.closing'),
+        cells: { in: ledger.totalInIqd, out: ledger.totalOutIqd, balance: ledger.closingIqd },
+        // The closing balance is where the running balance ends, not a sum.
+        sum: ['in', 'out'],
+      },
+    });
+  }
+
+  return built(
+    ctx,
+    report({
+      title: m.print('titles.treasury_reporting'),
+      currency: 'IQD',
+      orientation: 'landscape',
+      filters: [
+        { label: m.admin('reports.from'), value: day(from, locale), ltr: true },
+        { label: m.admin('reports.to'), value: day(to, locale), ltr: true },
+        {
+          label: m.column('account_type'),
+          value: kind ? m.admin(`treasury_reporting.kind_${kind}`) : m.admin('treasury_reporting.all_accounts'),
+        },
+      ],
+      tables,
+      fileName: `bank-cash-reporting_${from}_${to}`,
+    }),
+    account || 'all',
   );
 }
 

@@ -307,7 +307,9 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('bank_reconciliation', 'bank_reconciliation', '07'),
       page('daily_position', 'daily_position', '07'),
       page('cash_forecast', 'cash_forecast', '07'),
-      page('treasury_reports', 'treasury_report', '07'),
+      // Bank and Cash Reporting — every account's balance and what it is
+      // made of, beside the accounts themselves (2026-09-29).
+      page('treasury_reports', 'bank_account', '07', '/treasury/reporting'),
     ],
   },
   {

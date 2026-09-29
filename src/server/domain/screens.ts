@@ -430,6 +430,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/purchasing/supplier-statements',
   // Where every document that cannot name its own account says which one.
   '/finance/posting-mappings',
+  // Treasury and Banking reporting — the balance, and what it is made of.
+  '/treasury/reporting',
 ]);
 
 export function isDelivered(route: string): boolean {

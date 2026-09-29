@@ -49,6 +49,7 @@ const BUILDERS = {
   warehouses_report: (ctx, input) => reports.warehousesReport(ctx, input.query),
   stock_movement: (ctx, input) => reports.stockMovement(ctx, input.query),
   stock_ledger: (ctx, input) => reports.stockLedger(ctx, input.query),
+  treasury_reporting: (ctx, input) => reports.treasuryReporting(ctx, input.query),
   invoice_status_tracking: (ctx, input) => reports.invoiceStatusTracking(ctx, input.query),
   trial_balance: (ctx, input) => reports.trialBalance(ctx, input.query),
   income_statement: (ctx, input) => reports.incomeStatement(ctx, input.query),

@@ -127,6 +127,14 @@ export const OPERATIONS: readonly string[] = [
    * nowhere else to say it.
    */
   '/finance/posting-mappings',
+  /*
+   * Bank and Cash Reporting (2026-09-29). §17's daily position, asked for as a
+   * screen beside the accounts it reports on: every account's opening, what
+   * came in, what went out, what merely moved between the company's own
+   * accounts, and what it closes at — each figure read from the G/L rather
+   * than stored.
+   */
+  '/treasury/reporting',
 ];
 
 const VISIBLE: ReadonlySet<string> = new Set([
