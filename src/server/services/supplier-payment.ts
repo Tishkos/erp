@@ -439,7 +439,10 @@ export async function post(
   // credit the wrong account on every payment and 07.1's identity — an account's
   // ledger balance *is* its G/L balance — would quietly stop holding.
   const [account] = await tx
-    .select({ glAccountId: bankCashAccount.glAccountId })
+    // The code as well as the id: the bank subledger's party is the account
+    // code, and without it a G/L account flagged as a bank control account
+    // refuses the whole posting (§1.2).
+    .select({ glAccountId: bankCashAccount.glAccountId, code: bankCashAccount.code })
     .from(bankCashAccount)
     .where(eq(bankCashAccount.id, payment.bankCashAccountId))
     .limit(1);
@@ -460,6 +463,7 @@ export async function post(
         credit: payment.amountIqd,
         criteria,
         dimensions,
+        bankAccountCode: account!.code,
       },
     ],
   });
@@ -545,7 +549,10 @@ export async function reverse(
     .limit(1);
 
   const [account] = await tx
-    .select({ glAccountId: bankCashAccount.glAccountId })
+    // The code as well as the id: the bank subledger's party is the account
+    // code, and without it a G/L account flagged as a bank control account
+    // refuses the whole posting (§1.2).
+    .select({ glAccountId: bankCashAccount.glAccountId, code: bankCashAccount.code })
     .from(bankCashAccount)
     .where(eq(bankCashAccount.id, payment.bankCashAccountId))
     .limit(1);
@@ -570,6 +577,7 @@ export async function reverse(
         debit: payment.amountIqd,
         criteria,
         dimensions,
+        bankAccountCode: account!.code,
       },
       { role: 'supplier_payable', credit: payment.amountIqd, criteria, dimensions },
     ],

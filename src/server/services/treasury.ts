@@ -651,6 +651,7 @@ export async function postTransfer(
       debit: transfer.receivedAmount,
       criteria,
       dimensions,
+      bankAccountCode: to!.code,
       description: `Into ${to!.code}`,
     },
     {
@@ -659,6 +660,7 @@ export async function postTransfer(
       credit: transfer.amount,
       criteria,
       dimensions,
+      bankAccountCode: from!.code,
       description: `Out of ${from!.code}`,
     },
   ];

@@ -232,6 +232,22 @@ export interface PostingLineRequest {
   readonly description?: string | null;
   /** §3.3 — "source module, document and line identifiers for complete drill-down". */
   readonly sourceLineId?: string | null;
+  /**
+   * Which bank or cash account this line is against.
+   *
+   * §1.2 requires a bank subledger that reconciles to the G/L, and
+   * `subledger.ts` reads the party for a `bank` control account from the
+   * line's own `bank_account_code`. Without a way to supply it, any document
+   * posting to a G/L account flagged as a bank control account was refused
+   * outright — receipts, payments and transfers alike — while a manual journal
+   * through `journal.addLine` posted fine, because only that path could carry
+   * the code. Found on 2026-09-29 while building the treasury report.
+   *
+   * Not a §4.2 dimension: the seven are branch, department, business line,
+   * project, warehouse, business partner and employee. This is the subledger's
+   * party, which is a different thing and lives in its own column.
+   */
+  readonly bankAccountCode?: string | null;
 }
 
 export interface PostingRequest {
@@ -277,6 +293,8 @@ export interface PlannedLine {
   readonly dimensions: Readonly<Record<string, string | null | undefined>>;
   readonly sourceLineId: string | null;
   readonly description: string | null;
+  /** The bank subledger's party, carried from the request. */
+  readonly bankAccountCode: string | null;
 }
 
 /**

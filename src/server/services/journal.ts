@@ -30,6 +30,7 @@ import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 import type { SuppliedDimensions } from '../domain/dimensions';
 import {
   appUser,
+  bankCashAccount,
   chartOfAccount,
   department,
   journalEntry,
@@ -216,6 +217,25 @@ export async function createDraft(
  * Entry"), the IQD and USD figures are derived from it, and the dimensions are
  * validated against the account and the document type (§4.2).
  */
+/**
+ * Which bank or cash account a G/L account belongs to, if any.
+ *
+ * Asked only of an account flagged as a `bank` control account. One row at
+ * most, by `bank_cash_account_gl_uniq`.
+ */
+async function bankAccountCodeFor(
+  tx: Tx,
+  account: { readonly id: string; readonly controlAccount: string | null },
+): Promise<string | null> {
+  if (account.controlAccount !== 'bank') return null;
+  const [row] = await tx
+    .select({ code: bankCashAccount.code })
+    .from(bankCashAccount)
+    .where(eq(bankCashAccount.glAccountId, account.id))
+    .limit(1);
+  return row?.code ?? null;
+}
+
 export async function addLine(
   tx: Tx,
   ctx: ActorContext,
@@ -308,7 +328,17 @@ export async function addLine(
     warehouseCode: dimensions.warehouse ?? null,
     businessPartnerCode: dimensions.business_partner ?? null,
     employeeCode: dimensions.employee ?? null,
-    bankAccountCode: input.bankAccountCode ?? null,
+    /*
+     * Named by the person, or derived from the account.
+     *
+     * A line on a bank control account must say which bank it is against or
+     * the subledger refuses the entry (§1.2). Requiring the typist to know
+     * that makes a rule out of something the data already answers:
+     * `bank_cash_account_gl_uniq` allows at most one bank or cash account per
+     * G/L account, so the account names its own bank. What is typed still
+     * wins; this only fills the silence.
+     */
+    bankAccountCode: input.bankAccountCode ?? (await bankAccountCodeFor(tx, account)),
     lineDescription: input.description ?? null,
   });
 

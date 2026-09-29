@@ -127,15 +127,13 @@ beforeAll(async () => {
     rates.publishRate(tx, manager, { currency: 'USD', iqdPerUnit: '1310.00000000', effectiveFrom: '2026-01-01' }),
   );
 
-  // Deliberately NOT flagged `control_account = 'bank'`, which is how every
-  // cash account on the live books is set up. A flagged account cannot be
-  // posted through at all: the subledger asks each line which bank it is
-  // against, and `PostingLineRequest` has no field to answer with — so a
-  // receipt, a payment or a transfer through such an account refuses. That is
-  // a defect in the posting engine, recorded here rather than worked around,
-  // and this suite tests the report rather than that.
-  const glA = await account('A000001', 'Treasury test — cash A');
-  const glB = await account('A000001', 'Treasury test — cash B');
+  // Flagged `control_account = 'bank'`, which is the semantically right thing
+  // for an account carrying a bank balance and, until 2026-09-29, the one
+  // setup that could not post at all: the subledger asks each line which bank
+  // it is against and nothing could answer. The engine now derives it from the
+  // account, so this suite exercises the case that used to refuse.
+  const glA = await account('A000001', 'Treasury test — cash A', 'bank');
+  const glB = await account('A000001', 'Treasury test — cash B', 'bank');
   equityAccountId = await account('E000001', 'Treasury test — funding');
 
   const made = await withScope(scope(manager), async (tx) => ({

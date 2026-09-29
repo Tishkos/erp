@@ -274,6 +274,9 @@ export async function post(
       // the bank subledger; putting it in the ledger as an eighth dimension
       // would create one no account can require and nothing can report on.
       dimensions,
+      // The bank subledger's party (§1.2). Without it a G/L account flagged as
+      // a bank control account refuses the whole posting.
+      bankAccountCode: account?.code ?? null,
       description: account?.code ? `Received into ${account.code}` : null,
     },
     {
