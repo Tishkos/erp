@@ -1,6 +1,6 @@
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
-import { apInvoice, arInvoice, customerReceipt } from '../db/schema';
+import { apInvoice, arInvoice, businessPartner, customerReceipt } from '../db/schema';
 import { AGEING_BUCKETS, bucketFor, type AgeingBucket } from '../domain/ageing';
 import { parseDecimal, toDecimalString } from '../domain/money';
 import { can, type Principal } from '../domain/permissions';
@@ -8,6 +8,7 @@ import * as approvals from './approvals';
 import * as banks from './bank-cash-accounts';
 import * as statements from './financial-statements';
 import * as integrity from './inventory-integrity';
+import * as inventoryReports from './inventory-reports';
 import { rows as listRows } from './list';
 import * as notifications from './notifications';
 import * as statement from './partner-statement';
@@ -306,6 +307,138 @@ async function attentionFor(tx: Tx, principal: Principal, branchCode: string): P
   };
 }
 
+// ----------------------------------------------------------------- charts
+
+export interface MonthResult {
+  /** `YYYY-MM`. */
+  readonly month: string;
+  readonly incomeIqd: string;
+  readonly expensesIqd: string;
+  readonly resultIqd: string;
+}
+
+/**
+ * Income and what it cost, month by month.
+ *
+ * Twelve calls to `profitOrLoss` rather than one query grouped by month, and
+ * the reason is worth stating: the Income Statement's totals come from the
+ * *statement layout* — which lines Finance mapped where — not from summing
+ * account types. A monthly query written here would be a second opinion about
+ * what counts as income, and the month a chart disagrees with the statement is
+ * the month nobody trusts either. The same function the statement calls,
+ * twelve times, cannot disagree with it.
+ */
+async function monthlyResult(
+  tx: Tx,
+  branchCode: string,
+  asOf: string,
+  months = 12,
+): Promise<readonly MonthResult[]> {
+  const end = new Date(`${asOf}T00:00:00Z`);
+  const windows: { month: string; from: string; to: string }[] = [];
+  for (let back = months - 1; back >= 0; back -= 1) {
+    const first = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - back, 1));
+    const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0));
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    windows.push({ month: iso(first).slice(0, 7), from: iso(first), to: iso(last) });
+  }
+
+  return Promise.all(
+    windows.map(async (window) => {
+      const pl = await statements.profitOrLoss(tx, {
+        from: window.from,
+        to: window.to,
+        branchCode,
+        currency: 'IQD',
+      });
+      return {
+        month: window.month,
+        incomeIqd: pl.totalIncome,
+        expensesIqd: pl.totalExpenses,
+        resultIqd: pl.result,
+      };
+    }),
+  );
+}
+
+export interface NamedAmount {
+  readonly key: string;
+  readonly label: string;
+  readonly amountIqd: string;
+}
+
+/**
+ * A stock value at the money scale.
+ *
+ * `inventoryReports.valuation` answers with FIFO value at ten decimal places —
+ * quantity times unit cost, left unrounded because the Warehouses Report shows
+ * the multiplication rather than a rounded product. `parseDecimal` refuses that
+ * precision deliberately: "a rounding decision belongs to a documented rule,
+ * not to a parser". This is the rule — half-up to the four places every other
+ * figure on this page carries — written down where it is made rather than
+ * hidden in a cast. Without it the whole band threw and the chart silently did
+ * not appear (2026-09-29).
+ */
+function stockValue(value: string): bigint {
+  const trimmed = value.trim();
+  const [whole, fraction = ''] = trimmed.split('.');
+  if (fraction.length <= Number(MONEY)) return parseDecimal(trimmed, MONEY);
+  const kept = parseDecimal(`${whole}.${fraction.slice(0, Number(MONEY))}`, MONEY);
+  const nextPlace = Number(fraction[Number(MONEY)] ?? '0');
+  if (nextPlace < 5) return kept;
+  return trimmed.startsWith('-') ? kept - 1n : kept + 1n;
+}
+
+/** What is in each warehouse, at FIFO cost — the Warehouses Report, summed. */
+async function stockByWarehouse(tx: Tx, principal: Principal): Promise<readonly NamedAmount[]> {
+  const rows = await inventoryReports.valuation(tx, principal, { allPermittedBranches: false });
+  const byHouse = new Map<string, { label: string; total: bigint }>();
+  for (const row of rows) {
+    const held = byHouse.get(row.warehouseCode) ?? { label: row.warehouseName, total: 0n };
+    byHouse.set(row.warehouseCode, {
+      label: row.warehouseName,
+      total: held.total + stockValue(row.valueIqd),
+    });
+  }
+  return [...byHouse]
+    .map(([key, held]) => ({ key, label: held.label, amountIqd: toDecimalString(held.total, MONEY) }))
+    .filter((row) => Number(row.amountIqd) !== 0)
+    .sort((a, b) => Number(b.amountIqd) - Number(a.amountIqd));
+}
+
+/**
+ * Who we sold the most to — posted invoices only, biggest first, top eight.
+ *
+ * Eight because that is where the categorical palette stops and where a bar
+ * list stops being readable; everything past it is the Sales Invoice register's
+ * job, which this links to.
+ */
+async function topCustomers(tx: Tx, branchCode: string, from: string, to: string): Promise<readonly NamedAmount[]> {
+  const rows = await tx
+    .select({
+      code: businessPartner.code,
+      name: businessPartner.legalName,
+      net: sql<string>`coalesce(sum(${arInvoice.netIqd}), 0)::text`,
+    })
+    .from(arInvoice)
+    .innerJoin(businessPartner, eq(businessPartner.id, arInvoice.customerId))
+    .where(
+      and(
+        eq(arInvoice.branchCode, branchCode),
+        inArray(arInvoice.status, [...OPEN_INVOICE_STATUSES]),
+        gte(arInvoice.invoiceDate, from),
+        lte(arInvoice.invoiceDate, to),
+      ),
+    )
+    .groupBy(businessPartner.code, businessPartner.legalName);
+
+  return rows
+    .map((row) => ({ key: row.code, label: row.name, amountIqd: row.net }))
+    .filter((row) => Number(row.amountIqd) > 0)
+    .sort((a, b) => Number(b.amountIqd) - Number(a.amountIqd))
+    .slice(0, 8);
+}
+
 // ---------------------------------------------------------------- the lot
 
 export interface Activity {
@@ -325,6 +458,10 @@ export interface Dashboard {
   readonly payable: Band<Ageing>;
   readonly result: Band<{ readonly income: string; readonly expenses: string; readonly result: string; readonly from: string; readonly to: string }>;
   readonly activity: Band<readonly Activity[]>;
+  /** Charts. Each is its own band, so a slow one costs only itself. */
+  readonly monthly: Band<readonly MonthResult[]>;
+  readonly stock: Band<readonly NamedAmount[]>;
+  readonly customers: Band<readonly NamedAmount[]>;
   readonly attention: Band<Attention>;
 }
 
@@ -346,7 +483,7 @@ export async function forPrincipal(
   const asOf = today();
   const yearStart = `${asOf.slice(0, 4)}-01-01`;
 
-  const [waiting, accountBalances, receivable, payable, result, activity, attention] =
+  const [waiting, accountBalances, receivable, payable, result, activity, attention, monthly, stock, customers] =
     await Promise.all([
       band('waiting', () => waitingFor(tx, principal)),
 
@@ -406,6 +543,20 @@ export async function forPrincipal(
         : Promise.resolve(null),
 
       band('attention', () => attentionFor(tx, principal, branchCode)),
+
+      // The charts. Twelve months of the Income Statement's own figure, what
+      // the warehouses hold, and who we sold the most to this year.
+      can(principal, 'view', 'financial_statement')
+        ? band('monthly', () => monthlyResult(tx, branchCode, asOf))
+        : Promise.resolve(null),
+
+      can(principal, 'view', 'inventory_movement')
+        ? band('stock', () => stockByWarehouse(tx, principal))
+        : Promise.resolve(null),
+
+      can(principal, 'view', 'ar_invoice')
+        ? band('customers', () => topCustomers(tx, branchCode, yearStart, asOf))
+        : Promise.resolve(null),
     ]);
 
   return {
@@ -418,6 +569,9 @@ export async function forPrincipal(
     result,
     activity,
     attention,
+    monthly,
+    stock,
+    customers,
   };
 }
 

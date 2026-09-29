@@ -1,8 +1,10 @@
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, admin as s } from '@/components/admin';
 import { Band, BandTable, Figure, Figures } from '@/components/admin/dashboard-band';
+import { BarList, Chart, GroupedColumns, Legend, StackedBands } from '@/components/admin/charts';
 import { documentHref } from '@/components/admin/document-link';
 import { formatBusinessDate, formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
 import { registerAllLists } from '@/server/lists';
@@ -61,6 +63,9 @@ export default async function Home() {
     '90+': 'bucket_over_90',
   };
   const bucketName = (bucket: string) => t(`dashboard.${BUCKET_KEY[bucket] ?? 'bucket_current'}`);
+  // Which ramp step each bucket wears. Ordered by how late the money is, so
+  // the darkest step always means "90 days and over" whatever the amounts are.
+  const BUCKET_STEP: Record<string, number> = { current: 1, '1-30': 2, '31-60': 3, '61-90': 4, '90+': 5 };
 
   // Said once, at the top: every figure below is this branch, as at this day.
   // A figure whose scope is unstated is a figure nobody can reconcile.
@@ -75,6 +80,228 @@ export default async function Home() {
   const waiting = view.waiting;
   const attention = view.attention;
   const showAttention = attention !== null && dashboard.hasAttention(attention);
+
+  // ── The charts ───────────────────────────────────────────────────────────
+  // Assembled here rather than in the markup so each one can decide for itself
+  // whether it has anything to say. A chart of nothing is worse than no chart:
+  // it looks like a fault in the data.
+  const num = (value: string) => Number(value);
+  // The charts carry numbers; the tables under them carry the services own
+  // decimal strings. Only the label passes through here, so nothing is added
+  // or re-totalled from a rounded figure.
+  const chartMoney = (value: number) => money(String(value));
+  const monthName = (month: string) =>
+    new Date(`${month}-01T00:00:00Z`).toLocaleString(locale, { month: 'short', timeZone: 'UTC' });
+  const charts: ReactNode[] = [];
+
+  if (view.monthly && view.monthly.some((row) => num(row.incomeIqd) + num(row.expensesIqd) !== 0)) {
+    const income = {
+      label: t('dashboard.income'),
+      token: '--chart-series-1',
+      values: view.monthly.map((row) => num(row.incomeIqd)),
+    };
+    const expenses = {
+      label: t('dashboard.expenses'),
+      token: '--chart-series-2',
+      values: view.monthly.map((row) => num(row.expensesIqd)),
+    };
+    charts.push(
+      <Chart
+        hint={t('dashboard.last_months', { count: view.monthly.length })}
+        key="monthly"
+        table={
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">{column('date')}</th>
+                <th scope="col">{t('dashboard.income')}</th>
+                <th scope="col">{t('dashboard.expenses')}</th>
+                <th scope="col">{t('dashboard.net_result')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {view.monthly.map((row) => (
+                <tr key={row.month}>
+                  <td>{row.month}</td>
+                  <td>{money(row.incomeIqd)}</td>
+                  <td>{money(row.expensesIqd)}</td>
+                  <td>{money(row.resultIqd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        }
+        title={t('dashboard.chart_trading')}
+        wide
+      >
+        <Legend series={[income, expenses]} />
+        <GroupedColumns
+          format={chartMoney}
+          labels={view.monthly.map((row) => monthName(row.month))}
+          series={[income, expenses]}
+        />
+      </Chart>,
+    );
+  }
+
+  // Owed to us and owed by us, each as one ordered stack. Ageing is a scale,
+  // not a set of identities, so this is the one-hue ramp: later is darker.
+  for (const [key, ageing, side, href] of [
+    ['receivable', view.receivable, t('dashboard.receivable'), '/sales/ar-invoices'],
+    ['payable', view.payable, t('dashboard.payable'), '/purchasing/ap-invoices'],
+  ] as const) {
+    if (!ageing || ageing.invoices === 0) continue;
+    charts.push(
+      <Chart
+        hint={t('dashboard.of_total', { total: money(ageing.totalIqd) })}
+        key={`ageing-${key}`}
+        table={
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">{t('dashboard.bucket')}</th>
+                <th scope="col">{column('document')}</th>
+                <th scope="col">{t('dashboard.total_open')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ageing.buckets.map((row) => (
+                <tr key={row.bucket}>
+                  <td>{bucketName(row.bucket)}</td>
+                  <td>{row.invoices}</td>
+                  <td>{money(row.amountIqd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        }
+        title={t('dashboard.chart_ageing', { side })}
+      >
+        <StackedBands
+          bands={ageing.buckets.map((row) => ({
+            key: row.bucket,
+            label: bucketName(row.bucket),
+            value: num(row.amountIqd),
+            step: BUCKET_STEP[row.bucket] ?? 1,
+          }))}
+          format={chartMoney}
+        />
+        <Link className={s.sapPlainLink} href={href}>
+          {t('dashboard.open_invoices')}
+        </Link>
+      </Chart>,
+    );
+  }
+
+  if (view.balances && view.balances.length > 0) {
+    charts.push(
+      <Chart
+        key="cash"
+        table={
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">{column('account')}</th>
+                <th scope="col">{t('dashboard.balance')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {view.balances.map((row) => (
+                <tr key={row.code}>
+                  <td>{row.name}</td>
+                  <td>{money(row.balanceIqd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        }
+        title={t('dashboard.chart_cash')}
+      >
+        <BarList
+          format={chartMoney}
+          rows={view.balances.map((row) => ({
+            key: row.code,
+            label: row.name,
+            value: num(row.balanceIqd),
+          }))}
+        />
+      </Chart>,
+    );
+  }
+
+  if (view.customers && view.customers.length > 0) {
+    charts.push(
+      <Chart
+        hint={t('dashboard.year_to_date')}
+        key="customers"
+        table={
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">{column('customer_name')}</th>
+                <th scope="col">{t('dashboard.invoiced')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {view.customers.map((row) => (
+                <tr key={row.key}>
+                  <td>{row.label}</td>
+                  <td>{money(row.amountIqd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        }
+        title={t('dashboard.chart_customers')}
+      >
+        <BarList
+          format={chartMoney}
+          rows={view.customers.map((row) => ({
+            key: row.key,
+            label: row.label,
+            value: num(row.amountIqd),
+          }))}
+        />
+      </Chart>,
+    );
+  }
+
+  if (view.stock && view.stock.length > 0) {
+    charts.push(
+      <Chart
+        hint={t('dashboard.at_cost')}
+        key="stock"
+        table={
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">{column('warehouse_name')}</th>
+                <th scope="col">{t('dashboard.value')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {view.stock.map((row) => (
+                <tr key={row.key}>
+                  <td>{row.label}</td>
+                  <td>{money(row.amountIqd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        }
+        title={t('dashboard.chart_stock')}
+      >
+        <BarList
+          format={chartMoney}
+          rows={view.stock.map((row) => ({
+            key: row.key,
+            label: row.label,
+            value: num(row.amountIqd),
+          }))}
+        />
+      </Chart>,
+    );
+  }
 
   return (
     <AdminPage subtitle={subtitle} title={t('dashboard.title')} variant="sap">
@@ -246,6 +473,12 @@ export default async function Home() {
               </tr>
             ))}
           </BandTable>
+        </Band>
+      ) : null}
+
+      {charts.length > 0 ? (
+        <Band title={t('dashboard.charts')}>
+          <div className={s.chartGrid}>{charts}</div>
         </Band>
       ) : null}
 

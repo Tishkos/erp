@@ -11,7 +11,7 @@ report.
 | **Phase** | Operations build — after block 10 |
 | **Blueprint section** | §5 (permissions) · §14.4 (maker-checker) · §15–16 (open items) · §21 (notifications) |
 | **Test case(s)** | *None yet. §15 states the criteria; each gains its test link when the screen is built — a link to a test that does not exist would fail the 00.6 gate and is worse than no link.* |
-| **Status** | Specified — not built |
+| **Status** | Built — awaiting acceptance |
 | **Approved by** | *Not yet approved. §28.1 requires written approval from the Business Process Owner before any of this is built.* |
 
 ---
@@ -139,6 +139,38 @@ where it is fixed.
 The third of these is not hypothetical: `CASH-ACCOUNTANT_ERBIL` points at a
 deleted `chart_of_account` and has been failing the weekly restore drill. It is
 visible today only to somebody who reads the drill log.
+
+### Band 4 — How the business is doing (charts)
+
+Added 2026-09-29 at the sponsor's direction; see §16 for what it replaced.
+
+| Chart | Form | Why that form | Source |
+|---|---|---|---|
+| Income and expenses, month by month | grouped columns, 2 series | the two are *compared*, not added — a stack would invite reading a total that means nothing; one baseline, one scale, never a second axis | `profitOrLoss`, once per month |
+| Owed to us / by us, by how late | one ordered stacked bar each | ageing is an ordered scale, so a one-hue ramp where later is darker — not a categorical palette, which would ask colour to mean identity when it means severity | the ageing buckets of Band 2 |
+| Cash and bank balances | horizontal bars, one series | ranked magnitude across accounts that have no natural order | the same balances as Band 2 |
+| Biggest customers | horizontal bars, one series | ranked magnitude, top eight | posted A/R, year to date |
+| Stock held, by warehouse | horizontal bars, one series | ranked magnitude | `inventoryReports.valuation`, summed per warehouse |
+
+**Conditions, all of which are the difference between a chart and decoration:**
+
+- **Every figure comes from the service that owns it.** The monthly series is
+  twelve calls to `profitOrLoss` — the Income Statement's own function — rather
+  than one query grouped by month, because the statement's totals come from the
+  *layout* Finance mapped, not from summing account types. A query written for
+  the chart would be a second opinion about what counts as income.
+- **Every chart has a table of the same numbers**, open from the chart itself.
+  No value is reachable only by pointing at it.
+- **One series, one colour.** No chart colours its bars darker-where-bigger:
+  that spends the only free channel on what the bar's length already says.
+- **The palette is validated, not chosen.** Two categorical slots and a
+  five-step ordinal ramp, checked against this application's own light and dark
+  surfaces for lightness band, chroma, colour-vision separation,
+  normal-vision separation and contrast. The dark ramp stops one step lighter
+  than the light one because its darkest step measured 1.95:1 against the
+  window.
+- **A chart with nothing in it is not drawn.** An empty plot reads as a fault in
+  the data.
 
 ## 5. Workflow and status
 
@@ -321,9 +353,16 @@ Then   it remains usable, with no sideways scroll
 Excluded, not deferred. Each of these was considered and rejected for a reason,
 and the reason is the point:
 
-- **Charts of any kind.** The old dashboard's 14-day activity line is the
-  specific thing being replaced. A trend nobody acts on is decoration, and
-  decoration on a landing page is what makes people stop reading it.
+- ~~**Charts of any kind.**~~ **Reversed by the sponsor, 2026-09-29.** This
+  section argued that a trend nobody acts on is decoration. The sponsor's answer
+  was that an executive reads the shape of a year faster than a column of
+  figures, and that is a fair correction: the objection was to the *old*
+  dashboard's 14-day activity line — a count of records with no decision
+  attached — not to charts as such. Charts are in scope, under §4 Band 4, with
+  the conditions that make them answerable rather than decorative: every series
+  comes from the service that owns the figure, every chart carries a table of
+  the same numbers, and a chart with nothing in it is not drawn. What stays
+  excluded is the activity line itself.
 - **Record counts** — how many customers, items, users. Nobody does anything
   about these numbers.
 - **Acting from the dashboard** — approving, posting, allocating. These are

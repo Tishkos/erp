@@ -1679,6 +1679,31 @@
   --chip-warn-line: #b03a2e;
   --chip-warn-bg: #f8d7d2;
   --chip-warn-ink: #7d201a;
+
+  /* ── Charts ──────────────────────────────────────────────────────────────
+     Two categorical slots and a five-step ordinal ramp, both validated
+     against this application's own light surface rather than a generic one:
+     lightness band, chroma floor, colour-vision separation, normal-vision
+     separation and contrast all pass (blue↔orange ΔE 24.7 protan, 33.6
+     normal). The ramp is one hue getting darker, for the ageing buckets,
+     which are an ordered scale and not identities.
+
+     They are deliberately not the palette's own `--w-*` colours: a chart that
+     recoloured itself with the theme would have eighteen unvalidated
+     palettes, and the two that matter — is this series distinguishable, does
+     it clear the surface — would be true in none of them by construction. */
+  --chart-series-1: #2a78d6;
+  --chart-series-2: #eb6834;
+  --chart-ramp-1: #86b6ef;
+  --chart-ramp-2: #5598e7;
+  --chart-ramp-3: #2a78d6;
+  --chart-ramp-4: #1c5cab;
+  --chart-ramp-5: #104281;
+  --chart-negative: #d03b3b;
+  --chart-grid: var(--w-rule);
+  --chart-axis: var(--w-muted);
+  --chart-ink: var(--w-text);
+  --chart-track: var(--w-field-ro);
 }
 
 .sapDoc,
@@ -4773,6 +4798,20 @@
   --chip-warn-line: color-mix(in srgb, var(--status-rejected) 60%, var(--w-line-strong));
   --chip-warn-bg: color-mix(in srgb, var(--status-rejected) 18%, var(--w-field));
   --chip-warn-ink: var(--status-rejected);
+
+  /* The charts, stepped for a dark ground — the same hues, chosen for the dark
+     band and validated against this application's darkest surface, not an
+     automatic inversion of the light steps. The ramp stops one step lighter
+     than the light-mode ramp does: its darkest step measured 1.95:1 against
+     the window and would have sunk into it. */
+  --chart-series-1: #3987e5;
+  --chart-series-2: #d95926;
+  --chart-ramp-1: #cde2fb;
+  --chart-ramp-2: #9ec5f4;
+  --chart-ramp-3: #6da7ec;
+  --chart-ramp-4: #3987e5;
+  --chart-ramp-5: #256abf;
+  --chart-negative: #ff9b9b;
 }
 
 :global([data-palette] input[type='checkbox']),
@@ -5424,4 +5463,175 @@
   .mapTable {
     min-inline-size: 40rem;
   }
+}
+
+/* ── Chart anatomy ────────────────────────────────────────────────────────
+   Layout only. Every colour above is a token; nothing here picks one. */
+.chartGrid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  margin: 0;
+}
+
+.chartFigure {
+  /* Each card is as tall as its own content. Stretching them to the tallest in
+     the row leaves a short chart floating in a half-empty box. */
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0.7rem 0.8rem 0.6rem;
+  border: 1px solid var(--w-line);
+  border-radius: var(--w-radius);
+  background: var(--w-bg);
+}
+
+.chartCaption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  color: var(--w-text);
+  font-size: 0.78rem;
+}
+
+.chartCaption span {
+  color: var(--w-muted);
+  font-size: 0.7rem;
+  font-weight: 400;
+}
+
+/* The plot grows with the card; the axis band is inside the height, so the
+   card never gets a nested scrollbar to reveal its own labels. */
+.chartSvg {
+  inline-size: 100%;
+  block-size: 10.5rem;
+  overflow: visible;
+}
+
+.chartLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.8rem;
+  margin: 0;
+  padding: 0;
+  color: var(--w-muted);
+  font-size: 0.68rem;
+  list-style: none;
+}
+
+.chartLegend li {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.chartLegend li > span {
+  inline-size: 0.6rem;
+  block-size: 0.6rem;
+  border-radius: 0.1rem;
+}
+
+.chartLegend strong {
+  color: var(--w-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.chartBars {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chartBars li {
+  display: grid;
+  align-items: center;
+  gap: 0.5rem;
+  grid-template-columns: minmax(5rem, 9rem) 1fr auto;
+  font-size: 0.72rem;
+}
+
+.chartBarLabel {
+  overflow: hidden;
+  color: var(--w-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chartBarTrack {
+  display: block;
+  block-size: 0.7rem;
+  border-radius: 0.1rem;
+  background: var(--chart-track);
+}
+
+.chartBarFill {
+  display: block;
+  block-size: 100%;
+  /* 4px rounded data-end, square where it meets the baseline. */
+  border-radius: 0 0.25rem 0.25rem 0;
+  block-size: 0.7rem;
+}
+
+.chartBarValue {
+  color: var(--w-text);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* The 2px separators are the surface showing through — never a stroke. */
+.chartStack {
+  display: flex;
+  gap: 2px;
+  overflow: hidden;
+  block-size: 1.1rem;
+  border-radius: 0.1rem;
+}
+
+.chartStackSegment {
+  display: block;
+  block-size: 100%;
+  border-radius: 0.1rem;
+}
+
+.chartTable {
+  color: var(--w-muted);
+  font-size: 0.68rem;
+}
+
+.chartTable summary {
+  cursor: pointer;
+}
+
+.chartTable table {
+  inline-size: 100%;
+  margin-block-start: 0.35rem;
+  border-collapse: collapse;
+}
+
+.chartTable :is(th, td) {
+  padding: 0.18rem 0.3rem;
+  border-block-end: 1px solid var(--w-rule);
+  color: var(--w-text);
+  font-variant-numeric: tabular-nums;
+  text-align: start;
+}
+
+.chartTable td:last-child,
+.chartTable th:last-child {
+  text-align: end;
+}
+
+.chartWide {
+  grid-column: 1 / -1;
+}
+
+.chartWide .chartSvg {
+  block-size: 12rem;
 }
