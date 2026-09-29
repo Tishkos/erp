@@ -2564,36 +2564,48 @@
   text-overflow: ellipsis;
 }
 
+/* The register's own status chip — the same four families as `.sapStatus`
+   above, and now the same tokens. This was a second set of hard-coded pastels,
+   which is why Draft, Posted and Approved still came out cream and near-white
+   on every dark palette after the document window's chips were fixed: a chip
+   in a list is a different rule from a chip on a document, and fixing one of
+   them fixed exactly one of them (reported 2026-09-29). Anything that draws a
+   status now derives from --chip-*; nothing here names a colour. */
 .sapRegister .sapRegisterStatus {
   min-block-size: 1.45rem;
   padding-inline: 0.55rem;
-  border: 1px solid #c1aa67;
+  border: 1px solid var(--chip-line);
   border-radius: 999px;
-  background: #fff3bd;
-  color: #654b06;
+  background: var(--chip-bg);
+  color: var(--chip-ink);
   font-size: 0.69rem;
   font-weight: 750;
 }
 
+.sapRegister .sapRegisterStatus[data-status='matched'],
 .sapRegister .sapRegisterStatus[data-status='posted'],
+.sapRegister .sapRegisterStatus[data-status='settled'],
 .sapRegister .sapRegisterStatus[data-status='approved'] {
-  border-color: #86a28c;
-  background: #e2f0df;
-  color: #235b32;
+  border-color: var(--chip-good-line);
+  background: var(--chip-good-bg);
+  color: var(--chip-good-ink);
 }
 
-.sapRegister .sapRegisterStatus[data-status='submitted'] {
-  border-color: #91a8bb;
-  background: #e5eef5;
-  color: #294f6d;
+.sapRegister .sapRegisterStatus[data-status='submitted'],
+.sapRegister .sapRegisterStatus[data-status='partially_executed'],
+.sapRegister .sapRegisterStatus[data-status='executed'] {
+  border-color: var(--chip-info-line);
+  background: var(--chip-info-bg);
+  color: var(--chip-info-ink);
 }
 
+.sapRegister .sapRegisterStatus[data-status='exception'],
 .sapRegister .sapRegisterStatus[data-status='rejected'],
 .sapRegister .sapRegisterStatus[data-status='cancelled'],
 .sapRegister .sapRegisterStatus[data-status='reversed'] {
-  border-color: #ca9b94;
-  background: #f7e5e2;
-  color: #7e332c;
+  border-color: var(--chip-bad-line);
+  background: var(--chip-bad-bg);
+  color: var(--chip-bad-ink);
 }
 
 .sapEmptyRow {
@@ -3349,32 +3361,39 @@
   font-weight: 700;
 }
 
-/* ── Status, as a pill rather than a solid block ──────────────────────── */
+/* ── Status, as a pill rather than a solid block ──────────────────────────
+   The third place a status is drawn, after the document window and the
+   register — the global `.status` element as it appears on a SAP-chrome page.
+   All three now derive from the same --chip-* tokens. They were three separate
+   copies of the same twelve hexes, so a dark palette had to be fixed three
+   times to be fixed once, and twice it was not. */
 .sapPage :global(.status) {
   min-block-size: 1.4rem;
   padding-inline: 0.5rem;
-  border: 1px solid #c1aa67;
+  border: 1px solid var(--chip-line);
   border-radius: 999px;
-  background: #fff3bd;
-  color: #654b06;
+  background: var(--chip-bg);
+  color: var(--chip-ink);
   font-size: 0.69rem;
   font-weight: 750;
 }
 
 .sapPage :global(.status--posted),
+.sapPage :global(.status--settled),
 .sapPage :global(.status--approved),
 .sapPage :global(.status--active),
 .sapPage :global(.status--open) {
-  border-color: #86a28c;
-  background: #e2f0df;
-  color: #235b32;
+  border-color: var(--chip-good-line);
+  background: var(--chip-good-bg);
+  color: var(--chip-good-ink);
 }
 
 .sapPage :global(.status--submitted),
+.sapPage :global(.status--executed),
 .sapPage :global(.status--partially_executed) {
-  border-color: #91a8bb;
-  background: #e5eef5;
-  color: #294f6d;
+  border-color: var(--chip-info-line);
+  background: var(--chip-info-bg);
+  color: var(--chip-info-ink);
 }
 
 .sapPage :global(.status--rejected),
@@ -3382,9 +3401,9 @@
 .sapPage :global(.status--reversed),
 .sapPage :global(.status--closed),
 .sapPage :global(.status--inactive) {
-  border-color: #ca9b94;
-  background: #f7e5e2;
-  color: #7e332c;
+  border-color: var(--chip-bad-line);
+  background: var(--chip-bad-bg);
+  color: var(--chip-bad-ink);
 }
 
 /* Odds and ends the screens lean on. */
@@ -3437,15 +3456,15 @@
 }
 
 .sapPage .pillOn {
-  border-color: #86a28c;
-  background: #e2f0df;
-  color: #235b32;
+  border-color: var(--chip-good-line);
+  background: var(--chip-good-bg);
+  color: var(--chip-good-ink);
 }
 
 .sapPage .pillOff {
-  border-color: #ca9b94;
-  background: #f7e5e2;
-  color: #7e332c;
+  border-color: var(--chip-bad-line);
+  background: var(--chip-bad-bg);
+  color: var(--chip-bad-ink);
 }
 
 /* ── Chart of Accounts, and the record framework ──────────────────────────
@@ -3932,10 +3951,10 @@
 }
 
 .sapPage .system {
-  border: 1px solid #91a8bb;
+  border: 1px solid var(--chip-info-line);
   border-radius: 999px;
-  background: #e5eef5;
-  color: #294f6d;
+  background: var(--chip-info-bg);
+  color: var(--chip-info-ink);
   font-size: 0.69rem;
   font-weight: 750;
 }
@@ -5068,10 +5087,10 @@
 
 .sapBalanced {
   padding: 0.28rem 0.5rem;
-  border: 1px solid #86a28c;
+  border: 1px solid var(--chip-good-line);
   border-radius: var(--w-radius-sm);
-  background: #e2f0df;
-  color: #235b32;
+  background: var(--chip-good-bg);
+  color: var(--chip-good-ink);
   font-size: 0.72rem;
   font-weight: 700;
 }

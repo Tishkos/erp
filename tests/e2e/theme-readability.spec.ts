@@ -24,14 +24,16 @@ async function setAppearance(page: Page, palette: string, accent: string) {
   }, { palette, accent });
 }
 
+/** Lifted out of `contrast` so a test can also ask "is this surface dark?". */
+function luminance(color: string) {
+  const channels = color.match(/[\d.]+/g)!.slice(0, 3).map(Number).map((n) => {
+    const c = color.startsWith('color(srgb') ? n : n / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722;
+}
+
 function contrast(a: string, b: string) {
-  const luminance = (color: string) => {
-    const channels = color.match(/[\d.]+/g)!.slice(0, 3).map(Number).map((n) => {
-      const c = color.startsWith('color(srgb') ? n : n / 255;
-      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-    });
-    return channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722;
-  };
   const x = luminance(a);
   const y = luminance(b);
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
@@ -198,5 +200,54 @@ test('Print / Export uses the active palette and readable download links', async
     expect(box).not.toBeNull();
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+  }
+});
+
+test('status chips follow the palette into the dark, on every screen that draws one', async ({ page }) => {
+  test.setTimeout(120_000);
+  await signIn(page);
+
+  // A status is drawn in three different rules — the document window's
+  // `.sapStatus`, the register's `.sapRegisterStatus`, and the global
+  // `.status` on a SAP page. They were three copies of the same twelve hexes,
+  // so fixing the dark palette in one fixed exactly one, and twice it was not
+  // noticed (2026-09-29: "approved posted draft status in dark mode they
+  // shouldn't be white"). One screen per rule, so a fourth copy cannot hide.
+  const screens = [
+    '/purchasing/ap-invoices',
+    '/finance/journals',
+    '/master-data/chart-of-accounts',
+  ];
+
+  for (const route of screens) {
+    await page.goto(route);
+    await setAppearance(page, 'midnight', 'gold');
+
+    const chips = await page.locator('[class*="tatus"]').evaluateAll((els) =>
+      els
+        .filter((el) => {
+          const text = el.textContent?.trim() ?? '';
+          return text.length > 0 && text.length <= 24;
+        })
+        .map((el) => {
+          const style = getComputedStyle(el);
+          return { text: el.textContent!.trim(), background: style.backgroundColor, color: style.color };
+        }),
+    );
+
+    expect(chips.length, `${route} draws at least one status`).toBeGreaterThan(0);
+
+    for (const chip of chips) {
+      // On a dark ground the chip's own surface must be dark. A pale pastel
+      // here is the light-mode treatment showing through, which is what the
+      // sponsor saw as "white".
+      const background = luminance(chip.background);
+      expect(background, `${route} · ${chip.text} background is dark`).toBeLessThan(0.35);
+      // And it still has to be readable, which a dark chip with dark ink is not.
+      expect(
+        contrast(chip.color, chip.background),
+        `${route} · ${chip.text} is readable`,
+      ).toBeGreaterThan(4.5);
+    }
   }
 });
