@@ -807,7 +807,10 @@ export async function openItems(
             party: `${row.partyName} · ${row.partyCode}`,
             // No document to name, so the row says what it is rather than
             // leaving a blank somebody would read as a missing reference.
-            invoice: m.admin('reconciliation.by_journal'),
+            // The plain wording, not the screen's: a printed page inviting
+            // the reader to "open the statement" is inviting them to click
+            // a piece of paper.
+            invoice: m.admin('reconciliation.by_journal_plain'),
             invoice_date: row.oldestDate ?? '',
             due_date: '',
             terms: '',

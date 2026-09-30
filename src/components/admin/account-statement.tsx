@@ -128,7 +128,7 @@ export async function AccountStatement({
 
   // The whole role, not only the active part of it: a partner stops trading
   // long before their account stops needing to be read.
-  const { roll, chosen, account, items } = await withCurrentUser(async (tx) => {
+  const { roll, chosen, account, items, everyItem, balances } = await withCurrentUser(async (tx) => {
     const roll = await partners.listByRole(tx, side);
     /* Resolved from what was typed, not matched against the whole label.
        The box used to carry the partner's code in a hidden field, set only when
@@ -159,6 +159,26 @@ export async function AccountStatement({
           ...openItems.viewFilter(view),
         })
         .catch(() => []),
+      /*
+       * Every invoice and the control account behind them.
+       *
+       * The panel used to read only the document layer, so a customer whose
+       * debt had been journalled in showed nothing owing while the closing
+       * balance under it said otherwise — the same disagreement the Ageing
+       * screens had, on the one screen where both figures are in view at once.
+       */
+      everyItem: await openItems
+        .openItems(tx, context.principal, side, agedAt, {
+          branchCode: context.scope.branchCode,
+          ...(chosen ? { partyCode: chosen.code } : {}),
+        })
+        .catch(() => []),
+      balances: await openItems
+        .ledgerBalances(tx, context.principal, side, agedAt, {
+          branchCode: context.scope.branchCode,
+          ...(chosen ? { partyCode: chosen.code } : {}),
+        })
+        .catch(() => []),
     };
   });
 
@@ -168,6 +188,11 @@ export async function AccountStatement({
     (row) => row.code,
     (row) => [row.code, row.legalName, row.tradeName],
   );
+
+  const reconciled = openItems.reconcile(everyItem, balances, agedAt);
+  const tie = openItems.reconciliationTotals(reconciled);
+  const unexplained = reconciled.filter((row) => Number(row.unexplainedIqd) !== 0);
+  const byParty = new Map(openItems.byParty(items).map((row) => [row.partyCode, row]));
 
   const money = (amount: string) => formatStatementAmount(amount, currency, locale as Locale);
   const day = (date: string) => formatBusinessDate(date, locale as Locale);
@@ -387,14 +412,14 @@ export async function AccountStatement({
           Kept on screen while a narrowing is in force even when it matches
           nothing: a panel that disappears when "Overdue" is chosen looks like
           a fault, where "nothing overdue" is the answer somebody wanted. */}
-      {items.length > 0 || view !== 'all' ? (
+      {reconciled.length > 0 || view !== 'all' ? (
         <ReportWindow
           meta={t('statement_outstanding.as_at', { date: day(agedAt) })}
           title={t('statement_outstanding.title')}
           {...{
             foot: (
               <div className={s.sapFootTotals}>
-                {openItems.ageing(items).map((bucket) => (
+                {openItems.ageingWith(items, reconciled).map((bucket) => (
                   <div className={s.sapFootTotal} key={bucket.bucket}>
                     <span>{t(`dashboard.${BUCKET_KEY[bucket.bucket] ?? 'bucket_current'}`)}</span>
                     <strong>
@@ -406,7 +431,7 @@ export async function AccountStatement({
                   <span>{t('open_items.outstanding')}</span>
                   <strong>
                     <bdi dir="ltr">
-                      {money(String(items.reduce((sum, row) => sum + Number(row.outstandingIqd), 0)))}
+                      {money(tie.ledgerIqd)}
                     </bdi>
                   </strong>
                 </div>
@@ -437,14 +462,38 @@ export async function AccountStatement({
               )}
             </thead>
             <tbody>
-              {items.length === 0 ? (
+              {items.length === 0 && unexplained.length === 0 ? (
                 <tr>
                   <td className={s.sapEmptyRow} colSpan={chosen ? 8 : 4}>
                     {t('statement_outstanding.nothing')}
                   </td>
                 </tr>
               ) : chosen
-                ? items.map((item) => (
+                ? [
+                    /* A debt charged to the account without an invoice — an
+                       opening balance, a correction, a write-off. It reads
+                       like the invoice it stands for: raised, paid, left. */
+                    ...unexplained.map((row) => (
+                      <tr key={`journal-${row.partyCode}`}>
+                        <td className={s.sapAccountCell}>
+                          {/* The plain wording: on the Ageing this row offers
+                              a way through to the statement, and on the
+                              statement itself that would be an invitation to
+                              go where the reader already is. */}
+                          {t('reconciliation.by_journal_plain')}
+                        </td>
+                        <td><bdi dir="ltr">{row.oldestDate ? day(row.oldestDate) : '—'}</bdi></td>
+                        <td>—</td>
+                        <td>—</td>
+                        <td className={s.sapNum}><bdi dir="ltr">{money(row.unexplainedChargedIqd)}</bdi></td>
+                        <td className={s.sapNum}><bdi dir="ltr">{money(row.unexplainedPaidIqd)}</bdi></td>
+                        <td className={s.sapNum}><strong><bdi dir="ltr">{money(row.unexplainedIqd)}</bdi></strong></td>
+                        <td>
+                          <span className="muted">{t('reconciliation.no_document')}</span>
+                        </td>
+                      </tr>
+                    )),
+                    ...items.map((item) => (
                     <tr key={item.invoiceId}>
                       <td className={s.sapAccountCell}>
                         <Link
@@ -468,26 +517,36 @@ export async function AccountStatement({
                         )}
                       </td>
                     </tr>
-                  ))
-                : openItems.byParty(items).map((party) => (
-                    <tr key={party.partyCode}>
+                  )),
+                  ]
+                : /* Everybody's position — the ledger's figure per partner,
+                     not merely what their invoices come to, so this column
+                     adds up to the same total the statement below closes at. */
+                  reconciled.map((row) => {
+                    const party = byParty.get(row.partyCode);
+                    const overdue =
+                      Number(party?.overdueIqd ?? 0) +
+                      (row.bucket === 'current' ? 0 : Number(row.unexplainedIqd));
+                    return (
+                    <tr key={row.partyCode}>
                       <td className={s.sapAccountCell}>
-                        <Link className={s.sapLink} href={`${screen.route}?code=${encodeURIComponent(party.partyCode)}&from=${from}&to=${to}&currency=${currency}`}>
-                          <bdi dir="auto">{party.partyName}</bdi>
+                        <Link className={s.sapLink} href={`${screen.route}?code=${encodeURIComponent(row.partyCode)}&from=${from}&to=${to}&currency=${currency}`}>
+                          <bdi dir="auto">{row.partyName}</bdi>
                         </Link>{' '}
-                        <span className="muted"><bdi dir="ltr">{party.partyCode}</bdi></span>
+                        <span className="muted"><bdi dir="ltr">{row.partyCode}</bdi></span>
                       </td>
-                      <td className={s.sapNum}>{party.invoices}</td>
-                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(party.outstandingIqd)}</bdi></strong></td>
+                      <td className={s.sapNum}>{party?.invoices ?? 0}</td>
+                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(row.ledgerIqd)}</bdi></strong></td>
                       <td className={s.sapNum}>
-                        {Number(party.overdueIqd) > 0 ? (
-                          <span className={s.sapWarn}><bdi dir="ltr">{money(party.overdueIqd)}</bdi></span>
+                        {overdue > 0 ? (
+                          <span className={s.sapWarn}><bdi dir="ltr">{money(String(overdue))}</bdi></span>
                         ) : (
                           <bdi dir="ltr">{money('0')}</bdi>
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
             </tbody>
           </table>
         </ReportWindow>

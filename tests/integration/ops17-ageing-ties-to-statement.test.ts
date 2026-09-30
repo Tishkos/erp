@@ -443,6 +443,43 @@ describe('ops 17 · the same holds for what we owe', () => {
   });
 });
 
+describe('ops 17 · a reversal takes both sides down together', () => {
+  /*
+   * The case that would silently break the tie.
+   *
+   * A reversed invoice leaves `OPEN_STATUSES`, so the document layer forgets
+   * it. If the ledger did not forget it too, the difference would appear as
+   * an unexplained balance for a debt that no longer exists — a report
+   * chasing a customer for an invoice somebody deliberately cancelled.
+   *
+   * It holds because `journal.reverse` mirrors the subledger movements in the
+   * same transaction, so both sides reach nought at the same moment.
+   */
+  it('leaves nothing owing and nothing unexplained', async () => {
+    const customer = await partner('CUST-005', 'Cancelled Order Ltd', 'customer');
+
+    const entry = await post('2026-05-01', 'Invoice raised in error', [
+      { account: receivables, debit: '9000.0000', party: customer.code },
+      { account: revenue, credit: '9000.0000' },
+    ]);
+
+    const before = await closingOf('customer', customer.code);
+    expect(before).toBe(9_000);
+
+    await withScope(scope(manager), (tx) =>
+      journal.reverse(tx, manager, entry.id, { reason: 'Raised against the wrong customer' }),
+    );
+
+    const after = await closingOf('customer', customer.code);
+    const { totals } = await reconciliation('customer', customer.code);
+
+    expect(after, 'the statement forgets it').toBe(0);
+    expect(Number(totals.ledgerIqd), 'and so does the ageing').toBe(0);
+    expect(Number(totals.unexplainedIqd), 'with nothing left over to explain').toBe(0);
+    expect(totals.ties).toBe(true);
+  });
+});
+
 describe('ops 17 · the ageing bands tie too', () => {
   it('folds what no invoice explains into the same bands as the invoices', async () => {
     const customer = await partner('CUST-004', 'Mixed Ltd', 'customer');
