@@ -181,124 +181,6 @@ export async function AccountStatement({
       title={page(screen.page)}
       variant="sap"
     >
-      {/* ── What is still owed ────────────────────────────────────────────
-          Above the movements, because it is the question the screen is opened
-          with. With nobody chosen it lists every partner's position, so "who
-          owes us money" is answerable without picking a name first; with a
-          partner chosen it lists their open invoices and when each fell due.
-
-          Both read `open-items.ts`, the same service the Ageing screens use,
-          so a figure here and a figure there cannot disagree.
-
-          Kept on screen while a narrowing is in force even when it matches
-          nothing: a panel that disappears when "Overdue" is chosen looks like
-          a fault, where "nothing overdue" is the answer somebody wanted. */}
-      {items.length > 0 || view !== 'all' ? (
-        <ReportWindow
-          meta={t('statement_outstanding.as_at', { date: day(agedAt) })}
-          title={t('statement_outstanding.title')}
-          {...{
-            foot: (
-              <div className={s.sapFootTotals}>
-                {openItems.ageing(items).map((bucket) => (
-                  <div className={s.sapFootTotal} key={bucket.bucket}>
-                    <span>{t(`dashboard.${BUCKET_KEY[bucket.bucket] ?? 'bucket_current'}`)}</span>
-                    <strong>
-                      <bdi dir="ltr">{money(bucket.amountIqd)}</bdi>
-                    </strong>
-                  </div>
-                ))}
-                <div className={s.sapFootTotal}>
-                  <span>{t('open_items.outstanding')}</span>
-                  <strong>
-                    <bdi dir="ltr">
-                      {money(String(items.reduce((sum, row) => sum + Number(row.outstandingIqd), 0)))}
-                    </bdi>
-                  </strong>
-                </div>
-              </div>
-            ),
-          }}
-        >
-          <table className={`${s.sapTable} ${s.sapReportTable}`}>
-            <thead>
-              {chosen ? (
-                <tr>
-                  <th scope="col">{column('invoice_no')}</th>
-                  <th scope="col">{column('invoice_date')}</th>
-                  <th scope="col">{column('due_date')}</th>
-                  <th scope="col">{t('open_items.terms')}</th>
-                  <th className={s.sapNum} scope="col">{column('total_price')}</th>
-                  <th className={s.sapNum} scope="col">{t('open_items.paid')}</th>
-                  <th className={s.sapNum} scope="col">{t('open_items.outstanding')}</th>
-                  <th scope="col">{t('open_items.lateness')}</th>
-                </tr>
-              ) : (
-                <tr>
-                  <th scope="col">{t(`partners.role_${side}`)}</th>
-                  <th className={s.sapNum} scope="col">{column('document')}</th>
-                  <th className={s.sapNum} scope="col">{t('open_items.outstanding')}</th>
-                  <th className={s.sapNum} scope="col">{t('statement_outstanding.overdue')}</th>
-                </tr>
-              )}
-            </thead>
-            <tbody>
-              {items.length === 0 ? (
-                <tr>
-                  <td className={s.sapEmptyRow} colSpan={chosen ? 8 : 4}>
-                    {t('statement_outstanding.nothing')}
-                  </td>
-                </tr>
-              ) : chosen
-                ? items.map((item) => (
-                    <tr key={item.invoiceId}>
-                      <td className={s.sapAccountCell}>
-                        <Link
-                          className={s.sapLink}
-                          href={`${DOCUMENT_ROUTE[side === 'customer' ? 'ar_invoice' : 'ap_invoice']}/${encodeURIComponent(item.invoiceNo)}`}
-                        >
-                          <bdi dir="ltr">{item.invoiceNo}</bdi>
-                        </Link>
-                      </td>
-                      <td><bdi dir="ltr">{day(item.invoiceDate)}</bdi></td>
-                      <td><bdi dir="ltr">{day(item.dueDate)}</bdi></td>
-                      <td><bdi dir="auto">{item.paymentTermsName ?? item.paymentTermsCode ?? '—'}</bdi></td>
-                      <td className={s.sapNum}><bdi dir="ltr">{money(item.totalIqd)}</bdi></td>
-                      <td className={s.sapNum}><bdi dir="ltr">{money(item.paidIqd)}</bdi></td>
-                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(item.outstandingIqd)}</bdi></strong></td>
-                      <td>
-                        {item.daysOverdue > 0 ? (
-                          <span className={s.sapWarn}>{t('open_items.overdue_by', { days: item.daysOverdue })}</span>
-                        ) : (
-                          <span>{t('open_items.due_in', { days: item.daysUntilDue })}</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                : openItems.byParty(items).map((party) => (
-                    <tr key={party.partyCode}>
-                      <td className={s.sapAccountCell}>
-                        <Link className={s.sapLink} href={`${screen.route}?code=${encodeURIComponent(party.partyCode)}&from=${from}&to=${to}&currency=${currency}`}>
-                          <bdi dir="auto">{party.partyName}</bdi>
-                        </Link>{' '}
-                        <span className="muted"><bdi dir="ltr">{party.partyCode}</bdi></span>
-                      </td>
-                      <td className={s.sapNum}>{party.invoices}</td>
-                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(party.outstandingIqd)}</bdi></strong></td>
-                      <td className={s.sapNum}>
-                        {Number(party.overdueIqd) > 0 ? (
-                          <span className={s.sapWarn}><bdi dir="ltr">{money(party.overdueIqd)}</bdi></span>
-                        ) : (
-                          <bdi dir="ltr">{money('0')}</bdi>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-            </tbody>
-          </table>
-        </ReportWindow>
-      ) : null}
-
       <ReportWindow
         filter={
           <ReportFilter action={screen.route} currency={currency} from={from} to={to}>
@@ -491,6 +373,125 @@ export async function AccountStatement({
           </tbody>
         </table>
       </ReportWindow>
+
+      {/* ── What is still owed ────────────────────────────────────────────
+          Under the movements, where a reader arrives having read them: the
+          statement says what happened, and this says what is left of it. With
+          nobody chosen it lists every partner's position, so "who owes us
+          money" is still answerable without picking a name first; with a
+          partner chosen it lists their open invoices and when each fell due.
+
+          Both read `open-items.ts`, the same service the Ageing screens use,
+          so a figure here and a figure there cannot disagree.
+
+          Kept on screen while a narrowing is in force even when it matches
+          nothing: a panel that disappears when "Overdue" is chosen looks like
+          a fault, where "nothing overdue" is the answer somebody wanted. */}
+      {items.length > 0 || view !== 'all' ? (
+        <ReportWindow
+          meta={t('statement_outstanding.as_at', { date: day(agedAt) })}
+          title={t('statement_outstanding.title')}
+          {...{
+            foot: (
+              <div className={s.sapFootTotals}>
+                {openItems.ageing(items).map((bucket) => (
+                  <div className={s.sapFootTotal} key={bucket.bucket}>
+                    <span>{t(`dashboard.${BUCKET_KEY[bucket.bucket] ?? 'bucket_current'}`)}</span>
+                    <strong>
+                      <bdi dir="ltr">{money(bucket.amountIqd)}</bdi>
+                    </strong>
+                  </div>
+                ))}
+                <div className={s.sapFootTotal}>
+                  <span>{t('open_items.outstanding')}</span>
+                  <strong>
+                    <bdi dir="ltr">
+                      {money(String(items.reduce((sum, row) => sum + Number(row.outstandingIqd), 0)))}
+                    </bdi>
+                  </strong>
+                </div>
+              </div>
+            ),
+          }}
+        >
+          <table className={`${s.sapTable} ${s.sapReportTable}`}>
+            <thead>
+              {chosen ? (
+                <tr>
+                  <th scope="col">{column('invoice_no')}</th>
+                  <th scope="col">{column('invoice_date')}</th>
+                  <th scope="col">{column('due_date')}</th>
+                  <th scope="col">{t('open_items.terms')}</th>
+                  <th className={s.sapNum} scope="col">{column('total_price')}</th>
+                  <th className={s.sapNum} scope="col">{t('open_items.paid')}</th>
+                  <th className={s.sapNum} scope="col">{t('open_items.outstanding')}</th>
+                  <th scope="col">{t('open_items.lateness')}</th>
+                </tr>
+              ) : (
+                <tr>
+                  <th scope="col">{t(`partners.role_${side}`)}</th>
+                  <th className={s.sapNum} scope="col">{column('document')}</th>
+                  <th className={s.sapNum} scope="col">{t('open_items.outstanding')}</th>
+                  <th className={s.sapNum} scope="col">{t('statement_outstanding.overdue')}</th>
+                </tr>
+              )}
+            </thead>
+            <tbody>
+              {items.length === 0 ? (
+                <tr>
+                  <td className={s.sapEmptyRow} colSpan={chosen ? 8 : 4}>
+                    {t('statement_outstanding.nothing')}
+                  </td>
+                </tr>
+              ) : chosen
+                ? items.map((item) => (
+                    <tr key={item.invoiceId}>
+                      <td className={s.sapAccountCell}>
+                        <Link
+                          className={s.sapLink}
+                          href={`${DOCUMENT_ROUTE[side === 'customer' ? 'ar_invoice' : 'ap_invoice']}/${encodeURIComponent(item.invoiceNo)}`}
+                        >
+                          <bdi dir="ltr">{item.invoiceNo}</bdi>
+                        </Link>
+                      </td>
+                      <td><bdi dir="ltr">{day(item.invoiceDate)}</bdi></td>
+                      <td><bdi dir="ltr">{day(item.dueDate)}</bdi></td>
+                      <td><bdi dir="auto">{item.paymentTermsName ?? item.paymentTermsCode ?? '—'}</bdi></td>
+                      <td className={s.sapNum}><bdi dir="ltr">{money(item.totalIqd)}</bdi></td>
+                      <td className={s.sapNum}><bdi dir="ltr">{money(item.paidIqd)}</bdi></td>
+                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(item.outstandingIqd)}</bdi></strong></td>
+                      <td>
+                        {item.daysOverdue > 0 ? (
+                          <span className={s.sapWarn}>{t('open_items.overdue_by', { days: item.daysOverdue })}</span>
+                        ) : (
+                          <span>{t('open_items.due_in', { days: item.daysUntilDue })}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                : openItems.byParty(items).map((party) => (
+                    <tr key={party.partyCode}>
+                      <td className={s.sapAccountCell}>
+                        <Link className={s.sapLink} href={`${screen.route}?code=${encodeURIComponent(party.partyCode)}&from=${from}&to=${to}&currency=${currency}`}>
+                          <bdi dir="auto">{party.partyName}</bdi>
+                        </Link>{' '}
+                        <span className="muted"><bdi dir="ltr">{party.partyCode}</bdi></span>
+                      </td>
+                      <td className={s.sapNum}>{party.invoices}</td>
+                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(party.outstandingIqd)}</bdi></strong></td>
+                      <td className={s.sapNum}>
+                        {Number(party.overdueIqd) > 0 ? (
+                          <span className={s.sapWarn}><bdi dir="ltr">{money(party.overdueIqd)}</bdi></span>
+                        ) : (
+                          <bdi dir="ltr">{money('0')}</bdi>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </ReportWindow>
+      ) : null}
     </AdminPage>
   );
 }

@@ -946,6 +946,103 @@
   font-size: 0.78rem;
 }
 
+/* -------------------------------------------------------------------------
+ * What a bank or cash account holds
+ *
+ * One figure the reader came for, and the flows that made it. Laid out across
+ * rather than down, which is the reason it sits in the wide column beside the
+ * form and not in the narrow one with the details: a balance read as the sixth
+ * row of a label-and-value list is a balance nobody sees.
+ * ---------------------------------------------------------------------- */
+.holdings {
+  display: grid;
+  gap: 1rem;
+}
+
+.holdingsHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding-block-end: 0.95rem;
+  border-block-end: 1px solid var(--border);
+}
+
+.holdingsHead > span:first-child {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.holdingsAmount {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.holdingsFlows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.7rem;
+}
+
+.holdingsFlow {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+}
+
+.holdingsFlow > span {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.holdingsFlow > span > svg {
+  inline-size: 0.85rem;
+  block-size: 0.85rem;
+}
+
+.holdingsFlow > strong {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* Money arriving reads as the good direction, money leaving as the other —
+   the only colour on the panel, and it is carrying meaning rather than
+   decoration. */
+.holdingsIn > span > svg {
+  color: var(--status-posted);
+}
+
+.holdingsOut > span > svg {
+  color: var(--status-rejected, var(--text-muted));
+}
+
+/* -------------------------------------------------------------------------
+ * Two report panels, one above the other
+ *
+ * `Panel` carries no margin of its own, so stacked siblings touched: the
+ * account positions and the ledger under them read as one table with a stray
+ * heading in the middle of it.
+ * ---------------------------------------------------------------------- */
+.reportStack {
+  display: grid;
+  gap: 1.1rem;
+}
+
 .profileFacts li > span:first-child {
   color: var(--text-muted);
   font-weight: 600;

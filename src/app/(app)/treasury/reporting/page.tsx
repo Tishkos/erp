@@ -96,245 +96,250 @@ export default async function TreasuryReportingPage({ searchParams }: { searchPa
       title={page('treasury_reports')}
       variant="sap"
     >
-      <Panel flush>
-        <form className={s.filterBar} method="get">
-          <FilterRow>
-            <Field defaultValue={from} label={t('reports.from')} name="from" type="date" />
-            <Field defaultValue={to} label={t('reports.to')} name="to" type="date" />
-            <Select
-              defaultValue={kind ?? ''}
-              emptyLabel={t('treasury_reporting.all_accounts')}
-              label={column('account_type')}
-              name="kind"
-              options={[
-                { value: 'bank', label: kindName('bank') },
-                { value: 'cash', label: kindName('cash') },
-              ]}
-            />
-            {/* One account by name, typed and matched — a treasury with forty
-                accounts is not a drop-down anybody reads. */}
-            <SearchablePicker
-              defaultValue={chosen ?? ''}
-              label={column('account')}
-              name="account"
-              options={allAccounts.map((row) => ({
-                value: row.accountCode,
-                label: `${row.accountName} · ${row.accountCode}`,
-              }))}
-            />
-            <SubmitRow>
-              <Submit label={t('stock_movements.filter')} />
-            </SubmitRow>
-          </FilterRow>
-        </form>
+      {/* The positions and the ledger under them, spaced. `Panel` has no
+          margin of its own, so the two used to touch and read as one table
+          with a stray heading in the middle of it. */}
+      <div className={s.reportStack}>
+        <Panel flush>
+          <form className={s.filterBar} method="get">
+            <FilterRow>
+              <Field defaultValue={from} label={t('reports.from')} name="from" type="date" />
+              <Field defaultValue={to} label={t('reports.to')} name="to" type="date" />
+              <Select
+                defaultValue={kind ?? ''}
+                emptyLabel={t('treasury_reporting.all_accounts')}
+                label={column('account_type')}
+                name="kind"
+                options={[
+                  { value: 'bank', label: kindName('bank') },
+                  { value: 'cash', label: kindName('cash') },
+                ]}
+              />
+              {/* One account by name, typed and matched — a treasury with forty
+                  accounts is not a drop-down anybody reads. */}
+              <SearchablePicker
+                defaultValue={chosen ?? ''}
+                label={column('account')}
+                name="account"
+                options={allAccounts.map((row) => ({
+                  value: row.accountCode,
+                  label: `${row.accountName} · ${row.accountCode}`,
+                }))}
+              />
+              <SubmitRow>
+                <Submit label={t('stock_movements.filter')} />
+              </SubmitRow>
+            </FilterRow>
+          </form>
 
-        {positions.length === 0 ? (
-          <p className="muted" style={{ padding: '0 1rem 1rem' }}>
-            {t('treasury_reporting.no_accounts')}
-          </p>
-        ) : (
-          <div className="table-wrap">
-            <table className="list">
-              <thead>
-                <tr>
-                  <th scope="col">{column('account')}</th>
-                  <th scope="col">{column('account_type')}</th>
-                  <th scope="col">{column('currency')}</th>
-                  <th scope="col">{t('treasury_reporting.opening')}</th>
-                  <th scope="col">{t('treasury_reporting.money_in')}</th>
-                  <th scope="col">{t('treasury_reporting.money_out')}</th>
-                  <th scope="col">{t('treasury_reporting.transfers_in')}</th>
-                  <th scope="col">{t('treasury_reporting.transfers_out')}</th>
-                  <th scope="col">{t('treasury_reporting.closing')}</th>
-                  <th scope="col">{t('treasury_reporting.last_movement')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {positions.map((row) => (
-                  <tr key={row.accountCode}>
-                    <td>
-                      <Link href={href({ account: row.accountCode })}>
-                        <bdi dir="auto">{row.accountName}</bdi>
-                      </Link>{' '}
-                      <span className="muted">
-                        <bdi dir="ltr">{row.accountCode}</bdi>
-                      </span>
-                      {/* An account with no ledger account behind it cannot
-                          post. Said here rather than hidden, because this is
-                          the screen from which it can be repaired. */}
-                      {row.glAccountCode ? null : (
-                        <>
-                          {' '}
-                          <span className={s.sapWarn}>{t('treasury_reporting.no_ledger_account')}</span>
-                        </>
-                      )}
-                    </td>
-                    <td>{kindName(row.kind)}</td>
-                    <td>
-                      <bdi dir="ltr">{row.currency}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="ltr">{money(row.openingIqd)}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="ltr">{money(row.moneyInIqd)}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="ltr">{money(row.moneyOutIqd)}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="ltr">{money(row.transfersInIqd)}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="ltr">{money(row.transfersOutIqd)}</bdi>
-                    </td>
-                    <td>
-                      <strong>
-                        <bdi dir="ltr">{money(row.closingIqd)}</bdi>
-                      </strong>
-                    </td>
-                    <td>
-                      <bdi dir="ltr">{row.lastMovementDate ? day(row.lastMovementDate) : '—'}</bdi>
-                    </td>
-                  </tr>
-                ))}
-                <tr>
-                  <td colSpan={3}>
-                    <strong>{t('reports.totals')}</strong>
-                  </td>
-                  {(
-                    [
-                      (row: reports.AccountPosition) => row.openingIqd,
-                      (row: reports.AccountPosition) => row.moneyInIqd,
-                      (row: reports.AccountPosition) => row.moneyOutIqd,
-                      (row: reports.AccountPosition) => row.transfersInIqd,
-                      (row: reports.AccountPosition) => row.transfersOutIqd,
-                      (row: reports.AccountPosition) => row.closingIqd,
-                    ] as const
-                  ).map((pick, index) => (
-                    <td key={index}>
-                      <strong>
-                        <bdi dir="ltr">{money(String(sum(pick)))}</bdi>
-                      </strong>
-                    </td>
-                  ))}
-                  <td />
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Panel>
-
-      {ledger ? (
-        <Panel
-          flush
-          title={t('treasury_reporting.ledger_for', {
-            account: `${ledger.accountName} · ${ledger.accountCode}`,
-          })}
-        >
-          <div className="table-wrap">
-            <table className="list">
-              <thead>
-                <tr>
-                  <th scope="col">{column('date')}</th>
-                  <th scope="col">{column('reference')}</th>
-                  <th scope="col">{column('movement')}</th>
-                  <th scope="col">{t('treasury_reporting.party')}</th>
-                  <th scope="col">{column('description')}</th>
-                  <th scope="col">{column('raised_by')}</th>
-                  <th scope="col">{t('treasury_reporting.approved_by')}</th>
-                  <th scope="col">{t('treasury_reporting.money_in')}</th>
-                  <th scope="col">{t('treasury_reporting.money_out')}</th>
-                  <th scope="col">{t('treasury_reporting.running_balance')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>
-                    <bdi dir="ltr">{day(ledger.from)}</bdi>
-                  </td>
-                  <td colSpan={8}>
-                    <strong>{t('treasury_reporting.opening')}</strong>
-                  </td>
-                  <td>
-                    <strong>
-                      <bdi dir="ltr">{money(ledger.openingIqd)}</bdi>
-                    </strong>
-                  </td>
-                </tr>
-                {ledger.lines.length === 0 ? (
+          {positions.length === 0 ? (
+            <p className="muted" style={{ padding: '0 1rem 1rem' }}>
+              {t('treasury_reporting.no_accounts')}
+            </p>
+          ) : (
+            <div className="table-wrap">
+              <table className="list">
+                <thead>
                   <tr>
-                    <td colSpan={10}>{t('treasury_reporting.no_movements')}</td>
+                    <th scope="col">{column('account')}</th>
+                    <th scope="col">{column('account_type')}</th>
+                    <th scope="col">{column('currency')}</th>
+                    <th scope="col">{t('treasury_reporting.opening')}</th>
+                    <th scope="col">{t('treasury_reporting.money_in')}</th>
+                    <th scope="col">{t('treasury_reporting.money_out')}</th>
+                    <th scope="col">{t('treasury_reporting.transfers_in')}</th>
+                    <th scope="col">{t('treasury_reporting.transfers_out')}</th>
+                    <th scope="col">{t('treasury_reporting.closing')}</th>
+                    <th scope="col">{t('treasury_reporting.last_movement')}</th>
                   </tr>
-                ) : null}
-                {ledger.lines.map((line, index) => (
-                  <tr key={`${line.entryNo}-${index}`}>
-                    <td>
-                      <bdi dir="ltr">{day(line.postingDate)}</bdi>
+                </thead>
+                <tbody>
+                  {positions.map((row) => (
+                    <tr key={row.accountCode}>
+                      <td>
+                        <Link href={href({ account: row.accountCode })}>
+                          <bdi dir="auto">{row.accountName}</bdi>
+                        </Link>{' '}
+                        <span className="muted">
+                          <bdi dir="ltr">{row.accountCode}</bdi>
+                        </span>
+                        {/* An account with no ledger account behind it cannot
+                            post. Said here rather than hidden, because this is
+                            the screen from which it can be repaired. */}
+                        {row.glAccountCode ? null : (
+                          <>
+                            {' '}
+                            <span className={s.sapWarn}>{t('treasury_reporting.no_ledger_account')}</span>
+                          </>
+                        )}
+                      </td>
+                      <td>{kindName(row.kind)}</td>
+                      <td>
+                        <bdi dir="ltr">{row.currency}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{money(row.openingIqd)}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{money(row.moneyInIqd)}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{money(row.moneyOutIqd)}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{money(row.transfersInIqd)}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{money(row.transfersOutIqd)}</bdi>
+                      </td>
+                      <td>
+                        <strong>
+                          <bdi dir="ltr">{money(row.closingIqd)}</bdi>
+                        </strong>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{row.lastMovementDate ? day(row.lastMovementDate) : '—'}</bdi>
+                      </td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td colSpan={3}>
+                      <strong>{t('reports.totals')}</strong>
                     </td>
-                    <td className={s.sapAccountCell}>
-                      {/* Every row opens the journal that made it: a figure
-                          nobody can trace is a figure nobody can defend. */}
-                      <Link href={`/finance/journals/${encodeURIComponent(line.entryNo)}`}>
-                        <bdi dir="ltr">{line.entryNo}</bdi>
-                      </Link>
-                    </td>
-                    <td>{t(`treasury_reporting.movement_${line.kind}`)}</td>
-                    <td>
-                      <bdi dir="auto">{line.partyName ?? '—'}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="auto">{line.description ?? '—'}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="auto">{line.raisedBy ?? '—'}</bdi>
-                    </td>
-                    <td>
-                      {/* Blank on an entry the posting engine raised: the
-                          approval was given on the document, and naming
-                          somebody here would claim one nobody gave. */}
-                      <bdi dir="auto">{line.approvedBy ?? '—'}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="ltr">{Number(line.debitIqd) === 0 ? '' : money(line.debitIqd)}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="ltr">{Number(line.creditIqd) === 0 ? '' : money(line.creditIqd)}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="ltr">{money(line.balanceIqd)}</bdi>
-                    </td>
+                    {(
+                      [
+                        (row: reports.AccountPosition) => row.openingIqd,
+                        (row: reports.AccountPosition) => row.moneyInIqd,
+                        (row: reports.AccountPosition) => row.moneyOutIqd,
+                        (row: reports.AccountPosition) => row.transfersInIqd,
+                        (row: reports.AccountPosition) => row.transfersOutIqd,
+                        (row: reports.AccountPosition) => row.closingIqd,
+                      ] as const
+                    ).map((pick, index) => (
+                      <td key={index}>
+                        <strong>
+                          <bdi dir="ltr">{money(String(sum(pick)))}</bdi>
+                        </strong>
+                      </td>
+                    ))}
+                    <td />
                   </tr>
-                ))}
-                <tr>
-                  <td>
-                    <bdi dir="ltr">{day(ledger.to)}</bdi>
-                  </td>
-                  <td colSpan={6}>
-                    <strong>{t('treasury_reporting.closing')}</strong>
-                  </td>
-                  <td>
-                    <strong>
-                      <bdi dir="ltr">{money(ledger.totalInIqd)}</bdi>
-                    </strong>
-                  </td>
-                  <td>
-                    <strong>
-                      <bdi dir="ltr">{money(ledger.totalOutIqd)}</bdi>
-                    </strong>
-                  </td>
-                  <td>
-                    <strong>
-                      <bdi dir="ltr">{money(ledger.closingIqd)}</bdi>
-                    </strong>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                </tbody>
+              </table>
+            </div>
+          )}
         </Panel>
-      ) : null}
+
+        {ledger ? (
+          <Panel
+            flush
+            title={t('treasury_reporting.ledger_for', {
+              account: `${ledger.accountName} · ${ledger.accountCode}`,
+            })}
+          >
+            <div className="table-wrap">
+              <table className="list">
+                <thead>
+                  <tr>
+                    <th scope="col">{column('date')}</th>
+                    <th scope="col">{column('reference')}</th>
+                    <th scope="col">{column('movement')}</th>
+                    <th scope="col">{t('treasury_reporting.party')}</th>
+                    <th scope="col">{column('description')}</th>
+                    <th scope="col">{column('raised_by')}</th>
+                    <th scope="col">{t('treasury_reporting.approved_by')}</th>
+                    <th scope="col">{t('treasury_reporting.money_in')}</th>
+                    <th scope="col">{t('treasury_reporting.money_out')}</th>
+                    <th scope="col">{t('treasury_reporting.running_balance')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <bdi dir="ltr">{day(ledger.from)}</bdi>
+                    </td>
+                    <td colSpan={8}>
+                      <strong>{t('treasury_reporting.opening')}</strong>
+                    </td>
+                    <td>
+                      <strong>
+                        <bdi dir="ltr">{money(ledger.openingIqd)}</bdi>
+                      </strong>
+                    </td>
+                  </tr>
+                  {ledger.lines.length === 0 ? (
+                    <tr>
+                      <td colSpan={10}>{t('treasury_reporting.no_movements')}</td>
+                    </tr>
+                  ) : null}
+                  {ledger.lines.map((line, index) => (
+                    <tr key={`${line.entryNo}-${index}`}>
+                      <td>
+                        <bdi dir="ltr">{day(line.postingDate)}</bdi>
+                      </td>
+                      <td className={s.sapAccountCell}>
+                        {/* Every row opens the journal that made it: a figure
+                            nobody can trace is a figure nobody can defend. */}
+                        <Link href={`/finance/journals/${encodeURIComponent(line.entryNo)}`}>
+                          <bdi dir="ltr">{line.entryNo}</bdi>
+                        </Link>
+                      </td>
+                      <td>{t(`treasury_reporting.movement_${line.kind}`)}</td>
+                      <td>
+                        <bdi dir="auto">{line.partyName ?? '—'}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="auto">{line.description ?? '—'}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="auto">{line.raisedBy ?? '—'}</bdi>
+                      </td>
+                      <td>
+                        {/* Blank on an entry the posting engine raised: the
+                            approval was given on the document, and naming
+                            somebody here would claim one nobody gave. */}
+                        <bdi dir="auto">{line.approvedBy ?? '—'}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{Number(line.debitIqd) === 0 ? '' : money(line.debitIqd)}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{Number(line.creditIqd) === 0 ? '' : money(line.creditIqd)}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{money(line.balanceIqd)}</bdi>
+                      </td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td>
+                      <bdi dir="ltr">{day(ledger.to)}</bdi>
+                    </td>
+                    <td colSpan={6}>
+                      <strong>{t('treasury_reporting.closing')}</strong>
+                    </td>
+                    <td>
+                      <strong>
+                        <bdi dir="ltr">{money(ledger.totalInIqd)}</bdi>
+                      </strong>
+                    </td>
+                    <td>
+                      <strong>
+                        <bdi dir="ltr">{money(ledger.totalOutIqd)}</bdi>
+                      </strong>
+                    </td>
+                    <td>
+                      <strong>
+                        <bdi dir="ltr">{money(ledger.closingIqd)}</bdi>
+                      </strong>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        ) : null}
+      </div>
     </AdminPage>
   );
 }

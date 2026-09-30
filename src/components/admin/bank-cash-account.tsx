@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { Banknote, Landmark } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Banknote, Landmark, Wallet } from 'lucide-react';
 import { Panel } from '@/components/ui';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import {
@@ -400,79 +400,6 @@ export async function AccountRecord({
             </ul>
           </Panel>
 
-          {/* ── What the account holds ──────────────────────────────────
-              The question anybody opening a till or a bank account asks
-              first, and it used to need a different screen to answer. Read
-              from `treasury-reports.ts`, which reads the G/L, so this figure
-              is the ledger's rather than a second tally kept beside it. */}
-          {position ? (
-            <Panel title={t('accounts_shared.money_title')}>
-              <ul className={s.profileFacts}>
-                <li>
-                  <span>{t('accounts_shared.holds_now')}</span>
-                  <span>
-                    <strong>
-                      <bdi dir="ltr">{money(position.closingIqd)}</bdi>
-                    </strong>
-                  </span>
-                </li>
-                <li>
-                  <span>{t('accounts_shared.opening_year', { year: String(year) })}</span>
-                  <span>
-                    <bdi dir="ltr">{money(position.openingIqd)}</bdi>
-                  </span>
-                </li>
-                <li>
-                  <span>{t('accounts_shared.received_in', { year: String(year) })}</span>
-                  <span>
-                    <bdi dir="ltr">{money(position.moneyInIqd)}</bdi>
-                  </span>
-                </li>
-                <li>
-                  <span>{t('accounts_shared.paid_out_in', { year: String(year) })}</span>
-                  <span>
-                    <bdi dir="ltr">{money(position.moneyOutIqd)}</bdi>
-                  </span>
-                </li>
-                {/* Only when there are any: a till that has never been part of
-                    a transfer should not carry two empty lines explaining it. */}
-                {Number(position.transfersInIqd) > 0 || Number(position.transfersOutIqd) > 0 ? (
-                  <>
-                    <li>
-                      <span>{t('accounts_shared.transfers_in')}</span>
-                      <span>
-                        <bdi dir="ltr">{money(position.transfersInIqd)}</bdi>
-                      </span>
-                    </li>
-                    <li>
-                      <span>{t('accounts_shared.transfers_out')}</span>
-                      <span>
-                        <bdi dir="ltr">{money(position.transfersOutIqd)}</bdi>
-                      </span>
-                    </li>
-                  </>
-                ) : null}
-                <li>
-                  <span>{t('accounts_shared.last_movement')}</span>
-                  <span>
-                    {position.lastMovementDate ? (
-                      <bdi dir="ltr">
-                        {formatBusinessDate(position.lastMovementDate, locale as Locale)}
-                      </bdi>
-                    ) : (
-                      t('accounts_shared.never_moved')
-                    )}
-                  </span>
-                </li>
-              </ul>
-              <p className={s.panelNote}>
-                <Link className={s.sapLink} href={`/treasury/reporting?account=${encodeURIComponent(row.code)}`}>
-                  {t('accounts_shared.see_transactions')}
-                </Link>
-              </p>
-            </Panel>
-          ) : null}
-
           {mayAdminister ? (
             <Panel title={row.active ? t('accounts_shared.deactivate_title') : t('reactivate')}>
               {row.active ? (
@@ -497,6 +424,96 @@ export async function AccountRecord({
         </div>
 
         <div className={s.profileStack}>
+          {/* ── What this account holds ──────────────────────────────────
+              First in the wide column, above the form. The balance is what a
+              person opens a till or a bank account to find out; the form is
+              what they open it to change, and that is the rarer errand.
+
+              Read through `treasury-reports.ts`, which reads the G/L, so this
+              figure is the ledger's rather than a second tally kept beside it
+              — and cannot disagree with Bank and Cash Reporting. */}
+          {position ? (
+            <Panel
+              actions={
+                <Link className={s.sapLink} href={`/treasury/reporting?account=${encodeURIComponent(row.code)}`}>
+                  {t('accounts_shared.see_transactions')}
+                </Link>
+              }
+              icon={Wallet}
+              title={t('accounts_shared.money_title')}
+            >
+              <div className={s.holdings}>
+                <div className={s.holdingsHead}>
+                  <span>{t('accounts_shared.holds_now')}</span>
+                  <span className={s.holdingsAmount}>
+                    <bdi dir="ltr">{money(position.closingIqd)}</bdi>
+                  </span>
+                </div>
+
+                <div className={s.holdingsFlows}>
+                  <div className={`${s.holdingsFlow} ${s.holdingsIn}`}>
+                    <span>
+                      <ArrowDownLeft aria-hidden="true" />
+                      {t('accounts_shared.received_in', { year: String(year) })}
+                    </span>
+                    <strong>
+                      <bdi dir="ltr">{money(position.moneyInIqd)}</bdi>
+                    </strong>
+                  </div>
+
+                  <div className={`${s.holdingsFlow} ${s.holdingsOut}`}>
+                    <span>
+                      <ArrowUpRight aria-hidden="true" />
+                      {t('accounts_shared.paid_out_in', { year: String(year) })}
+                    </span>
+                    <strong>
+                      <bdi dir="ltr">{money(position.moneyOutIqd)}</bdi>
+                    </strong>
+                  </div>
+
+                  <div className={s.holdingsFlow}>
+                    <span>{t('accounts_shared.opening_year', { year: String(year) })}</span>
+                    <strong>
+                      <bdi dir="ltr">{money(position.openingIqd)}</bdi>
+                    </strong>
+                  </div>
+
+                  <div className={s.holdingsFlow}>
+                    <span>{t('accounts_shared.last_movement')}</span>
+                    <strong>
+                      {position.lastMovementDate ? (
+                        <bdi dir="ltr">
+                          {formatBusinessDate(position.lastMovementDate, locale as Locale)}
+                        </bdi>
+                      ) : (
+                        t('accounts_shared.never_moved')
+                      )}
+                    </strong>
+                  </div>
+
+                  {/* Only when there are any: a till that has never been part
+                      of a transfer should not carry two empty tiles. */}
+                  {Number(position.transfersInIqd) > 0 || Number(position.transfersOutIqd) > 0 ? (
+                    <>
+                      <div className={s.holdingsFlow}>
+                        <span>{t('accounts_shared.transfers_in')}</span>
+                        <strong>
+                          <bdi dir="ltr">{money(position.transfersInIqd)}</bdi>
+                        </strong>
+                      </div>
+                      <div className={s.holdingsFlow}>
+                        <span>{t('accounts_shared.transfers_out')}</span>
+                        <strong>
+                          <bdi dir="ltr">{money(position.transfersOutIqd)}</bdi>
+                        </strong>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </Panel>
+          ) : null}
+
           {mayEdit ? (
             <Panel title={t('update')}>
               <Form action={updateAccount}>
