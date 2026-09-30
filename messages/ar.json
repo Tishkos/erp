@@ -137,7 +137,7 @@
     "year_end_close": "إقفال نهاية السنة",
     "posting_mappings": "خرائط الترحيل",
     "customer_ledger": "أستاذ العملاء",
-    "ar_open_items": "البنود المفتوحة",
+    "ar_open_items": "أعمار الذمم المدينة",
     "ar_receipts": "المقبوضات",
     "ar_allocations": "التخصيصات",
     "credit_limits": "حدود الائتمان",
@@ -146,7 +146,7 @@
     "ar_ageing": "أعمار الديون",
     "ar_reconciliation": "التسوية",
     "supplier_ledger": "أستاذ الموردين",
-    "ap_open_items": "البنود المفتوحة",
+    "ap_open_items": "أعمار الذمم الدائنة",
     "ap_advances": "السلف",
     "ap_payments": "المدفوعات",
     "ap_allocations": "التخصيصات",
@@ -1726,7 +1726,17 @@
       "currency_hint": "ثلاثة أحرف. لا يحمل الحساب سوى هذه العملة.",
       "approval_limit": "حد الاعتماد",
       "approval_limit_hint": "أقصى ما تبلغه دفعة من هذا الحساب.",
-      "deactivate_title": "إلغاء تنشيط الحساب"
+      "deactivate_title": "إلغاء تنشيط الحساب",
+      "money_title": "ما يحتفظ به هذا الحساب",
+      "holds_now": "الرصيد الحالي",
+      "opening_year": "الرصيد في بداية {year}",
+      "received_in": "المقبوض في {year}",
+      "paid_out_in": "المدفوع في {year}",
+      "transfers_in": "وارد من حساباتنا",
+      "transfers_out": "صادر إلى حساباتنا",
+      "last_movement": "آخر حركة",
+      "never_moved": "لم تحدث أي حركة بعد",
+      "see_transactions": "عرض كل الحركات"
     },
     "bank_accounts": {
       "subtitle": "حسابات الشركة البنكية، والحساب الدفتري الذي يحمل كلًا منها.",
@@ -2034,6 +2044,7 @@
       "amount": "المبلغ (د.ع)",
       "reference": "المرجع",
       "allocate": "تخصيص",
+      "allocate_oldest_first": "سدّد الأقدم أولاً",
       "allocated": "المخصص",
       "unallocated": "غير المخصص",
       "outstanding": "المتبقي",
@@ -2054,6 +2065,7 @@
       "amount": "المبلغ (د.ع)",
       "reference": "المرجع",
       "allocate": "تخصيص",
+      "allocate_oldest_first": "خصّص للأقدم أولاً",
       "allocated": "المخصص",
       "unallocated": "غير المخصص",
       "outstanding": "المتبقي",
@@ -2197,7 +2209,8 @@
       "movement_transfer_in": "تحويل وارد",
       "movement_transfer_out": "تحويل صادر",
       "movement_other": "قيد",
-      "party": "العميل / المورّد"
+      "party": "العميل / المورّد",
+      "approved_by": "اعتمدها"
     },
     "open_items": {
       "subtitle_customer": "ما على العملاء، فاتورة بفاتورة، ومدى تأخره",
@@ -2218,6 +2231,16 @@
       "paid_on_time": "دُفعت في موعدها",
       "settlement": "التسوية",
       "last_payment": "آخر دفعة"
+    },
+    "statement_outstanding": {
+      "title": "ما زال مستحقاً",
+      "as_at": "القائم حتى {date}",
+      "overdue": "منه المتأخر",
+      "show_all": "الكل",
+      "due_soon": "يستحق قريباً",
+      "show_unpaid": "لم يُسدَّد بعد",
+      "show_part_paid": "مسدَّد جزئياً",
+      "nothing": "لا شيء هنا — لا توجد فاتورة على هذا الحساب تطابق ما يُعرض."
     }
   },
   "profile": {

@@ -115,6 +115,92 @@ function statementTable(m: Messages, account: statement.PartnerStatement): Table
   };
 }
 
+/**
+ * What is still owed, printed under the movements — asked for on 2026-09-30.
+ *
+ * A statement handed to a customer says what moved; what they actually want to
+ * know is which invoices are still open and when each fell due. Reading it
+ * through `open-items.ts` means the printed copy and the screen cannot state
+ * different figures, which is the only reason to print a statement at all.
+ *
+ * Nothing outstanding prints no table rather than an empty one: a heading over
+ * nothing reads as a fault in the report.
+ */
+
+/** The ageing bands, named as the dashboard names them. One vocabulary. */
+const AGEING_LABEL: Readonly<Record<string, string>> = {
+  current: 'bucket_current',
+  '1-30': 'bucket_1_30',
+  '31-60': 'bucket_31_60',
+  '61-90': 'bucket_61_90',
+  '90+': 'bucket_over_90',
+};
+
+async function outstandingTable(
+  ctx: BuildContext,
+  side: 'customer' | 'supplier',
+  partyCode: string,
+  asOf: string,
+  view: openItemsService.OpenItemView,
+): Promise<{ readonly tables: Table[]; readonly ageing: openItemsService.BucketTotal[] }> {
+  const { m } = ctx;
+  const items = await openItemsService
+    .openItems(ctx.tx, ctx.principal, side, asOf, {
+      branchCode: ctx.branchCode,
+      partyCode,
+      outstandingOnly: true,
+      // The copy answers the question the screen was answering when Print was
+      // pressed: a statement headed "Overdue" that lists everything is worse
+      // than no statement.
+      ...openItemsService.viewFilter(view),
+    })
+    .catch(() => []);
+  if (items.length === 0) return { tables: [], ageing: [] };
+
+  return {
+    ageing: openItemsService.ageing(items),
+    tables: [
+    {
+      title: m.admin('statement_outstanding.title'),
+      columns: [
+        { key: 'invoice', label: m.column('invoice_no'), kind: 'code', weight: 1.4 },
+        { key: 'invoice_date', label: m.column('invoice_date'), kind: 'date' },
+        { key: 'due_date', label: m.column('due_date'), kind: 'date' },
+        { key: 'terms', label: m.admin('open_items.terms'), kind: 'text' },
+        { key: 'total', label: m.column('total_price'), kind: 'money' },
+        { key: 'paid', label: m.admin('open_items.paid'), kind: 'money' },
+        { key: 'outstanding', label: m.admin('open_items.outstanding'), kind: 'money' },
+        { key: 'late', label: m.admin('open_items.lateness'), kind: 'text' },
+      ],
+      rows: items.map((item) => ({
+        cells: {
+          invoice: item.invoiceNo,
+          invoice_date: item.invoiceDate,
+          due_date: item.dueDate,
+          terms: item.paymentTermsName ?? item.paymentTermsCode ?? '',
+          total: item.totalIqd,
+          paid: item.paidIqd,
+          outstanding: item.outstandingIqd,
+          late:
+            item.daysOverdue > 0
+              ? m.admin('open_items.overdue_by', { days: item.daysOverdue })
+              : m.admin('open_items.due_in', { days: item.daysUntilDue }),
+        },
+      })),
+      empty: m.admin('open_items.nothing'),
+      totals: {
+        label: m.admin('open_items.outstanding'),
+        cells: {
+          total: sumMoney(items.map((item) => item.totalIqd)),
+          paid: sumMoney(items.map((item) => item.paidIqd)),
+          outstanding: sumMoney(items.map((item) => item.outstandingIqd)),
+        },
+      },
+    },
+    ],
+  };
+}
+
 /** Customer or Supplier Account Statement — blocks 2 and 3. */
 export async function partnerStatement(
   ctx: BuildContext,
@@ -127,12 +213,22 @@ export async function partnerStatement(
   const to = param(query, 'to', `${year}-12-31`);
   const currency = currencyOf(query);
   const asked = query.get('code') ?? '';
+  const view = openItemsService.viewFrom(query.get('due'));
+
+  /*
+   * Aged as at the statement's closing date, but never later than today —
+   * the same rule the screen applies, so the copy in the file and the screen
+   * it was printed from cannot disagree about how late an invoice is.
+   */
+  const today = new Date().toISOString().slice(0, 10);
+  const agedAt = to > today ? today : to;
 
   const roll = await partners.listByRole(tx, side);
   const chosen = roll.find((row) => row.code === asked) ?? null;
   // No partner chosen is a screen that asks for one, not a statement.
   if (!chosen) return null;
   const account = await statement.statementFor(tx, side, chosen.code, { from, to, currency });
+  const outstanding = await outstandingTable(ctx, side, chosen.code, agedAt, view);
 
   const title = m.print(`titles.${side}_statement`);
   return built(
@@ -146,13 +242,26 @@ export async function partnerStatement(
         { label: m.admin('reports.to'), value: day(to, locale), ltr: true },
         { label: m.admin('reports.currency'), value: currency, ltr: true },
       ],
-      tables: [statementTable(m, account)],
+      tables: [statementTable(m, account), ...outstanding.tables],
       summary: [
         {
           label: m.admin('partners.statement_closing'),
           value: formatStatementAmount(account.closing, currency, locale),
           ltr: true,
         },
+        /*
+         * The ageing, band by band, on the printed copy.
+         *
+         * A statement posted to a customer is the document a conversation
+         * about money happens over, and "how much of this is old" is the
+         * first thing asked about it. The screen carries the bands in its
+         * footer; a copy without them made the reader add the column up.
+         */
+        ...outstanding.ageing.map((bucket) => ({
+          label: m.admin(`dashboard.${AGEING_LABEL[bucket.bucket] ?? 'bucket_current'}`),
+          value: formatStatementAmount(bucket.amountIqd, currency, locale),
+          ltr: true,
+        })),
       ],
       fileName: `${side}-statement_${chosen.code}_${from}_${to}`,
     }),

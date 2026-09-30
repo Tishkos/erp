@@ -137,7 +137,7 @@
     "year_end_close": "Year-End Close",
     "posting_mappings": "Posting Mappings",
     "customer_ledger": "Customer Ledger",
-    "ar_open_items": "Open Items",
+    "ar_open_items": "Receivables Ageing",
     "ar_receipts": "Receipts",
     "ar_allocations": "Allocations",
     "credit_limits": "Credit Limits",
@@ -146,7 +146,7 @@
     "ar_ageing": "Ageing",
     "ar_reconciliation": "Reconciliation",
     "supplier_ledger": "Supplier Ledger",
-    "ap_open_items": "Open Items",
+    "ap_open_items": "Payables Ageing",
     "ap_advances": "Advances",
     "ap_payments": "Payments",
     "ap_allocations": "Allocations",
@@ -1726,7 +1726,17 @@
       "currency_hint": "Three letters. The account can only hold this currency.",
       "approval_limit": "Approval limit",
       "approval_limit_hint": "The ceiling a payment from this account may reach.",
-      "deactivate_title": "Deactivate this account"
+      "deactivate_title": "Deactivate this account",
+      "money_title": "What this account holds",
+      "holds_now": "Holds now",
+      "opening_year": "Held at the start of {year}",
+      "received_in": "Received in {year}",
+      "paid_out_in": "Paid out in {year}",
+      "transfers_in": "Moved in from our own accounts",
+      "transfers_out": "Moved out to our own accounts",
+      "last_movement": "Last movement",
+      "never_moved": "Nothing has moved yet",
+      "see_transactions": "See every transaction"
     },
     "bank_accounts": {
       "subtitle": "The company’s bank accounts, and the G/L account each is carried in.",
@@ -2034,6 +2044,7 @@
       "amount": "Amount (IQD)",
       "reference": "Reference",
       "allocate": "Allocate",
+      "allocate_oldest_first": "Pay oldest first",
       "allocated": "Allocated",
       "unallocated": "Unallocated",
       "outstanding": "Outstanding",
@@ -2054,6 +2065,7 @@
       "amount": "Amount (IQD)",
       "reference": "Reference",
       "allocate": "Allocate",
+      "allocate_oldest_first": "Apply oldest first",
       "allocated": "Allocated",
       "unallocated": "Unallocated",
       "outstanding": "Outstanding",
@@ -2197,7 +2209,8 @@
       "movement_transfer_in": "Transfer in",
       "movement_transfer_out": "Transfer out",
       "movement_other": "Journal",
-      "party": "Customer / Supplier"
+      "party": "Customer / Supplier",
+      "approved_by": "Approved by"
     },
     "open_items": {
       "subtitle_customer": "What customers owe, invoice by invoice, and how late it is",
@@ -2218,6 +2231,16 @@
       "paid_on_time": "Paid on time",
       "settlement": "Settlement",
       "last_payment": "Last payment"
+    },
+    "statement_outstanding": {
+      "title": "What is still owed",
+      "as_at": "Open as at {date}",
+      "overdue": "Of which overdue",
+      "show_all": "All",
+      "due_soon": "Falling due soon",
+      "show_unpaid": "Not yet paid",
+      "show_part_paid": "Part paid",
+      "nothing": "Nothing here — no invoice on this account matches what is being shown."
     }
   },
   "profile": {

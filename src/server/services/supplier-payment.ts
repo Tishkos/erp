@@ -37,6 +37,7 @@ import {
 } from '../db/schema';
 import { parseDecimal, toDecimalString } from '../domain/money';
 import { bucketFor, horizonFor } from '../domain/ageing';
+import { oldestFirst, proposeAllocation } from '../domain/receipt-allocation';
 export { AGEING_BUCKETS, bucketFor, horizonFor, type AgeingBucket } from '../domain/ageing';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
@@ -111,6 +112,18 @@ export class DuplicateAllocationError extends Error {
         'Reverse that allocation if it was wrong; applying the same money twice would clear a debt that is still owed.',
     );
     this.name = 'DuplicateAllocationError';
+  }
+}
+
+export class NothingToAllocateError extends Error {
+  readonly code = 'PAYMENT_NOTHING_TO_ALLOCATE';
+
+  constructor(readonly paymentNo: string) {
+    super(
+      `Payment ${paymentNo} has nothing left to apply, or the supplier has no invoice still owing ` +
+        'that this payment is not already against. Money with no debt to settle stays unallocated.',
+    );
+    this.name = 'NothingToAllocateError';
   }
 }
 
@@ -1064,16 +1077,116 @@ export async function openInvoicesFor(tx: Tx, supplierId: string) {
       inArray(apInvoice.status, ['posted', 'partially_executed', 'settled'])))
     .orderBy(asc(apInvoice.dueDate));
 
-  return rows
+  const open = rows
     .map((invoice) => ({
       id: invoice.id,
       invoiceNo: invoice.invoiceNo,
       supplierInvoiceNo: invoice.supplierInvoiceNo,
+      invoiceDate: invoice.invoiceDate,
       dueDate: invoice.dueDate,
       totalIqd: invoice.totalIqd,
       outstanding: outstandingOn(invoice),
     }))
     .filter((invoice) => invoice.outstanding > 0n);
+
+  // Read down the screen in the order the money would be applied in — the
+  // same rule `proposeAllocation` follows, so the list and the plan agree.
+  const order = new Map(
+    oldestFirst(
+      open.map((invoice) => ({
+        id: invoice.id,
+        dueDate: invoice.dueDate,
+        invoiceDate: invoice.invoiceDate,
+        invoiceNo: invoice.invoiceNo,
+        openIqd: invoice.outstanding,
+      })),
+    ).map((invoice, index) => [invoice.id, index]),
+  );
+
+  return open.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+}
+
+/**
+ * What oldest-first would do with what is left of this payment.
+ *
+ * The screen fills each invoice's box from this, so the amounts offered add up
+ * to the payment instead of each offering the whole of it.
+ */
+export async function planFor(
+  tx: Tx,
+  payment: typeof supplierPayment.$inferSelect,
+): Promise<Map<string, bigint>> {
+  const open = await openInvoicesFor(tx, payment.supplierId);
+
+  /*
+   * Skip what this payment is already against.
+   *
+   * §15 allows one live allocation per payment and invoice — a second is
+   * refused as a duplicate. So an invoice this payment has already part-paid
+   * is not a candidate for the rest of it, however much it still owes; the
+   * remainder goes to the next invoice down, and the clerk who wants to
+   * increase the first one reverses that allocation and makes it again.
+   */
+  const already = new Set(
+    (
+      await tx
+        .select({ apInvoiceId: supplierPaymentAllocation.apInvoiceId })
+        .from(supplierPaymentAllocation)
+        .where(
+          and(
+            eq(supplierPaymentAllocation.supplierPaymentId, payment.id),
+            isNull(supplierPaymentAllocation.reversedAt),
+          ),
+        )
+    ).map((row) => row.apInvoiceId),
+  );
+
+  const plan = proposeAllocation(
+    {
+      amountIqd: parseDecimal(payment.amountIqd, 4n),
+      allocatedIqd: parseDecimal(payment.allocatedAmountIqd, 4n),
+    },
+    open
+      .filter((invoice) => !already.has(invoice.id))
+      .map((invoice) => ({
+        id: invoice.id,
+        dueDate: invoice.dueDate,
+        invoiceDate: invoice.invoiceDate,
+        invoiceNo: invoice.invoiceNo,
+        openIqd: invoice.outstanding,
+      })),
+  );
+  // `proposeAllocation` names its key for the receivable side; the plan itself
+  // is the same arithmetic whichever way the money is going.
+  return new Map(plan.map((line) => [line.arInvoiceId, line.amountIqd]));
+}
+
+/**
+ * Put what is left of a payment against the oldest supplier invoices first.
+ *
+ * The whole plan in one transaction. A supplier who is paid 100,000 against a
+ * 50,000 invoice from Monday and a 100,000 from Tuesday has settled Monday and
+ * half of Tuesday, and the ageing has to say so.
+ */
+export async function allocateOldestFirst(
+  tx: Tx,
+  ctx: ActorContext,
+  supplierPaymentId: string,
+): Promise<{ invoices: number; paymentUnallocated: bigint }> {
+  const payment = await load(tx, supplierPaymentId);
+  const plan = [...(await planFor(tx, payment))];
+
+  if (plan.length === 0) {
+    throw new NothingToAllocateError(payment.paymentNo);
+  }
+
+  let unallocatedLeft = unallocatedOn(payment);
+  for (const [apInvoiceId, amountIqd] of plan) {
+    const outcome = await allocate(tx, ctx, { supplierPaymentId, apInvoiceId, amountIqd });
+    unallocatedLeft = outcome.paymentUnallocated;
+  }
+
+  return { invoices: plan.length, paymentUnallocated: unallocatedLeft };
 }
 
 export async function view(tx: Tx, id: string) {

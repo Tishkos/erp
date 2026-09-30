@@ -63,3 +63,20 @@ export async function allocateReceipt(formData: FormData): Promise<void> {
     record(receiptNo),
   );
 }
+
+/**
+ * Oldest invoice first, in one act.
+ *
+ * What the money means: a customer with a 50,000 invoice from Monday and a
+ * 100,000 from Tuesday who pays 50,000 has paid Monday's, and one who pays
+ * 100,000 has settled Monday and half-paid Tuesday. The rows can still be
+ * filled in by hand when the customer says which invoice they meant — this is
+ * the button for when they have not.
+ */
+export async function allocateOldestFirst(formData: FormData): Promise<void> {
+  const receiptNo = text(formData, 'receipt_no');
+  await runAdminAndReturn(
+    (tx, ctx) => receipts.allocateOldestFirst(tx, ctx, text(formData, 'id')),
+    record(receiptNo),
+  );
+}

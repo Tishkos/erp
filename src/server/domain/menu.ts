@@ -118,6 +118,10 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('pick_lists', 'pick_list', '06'),
       page('delivery_notes', 'delivery_note', '06'),
       page('ar_invoices', 'ar_invoice', '06'),
+      // Beside the invoices it ages. Appendix A filed it under Receivables; it
+      // sits here for the reason the Account Statement does — the screen
+      // belongs under the heading whose work it is (2026-09-30).
+      page('ar_open_items', 'ar_invoice', '06', '/sales/receivables'),
       page('cash_sales', 'cash_sale', '06'),
       page('customer_receipts', 'customer_receipt', '06'),
       page('credit_control', 'credit_control', '06'),
@@ -140,6 +144,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('goods_receipts', 'goods_receipt', '05'),
       page('service_receipts', 'service_receipt', '05'),
       page('ap_invoices', 'ap_invoice', '05'),
+      // The supplier's side of the same mirror.
+      page('ap_open_items', 'ap_invoice', '05', '/purchasing/payables'),
       page('supplier_advances', 'supplier_advance', '05'),
       page('supplier_payments', 'supplier_payment', '05'),
       page('goods_returns', 'goods_return', '05'),
@@ -272,9 +278,6 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ordinal: 11,
     items: [
       page('customer_ledger', 'customer_ledger', '06'),
-      // What customers owe, invoice by invoice, with the terms that set each
-      // due date and how late the remainder is (2026-09-29).
-      page('ar_open_items', 'ar_invoice', '06', '/sales/receivables'),
       page('ar_receipts', 'customer_receipt', '06'),
       page('ar_allocations', 'ar_allocation', '06'),
       page('credit_limits', 'credit_limit', '06'),
@@ -288,8 +291,6 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ordinal: 12,
     items: [
       page('supplier_ledger', 'supplier_ledger', '05'),
-      // The supplier's side of the same mirror.
-      page('ap_open_items', 'ap_invoice', '05', '/purchasing/payables'),
       page('ap_advances', 'supplier_advance', '05'),
       page('ap_payments', 'supplier_payment', '05'),
       page('ap_allocations', 'ap_allocation', '05'),

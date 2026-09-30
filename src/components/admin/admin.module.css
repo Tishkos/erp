@@ -938,6 +938,14 @@
   border-block-end: 0;
 }
 
+/* A way out of a panel — the link under the account's balances to the ledger
+   those balances are made of. Quiet, because it is an offer rather than the
+   point of the panel. */
+.panelNote {
+  margin: 0.75rem 0 0;
+  font-size: 0.78rem;
+}
+
 .profileFacts li > span:first-child {
   color: var(--text-muted);
   font-weight: 600;

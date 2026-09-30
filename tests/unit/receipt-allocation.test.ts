@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertWithinReceipt,
   creditRoleFor,
+  oldestFirst,
   proposeAllocation,
   receiptStatusFor,
   unapplied,
@@ -142,5 +143,48 @@ describe('06.10 · the oldest-first proposal (§16 one-to-many)', () => {
 
     // 300 + 500 + 400 — the receipt has more, and the invoices do not want it.
     expect(total).toBe(iqd('1200'));
+  });
+});
+
+/**
+ * The case the sponsor put in writing, in their figures.
+ *
+ * *"we make an invoice today and tomorrow, today was 50,000 IQD and tomorrow
+ * is 100,000 IQD; customer tomorrow pays 50,000 — it means 50,000 from the
+ * receipt paid for the first one; if it pays 100,000 it means the second
+ * invoice is partially paid."*
+ */
+describe('06.10 · what the money means', () => {
+  const monday = { id: 'monday', dueDate: '2026-03-02', invoiceNo: 'INV-1', openIqd: iqd('50000') };
+  const tuesday = { id: 'tuesday', dueDate: '2026-03-03', invoiceNo: 'INV-2', openIqd: iqd('100000') };
+
+  it('50,000 pays Monday and leaves Tuesday untouched', () => {
+    expect(proposeAllocation({ amountIqd: iqd('50000'), allocatedIqd: 0n }, [tuesday, monday])).toEqual([
+      { arInvoiceId: 'monday', amountIqd: iqd('50000') },
+    ]);
+  });
+
+  it('100,000 settles Monday and part-pays Tuesday', () => {
+    expect(proposeAllocation({ amountIqd: iqd('100000'), allocatedIqd: 0n }, [tuesday, monday])).toEqual([
+      { arInvoiceId: 'monday', amountIqd: iqd('50000') },
+      // 100,000 less Monday's 50,000 — Tuesday is half done, not settled.
+      { arInvoiceId: 'tuesday', amountIqd: iqd('50000') },
+    ]);
+  });
+
+  it('orders two invoices due on one day by their own date, then their number', () => {
+    const sameDay = [
+      { id: 'b', dueDate: '2026-04-01', invoiceDate: '2026-03-02', invoiceNo: 'INV-9', openIqd: iqd('10') },
+      { id: 'a', dueDate: '2026-04-01', invoiceDate: '2026-03-01', invoiceNo: 'INV-8', openIqd: iqd('10') },
+      { id: 'c', dueDate: '2026-04-01', invoiceDate: '2026-03-02', invoiceNo: 'INV-7', openIqd: iqd('10') },
+    ];
+    // Raised first wins; between the two raised together, the lower number.
+    expect(oldestFirst(sameDay).map((invoice) => invoice.id)).toEqual(['a', 'c', 'b']);
+  });
+
+  it('gives the same order however the rows arrive', () => {
+    const rows = [tuesday, monday];
+    expect(oldestFirst(rows).map((row) => row.id)).toEqual(['monday', 'tuesday']);
+    expect(oldestFirst([...rows].reverse()).map((row) => row.id)).toEqual(['monday', 'tuesday']);
   });
 });

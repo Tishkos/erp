@@ -35,6 +35,7 @@ import { assertWithinBalance, openBalance } from '../domain/ar-invoicing';
 import {
   assertWithinReceipt,
   creditRoleFor,
+  oldestFirst,
   proposeAllocation,
   receiptStatusFor,
   unapplied,
@@ -66,6 +67,18 @@ export class ReceiptNotPostedError extends Error {
         'before that it is a document, not a payment.',
     );
     this.name = 'ReceiptNotPostedError';
+  }
+}
+
+export class NothingToAllocateError extends Error {
+  readonly code = 'RECEIPT_NOTHING_TO_ALLOCATE';
+
+  constructor(readonly receiptNo: string) {
+    super(
+      `Receipt ${receiptNo} has nothing left to apply, or the customer has no invoice still owing. ` +
+        'Money with no debt to settle stays unapplied and appears on the unapplied report (§16).',
+    );
+    this.name = 'NothingToAllocateError';
   }
 }
 
@@ -678,12 +691,20 @@ export async function viewByNo(tx: Tx, receiptNo: string) {
   return view(tx, row.id);
 }
 
-/** A customer's invoices with something still owed on them, oldest first. */
+/**
+ * A customer's invoices with something still owed on them, oldest first.
+ *
+ * Ordered by `oldestFirst`, the same rule the allocation plan uses, so the
+ * order a clerk reads down the screen is the order the money would be applied
+ * in if they pressed the button. A list in one order and a plan in another is
+ * how somebody comes to believe the plan skipped an invoice.
+ */
 export async function openInvoicesFor(tx: Tx, customerId: string) {
   const rows = await tx
     .select({
       id: arInvoice.id,
       invoiceNo: arInvoice.invoiceNo,
+      invoiceDate: arInvoice.invoiceDate,
       dueDate: arInvoice.dueDate,
       netIqd: arInvoice.netIqd,
       allocatedIqd: arInvoice.allocatedIqd,
@@ -694,12 +715,84 @@ export async function openInvoicesFor(tx: Tx, customerId: string) {
       inArray(arInvoice.status, ['posted', 'partially_executed', 'settled'])))
     .orderBy(asc(arInvoice.dueDate));
 
-  return rows
+  const open = rows
     .map((invoice) => ({
       ...invoice,
       outstanding: parseDecimal(invoice.netIqd, 4n) - parseDecimal(invoice.allocatedIqd, 4n),
     }))
     .filter((invoice) => invoice.outstanding > 0n);
+
+  const order = new Map(
+    oldestFirst(
+      open.map((invoice) => ({
+        id: invoice.id,
+        dueDate: invoice.dueDate,
+        invoiceDate: invoice.invoiceDate,
+        invoiceNo: invoice.invoiceNo,
+        openIqd: invoice.outstanding,
+      })),
+    ).map((invoice, index) => [invoice.id, index]),
+  );
+
+  return open.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+}
+
+/**
+ * What oldest-first would do with what is left of this receipt.
+ *
+ * Read by the screen to fill each invoice's box with its share, so the amounts
+ * offered add up to the receipt rather than each offering the whole of it —
+ * which is what the boxes used to do, and it invited an over-allocation the
+ * service then had to refuse.
+ */
+export async function planFor(
+  tx: Tx,
+  receipt: { readonly customerId: string | null; readonly amountIqd: string; readonly allocatedIqd: string },
+): Promise<Map<string, bigint>> {
+  if (!receipt.customerId) return new Map();
+  const open = await openInvoicesFor(tx, receipt.customerId);
+  const plan = proposeAllocation(
+    {
+      amountIqd: parseDecimal(receipt.amountIqd, 4n),
+      allocatedIqd: parseDecimal(receipt.allocatedIqd, 4n),
+    },
+    open.map((invoice) => ({
+      id: invoice.id,
+      dueDate: invoice.dueDate,
+      invoiceDate: invoice.invoiceDate,
+      invoiceNo: invoice.invoiceNo,
+      openIqd: invoice.outstanding,
+    })),
+  );
+  return new Map(plan.map((line) => [line.arInvoiceId, line.amountIqd]));
+}
+
+/**
+ * Apply what is left of a receipt to the oldest invoices first — one act.
+ *
+ * The whole plan in one transaction, because that is what the clerk meant: a
+ * run that settled two invoices and then refused the third would leave them
+ * working out by hand which of the three it was.
+ */
+export async function allocateOldestFirst(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+): Promise<{ allocatedIqd: bigint; status: string; invoices: number }> {
+  const receipt = await load(tx, id);
+  if (!receipt.customerId) throw new UnidentifiedReceiptError(receipt.receiptNo);
+
+  const plan = [...(await planFor(tx, receipt))].map(([arInvoiceId, amountIqd]) => ({
+    arInvoiceId,
+    amountIqd,
+  }));
+
+  if (plan.length === 0) {
+    throw new NothingToAllocateError(receipt.receiptNo);
+  }
+
+  const outcome = await allocate(tx, ctx, id, plan);
+  return { ...outcome, invoices: plan.length };
 }
 
 export async function view(tx: Tx, id: string) {
@@ -781,6 +874,8 @@ export async function proposeFor(tx: Tx, id: string) {
     open.map((invoice) => ({
       id: invoice.id,
       dueDate: invoice.dueDate,
+      invoiceDate: invoice.invoiceDate,
+      invoiceNo: invoice.invoiceNo,
       openIqd: openBalance({
         totalIqd: parseDecimal(invoice.netIqd, 4n),
         allocatedIqd: parseDecimal(invoice.allocatedIqd, 4n),

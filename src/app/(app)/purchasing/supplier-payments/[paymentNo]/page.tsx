@@ -14,7 +14,7 @@ import { toDecimalString } from '@domain/money';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as payments from '@/server/services/supplier-payment';
-import { allocatePayment, postPayment } from '../actions';
+import { allocateOldestFirstPayment, allocatePayment, postPayment } from '../actions';
 
 /**
  * One Payment — Operations build, block 6.
@@ -66,12 +66,16 @@ export default async function PaymentPage({
     return {
       ...seen,
       open: await payments.openInvoicesFor(tx, seen.payment.supplierId),
+      // What oldest-first would give each invoice. The boxes used to offer
+      // every row the whole of the payment, so two rows offered the same money
+      // twice and the second submit was refused as an over-allocation.
+      plan: await payments.planFor(tx, seen.payment),
       parties: await payments.partiesOf(tx, seen.payment.id),
     };
   });
 
   if (!found) notFound();
-  const { payment, unallocated, open, parties } = found;
+  const { payment, unallocated, open, plan, parties } = found;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   const mayAllocate = unallocated > 0n && can(principal, 'post', payments.PERMISSION_OBJECT);
@@ -130,13 +134,28 @@ export default async function PaymentPage({
 
       <DocumentWindow
         actions={
-          mayPost ? (
-            <form action={postPayment}>
-              <input name="id" type="hidden" value={payment.id} />
-              <input name="payment_no" type="hidden" value={payment.paymentNo} />
-              <Submit label={t('supplier_payments.post')} variant="document" />
-            </form>
-          ) : null
+          <>
+            {mayPost ? (
+              <form action={postPayment}>
+                <input name="id" type="hidden" value={payment.id} />
+                <input name="payment_no" type="hidden" value={payment.paymentNo} />
+                <Submit label={t('supplier_payments.post')} variant="document" />
+              </form>
+            ) : null}
+            {/* The whole plan in one press, for the ordinary case where a
+                payment clears whatever is oldest. */}
+            {mayAllocate && plan.size > 0 ? (
+              <form action={allocateOldestFirstPayment}>
+                <input name="id" type="hidden" value={payment.id} />
+                <input name="payment_no" type="hidden" value={payment.paymentNo} />
+                <Submit
+                  label={t('supplier_payments.allocate_oldest_first')}
+                  tone="secondary"
+                  variant="document"
+                />
+              </form>
+            ) : null}
+          </>
         }
         auditHref="#audit-log"
         auditLabel={t('history')}
@@ -196,14 +215,9 @@ export default async function PaymentPage({
                         // in the box: the dinar has no minor unit, and four
                         // decimal places in a figure somebody is about to
                         // retype reads as a fault in the amount.
-                        defaultValue={String(
-                          Number(
-                            toDecimalString(
-                              invoice.outstanding < unallocated ? invoice.outstanding : unallocated,
-                              4n,
-                            ),
-                          ),
-                        )}
+                        // This invoice's share under oldest-first, so the
+                        // amounts down the column add up to the payment.
+                        defaultValue={String(Number(toDecimalString(plan.get(invoice.id) ?? 0n, 4n)))}
                         inputMode="decimal"
                         name="amount_iqd"
                       />

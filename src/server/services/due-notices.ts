@@ -30,8 +30,14 @@ import * as openItems from './open-items';
  * announced thirty mornings running before it is even late.
  */
 
-/** How far ahead "soon" reaches. A week is long enough to do something about. */
-export const DUE_SOON_DAYS = 7;
+/**
+ * How far ahead "soon" reaches — the report's horizon, not a second one.
+ *
+ * Re-exported rather than restated so that a notification calling an invoice
+ * "due soon" and the Account Statement listing it under "falling due soon"
+ * cannot come to mean different weeks.
+ */
+export const DUE_SOON_DAYS = openItems.DUE_SOON_DAYS;
 
 export interface NoticeRun {
   readonly asOf: string;

@@ -86,12 +86,18 @@ export async function positions(
   tx: Tx,
   ctx: ActorContext,
   window: { readonly from: string; readonly to: string },
-  filter: { readonly branchCode?: string | null; readonly kind?: 'bank' | 'cash' | null } = {},
+  filter: {
+    readonly branchCode?: string | null;
+    readonly kind?: 'bank' | 'cash' | null;
+    /** One account, by code. The screen's picker is typed into by name. */
+    readonly accountCode?: string | null;
+  } = {},
 ): Promise<AccountPosition[]> {
   await authz.authorize(ctx.principal, 'view', PERMISSION_OBJECT, { branchCode: ctx.branchCode });
 
   const branch = filter.branchCode ?? null;
   const kind = filter.kind ?? null;
+  const only = filter.accountCode?.trim() || null;
   const opensAt = dayBefore(window.from);
 
   const result = await tx.execute(sql`
@@ -139,6 +145,7 @@ export async function positions(
       left join movement m         on m.account_id = b.id
      where b.active
        and (${kind}::text is null or b.account_type::text = ${kind})
+       and (${only}::text is null or b.code = ${only})
      group by b.code, b.name, b.account_type, b.currency, a.code, a.name
      order by b.account_type, b.code
   `);
@@ -161,6 +168,20 @@ export interface LedgerLine {
   readonly partyName: string | null;
   readonly sourceModule: string | null;
   readonly sourceDocId: string | null;
+  /**
+   * Who raised the entry, and who approved it.
+   *
+   * §14.4's maker-checker is only a control if it can be read afterwards. A
+   * treasury line showing money leaving without naming the two people behind
+   * it is a line nobody can question — and the question "who authorised this"
+   * is the first one asked about any payment.
+   *
+   * Null on an entry the posting engine raised from an approved document: the
+   * approval happened on the document, not on the journal, and inventing a
+   * name here would claim an approval nobody gave.
+   */
+  readonly raisedBy: string | null;
+  readonly approvedBy: string | null;
   readonly debitIqd: string;
   readonly creditIqd: string;
   readonly balanceIqd: string;
@@ -267,11 +288,15 @@ export async function ledger(
              e.source_doc_id::text       as "sourceDocId",
              l.business_partner_code      as "partyCode",
              p.legal_name                as "partyName",
+             raiser.display_name         as "raisedBy",
+             approver.display_name       as "approvedBy",
              l.debit_iqd::text           as "debitIqd",
              l.credit_iqd::text          as "creditIqd"
         from journal_line l
         join journal_entry e on e.id = l.journal_entry_id
         left join business_partner p on p.code = l.business_partner_code
+        left join app_user raiser    on raiser.id = e.created_by
+        left join app_user approver  on approver.id = e.approved_by
        where l.account_id = ${account.glAccountId}
          and e.status in ('posted', 'reversed')
          and e.posting_date between ${window.from}::date and ${window.to}::date

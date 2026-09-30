@@ -376,6 +376,81 @@ describe('06.10 gate · one receipt across several invoices (§16)', () => {
   });
 });
 
+/**
+ * Oldest first, applied — the sponsor's own example.
+ *
+ * *"we make an invoice today and tomorrow … customer tomorrow pays 50,000, it
+ * means 50,000 from the receipt paid for the first one; if it pays 100,000 it
+ * means the second invoice is partially paid."*
+ *
+ * The proposal above is arithmetic; this is the button. It matters that the
+ * money lands on the *older* invoice: put it on the newer one and the ageing
+ * report starts describing the allocation instead of the account.
+ */
+describe('06.10 · applying a receipt oldest-first', () => {
+  it('settles the older invoice and leaves the newer one alone', async () => {
+    await receive(qty('500'), 'B-1');
+    const older = await postedInvoice(qty('10'), '2026-02-13'); // 200
+    const newer = await postedInvoice(qty('20'), '2026-02-16'); // 400
+
+    const receipt = await postedReceipt('200');
+    const outcome = await withScope(scope(manager), (tx) =>
+      receipts.allocateOldestFirst(tx, manager, receipt.id),
+    );
+
+    expect(outcome.invoices).toBe(1);
+    expect(outcome.status, 'every dinar of it is applied').toBe('settled');
+
+    const first = await withScope(scope(manager), (tx) => ar.view(tx, older.id));
+    expect(first.status).toBe('settled');
+    expect(first.allocatedIqd).toBe('200.0000');
+
+    const second = await withScope(scope(manager), (tx) => ar.view(tx, newer.id));
+    expect(second.status, 'untouched — the money did not reach it').toBe('posted');
+    expect(second.allocatedIqd).toBe('0.0000');
+  });
+
+  it('settles the older invoice and part-pays the newer one with the rest', async () => {
+    await receive(qty('500'), 'B-1');
+    const older = await postedInvoice(qty('10'), '2026-02-13'); // 200
+    const newer = await postedInvoice(qty('20'), '2026-02-16'); // 400
+
+    const receipt = await postedReceipt('400');
+    const outcome = await withScope(scope(manager), (tx) =>
+      receipts.allocateOldestFirst(tx, manager, receipt.id),
+    );
+
+    expect(outcome.invoices).toBe(2);
+
+    const first = await withScope(scope(manager), (tx) => ar.view(tx, older.id));
+    expect(first.status).toBe('settled');
+    expect(first.allocatedIqd).toBe('200.0000');
+
+    const second = await withScope(scope(manager), (tx) => ar.view(tx, newer.id));
+    expect(second.status, 'the 400 receipt, less the 200 the older invoice took').toBe(
+      'partially_executed',
+    );
+    expect(second.allocatedIqd).toBe('200.0000');
+    expect(second.netIqd).toBe('400.0000');
+  });
+
+  it('refuses when there is nothing left to apply', async () => {
+    await receive(qty('500'), 'B-1');
+    const invoice = await postedInvoice(qty('10'), '2026-02-13'); // 200
+    const receipt = await postedReceipt('200');
+
+    await withScope(scope(manager), (tx) => receipts.allocateOldestFirst(tx, manager, receipt.id));
+    const settled = await withScope(scope(manager), (tx) => ar.view(tx, invoice.id));
+    expect(settled.status).toBe('settled');
+
+    // A second press has no debt to settle and says so rather than doing
+    // nothing quietly.
+    await expect(
+      withScope(scope(manager), (tx) => receipts.allocateOldestFirst(tx, manager, receipt.id)),
+    ).rejects.toThrow(receipts.NothingToAllocateError);
+  });
+});
+
 describe('06.10 gate · several receipts to one invoice (§16)', () => {
   it('accumulates until the invoice is paid', async () => {
     await receive(qty('500'), 'B-1');

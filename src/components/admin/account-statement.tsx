@@ -10,6 +10,7 @@ import { formatBusinessDate, formatStatementAmount, type Locale } from '@/i18n/c
 import { can } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { pickOne, pickOutcome } from '@domain/pick';
+import * as openItems from '@/server/services/open-items';
 import { daysBetween } from '@domain/ageing';
 import * as partners from '@/server/services/partners';
 import * as statement from '@/server/services/partner-statement';
@@ -57,6 +58,15 @@ const SIDE = {
  * linked — an address that refuses is worse than plain text. The line is on the
  * statement either way, because the money moved either way.
  */
+/** One wording for the buckets, shared with the dashboard and the ageing screens. */
+const BUCKET_KEY: Record<string, string> = {
+  current: 'bucket_current',
+  '1-30': 'bucket_1_30',
+  '31-60': 'bucket_31_60',
+  '61-90': 'bucket_61_90',
+  '90+': 'bucket_over_90',
+};
+
 const DOCUMENT_ROUTE: Readonly<Record<statement.DocumentKind, string | null>> = {
   ar_invoice: '/sales/ar-invoices',
   customer_receipt: '/sales/customer-receipts',
@@ -91,10 +101,34 @@ export async function AccountStatement({
   const to = typeof query.to === 'string' ? query.to : `${year}-12-31`;
   const currency = currencyFrom(query.currency);
   const asked = typeof query.code === 'string' ? query.code : '';
+  /*
+   * What to show of the account besides its movements.
+   *
+   * `all` is the default and the useful one: a statement screen that insists on
+   * a customer before it will say anything cannot answer "who owes us money",
+   * which is the question somebody actually opens it with. Choosing a partner
+   * narrows to their statement; leaving it blank now lists everybody's
+   * position instead of an empty table.
+   */
+  const view = openItems.viewFrom(query.due);
+
+  /*
+   * The day the open items are aged against.
+   *
+   * The statement's own closing date, so a copy printed for August ages its
+   * lines as at August and still says the same thing when it is re-printed in
+   * November — a statement in a file has to keep agreeing with itself.
+   *
+   * But never later than today. A statement run to the end of the year would
+   * otherwise declare an invoice due three days ago "95 days overdue", which
+   * is a fact about a future that has not happened.
+   */
+  const today = new Date().toISOString().slice(0, 10);
+  const agedAt = to > today ? today : to;
 
   // The whole role, not only the active part of it: a partner stops trading
   // long before their account stops needing to be read.
-  const { roll, chosen, account } = await withCurrentUser(async (tx) => {
+  const { roll, chosen, account, items } = await withCurrentUser(async (tx) => {
     const roll = await partners.listByRole(tx, side);
     /* Resolved from what was typed, not matched against the whole label.
        The box used to carry the partner's code in a hidden field, set only when
@@ -111,6 +145,20 @@ export async function AccountStatement({
       account: chosen
         ? await statement.statementFor(tx, side, chosen.code, { from, to, currency })
         : null,
+      /*
+       * The open items behind the same account, read through the service the
+       * ageing reports use. The statement shows what *moved*; this shows what
+       * is still owed and when it fell due — two different questions about one
+       * account, and the reason a reader used to need two screens.
+       */
+      items: await openItems
+        .openItems(tx, context.principal, side, agedAt, {
+          branchCode: context.scope.branchCode,
+          ...(chosen ? { partyCode: chosen.code } : {}),
+          outstandingOnly: true,
+          ...openItems.viewFilter(view),
+        })
+        .catch(() => []),
     };
   });
 
@@ -120,20 +168,6 @@ export async function AccountStatement({
     (row) => row.code,
     (row) => [row.code, row.legalName, row.tradeName],
   );
-
-  /*
-   * The day the lines are aged against.
-   *
-   * The statement's own closing date, so a copy printed for August ages its
-   * lines as at August and still says the same thing when it is re-printed in
-   * November — a statement in a file has to keep agreeing with itself.
-   *
-   * But never later than today. A statement run to the end of the year would
-   * otherwise declare an invoice due last week "95 days overdue", which is a
-   * fact about a future that has not happened.
-   */
-  const today = new Date().toISOString().slice(0, 10);
-  const agedAt = account && account.to > today ? today : (account?.to ?? today);
 
   const money = (amount: string) => formatStatementAmount(amount, currency, locale as Locale);
   const day = (date: string) => formatBusinessDate(date, locale as Locale);
@@ -147,6 +181,124 @@ export async function AccountStatement({
       title={page(screen.page)}
       variant="sap"
     >
+      {/* ── What is still owed ────────────────────────────────────────────
+          Above the movements, because it is the question the screen is opened
+          with. With nobody chosen it lists every partner's position, so "who
+          owes us money" is answerable without picking a name first; with a
+          partner chosen it lists their open invoices and when each fell due.
+
+          Both read `open-items.ts`, the same service the Ageing screens use,
+          so a figure here and a figure there cannot disagree.
+
+          Kept on screen while a narrowing is in force even when it matches
+          nothing: a panel that disappears when "Overdue" is chosen looks like
+          a fault, where "nothing overdue" is the answer somebody wanted. */}
+      {items.length > 0 || view !== 'all' ? (
+        <ReportWindow
+          meta={t('statement_outstanding.as_at', { date: day(agedAt) })}
+          title={t('statement_outstanding.title')}
+          {...{
+            foot: (
+              <div className={s.sapFootTotals}>
+                {openItems.ageing(items).map((bucket) => (
+                  <div className={s.sapFootTotal} key={bucket.bucket}>
+                    <span>{t(`dashboard.${BUCKET_KEY[bucket.bucket] ?? 'bucket_current'}`)}</span>
+                    <strong>
+                      <bdi dir="ltr">{money(bucket.amountIqd)}</bdi>
+                    </strong>
+                  </div>
+                ))}
+                <div className={s.sapFootTotal}>
+                  <span>{t('open_items.outstanding')}</span>
+                  <strong>
+                    <bdi dir="ltr">
+                      {money(String(items.reduce((sum, row) => sum + Number(row.outstandingIqd), 0)))}
+                    </bdi>
+                  </strong>
+                </div>
+              </div>
+            ),
+          }}
+        >
+          <table className={`${s.sapTable} ${s.sapReportTable}`}>
+            <thead>
+              {chosen ? (
+                <tr>
+                  <th scope="col">{column('invoice_no')}</th>
+                  <th scope="col">{column('invoice_date')}</th>
+                  <th scope="col">{column('due_date')}</th>
+                  <th scope="col">{t('open_items.terms')}</th>
+                  <th className={s.sapNum} scope="col">{column('total_price')}</th>
+                  <th className={s.sapNum} scope="col">{t('open_items.paid')}</th>
+                  <th className={s.sapNum} scope="col">{t('open_items.outstanding')}</th>
+                  <th scope="col">{t('open_items.lateness')}</th>
+                </tr>
+              ) : (
+                <tr>
+                  <th scope="col">{t(`partners.role_${side}`)}</th>
+                  <th className={s.sapNum} scope="col">{column('document')}</th>
+                  <th className={s.sapNum} scope="col">{t('open_items.outstanding')}</th>
+                  <th className={s.sapNum} scope="col">{t('statement_outstanding.overdue')}</th>
+                </tr>
+              )}
+            </thead>
+            <tbody>
+              {items.length === 0 ? (
+                <tr>
+                  <td className={s.sapEmptyRow} colSpan={chosen ? 8 : 4}>
+                    {t('statement_outstanding.nothing')}
+                  </td>
+                </tr>
+              ) : chosen
+                ? items.map((item) => (
+                    <tr key={item.invoiceId}>
+                      <td className={s.sapAccountCell}>
+                        <Link
+                          className={s.sapLink}
+                          href={`${DOCUMENT_ROUTE[side === 'customer' ? 'ar_invoice' : 'ap_invoice']}/${encodeURIComponent(item.invoiceNo)}`}
+                        >
+                          <bdi dir="ltr">{item.invoiceNo}</bdi>
+                        </Link>
+                      </td>
+                      <td><bdi dir="ltr">{day(item.invoiceDate)}</bdi></td>
+                      <td><bdi dir="ltr">{day(item.dueDate)}</bdi></td>
+                      <td><bdi dir="auto">{item.paymentTermsName ?? item.paymentTermsCode ?? '—'}</bdi></td>
+                      <td className={s.sapNum}><bdi dir="ltr">{money(item.totalIqd)}</bdi></td>
+                      <td className={s.sapNum}><bdi dir="ltr">{money(item.paidIqd)}</bdi></td>
+                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(item.outstandingIqd)}</bdi></strong></td>
+                      <td>
+                        {item.daysOverdue > 0 ? (
+                          <span className={s.sapWarn}>{t('open_items.overdue_by', { days: item.daysOverdue })}</span>
+                        ) : (
+                          <span>{t('open_items.due_in', { days: item.daysUntilDue })}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                : openItems.byParty(items).map((party) => (
+                    <tr key={party.partyCode}>
+                      <td className={s.sapAccountCell}>
+                        <Link className={s.sapLink} href={`${screen.route}?code=${encodeURIComponent(party.partyCode)}&from=${from}&to=${to}&currency=${currency}`}>
+                          <bdi dir="auto">{party.partyName}</bdi>
+                        </Link>{' '}
+                        <span className="muted"><bdi dir="ltr">{party.partyCode}</bdi></span>
+                      </td>
+                      <td className={s.sapNum}>{party.invoices}</td>
+                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(party.outstandingIqd)}</bdi></strong></td>
+                      <td className={s.sapNum}>
+                        {Number(party.overdueIqd) > 0 ? (
+                          <span className={s.sapWarn}><bdi dir="ltr">{money(party.overdueIqd)}</bdi></span>
+                        ) : (
+                          <bdi dir="ltr">{money('0')}</bdi>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </ReportWindow>
+      ) : null}
+
       <ReportWindow
         filter={
           <ReportFilter action={screen.route} currency={currency} from={from} to={to}>
@@ -166,6 +318,16 @@ export async function AccountStatement({
                   </option>
                 ))}
               </datalist>
+            </label>
+            <label className={s.sapFilterField}>
+              <span className={s.sapLabel}>{t('open_items.show')}</span>
+              <select defaultValue={view} name="due">
+                <option value="all">{t('statement_outstanding.show_all')}</option>
+                <option value="soon">{t('statement_outstanding.due_soon')}</option>
+                <option value="overdue">{t('open_items.show_overdue')}</option>
+                <option value="unpaid">{t('statement_outstanding.show_unpaid')}</option>
+                <option value="part_paid">{t('statement_outstanding.show_part_paid')}</option>
+              </select>
             </label>
           </ReportFilter>
         }

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
 import { AdminPage, Field, FilterRow, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { SearchablePicker } from '@/components/admin/searchable-picker';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -57,10 +58,13 @@ export default async function TreasuryReportingPage({ searchParams }: { searchPa
   const kind = one('kind') === 'bank' || one('kind') === 'cash' ? (one('kind') as 'bank' | 'cash') : null;
   const chosen = one('account') || null;
 
-  const { positions, ledger } = await withCurrentUser(async (tx, request) => {
+  const { positions, allAccounts, ledger } = await withCurrentUser(async (tx, request) => {
     const actor = { principal: request.principal, branchCode: request.scope.branchCode };
     return {
-      positions: await reports.positions(tx, actor, { from, to }, { kind }),
+      positions: await reports.positions(tx, actor, { from, to }, { kind, accountCode: chosen }),
+      // The picker offers every account, not the filtered set — a filter that
+      // hid the thing you are trying to choose would be a trap.
+      allAccounts: await reports.positions(tx, actor, { from, to }, {}),
       // The branch is deliberately not narrowed here: a bank account is a
       // company-wide master (§17), and a balance shown for one branch would
       // not be the balance anybody can reconcile against the bank.
@@ -106,6 +110,17 @@ export default async function TreasuryReportingPage({ searchParams }: { searchPa
                 { value: 'bank', label: kindName('bank') },
                 { value: 'cash', label: kindName('cash') },
               ]}
+            />
+            {/* One account by name, typed and matched — a treasury with forty
+                accounts is not a drop-down anybody reads. */}
+            <SearchablePicker
+              defaultValue={chosen ?? ''}
+              label={column('account')}
+              name="account"
+              options={allAccounts.map((row) => ({
+                value: row.accountCode,
+                label: `${row.accountName} · ${row.accountCode}`,
+              }))}
             />
             <SubmitRow>
               <Submit label={t('stock_movements.filter')} />
@@ -227,6 +242,8 @@ export default async function TreasuryReportingPage({ searchParams }: { searchPa
                   <th scope="col">{column('movement')}</th>
                   <th scope="col">{t('treasury_reporting.party')}</th>
                   <th scope="col">{column('description')}</th>
+                  <th scope="col">{column('raised_by')}</th>
+                  <th scope="col">{t('treasury_reporting.approved_by')}</th>
                   <th scope="col">{t('treasury_reporting.money_in')}</th>
                   <th scope="col">{t('treasury_reporting.money_out')}</th>
                   <th scope="col">{t('treasury_reporting.running_balance')}</th>
@@ -237,7 +254,7 @@ export default async function TreasuryReportingPage({ searchParams }: { searchPa
                   <td>
                     <bdi dir="ltr">{day(ledger.from)}</bdi>
                   </td>
-                  <td colSpan={6}>
+                  <td colSpan={8}>
                     <strong>{t('treasury_reporting.opening')}</strong>
                   </td>
                   <td>
@@ -248,7 +265,7 @@ export default async function TreasuryReportingPage({ searchParams }: { searchPa
                 </tr>
                 {ledger.lines.length === 0 ? (
                   <tr>
-                    <td colSpan={8}>{t('treasury_reporting.no_movements')}</td>
+                    <td colSpan={10}>{t('treasury_reporting.no_movements')}</td>
                   </tr>
                 ) : null}
                 {ledger.lines.map((line, index) => (
@@ -271,6 +288,15 @@ export default async function TreasuryReportingPage({ searchParams }: { searchPa
                       <bdi dir="auto">{line.description ?? '—'}</bdi>
                     </td>
                     <td>
+                      <bdi dir="auto">{line.raisedBy ?? '—'}</bdi>
+                    </td>
+                    <td>
+                      {/* Blank on an entry the posting engine raised: the
+                          approval was given on the document, and naming
+                          somebody here would claim one nobody gave. */}
+                      <bdi dir="auto">{line.approvedBy ?? '—'}</bdi>
+                    </td>
+                    <td>
                       <bdi dir="ltr">{Number(line.debitIqd) === 0 ? '' : money(line.debitIqd)}</bdi>
                     </td>
                     <td>
@@ -285,7 +311,7 @@ export default async function TreasuryReportingPage({ searchParams }: { searchPa
                   <td>
                     <bdi dir="ltr">{day(ledger.to)}</bdi>
                   </td>
-                  <td colSpan={4}>
+                  <td colSpan={6}>
                     <strong>{t('treasury_reporting.closing')}</strong>
                   </td>
                   <td>

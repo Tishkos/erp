@@ -54,3 +54,19 @@ export async function postPayment(formData: FormData): Promise<void> {
     record(paymentNo),
   );
 }
+
+/**
+ * Oldest invoice first, in one act.
+ *
+ * The mirror of the receipt side: money going out clears the oldest debt
+ * first, so a payment of 100,000 against a 50,000 invoice from Monday and a
+ * 100,000 from Tuesday settles Monday and half-pays Tuesday. A supplier who
+ * says which invoice a payment is for is still answered by the boxes.
+ */
+export async function allocateOldestFirstPayment(formData: FormData): Promise<void> {
+  const paymentNo = text(formData, 'payment_no');
+  await runAdminAndReturn(
+    (tx, ctx) => payments.allocateOldestFirst(tx, ctx, text(formData, 'id')),
+    record(paymentNo),
+  );
+}

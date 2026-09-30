@@ -126,12 +126,65 @@ const SIDES = {
 /** Statuses that mean the invoice is a real debt. A draft is not one. */
 const OPEN_STATUSES = sql`('posted', 'partially_executed', 'settled')`;
 
+/**
+ * How far ahead "due soon" reaches.
+ *
+ * A week: long enough to do something about, short enough that the same
+ * invoice is not called imminent for a month. The report and the morning
+ * sweep share it, so a screen saying "falling due soon" and a notification
+ * saying the same thing are talking about the same invoices.
+ */
+export const DUE_SOON_DAYS = 7;
+
 export interface OpenItemFilter {
   readonly branchCode?: string | null;
   readonly partyCode?: string | null;
   /** Only what is still owed. Off by default, so a paid invoice keeps its history. */
   readonly outstandingOnly?: boolean;
   readonly overdueOnly?: boolean;
+  /**
+   * Only what falls due within this many days and has not fallen due yet.
+   * "Coming up", which is a different question from "already late".
+   */
+  readonly dueWithinDays?: number | null;
+  /** Narrow to particular document statuses — part paid, untouched, and so on. */
+  readonly statuses?: readonly string[] | null;
+}
+
+/**
+ * The five questions a reader actually asks of an account, named.
+ *
+ * Kept here rather than in the screen because the printed copy has to answer
+ * the same question the screen was showing when Print was pressed. A statement
+ * headed "Overdue" that lists everything is worse than no statement.
+ */
+export const OPEN_ITEM_VIEWS = ['all', 'soon', 'overdue', 'unpaid', 'part_paid'] as const;
+export type OpenItemView = (typeof OPEN_ITEM_VIEWS)[number];
+
+/** Whatever arrived in the query string, as one of the five. Unknown reads as all. */
+export function viewFrom(value: unknown): OpenItemView {
+  return (OPEN_ITEM_VIEWS as readonly string[]).includes(value as string)
+    ? (value as OpenItemView)
+    : 'all';
+}
+
+/** One view, as this service's filter. */
+export function viewFilter(view: OpenItemView): OpenItemFilter {
+  switch (view) {
+    case 'soon':
+      return { dueWithinDays: DUE_SOON_DAYS };
+    case 'overdue':
+      return { overdueOnly: true };
+    // Posted with nothing allocated against it yet. `partially_executed` is
+    // what the allocation services move an invoice to on the first payment,
+    // so the two together are every invoice that still owes something.
+    case 'unpaid':
+      return { statuses: ['posted'] };
+    case 'part_paid':
+      return { statuses: ['partially_executed'] };
+    default:
+      return {};
+  }
 }
 
 /**
@@ -220,6 +273,15 @@ export async function openItems(
     .filter((item) => {
       if (filter.outstandingOnly && Number(item.outstandingIqd) <= 0) return false;
       if (filter.overdueOnly && item.daysOverdue === 0) return false;
+      // Coming up, not already gone: an invoice that fell due last week is
+      // overdue, and answering "what falls due this week" with it is wrong.
+      if (
+        filter.dueWithinDays != null &&
+        (item.daysUntilDue < 0 || item.daysUntilDue > filter.dueWithinDays)
+      ) {
+        return false;
+      }
+      if (filter.statuses && !filter.statuses.includes(item.status)) return false;
       return true;
     });
 }

@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import { Banknote, Landmark } from 'lucide-react';
 import { Panel } from '@/components/ui';
+import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import {
   ActionButton,
   AdminPage,
@@ -30,6 +31,7 @@ import { can } from '@domain/permissions';
 import { AdminNotFoundError } from '@/server/services/administration';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as accounts from '@/server/services/bank-cash-accounts';
+import * as treasury from '@/server/services/treasury-reports';
 import * as rates from '@/server/services/exchange-rates';
 import * as users from '@/server/services/users';
 import {
@@ -242,10 +244,11 @@ export async function AccountRecord({
   readonly params: Promise<{ code: string }>;
   readonly searchParams: SearchParams;
 }) {
-  const [t, page, column, context, outcome, { code: rawCode }] = await Promise.all([
+  const [t, page, column, locale, context, outcome, { code: rawCode }] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('column'),
+    getLocale(),
     requireContext(),
     outcomeOf(searchParams),
     params,
@@ -258,7 +261,19 @@ export async function AccountRecord({
   const mayEdit = can(principal, 'configure', accounts.PERMISSION_OBJECT);
   const mayAdminister = can(principal, 'administer', accounts.PERMISSION_OBJECT);
 
-  const data = await withCurrentUser(async (tx) => {
+  /*
+   * The year so far, and what the account holds now.
+   *
+   * `to` is today, so `closingIqd` is every posted movement up to this moment
+   * — the account's actual balance, not the year's. The in and out figures are
+   * the year's, because "how much has gone through this till" is a question
+   * about a period and lifetime totals on a five-year-old account answer it
+   * badly.
+   */
+  const year = new Date().getFullYear();
+  const window = { from: `${year}-01-01`, to: new Date().toISOString().slice(0, 10) };
+
+  const data = await withCurrentUser(async (tx, request) => {
     try {
       const row = await accounts.detail(tx, code);
       return {
@@ -266,6 +281,22 @@ export async function AccountRecord({
         gl: mayEdit ? await accounts.availableGlAccounts(tx, row.glAccountId) : [],
         people: mayEdit ? await users.listAll(tx) : [],
         moneys: mayEdit ? await rates.currencies(tx) : [],
+        /*
+         * Read through the same service the Bank and Cash Reporting screen
+         * uses, so this panel and that report cannot state different balances
+         * for one account. An account with no G/L account linked has no
+         * position to state, and says so rather than showing nought.
+         */
+        position: (
+          await treasury
+            .positions(
+              tx,
+              { principal: request.principal, branchCode: request.scope.branchCode },
+              window,
+              { accountCode: code },
+            )
+            .catch(() => [])
+        )[0] ?? null,
       };
     } catch (error) {
       if (error instanceof AdminNotFoundError) return null;
@@ -273,7 +304,8 @@ export async function AccountRecord({
     }
   });
   if (!data) notFound();
-  const { row, gl, people, moneys } = data;
+  const { row, gl, people, moneys, position } = data;
+  const money = (amount: string) => formatMoney(amount, row.currency, locale as Locale);
   // The address is the truth about which list this belongs on; a cash account
   // reached through the bank route is the wrong page for it.
   if (row.accountType !== kind) notFound();
@@ -367,6 +399,79 @@ export async function AccountRecord({
               </li>
             </ul>
           </Panel>
+
+          {/* ── What the account holds ──────────────────────────────────
+              The question anybody opening a till or a bank account asks
+              first, and it used to need a different screen to answer. Read
+              from `treasury-reports.ts`, which reads the G/L, so this figure
+              is the ledger's rather than a second tally kept beside it. */}
+          {position ? (
+            <Panel title={t('accounts_shared.money_title')}>
+              <ul className={s.profileFacts}>
+                <li>
+                  <span>{t('accounts_shared.holds_now')}</span>
+                  <span>
+                    <strong>
+                      <bdi dir="ltr">{money(position.closingIqd)}</bdi>
+                    </strong>
+                  </span>
+                </li>
+                <li>
+                  <span>{t('accounts_shared.opening_year', { year: String(year) })}</span>
+                  <span>
+                    <bdi dir="ltr">{money(position.openingIqd)}</bdi>
+                  </span>
+                </li>
+                <li>
+                  <span>{t('accounts_shared.received_in', { year: String(year) })}</span>
+                  <span>
+                    <bdi dir="ltr">{money(position.moneyInIqd)}</bdi>
+                  </span>
+                </li>
+                <li>
+                  <span>{t('accounts_shared.paid_out_in', { year: String(year) })}</span>
+                  <span>
+                    <bdi dir="ltr">{money(position.moneyOutIqd)}</bdi>
+                  </span>
+                </li>
+                {/* Only when there are any: a till that has never been part of
+                    a transfer should not carry two empty lines explaining it. */}
+                {Number(position.transfersInIqd) > 0 || Number(position.transfersOutIqd) > 0 ? (
+                  <>
+                    <li>
+                      <span>{t('accounts_shared.transfers_in')}</span>
+                      <span>
+                        <bdi dir="ltr">{money(position.transfersInIqd)}</bdi>
+                      </span>
+                    </li>
+                    <li>
+                      <span>{t('accounts_shared.transfers_out')}</span>
+                      <span>
+                        <bdi dir="ltr">{money(position.transfersOutIqd)}</bdi>
+                      </span>
+                    </li>
+                  </>
+                ) : null}
+                <li>
+                  <span>{t('accounts_shared.last_movement')}</span>
+                  <span>
+                    {position.lastMovementDate ? (
+                      <bdi dir="ltr">
+                        {formatBusinessDate(position.lastMovementDate, locale as Locale)}
+                      </bdi>
+                    ) : (
+                      t('accounts_shared.never_moved')
+                    )}
+                  </span>
+                </li>
+              </ul>
+              <p className={s.panelNote}>
+                <Link className={s.sapLink} href={`/treasury/reporting?account=${encodeURIComponent(row.code)}`}>
+                  {t('accounts_shared.see_transactions')}
+                </Link>
+              </p>
+            </Panel>
+          ) : null}
 
           {mayAdminister ? (
             <Panel title={row.active ? t('accounts_shared.deactivate_title') : t('reactivate')}>

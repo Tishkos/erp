@@ -14,7 +14,7 @@ import { toDecimalString } from '@domain/money';
 import { visibleRoute } from '@/server/phase-gate';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as receipts from '@/server/services/customer-receipt';
-import { allocateReceipt, approveReceipt, postReceipt } from '../actions';
+import { allocateOldestFirst, allocateReceipt, approveReceipt, postReceipt } from '../actions';
 
 /**
  * One Receipt — Operations build, block 6.
@@ -68,11 +68,19 @@ export default async function ReceiptPage({
     // §16 — a receipt whose payer is unknown has no invoices to offer, and
     // asking for them by a null customer would be asking the wrong question.
     const open = seen.customerId ? await receipts.openInvoicesFor(tx, seen.customerId) : [];
-    return { receipt: seen, open, parties: await receipts.partiesOf(tx, seen.id) };
+    return {
+      receipt: seen,
+      open,
+      // What oldest-first would give each invoice. The boxes used to offer
+      // every row the whole of the receipt, so two rows offered the same money
+      // twice and the second submit was refused as an over-allocation.
+      plan: await receipts.planFor(tx, seen),
+      parties: await receipts.partiesOf(tx, seen.id),
+    };
   });
 
   if (!found) notFound();
-  const { receipt, open, parties } = found;
+  const { receipt, open, plan, parties } = found;
   const unallocated = receipt.unappliedIqd;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
@@ -153,6 +161,19 @@ export default async function ReceiptPage({
                 <Submit label={t('customer_receipts.post')} variant="document" />
               </form>
             ) : null}
+            {/* The whole plan in one press, for the ordinary case where the
+                customer sent money without saying which invoice it pays. */}
+            {mayAllocate && plan.size > 0 ? (
+              <form action={allocateOldestFirst}>
+                <input name="id" type="hidden" value={receipt.id} />
+                <input name="receipt_no" type="hidden" value={receipt.receiptNo} />
+                <Submit
+                  label={t('customer_receipts.allocate_oldest_first')}
+                  tone="secondary"
+                  variant="document"
+                />
+              </form>
+            ) : null}
           </>
         }
         auditHref="#audit-log"
@@ -209,14 +230,9 @@ export default async function ReceiptPage({
                         // in the box: the dinar has no minor unit, and four
                         // decimal places in a figure somebody is about to
                         // retype reads as a fault in the amount.
-                        defaultValue={String(
-                          Number(
-                            toDecimalString(
-                              invoice.outstanding < unallocated ? invoice.outstanding : unallocated,
-                              4n,
-                            ),
-                          ),
-                        )}
+                        // This invoice's share under oldest-first, so the
+                        // amounts down the column add up to the receipt.
+                        defaultValue={String(Number(toDecimalString(plan.get(invoice.id) ?? 0n, 4n)))}
                         inputMode="decimal"
                         name="amount_iqd"
                       />

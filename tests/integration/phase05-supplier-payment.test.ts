@@ -390,6 +390,103 @@ describe('05.10 gate · payment allocates to specific invoices', () => {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Oldest first, on the money going out.
+ *
+ * The mirror of the receipt side, and the same reason: a payment that cleared
+ * a newer invoice while an older one aged would make the payables ageing a
+ * description of how the clerk allocated rather than of what we owe.
+ */
+describe('05.10 · paying oldest-first', () => {
+  it('settles the older invoice and leaves the newer one alone', async () => {
+    const older = await openInvoice({ quantity: '20', dueDate: '2026-03-02' }); // 200
+    const newer = await openInvoice({ quantity: '40', dueDate: '2026-03-03' }); // 400
+
+    const made = await payment(price('200'));
+    const outcome = await withScope(scope(manager), (tx) =>
+      pay.allocateOldestFirst(tx, manager, made.id),
+    );
+
+    expect(outcome.invoices).toBe(1);
+    expect(outcome.paymentUnallocated).toBe(0n);
+
+    const { rows } = await ownerPool.query(
+      `select id, status, settled_amount_iqd from ap_invoice where id = any($1::uuid[])`,
+      [[older.id, newer.id]],
+    );
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    expect(byId.get(older.id).status).toBe('settled');
+    expect(byId.get(newer.id).status, 'the money did not reach it').toBe('posted');
+    expect(byId.get(newer.id).settled_amount_iqd).toBe('0.0000');
+  });
+
+  it('settles the older invoice and part-pays the newer one with the rest', async () => {
+    const older = await openInvoice({ quantity: '20', dueDate: '2026-03-02' }); // 200
+    const newer = await openInvoice({ quantity: '40', dueDate: '2026-03-03' }); // 400
+
+    const made = await payment(price('400'));
+    const outcome = await withScope(scope(manager), (tx) =>
+      pay.allocateOldestFirst(tx, manager, made.id),
+    );
+
+    expect(outcome.invoices).toBe(2);
+
+    const { rows } = await ownerPool.query(
+      `select id, status, settled_amount_iqd from ap_invoice where id = any($1::uuid[])`,
+      [[older.id, newer.id]],
+    );
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    expect(byId.get(older.id).status).toBe('settled');
+    expect(byId.get(newer.id).status).toBe('partially_executed');
+    // 400 paid, less the 200 the older invoice took.
+    expect(byId.get(newer.id).settled_amount_iqd).toBe('200.0000');
+  });
+
+  it('skips an invoice this payment is already against', async () => {
+    const older = await openInvoice({ quantity: '20', dueDate: '2026-03-02' }); // 200
+    const newer = await openInvoice({ quantity: '40', dueDate: '2026-03-03' }); // 400
+
+    const made = await payment(price('300'));
+    // A hundred put on the older invoice by hand first.
+    await withScope(scope(manager), (tx) =>
+      pay.allocate(tx, manager, {
+        supplierPaymentId: made.id,
+        apInvoiceId: older.id,
+        amountIqd: price('100'),
+      }),
+    );
+
+    /*
+     * §15 allows one live allocation per payment and invoice, so the rest
+     * cannot go onto the older invoice again — it goes to the next one down.
+     * Planning it there would have been refused as a duplicate, which is the
+     * bug this guards.
+     */
+    const outcome = await withScope(scope(manager), (tx) =>
+      pay.allocateOldestFirst(tx, manager, made.id),
+    );
+    expect(outcome.invoices).toBe(1);
+
+    const { rows } = await ownerPool.query(
+      `select id, settled_amount_iqd from ap_invoice where id = any($1::uuid[])`,
+      [[older.id, newer.id]],
+    );
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    expect(byId.get(older.id).settled_amount_iqd).toBe('100.0000');
+    expect(byId.get(newer.id).settled_amount_iqd).toBe('200.0000');
+  });
+
+  it('refuses when there is nothing left to apply', async () => {
+    await openInvoice({ quantity: '20', dueDate: '2026-03-02' });
+    const made = await payment(price('200'));
+    await withScope(scope(manager), (tx) => pay.allocateOldestFirst(tx, manager, made.id));
+
+    await expect(
+      withScope(scope(manager), (tx) => pay.allocateOldestFirst(tx, manager, made.id)),
+    ).rejects.toThrow(pay.NothingToAllocateError);
+  });
+});
+
 describe('05.9 gate · a payment exceeding the available balance is rejected', () => {
   it('refuses more than the invoice owes', async () => {
     const invoice = await openInvoice();
