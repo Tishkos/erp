@@ -630,12 +630,20 @@ describe('statements · the export closes where the screen does', () => {
     expect(files.docx.text).toContain(closing);
     expect(files.pdf.text).toContain('Opening balance');
     expect(files.pdf.text).toContain('Closing balance');
-    // The workbook: debit and credit are formulas over the lines; the closing
-    // balance is the running balance's last figure, stored as the number.
-    const totals = workbookTotals(files.xlsx);
-    expect(totals.map((t) => t.evaluated).sort()).toEqual(
-      [Number(screen.totalDebit), Number(screen.totalCredit)].sort(),
-    );
+    /*
+     * The workbook: debit and credit are formulas over the lines; the closing
+     * balance is the running balance's last figure, stored as the number.
+     *
+     * Both must be *among* the formula totals rather than the whole of them.
+     * The sheet also carries "What is still owed", whose own totals row is
+     * three more formulas — and that table now appears whenever the account
+     * has a balance, including one raised by journal with no invoice behind
+     * it, which is exactly the case these fixtures build. Asserting equality
+     * with the set would be asserting that the second table is absent.
+     */
+    const evaluated = workbookTotals(files.xlsx).map((t) => t.evaluated);
+    expect(evaluated).toContain(Number(screen.totalDebit));
+    expect(evaluated).toContain(Number(screen.totalCredit));
     expect([...files.xlsx.cells.values()].some((cell) => cell.number === Number(screen.closing))).toBe(true);
     // And the filters it was run with are on it.
     expect(files.pdf.text).toContain(code);
