@@ -2137,7 +2137,16 @@
       "none": "No reconciliations yet.",
       "created_note": "In adds stock that was found; Out removes stock that is missing. The system gives the reconciliation its number.",
       "in": "In",
-      "out": "Out"
+      "out": "Out",
+      "source": "Where it came from",
+      "since": "On the account since",
+      "by_journal": "Posted by journal — open the statement",
+      "ledger": "Ledger says",
+      "invoices": "Invoices account for",
+      "journals": "No invoice accounts for",
+      "ties": "Ties to the statement",
+      "explained": "Difference is listed above",
+      "owed_total": "Total owed — agrees with the statement"
     },
     "opening_stock": {
       "subtitle": "The stock the company starts with",

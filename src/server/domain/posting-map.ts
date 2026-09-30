@@ -89,8 +89,14 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
   {
     event: 'sales.customer_receipt',
     lines: [
-      // Money in against a named customer.
-      line('customer_receivable', 'credit', true),
+      // Money in against a named customer. Constrained to the customer control
+      // account for the same reason the invoice's debit is: a receipt credited
+      // anywhere else posts a balanced journal, leaves the customer's statement
+      // exactly where it was, and the money looks received while the debt looks
+      // unpaid. That is not a hypothetical — a live mapping sent this line to a
+      // cash account, so receipts moved money between two cash accounts and no
+      // customer balance ever came down.
+      line('customer_receivable', 'credit', true, 'customer'),
       // Money in that no customer has been put to yet — it waits here rather
       // than being guessed at.
       line('customer_clearing', 'credit'),
@@ -102,24 +108,24 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     // arrived earlier, and this is only the moment it found its owner.
     lines: [
       line('customer_clearing', 'debit', true),
-      line('customer_receivable', 'credit', true),
+      line('customer_receivable', 'credit', true, 'customer'),
     ],
   },
   {
     event: 'purchasing.supplier_payment',
-    lines: [line('supplier_payable', 'debit', true)],
+    lines: [line('supplier_payable', 'debit', true, 'supplier')],
   },
   {
     event: 'purchasing.supplier_credit_memo',
     lines: [
-      line('supplier_payable', 'debit', true),
+      line('supplier_payable', 'debit', true, 'supplier'),
       line('return_clearing', 'credit', true),
     ],
   },
   {
     event: 'sales.customer_credit_memo',
     lines: [
-      line('customer_receivable', 'credit', true),
+      line('customer_receivable', 'credit', true, 'customer'),
       line('sales_returns', 'debit', true),
     ],
   },

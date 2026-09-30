@@ -1043,6 +1043,51 @@
   gap: 1.1rem;
 }
 
+/* -------------------------------------------------------------------------
+ * Does the ageing tie to the statement?
+ *
+ * Stated on the report rather than left to a reader with a calculator. The
+ * only thing an ageing must never do is disagree with the statement silently,
+ * so the three figures that make up the identity are shown together and the
+ * verdict is a word, not a colour alone.
+ * ---------------------------------------------------------------------- */
+.tieStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1.5rem;
+  margin: 0 1rem 1rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+  font-size: 0.78rem;
+}
+
+.tieStrip > span {
+  color: var(--text-muted);
+}
+
+.tieStrip strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.tieVerdict {
+  margin-inline-start: auto;
+  font-weight: 700;
+}
+
+.tieStrip[data-ties='yes'] .tieVerdict {
+  color: var(--status-posted);
+}
+
+/* Not an error — a difference that is accounted for, and named in the rows
+   above. Amber rather than red: the report is telling you where to look. */
+.tieStrip[data-ties='no'] .tieVerdict {
+  color: var(--status-submitted, var(--text));
+}
+
 .profileFacts li > span:first-child {
   color: var(--text-muted);
   font-weight: 600;

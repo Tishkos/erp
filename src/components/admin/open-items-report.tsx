@@ -61,10 +61,19 @@ export async function OpenItemsReport({
 
   const one = (key: string) => (typeof params[key] === 'string' ? (params[key] as string).trim() : '');
   const asOf = one('as_at') || new Date().toISOString().slice(0, 10);
-  const show = one('show') === 'all' || one('show') === 'overdue' ? one('show') : 'open';
+  /*
+   * Everything by default, paid invoices included.
+   *
+   * An ageing that opens showing only what is still owed cannot answer "how
+   * does this account actually behave" — a customer who always pays eleven
+   * days late never stays on an outstanding-only list long enough to notice.
+   * Narrowing to what is owed is one click; the fuller picture being one
+   * click away was the wrong way round.
+   */
+  const show = one('show') === 'open' || one('show') === 'overdue' ? one('show') : 'all';
   const asked = one('code');
 
-  const { roll, chosen, items } = await withCurrentUser(async (tx, request) => {
+  const { roll, chosen, items, balances } = await withCurrentUser(async (tx, request) => {
     /*
      * The whole role, not only the active part of it — an account is read
      * long after the partner stops trading, and an ageing that hid a dormant
@@ -91,17 +100,30 @@ export async function OpenItemsReport({
      */
     const unresolved = Boolean(asked) && !chosen;
 
+    const narrow = {
+      branchCode: request.scope.branchCode,
+      ...(chosen ? { partyCode: chosen.code } : {}),
+    };
+
     return {
       roll,
       chosen,
       items: unresolved
         ? []
         : await openItems.openItems(tx, request.principal, side, asOf, {
-            branchCode: request.scope.branchCode,
+            ...narrow,
             outstandingOnly: show !== 'all',
             overdueOnly: show === 'overdue',
-            ...(chosen ? { partyCode: chosen.code } : {}),
           }),
+      /*
+       * What the control account says, read through the same table the Account
+       * Statement reads. The two reports are only one report if this figure
+       * and the invoices are shown together — otherwise the ageing is a
+       * description of the document layer wearing the ledger's authority.
+       */
+      balances: unresolved
+        ? []
+        : await openItems.ledgerBalances(tx, request.principal, side, asOf, narrow),
     };
   });
 
@@ -118,13 +140,26 @@ export async function OpenItemsReport({
     (row) => [row.code, row.legalName, row.tradeName],
   );
 
-  const buckets = openItems.ageing(items);
+  /*
+   * The two figures side by side. `show` narrows which invoices are listed but
+   * never which ledger entries count, so the reconciliation is always against
+   * the whole account — an ageing filtered to "overdue only" that also
+   * quietly dropped part of the ledger would tie to nothing.
+   */
+  const reconciled = openItems.reconcile(items, balances, asOf);
+  const tie = openItems.reconciliationTotals(reconciled);
+  const unexplained = reconciled.filter((row) => Number(row.unexplainedIqd) !== 0);
+  const buckets = openItems.ageingWith(items, reconciled);
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   const day = (value: string) => formatBusinessDate(value, locale as Locale);
   const total = (pick: (row: openItems.OpenItem) => string) =>
     String(items.reduce((sum, row) => sum + Number(pick(row)), 0));
 
   const partyColumn = side === 'customer' ? column('customer_name') : column('supplier_name');
+  // Where the entries behind an unexplained balance can actually be read: the
+  // statement lists them line by line, which this report deliberately does not.
+  const statementRoute =
+    side === 'customer' ? '/sales/customer-statements' : '/purchasing/supplier-statements';
 
   /**
    * How late, in words a person acts on.
@@ -163,10 +198,10 @@ export async function OpenItemsReport({
       <Panel flush>
         <form className={s.filterBar} method="get">
           <FilterRow>
-            <Field defaultValue={asOf} label={t('reports.as_at_label')} name="as_at" type="date" />
-            {/* One partner, typed. Four hundred customers is not a drop-down
-                anybody reads, and the question the screen is most often opened
-                with is about one of them. Leave it empty for everybody. */}
+            {/* The partner first: it is what the reader came to narrow, and a
+                date box ahead of it asks them to confirm today's date before
+                they may ask their question. Four hundred customers is not a
+                drop-down anybody reads, so it is typed. Empty means everybody. */}
             <Field
               defaultValue={asked}
               label={t(`partners.role_${side}`)}
@@ -181,14 +216,17 @@ export async function OpenItemsReport({
                 </option>
               ))}
             </datalist>
+            <Field defaultValue={asOf} label={t('reports.as_at_label')} name="as_at" type="date" />
             <Select
               defaultValue={show}
               label={t('open_items.show')}
               name="show"
+              // The default first, so the list reads in the order somebody
+              // narrows: everything, then what is owed, then what is late.
               options={[
+                { value: 'all', label: t('open_items.show_all') },
                 { value: 'open', label: t('open_items.show_open') },
                 { value: 'overdue', label: t('open_items.show_overdue') },
-                { value: 'all', label: t('open_items.show_all') },
               ]}
             />
             <SubmitRow>
@@ -226,7 +264,7 @@ export async function OpenItemsReport({
                   ))}
                   <td>
                     <strong>
-                      <bdi dir="ltr">{money(total((row) => row.outstandingIqd))}</bdi>
+                      <bdi dir="ltr">{money(tie.ledgerIqd)}</bdi>
                     </strong>
                   </td>
                 </tr>
@@ -234,6 +272,81 @@ export async function OpenItemsReport({
             </table>
           </div>
         ) : null}
+
+        {/* ── What no invoice accounts for ──────────────────────────────
+            Listed rather than netted away, because it is the part a reader
+            cannot find from the invoices: an opening balance journalled in, a
+            write-off, or a payment that never reached the control account.
+            Without it the total below would not be the statement's. */}
+        {unexplained.length > 0 ? (
+          <div className="table-wrap">
+            <table className="list">
+              <thead>
+                <tr>
+                  <th scope="col">{partyColumn}</th>
+                  <th scope="col">{t('reconciliation.source')}</th>
+                  <th scope="col">{t('reconciliation.since')}</th>
+                  <th scope="col">{t('open_items.ageing')}</th>
+                  <th scope="col">{t('open_items.outstanding')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {unexplained.map((row) => (
+                  <tr key={row.partyCode}>
+                    <td>
+                      <bdi dir="auto">{row.partyName}</bdi>{' '}
+                      <span className="muted">
+                        <bdi dir="ltr">{row.partyCode}</bdi>
+                      </span>
+                    </td>
+                    <td>
+                      <Link href={`${statementRoute}?code=${encodeURIComponent(row.partyCode)}`}>
+                        {t('reconciliation.by_journal')}
+                      </Link>
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{row.oldestDate ? day(row.oldestDate) : '—'}</bdi>
+                    </td>
+                    <td>{t(`dashboard.${BUCKET_KEY[row.bucket]}`)}</td>
+                    <td>
+                      <strong>
+                        <bdi dir="ltr">{money(row.unexplainedIqd)}</bdi>
+                      </strong>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {/* ── Does it tie? ──────────────────────────────────────────────
+            Stated on the report rather than left for somebody to work out
+            with a calculator, because the one thing an ageing must never do
+            is disagree with the statement silently. */}
+        <div className={s.tieStrip} data-ties={tie.ties ? 'yes' : 'no'}>
+          <span>
+            {t('reconciliation.ledger')}{' '}
+            <strong>
+              <bdi dir="ltr">{money(tie.ledgerIqd)}</bdi>
+            </strong>
+          </span>
+          <span>
+            {t('reconciliation.invoices')}{' '}
+            <strong>
+              <bdi dir="ltr">{money(tie.documentsIqd)}</bdi>
+            </strong>
+          </span>
+          <span>
+            {t('reconciliation.journals')}{' '}
+            <strong>
+              <bdi dir="ltr">{money(tie.unexplainedIqd)}</bdi>
+            </strong>
+          </span>
+          <span className={s.tieVerdict}>
+            {tie.ties ? t('reconciliation.ties') : t('reconciliation.explained')}
+          </span>
+        </div>
 
         {items.length === 0 ? (
           <p className="muted" style={{ padding: '0 1rem 1rem' }}>
@@ -321,9 +434,13 @@ export async function OpenItemsReport({
                     <td>{lateness(item)}</td>
                   </tr>
                 ))}
+                {/* What these rows come to — named as the invoices' subtotal
+                    rather than "Totals", because it is not the total of the
+                    report. Read on its own beside a ledger balance of 700,000
+                    an unlabelled "0" reads as a contradiction. */}
                 <tr>
                   <td colSpan={5}>
-                    <strong>{t('reports.totals')}</strong>
+                    <strong>{t('reconciliation.invoices')}</strong>
                   </td>
                   <td>
                     <strong>
@@ -338,6 +455,35 @@ export async function OpenItemsReport({
                   <td>
                     <strong>
                       <bdi dir="ltr">{money(total((row) => row.outstandingIqd))}</bdi>
+                    </strong>
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+                {/* …and then the figure somebody actually came for, which is
+                    the statement's closing balance and the sum of everything
+                    this report has shown. */}
+                {Number(tie.unexplainedIqd) !== 0 ? (
+                  <tr>
+                    <td colSpan={5}>
+                      <strong>{t('reconciliation.journals')}</strong>
+                    </td>
+                    <td colSpan={2} />
+                    <td>
+                      <strong>
+                        <bdi dir="ltr">{money(tie.unexplainedIqd)}</bdi>
+                      </strong>
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                ) : null}
+                <tr>
+                  <td colSpan={5}>
+                    <strong>{t('reconciliation.owed_total')}</strong>
+                  </td>
+                  <td colSpan={2} />
+                  <td>
+                    <strong>
+                      <bdi dir="ltr">{money(tie.ledgerIqd)}</bdi>
                     </strong>
                   </td>
                   <td colSpan={2} />

@@ -351,3 +351,205 @@ export function byParty(items: readonly OpenItem[]): PartyTotal[] {
     }))
     .sort((a, b) => Number(b.outstandingIqd) - Number(a.outstandingIqd));
 }
+
+/* -------------------------------------------------------------------------
+ * Tying the ageing to the ledger
+ *
+ * An ageing that does not add up to the statement is worse than no ageing:
+ * both look authoritative, and the reader has no way to tell which one is
+ * lying. They disagree for one structural reason — the ageing is built from
+ * invoice documents, and the statement is built from the subledger the
+ * posting engine writes. Anything reaching a party's control account without
+ * an invoice behind it therefore shows on one and not the other:
+ *
+ *   · an opening balance journalled in when the books were loaded;
+ *   · a write-off, an interest charge or a correction posted by journal;
+ *   · and — until the posting map was constrained — a receipt whose credit
+ *     was mapped to a cash account instead of Trade Receivables, so the
+ *     invoice said Paid while the ledger still said owed.
+ *
+ * The answer is not to guess which of the two is right. It is to state both
+ * and name the difference, so the ageing's total *is* the statement's closing
+ * balance by construction: the invoices, plus whatever else reached the
+ * account, equals the ledger. A difference becomes a thing to look at rather
+ * than a silent disagreement between two screens.
+ * ---------------------------------------------------------------------- */
+
+/** Which subledger each side reconciles to (§1.2). */
+const SUBLEDGER: Readonly<Record<Side, string>> = { customer: 'customer', supplier: 'supplier' };
+
+/** What the subledger says one party owes as at a date — the statement's figure. */
+export interface LedgerBalance {
+  readonly partyCode: string;
+  readonly partyName: string;
+  /** Owed *to* us on the customer side, owed *by* us on the supplier side. */
+  readonly balanceIqd: string;
+  /** The oldest entry on the account, for ageing what no invoice explains. */
+  readonly oldestDate: string | null;
+}
+
+/**
+ * Every party's control-account balance, read exactly as the statement reads
+ * it — same table, same sign convention, same date rule.
+ *
+ * Deliberately the same source rather than a second query over journal lines:
+ * two ways of computing one balance is how the two reports came to disagree
+ * in the first place.
+ */
+export async function ledgerBalances(
+  tx: Tx,
+  principal: Principal,
+  side: Side,
+  asOf: string,
+  filter: { readonly branchCode?: string | null; readonly partyCode?: string | null } = {},
+): Promise<LedgerBalance[]> {
+  assertCan(principal, 'view', PERMISSION_OBJECT[side]);
+  const branch = filter.branchCode ?? null;
+  const party = filter.partyCode ?? null;
+
+  // Debit-normal for a customer, credit-normal for a supplier — so either ends
+  // positive when something is outstanding, exactly as the statement does.
+  const owed =
+    side === 'customer'
+      ? sql`sum(s.debit_iqd - s.credit_iqd)`
+      : sql`sum(s.credit_iqd - s.debit_iqd)`;
+
+  const result = await tx.execute(sql`
+    select s.party_code                         as "partyCode",
+           coalesce(p.legal_name, s.party_code) as "partyName",
+           coalesce(${owed}, 0)::text           as "balanceIqd",
+           min(s.posting_date)::text            as "oldestDate"
+      from subledger_entry s
+      left join business_partner p on p.code = s.party_code
+     where s.subledger_type::text = ${SUBLEDGER[side]}
+       and s.posting_date <= ${asOf}::date
+       and (${branch}::text is null or s.branch_code = ${branch})
+       and (${party}::text is null or s.party_code = ${party})
+     group by s.party_code, p.legal_name
+  `);
+
+  return result.rows as unknown as LedgerBalance[];
+}
+
+/** One party, reconciled: what the ledger says, what the invoices say, the gap. */
+export interface Reconciliation {
+  readonly partyCode: string;
+  readonly partyName: string;
+  /** The statement's closing balance for this party. */
+  readonly ledgerIqd: string;
+  /** What the open invoices on this report account for. */
+  readonly documentsIqd: string;
+  /** Everything else that reached the control account. May be negative. */
+  readonly unexplainedIqd: string;
+  /** When the account first moved — what the unexplained part is aged from. */
+  readonly oldestDate: string | null;
+  readonly bucket: AgeingBucket;
+}
+
+/**
+ * The two figures side by side, party by party.
+ *
+ * Every party with a ledger balance appears, including those with no open
+ * invoice at all — which is precisely the case the report used to be blind
+ * to, and the one the sponsor found: a customer whose whole debt had been
+ * journalled in showed nothing owing.
+ */
+export function reconcile(
+  items: readonly OpenItem[],
+  balances: readonly LedgerBalance[],
+  asOf: string,
+): Reconciliation[] {
+  const documents = new Map<string, number>();
+  const names = new Map<string, string>();
+  for (const item of items) {
+    names.set(item.partyCode, item.partyName);
+    const outstanding = Number(item.outstandingIqd);
+    if (outstanding <= 0) continue;
+    documents.set(item.partyCode, (documents.get(item.partyCode) ?? 0) + outstanding);
+  }
+
+  const parties = new Map<string, { name: string; ledger: number; oldest: string | null }>();
+  for (const balance of balances) {
+    parties.set(balance.partyCode, {
+      name: balance.partyName,
+      ledger: Number(balance.balanceIqd),
+      oldest: balance.oldestDate,
+    });
+  }
+  // A party the invoices know about but the subledger does not is still worth
+  // a row: its ledger side is nought, and the difference then says so.
+  for (const [partyCode, name] of names) {
+    if (!parties.has(partyCode)) parties.set(partyCode, { name, ledger: 0, oldest: null });
+  }
+
+  return [...parties]
+    .map(([partyCode, held]) => {
+      const documented = documents.get(partyCode) ?? 0;
+      return {
+        partyCode,
+        partyName: held.name,
+        ledgerIqd: String(held.ledger),
+        documentsIqd: String(documented),
+        unexplainedIqd: String(held.ledger - documented),
+        oldestDate: held.oldest,
+        // No invoice means no due date, so it is due from the day it was
+        // raised. An opening balance journalled in last year is a year old,
+        // and an ageing that called it current would be flattering it.
+        bucket: held.oldest ? bucketFor(held.oldest, asOf) : 'current',
+      };
+    })
+    .filter((row) => Number(row.ledgerIqd) !== 0 || Number(row.documentsIqd) !== 0)
+    .sort((a, b) => Number(b.ledgerIqd) - Number(a.ledgerIqd));
+}
+
+/** What the whole report ties to — every figure a reader might add up by hand. */
+export interface ReconciliationTotals {
+  readonly ledgerIqd: string;
+  readonly documentsIqd: string;
+  readonly unexplainedIqd: string;
+  /** True when the invoices and the ledger agree to the dinar. */
+  readonly ties: boolean;
+}
+
+export function reconciliationTotals(rows: readonly Reconciliation[]): ReconciliationTotals {
+  const sum = (pick: (row: Reconciliation) => string) =>
+    rows.reduce((total, row) => total + Number(pick(row)), 0);
+  const unexplained = sum((row) => row.unexplainedIqd);
+  return {
+    ledgerIqd: String(sum((row) => row.ledgerIqd)),
+    documentsIqd: String(sum((row) => row.documentsIqd)),
+    unexplainedIqd: String(unexplained),
+    ties: unexplained === 0,
+  };
+}
+
+/**
+ * The ageing, with what no invoice explains folded into the same bands.
+ *
+ * So the bucket row adds up to the ledger too, not merely the grand total —
+ * otherwise "1–30 days late" would still quietly be a different report from
+ * the statement sitting next to it.
+ */
+export function ageingWith(
+  items: readonly OpenItem[],
+  rows: readonly Reconciliation[],
+): BucketTotal[] {
+  const totals = new Map<AgeingBucket, { amount: number; invoices: number }>();
+  const add = (bucket: AgeingBucket, amount: number, documents: number) => {
+    if (amount === 0) return;
+    const held = totals.get(bucket) ?? { amount: 0, invoices: 0 };
+    totals.set(bucket, { amount: held.amount + amount, invoices: held.invoices + documents });
+  };
+
+  for (const item of items) {
+    const outstanding = Number(item.outstandingIqd);
+    if (outstanding > 0) add(item.bucket, outstanding, 1);
+  }
+  for (const row of rows) add(row.bucket, Number(row.unexplainedIqd), 0);
+
+  return AGEING_BUCKETS.filter((bucket) => totals.has(bucket)).map((bucket) => ({
+    bucket,
+    amountIqd: String(totals.get(bucket)!.amount),
+    invoices: totals.get(bucket)!.invoices,
+  }));
+}

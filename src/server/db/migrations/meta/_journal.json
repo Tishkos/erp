@@ -1030,6 +1030,13 @@
       "when": 1795900000026,
       "tag": "0222_invoice_due_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1795900000027,
+      "tag": "0223_subledger_mappings_name_their_control_account",
+      "breakpoints": true
     }
   ]
 }

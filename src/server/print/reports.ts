@@ -699,7 +699,9 @@ export async function openItems(
 ): Promise<Built | null> {
   const { m, locale } = ctx;
   const asOf = param(query, 'as_at', today());
-  const show = query.get('show') ?? 'open';
+  // Matches the screen's default, so a copy taken without touching the filter
+  // is the copy of what was on screen.
+  const show = query.get('show') ?? 'all';
 
   /*
    * The partner the screen was narrowed to, resolved the same way the screen
