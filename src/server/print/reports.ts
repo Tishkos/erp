@@ -145,10 +145,11 @@ async function outstandingTable(
   view: openItemsService.OpenItemView,
 ): Promise<{ readonly tables: Table[]; readonly ageing: openItemsService.BucketTotal[] }> {
   const { m } = ctx;
+  const narrow = { branchCode: ctx.branchCode, partyCode };
+
   const items = await openItemsService
     .openItems(ctx.tx, ctx.principal, side, asOf, {
-      branchCode: ctx.branchCode,
-      partyCode,
+      ...narrow,
       outstandingOnly: true,
       // The copy answers the question the screen was answering when Print was
       // pressed: a statement headed "Overdue" that lists everything is worse
@@ -156,10 +157,29 @@ async function outstandingTable(
       ...openItemsService.viewFilter(view),
     })
     .catch(() => []);
-  if (items.length === 0) return { tables: [], ageing: [] };
+
+  /*
+   * …and what reached the account without an invoice behind it.
+   *
+   * A printed statement is the document a conversation about money happens
+   * over. This table sitting under a closing balance it disagreed with was
+   * the worst instance of the whole problem: the reader has both figures in
+   * front of them on one sheet and no way to tell which is wrong.
+   */
+  const everyItem = await openItemsService
+    .openItems(ctx.tx, ctx.principal, side, asOf, narrow)
+    .catch(() => []);
+  const balances = await openItemsService
+    .ledgerBalances(ctx.tx, ctx.principal, side, asOf, narrow)
+    .catch(() => []);
+  const reconciled = openItemsService.reconcile(everyItem, balances, asOf);
+  const unexplained = reconciled.filter((row) => Number(row.unexplainedIqd) !== 0);
+  const tie = openItemsService.reconciliationTotals(reconciled);
+
+  if (items.length === 0 && unexplained.length === 0) return { tables: [], ageing: [] };
 
   return {
-    ageing: openItemsService.ageing(items),
+    ageing: openItemsService.ageingWith(items, reconciled),
     tables: [
     {
       title: m.admin('statement_outstanding.title'),
@@ -173,28 +193,50 @@ async function outstandingTable(
         { key: 'outstanding', label: m.admin('open_items.outstanding'), kind: 'money' },
         { key: 'late', label: m.admin('open_items.lateness'), kind: 'text' },
       ],
-      rows: items.map((item) => ({
-        cells: {
-          invoice: item.invoiceNo,
-          invoice_date: item.invoiceDate,
-          due_date: item.dueDate,
-          terms: item.paymentTermsName ?? item.paymentTermsCode ?? '',
-          total: item.totalIqd,
-          paid: item.paidIqd,
-          outstanding: item.outstandingIqd,
-          late:
-            item.daysOverdue > 0
-              ? m.admin('open_items.overdue_by', { days: item.daysOverdue })
-              : m.admin('open_items.due_in', { days: item.daysUntilDue }),
-        },
-      })),
+      rows: [
+        ...unexplained.map((row) => ({
+          cells: {
+            invoice: m.admin('reconciliation.by_journal_plain'),
+            invoice_date: row.oldestDate ?? '',
+            due_date: '',
+            terms: '',
+            total: row.unexplainedChargedIqd,
+            paid: row.unexplainedPaidIqd,
+            outstanding: row.unexplainedIqd,
+            late: m.admin(`dashboard.${AGEING_LABEL[row.bucket] ?? 'bucket_current'}`),
+          },
+        })),
+        ...items.map((item) => ({
+          cells: {
+            invoice: item.invoiceNo,
+            invoice_date: item.invoiceDate,
+            due_date: item.dueDate,
+            terms: item.paymentTermsName ?? item.paymentTermsCode ?? '',
+            total: item.totalIqd,
+            paid: item.paidIqd,
+            outstanding: item.outstandingIqd,
+            late:
+              item.daysOverdue > 0
+                ? m.admin('open_items.overdue_by', { days: item.daysOverdue })
+                : m.admin('open_items.due_in', { days: item.daysUntilDue }),
+          },
+        })),
+      ],
       empty: m.admin('open_items.nothing'),
+      // The foot is the statement's closing balance, so the two figures on
+      // the sheet are the same figure.
       totals: {
-        label: m.admin('open_items.outstanding'),
+        label: m.admin('reconciliation.owed_total'),
         cells: {
-          total: sumMoney(items.map((item) => item.totalIqd)),
-          paid: sumMoney(items.map((item) => item.paidIqd)),
-          outstanding: sumMoney(items.map((item) => item.outstandingIqd)),
+          total: sumMoney([
+            ...items.map((item) => item.totalIqd),
+            ...unexplained.map((row) => row.unexplainedChargedIqd),
+          ]),
+          paid: sumMoney([
+            ...items.map((item) => item.paidIqd),
+            ...unexplained.map((row) => row.unexplainedPaidIqd),
+          ]),
+          outstanding: tie.ledgerIqd,
         },
       },
     },
