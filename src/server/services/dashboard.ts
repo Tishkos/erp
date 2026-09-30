@@ -11,6 +11,7 @@ import * as integrity from './inventory-integrity';
 import * as inventoryReports from './inventory-reports';
 import { rows as listRows } from './list';
 import * as notifications from './notifications';
+import * as openItems from './open-items';
 import * as statement from './partner-statement';
 
 /**
@@ -165,8 +166,50 @@ function bucketed(
   };
 }
 
+/**
+ * What reached a control account with no invoice behind it, as rows the
+ * bucketing can take.
+ *
+ * Read through `open-items.ts`, so this band and the Ageing report it sits
+ * beside state one figure. A dashboard quietly disagreeing with the report it
+ * links to is worse than a dashboard with no band at all — the reader has no
+ * reason to doubt either, and will act on whichever they saw first.
+ *
+ * Only what is owed. A credit on account — money in that no invoice has taken
+ * yet — is not late, and letting it shorten a band would flatter the ageing.
+ * It still shows on the Ageing report, which is where it can be acted on.
+ */
+async function journalRaised(
+  tx: Tx,
+  principal: Principal,
+  side: openItems.Side,
+  branchCode: string,
+  asOf: string,
+): Promise<{ dueDate: string; outstanding: bigint }[]> {
+  const narrow = { branchCode };
+  const [items, balances] = await Promise.all([
+    openItems.openItems(tx, principal, side, asOf, narrow).catch(() => []),
+    openItems.ledgerBalances(tx, principal, side, asOf, narrow).catch(() => []),
+  ]);
+
+  return openItems
+    .reconcile(items, balances, asOf)
+    .filter((row) => Number(row.unexplainedIqd) > 0)
+    .map((row) => ({
+      // No invoice means no due date, so it is due from the day it was
+      // raised — the same rule the Ageing report ages it by.
+      dueDate: row.oldestDate ?? asOf,
+      outstanding: parseDecimal(row.unexplainedIqd, MONEY),
+    }));
+}
+
 /** What customers still owe — `net − allocated`, the invoice's own arithmetic. */
-async function receivableAgeing(tx: Tx, branchCode: string, asOf: string): Promise<Ageing> {
+async function receivableAgeing(
+  tx: Tx,
+  principal: Principal,
+  branchCode: string,
+  asOf: string,
+): Promise<Ageing> {
   const open = await tx
     .select({ dueDate: arInvoice.dueDate, net: arInvoice.netIqd, allocated: arInvoice.allocatedIqd })
     .from(arInvoice)
@@ -178,18 +221,26 @@ async function receivableAgeing(tx: Tx, branchCode: string, asOf: string): Promi
     );
 
   return bucketed(
-    open
-      .map((row) => ({
-        dueDate: row.dueDate,
-        outstanding: parseDecimal(row.net, MONEY) - parseDecimal(row.allocated, MONEY),
-      }))
-      .filter((row) => row.outstanding > 0n),
+    [
+      ...open
+        .map((row) => ({
+          dueDate: row.dueDate,
+          outstanding: parseDecimal(row.net, MONEY) - parseDecimal(row.allocated, MONEY),
+        }))
+        .filter((row) => row.outstanding > 0n),
+      ...(await journalRaised(tx, principal, 'customer', branchCode, asOf)),
+    ],
     asOf,
   );
 }
 
 /** What the company still owes — `total − settled`. */
-async function payableAgeing(tx: Tx, branchCode: string, asOf: string): Promise<Ageing> {
+async function payableAgeing(
+  tx: Tx,
+  principal: Principal,
+  branchCode: string,
+  asOf: string,
+): Promise<Ageing> {
   const open = await tx
     .select({
       dueDate: apInvoice.dueDate,
@@ -205,12 +256,15 @@ async function payableAgeing(tx: Tx, branchCode: string, asOf: string): Promise<
     );
 
   return bucketed(
-    open
-      .map((row) => ({
-        dueDate: row.dueDate,
-        outstanding: parseDecimal(row.total, MONEY) - parseDecimal(row.settled, MONEY),
-      }))
-      .filter((row) => row.outstanding > 0n),
+    [
+      ...open
+        .map((row) => ({
+          dueDate: row.dueDate,
+          outstanding: parseDecimal(row.total, MONEY) - parseDecimal(row.settled, MONEY),
+        }))
+        .filter((row) => row.outstanding > 0n),
+      ...(await journalRaised(tx, principal, 'supplier', branchCode, asOf)),
+    ],
     asOf,
   );
 }
@@ -492,11 +546,11 @@ export async function forPrincipal(
         : Promise.resolve(null),
 
       can(principal, 'view', 'ar_invoice')
-        ? band('receivable', () => receivableAgeing(tx, branchCode, asOf))
+        ? band('receivable', () => receivableAgeing(tx, principal, branchCode, asOf))
         : Promise.resolve(null),
 
       can(principal, 'view', 'ap_invoice')
-        ? band('payable', () => payableAgeing(tx, branchCode, asOf))
+        ? band('payable', () => payableAgeing(tx, principal, branchCode, asOf))
         : Promise.resolve(null),
 
       // Income and what it cost, for the year so far. `profitOrLoss` is the
