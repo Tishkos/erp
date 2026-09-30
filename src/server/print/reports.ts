@@ -717,16 +717,40 @@ export async function openItems(
   // A name that names nobody prints nothing, as the screen shows nothing —
   // a copy of everybody's ageing under one customer's name is worse than a
   // blank page, because somebody would act on it.
+  const narrow = {
+    branchCode: ctx.branchCode,
+    ...(chosen ? { partyCode: chosen.code } : {}),
+  };
+
   const items =
     asked && !chosen
       ? []
       : await openItemsService.openItems(ctx.tx, ctx.principal, side, asOf, {
-          branchCode: ctx.branchCode,
+          ...narrow,
           outstandingOnly: show !== 'all',
           overdueOnly: show === 'overdue',
-          ...(chosen ? { partyCode: chosen.code } : {}),
         });
-  const buckets = openItemsService.ageing(items);
+
+  /*
+   * The same reconciliation the screen performs.
+   *
+   * A printed ageing is the copy somebody reads in a meeting beside a
+   * statement, so it is the copy that most needs to add up to it. Reconciled
+   * against every invoice rather than the filtered list, for the same reason
+   * as on screen: the filter chooses what is listed, never what counts.
+   */
+  const everyItem =
+    asked && !chosen
+      ? []
+      : await openItemsService.openItems(ctx.tx, ctx.principal, side, asOf, narrow);
+  const balances =
+    asked && !chosen
+      ? []
+      : await openItemsService.ledgerBalances(ctx.tx, ctx.principal, side, asOf, narrow);
+  const reconciled = openItemsService.reconcile(everyItem, balances, asOf);
+  const tie = openItemsService.reconciliationTotals(reconciled);
+  const unexplained = reconciled.filter((row) => Number(row.unexplainedIqd) !== 0);
+  const buckets = openItemsService.ageingWith(items, reconciled);
 
   const bucketLabel = (bucket: string) =>
     m.admin(
@@ -754,8 +778,8 @@ export async function openItems(
       })),
       empty: m.admin('open_items.nothing'),
       totals: {
-        label: m.admin('reports.totals'),
-        cells: { amount: sumMoney(buckets.map((bucket) => bucket.amountIqd)) },
+        label: m.admin('reconciliation.owed_total'),
+        cells: { amount: tie.ledgerIqd },
       },
     },
     {
@@ -777,7 +801,24 @@ export async function openItems(
         { key: 'status', label: m.column('status'), kind: 'text' },
         { key: 'late', label: m.admin('open_items.lateness'), kind: 'text' },
       ],
-      rows: items.map((item) => ({
+      rows: [
+        ...unexplained.map((row) => ({
+          cells: {
+            party: `${row.partyName} · ${row.partyCode}`,
+            // No document to name, so the row says what it is rather than
+            // leaving a blank somebody would read as a missing reference.
+            invoice: m.admin('reconciliation.by_journal'),
+            invoice_date: row.oldestDate ?? '',
+            due_date: '',
+            terms: '',
+            total: row.unexplainedChargedIqd,
+            paid: row.unexplainedPaidIqd,
+            outstanding: row.unexplainedIqd,
+            status: m.admin('reconciliation.no_document'),
+            late: bucketLabel(row.bucket),
+          },
+        })),
+        ...items.map((item) => ({
         cells: {
           party: `${item.partyName} · ${item.partyCode}`,
           invoice: item.invoiceNo,
@@ -798,13 +839,22 @@ export async function openItems(
                 : m.admin('open_items.due_in', { days: item.daysUntilDue }),
         },
       })),
+      ],
       empty: m.admin('open_items.nothing'),
+      // Everything the table lists, invoices and journals together, so the
+      // foot of the printed copy is the statement's closing balance.
       totals: {
-        label: m.admin('reports.totals'),
+        label: m.admin('reconciliation.owed_total'),
         cells: {
-          total: sumMoney(items.map((item) => item.totalIqd)),
-          paid: sumMoney(items.map((item) => item.paidIqd)),
-          outstanding: sumMoney(items.map((item) => item.outstandingIqd)),
+          total: sumMoney([
+            ...items.map((item) => item.totalIqd),
+            ...unexplained.map((row) => row.unexplainedChargedIqd),
+          ]),
+          paid: sumMoney([
+            ...items.map((item) => item.paidIqd),
+            ...unexplained.map((row) => row.unexplainedPaidIqd),
+          ]),
+          outstanding: tie.ledgerIqd,
         },
       },
     },
