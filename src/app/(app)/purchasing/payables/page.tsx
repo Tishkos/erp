@@ -1,0 +1,21 @@
+import { notFound } from 'next/navigation';
+import { OpenItemsReport } from '@/components/admin/open-items-report';
+import type { SearchParams } from '@/components/admin/params';
+import { visibleRoute } from '@/server/phase-gate';
+
+/** Payables — the supplier's side of the same mirror. See Receivables. */
+export const dynamic = 'force-dynamic';
+
+export default async function PayablesPage({ searchParams }: { searchParams: SearchParams }) {
+  if (!visibleRoute('/purchasing/payables')) notFound();
+  return (
+    <OpenItemsReport
+      exportKey="payables"
+      invoiceHref={(invoiceNo) => `/purchasing/ap-invoices/${encodeURIComponent(invoiceNo)}`}
+      route="/purchasing/payables"
+      searchParams={searchParams}
+      side="supplier"
+      titleKey="ap_open_items"
+    />
+  );
+}

@@ -67,6 +67,15 @@ export type DocumentKind =
 export interface StatementDocument {
   readonly kind: DocumentKind;
   readonly number: string;
+  /**
+   * When it falls due — invoices only.
+   *
+   * A statement that lists what is owed without saying when it was due makes
+   * the reader open every line to find out which ones are late. Null on a
+   * receipt, a payment or a return: those settle a debt rather than create
+   * one, and a due date on them would be a date that means nothing.
+   */
+  readonly dueDate?: string | null;
 }
 
 export interface StatementLine {
@@ -145,7 +154,7 @@ const AR_INVOICE: DocumentSource = {
   kind: 'ar_invoice',
   find: (tx, ids) =>
     tx
-      .select({ id: arInvoice.id, number: arInvoice.invoiceNo })
+      .select({ id: arInvoice.id, number: arInvoice.invoiceNo, dueDate: arInvoice.dueDate })
       .from(arInvoice)
       .where(inArray(arInvoice.id, ids)),
 };
@@ -172,7 +181,7 @@ const AP_INVOICE: DocumentSource = {
   kind: 'ap_invoice',
   find: (tx, ids) =>
     tx
-      .select({ id: apInvoice.id, number: apInvoice.invoiceNo })
+      .select({ id: apInvoice.id, number: apInvoice.invoiceNo, dueDate: apInvoice.dueDate })
       .from(apInvoice)
       .where(inArray(apInvoice.id, ids)),
 };
@@ -214,7 +223,11 @@ async function documentsFor(
 
   for (const source of RAISED_BY[side]) {
     for (const row of await source.find(tx, wanted)) {
-      found.set(row.id, { kind: source.kind, number: row.number });
+      found.set(row.id, {
+        kind: source.kind,
+        number: row.number,
+        dueDate: 'dueDate' in row ? ((row as { dueDate: string | null }).dueDate ?? null) : null,
+      });
     }
   }
   return found;

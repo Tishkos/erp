@@ -431,7 +431,8 @@
     "from_warehouse_name": "من",
     "to_warehouse_name": "إلى",
     "entered_at": "أُدخل",
-    "raised_by": "أدخله"
+    "raised_by": "أدخله",
+    "invoice_date": "تاريخ الفاتورة"
   },
   "list": {
     "search": "بحث",
@@ -2197,6 +2198,26 @@
       "movement_transfer_out": "تحويل صادر",
       "movement_other": "قيد",
       "party": "العميل / المورّد"
+    },
+    "open_items": {
+      "subtitle_customer": "ما على العملاء، فاتورة بفاتورة، ومدى تأخره",
+      "subtitle_supplier": "ما علينا للموردين، فاتورة بفاتورة، ومدى تأخره",
+      "ageing": "مدة التأخر",
+      "outstanding": "المتبقي",
+      "paid": "المدفوع",
+      "terms": "شروط الدفع",
+      "lateness": "الحالة مقابل الشروط",
+      "show": "العرض",
+      "show_open": "ما زال مستحقاً",
+      "show_overdue": "المتأخر فقط",
+      "show_all": "الكل، بما في ذلك المدفوع",
+      "nothing": "لا شيء يطابق — لا توجد فاتورة قائمة في هذا التاريخ.",
+      "due_in": "تستحق خلال {days} يوماً",
+      "overdue_by": "متأخرة {days} يوماً",
+      "paid_late": "دُفعت متأخرة {days} يوماً",
+      "paid_on_time": "دُفعت في موعدها",
+      "settlement": "التسوية",
+      "last_payment": "آخر دفعة"
     }
   },
   "profile": {
@@ -2463,6 +2484,8 @@
       "stock_movement": "حركة المخزون",
       "stock_ledger": "دفتر المخزون",
       "treasury_reporting": "تقرير البنوك والنقد",
+      "receivables": "الذمم المدينة",
+      "payables": "الذمم الدائنة",
       "invoice_status_tracking": "تتبع حالة الفواتير",
       "trial_balance": "ميزان المراجعة",
       "income_statement": "قائمة الدخل",

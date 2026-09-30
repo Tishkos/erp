@@ -3,6 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { InvoiceSettlement } from '@/components/admin/invoice-settlement';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -386,6 +387,11 @@ export default async function ApInvoicePage({
           </table>
         )}
       </DocumentWindow>
+
+      {/* How it stands against its payment terms — read through the same
+          service the Receivables and Payables reports use, so an invoice and
+          the report listing it cannot disagree about its own due date. */}
+      <InvoiceSettlement invoiceNo={invoice.invoiceNo} side="supplier" />
 
       <RecordHistory objectId={invoice.id} objectType={ap.PERMISSION_OBJECT} />
       {sheet ? <PrintSheet {...sheet} /> : null}

@@ -29,6 +29,8 @@ export const EXPORT_ACCESS = {
   stock_movement: { kind: 'report', route: '/inventory/stock-movements', object: 'stock_movement' },
   stock_ledger: { kind: 'report', route: '/inventory/stock-ledger', object: 'stock_movement' },
   treasury_reporting: { kind: 'report', route: '/treasury/reporting', object: 'bank_account' },
+  receivables: { kind: 'report', route: '/sales/receivables', object: 'ar_invoice' },
+  payables: { kind: 'report', route: '/purchasing/payables', object: 'ap_invoice' },
   invoice_status_tracking: { kind: 'report', route: '/inventory/in-transit', object: 'supplier_shipment' },
   trial_balance: { kind: 'report', route: '/finance/trial-balance', object: 'trial_balance' },
   income_statement: { kind: 'report', route: '/finance/income-statement', object: 'financial_statement' },

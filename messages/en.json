@@ -431,7 +431,8 @@
     "from_warehouse_name": "From",
     "to_warehouse_name": "To",
     "entered_at": "Entered",
-    "raised_by": "Raised by"
+    "raised_by": "Raised by",
+    "invoice_date": "Invoice Date"
   },
   "list": {
     "search": "Search",
@@ -2197,6 +2198,26 @@
       "movement_transfer_out": "Transfer out",
       "movement_other": "Journal",
       "party": "Customer / Supplier"
+    },
+    "open_items": {
+      "subtitle_customer": "What customers owe, invoice by invoice, and how late it is",
+      "subtitle_supplier": "What we owe suppliers, invoice by invoice, and how late it is",
+      "ageing": "How late",
+      "outstanding": "Outstanding",
+      "paid": "Paid",
+      "terms": "Payment terms",
+      "lateness": "Status against terms",
+      "show": "Show",
+      "show_open": "Still owed",
+      "show_overdue": "Overdue only",
+      "show_all": "All, including paid",
+      "nothing": "Nothing matches — no invoice is outstanding for this date.",
+      "due_in": "Due in {days} days",
+      "overdue_by": "{days} days overdue",
+      "paid_late": "Paid {days} days late",
+      "paid_on_time": "Paid on time",
+      "settlement": "Settlement",
+      "last_payment": "Last payment"
     }
   },
   "profile": {
@@ -2463,6 +2484,8 @@
       "stock_movement": "Stock Movement",
       "stock_ledger": "Stock Ledger",
       "treasury_reporting": "Bank and Cash Reporting",
+      "receivables": "Receivables",
+      "payables": "Payables",
       "invoice_status_tracking": "Invoice Status Tracking",
       "trial_balance": "Trial Balance",
       "income_statement": "Income Statement",

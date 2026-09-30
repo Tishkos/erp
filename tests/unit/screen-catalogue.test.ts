@@ -228,6 +228,8 @@ describe('every screen has one address', () => {
       '/purchasing/ap-invoices',
       // Block 10 — Purchase Returns.
       '/purchasing/goods-returns',
+      // §15 — what we owe, invoice by invoice.
+      '/purchasing/payables',
       // Block 6 — Payments and Receipts.
       '/purchasing/supplier-payments',
       // Blocks 2 and 3 — the Account Statement, one screen on each side.
@@ -237,6 +239,8 @@ describe('every screen has one address', () => {
       // Block 6 — Receipts.
       '/sales/customer-receipts',
       '/sales/customer-statements',
+      // §16 — what is owed to us, invoice by invoice.
+      '/sales/receivables',
       // Block 9 — Sales Returns.
       '/sales/sales-returns',
       // §17 — Bank and Cash Reporting, beside the accounts it reports on.

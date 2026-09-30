@@ -20,6 +20,7 @@ import * as partners from '../services/partners';
 import * as statement from '../services/partner-statement';
 import * as stock from '../services/stock-operations';
 import * as shipments from '../services/supplier-shipment';
+import * as openItemsService from '../services/open-items';
 import * as treasuryReports from '../services/treasury-reports';
 import * as trialBalanceService from '../services/trial-balance';
 import { decimalString, isZero, scaled, sumMoney, sumQuantity } from './decimal';
@@ -571,6 +572,128 @@ export async function treasuryReporting(ctx: BuildContext, query: Query): Promis
       fileName: `bank-cash-reporting_${from}_${to}`,
     }),
     account || 'all',
+  );
+}
+
+/**
+ * Receivables and Payables — §15 and §16, the printed copy.
+ *
+ * One builder for both sides, like the screen: the ageing as one table, then
+ * the invoices behind it. A copy whose summary and detail were built by
+ * different code would eventually print two different totals on one page.
+ */
+export async function openItems(
+  ctx: BuildContext,
+  side: openItemsService.Side,
+  query: Query,
+): Promise<Built | null> {
+  const { m, locale } = ctx;
+  const asOf = param(query, 'as_at', today());
+  const show = query.get('show') ?? 'open';
+
+  const items = await openItemsService.openItems(ctx.tx, ctx.principal, side, asOf, {
+    branchCode: ctx.branchCode,
+    outstandingOnly: show !== 'all',
+    overdueOnly: show === 'overdue',
+  });
+  const buckets = openItemsService.ageing(items);
+
+  const bucketLabel = (bucket: string) =>
+    m.admin(
+      `dashboard.${
+        { current: 'bucket_current', '1-30': 'bucket_1_30', '31-60': 'bucket_31_60', '61-90': 'bucket_61_90', '90+': 'bucket_over_90' }[
+          bucket
+        ] ?? 'bucket_current'
+      }`,
+    );
+
+  const tables: Table[] = [
+    {
+      title: m.admin('open_items.ageing'),
+      columns: [
+        { key: 'bucket', label: m.admin('open_items.ageing'), kind: 'text', weight: 1.4 },
+        { key: 'invoices', label: m.column('document'), kind: 'text' },
+        { key: 'amount', label: m.admin('open_items.outstanding'), kind: 'money' },
+      ],
+      rows: buckets.map((bucket) => ({
+        cells: {
+          bucket: bucketLabel(bucket.bucket),
+          invoices: String(bucket.invoices),
+          amount: bucket.amountIqd,
+        },
+      })),
+      empty: m.admin('open_items.nothing'),
+      totals: {
+        label: m.admin('reports.totals'),
+        cells: { amount: sumMoney(buckets.map((bucket) => bucket.amountIqd)) },
+      },
+    },
+    {
+      title: m.page(side === 'customer' ? 'ar_open_items' : 'ap_open_items'),
+      columns: [
+        {
+          key: 'party',
+          label: m.column(side === 'customer' ? 'customer_name' : 'supplier_name'),
+          kind: 'text',
+          weight: 1.6,
+        },
+        { key: 'invoice', label: m.column('invoice_no'), kind: 'code', weight: 1.4 },
+        { key: 'invoice_date', label: m.column('invoice_date'), kind: 'date' },
+        { key: 'due_date', label: m.column('due_date'), kind: 'date' },
+        { key: 'terms', label: m.admin('open_items.terms'), kind: 'text' },
+        { key: 'total', label: m.column('total_price'), kind: 'money' },
+        { key: 'paid', label: m.admin('open_items.paid'), kind: 'money' },
+        { key: 'outstanding', label: m.admin('open_items.outstanding'), kind: 'money' },
+        { key: 'status', label: m.column('status'), kind: 'text' },
+        { key: 'late', label: m.admin('open_items.lateness'), kind: 'text' },
+      ],
+      rows: items.map((item) => ({
+        cells: {
+          party: `${item.partyName} · ${item.partyCode}`,
+          invoice: item.invoiceNo,
+          invoice_date: item.invoiceDate,
+          due_date: item.dueDate,
+          terms: item.paymentTermsName ?? item.paymentTermsCode ?? '',
+          total: item.totalIqd,
+          paid: item.paidIqd,
+          outstanding: item.outstandingIqd,
+          status: m.status(item.status),
+          late:
+            Number(item.outstandingIqd) <= 0
+              ? item.daysLateAtLastPayment && item.daysLateAtLastPayment > 0
+                ? m.admin('open_items.paid_late', { days: item.daysLateAtLastPayment })
+                : m.admin('open_items.paid_on_time')
+              : item.daysOverdue > 0
+                ? m.admin('open_items.overdue_by', { days: item.daysOverdue })
+                : m.admin('open_items.due_in', { days: item.daysUntilDue }),
+        },
+      })),
+      empty: m.admin('open_items.nothing'),
+      totals: {
+        label: m.admin('reports.totals'),
+        cells: {
+          total: sumMoney(items.map((item) => item.totalIqd)),
+          paid: sumMoney(items.map((item) => item.paidIqd)),
+          outstanding: sumMoney(items.map((item) => item.outstandingIqd)),
+        },
+      },
+    },
+  ];
+
+  return built(
+    ctx,
+    report({
+      title: m.print(side === 'customer' ? 'titles.receivables' : 'titles.payables'),
+      currency: 'IQD',
+      orientation: 'landscape',
+      filters: [
+        { label: m.admin('reports.as_at_label'), value: day(asOf, locale), ltr: true },
+        { label: m.admin('open_items.show'), value: m.admin(`open_items.show_${show}`) },
+      ],
+      tables,
+      fileName: `${side === 'customer' ? 'receivables' : 'payables'}_${asOf}`,
+    }),
+    side,
   );
 }
 

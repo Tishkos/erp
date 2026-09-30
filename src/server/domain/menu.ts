@@ -272,7 +272,9 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ordinal: 11,
     items: [
       page('customer_ledger', 'customer_ledger', '06'),
-      page('ar_open_items', 'ar_open_item', '06'),
+      // What customers owe, invoice by invoice, with the terms that set each
+      // due date and how late the remainder is (2026-09-29).
+      page('ar_open_items', 'ar_invoice', '06', '/sales/receivables'),
       page('ar_receipts', 'customer_receipt', '06'),
       page('ar_allocations', 'ar_allocation', '06'),
       page('credit_limits', 'credit_limit', '06'),
@@ -286,7 +288,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ordinal: 12,
     items: [
       page('supplier_ledger', 'supplier_ledger', '05'),
-      page('ap_open_items', 'ap_open_item', '05'),
+      // The supplier's side of the same mirror.
+      page('ap_open_items', 'ap_invoice', '05', '/purchasing/payables'),
       page('ap_advances', 'supplier_advance', '05'),
       page('ap_payments', 'supplier_payment', '05'),
       page('ap_allocations', 'ap_allocation', '05'),

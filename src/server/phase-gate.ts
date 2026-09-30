@@ -135,6 +135,14 @@ export const OPERATIONS: readonly string[] = [
    * than stored.
    */
   '/treasury/reporting',
+  /*
+   * Receivables and Payables (2026-09-29). §15 and §16's open items: every
+   * invoice with the terms that set its due date, what has been paid against
+   * it, what is left, and how late that is — plus the ageing above the rows
+   * it summarises. One component serves both sides.
+   */
+  '/sales/receivables',
+  '/purchasing/payables',
 ];
 
 const VISIBLE: ReadonlySet<string> = new Set([

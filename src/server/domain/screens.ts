@@ -432,6 +432,9 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/finance/posting-mappings',
   // Treasury and Banking reporting — the balance, and what it is made of.
   '/treasury/reporting',
+  // §15 and §16 — open items and ageing, one screen on each side.
+  '/sales/receivables',
+  '/purchasing/payables',
 ]);
 
 export function isDelivered(route: string): boolean {

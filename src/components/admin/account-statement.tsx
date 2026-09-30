@@ -10,6 +10,7 @@ import { formatBusinessDate, formatStatementAmount, type Locale } from '@/i18n/c
 import { can } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { pickOne, pickOutcome } from '@domain/pick';
+import { daysBetween } from '@domain/ageing';
 import * as partners from '@/server/services/partners';
 import * as statement from '@/server/services/partner-statement';
 
@@ -73,9 +74,10 @@ export async function AccountStatement({
   readonly searchParams: SearchParams;
 }) {
   const screen = SIDE[side];
-  const [t, page, locale, context, query] = await Promise.all([
+  const [t, page, column, locale, context, query] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
+    getTranslations('column'),
     getLocale(),
     requireContext(),
     searchParams,
@@ -118,6 +120,20 @@ export async function AccountStatement({
     (row) => row.code,
     (row) => [row.code, row.legalName, row.tradeName],
   );
+
+  /*
+   * The day the lines are aged against.
+   *
+   * The statement's own closing date, so a copy printed for August ages its
+   * lines as at August and still says the same thing when it is re-printed in
+   * November — a statement in a file has to keep agreeing with itself.
+   *
+   * But never later than today. A statement run to the end of the year would
+   * otherwise declare an invoice due last week "95 days overdue", which is a
+   * fact about a future that has not happened.
+   */
+  const today = new Date().toISOString().slice(0, 10);
+  const agedAt = account && account.to > today ? today : (account?.to ?? today);
 
   const money = (amount: string) => formatStatementAmount(amount, currency, locale as Locale);
   const day = (date: string) => formatBusinessDate(date, locale as Locale);
@@ -178,6 +194,8 @@ export async function AccountStatement({
             <tr>
               <th scope="col">{t('partners.statement_date')}</th>
               <th scope="col">{t('partners.statement_document')}</th>
+              <th scope="col">{column('due_date')}</th>
+              <th scope="col">{t('open_items.ageing')}</th>
               <th scope="col">{t('journals.description')}</th>
               <th className={s.sapNum} scope="col">
                 {`${t('partners.statement_debit')} · ${currency}`}
@@ -193,7 +211,7 @@ export async function AccountStatement({
           <tbody>
             {account === null ? (
               <tr>
-                <td className={s.sapEmptyRow} colSpan={6}>
+                <td className={s.sapEmptyRow} colSpan={8}>
                   {/* Which of the three it is: nothing typed, nothing found, or
                       too much found. "Choose a customer" for a name that was
                       typed and not recognised reads as though the box had been
@@ -211,7 +229,7 @@ export async function AccountStatement({
                     earlier is folded into it rather than dropped, so a window
                     closes where the whole account does. */}
                 <tr>
-                  <td colSpan={3}>{t('partners.statement_opening')}</td>
+                  <td colSpan={5}>{t('partners.statement_opening')}</td>
                   <td className={s.sapNum} />
                   <td className={s.sapNum} />
                   <td className={s.sapNum}>
@@ -220,7 +238,7 @@ export async function AccountStatement({
                 </tr>
                 {account.lines.length === 0 ? (
                   <tr>
-                    <td className={s.sapEmptyRow} colSpan={6}>
+                    <td className={s.sapEmptyRow} colSpan={8}>
                       {t('partners.statement_empty')}
                     </td>
                   </tr>
@@ -252,6 +270,32 @@ export async function AccountStatement({
                         )}
                       </td>
                       <td>
+                        <bdi dir="ltr">
+                          {line.document?.dueDate ? day(line.document.dueDate) : '—'}
+                        </bdi>
+                      </td>
+                      <td>
+                        {/* How old the document is as at the statement's own
+                            closing date — not today's. A statement printed for
+                            August must age its lines as at August, or a copy
+                            re-printed in November would quietly disagree with
+                            the one already in the file. */}
+                        {line.document?.dueDate ? (
+                          (() => {
+                            const late = daysBetween(line.document.dueDate, agedAt);
+                            return late > 0 ? (
+                              <span className={s.sapWarn}>
+                                {t('open_items.overdue_by', { days: late })}
+                              </span>
+                            ) : (
+                              <span className="muted">{t('open_items.due_in', { days: -late })}</span>
+                            );
+                          })()
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>
                         <bdi dir="auto">{line.description ?? '—'}</bdi>
                       </td>
                       <td className={s.sapNum}>
@@ -269,7 +313,7 @@ export async function AccountStatement({
                 {/* The two totals and what the account stands at — ruled twice,
                     the way a statement ends. */}
                 <tr data-rule="double">
-                  <td colSpan={3}>{t('partners.statement_closing')}</td>
+                  <td colSpan={5}>{t('partners.statement_closing')}</td>
                   <td className={s.sapNum}>
                     <bdi dir="ltr">{money(account.totalDebit)}</bdi>
                   </td>
