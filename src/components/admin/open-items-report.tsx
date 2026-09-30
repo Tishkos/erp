@@ -73,7 +73,7 @@ export async function OpenItemsReport({
   const show = one('show') === 'open' || one('show') === 'overdue' ? one('show') : 'all';
   const asked = one('code');
 
-  const { roll, chosen, items, balances } = await withCurrentUser(async (tx, request) => {
+  const { roll, chosen, items, everyItem, balances } = await withCurrentUser(async (tx, request) => {
     /*
      * The whole role, not only the active part of it — an account is read
      * long after the partner stops trading, and an ageing that hid a dormant
@@ -116,6 +116,17 @@ export async function OpenItemsReport({
             overdueOnly: show === 'overdue',
           }),
       /*
+       * Every invoice, whatever the filter shows.
+       *
+       * `show` decides which rows are listed; it must not decide which
+       * invoices count as accounted for. Reconciling against the filtered set
+       * would attribute a hidden invoice's charge to the journals, and
+       * narrowing to "overdue only" would make the report stop tying.
+       */
+      everyItem: unresolved
+        ? []
+        : await openItems.openItems(tx, request.principal, side, asOf, narrow),
+      /*
        * What the control account says, read through the same table the Account
        * Statement reads. The two reports are only one report if this figure
        * and the invoices are shown together — otherwise the ageing is a
@@ -146,9 +157,13 @@ export async function OpenItemsReport({
    * the whole account — an ageing filtered to "overdue only" that also
    * quietly dropped part of the ledger would tie to nothing.
    */
-  const reconciled = openItems.reconcile(items, balances, asOf);
+  const reconciled = openItems.reconcile(everyItem, balances, asOf);
   const tie = openItems.reconciliationTotals(reconciled);
   const unexplained = reconciled.filter((row) => Number(row.unexplainedIqd) !== 0);
+  const journalled = {
+    charged: String(unexplained.reduce((sum, row) => sum + Number(row.unexplainedChargedIqd), 0)),
+    paid: String(unexplained.reduce((sum, row) => sum + Number(row.unexplainedPaidIqd), 0)),
+  };
   const buckets = openItems.ageingWith(items, reconciled);
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   const day = (value: string) => formatBusinessDate(value, locale as Locale);
@@ -273,53 +288,6 @@ export async function OpenItemsReport({
           </div>
         ) : null}
 
-        {/* ── What no invoice accounts for ──────────────────────────────
-            Listed rather than netted away, because it is the part a reader
-            cannot find from the invoices: an opening balance journalled in, a
-            write-off, or a payment that never reached the control account.
-            Without it the total below would not be the statement's. */}
-        {unexplained.length > 0 ? (
-          <div className="table-wrap">
-            <table className="list">
-              <thead>
-                <tr>
-                  <th scope="col">{partyColumn}</th>
-                  <th scope="col">{t('reconciliation.source')}</th>
-                  <th scope="col">{t('reconciliation.since')}</th>
-                  <th scope="col">{t('open_items.ageing')}</th>
-                  <th scope="col">{t('open_items.outstanding')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {unexplained.map((row) => (
-                  <tr key={row.partyCode}>
-                    <td>
-                      <bdi dir="auto">{row.partyName}</bdi>{' '}
-                      <span className="muted">
-                        <bdi dir="ltr">{row.partyCode}</bdi>
-                      </span>
-                    </td>
-                    <td>
-                      <Link href={`${statementRoute}?code=${encodeURIComponent(row.partyCode)}`}>
-                        {t('reconciliation.by_journal')}
-                      </Link>
-                    </td>
-                    <td>
-                      <bdi dir="ltr">{row.oldestDate ? day(row.oldestDate) : '—'}</bdi>
-                    </td>
-                    <td>{t(`dashboard.${BUCKET_KEY[row.bucket]}`)}</td>
-                    <td>
-                      <strong>
-                        <bdi dir="ltr">{money(row.unexplainedIqd)}</bdi>
-                      </strong>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-
         {/* ── Does it tie? ──────────────────────────────────────────────
             Stated on the report rather than left for somebody to work out
             with a calculator, because the one thing an ageing must never do
@@ -434,7 +402,49 @@ export async function OpenItemsReport({
                     <td>{lateness(item)}</td>
                   </tr>
                 ))}
-                {/* What these rows come to — named as the invoices' subtotal
+                {/* ── Raised without an invoice ────────────────────────
+                    In the same table, because the reader asked for every
+                    invoice and this is one in all but name: a debt charged to
+                    the account by journal, what has come off it, and what is
+                    left. It has no document to open, so the reference is a
+                    way through to the statement, where the entries behind it
+                    are listed one by one. */}
+                {unexplained.map((row) => (
+                  <tr key={`journal-${row.partyCode}`}>
+                    <td>
+                      <bdi dir="auto">{row.partyName}</bdi>{' '}
+                      <span className="muted">
+                        <bdi dir="ltr">{row.partyCode}</bdi>
+                      </span>
+                    </td>
+                    <td>
+                      <Link href={`${statementRoute}?code=${encodeURIComponent(row.partyCode)}`}>
+                        {t('reconciliation.by_journal')}
+                      </Link>
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{row.oldestDate ? day(row.oldestDate) : '—'}</bdi>
+                    </td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>
+                      <bdi dir="ltr">{money(row.unexplainedChargedIqd)}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{money(row.unexplainedPaidIqd)}</bdi>
+                    </td>
+                    <td>
+                      <strong>
+                        <bdi dir="ltr">{money(row.unexplainedIqd)}</bdi>
+                      </strong>
+                    </td>
+                    <td>
+                      <span className="muted">{t('reconciliation.no_document')}</span>
+                    </td>
+                    <td>{t(`dashboard.${BUCKET_KEY[row.bucket]}`)}</td>
+                  </tr>
+                ))}
+                {/* What the invoice rows come to — named as their subtotal
                     rather than "Totals", because it is not the total of the
                     report. Read on its own beside a ledger balance of 700,000
                     an unlabelled "0" reads as a contradiction. */}
@@ -467,7 +477,16 @@ export async function OpenItemsReport({
                     <td colSpan={5}>
                       <strong>{t('reconciliation.journals')}</strong>
                     </td>
-                    <td colSpan={2} />
+                    <td>
+                      <strong>
+                        <bdi dir="ltr">{money(journalled.charged)}</bdi>
+                      </strong>
+                    </td>
+                    <td>
+                      <strong>
+                        <bdi dir="ltr">{money(journalled.paid)}</bdi>
+                      </strong>
+                    </td>
                     <td>
                       <strong>
                         <bdi dir="ltr">{money(tie.unexplainedIqd)}</bdi>
@@ -480,7 +499,20 @@ export async function OpenItemsReport({
                   <td colSpan={5}>
                     <strong>{t('reconciliation.owed_total')}</strong>
                   </td>
-                  <td colSpan={2} />
+                  <td>
+                    <strong>
+                      <bdi dir="ltr">
+                        {money(String(Number(total((row) => row.totalIqd)) + Number(journalled.charged)))}
+                      </bdi>
+                    </strong>
+                  </td>
+                  <td>
+                    <strong>
+                      <bdi dir="ltr">
+                        {money(String(Number(total((row) => row.paidIqd)) + Number(journalled.paid)))}
+                      </bdi>
+                    </strong>
+                  </td>
                   <td>
                     <strong>
                       <bdi dir="ltr">{money(tie.ledgerIqd)}</bdi>

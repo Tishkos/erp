@@ -186,16 +186,23 @@ async function apInvoice(
 /** The whole reconciliation for one side, as the screen assembles it. */
 async function reconciliation(side: openItems.Side, partyCode?: string) {
   return withScope(scope(manager), async (tx) => {
+    const narrow = { branchCode: BAGHDAD, ...(partyCode ? { partyCode } : {}) };
     const items = await openItems.openItems(tx, manager.principal, side, AS_OF, {
-      branchCode: BAGHDAD,
+      ...narrow,
       outstandingOnly: true,
-      ...(partyCode ? { partyCode } : {}),
     });
-    const balances = await openItems.ledgerBalances(tx, manager.principal, side, AS_OF, {
-      branchCode: BAGHDAD,
-      ...(partyCode ? { partyCode } : {}),
-    });
-    const rows = openItems.reconcile(items, balances, AS_OF);
+    /*
+     * Every invoice, as the screen does.
+     *
+     * The filter decides which rows are listed, never which invoices count as
+     * accounted for. Reconciling against the outstanding-only set would
+     * attribute a settled invoice's charge and payment to the journals, and
+     * the report would double-count inside the very figures meant to prove it
+     * does not.
+     */
+    const everyItem = await openItems.openItems(tx, manager.principal, side, AS_OF, narrow);
+    const balances = await openItems.ledgerBalances(tx, manager.principal, side, AS_OF, narrow);
+    const rows = openItems.reconcile(everyItem, balances, AS_OF);
     return { items, rows, totals: openItems.reconciliationTotals(rows) };
   });
 }
@@ -273,6 +280,15 @@ describe('ops 17 · a debt raised by journal is still a debt', () => {
 
     const mine = rows.find((row) => row.partyCode === customer.code)!;
     expect(Number(mine.ledgerIqd)).toBe(700_000);
+    /*
+     * And it reads like the invoice it is: raised, paid, left.
+     *
+     * The sponsor wrote the row out by hand — *"INV-1001: 1,200,000 →
+     * 500,000 paid → 700,000 outstanding"* — and a bare 700,000 is a figure
+     * they would have to take on trust.
+     */
+    expect(Number(mine.unexplainedChargedIqd)).toBe(1_200_000);
+    expect(Number(mine.unexplainedPaidIqd)).toBe(500_000);
     // Aged from the day the account first moved — 1 March is more than ninety
     // days before 30 September, and calling it current would flatter it.
     expect(mine.bucket).toBe('90+');
@@ -306,9 +322,24 @@ describe('ops 17 · a debt raised by journal is still a debt', () => {
 
     expect(closing).toBe(700_000);
     expect(Number(totals.ledgerIqd)).toBe(closing);
-    // The settled invoice contributes nothing to either side — it is paid.
+    // The settled invoice contributes nothing to what is *owed* — it is paid.
     expect(Number(totals.documentsIqd)).toBe(0);
     expect(Number(totals.unexplainedIqd)).toBe(700_000);
+
+    /*
+     * But its charge and its payment are the invoice's, not the journals'.
+     *
+     * The ledger moved by 1,210,000 and 510,000 across the four entries; the
+     * settled invoice accounts for 10,000 of each, so the journal row must
+     * show 1,200,000 and 500,000 — not the gross. Getting this wrong would
+     * double-count the invoice inside the very report that is meant to prove
+     * nothing is double-counted.
+     */
+    const mine = (await reconciliation('customer')).rows.find(
+      (row) => row.partyCode === customer.code,
+    )!;
+    expect(Number(mine.unexplainedChargedIqd)).toBe(1_200_000);
+    expect(Number(mine.unexplainedPaidIqd)).toBe(500_000);
   });
 
   it('reports nothing unexplained when every movement has an invoice behind it', async () => {

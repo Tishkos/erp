@@ -384,6 +384,15 @@ export interface LedgerBalance {
   readonly partyName: string;
   /** Owed *to* us on the customer side, owed *by* us on the supplier side. */
   readonly balanceIqd: string;
+  /**
+   * What was charged to the account, and what came off it.
+   *
+   * Both, not merely the net, because the reader is looking for an invoice:
+   * "1,200,000 raised, 500,000 paid, 700,000 left" is a line somebody
+   * recognises, and a bare 700,000 is a number they have to take on trust.
+   */
+  readonly chargedIqd: string;
+  readonly paidIqd: string;
   /** The oldest entry on the account, for ageing what no invoice explains. */
   readonly oldestDate: string | null;
 }
@@ -414,10 +423,17 @@ export async function ledgerBalances(
       ? sql`sum(s.debit_iqd - s.credit_iqd)`
       : sql`sum(s.credit_iqd - s.debit_iqd)`;
 
+  // "Charged" is the side that increases the debt, which is the debit for a
+  // customer and the credit for a supplier — the mirror the statement uses.
+  const charged = side === 'customer' ? sql`sum(s.debit_iqd)` : sql`sum(s.credit_iqd)`;
+  const paid = side === 'customer' ? sql`sum(s.credit_iqd)` : sql`sum(s.debit_iqd)`;
+
   const result = await tx.execute(sql`
     select s.party_code                         as "partyCode",
            coalesce(p.legal_name, s.party_code) as "partyName",
            coalesce(${owed}, 0)::text           as "balanceIqd",
+           coalesce(${charged}, 0)::text        as "chargedIqd",
+           coalesce(${paid}, 0)::text           as "paidIqd",
            min(s.posting_date)::text            as "oldestDate"
       from subledger_entry s
       left join business_partner p on p.code = s.party_code
@@ -441,6 +457,15 @@ export interface Reconciliation {
   readonly documentsIqd: string;
   /** Everything else that reached the control account. May be negative. */
   readonly unexplainedIqd: string;
+  /**
+   * The unexplained part, as an invoice reads: raised, paid, left.
+   *
+   * Derived by taking what the invoices account for off the ledger's own
+   * totals, so a journalled-in debt that was later part-paid shows both
+   * halves rather than only its remainder.
+   */
+  readonly unexplainedChargedIqd: string;
+  readonly unexplainedPaidIqd: string;
   /** When the account first moved — what the unexplained part is aged from. */
   readonly oldestDate: string | null;
   readonly bucket: AgeingBucket;
@@ -459,38 +484,53 @@ export function reconcile(
   balances: readonly LedgerBalance[],
   asOf: string,
 ): Reconciliation[] {
-  const documents = new Map<string, number>();
+  const documents = new Map<string, { open: number; charged: number; paid: number }>();
   const names = new Map<string, string>();
   for (const item of items) {
     names.set(item.partyCode, item.partyName);
-    const outstanding = Number(item.outstandingIqd);
-    if (outstanding <= 0) continue;
-    documents.set(item.partyCode, (documents.get(item.partyCode) ?? 0) + outstanding);
+    const held = documents.get(item.partyCode) ?? { open: 0, charged: 0, paid: 0 };
+    documents.set(item.partyCode, {
+      open: held.open + Math.max(0, Number(item.outstandingIqd)),
+      // Every invoice's own totals, settled ones included: they are movement
+      // on the control account whether or not anything is left on them, and
+      // leaving them out would attribute their charge to the journals.
+      charged: held.charged + Number(item.totalIqd),
+      paid: held.paid + Number(item.paidIqd),
+    });
   }
 
-  const parties = new Map<string, { name: string; ledger: number; oldest: string | null }>();
+  const parties = new Map<
+    string,
+    { name: string; ledger: number; charged: number; paid: number; oldest: string | null }
+  >();
   for (const balance of balances) {
     parties.set(balance.partyCode, {
       name: balance.partyName,
       ledger: Number(balance.balanceIqd),
+      charged: Number(balance.chargedIqd),
+      paid: Number(balance.paidIqd),
       oldest: balance.oldestDate,
     });
   }
   // A party the invoices know about but the subledger does not is still worth
   // a row: its ledger side is nought, and the difference then says so.
   for (const [partyCode, name] of names) {
-    if (!parties.has(partyCode)) parties.set(partyCode, { name, ledger: 0, oldest: null });
+    if (!parties.has(partyCode)) {
+      parties.set(partyCode, { name, ledger: 0, charged: 0, paid: 0, oldest: null });
+    }
   }
 
   return [...parties]
     .map(([partyCode, held]) => {
-      const documented = documents.get(partyCode) ?? 0;
+      const documented = documents.get(partyCode) ?? { open: 0, charged: 0, paid: 0 };
       return {
         partyCode,
         partyName: held.name,
         ledgerIqd: String(held.ledger),
-        documentsIqd: String(documented),
-        unexplainedIqd: String(held.ledger - documented),
+        documentsIqd: String(documented.open),
+        unexplainedIqd: String(held.ledger - documented.open),
+        unexplainedChargedIqd: String(held.charged - documented.charged),
+        unexplainedPaidIqd: String(held.paid - documented.paid),
         oldestDate: held.oldest,
         // No invoice means no due date, so it is due from the day it was
         // raised. An opening balance journalled in last year is a year old,

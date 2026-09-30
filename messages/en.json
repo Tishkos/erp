@@ -2146,7 +2146,8 @@
       "journals": "No invoice accounts for",
       "ties": "Ties to the statement",
       "explained": "Difference is listed above",
-      "owed_total": "Total owed — agrees with the statement"
+      "owed_total": "Total owed — agrees with the statement",
+      "no_document": "No document — see the statement"
     },
     "opening_stock": {
       "subtitle": "The stock the company starts with",
