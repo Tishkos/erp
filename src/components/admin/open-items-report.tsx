@@ -9,7 +9,9 @@ import { ExportMenu } from '@/components/print/export-menu';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
+import { pickOne, pickOutcome } from '@domain/pick';
 import * as openItems from '@/server/services/open-items';
+import * as partners from '@/server/services/partners';
 
 /**
  * Receivables and Payables — §15 and §16, written once.
@@ -60,13 +62,60 @@ export async function OpenItemsReport({
   const one = (key: string) => (typeof params[key] === 'string' ? (params[key] as string).trim() : '');
   const asOf = one('as_at') || new Date().toISOString().slice(0, 10);
   const show = one('show') === 'all' || one('show') === 'overdue' ? one('show') : 'open';
+  const asked = one('code');
 
-  const items = await withCurrentUser((tx, request) =>
-    openItems.openItems(tx, request.principal, side, asOf, {
-      branchCode: request.scope.branchCode,
-      outstandingOnly: show !== 'all',
-      overdueOnly: show === 'overdue',
-    }),
+  const { roll, chosen, items } = await withCurrentUser(async (tx, request) => {
+    /*
+     * The whole role, not only the active part of it — an account is read
+     * long after the partner stops trading, and an ageing that hid a dormant
+     * customer's unpaid invoices would hide exactly the ones worth chasing.
+     */
+    const roll = await partners.listByRole(tx, side);
+
+    /*
+     * Resolved from what was typed rather than matched against a whole label.
+     * A code wins outright; short of that, a phrase that can only be one
+     * partner names them, and anything still ambiguous narrows to nobody and
+     * says so. The same rule the statement screens use, so typing a name in
+     * one place and the other behaves identically.
+     */
+    const chosen =
+      pickOne(roll, asked, (row) => row.code, (row) => [row.code, row.legalName, row.tradeName]) ??
+      null;
+
+    /*
+     * A name that was typed and names nobody narrows to nothing, rather than
+     * falling back to everybody. Reporting the whole ledger under a misspelt
+     * customer's name is how somebody reads another account's ageing as
+     * theirs — and the figure would look plausible.
+     */
+    const unresolved = Boolean(asked) && !chosen;
+
+    return {
+      roll,
+      chosen,
+      items: unresolved
+        ? []
+        : await openItems.openItems(tx, request.principal, side, asOf, {
+            branchCode: request.scope.branchCode,
+            outstandingOnly: show !== 'all',
+            overdueOnly: show === 'overdue',
+            ...(chosen ? { partyCode: chosen.code } : {}),
+          }),
+    };
+  });
+
+  /*
+   * Whether what was typed named anybody.
+   *
+   * Without this a name that matches nothing silently reports the whole
+   * ledger, and a reader takes somebody else's ageing for their customer's.
+   */
+  const outcome = pickOutcome(
+    roll,
+    asked,
+    (row) => row.code,
+    (row) => [row.code, row.legalName, row.tradeName],
   );
 
   const buckets = openItems.ageing(items);
@@ -115,6 +164,23 @@ export async function OpenItemsReport({
         <form className={s.filterBar} method="get">
           <FilterRow>
             <Field defaultValue={asOf} label={t('reports.as_at_label')} name="as_at" type="date" />
+            {/* One partner, typed. Four hundred customers is not a drop-down
+                anybody reads, and the question the screen is most often opened
+                with is about one of them. Leave it empty for everybody. */}
+            <Field
+              defaultValue={asked}
+              label={t(`partners.role_${side}`)}
+              list={`${side}-ageing-parties`}
+              name="code"
+              placeholder={t('open_items.party_placeholder')}
+            />
+            <datalist id={`${side}-ageing-parties`}>
+              {roll.map((row) => (
+                <option key={row.code} value={row.code}>
+                  {row.legalName}
+                </option>
+              ))}
+            </datalist>
             <Select
               defaultValue={show}
               label={t('open_items.show')}
@@ -171,7 +237,15 @@ export async function OpenItemsReport({
 
         {items.length === 0 ? (
           <p className="muted" style={{ padding: '0 1rem 1rem' }}>
-            {t('open_items.nothing')}
+            {/* Which of the three it is: nothing matched the filters, or the
+                name typed names nobody, or it names more than one. A report
+                that answered "nothing outstanding" to a misspelt customer
+                would be read as good news. */}
+            {outcome === 'none'
+              ? t('partners.statement_party_unknown', { side: t(`partners.role_${side}`) })
+              : outcome === 'ambiguous'
+                ? t('partners.statement_party_ambiguous', { side: t(`partners.role_${side}`) })
+                : t('open_items.nothing')}
           </p>
         ) : (
           <div className="table-wrap">

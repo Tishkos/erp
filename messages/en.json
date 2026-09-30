@@ -2221,6 +2221,7 @@
       "terms": "Payment terms",
       "lateness": "Status against terms",
       "show": "Show",
+      "party_placeholder": "Everybody — or type a name or code",
       "show_open": "Still owed",
       "show_overdue": "Overdue only",
       "show_all": "All, including paid",

@@ -2,6 +2,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { formatBusinessDate, formatStatementAmount, formatTimestamp, type Locale } from '@/i18n/config';
 import { levelFrom, maxLevel, rollUp } from '@domain/report-levels';
 import { matches } from '@/lib/search';
+import { pickOne } from '@domain/pick';
 import { appUser, item as itemTable, warehouse } from '../db/schema';
 import {
   BALANCE_SHEET_LEVELS,
@@ -700,11 +701,29 @@ export async function openItems(
   const asOf = param(query, 'as_at', today());
   const show = query.get('show') ?? 'open';
 
-  const items = await openItemsService.openItems(ctx.tx, ctx.principal, side, asOf, {
-    branchCode: ctx.branchCode,
-    outstandingOnly: show !== 'all',
-    overdueOnly: show === 'overdue',
-  });
+  /*
+   * The partner the screen was narrowed to, resolved the same way the screen
+   * resolves it. A copy headed with everybody's ageing, taken from a screen
+   * showing one customer's, is the sort of thing that reaches a customer.
+   */
+  const asked = query.get('code') ?? '';
+  const roll = await partners.listByRole(ctx.tx, side);
+  const chosen =
+    pickOne(roll, asked, (row) => row.code, (row) => [row.code, row.legalName, row.tradeName]) ??
+    null;
+
+  // A name that names nobody prints nothing, as the screen shows nothing —
+  // a copy of everybody's ageing under one customer's name is worse than a
+  // blank page, because somebody would act on it.
+  const items =
+    asked && !chosen
+      ? []
+      : await openItemsService.openItems(ctx.tx, ctx.principal, side, asOf, {
+          branchCode: ctx.branchCode,
+          outstandingOnly: show !== 'all',
+          overdueOnly: show === 'overdue',
+          ...(chosen ? { partyCode: chosen.code } : {}),
+        });
   const buckets = openItemsService.ageing(items);
 
   const bucketLabel = (bucket: string) =>
@@ -798,9 +817,19 @@ export async function openItems(
       filters: [
         { label: m.admin('reports.as_at_label'), value: day(asOf, locale), ltr: true },
         { label: m.admin('open_items.show'), value: m.admin(`open_items.show_${show}`) },
+        ...(chosen
+          ? [
+              {
+                label: m.admin(`partners.role_${side}`),
+                value: `${chosen.code} · ${chosen.legalName}`,
+              },
+            ]
+          : []),
       ],
       tables,
-      fileName: `${side === 'customer' ? 'receivables' : 'payables'}_${asOf}`,
+      fileName: chosen
+        ? `${side === 'customer' ? 'receivables' : 'payables'}_${chosen.code}_${asOf}`
+        : `${side === 'customer' ? 'receivables' : 'payables'}_${asOf}`,
     }),
     side,
   );
