@@ -1931,7 +1931,8 @@
       "reverse_reason": "Why the invoice was wrong",
       "reverse_hint": "Undoes the posting: the journal is reversed, the stock goes back to where it came from at the cost it left at, and the invoice is marked reversed. Refused while a payment, return or credit memo rests on it.",
       "save_accounts": "Save accounts",
-      "posts_to": "Posts to"
+      "posts_to": "Posts to",
+      "account_missing": "The account this invoice names no longer exists — choose one in Chart of Accounts."
     },
     "ap_invoices": {
       "title": "Purchase Invoices",

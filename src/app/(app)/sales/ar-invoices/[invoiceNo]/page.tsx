@@ -106,6 +106,22 @@ export default async function ArInvoicePage({
       // What may be chosen on the document: the customer control accounts the
       // statement can be kept on, and the revenue accounts income may go to.
       accounts: editable ? await coa.postableAccounts(tx) : [],
+      /*
+       * The accounts this invoice actually names, looked up by id.
+       *
+       * Separately from the picker, because the picker is empty on anything
+       * but a draft — so a posted invoice with a deliberately chosen
+       * receivable or revenue account reported "As configured", which is the
+       * opposite of what was configured. Looked up regardless of whether the
+       * account is still selectable: an account since deactivated is still
+       * the account this document posts to, and saying otherwise hides the
+       * one fact somebody opened the page for.
+       */
+      chosenAccounts: await Promise.all(
+        [document.receivableAccountId, document.revenueAccountId]
+          .filter((id): id is string => Boolean(id))
+          .map((id) => coa.loadAccount(tx, id).catch(() => null)),
+      ),
     };
   });
 
@@ -136,10 +152,22 @@ export default async function ArInvoicePage({
     can(principal, 'edit_draft', ar.PERMISSION_OBJECT);
   const mayPost = invoice.status === 'approved' && can(principal, 'post', ar.PERMISSION_OBJECT);
   const mayChooseAccounts = mayEdit && can(principal, 'edit_draft', ar.PERMISSION_OBJECT);
+  /*
+   * What the field says, and why it is not simply the picker's label.
+   *
+   * "As configured" means *no account was chosen on this document* — the
+   * mapping decides. It must never be shown for a document that did choose
+   * one, and it used to be shown for every posted invoice, because the list
+   * it searched is only populated while the invoice is editable.
+   */
   const accountLabel = (id: string | null) => {
     if (!id) return t('invoices.account_default');
-    const account = found.accounts.find((row) => row.id === id);
-    return account ? `${account.code} · ${account.name}` : t('invoices.account_default');
+    const account =
+      found.accounts.find((row) => row.id === id) ??
+      found.chosenAccounts.find((row) => row?.id === id);
+    // An id that names nothing at all is a broken link, not a default. Said
+    // plainly, because it is the screen the link is repaired from.
+    return account ? `${account.code} · ${account.name}` : t('invoices.account_missing');
   };
   const mayReturnToDraft =
     invoice.status === 'approved' &&

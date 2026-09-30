@@ -96,6 +96,20 @@ export default async function ApInvoicePage({
       // statement can be kept on, and the expense accounts a service line's
       // cost may go to.
       accounts: editable ? await coa.postableAccounts(tx) : [],
+      /*
+       * The accounts this invoice actually names, looked up by id.
+       *
+       * Separately from the picker above, which is empty on anything but a
+       * draft — so a posted invoice with a deliberately chosen payable or
+       * expense account reported "As configured", the opposite of what was
+       * configured. Looked up whether or not the account is still selectable:
+       * one since deactivated is still the account this document posted to.
+       */
+      chosenAccounts: await Promise.all(
+        [document.invoice.payableAccountId, document.invoice.expenseAccountId]
+          .filter((id): id is string => Boolean(id))
+          .map((id) => coa.loadAccount(tx, id).catch(() => null)),
+      ),
       houses: editable
         ? (await warehouses.listActive(tx)).filter(
             (house) => house.branchCode === document.invoice.branchCode,
@@ -133,10 +147,18 @@ export default async function ApInvoicePage({
     can(principal, 'edit_draft', ap.PERMISSION_OBJECT);
   const maySubmit = invoice.status === 'draft' && can(principal, 'submit', ap.PERMISSION_OBJECT);
   const mayChooseAccounts = mayEdit;
+  /*
+   * "As configured" means *no account was chosen on this document* — the
+   * mapping decides. It must never be shown for a document that did choose
+   * one, and it used to be shown for every posted invoice.
+   */
   const accountLabel = (id: string | null) => {
     if (!id) return t('invoices.account_default');
-    const account = accounts.find((row) => row.id === id);
-    return account ? `${account.code} · ${account.name}` : t('invoices.account_default');
+    const account =
+      accounts.find((row) => row.id === id) ??
+      found.chosenAccounts.find((row) => row?.id === id);
+    // An id naming nothing at all is a broken link, not a default.
+    return account ? `${account.code} · ${account.name}` : t('invoices.account_missing');
   };
   const accountField = (
     label: string,
