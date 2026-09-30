@@ -44,6 +44,7 @@ import type { PostingLineRequest } from '../domain/posting';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
+import * as dueNotices from './due-notices';
 import * as arInvoiceService from './ar-invoice';
 import * as posting from './posting';
 import * as statuses from './statuses';
@@ -325,6 +326,21 @@ export async function post(
     },
   });
 
+  // §21 — money in is news, and it is news now rather than on tomorrow's
+  // sweep: a receipt banked at ten o'clock should not wait until the morning
+  // to be mentioned. The party is read from the receipt, so a receipt whose
+  // payer is unknown (§16) still announces itself, with a dash.
+  const parties = await partiesOf(tx, id);
+  await dueNotices.announceSettlement(tx, {
+    side: 'customer',
+    documentId: id,
+    documentNo: receipt.receiptNo,
+    partyName: parties.customerName,
+    amountIqd: receipt.amountIqd,
+    branchCode: receipt.branchCode,
+    link: `/sales/customer-receipts/${receipt.receiptNo}`,
+  });
+
   return { journalEntryId: result.journalEntryId };
 }
 
@@ -373,6 +389,7 @@ export async function allocate(
     throw new UnidentifiedReceiptError(receipt.receiptNo);
   }
 
+  const customerName = (await partiesOf(tx, id)).customerName;
   let applied = parseDecimal(receipt.allocatedIqd, 4n);
   const amount = parseDecimal(receipt.amountIqd, 4n);
 
@@ -417,7 +434,29 @@ export async function allocate(
     // The invoice's own rule — Appendix B's Partially Paid and Paid — lives in
     // `ar-invoice.applyAllocation`, so a credit memo (06.9) moves an invoice
     // exactly the way a receipt does.
-    await arInvoiceService.applyAllocation(tx, ctx, allocation.arInvoiceId, allocation.amountIqd);
+    const settledNow = await arInvoiceService.applyAllocation(
+      tx,
+      ctx,
+      allocation.arInvoiceId,
+      allocation.amountIqd,
+    );
+
+    // §21 — the customer's side of the same record. Announced when the invoice
+    // reaches zero, and only then: a partial payment is not a settlement, and
+    // a notice on every instalment would say nothing about how the account
+    // behaves.
+    if (settledNow.status === 'settled') {
+      await dueNotices.announcePaidLate(tx, {
+        side: 'customer',
+        invoiceId: invoice.id,
+        invoiceNo: invoice.invoiceNo,
+        partyName: customerName,
+        dueDate: invoice.dueDate,
+        paidOn: receipt.receiptDate,
+        branchCode: receipt.branchCode,
+        link: `/sales/ar-invoices/${invoice.invoiceNo}`,
+      });
+    }
 
     applied += allocation.amountIqd;
   }

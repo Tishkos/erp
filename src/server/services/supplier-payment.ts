@@ -41,6 +41,7 @@ export { AGEING_BUCKETS, bucketFor, horizonFor, type AgeingBucket } from '../dom
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
+import * as dueNotices from './due-notices';
 import * as posting from './posting';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
@@ -373,6 +374,29 @@ export async function allocate(
     .set({ status: remaining === 0n ? 'settled' : 'partially_executed', updatedAt: new Date() })
     .where(eq(apInvoice.id, input.apInvoiceId));
 
+  // §21 — an invoice settled after its due date, said once, when it settles.
+  // Not a chase: the money is in. It is the record of how an account actually
+  // behaves, which a list of what is *currently* overdue cannot give — a
+  // supplier always paid eleven days late never stays on that list long
+  // enough to notice.
+  if (remaining === 0n) {
+    const [supplier] = await tx
+      .select({ name: businessPartner.legalName })
+      .from(businessPartner)
+      .where(eq(businessPartner.id, payment.supplierId))
+      .limit(1);
+    await dueNotices.announcePaidLate(tx, {
+      side: 'supplier',
+      invoiceId: invoice.id,
+      invoiceNo: invoice.invoiceNo,
+      partyName: supplier?.name ?? null,
+      dueDate: invoice.dueDate,
+      paidOn: payment.paymentDate,
+      branchCode: payment.branchCode,
+      link: `/purchasing/ap-invoices/${invoice.invoiceNo}`,
+    });
+  }
+
   const paymentAfter = await load(tx, input.supplierPaymentId);
 
   await audit.record(tx, {
@@ -490,6 +514,19 @@ export async function post(
     before: { status: payment.status },
     after: { status: 'posted', journalEntryId: result.journalEntryId },
     outcome: 'success',
+  });
+
+  // §21 — the other side of the same coin: money leaving is news to the
+  // person who approved it.
+  const parties = await partiesOf(tx, id);
+  await dueNotices.announceSettlement(tx, {
+    side: 'supplier',
+    documentId: id,
+    documentNo: payment.paymentNo,
+    partyName: parties.supplierName,
+    amountIqd: payment.amountIqd,
+    branchCode: payment.branchCode,
+    link: `/purchasing/supplier-payments/${payment.paymentNo}`,
   });
 
   return { journalEntryId: result.journalEntryId };
