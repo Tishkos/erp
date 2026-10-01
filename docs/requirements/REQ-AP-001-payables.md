@@ -22,7 +22,7 @@ diagram disagree about the import, the diagram is the intent.
 | **Release** | 2 |
 | **Phase** | Operations build — Payables module, delivered in the eight stages of §25 |
 | **Source** | `QS_ERP_Workflow_Final.pdf` · `QS_DASHBOARD.xlsx` · the code review of 2026-10-01 (§3) · the instruction of 2026-10-01 that Purchasing becomes Payables and covers service fees such as office rent |
-| **Test case(s)** | §26 names the test file for every acceptance criterion; none exists yet |
+| **Test case(s)** | §26 names the test file for every acceptance criterion; Stage 1's seven (A1–A7) exist and run in CI |
 | **Status** | Approved for the Stage 1 build (decisions recorded in §28) |
 | **Approved by** | Baban Ali, 2026-10-01 (chat approval; §28.1 of the blueprint requires the Business Process Owner's written sign-off to be attached) |
 
@@ -1107,13 +1107,13 @@ one process.
 
 | # | Criterion | Test |
 |---|---|---|
-| A1 | Creating a payable of each seeded type allocates its series number, writes `PAYABLE_OPENED`, enforces the type's controls (PO required for import / local goods; department required for service / recurring), and refuses a duplicate supplier + normalised reference + type. | `ap01-payable-core` |
-| A2 | Every service writing to a table carrying `payable_id` writes at least one `payable_event` in the same transaction; the coverage test fails any that does not. | `ap01-event-coverage` |
-| A3 | UPDATE / DELETE on the append-only tables raise; DELETE on any payable table is refused for `erp_app`. | `ap01-append-only` |
-| A4 | Stage derivation is correct for each seeded rail, including deposit-paid-then-shipped (import, stage 5) and advance-before-confirmation (service, stage 5 with lane "not confirmed"). | `ap01-stage-derivation` |
-| A5 | The sweep, run twice, opens exactly one `PENDING_REASON` hold per payable+check over its limit (SWIFT pending, recurring overdue, PD not validated…); completing needs reason, owner, next action; the thread is append-only. | `ap01-holds-sweep` |
-| A6 | A time limit changed in settings (scope type / bank / method) applies on the next sweep without deployment; the old row keeps its validity. | `ap01-settings-live` |
-| A7 | The menu shows *Payables* (en/ar) with the moved `finance_ap` items; every `/purchasing/*` route redirects to `/payables/*`; permissions unchanged. | `ap01-menu-redirects` |
+| A1 | Creating a payable of each seeded type allocates its series number, writes `PAYABLE_OPENED`, enforces the type's controls (PO required for import / local goods; department required for service / recurring), and refuses a duplicate supplier + normalised reference + type. | `tests/integration/ap01-payable-core.test.ts` |
+| A2 | Every service writing to a table carrying `payable_id` writes at least one `payable_event` in the same transaction; the coverage test fails any that does not. | `tests/integration/ap01-event-coverage.test.ts` |
+| A3 | UPDATE / DELETE on the append-only tables raise; DELETE on any payable table is refused for `erp_app`. | `tests/integration/ap01-append-only.test.ts` |
+| A4 | Stage derivation is correct for each seeded rail, including deposit-paid-then-shipped (import, stage 5) and advance-before-confirmation (service, stage 5 with lane "not confirmed"). | `tests/integration/ap01-stage-derivation.test.ts` |
+| A5 | The sweep, run twice, opens exactly one `PENDING_REASON` hold per payable+check over its limit (SWIFT pending, recurring overdue, PD not validated…); completing needs reason, owner, next action; the thread is append-only. | `tests/integration/ap01-holds-sweep.test.ts` |
+| A6 | A time limit changed in settings (scope type / bank / method) applies on the next sweep without deployment; the old row keeps its validity. | `tests/integration/ap01-settings-live.test.ts` |
+| A7 | The menu shows *Payables* (en/ar) with the moved `finance_ap` items; every `/purchasing/*` route redirects to `/payables/*`; permissions unchanged. | `tests/integration/ap01-menu-redirects.test.ts` |
 | A8 | A monthly rent contract generates one payable per period, 30 days ahead, idempotently; auto-confirm moves it to stage 2; a period unpaid after its due date gets an automatic hold; an amendment changes future periods only. | `ap02-recurring-contract` |
 | A9 | A service payable cannot have its invoice approved without an approved service receipt when the category requires one; a category with `requires_receipt=false` approves with the note shown. | `ap02-service-flow` |
 | A10 | A forwarder's invoice line charged to an import becomes a landed-cost charge of that import and posts to the clearing account, not P&L. | `ap02-charged-to-import` |

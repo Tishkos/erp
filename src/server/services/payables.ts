@@ -795,7 +795,8 @@ export async function cancel(
     objectType: PERMISSION_OBJECT,
     objectId: row.id,
     branchCode: row.branchCode,
-    after: { reason },
+    after: { cancelled: true },
+    reason,
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });

@@ -203,7 +203,10 @@ export async function runSweep(tx: Tx, asOf: string): Promise<SweepResult> {
   for (const hold of openHolds) {
     const rule = escalateDays.get(hold.checkCode!);
     if (!rule?.escalateAfterDays) continue;
-    const waited = daysBetween(hold.startedAt.toISOString().slice(0, 10), asOf);
+    // From when the hold was OPENED, not from the backdated breach: the
+    // escalation is about nobody answering, and nobody could answer before
+    // the question existed.
+    const waited = daysBetween(hold.createdAt.toISOString().slice(0, 10), asOf);
     if (waited <= rule.escalateAfterDays) continue;
 
     const toRole = rule.escalateToRole ?? 'accounting_manager';

@@ -730,6 +730,9 @@ export async function resetTestData(): Promise<void> {
                          'JOURNAL_ENTRY', 'WAREHOUSE_TRANSFER', 'OPENING_STOCK', 'STOCK_COUNT',
                          'PURCHASE_ORDER', 'GOODS_RECEIPT', 'SERVICE_RECEIPT', 'AP_INVOICE',
                          'SUPPLIER_ADVANCE',
+                         -- REQ-AP-001 Stage 1, migration 0225 — one per payable type.
+                         'PAYABLE_IMPORT', 'PAYABLE_SERVICE', 'PAYABLE_RECURRING',
+                         'PAYABLE_LOCAL_GOODS', 'PAYABLE_ADVANCE',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',
