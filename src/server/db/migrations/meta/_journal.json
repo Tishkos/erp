@@ -1044,6 +1044,20 @@
       "when": 1795900000028,
       "tag": "0224_restore_builtin_job_queues",
       "breakpoints": true
+    },
+    {
+      "idx": 149,
+      "version": "7",
+      "when": 1795900000029,
+      "tag": "0225_payables_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 150,
+      "version": "7",
+      "when": 1795900000030,
+      "tag": "0226_payable_event_partitioned",
+      "breakpoints": true
     }
   ]
 }

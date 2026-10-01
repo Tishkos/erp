@@ -50,6 +50,7 @@ import { documentStatus } from './workflow';
 import { chartOfAccount } from './accounting';
 import { journalEntry } from './journal';
 import { purchaseOrder, purchaseOrderLine } from './purchase-order';
+import { payable } from './payables';
 
 /** Appendix B's Matched / Exception, on its own axis. */
 export const MATCH_STATUSES = ['matched', 'exception'] as const;
@@ -127,6 +128,14 @@ export const apInvoice = pgTable(
      * cost something: no order means a justification and an approver.
      */
     purchaseOrderId: uuid('purchase_order_id').references(() => purchaseOrder.id),
+
+    /**
+     * REQ-AP-001 §5.1 — the payable this invoice belongs to. One invoice
+     * belongs to at most one payable; one payable may hold several invoices
+     * (a rent paid in two, an import invoiced -A / -B). Nullable: an invoice
+     * outside the payables module carries nothing.
+     */
+    payableId: uuid('payable_id').references(() => payable.id),
 
     branchCode: text('branch_code')
       .notNull()
