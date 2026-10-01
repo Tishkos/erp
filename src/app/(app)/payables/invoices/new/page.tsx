@@ -42,7 +42,7 @@ import { createApInvoice, invoiceLineAvailability } from '../actions';
 export const dynamic = 'force-dynamic';
 
 export default async function NewApInvoicePage({ searchParams }: { searchParams: SearchParams }) {
-  if (!visibleRoute('/purchasing/ap-invoices')) notFound();
+  if (!visibleRoute('/payables/invoices')) notFound();
 
   const [t, page, column, locale, context, outcome] = await Promise.all([
     getTranslations('admin'),
@@ -175,7 +175,7 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
 
   return (
     <AdminPage
-      back={{ href: '/purchasing/ap-invoices', label: t('back') }}
+      back={{ href: '/payables/invoices', label: t('back') }}
       title={t('ap_invoices.new')}
       trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"

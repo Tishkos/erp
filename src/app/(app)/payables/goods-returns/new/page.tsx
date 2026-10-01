@@ -41,7 +41,7 @@ import { createGoodsReturn } from '../actions';
 export const dynamic = 'force-dynamic';
 
 export default async function NewGoodsReturnPage({ searchParams }: { searchParams: SearchParams }) {
-  if (!visibleRoute('/purchasing/goods-returns')) notFound();
+  if (!visibleRoute('/payables/goods-returns')) notFound();
 
   const [t, page, column, locale, context, outcome, params] = await Promise.all([
     getTranslations('admin'),
@@ -102,9 +102,9 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
 
   return (
     <AdminPage
-      back={{ href: '/purchasing/goods-returns', label: t('back') }}
+      back={{ href: '/payables/goods-returns', label: t('back') }}
       trail={[{ href: '/', label: t('dashboard_label') }]}
-      tabs={<SectionTabs route="/purchasing/goods-returns" />}
+      tabs={<SectionTabs route="/payables/goods-returns" />}
       subtitle={t('goods_returns.subtitle')}
       title={t('goods_returns.new')}
       variant="sap"
@@ -325,7 +325,7 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
       )}
 
       <p className={s.sectionHint}>
-        <Link className={s.sapLink} href="/purchasing/ap-invoices">
+        <Link className={s.sapLink} href="/payables/invoices">
           {t('ap_invoices.title')}
         </Link>
       </p>

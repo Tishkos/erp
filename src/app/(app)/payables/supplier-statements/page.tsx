@@ -11,6 +11,6 @@ export default async function SupplierStatementsPage({
 }: {
   searchParams: SearchParams;
 }) {
-  if (!visibleRoute('/purchasing/supplier-statements')) notFound();
+  if (!visibleRoute('/payables/supplier-statements')) notFound();
   return <AccountStatement side="supplier" searchParams={searchParams} />;
 }

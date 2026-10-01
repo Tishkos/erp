@@ -63,7 +63,7 @@ export default async function ApInvoicePage({
   params: Promise<{ invoiceNo: string }>;
   searchParams: SearchParams;
 }) {
-  if (!visibleRoute('/purchasing/ap-invoices')) notFound();
+  if (!visibleRoute('/payables/invoices')) notFound();
 
   const [t, page, column, status, locale, context, outcome, { invoiceNo }] = await Promise.all([
     getTranslations('admin'),
@@ -231,7 +231,7 @@ export default async function ApInvoicePage({
   return (
     <AdminPage
       actions={<ExportMenu exportKey="purchase_invoice" id={invoice.invoiceNo} />}
-      back={{ href: '/purchasing/ap-invoices', label: t('back') }}
+      back={{ href: '/payables/invoices', label: t('back') }}
       title={invoice.invoiceNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"

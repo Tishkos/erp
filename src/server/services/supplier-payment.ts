@@ -406,7 +406,7 @@ export async function allocate(
       dueDate: invoice.dueDate,
       paidOn: payment.paymentDate,
       branchCode: payment.branchCode,
-      link: `/purchasing/ap-invoices/${invoice.invoiceNo}`,
+      link: `/payables/invoices/${invoice.invoiceNo}`,
     });
   }
 
@@ -539,7 +539,7 @@ export async function post(
     partyName: parties.supplierName,
     amountIqd: payment.amountIqd,
     branchCode: payment.branchCode,
-    link: `/purchasing/supplier-payments/${payment.paymentNo}`,
+    link: `/payables/supplier-payments/${payment.paymentNo}`,
   });
 
   return { journalEntryId: result.journalEntryId };

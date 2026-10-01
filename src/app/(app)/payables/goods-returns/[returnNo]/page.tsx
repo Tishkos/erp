@@ -38,7 +38,7 @@ export default async function GoodsReturnPage({
   params: Promise<{ returnNo: string }>;
   searchParams: SearchParams;
 }) {
-  if (!visibleRoute('/purchasing/goods-returns')) notFound();
+  if (!visibleRoute('/payables/goods-returns')) notFound();
 
   const [t, page, column, status, locale, context, outcome, { returnNo }] = await Promise.all([
     getTranslations('admin'),
@@ -89,7 +89,7 @@ export default async function GoodsReturnPage({
   return (
     <AdminPage
       actions={<ExportMenu exportKey="purchase_return" id={document.returnNo} />}
-      back={{ href: '/purchasing/goods-returns', label: t('back') }}
+      back={{ href: '/payables/goods-returns', label: t('back') }}
       title={document.returnNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"

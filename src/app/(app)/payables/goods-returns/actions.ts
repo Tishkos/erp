@@ -6,7 +6,7 @@ import { parseQuantity } from '@domain/uom';
 import * as gr from '@/server/services/goods-return';
 import { LINE_ROWS } from './lines';
 
-const LIST = '/purchasing/goods-returns';
+const LIST = '/payables/goods-returns';
 const record = (returnNo: string) => `${LIST}/${encodeURIComponent(returnNo)}`;
 
 /**

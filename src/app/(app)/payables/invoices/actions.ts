@@ -9,7 +9,7 @@ import * as ap from '@/server/services/ap-invoice';
 import * as inventory from '@/server/services/inventory';
 import { LINE_ROWS } from './lines';
 
-const LIST = '/purchasing/ap-invoices';
+const LIST = '/payables/invoices';
 const record = (invoiceNo: string) => `${LIST}/${encodeURIComponent(invoiceNo)}`;
 
 /**

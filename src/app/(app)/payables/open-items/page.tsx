@@ -7,12 +7,12 @@ import { visibleRoute } from '@/server/delivered';
 export const dynamic = 'force-dynamic';
 
 export default async function PayablesPage({ searchParams }: { searchParams: SearchParams }) {
-  if (!visibleRoute('/purchasing/payables')) notFound();
+  if (!visibleRoute('/payables/open-items')) notFound();
   return (
     <OpenItemsReport
       exportKey="payables"
-      invoiceHref={(invoiceNo) => `/purchasing/ap-invoices/${encodeURIComponent(invoiceNo)}`}
-      route="/purchasing/payables"
+      invoiceHref={(invoiceNo) => `/payables/invoices/${encodeURIComponent(invoiceNo)}`}
+      route="/payables/open-items"
       searchParams={searchParams}
       side="supplier"
       titleKey="ap_open_items"

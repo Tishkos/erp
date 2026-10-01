@@ -48,7 +48,7 @@ export default async function BusinessPartnerPage({
   params: Promise<{ code: string }>;
   searchParams: SearchParams;
 }) {
-  if (!visibleRoute('/sales/customers') && !visibleRoute('/purchasing/suppliers')) notFound();
+  if (!visibleRoute('/sales/customers') && !visibleRoute('/payables/suppliers')) notFound();
 
   const [t, page, column, locale, context, outcome, query, { code: rawCode }] = await Promise.all([
     getTranslations('admin'),
@@ -85,7 +85,7 @@ export default async function BusinessPartnerPage({
     query.role === 'supplier' || (query.role !== 'customer' && !row.isCustomer && row.isSupplier)
       ? 'supplier'
       : 'customer';
-  const listRoute = routeRole === 'customer' ? '/sales/customers' : '/purchasing/suppliers';
+  const listRoute = routeRole === 'customer' ? '/sales/customers' : '/payables/suppliers';
 
   return (
     <AdminPage
@@ -98,7 +98,7 @@ export default async function BusinessPartnerPage({
           <Link
             className={s.backButton}
             href={`${
-              routeRole === 'customer' ? '/sales/customer-statements' : '/purchasing/supplier-statements'
+              routeRole === 'customer' ? '/sales/customer-statements' : '/payables/supplier-statements'
             }?code=${encodeURIComponent(code)}`}
           >
             {t('partners.statement')}

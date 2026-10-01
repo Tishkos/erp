@@ -132,26 +132,48 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ],
   },
   {
-    key: 'purchasing',
+    /*
+     * Purchasing became Payables — REQ-AP-001 (D7, §21.1): one module for
+     * everything the company owes, of every type; the import application is
+     * one payable type. The former finance_ap section's items live here now —
+     * one module, one place — and every old /purchasing/* route redirects.
+     */
+    key: 'payables',
     ordinal: 4,
     items: [
-      page('procurement_dashboard', 'procurement_dashboard'),
-      page('suppliers', 'business_partner', '/purchasing/suppliers'),
+      page('payables_workbench', 'payable', '/payables'),
+      page('suppliers', 'business_partner', '/payables/suppliers'),
       // The supplier's side of the same mirror. See the note under Sales.
-      page('ap_statements', 'business_partner', '/purchasing/supplier-statements'),
+      page('ap_statements', 'business_partner', '/payables/supplier-statements'),
       page('purchase_orders', 'purchase_order'),
       page('goods_receipts', 'goods_receipt'),
       page('service_receipts', 'service_receipt'),
-      page('ap_invoices', 'ap_invoice'),
+      page('recurring_contracts', 'recurring_contract', '/payables/contracts'),
+      page('ap_invoices', 'ap_invoice', '/payables/invoices'),
       // The supplier's side of the same mirror.
-      page('ap_open_items', 'ap_invoice', '/purchasing/payables'),
-      page('supplier_advances', 'supplier_advance'),
-      page('supplier_payments', 'supplier_payment'),
-      page('goods_returns', 'goods_return'),
-      page('supplier_credit_memos', 'supplier_credit_memo'),
+      page('ap_open_items', 'ap_invoice', '/payables/open-items'),
+      page('payment_applications', 'payment_application'),
+      page('supplier_advances', 'supplier_advance', '/payables/advances'),
+      page('supplier_payments', 'supplier_payment', '/payables/supplier-payments'),
+      page('goods_returns', 'goods_return', '/payables/goods-returns'),
+      page('supplier_credit_memos', 'supplier_credit_memo', '/payables/credit-memos'),
       page('match_exceptions', 'match_exception'),
+      page('pds', 'customs_pd', '/payables/pd'),
+      page('shipments', 'bill_of_lading', '/payables/shipments'),
+      page('containers', 'shipment_container', '/payables/containers'),
+      // The Banks master lives under Master Data, where the tree already
+      // names it — one screen, one home (by direction, 2026-08-31).
+      page('loans', 'bank_loan', '/payables/loans'),
+      // Moved in from the former finance_ap section (§21.1).
+      page('supplier_ledger', 'supplier_ledger'),
+      page('ap_advances', 'supplier_advance'),
+      page('ap_payments', 'supplier_payment'),
+      page('ap_allocations', 'ap_allocation'),
+      page('ap_ageing', 'ap_ageing', '/payables/ageing'),
+      page('ap_reconciliation', 'ap_reconciliation'),
+      page('procurement_dashboard', 'procurement_dashboard'),
       page('purchasing_reports', 'purchasing_report'),
-      page('purchasing_settings', 'purchasing_settings'),
+      page('payables_settings', 'payables_settings', '/administration/payables-settings'),
     ],
   },
   {
@@ -286,20 +308,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ],
   },
   {
-    key: 'finance_ap',
-    ordinal: 12,
-    items: [
-      page('supplier_ledger', 'supplier_ledger'),
-      page('ap_advances', 'supplier_advance'),
-      page('ap_payments', 'supplier_payment'),
-      page('ap_allocations', 'ap_allocation'),
-      page('ap_ageing', 'ap_ageing'),
-      page('ap_reconciliation', 'ap_reconciliation'),
-    ],
-  },
-  {
     key: 'treasury',
-    ordinal: 13,
+    ordinal: 12,
     items: [
       page('bank_cash_accounts', 'bank_account', '/master-data/bank-accounts'),
       page('cash_accounts', 'bank_account', '/master-data/cash-accounts'),
@@ -317,7 +327,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
   },
   {
     key: 'fixed_assets',
-    ordinal: 14,
+    ordinal: 13,
     items: [
       page('asset_categories', 'asset_category'),
       page('fixed_asset_documents', 'fixed_asset_document'),
@@ -333,7 +343,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
   },
   {
     key: 'budgeting',
-    ordinal: 15,
+    ordinal: 14,
     items: [
       page('budget_versions', 'budget_version'),
       page('department_project_budgets', 'budget'),
@@ -345,7 +355,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
   },
   {
     key: 'hr_payroll',
-    ordinal: 16,
+    ordinal: 15,
     items: [
       page('employees', 'employee'),
       page('organisation', 'org_structure'),
@@ -362,7 +372,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
   },
   {
     key: 'documents',
-    ordinal: 17,
+    ordinal: 16,
     items: [
       page('document_centre', 'attachment', '/documents'),
       page('templates', 'document_template'),
@@ -375,7 +385,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
   },
   {
     key: 'reports',
-    ordinal: 18,
+    ordinal: 17,
     items: [
       page('executive_reports', 'executive_report'),
       page('financial_reports', 'financial_report'),
@@ -393,7 +403,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
   },
   {
     key: 'master_data',
-    ordinal: 19,
+    ordinal: 18,
     items: [
       page('chart_of_accounts', 'chart_of_account', '/master-data/chart-of-accounts'),
       page('statement_mapping', 'financial_statement', '/master-data/statement-mapping'),
@@ -412,7 +422,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
   },
   {
     key: 'administration',
-    ordinal: 20,
+    ordinal: 19,
     items: [
       page('company', 'company', '/administration/company'),
       page('users', 'app_user', '/administration/users'),
@@ -428,7 +438,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
   },
   {
     key: 'integrations',
-    ordinal: 21,
+    ordinal: 20,
     items: [
       page('api_clients', 'api_client'),
       page('imports', 'import_batch', '/integrations/imports'),

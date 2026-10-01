@@ -358,7 +358,7 @@ test('an account statement keeps its partner when the filters run', async ({ pag
   };
 
   const sides = [
-    { kind: 'supplier', route: '/purchasing/supplier-statements' },
+    { kind: 'supplier', route: '/payables/supplier-statements' },
     { kind: 'customer', route: '/sales/customer-statements' },
   ] as const;
 

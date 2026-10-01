@@ -37,7 +37,7 @@ import { createPayment } from '../actions';
 export const dynamic = 'force-dynamic';
 
 export default async function NewPaymentPage({ searchParams }: { searchParams: SearchParams }) {
-  if (!visibleRoute('/purchasing/supplier-payments')) notFound();
+  if (!visibleRoute('/payables/supplier-payments')) notFound();
 
   const [t, page, column, context, outcome] = await Promise.all([
     getTranslations('admin'),
@@ -154,7 +154,7 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: S
 
   return (
     <AdminPage
-      back={{ href: '/purchasing/supplier-payments', label: t('back') }}
+      back={{ href: '/payables/supplier-payments', label: t('back') }}
       title={t('supplier_payments.new')}
       trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"

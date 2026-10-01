@@ -24,7 +24,8 @@
     "reports": "التقارير والتحليلات",
     "master_data": "البيانات الرئيسية",
     "administration": "الإدارة",
-    "integrations": "التكاملات والدعم"
+    "integrations": "التكاملات والدعم",
+    "payables": "الذمم الدائنة"
   },
   "page": {
     "my_dashboard": "لوحة معلوماتي",
@@ -255,7 +256,15 @@
     "payment_methods": "طرق الدفع",
     "statement_mapping": "تخطيط القوائم المالية",
     "ap_invoice": "فاتورة شراء",
-    "ar_invoice": "فاتورة مبيعات"
+    "ar_invoice": "فاتورة مبيعات",
+    "payables_workbench": "الذمم الدائنة",
+    "payment_applications": "طلبات الدفع",
+    "recurring_contracts": "العقود الدورية",
+    "loans": "القروض المصرفية",
+    "pds": "التصاريح الجمركية المسبقة",
+    "shipments": "بوالص الشحن",
+    "containers": "الحاويات",
+    "payables_settings": "إعدادات الذمم الدائنة"
   },
   "auth": {
     "email": "البريد الإلكتروني",

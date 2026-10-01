@@ -139,7 +139,7 @@ test.describe('the Operations Build screens open', () => {
   });
 
   test('block 4 · the Purchase Invoice register opens', async ({ page }) => {
-    await page.goto('/purchasing/ap-invoices');
+    await page.goto('/payables/invoices');
 
     await expect(page.getByRole('heading', { name: 'Purchase Invoices' }).first()).toBeVisible();
     for (const column of ['Posting Date', 'Due Date', 'Supplier Code', 'Supplier Name']) {
@@ -159,7 +159,7 @@ test.describe('the Operations Build screens open', () => {
     await supplier.getByRole('button', { name: 'Create' }).click();
     await expect(page.getByText('End To End Supplies').first()).toBeVisible();
 
-    await page.goto('/purchasing/ap-invoices/new');
+    await page.goto('/payables/invoices/new');
 
     await expect(page.getByRole('heading', { name: 'New invoice' })).toBeVisible();
 
@@ -225,7 +225,7 @@ test.describe('the Operations Build screens open', () => {
     await page.waitForURL(/\/master-data\/business-partners\/[^/?]+/, { timeout: 60_000 });
     supplierCode = mintedCode(page);
 
-    await page.goto('/purchasing/ap-invoices/new');
+    await page.goto('/payables/invoices/new');
     await expect(page.getByRole('heading', { name: 'New invoice' })).toBeVisible();
 
     // Today, as the form opens it — and thirty days after it, which is what
@@ -247,7 +247,7 @@ test.describe('the Operations Build screens open', () => {
     // On the invoice's own record, not back on the form under a refusal.
     await page.waitForURL(
       (url) =>
-        url.pathname.startsWith('/purchasing/ap-invoices/') &&
+        url.pathname.startsWith('/payables/invoices/') &&
         !url.pathname.endsWith('/new') &&
         url.search === '',
       { timeout: 120_000 },
@@ -286,7 +286,7 @@ test.describe('the Operations Build screens open', () => {
       await administration.close();
     }
 
-    await page.goto('/purchasing/ap-invoices/new');
+    await page.goto('/payables/invoices/new');
     await page.getByLabel('Supplier Code').fill(supplierCode);
     await page.locator('select[name="item_code_0"]').selectOption('ITM-SEED');
     await page.locator('input[name="quantity_0"]').fill('2');
@@ -405,7 +405,7 @@ test.describe('the Operations Build screens open', () => {
         .getByLabel('Quantity', { exact: true }),
     ).toHaveValue('5');
 
-    await page.goto('/purchasing/ap-invoices/new');
+    await page.goto('/payables/invoices/new');
     const newQuantity = page.locator('input[name="quantity_0"]');
     const newItem = page.locator('select[name="item_code_0"]');
     await newItem.selectOption('ITM-SEED');
@@ -516,7 +516,7 @@ test.describe('the Operations Build screens open', () => {
       await administration.close();
     }
 
-    await page.goto('/purchasing/ap-invoices/new');
+    await page.goto('/payables/invoices/new');
     await page.getByLabel('Supplier Code').fill(supplierACode);
     await page.locator('select[name="item_code_0"]').selectOption(itemCode);
     await expect(page.locator('input[name="quantity_0"]')).toHaveValue('1');
@@ -821,7 +821,7 @@ test.describe('the Operations Build screens open', () => {
   });
 
   test('block 10 · the Purchase Returns register opens', async ({ page }) => {
-    await page.goto('/purchasing/goods-returns');
+    await page.goto('/payables/goods-returns');
 
     await expect(page.getByRole('heading', { name: 'Purchase Returns' }).first()).toBeVisible();
     for (const column of ['Supplier Code', 'Supplier Name', 'Offset Account']) {
@@ -830,7 +830,7 @@ test.describe('the Operations Build screens open', () => {
   });
 
   test('block 10 · the return form asks for one offset account', async ({ page }) => {
-    await page.goto('/purchasing/goods-returns/new');
+    await page.goto('/payables/goods-returns/new');
     await expect(page.getByRole('heading', { name: 'New return' })).toBeVisible();
 
     const choices = page.locator('select[name="invoice"] option:not([value=""])');
@@ -857,7 +857,7 @@ test.describe('the Operations Build screens open', () => {
   });
 
   test('block 6 · Payments and Receipts open, with the bank columns', async ({ page }) => {
-    await page.goto('/purchasing/supplier-payments');
+    await page.goto('/payables/supplier-payments');
     await expect(page.getByRole('heading', { name: 'Payments' }).first()).toBeVisible();
     for (const column of ['Supplier Code', 'Supplier Name', 'Bank/Cash Code', 'Bank/Cash Name']) {
       await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
@@ -880,7 +880,7 @@ test.describe('the Operations Build screens open', () => {
   });
 
   test('block 6 · a payment can be recorded against a bank account', async ({ page }) => {
-    await page.goto('/purchasing/supplier-payments/new');
+    await page.goto('/payables/supplier-payments/new');
     await expect(page.getByRole('heading', { name: 'New payment' })).toBeVisible();
 
     // The draft wears the document window the payment will wear — the same

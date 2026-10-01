@@ -5,7 +5,7 @@ import { runAdmin, runAdminAndReturn, text, withQuery } from '@/server/admin-act
 import { parseDecimal } from '@domain/money';
 import * as payments from '@/server/services/supplier-payment';
 
-const LIST = '/purchasing/supplier-payments';
+const LIST = '/payables/supplier-payments';
 const record = (paymentNo: string) => `${LIST}/${encodeURIComponent(paymentNo)}`;
 
 /** Block 6's Payment — supplier, bank or cash account, date, amount, reference. */

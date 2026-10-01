@@ -9,23 +9,23 @@ import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
-import * as payments from '@/server/services/supplier-payment';
+import * as ap from '@/server/services/ap-invoice';
 
 /**
- * Payments — Operations build, block 6.
+ * Purchase Invoices — Operations build, block 4.
  *
- *   Payments   Supplier Name; Supplier Code; Date; Bank/Cash Name; Bank/Cash
- *              Code; Amount; Reference; Supplier Invoice.
- *   Journal    Accounts Payable Dr. / Bank or Cash Cr.
+ *   Header   Invoice Number (automatically generated); Posting Date; Due Date;
+ *            Supplier Code; Supplier Name.
  *
- * Every column the sponsor names except the invoice, which is not one value —
- * a payment can be spread across several, and partly — so it lives on the
- * payment's own page rather than being squeezed into a cell here.
+ * The register shows those five and what the invoice came to, which is the
+ * column a person actually scans for. The supplier's name is joined from the
+ * partner rather than copied onto the invoice, so a supplier renamed this year
+ * reads correctly on an invoice raised last year.
  */
 export const dynamic = 'force-dynamic';
 
-export default async function PaymentsPage({ searchParams }: { searchParams: SearchParams }) {
-  if (!visibleRoute('/purchasing/supplier-payments')) notFound();
+export default async function ApInvoicesPage({ searchParams }: { searchParams: SearchParams }) {
+  if (!visibleRoute('/payables/invoices')) notFound();
 
   const [t, page, column, status, locale, context, outcome] = await Promise.all([
     getTranslations('admin'),
@@ -38,28 +38,27 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Sea
   ]);
 
   const { principal } = context;
-  if (!can(principal, 'view', payments.PERMISSION_OBJECT)) {
-    return <Denied object={page('supplier_payments')} />;
+  if (!can(principal, 'view', ap.PERMISSION_OBJECT)) {
+    return <Denied object={page('ap_invoices')} />;
   }
-  const mayCreate = can(principal, 'create', payments.PERMISSION_OBJECT);
+  const mayCreate = can(principal, 'create', ap.PERMISSION_OBJECT);
 
-  const rows = await withCurrentUser((tx) => payments.list(tx));
+  const rows = await withCurrentUser((tx) => ap.list(tx));
   const shown = rows.filter((row) => matches(row, outcome.q));
-  const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
 
   return (
     <AdminPage
       actions={
         mayCreate ? (
-          <Link className="action action--primary" href="/purchasing/supplier-payments/new">
-            {t('supplier_payments.new')}
+          <Link className="action action--primary" href="/payables/invoices/new">
+            {t('ap_invoices.new')}
           </Link>
         ) : null
       }
       back={{ href: '/', label: t('dashboard_label') }}
-      tabs={<SectionTabs route="/purchasing/supplier-payments" />}
-      subtitle={t('supplier_payments.subtitle')}
-      title={t('supplier_payments.title')}
+      tabs={<SectionTabs route="/payables/invoices" />}
+      subtitle={t('ap_invoices.subtitle')}
+      title={t('ap_invoices.title')}
       variant="sap"
     >
       <Flash
@@ -69,15 +68,15 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Sea
         savedLabel={t('saved')}
       />
 
-      <section aria-labelledby="pay-list-title" className={`${s.sapDoc} ${s.sapRegister}`}>
+      <section aria-labelledby="ap-list-title" className={`${s.sapDoc} ${s.sapRegister}`}>
         <div className={s.sapWindow}>
-          <h2 className={s.sapTitle} id="pay-list-title">
-            <span>{t('supplier_payments.title')}</span>
+          <h2 className={s.sapTitle} id="ap-list-title">
+            <span>{t('ap_invoices.title')}</span>
             <span className={s.sapTitleMeta}>{t('rows_shown', { count: shown.length })}</span>
           </h2>
 
           <ListToolbar
-            clearHref="/purchasing/supplier-payments"
+            clearHref="/payables/invoices"
             clearLabel={t('clear_search')}
             countLabel={t('rows_shown', { count: shown.length })}
             placeholder={t('search_placeholder')}
@@ -86,20 +85,16 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Sea
           />
 
           <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
-            <table aria-labelledby="pay-list-title" className={`${s.sapTable} ${s.sapRegisterTable}`}>
+            <table aria-labelledby="ap-list-title" className={`${s.sapTable} ${s.sapRegisterTable}`}>
               <thead>
                 <tr>
                   <th scope="col">{column('reference')}</th>
                   <th scope="col">{column('posting_date')}</th>
+                  <th scope="col">{column('due_date')}</th>
                   <th scope="col">{column('supplier_code')}</th>
                   <th scope="col">{column('supplier_name')}</th>
-                  <th scope="col">{column('bank_code')}</th>
-                  <th scope="col">{column('bank_name')}</th>
                   <th className={s.sapNum} scope="col">
-                    {t('supplier_payments.amount')}
-                  </th>
-                  <th className={s.sapNum} scope="col">
-                    {t('supplier_payments.allocated')}
+                    {column('amount')}
                   </th>
                   <th scope="col">{column('status')}</th>
                 </tr>
@@ -107,8 +102,8 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Sea
               <tbody>
                 {shown.length === 0 ? (
                   <tr>
-                    <td className={s.sapEmptyRow} colSpan={9}>
-                      {t('supplier_payments.none')}
+                    <td className={s.sapEmptyRow} colSpan={7}>
+                      {t('ap_invoices.none')}
                     </td>
                   </tr>
                 ) : null}
@@ -117,13 +112,16 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Sea
                     <td>
                       <Link
                         className={s.sapLink}
-                        href={`/purchasing/supplier-payments/${encodeURIComponent(row.paymentNo)}`}
+                        href={`/payables/invoices/${encodeURIComponent(row.invoiceNo)}`}
                       >
-                        <bdi dir="ltr">{row.paymentNo}</bdi>
+                        <bdi dir="ltr">{row.invoiceNo}</bdi>
                       </Link>
                     </td>
                     <td>
-                      <bdi dir="ltr">{formatBusinessDate(row.paymentDate, locale as Locale)}</bdi>
+                      <bdi dir="ltr">{formatBusinessDate(row.invoiceDate, locale as Locale)}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{formatBusinessDate(row.dueDate, locale as Locale)}</bdi>
                     </td>
                     <td>
                       <bdi dir="ltr">{row.supplierCode ?? '—'}</bdi>
@@ -131,17 +129,8 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Sea
                     <td>
                       <bdi dir="auto">{row.supplierName ?? '—'}</bdi>
                     </td>
-                    <td>
-                      <bdi dir="ltr">{row.bankCode ?? '—'}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="auto">{row.bankName ?? '—'}</bdi>
-                    </td>
                     <td className={s.sapNum}>
-                      <bdi dir="ltr">{money(row.amountIqd)}</bdi>
-                    </td>
-                    <td className={s.sapNum}>
-                      <bdi dir="ltr">{money(row.allocatedAmountIqd)}</bdi>
+                      <bdi dir="ltr">{formatMoney(row.totalIqd, 'IQD', locale as Locale)}</bdi>
                     </td>
                     <td>
                       <span

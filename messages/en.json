@@ -24,7 +24,8 @@
     "reports": "Reports & Analytics",
     "master_data": "Master Data",
     "administration": "Administration",
-    "integrations": "Integrations & Support"
+    "integrations": "Integrations & Support",
+    "payables": "Payables"
   },
   "page": {
     "my_dashboard": "My Dashboard",
@@ -255,7 +256,15 @@
     "payment_methods": "Payment Methods",
     "statement_mapping": "Statement Mapping",
     "ap_invoice": "Purchase Invoice",
-    "ar_invoice": "Sales Invoice"
+    "ar_invoice": "Sales Invoice",
+    "payables_workbench": "Payables",
+    "payment_applications": "Payment Applications",
+    "recurring_contracts": "Recurring Contracts",
+    "loans": "Bank Loans",
+    "pds": "Customs Pre-Declarations",
+    "shipments": "Bills of Lading",
+    "containers": "Containers",
+    "payables_settings": "Payables Settings"
   },
   "auth": {
     "email": "Email",

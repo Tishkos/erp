@@ -39,7 +39,7 @@ export default async function PaymentPage({
   params: Promise<{ paymentNo: string }>;
   searchParams: SearchParams;
 }) {
-  if (!visibleRoute('/purchasing/supplier-payments')) notFound();
+  if (!visibleRoute('/payables/supplier-payments')) notFound();
 
   const [t, page, column, status, locale, context, outcome, { paymentNo }] = await Promise.all([
     getTranslations('admin'),
@@ -120,7 +120,7 @@ export default async function PaymentPage({
   return (
     <AdminPage
       actions={<ExportMenu exportKey="supplier_payment" id={payment.paymentNo} />}
-      back={{ href: '/purchasing/supplier-payments', label: t('back') }}
+      back={{ href: '/payables/supplier-payments', label: t('back') }}
       title={payment.paymentNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"

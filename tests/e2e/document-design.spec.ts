@@ -67,7 +67,7 @@ test.describe('an invoice is built like a journal entry', () => {
       expect(journal).toContain(part);
     }
 
-    await page.goto('/purchasing/ap-invoices');
+    await page.goto('/payables/invoices');
 
     // Wait for the register to have rendered before deciding it is empty. A
     // `count()` against a page still compiling answers zero, and the test then
@@ -79,7 +79,7 @@ test.describe('an invoice is built like a journal entry', () => {
     // Not `/new`: that is the form, and it carries no document window. The
     // register's own rows are the only links to a record.
     const firstInvoice = page
-      .locator('a[href^="/purchasing/ap-invoices/"]:not([href$="/new"])')
+      .locator('a[href^="/payables/invoices/"]:not([href$="/new"])')
       .first();
     if ((await firstInvoice.count()) === 0) {
       test.skip(true, 'No purchase invoice to compare — raise one first.');
@@ -106,7 +106,7 @@ test.describe('an invoice is built like a journal entry', () => {
 
   test('the line grid opens a new line as each one is filled', async ({ page }) => {
     await signIn(page);
-    await page.goto('/purchasing/ap-invoices/new');
+    await page.goto('/payables/invoices/new');
     await expect(page.locator('select[name="item_code_0"]')).toBeVisible({ timeout: 60_000 });
 
     // One line to start with. There is no "Add line" button to look for —
@@ -139,13 +139,13 @@ test.describe('an invoice is built like a journal entry', () => {
 
   test('the document names everybody it passed through', async ({ page }) => {
     await signIn(page);
-    await page.goto('/purchasing/ap-invoices');
+    await page.goto('/payables/invoices');
     await expect(page.getByRole('heading', { name: 'Purchase Invoices' }).first()).toBeVisible({
       timeout: 60_000,
     });
 
     const firstInvoice = page
-      .locator('a[href^="/purchasing/ap-invoices/"]:not([href$="/new"])')
+      .locator('a[href^="/payables/invoices/"]:not([href$="/new"])')
       .first();
     if ((await firstInvoice.count()) === 0) {
       test.skip(true, 'No purchase invoice to read — raise one first.');

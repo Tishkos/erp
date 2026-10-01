@@ -45,9 +45,9 @@ const SIDE = {
     back: '/sales/customers',
   },
   supplier: {
-    route: '/purchasing/supplier-statements',
+    route: '/payables/supplier-statements',
     page: 'ap_statements',
-    back: '/purchasing/suppliers',
+    back: '/payables/suppliers',
   },
 } as const;
 
@@ -71,9 +71,9 @@ const DOCUMENT_ROUTE: Readonly<Record<statement.DocumentKind, string | null>> = 
   ar_invoice: '/sales/ar-invoices',
   customer_receipt: '/sales/customer-receipts',
   customer_credit_memo: null,
-  ap_invoice: '/purchasing/ap-invoices',
-  supplier_payment: '/purchasing/supplier-payments',
-  goods_return: '/purchasing/goods-returns',
+  ap_invoice: '/payables/invoices',
+  supplier_payment: '/payables/supplier-payments',
+  goods_return: '/payables/goods-returns',
 };
 
 export async function AccountStatement({

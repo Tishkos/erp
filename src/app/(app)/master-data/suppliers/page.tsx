@@ -7,6 +7,6 @@ import { visibleRoute } from '@/server/delivered';
 export const dynamic = 'force-dynamic';
 
 export default async function SuppliersPage({ searchParams }: { searchParams: SearchParams }) {
-  if (!visibleRoute('/purchasing/suppliers')) notFound();
+  if (!visibleRoute('/payables/suppliers')) notFound();
   return <PartnerList role="supplier" searchParams={searchParams} />;
 }
