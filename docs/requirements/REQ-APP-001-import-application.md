@@ -1,5 +1,12 @@
 # REQ-APP-001 — Import Application (QS ERP Workflow)
 
+> **Superseded on 2026-10-01 by [`REQ-AP-001 — Payables`](REQ-AP-001-payables.md).**
+> Purchasing becomes the Payables module and the import application is one
+> payable type within it. REQ-AP-001 carries this document's import lanes,
+> holds, cleared rule and landed cost over unchanged in substance (its Parts
+> D–F) and cites this file for the screen and table details it did not repeat.
+> Read REQ-AP-001 first; use this file only for the sections it points to.
+
 One import, one application. The application opens with the supplier's pending
 order / invoice and stays open until every container is in the warehouse, the
 PD is totally written off and the supplier is fully paid. Every update from
@@ -8,7 +15,7 @@ recorded on the application, and the application always shows where it is,
 whether it is stopped, and why.
 
 This document is the written form of **`QS_ERP_Workflow_Final.pdf`** (copy at
-`docs/requirements/REQ-APP-001-workflow.pdf`). Every box, arrow and band on that
+`docs/requirements/REQ-AP-001-workflow.pdf`). Every box, arrow and band on that
 page is specified here, stage by stage and screen by screen. Where this document
 and the diagram disagree, the diagram is the intent and this document is wrong.
 
@@ -19,7 +26,7 @@ and the diagram disagree, the diagram is the intent and this document is wrong.
 | **Phase** | Operations build — Import module, delivered in the seven stages of §19 |
 | **Source** | `QS_ERP_Workflow_Final.pdf` · `QS_DASHBOARD.xlsx` (the Google Sheet the company runs on today) · the code review of 2026-10-01 summarised in §3 |
 | **Test case(s)** | §20 names the test file for every acceptance criterion; none exists yet |
-| **Status** | Approved for the Stage 1 build (decisions of 2026-10-01 recorded in §22; code review reconciled with `main` 82ad32b, see §3.1) |
+| **Status** | Superseded by `REQ-AP-001` (2026-10-01) — kept for the sections REQ-AP-001 cites |
 | **Approved by** | Baban Ali, 2026-10-01 (chat approval; §28.1 written sign-off by the Business Process Owner to be attached) |
 
 ---
