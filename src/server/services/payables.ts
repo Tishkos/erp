@@ -292,26 +292,82 @@ export async function recomputeStage(
   const facts = await gatherFacts(tx, payableId);
   const next = deriveStage(rail, facts);
 
-  if (next === row.stageCode) return { stageCode: next, changed: false };
+  if (next !== row.stageCode) {
+    const from = rail.find((s) => s.code === row.stageCode);
+    const to = rail.find((s) => s.code === next);
 
-  const from = rail.find((s) => s.code === row.stageCode);
-  const to = rail.find((s) => s.code === next);
+    await tx
+      .update(payable)
+      .set({ stageCode: next, stageSince: new Date(), updatedAt: new Date() })
+      .where(eq(payable.id, payableId));
 
-  await tx
-    .update(payable)
-    .set({ stageCode: next, stageSince: new Date(), updatedAt: new Date() })
-    .where(eq(payable.id, payableId));
+    await events.record(tx, {
+      payableId,
+      eventCode: 'STAGE_CHANGED',
+      summary: `Stage: ${(from as { name?: string })?.name ?? row.stageCode} → ${(to as { name?: string })?.name ?? next}`,
+      before: { stage: row.stageCode },
+      after: { stage: next },
+      actorUserId,
+    });
+  }
 
-  await events.record(tx, {
-    payableId,
-    eventCode: 'STAGE_CHANGED',
-    summary: `Stage: ${(from as { name?: string })?.name ?? row.stageCode} → ${(to as { name?: string })?.name ?? next}`,
-    before: { stage: row.stageCode },
-    after: { stage: next },
-    actorUserId,
-  });
+  await clearOrReopen(tx, row, rail, facts, next, actorUserId);
+  return { stageCode: next, changed: next !== row.stageCode };
+}
 
-  return { stageCode: next, changed: true };
+/**
+ * §20.1 — the orange band. An import is cleared by nobody: in the same
+ * transaction as the event that satisfies the last of the three conditions
+ * (supplier fully paid and every application confirmed; every container
+ * received in full; every PD totally written off) it is stamped `closed_at`
+ * and `CLEARED` is written. When a condition later stops holding — an invoice
+ * reversed, a quantity corrected — it is re-opened with `CORRECTION` naming
+ * what no longer holds; the clearing stays in its story, never erased.
+ */
+async function clearOrReopen(
+  tx: Tx,
+  row: { id: string; payableNo: string; closedAt: Date | null; cancelledAt: Date | null },
+  rail: readonly StageRow[],
+  facts: StageFacts,
+  stageCode: string,
+  actorUserId: string | null,
+): Promise<void> {
+  const clearedStage = rail.find((stage) => stage.ruleName === 'import_cleared' && stage.active);
+  if (!clearedStage || row.cancelledAt) return;
+  const cleared = stageCode === clearedStage.code;
+
+  if (cleared && !row.closedAt) {
+    await tx.update(payable).set({ closedAt: new Date(), updatedAt: new Date() }).where(eq(payable.id, row.id));
+    await events.record(tx, {
+      payableId: row.id,
+      eventCode: 'CLEARED',
+      summary:
+        `${row.payableNo} cleared: the supplier is fully paid and every payment confirmed, every container ` +
+        'is received in full, every PD is totally written off',
+      after: { closedAt: new Date().toISOString() },
+      actorUserId,
+    });
+    return;
+  }
+
+  if (!cleared && row.closedAt) {
+    const missing = [
+      !(facts.fullyPaid && facts.allPaymentsConfirmed) ? 'the supplier is no longer fully paid' : null,
+      !(facts.containerCount > 0 && facts.containersReceived === facts.containerCount && facts.receivedQuantityMatches)
+        ? 'the received quantity no longer matches the invoice'
+        : null,
+      !facts.allPdsWrittenOff ? 'a PD is no longer totally written off' : null,
+    ].filter(Boolean);
+    await tx.update(payable).set({ closedAt: null, updatedAt: new Date() }).where(eq(payable.id, row.id));
+    await events.record(tx, {
+      payableId: row.id,
+      eventCode: 'CORRECTION',
+      summary: `${row.payableNo} re-opened: ${missing.join('; ') || 'a clearing condition no longer holds'}`,
+      before: { closedAt: row.closedAt.toISOString() },
+      after: { closedAt: null },
+      actorUserId,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

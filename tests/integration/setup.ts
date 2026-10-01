@@ -489,7 +489,13 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from instalment_trigger where created_by is not null');
     await client.query('update payment_application_transition set active = true');
     await client.query('truncate recurring_contract_amendment');
+    // Stage 7 (0236) — the locks and what they did to each layer (append-
+    // only in production); the charges name their lock, so they go between.
+    await client.query('delete from landed_cost_layer_adjustment');
     await client.query('delete from landed_cost_charge');
+    await client.query('delete from landed_cost_lock');
+    await client.query('delete from landed_cost_basis where created_by is not null');
+    await client.query('update landed_cost_basis set active = (code not in (\'by_weight\', \'by_volume\')) where created_by is null');
     await client.query('delete from landed_cost_type where created_by is not null');
     await client.query('truncate payable_hold_update');
     await client.query('delete from payable_hold');

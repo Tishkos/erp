@@ -217,6 +217,12 @@ test('status chips follow the palette into the dark, on every screen that draws 
     '/payables/invoices',
     '/finance/journals',
     '/master-data/chart-of-accounts',
+    // REQ-AP-001's registers draw the same chips (Stages 3–6).
+    '/payables/payment-applications',
+    '/payables/pd?view=all',
+    '/payables/shipments',
+    '/payables/containers?view=all',
+    '/payables/loans?view=all',
   ];
 
   for (const route of screens) {

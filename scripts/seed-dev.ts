@@ -272,6 +272,7 @@ async function main() {
       ['treasury.loan_repayment', 'bank_commission', 'X100050'],
       ['treasury.loan_commission', 'landed_cost_clearing', 'A100040'],
       ['treasury.loan_commission', 'bank_commission', 'X100050'],
+      ['payables.landed_cost', 'landed_cost_clearing', 'A100040'],
     ];
     for (const [event, role, code] of mappings) {
       await tx.execute(sql`
