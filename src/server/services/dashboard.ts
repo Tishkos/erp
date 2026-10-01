@@ -77,8 +77,21 @@ export interface WaitingItem {
   readonly submittedAt: Date;
 }
 
+export interface WaitingHold {
+  readonly payableNo: string;
+  readonly laneCode: string;
+  readonly reasonCode: string;
+  readonly startedAt: Date;
+  readonly nextAction: string | null;
+  readonly nextActionDue: string | null;
+}
+
 export interface Waiting {
   readonly approvals: readonly WaitingItem[];
+  /** §19.4 — the stops this person is answerable for. */
+  readonly holdsIOwn: readonly WaitingHold[];
+  /** §19.1 — automatic stops still waiting for their reason, in my lanes. */
+  readonly holdsNeedingReason: readonly WaitingHold[];
   readonly unreadNotifications: number;
 }
 
@@ -89,13 +102,61 @@ export interface Waiting {
  * waited nine days is the one that matters, and newest-first buries it under
  * whatever was submitted this morning.
  */
+/**
+ * D2 — which role answers an automatic hold in each lane by default. The
+ * manager answers any; a department-owned lane (service, contract) goes to
+ * whoever manages the payable's department, which the department scope rows
+ * already say.
+ */
+const LANE_DEFAULT_ROLE: Readonly<Record<string, string>> = {
+  order: 'accounting_officer',
+  bank: 'accounting_officer',
+  payment: 'accounting_officer',
+  pd: 'customs_officer',
+  shipment: 'logistics_officer',
+  warehouse: 'logistics_officer',
+  cost: 'accounting_officer',
+};
+
 async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting> {
-  const [inbox, unread] = await Promise.all([
+  const maySeePayables = can(principal, 'view', 'payable');
+  const [inbox, unread, holdRows] = await Promise.all([
     can(principal, 'view', approvals.PERMISSION_OBJECT)
       ? approvals.inbox(tx, principal)
       : Promise.resolve([]),
     notifications.inboxFor(tx, principal.userId, { unreadOnly: true }),
+    maySeePayables
+      ? tx.execute(sql`
+          select p.payable_no      as "payableNo",
+                 p.department_code as "departmentCode",
+                 h.lane_code       as "laneCode",
+                 h.reason_code     as "reasonCode",
+                 h.started_at      as "startedAt",
+                 h.next_action     as "nextAction",
+                 h.next_action_due::text as "nextActionDue",
+                 h.owner_user_id   as "ownerUserId"
+            from payable_hold h
+            join payable p on p.id = h.payable_id
+           where h.status = 'open'
+           order by h.started_at
+           limit 200
+        `)
+      : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
   ]);
+
+  type HoldRow = WaitingHold & { departmentCode: string | null; ownerUserId: string | null };
+  const holds = holdRows.rows as unknown as HoldRow[];
+
+  const isManager = principal.roleCodes.includes('accounting_manager') || principal.isSuperUser;
+  const inMyLane = (hold: HoldRow): boolean => {
+    if (isManager) return true;
+    const role = LANE_DEFAULT_ROLE[hold.laneCode];
+    if (role) return principal.roleCodes.includes(role);
+    // service / contract — the owning department's manager (D2).
+    return hold.departmentCode
+      ? principal.departments.some((d) => d.code === hold.departmentCode && d.isManager)
+      : false;
+  };
 
   return {
     approvals: inbox.map((item) => ({
@@ -104,6 +165,10 @@ async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting> {
       submittedByName: item.submittedByName,
       submittedAt: item.submittedAt,
     })),
+    holdsIOwn: holds.filter((hold) => hold.ownerUserId === principal.userId),
+    holdsNeedingReason: holds.filter(
+      (hold) => hold.reasonCode === 'PENDING_REASON' && inMyLane(hold),
+    ),
     unreadNotifications: unread.length,
   };
 }

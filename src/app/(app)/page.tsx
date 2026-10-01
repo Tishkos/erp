@@ -307,13 +307,67 @@ export default async function Home() {
     <AdminPage subtitle={subtitle} title={t('dashboard.title')} variant="sap">
       {waiting === null ? unreadable(t('dashboard.waiting')) : null}
 
-      {waiting && (waiting.approvals.length > 0 || waiting.unreadNotifications > 0) ? (
+      {waiting &&
+      (waiting.approvals.length > 0 ||
+        waiting.unreadNotifications > 0 ||
+        waiting.holdsIOwn.length > 0 ||
+        waiting.holdsNeedingReason.length > 0) ? (
         <Band
-          count={waiting.approvals.length}
+          count={
+            waiting.approvals.length +
+            waiting.holdsIOwn.length +
+            waiting.holdsNeedingReason.length
+          }
           href="/approvals"
           hrefLabel={t('dashboard.open_approvals')}
           title={t('dashboard.waiting')}
         >
+          {/* §19.4 — the only dashboard change the requirement makes. */}
+          {waiting.holdsNeedingReason.length > 0 ? (
+            <BandTable headings={[t('dashboard.holds_need_reason'), column('date'), '']}>
+              {waiting.holdsNeedingReason.map((hold) => (
+                <tr key={`nr:${hold.payableNo}:${hold.laneCode}`}>
+                  <td className={s.sapAccountCell}>
+                    <Link href={`/payables/${encodeURIComponent(hold.payableNo)}`}>
+                      <bdi dir="ltr">{hold.payableNo}</bdi>
+                    </Link>{' '}
+                    · {hold.laneCode}
+                  </td>
+                  <td>
+                    <bdi dir="ltr">
+                      {formatTimestamp(new Date(hold.startedAt).toISOString(), locale as Locale)}
+                    </bdi>
+                  </td>
+                  <td>
+                    <Link href="/payables?stopped=needs_reason">
+                      {t('dashboard.open_payables')}
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </BandTable>
+          ) : null}
+
+          {waiting.holdsIOwn.length > 0 ? (
+            <BandTable
+              headings={[t('dashboard.holds_i_own'), t('dashboard.next_action'), column('date')]}
+            >
+              {waiting.holdsIOwn.map((hold) => (
+                <tr key={`own:${hold.payableNo}:${hold.laneCode}:${hold.reasonCode}`}>
+                  <td className={s.sapAccountCell}>
+                    <Link href={`/payables/${encodeURIComponent(hold.payableNo)}`}>
+                      <bdi dir="ltr">{hold.payableNo}</bdi>
+                    </Link>{' '}
+                    · {hold.reasonCode}
+                  </td>
+                  <td>{hold.nextAction ?? '—'}</td>
+                  <td>
+                    <bdi dir="ltr">{hold.nextActionDue ?? '—'}</bdi>
+                  </td>
+                </tr>
+              ))}
+            </BandTable>
+          ) : null}
           {waiting.unreadNotifications > 0 ? (
             <Figures>
               <Figure

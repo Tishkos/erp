@@ -31,6 +31,7 @@ import {
   payableOrderLine,
   payableStage,
   payableType,
+  savedView,
   warehouse,
 } from '../db/schema';
 import {
@@ -1036,6 +1037,32 @@ export async function workbench(tx: Tx, filter: WorkbenchFilter = {}) {
     .where(where)) as [{ total: number }];
 
   return { rows, total, page, pageSize };
+}
+
+export interface WorkbenchView {
+  readonly id: string;
+  readonly name: string;
+  /** The workbench's own filter shape: { type?, stopped? }. */
+  readonly query: Readonly<Record<string, string>>;
+}
+
+/**
+ * §21.2 — the seed views are saved-view rows (shared, listKey 'payables'),
+ * so the accountant's own views sit beside them and the list is theirs to
+ * grow. Ordered by name under a numbered prefix, so the seeds keep the
+ * diagram's order without a column for it.
+ */
+export async function workbenchViews(tx: Tx): Promise<WorkbenchView[]> {
+  const rows = await tx
+    .select({ id: savedView.id, name: savedView.name, query: savedView.query })
+    .from(savedView)
+    .where(and(eq(savedView.listKey, 'payables'), eq(savedView.isShared, true)))
+    .orderBy(asc(savedView.name));
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name.replace(/^\d+\s*·\s*/, ''),
+    query: (row.query ?? {}) as Readonly<Record<string, string>>,
+  }));
 }
 
 /** The page's header: the record, its type, rail, lanes, lines, open holds. */

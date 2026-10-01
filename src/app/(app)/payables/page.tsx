@@ -35,7 +35,8 @@ import { createPayable } from './actions';
  */
 export const dynamic = 'force-dynamic';
 
-const VIEWS: readonly { key: string; query: string }[] = [
+/** The fallback until the 0230 seed rows exist on this database. */
+const PRESET_VIEWS: readonly { key: string; query: string }[] = [
   { key: 'all_open', query: '' },
   { key: 'needs_reason', query: 'stopped=needs_reason' },
   { key: 'stopped', query: 'stopped=yes' },
@@ -72,7 +73,8 @@ export default async function PayablesWorkbench({
       : null;
   const pageNo = Number(params.page) > 0 ? Number(params.page) : 1;
 
-  const { rows, total, types, suppliers, departments, categories } = await withCurrentUser(
+  const { rows, total, types, suppliers, departments, categories, savedViews } =
+    await withCurrentUser(
     async (tx) => {
       const list = await payables.workbench(tx, {
         typeCode: typeFilter,
@@ -88,6 +90,7 @@ export default async function PayablesWorkbench({
         categories: config.categories.filter((c) => c.active),
         suppliers: await partners.listActiveInRole(tx, 'supplier'),
         departments: await departmentsService.listAll(tx),
+        savedViews: await payables.workbenchViews(tx),
       };
     },
   );
@@ -99,9 +102,18 @@ export default async function PayablesWorkbench({
   const daysSince = (since: Date | string) =>
     Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 86_400_000));
 
+  // §21.2 — shared saved-view rows when the seeds exist; the presets until.
+  const views =
+    savedViews.length > 0
+      ? savedViews.map((view) => ({
+          key: view.id,
+          label: view.name,
+          query: new URLSearchParams(view.query).toString(),
+        }))
+      : PRESET_VIEWS.map((view) => ({ key: view.key, label: t(`view_${view.key}`), query: view.query }));
   const viewQuery = (query: string) => (query ? `/payables?${query}` : '/payables');
   const activeView =
-    VIEWS.find((view) => {
+    views.find((view) => {
       const q = new URLSearchParams(view.query);
       return (
         (q.get('stopped') ?? null) === stoppedFilter && (q.get('type') ?? null) === typeFilter
@@ -212,14 +224,14 @@ export default async function PayablesWorkbench({
 
           <div className={s.sapFootActions}>
             <nav aria-label={t('views')}>
-              {VIEWS.map((view) => (
+              {views.map((view) => (
                 <Link
                   aria-current={activeView === view.key ? 'page' : undefined}
                   className={`${s.button} ${s.small}${activeView === view.key ? ` ${s.primary}` : ''}`}
                   href={viewQuery(view.query)}
                   key={view.key}
                 >
-                  {t(`view_${view.key}`)}
+                  {view.label}
                 </Link>
               ))}
             </nav>

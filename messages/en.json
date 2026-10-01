@@ -886,7 +886,11 @@
     "number_series": "Number series",
     "department_managers": "Department managers",
     "no_manager": "No manager",
-    "members": "members"
+    "members": "members",
+    "holds_need_reason": "Stopped — reason required in my lane",
+    "holds_i_own": "Holds I own",
+    "open_payables": "Open the workbench",
+    "next_action": "Next action"
   },
   "shell": {
     "brand": "QS ERP",
