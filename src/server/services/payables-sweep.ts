@@ -24,6 +24,7 @@ import { payable, payableHold, stageTimeLimit, sweepCheck } from '../db/schema';
 import { limitInForce, type LimitScope, type TimeLimitRow } from '../domain/payables';
 import * as events from './payable-events';
 import * as holds from './payable-holds';
+import * as contracts from './recurring-contracts';
 import * as notifications from './notifications';
 
 export interface SweepResult {
@@ -31,6 +32,8 @@ export interface SweepResult {
   readonly checked: number;
   readonly opened: number;
   readonly escalated: number;
+  /** §10.4 — contract periods the generator raised in this run. */
+  readonly periodsGenerated: number;
   /** Checks whose query this build does not implement yet — seeded, inert. */
   readonly skipped: string[];
 }
@@ -139,6 +142,11 @@ export async function runSweep(tx: Tx, asOf: string): Promise<SweepResult> {
   const nextYear = Number(asOf.slice(0, 4)) + 1;
   await tx.execute(sql`select payable_event_ensure_partition(${nextYear})`);
 
+  // §10.4 — the contract generator runs in the same sweep, before the
+  // checks, so a period born due today is also checked today. Idempotent, as
+  // the generator itself is.
+  const generated = await contracts.generateDue(tx, asOf, null);
+
   const checks = await tx.select().from(sweepCheck).where(eq(sweepCheck.active, true));
 
   let checked = 0;
@@ -244,5 +252,5 @@ export async function runSweep(tx: Tx, asOf: string): Promise<SweepResult> {
     escalated += 1;
   }
 
-  return { asOf, checked, opened, escalated, skipped };
+  return { asOf, checked, opened, escalated, periodsGenerated: generated.periodsCreated, skipped };
 }

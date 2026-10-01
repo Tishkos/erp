@@ -42,6 +42,8 @@ import * as audit from './audit';
 import * as inventory from './inventory';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
+import * as payableEvents from './payable-events';
+import * as payables from './payables';
 
 /** The Appendix B document type this service manages. */
 export const DOCUMENT_TYPE = 'goods_receipt';
@@ -566,6 +568,34 @@ export async function post(
     .where(eq(goodsReceipt.id, id));
 
   const orderStatus = await refreshOrderStatus(tx, receipt.purchaseOrderId);
+
+  // REQ-AP-001 §11 — a local-goods payable hears its warehouse lane move.
+  {
+    const { payable: payableTable } = await import('../db/schema');
+    const { and: andOp, eq: eqOp, isNull: isNullOp } = await import('drizzle-orm');
+    const [owner] = await tx
+      .select({ id: payableTable.id })
+      .from(payableTable)
+      .where(
+        andOp(
+          eqOp(payableTable.purchaseOrderId, receipt.purchaseOrderId),
+          isNullOp(payableTable.cancelledAt),
+        ),
+      )
+      .limit(1);
+    if (owner) {
+      await payableEvents.record(tx, {
+        payableId: owner.id,
+        eventCode: 'GOODS_RECEIVED',
+        summary: `Goods receipt ${receipt.receiptNo} posted`,
+        sourceType: 'goods_receipt',
+        sourceId: receipt.id,
+        sourceNo: receipt.receiptNo,
+        actorUserId: ctx.principal.userId,
+      });
+      await payables.recomputeStage(tx, owner.id, ctx.principal.userId);
+    }
+  }
 
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,

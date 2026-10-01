@@ -26,12 +26,16 @@ import {
   apInvoice,
   branch,
   businessPartner,
+  expenseCategory,
+  goodsReceipt,
   payable,
   payableHold,
   payableOrderLine,
   payableStage,
   payableType,
   savedView,
+  serviceReceipt,
+  supplierAdvance,
   warehouse,
 } from '../db/schema';
 import {
@@ -142,6 +146,8 @@ export async function loadByNo(tx: Tx, payableNo: string) {
  * its build stage lands, which is R2 applied to the build itself.
  */
 export async function gatherFacts(tx: Tx, payableId: string): Promise<StageFacts> {
+  const row = await load(tx, payableId);
+
   const [invoices] = await tx
     .select({
       posted: sql<number>`count(*) filter (where ${apInvoice.status} in ('posted','partially_executed','settled'))::int`,
@@ -150,10 +156,56 @@ export async function gatherFacts(tx: Tx, payableId: string): Promise<StageFacts
     .from(apInvoice)
     .where(and(eq(apInvoice.payableId, payableId), isNull(apInvoice.reversedAt)));
 
+  // Service lane (build Stage 2) — an approved confirmation of this payable.
+  const [confirmation] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(serviceReceipt)
+    .where(and(eq(serviceReceipt.payableId, payableId), eq(serviceReceipt.status, 'approved')));
+  const serviceConfirmed = (confirmation?.n ?? 0) > 0;
+
+  // D8 — a generated period under an auto-confirm contract confirmed itself;
+  // the PERIOD_AUTO_CONFIRMED event in the log is the record of it.
+  const [autoConfirmed] = row.recurringContractId
+    ? await tx.execute(sql`
+        select count(*)::int as n from payable_event
+         where payable_id = ${payableId} and event_code = 'PERIOD_AUTO_CONFIRMED'`)
+        .then((r) => r.rows as { n: number }[])
+    : [{ n: 0 }];
+
+  // Warehouse lane (§11) — a posted goods receipt against this payable's order.
+  const [received] = row.purchaseOrderId
+    ? await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(goodsReceipt)
+        .where(
+          and(
+            eq(goodsReceipt.purchaseOrderId, row.purchaseOrderId),
+            inArray(goodsReceipt.status, ['posted', 'executed', 'partially_executed']),
+            isNull(goodsReceipt.reversedAt),
+          ),
+        )
+    : [{ n: 0 }];
+
+  // Advance type (§12) — the linked supplier advance's own lifecycle.
+  const [advance] = await tx
+    .select({ status: supplierAdvance.status })
+    .from(supplierAdvance)
+    .where(and(eq(supplierAdvance.payableId, payableId), isNull(supplierAdvance.reversedAt)))
+    .orderBy(desc(supplierAdvance.createdAt))
+    .limit(1);
+
   return {
     ...NO_FACTS,
     postedInvoiceCount: invoices?.posted ?? 0,
     approvedInvoiceCount: invoices?.approved ?? 0,
+    serviceConfirmed: serviceConfirmed || (autoConfirmed?.n ?? 0) > 0,
+    recurringConfirmed: serviceConfirmed || (autoConfirmed?.n ?? 0) > 0,
+    goodsReceiptPosted: (received?.n ?? 0) > 0,
+    advanceApproved: Boolean(advance && advance.status !== 'draft'),
+    advancePaid: Boolean(
+      advance && ['posted', 'partially_executed', 'settled', 'closed'].includes(advance.status),
+    ),
+    advanceSettled: Boolean(advance && ['settled', 'closed'].includes(advance.status)),
   };
 }
 
@@ -638,6 +690,112 @@ export async function onInvoiceEvent(
   });
   await refreshFromInvoices(tx, input.payableId);
   await recomputeStage(tx, input.payableId, input.actorUserId);
+}
+
+/**
+ * A9 — "did we actually get it?" before "pay it".
+ *
+ * The invoice posting calls this for a payable-linked invoice. A service or
+ * recurring payable must show its confirmation — an approved service receipt,
+ * or the period's own auto-confirmation (D8) — unless the expense category
+ * says none is expected (`requires_receipt = false`), in which case the
+ * approver is shown the note instead of a demand. Goods payables answer to
+ * the goods receipt, not to a service confirmation.
+ */
+export async function assertReceiptEvidence(
+  tx: Tx,
+  payableId: string,
+): Promise<{ required: boolean; note?: string }> {
+  const [row] = await tx
+    .select({
+      payableNo: payable.payableNo,
+      typeCode: payable.payableTypeCode,
+      categoryCode: payable.expenseCategoryCode,
+      categoryName: expenseCategory.name,
+      requiresReceipt: expenseCategory.requiresReceipt,
+    })
+    .from(payable)
+    .leftJoin(expenseCategory, eq(expenseCategory.code, payable.expenseCategoryCode))
+    .where(eq(payable.id, payableId))
+    .limit(1);
+  if (!row) throw new PayableValidationError('payable', 'no such payable.');
+
+  if (row.typeCode !== 'service' && row.typeCode !== 'recurring') {
+    return {
+      required: false,
+      note: 'A goods payable answers to the goods receipt, not a service confirmation.',
+    };
+  }
+  if (row.requiresReceipt === false) {
+    return {
+      required: false,
+      note: `No receipt required — ${row.categoryName ?? row.categoryCode ?? 'this category'} is invoiced without a confirmation.`,
+    };
+  }
+
+  const [confirmed] = await tx
+    .select({ id: serviceReceipt.id })
+    .from(serviceReceipt)
+    .where(and(eq(serviceReceipt.payableId, payableId), eq(serviceReceipt.status, 'approved')))
+    .limit(1);
+  if (confirmed) return { required: true };
+
+  const auto = await tx.execute(sql`
+    select 1 from payable_event
+     where payable_id = ${payableId} and event_code = 'PERIOD_AUTO_CONFIRMED'
+     limit 1`);
+  if (auto.rows.length > 0) return { required: true };
+
+  throw new PayableStateError(
+    row.payableNo,
+    'the benefiting department has not confirmed the service — an approved service receipt is the evidence (A9).',
+  );
+}
+
+/** §12 — an advance that belongs to a payable writes the bank lane's story. */
+export async function onAdvanceEvent(
+  tx: Tx,
+  input: {
+    payableId: string;
+    eventCode: 'DEPOSIT_RECORDED' | 'FIELD_CHANGED';
+    advanceId: string;
+    advanceNo: string;
+    summary: string;
+    actorUserId: string | null;
+  },
+): Promise<void> {
+  await events.record(tx, {
+    payableId: input.payableId,
+    eventCode: input.eventCode,
+    summary: input.summary,
+    sourceType: 'supplier_advance',
+    sourceId: input.advanceId,
+    sourceNo: input.advanceNo,
+    actorUserId: input.actorUserId,
+  });
+  await recomputeStage(tx, input.payableId, input.actorUserId);
+}
+
+/** A10 — the charged line's mark on the import file's story (§9.2). */
+export async function onChargedToImport(
+  tx: Tx,
+  input: {
+    payableId: string;
+    invoiceId: string;
+    invoiceNo: string;
+    summary: string;
+    actorUserId: string | null;
+  },
+): Promise<void> {
+  await events.record(tx, {
+    payableId: input.payableId,
+    eventCode: 'CHARGED_TO_IMPORT',
+    summary: input.summary,
+    sourceType: 'ap_invoice',
+    sourceId: input.invoiceId,
+    sourceNo: input.invoiceNo,
+    actorUserId: input.actorUserId,
+  });
 }
 
 /** §5.1 — once invoices post, the payable's amount is their sum. */

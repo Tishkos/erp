@@ -31,11 +31,13 @@ import {
   purchaseOrder,
   supplierAdvance,
   supplierAdvanceSettlement,
+  payable,
 } from '../db/schema';
 import { parseDecimal, toDecimalString } from '../domain/money';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
+import * as payables from './payables';
 import * as posting from './posting';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
@@ -239,6 +241,18 @@ export async function approve(tx: Tx, ctx: ActorContext, id: string): Promise<vo
     })
     .where(eq(supplierAdvance.id, id));
 
+  // §12 — an approved advance can move its payable's rail.
+  if (advance.payableId) {
+    await payables.onAdvanceEvent(tx, {
+      payableId: advance.payableId,
+      eventCode: 'FIELD_CHANGED',
+      advanceId: advance.id,
+      advanceNo: advance.advanceNo,
+      summary: `Advance ${advance.advanceNo} approved`,
+      actorUserId: ctx.principal.userId,
+    });
+  }
+
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
     action: 'supplier_advance.approved',
@@ -339,6 +353,18 @@ export async function pay(
     })
     .where(eq(supplierAdvance.id, id));
 
+  // §12 — a deposit paid on a linked payable is the bank lane's news.
+  if (advance.payableId) {
+    await payables.onAdvanceEvent(tx, {
+      payableId: advance.payableId,
+      eventCode: 'DEPOSIT_RECORDED',
+      advanceId: advance.id,
+      advanceNo: advance.advanceNo,
+      summary: `Deposit paid — advance ${advance.advanceNo}, ${toDecimalString(parseDecimal(advance.amountIqd, 4n), 4n)} IQD on ${paidDate}`,
+      actorUserId: ctx.principal.userId,
+    });
+  }
+
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
     action: 'supplier_advance.paid',
@@ -351,6 +377,71 @@ export async function pay(
   });
 
   return { journalEntryId: result.journalEntryId };
+}
+
+/**
+ * §12 — ties an advance to the payable it funds, so the payable's bank lane
+ * can see it. The link is set once; the same-supplier rule is §5.1's.
+ */
+export async function linkToPayable(
+  tx: Tx,
+  ctx: ActorContext,
+  input: { supplierAdvanceId: string; payableId: string },
+): Promise<void> {
+  const advance = await load(tx, input.supplierAdvanceId);
+  await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, {
+    branchCode: advance.branchCode,
+  });
+
+  const [target] = await tx
+    .select({
+      id: payable.id,
+      payableNo: payable.payableNo,
+      supplierId: payable.supplierId,
+      cancelledAt: payable.cancelledAt,
+      closedAt: payable.closedAt,
+    })
+    .from(payable)
+    .where(eq(payable.id, input.payableId))
+    .limit(1);
+  if (!target) throw new Error('No such payable to link this advance to.');
+  if (target.supplierId !== advance.supplierId) {
+    throw new Error(
+      `${target.payableNo} belongs to a different supplier than ${advance.advanceNo}.`,
+    );
+  }
+  if (target.cancelledAt || target.closedAt) {
+    throw new Error(`${target.payableNo} is closed — it takes no further advances.`);
+  }
+  if (advance.payableId && advance.payableId !== target.id) {
+    throw new Error(
+      `${advance.advanceNo} already funds another payable — one advance, one payable.`,
+    );
+  }
+
+  await tx
+    .update(supplierAdvance)
+    .set({ payableId: target.id, updatedAt: new Date() })
+    .where(eq(supplierAdvance.id, advance.id));
+
+  await payables.onAdvanceEvent(tx, {
+    payableId: target.id,
+    eventCode: 'FIELD_CHANGED',
+    advanceId: advance.id,
+    advanceNo: advance.advanceNo,
+    summary: `Advance ${advance.advanceNo} linked — ${toDecimalString(parseDecimal(advance.amountIqd, 4n), 4n)} IQD (${advance.status})`,
+    actorUserId: ctx.principal.userId,
+  });
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'supplier_advance.linked',
+    objectType: PERMISSION_OBJECT,
+    objectId: advance.id,
+    branchCode: advance.branchCode,
+    after: { payableNo: target.payableNo },
+    outcome: 'success',
+  });
 }
 
 /**
@@ -515,6 +606,18 @@ export async function settle(
       updatedAt: new Date(),
     })
     .where(eq(apInvoice.id, input.apInvoiceId));
+
+  // §12 — a settled advance moves the linked payable's rail too.
+  if (advance.payableId) {
+    await payables.onAdvanceEvent(tx, {
+      payableId: advance.payableId,
+      eventCode: 'FIELD_CHANGED',
+      advanceId: advance.id,
+      advanceNo: advance.advanceNo,
+      summary: `Advance ${advance.advanceNo} settled against an invoice`,
+      actorUserId: ctx.principal.userId,
+    });
+  }
 
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,

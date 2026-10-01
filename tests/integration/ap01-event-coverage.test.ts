@@ -48,10 +48,19 @@ describe('ap01 · every service that touches a payable writes its story', () => 
     // below, or its changes happen off the record (§7.2).
     expect(rows.map((row) => row.table_name)).toEqual([
       'ap_invoice',
+      // Stage 2 (0230): the charge writes CHARGED_TO_IMPORT in its own
+      // transaction — ap02-charged-to-import.
+      'landed_cost_charge',
       'payable_event',
       'payable_hold',
       'payable_hold_update',
       'payable_order_line',
+      // Stage 2 (0230): the confirmation writes SERVICE_RECEIPT_CREATED /
+      // SERVICE_CONFIRMED — ap02-service-flow.
+      'service_receipt',
+      // Stage 2 (0230): link / approve / pay / settle all write through
+      // payables.onAdvanceEvent — ap02-advance-link.
+      'supplier_advance',
     ]);
   });
 

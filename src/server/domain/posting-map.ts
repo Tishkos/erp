@@ -73,6 +73,9 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
       line('grni', 'debit'),
       // A service line — nothing was received into a warehouse.
       line('expense', 'debit'),
+      // §9.2 — a line charged to an import file: the cost belongs to the
+      // goods, parked on the clearing account until the file's cost is locked.
+      line('landed_cost_clearing', 'debit'),
       // §8.4 — the difference between what was ordered and what was billed,
       // which never goes into the value of the stock. Either way round: over
       // the order it is a debit, under it a credit.
