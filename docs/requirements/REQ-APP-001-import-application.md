@@ -19,8 +19,8 @@ and the diagram disagree, the diagram is the intent and this document is wrong.
 | **Phase** | Operations build — Import module, delivered in the seven stages of §19 |
 | **Source** | `QS_ERP_Workflow_Final.pdf` · `QS_DASHBOARD.xlsx` (the Google Sheet the company runs on today) · the code review of 2026-10-01 summarised in §3 |
 | **Test case(s)** | §20 names the test file for every acceptance criterion; none exists yet |
-| **Status** | Draft — for approval |
-| **Approved by** | *Not yet approved. §28.1 requires written approval from the Business Process Owner before any of this is built.* |
+| **Status** | Approved for the Stage 1 build (decisions of 2026-10-01 recorded in §22; code review reconciled with `main` 82ad32b, see §3.1) |
+| **Approved by** | Baban Ali, 2026-10-01 (chat approval; §28.1 written sign-off by the Business Process Owner to be attached) |
 
 ---
 
@@ -126,7 +126,7 @@ Read before designing anything, so that nothing is built twice.
 
 | Diagram lane | Exists | Does not exist |
 |---|---|---|
-| **Order & invoice** | Purchase order (`purchase_order`, hidden — no screen in `OPERATIONS`). AP invoice (`ap_invoice`, live) with `purchase_order_id`, partial settlement (`settled_amount_iqd`), reversal. Payment terms master (`payment_terms` + `payment_term_instalment`) — **days-based only**, and the instalment schedule is computed but never applied to an invoice (`domain/payment-terms.ts:239-242`). | A record keyed by the supplier's PO / INV no. that spans documents. Deposit % + "balance against B/L" terms. Proforma invoice. |
+| **Order & invoice** | Purchase order (`purchase_order`, built in schema and service, not yet in `DELIVERED` so it has no screen). AP invoice (`ap_invoice`, live) with `purchase_order_id`, partial settlement (`settled_amount_iqd`), reversal. Payment terms master (`payment_terms` + `payment_term_instalment`) — **days-based only**, and the instalment schedule is computed but never applied to an invoice (`domain/payment-terms.ts:239-242`). | A record keyed by the supplier's PO / INV no. that spans documents. Deposit % + "balance against B/L" terms. Proforma invoice. |
 | **Bank & finance** | `bank_cash_account` (one G/L account each; `bank_name` free text; `swift`, `iban`, `currency`). Balance = G/L; "committed" = approved bank transfers + pending payment-batch lines (`treasury.balances`). Bank statements and reconciliation. `investment_capital_call` as a dated-obligation pattern. | Bank master (Mansour, Arab, NBI, Rafidain). Reservation of money for a specific payment. Loans: principal, commission, net proceeds, schedule, instalment status. Deposits of own money as a document. Native-currency available balance. |
 | **Payment** | Supplier payment (draft → approved → posted), supplier advance (per PO), payment proposal/batch (pays full outstanding only), allocations. Money transfers have a *Sent (requires bank reference) → Completed* pattern worth copying. | A "payment application to the bank" document with sent / SWIFT-confirmed / debited states, SWIFT date and reference, days waiting. Instalment-level tracking. USD payment from an IQD account (refused today). |
 | **PD / ASYCUDA** | Nothing. | Everything: PD record, statuses, expiry, bank code, port file, write-off. |
@@ -138,6 +138,22 @@ The audit trail, the status machine helper, numbering, attachments, the
 notification service and the due-notice sweep are reused as they are. The
 four-stage `supplier_shipment` is **superseded** by §11 and kept read-only for
 history (§18.4).
+
+### 3.1 Reconciliation with `main` (2026-10-01, after PR #3 "de-phase")
+
+The implementation review found six points where the first draft of this
+document and the code disagreed. They are resolved as follows and the text
+below is already corrected.
+
+| # | Finding | Resolution |
+|---|---|---|
+| 1 | `phase-gate.ts` and its `OPERATIONS` list no longer exist; a route is served because it is in `domain/screens.ts` `DELIVERED`, and the menu tree is `domain/menu.ts`. | §15 now says so. The *Imports* section is a new `key: 'imports'` section in `MENU` between `purchasing` and `inventory`; each route joins `DELIVERED` on the day it reads real data. |
+| 2 | `goods_receipt.purchase_order_id` is NOT NULL by design ("no receipt without an order"). | **Kept.** The control is right; the application adapts to it: every application has a purchase order (§5.1, §8 — the PI *is* the PO, created by the existing PO service when the PI is recorded). A container receipt is a goods receipt against that PO with the new `container_id` (§12). |
+| 3 | `supplier_advance.purchase_order_id` is NOT NULL ("money out against nothing"). | **Kept**, resolved by the same rule: a deposit before the invoice is a supplier advance against the application's PO (§9.4). |
+| 4 | `supplier_payment` and `supplier_advance` store IQD only (`amount_iqd`); the posted document would not show the USD amount. | The payment application is the source of truth for transaction-currency amounts (§9.5). Stage 2 adds additive columns `amount_txn` + `currency` to both tables, filled when the document is created from a payment application; posting stays IQD. Q3 (USD from an IQD account) decided in §22: refuse, require an account in the application's currency. |
+| 5 | Defects the review confirmed: `allocate` accepts draft payments; `instalmentSchedule` has no caller; staging warehouses are `main`, and three more stage warehouses were created on the live database on 2026-09-30. | §9.4 moves allocation to SWIFT confirmation. §9.2 gives the schedule its caller. Stage 4's migration re-types **every** warehouse with a `shipment_stage` to `transit` (including the three live ones); `stock_position` is a view, so availability re-derives itself. |
+| 6 | Drizzle cannot declare a partitioned table; `application_event` must be hand-authored SQL. | Stated in §6.1 and §16.2. The Drizzle schema maps the parent table for queries; the migration creates the parent, the yearly partitions and the trigger; the nightly job adds next year's partition. |
+
 
 ## 4. The five rules
 
@@ -194,7 +210,7 @@ re-typed, and every migrated row says where it came from.
 | `invoice_date` | date | |
 | `product_summary` | text | Free text ("panel & batteries"), for the list. |
 | `payment_terms_text` | text | The terms as written on the PI/invoice, kept verbatim (evidence). The structured form is §9.2. |
-| `purchase_order_id` | fk, nullable | |
+| `purchase_order_id` | fk `purchase_order` | **Required.** Created from the PI lines by the existing PO service when the application is opened (§8), or an existing approved PO of the same supplier is linked. This keeps the ERP's rules that a goods receipt and a supplier advance never exist without an order. |
 | `stage_code` | fk `application_stage` | **Derived** (§5.3). Stored for listing speed; recomputed on every event. |
 | `stage_since` | timestamptz | When the current stage was entered. |
 | `on_hold` | boolean | Derived: an open hold exists (§13). |
@@ -303,6 +319,10 @@ the change it describes. Protected by the no-update/no-delete trigger of
 Indexes: `(application_id, recorded_at desc)`; `(event_code, recorded_at)`;
 `(source_type, source_id)`. The table is created **partitioned by year of
 `recorded_at`** from day one so it can grow without a later rewrite (§16.2).
+Drizzle does not declare partitioned tables, so this one migration is
+hand-authored SQL (parent table, the current and next year's partitions, the
+append-only trigger on the parent); the Drizzle schema file describes the
+parent for queries only, and `drizzle-kit` must not be allowed to "fix" it.
 
 ### 6.2 Event catalogue (seed) — what gets recorded
 
@@ -359,7 +379,7 @@ the exception box at the bottom of the lane.
 
 | Box | Specification |
 |---|---|
-| **Pending order / PI** | Creating the application records the proforma / pending order: supplier, PI number (= `supplier_reference`), PI date, currency, amount, and the model lines (item code, description, quantity, unit price). Lines are stored in `application_order_line` so quantity is known before the invoice exists. Optional link to an existing `purchase_order`. Event `APPLICATION_OPENED`, `PI_RECORDED`. |
+| **Pending order / PI** | Creating the application records the proforma / pending order: supplier, PI number (= `supplier_reference`), PI date, currency, amount, and the model lines (item code, description, quantity, unit price). Lines are stored in `application_order_line` so quantity is known before the invoice exists. **In the same transaction a purchase order is created from those lines through the existing `purchase-order` service and approved** (the PI is the company's order; `purchase_order.reference` = the PI number) — or, when the user picks an existing approved PO of the same supplier, that PO is linked and its lines become the order lines. Event `APPLICATION_OPENED`, `PI_RECORDED`, `PO_LINKED`. |
 | **Purchase invoice** | The existing AP invoice, created from the application page ("Create purchase invoice") with lines pre-filled from the PI, or linked afterwards by picking an existing posted invoice of the same supplier whose reference matches `supplier_reference_key`. Posting the invoice writes `INVOICE_POSTED` with amount and quantity; reversal writes `INVOICE_REVERSED` and re-derives the stage. Several invoices per application are allowed; one invoice belongs to at most one application. |
 | **Payment terms** | `payment_terms_text` (verbatim) and the structured instalment plan of §9.2, entered together. Event `TERMS_SET`; any later change `TERMS_CHANGED` with before/after. The invoice's own `due_date` (existing) is kept for AP ageing and is set from the last instalment's expected date. |
 | **Move to BL** | Automatic. The moment the first B/L is recorded (§11.1) the order lane writes `MOVED_TO_BL`; from then on quantities are tracked per container, and the PI lines become the plan to check containers against. |
@@ -441,7 +461,7 @@ logged):**
 | Box | Specification |
 |---|---|
 | **SWIFT pending — clock runs · NOT PAID** | Status `sent`. The list shows `days_waiting`. The daily sweep (§13.3) compares it with the time limit of stage *Payment in progress* **for that bank** (limits may be per bank, R4) and, when over, writes `SWIFT_OVER_LIMIT` and requires a hold (§13). The diagram's "e.g. 14 d" is the seed value. |
-| **SWIFT confirmed — Swift date set · PAID** | Action *Confirm SWIFT*: type `swift_date`, `swift_reference`, attach the copy. In the same transaction the system creates and posts the accounting document through the **existing** services: a `supplier_advance` if no AP invoice is posted yet (deposit before invoice), otherwise a `supplier_payment` allocated to the application's invoice(s). Posting date = `swift_date`. Event `SWIFT_CONFIRMED`, and `DEBIT_FINAL` in the bank lane once the bank statement line is matched (existing reconciliation; the match sets `debit_date`). Reserved → released, Booked falls. |
+| **SWIFT confirmed — Swift date set · PAID** | Action *Confirm SWIFT*: type `swift_date`, `swift_reference`, attach the copy. In the same transaction the system creates and posts the accounting document through the **existing** services: a `supplier_advance` against the application's purchase order if no AP invoice is posted yet (deposit before invoice), otherwise a `supplier_payment` allocated to the application's invoice(s). Both documents receive the new `amount_txn` + `currency` columns (Stage 2, additive) so the posted document shows the SWIFT amount in its own currency; the journal stays IQD. Posting date = `swift_date`. Event `SWIFT_CONFIRMED`, and `DEBIT_FINAL` in the bank lane once the bank statement line is matched (existing reconciliation; the match sets `debit_date`). Reserved → released, Booked falls. |
 | **Fully paid — Remaining = 0** | Derived (§9.5). Event `FULLY_PAID`. Instalment statuses become `paid`. |
 | **Exception: SWIFT late — over limit (e.g. 14 d) → reason** | Not a status. It is the hold of §13 with lane `payment`, opened automatically by the sweep and completed by the accountant with the reason code. The payment application stays `sent` until the bank answers. |
 
@@ -624,7 +644,7 @@ sea as available for sale (defect found in review). In this lane goods are
 |---|---|
 | **Container detail — container × model × WH** | `shipment_container_line` (§11.2). This is the plan the receipt is checked against. |
 | **In transit — planned − received qty** | Derived per model and per application; feeds the availability screen's "incoming" column (§11.4). |
-| **Inbound — date + qty per warehouse** | **Receive container**: a goods receipt keyed to the container (`goods_receipt.container_id`, new nullable fk; `purchase_order_id` becomes nullable so a receipt can be per container when the PO exists only as a PI). One receipt per container; several containers may be received in one session but each gets its own document. Lines pre-filled from the container lines; the user confirms `received_qty`, `damaged_qty`, `short_qty`, warehouse (must belong to the application's branch). Posting writes `inventory_movement` + `cost_layer` rows in the same transaction (existing `inventory.receive`, unit cost from the AP invoice line; if the invoice is not posted yet, the PI price, corrected at invoice posting through the existing cost-adjustment path). Sets the container `received`, `received_on`, `warehouse_code`; events `CONTAINER_RECEIVED` and, if any variance, `QUANTITY_VARIANCE` + status `missing_damaged` on the container + an automatic hold with reason `OTHER`/"claim" for purchasing. |
+| **Inbound — date + qty per warehouse** | **Receive container**: a goods receipt against the application's purchase order (`purchase_order_id` stays NOT NULL — every application has a PO, §5.1) with the new `goods_receipt.container_id` (nullable fk; set for every receipt made from this module). One receipt per container; several containers may be received in one session but each gets its own document. Lines pre-filled from the container lines; the user confirms `received_qty`, `damaged_qty`, `short_qty`, warehouse (must belong to the application's branch). Posting writes `inventory_movement` + `cost_layer` rows in the same transaction (existing `inventory.receive`, unit cost from the AP invoice line; if the invoice is not posted yet, the PI price, corrected at invoice posting through the existing cost-adjustment path). Sets the container `received`, `received_on`, `warehouse_code`; events `CONTAINER_RECEIVED` and, if any variance, `QUANTITY_VARIANCE` + status `missing_damaged` on the container + an automatic hold with reason `OTHER`/"claim" for purchasing. |
 | **In stock — inbound − outbound · 9 WH** | Existing `stock_position` per item per warehouse. "9 WH" on the diagram is the company's current count, not a limit — warehouses are master data. |
 | **Outbound / sales — sales invoice, customer** | Existing AR invoice / delivery note. When an AR invoice issues stock from a cost layer that came from a container of an application, the application receives an informational `OUTBOUND_RECORDED` event (traceability of what was sold from which import). |
 
@@ -775,9 +795,10 @@ Event `ITEM_COST_ALLOCATED` per model with the resulting unit cost.
 ## 15. Screen by screen
 
 Conventions: every screen is a Next.js route under `src/app/(app)/imports/…`
-(a new top-level **Imports** menu entry between *Purchasing* and *Inventory*),
-registered in `phase-gate.ts` `OPERATIONS` and `domain/screens.ts` `DELIVERED`
-on the day it reads real data, uses `DocumentWindow` / `RecordHistory` and the
+(a new section `key: 'imports'` in `domain/menu.ts` `MENU`, placed between
+`purchasing` and `inventory`, with one item per screen below and its permission
+object), added to `domain/screens.ts` `DELIVERED` on the day it reads real
+data (that list is the only thing that makes a route served — `delivered.ts`), uses `DocumentWindow` / `RecordHistory` and the
 existing print & export menu, is translated in `messages/en.json` and
 `messages/ar.json`, and works at mobile width and RTL like the rest of the
 application. Lists page server-side (existing `list.ts`), never load everything.
@@ -940,7 +961,7 @@ Every change is an `audit_event`; nothing is deleted, only deactivated.
 
 ### 16.2 Volume and retention
 
-The event table is partitioned by year from the first migration; partitions
+The event table is partitioned by year from the first (hand-authored) migration; partitions
 are created a year ahead by the nightly job. No row is ever purged; a partition
 older than the configured online horizon (seed 7 years) may be moved to slower
 storage, never dropped, by a documented operations procedure. Indexes of §6.1
@@ -1033,7 +1054,7 @@ is added when the test does).
 | A16 | Cleared is set automatically when the third condition is met, never by a user; reversing the invoice afterwards re-opens with a `CORRECTION` event and `cleared_at` preserved in history. | `imp01-cleared-rule` |
 | A17 | The dry-run import of `QS_DASHBOARD.xlsx` produces the report of §18 (unmatched suppliers, unmatched PDs, verify-SWIFT rows, legacy-cleared differences) and changes nothing; the real run is idempotent. | `imp07-sheet-import` |
 | A18 | Application list at 10,000 applications / 200,000 events responds under 1 s; application page under 1.5 s. | `tests/load/imports.js` |
-| A19 | Every new route is in `OPERATIONS` and `DELIVERED`, translated in `en` and `ar`, passes the theme-readability e2e at mobile RTL width. | `tests/e2e/imports.spec.ts` |
+| A19 | Every new route is in `domain/menu.ts` and `DELIVERED`, translated in `en` and `ar`, passes the theme-readability e2e at mobile RTL width. | `tests/e2e/imports.spec.ts` |
 
 ## 21. Out of scope (this release)
 
@@ -1049,25 +1070,20 @@ is added when the test does).
 * Changes to the existing GL, AP, AR or inventory posting rules beyond the
   mappings named in §9.7 and §14.2.
 
-## 22. Open questions (answers needed before stage 1 is approved)
+## 22. Decisions (2026-10-01)
 
-1. **Roles.** Create `logistics_officer` and `customs_officer`, or keep both
-   under `accounting_officer`?
-2. **Who completes an automatic hold?** Proposal: the reason code's default
-   role for that lane (payment → accountant, shipment → logistics, PD →
-   customs). Confirm.
-3. **USD from an IQD account.** Today refused. Allow with the accounting rate
-   of the SWIFT date and an FX difference posting, or keep refusing and require
-   a USD account? (Affects §9.3.)
-4. **Time-limit seeds.** The example values (14 / 7 / 45 / 30 / 10 / 7 days)
-   are placeholders; the accounting manager sets the real ones on day one.
-5. **Loan commission treatment.** Expense when paid, or capitalised into
-   landed cost of the goods it funded (as drawn on the diagram)? The model
-   supports both; the posting mapping needs one default.
-6. **Quantity variance.** Who may accept a short delivery as final (so the
-   application can clear) — purchasing manager, accounting manager, or both?
+The six questions of the first draft were decided on 2026-10-01. They are
+recorded here so the build does not re-ask them; changing one is a new dated
+row in this table, not an edit.
 
----
+| # | Question | Decision |
+|---|---|---|
+| 1 | Roles | Create `logistics_officer` and `customs_officer` as new roles. Until users are assigned, `accounting_officer` holds both sets of permissions. |
+| 2 | Who completes an automatic hold | The reason code's default role for that lane (payment → accounting officer, shipment → logistics officer, PD → customs officer). `accounting_manager` may complete any hold. |
+| 3 | USD from an IQD account | Refused (as today). A payment application must name an account in the application's currency. To be revisited when a multi-currency treasury requirement exists. |
+| 4 | Time-limit seeds | The example values stand as seeds — SWIFT pending 14, PD not validated 7, PD expiry warning 45, partly received 30, at port 10, invoice unfunded 7 days — and are editable on the settings screen from day one. |
+| 5 | Loan commission | Capitalised into the landed cost of the applications the loan funded (as drawn). "Expense when paid" remains an available `commission_treatment`. |
+| 6 | Accepting a short delivery as final | `accounting_manager`. |
 
 ## Review checklist
 
