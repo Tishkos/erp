@@ -432,7 +432,7 @@ ledger exactly as now.
 
 | Box | Specification |
 |---|---|
-| **Pending order / PI** | Creating the application records the proforma / pending order: supplier, PI number (= `supplier_reference`), PI date, currency, amount, and the model lines (item code, description, quantity, unit price). Lines are stored in `payable_order_line` so quantity is known before the invoice exists. **In the same transaction a purchase order is created from those lines through the existing `purchase-order` service and approved** (the PI is the company's order; `purchase_order.reference` = the PI number) — or, when the user picks an existing approved PO of the same supplier, that PO is linked and its lines become the order lines. Event `PAYABLE_OPENED`, `PI_RECORDED`, `PO_LINKED`. |
+| **Pending order / PI** | Creating the application records the proforma / pending order: supplier, PI number (= `supplier_reference`), PI date, currency, amount, and the model lines (item code, description, quantity, unit price). Lines are stored in `payable_order_line` so quantity is known before the invoice exists. **In the same transaction a purchase order is created from those lines through the existing `purchase-order` service and submitted** — approval stays a second person's act in the approvals inbox (blueprint §5.2 maker-checker; one officer must not self-approve a commitment) (the PI is the company's order; `purchase_order.reference` = the PI number) — or, when the user picks an existing approved PO of the same supplier, that PO is linked and its lines become the order lines. Event `PAYABLE_OPENED`, `PI_RECORDED`, `PO_LINKED`. |
 | **Purchase invoice** | The existing AP invoice, created from the application page ("Create purchase invoice") with lines pre-filled from the PI, or linked afterwards by picking an existing posted invoice of the same supplier whose reference matches `supplier_reference_key`. Posting the invoice writes `INVOICE_POSTED` with amount and quantity; reversal writes `INVOICE_REVERSED` and re-derives the stage. Several invoices per application are allowed; one invoice belongs to at most one application. |
 | **Payment terms** | `payment_terms_text` (verbatim) and the structured instalment plan of §15.2, entered together. Event `TERMS_SET`; any later change `TERMS_CHANGED` with before/after. The invoice's own `due_date` (existing) is kept for AP ageing and is set from the last instalment's expected date. |
 | **Move to BL** | Automatic. The moment the first B/L is recorded (§17.1) the order lane writes `MOVED_TO_BL`; from then on quantities are tracked per container, and the PI lines become the plan to check containers against. |
@@ -780,7 +780,9 @@ same condition.
   `import.hold.opened`.
 * When a hold has no owner for longer than `escalate_after_days`, or stays open
   past the limit's escalation, the sweep writes `ESCALATED` and notifies
-  `escalate_to_role` (seed: `accounting_manager`).
+  `escalate_to_role` (seed: `accounting_manager`). The escalation clock runs
+  from when the hold was **opened**, not from the back-dated breach date —
+  otherwise an automatic hold would escalate in the same sweep that raised it.
 * Holds are visible on the existing dashboard's *Waiting on me* band for the
   owner — the only dashboard change in this requirement. (A separate alerts
   dashboard is **out of scope**, §27.)
@@ -1152,6 +1154,9 @@ one process.
 | D6 | Accepting a short delivery as final | `accounting_manager`. |
 | D7 | Module name and scope | *Purchasing* becomes **Payables** and covers every payable type (import, service & expense, recurring contract, local goods, advance); `finance_ap` merges into it. The import application keeps its name as a type. |
 | D8 | Rent evidence | A lease with `auto_confirm` is its own receipt evidence; no service receipt is required per period. Metered utilities require the department's confirmation of the bill. |
+| D9 | PO from a PI (Stage 1 build, 2026-10-01) | The PO is created and *submitted* in the payable's transaction; approval is a second person's act (maker-checker). |
+| D10 | Escalation clock (Stage 1 build) | Counts from the hold's `opened_at`, not from the breach date. |
+| D11 | Order lines | No DELETE on `payable_order_line`; a changed PI line supersedes the old one and writes `FIELD_CHANGED` (follow-up to Stage 1). |
 
 ---
 
