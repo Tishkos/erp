@@ -10,7 +10,7 @@ import { StatementTable } from '@/components/admin/statement-table';
 import { formatBusinessDate, formatStatementAmount, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { levelFrom } from '@domain/report-levels';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as statements from '@/server/services/financial-statements';
 

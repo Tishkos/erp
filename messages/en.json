@@ -545,10 +545,6 @@
     "reversed": "Reversed",
     "closed": "Closed"
   },
-  "phase": {
-    "not_built": "Not yet built",
-    "explanation": "The menu shows the whole system. A page that is not ready yet is greyed out."
-  },
   "screen": {
     "preview_badge": "Preview",
     "preview_note": "This screen shows the approved design over sample data.",
@@ -676,7 +672,9 @@
     "planned_body": "It is part of the system and is not ready yet. Nothing here is invented: there are no sample figures, and nothing can be entered until it is ready.",
     "planned_shape": "What it will be",
     "planned_live_in_section": "Live now in this section",
-    "planned_back": "Dashboard"
+    "planned_back": "Dashboard",
+    "not_built": "Not yet built",
+    "explanation": "The menu shows the whole system. A page that is not ready yet is greyed out."
   },
   "error": {
     "not_found": "That record does not exist, or is outside the data you may see.",
@@ -941,7 +939,7 @@
     "my_profile": "My profile",
     "change_password": "Change password",
     "footer_copyright": "© {year} Qimah Al-Safinah",
-    "footer_phase": "v1.0.0",
+    "footer_version": "v1.0.0",
     "system_healthy": "System is healthy",
     "system_degraded": "System is degraded",
     "search": "Search",

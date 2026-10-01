@@ -24,7 +24,7 @@ import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { DUE_DATE_BASIS } from '@domain/payment-terms';
 import { AdminNotFoundError } from '@/server/services/administration';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as terms from '@/server/services/payment-terms';
 import { setPaymentTermActive, updatePaymentTerm } from '../actions';

@@ -20,8 +20,8 @@ report.
 
 A person signing in should see what needs them today, and nothing else.
 
-The dashboard this replaces (`components/phase0-dashboard.tsx`, still in the
-tree) showed live record counts, a fortnight of audit activity as a line chart,
+The dashboard this replaces (the original foundation dashboard, since removed
+from the tree) showed live record counts, a fortnight of audit activity as a line chart,
 the users-by-role split and the department managers. It was switched off by
 direction on 2026-08-26 and should stay off: none of those figures is something
 anybody does anything about. A count of items rises whether the month is going

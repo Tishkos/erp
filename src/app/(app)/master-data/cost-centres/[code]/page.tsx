@@ -22,7 +22,7 @@ import { Denied } from '@/components/denied';
 import { formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { AdminNotFoundError } from '@/server/services/administration';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as branches from '@/server/services/branches';
 import * as costCentres from '@/server/services/cost-centres';

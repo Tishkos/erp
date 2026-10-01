@@ -10,7 +10,7 @@ ahead of it.
 |---|---|
 | **Built** | The screen exists, reads and writes the real database, and is reachable from the menu. |
 | **Engine only** | The accounting and the rules are built and tested; no screen is exposed yet. The work behind it is real. |
-| **Planned** | Named in the approved navigation tree, scheduled for a later phase. Nothing behind it yet. |
+| **Planned** | Named in the approved navigation tree, awaiting a company requirement to call for it. Nothing behind it yet. |
 
 ---
 
@@ -657,7 +657,7 @@ pick lists, delivery notes), cash sales, credit memos, advances, three-way match
 exceptions, bank reconciliation, cash forecasting, payment runs, and the
 notification inbox. These are posted and tested; they need screens.
 
-**Planned by phase:** CRM, Projects and Contracting, Logistics, Money Transfer,
+**Planned, as company requirements call for them:** CRM, Projects and Contracting, Logistics, Money Transfer,
 Investments, Fixed Assets, Budgeting, HR and Payroll, Reports and Analytics, and
 the integration and support tooling.
 

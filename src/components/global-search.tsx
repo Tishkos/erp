@@ -26,7 +26,7 @@ export function GlobalSearch({ sections }: { readonly sections: readonly MenuSec
   const shell = useTranslations('shell');
   const page = useTranslations('page');
   const nav = useTranslations('nav');
-  const phase = useTranslations('phase');
+  const pending = useTranslations('screen');
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -147,7 +147,7 @@ export function GlobalSearch({ sections }: { readonly sections: readonly MenuSec
                       <strong>{entry.label}</strong>
                       <small>
                         {entry.section}
-                        {entry.planned ? ` · ${phase('not_built')}` : ''}
+                        {entry.planned ? ` · ${pending('not_built')}` : ''}
                       </small>
                     </span>
                     <ArrowRight aria-hidden="true" />

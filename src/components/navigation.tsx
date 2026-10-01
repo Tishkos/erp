@@ -22,7 +22,7 @@ export function Navigation({ sections }: { sections: readonly MenuSection[] }) {
   const pathname = usePathname();
   const nav = useTranslations('nav');
   const page = useTranslations('page');
-  const phase = useTranslations('phase');
+  const pending = useTranslations('screen');
 
   return (
     <nav className="shell__nav" aria-label={nav('home')}>
@@ -41,10 +41,10 @@ export function Navigation({ sections }: { sections: readonly MenuSection[] }) {
                     {page(item.key)}
                   </Link>
                 ) : (
-                  // Not a link, and not labelled with a phase number: a
+                  // Not a link, and not labelled with a date promise: a
                   // person reading the menu needs to know the page is not
                   // ready, not which sprint it belongs to.
-                  <span className="nav__link nav__link--pending" title={phase('not_built')}>
+                  <span className="nav__link nav__link--pending" title={pending('not_built')}>
                     {page(item.key)}
                   </span>
                 )}

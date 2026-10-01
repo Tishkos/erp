@@ -12,7 +12,7 @@ import {
 } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { matching, pickOne, pickOutcome } from '@domain/pick';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as banks from '@/server/services/bank-cash-accounts';
 import * as sr from '@/server/services/sales-return';

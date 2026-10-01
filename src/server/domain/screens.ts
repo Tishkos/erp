@@ -9,10 +9,10 @@
  * it, the argument happens seven times and the rest is data.
  *
  * This file is the classification, and it is pure data in the domain layer for
- * the same reason the menu tree is (`menu.ts`): three separate things need the
- * same answer — the route that serves a screen, the coverage test that proves
- * none was dropped, and the build tracker that reports what a phase still owes.
- * A classification assembled inside JSX could not be asserted against.
+ * the same reason the menu tree is (`menu.ts`): two separate things need the
+ * same answer — the route that serves a screen, and the coverage test that
+ * proves none was dropped. A classification assembled inside JSX could not be
+ * asserted against.
  *
  * A `document` screen is really a pair — the list and the record behind it,
  * since Appendix A rules 1–4 govern both — so counts treat it as two screens.
@@ -327,11 +327,6 @@ export function catalogueGaps(): { missing: string[]; orphaned: string[] } {
   };
 }
 
-/** The build phase (two digits) an item's `phase` field belongs to. */
-export function phaseNumberOf(item: MenuItem): string {
-  return item.phase.slice(0, 2);
-}
-
 /**
  * The route a screen lives at.
  *
@@ -341,8 +336,8 @@ export function phaseNumberOf(item: MenuItem): string {
  * from its position in Appendix A, `/{section}/{screen}`, so that **every**
  * entry in the approved tree is a real address rather than a dead menu item.
  *
- * Section keys and item keys are both unique — asserted in the Phase 01.12
- * tests — so the derivation cannot collide.
+ * Section keys and item keys are both unique — asserted in the unit tests —
+ * so the derivation cannot collide.
  *
  * Deriving rather than storing matters: the route and the tree cannot drift
  * apart, and a module that later ships its own page changes one field.
@@ -353,23 +348,24 @@ export function routeFor(item: MenuItem, sectionKey: string): string {
 }
 
 /**
- * The screens that read the database today.
+ * The screens that read the database today — the one list the server trusts.
  *
  * A menu item's `href` records where a module *intends* to put its page, and
- * 38 of the 42 name a path no module has written yet. That makes `href` the
- * wrong thing to badge a screen "live" with — the badge has to mean *these are
- * your figures*, and only these are. Every other screen renders the approved
- * design over samples and says so, in as many words.
+ * most name a path no module has written yet. That makes `href` the wrong
+ * thing to badge a screen "live" with — the badge has to mean *these are your
+ * figures*, and only these are. `visibleRoute` (src/server/delivered.ts)
+ * reads this set, so a route that is not here is refused on the URL and
+ * absent from every surface.
  *
- * A route joins this set when its page stops reading `src/sample` and starts
- * calling a service. Until then the honesty banner stays up.
+ * A route joins this set on the day its page reads the real database, as the
+ * company's requirements (docs/requirements/) are built out.
  */
 const DELIVERED: ReadonlySet<string> = new Set([
   '/',
   '/master-data/chart-of-accounts',
   '/inventory/availability',
   '/documents',
-  // Phase 0 — the administration screens read and write the database.
+  // Administration.
   '/administration/company',
   '/administration/users',
   '/administration/managers',
@@ -380,13 +376,13 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/master-data/branches',
   '/master-data/departments',
   '/approvals',
-  // Phase 1 — the accounting core.
+  // The accounting core.
   '/finance/journals',
   '/finance/reversals',
   '/finance/gl-inquiry',
   '/finance/trial-balance',
   '/finance/income-statement',
-  // Phase 2 — the accounting master data.
+  // The accounting master data.
   '/master-data/cost-centres',
   '/master-data/statement-mapping',
   '/sales/customers',
@@ -402,30 +398,30 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/finance/cash-flow',
   '/finance/periods',
   '/master-data/exchange-rates',
-  // Operations build — block 7's Warehouses Report and Warehouse Setup.
+  // The Warehouses Report and Warehouse Setup.
   '/inventory/fifo-valuation',
   '/master-data/warehouses',
-  // Block 7 — Transfer, Opening Stock, Item Reconciliation, Stock Movement.
+  // Transfer, Opening Stock, Item Reconciliation, Stock Movement.
   '/inventory/transfers',
   '/inventory/opening-stock',
   '/inventory/stock-reconciliation',
   '/inventory/stock-movements',
   // The Stock Ledger — the movements with a running balance (2026-09-27).
   '/inventory/stock-ledger',
-  // Block 4 — the Purchase Invoice.
+  // The Purchase Invoice.
   '/purchasing/ap-invoices',
-  // Block 5 — the Sales Invoice.
+  // The Sales Invoice.
   '/sales/ar-invoices',
-  // Block 9 — Sales Returns.
+  // Sales Returns.
   '/sales/sales-returns',
-  // Block 10 — Purchase Returns.
+  // Purchase Returns.
   '/purchasing/goods-returns',
-  // Block 6 — Payments and Receipts.
+  // Payments and Receipts.
   '/purchasing/supplier-payments',
   '/sales/customer-receipts',
-  // Block 8 — Invoice Status Tracking.
+  // Invoice Status Tracking.
   '/inventory/in-transit',
-  // Blocks 2 and 3 — the Account Statement, one screen on each side.
+  // The Account Statement, one screen on each side.
   '/sales/customer-statements',
   '/purchasing/supplier-statements',
   // Where every document that cannot name its own account says which one.
@@ -473,26 +469,4 @@ export function screenRoutes(): ReadonlyMap<string, ScreenRoute> {
     }
   }
   return routes;
-}
-
-export interface PhaseScreen {
-  readonly item: MenuItem;
-  readonly section: MenuSection;
-  readonly archetype: ScreenArchetype;
-}
-
-/** Every screen a build phase owes the frontend, in Appendix A order. */
-export function screensByPhase(): ReadonlyMap<string, readonly PhaseScreen[]> {
-  const byPhase = new Map<string, PhaseScreen[]>();
-  for (const section of MENU) {
-    for (const item of section.items) {
-      const archetype = SCREENS[item.key];
-      if (!archetype) continue;
-      const phase = phaseNumberOf(item);
-      const bucket = byPhase.get(phase) ?? [];
-      bucket.push({ item, section, archetype });
-      byPhase.set(phase, bucket);
-    }
-  }
-  return byPhase;
 }

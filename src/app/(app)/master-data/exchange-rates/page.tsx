@@ -22,7 +22,7 @@ import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { appUser, exchangeRate } from '@/server/db/schema';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as rates from '@/server/services/exchange-rates';
 import { createCurrency, publishRate, setCurrencyActive } from './actions';

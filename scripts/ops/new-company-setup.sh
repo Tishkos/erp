@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Phase 1 — the configuration a fresh company needs before anything can be
+# The configuration a fresh company needs before anything can be
 # posted, applied in one transaction.
 #
 # Four things stop a brand-new install from recording a journal, and none of

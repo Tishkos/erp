@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
 import { visibleMenu } from '@domain/menu';
 import { routeFor } from '@domain/screens';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { desc, eq } from 'drizzle-orm';
 import { appUser, notification } from '@/server/db/schema';
 import { requireContext, withCurrentUser } from '@/server/session';
@@ -27,7 +27,7 @@ export async function AppShell({
 }) {
   const t = await getTranslations();
   const { principal, scope } = await requireContext();
-  // The phase gate: only the accepted phase's screens exist, on every surface.
+  // Only the delivered screens exist, on every surface.
   const sections = visibleMenu(principal)
     .map((section) => ({
       ...section,

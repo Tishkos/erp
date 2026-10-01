@@ -4,7 +4,7 @@ import { AdminPage } from '@/components/admin';
 import { RecordHistory } from '@/components/admin/history';
 import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as journal from '@/server/services/journal';
 

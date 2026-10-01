@@ -54,7 +54,7 @@ export const EVENTS = [
   'money_transfer.client_goods_delivery',
 ] as const;
 
-export interface Phase09World {
+export interface MoneyTransferWorld {
   readonly clerk: ActorContext;
   readonly manager: ActorContext;
   /** A second manager, so maker-checker has somebody to be the checker. */
@@ -109,7 +109,7 @@ export const scopeOf = (ctx: ActorContext) => ({
  *
  * Call after `resetTestData()`.
  */
-export async function buildWorld(): Promise<Phase09World> {
+export async function buildWorld(): Promise<MoneyTransferWorld> {
   // §21 puts storage and a malware scan in the upload pipeline, and an
   // unconfigured deployment refuses uploads rather than accepting them
   // unscanned. KYC evidence goes through that pipeline like everything else, so
@@ -277,7 +277,7 @@ export async function buildWorld(): Promise<Phase09World> {
  * right rather than relying on this.
  */
 export async function approveKycFor(
-  world: Phase09World,
+  world: MoneyTransferWorld,
   partnerId: string,
   options: { expiresOn?: string | null } = {},
 ): Promise<string> {

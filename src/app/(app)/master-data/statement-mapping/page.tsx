@@ -11,7 +11,7 @@ import {
   BALANCE_SIDES,
   type StatementFace,
 } from '@domain/financial-statements';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as statementLines from '@/server/services/statement-lines';
 import { createLine, deleteLine, moveLine, updateLine } from './actions';

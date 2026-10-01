@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 /**
  * Phase 1 · the accounting round trip, in a browser.
  *
- * The phase's own expected result, performed: "Finance can create the Chart of
+ * The accounting core's expected result, performed: "Finance can create the Chart of
  * Accounts, enter and approve a Journal Entry, post it to the General Ledger,
  * review the Trial Balance and produce the basic financial statements."
  *

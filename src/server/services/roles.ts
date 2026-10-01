@@ -14,7 +14,7 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { role, roleGrant, userRole } from '../db/schema';
 import { menuObjects } from '../domain/menu';
-import { phaseObjects } from '../phase-gate';
+import { liveObjects } from '../delivered';
 import { PERMISSION_VERBS, isPermissionVerb, type PermissionVerb } from '../domain/permissions';
 import {
   AdminNotFoundError,
@@ -53,7 +53,7 @@ export async function listAll(tx: Tx) {
   const roles = await tx.select().from(role).orderBy(asc(role.code));
   const grants = await tx.select().from(roleGrant);
   const holders = await tx.select({ roleCode: userRole.roleCode }).from(userRole);
-  const live = phaseObjects();
+  const live = liveObjects();
   return roles.map((r) => ({
     ...r,
     grantCount: grants.filter((g) => g.roleCode === r.code && live.has(g.object)).length,
@@ -151,7 +151,7 @@ export async function setGrants(
   }
 
   // Only the objects the screen offered are replaced. A grant on something
-  // this phase does not show is left alone: an editor cannot revoke what it
+  // this build does not show is left alone: an editor cannot revoke what it
   // never displayed, so saving a role never quietly loses a permission.
   const offered = new Set(options?.offeredObjects ?? [...new Set([...wanted.values()].map((g) => g.object))]);
   if (offered.size > 0) {

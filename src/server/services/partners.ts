@@ -327,7 +327,7 @@ export async function setActive(
   return getByCode(tx, code);
 }
 
-/** Active partners in a role — for the pickers later phases will need. */
+/** Active partners in a role — for the pickers later modules will need. */
 export async function listActiveInRole(tx: Tx, role: PartnerRole) {
   return tx
     .select({

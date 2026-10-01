@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Phase 0 — System Foundation, end to end in a browser.
+ * The system foundation, end to end in a browser.
  *
  * The PDF's expected result, taken literally: "the company can open the ERP,
  * create the organisation structure, create users, assign access, use the

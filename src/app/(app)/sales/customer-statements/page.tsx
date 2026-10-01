@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { AccountStatement } from '@/components/admin/account-statement';
 import type { SearchParams } from '@/components/admin/params';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 
 /** Customer Statements — Operations build, block 2. */
 export const dynamic = 'force-dynamic';

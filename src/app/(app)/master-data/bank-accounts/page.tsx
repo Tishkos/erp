@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { AccountList } from '@/components/admin/bank-cash-account';
 import type { SearchParams } from '@/components/admin/params';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 
 /** Company bank accounts — Phase 2 requirement 5. */
 export const dynamic = 'force-dynamic';

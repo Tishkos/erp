@@ -41,7 +41,7 @@
  * service rather than selling the goods."* A logistics job that cannot name an
  * item, a quantity or a warehouse cannot move stock however it is called, which
  * is a stronger guarantee than any service-layer check: a column that does not
- * exist beats a rule nobody can forget. `tests/unit/phase10-no-company-inventory
+ * exist beats a rule nobody can forget. `tests/unit/logistics-no-company-inventory
  * .test.ts` asserts the absence, so it stays absent.
  *
  * ── Small vocabularies are text + CHECK, not pgEnum ─────────────────────────

@@ -2,7 +2,7 @@ import { getTranslations } from 'next-intl/server';
 import { MENU } from '@domain/menu';
 import { PERMISSION_VERBS } from '@domain/permissions';
 import { routeFor, screenRoutes } from '@domain/screens';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { Pill, Submit, SubmitRow, admin as s } from './index';
 
 /**
@@ -34,7 +34,7 @@ export async function GrantMatrix({
     getTranslations('action'),
   ]);
 
-  // Only the accepted phase's screens can be granted: a permission over a
+  // Only the delivered screens can be granted: a permission over a
   // section that does not exist yet would be a promise the system cannot keep.
   const sections = MENU.map((section) => {
     const objects = new Map<string, string[]>();
@@ -59,7 +59,7 @@ export async function GrantMatrix({
         <input key={k} name={k} type="hidden" value={v} />
       ))}
       {/* What this editor showed. The service replaces only these objects, so
-          a grant belonging to a phase that is not on screen survives a save. */}
+          a grant whose screen is not on this page survives a save. */}
       {sections.flatMap((section) => section.rows.map((r) => r.object)).map((object) => (
         <input key={object} name="offered" type="hidden" value={object} />
       ))}

@@ -184,10 +184,10 @@ async function apInvoice(
 }
 
 /** The whole reconciliation for one side, as the screen assembles it. */
-async function reconciliation(side: openItems.Side, partyCode?: string) {
+async function reconciliation(side: openItems.Side, partyCode?: string, asOf = AS_OF) {
   return withScope(scope(manager), async (tx) => {
     const narrow = { branchCode: BAGHDAD, ...(partyCode ? { partyCode } : {}) };
-    const items = await openItems.openItems(tx, manager.principal, side, AS_OF, {
+    const items = await openItems.openItems(tx, manager.principal, side, asOf, {
       ...narrow,
       outstandingOnly: true,
     });
@@ -200,8 +200,8 @@ async function reconciliation(side: openItems.Side, partyCode?: string) {
      * the report would double-count inside the very figures meant to prove it
      * does not.
      */
-    const everyItem = await openItems.openItems(tx, manager.principal, side, AS_OF, narrow);
-    const balances = await openItems.ledgerBalances(tx, manager.principal, side, AS_OF, narrow);
+    const everyItem = await openItems.openItems(tx, manager.principal, side, asOf, narrow);
+    const balances = await openItems.ledgerBalances(tx, manager.principal, side, asOf, narrow);
     const rows = openItems.reconcile(everyItem, balances);
     return { items, rows, totals: openItems.reconciliationTotals(rows) };
   });
@@ -375,8 +375,9 @@ describe('ops 17 · a debt raised by journal is still a debt', () => {
      * receipt credited somewhere else entirely.
      *
      * The old ageing reported "nothing outstanding" and was believed. This
-     * one reports 5,000 unexplained and does not tie — which is the report
-     * doing its job.
+     * one reports the 5,000 as a non-invoice debit row of its own — which is
+     * the report doing its job: the figure a reader must chase is on the
+     * page, not silently absent.
      */
     const closing = await closingOf('customer', customer.code);
     const { totals } = await reconciliation('customer');
@@ -384,7 +385,10 @@ describe('ops 17 · a debt raised by journal is still a debt', () => {
     expect(closing).toBe(5_000);
     expect(Number(totals.documentsIqd)).toBe(0);
     expect(Number(totals.unexplainedIqd)).toBe(5_000);
-    expect(totals.ties, 'and it says so rather than reporting nought').toBe(false);
+    expect(
+      Number(totals.otherNonInvoiceDebitsIqd),
+      'and it shows the 5,000 rather than reporting nought',
+    ).toBe(5_000);
     expect(Number(totals.ledgerIqd)).toBe(closing);
   });
 });
@@ -466,7 +470,11 @@ describe('ops 17 · a reversal takes both sides down together', () => {
     );
 
     const after = await closingOf('customer', customer.code);
-    const { totals } = await reconciliation('customer', customer.code);
+    // The reversal is dated the day it is made (§14.6) — after the suite's
+    // 30 September as-of. As at 30 September the debt genuinely stood, so
+    // the reconciliation is read to the end of the year, the same window
+    // the statement's closing balance is read over.
+    const { totals } = await reconciliation('customer', customer.code, WINDOW.to);
 
     expect(after, 'the statement forgets it').toBe(0);
     expect(Number(totals.ledgerIqd), 'and so does the ageing').toBe(0);

@@ -8,7 +8,7 @@ import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { can } from '@domain/permissions';
 import { POSTING_MAP, eventKey, mappingAccountEligible } from '@domain/posting-map';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as posting from '@/server/services/posting';

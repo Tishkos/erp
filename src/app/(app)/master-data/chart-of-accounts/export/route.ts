@@ -1,5 +1,5 @@
 import { exportRows } from '@/server/services/list';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { registerAllLists } from '@/server/lists';
 import { withCurrentUser } from '@/server/session';
 import { toCsv } from '@/server/services/csv';

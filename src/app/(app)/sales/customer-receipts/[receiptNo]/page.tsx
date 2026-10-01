@@ -11,7 +11,7 @@ import { printSheet } from '@/server/print/sheet';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { toDecimalString } from '@domain/money';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as receipts from '@/server/services/customer-receipt';
 import { allocateOldestFirst, allocateReceipt, approveReceipt, postReceipt } from '../actions';

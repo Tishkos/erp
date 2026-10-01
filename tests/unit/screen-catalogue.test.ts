@@ -20,7 +20,6 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { MENU, allMenuItems } from '@domain/menu';
-import { ENTITY_COLUMNS, specFor } from '@/sample/specs';
 import {
   SCREENS,
   SCREEN_ARCHETYPES,
@@ -29,7 +28,6 @@ import {
   routeFor,
   screenCount,
   screenRoutes,
-  screensByPhase,
 } from '@domain/screens';
 
 const APP = join(process.cwd(), 'src', 'app');
@@ -81,9 +79,9 @@ describe('the screen catalogue covers the approved tree', () => {
   // Balance Sheet, Changes in Equity and Cash Flow Statement each on its own
   // screen (2026-08-31), which is grouping refined, not function added.
   //
-  // Plus two for Phase 2: Cash Accounts beside Bank Accounts, because the
+  // Plus two beside the accounting master data: Cash Accounts beside Bank Accounts, because the
   // questions each kind asks are different; and Payment Methods, which the
-  // phase requires and Appendix A did not list at all.
+  // books require and Appendix A did not list at all.
   //
   // Less five, by direction (2026-08-31): no screen appears under two
   // headings. Appendix A listed the partners under CRM *and* Master Data,
@@ -183,7 +181,7 @@ describe('every screen has one address', () => {
       '/administration/users',
       '/approvals',
       '/documents',
-      // Phase 1 — the accounting core.
+      // The accounting core.
       '/finance/balance-sheet',
       '/finance/cash-flow',
       '/finance/changes-in-equity',
@@ -214,7 +212,7 @@ describe('every screen has one address', () => {
       '/master-data/branches',
       '/master-data/cash-accounts',
       '/master-data/chart-of-accounts',
-      // Phase 2 — the accounting master data.
+      // The accounting master data.
       '/master-data/cost-centres',
       '/master-data/departments',
       '/master-data/exchange-rates',
@@ -270,15 +268,6 @@ describe('the navigation offers no page that does not exist', () => {
   });
 });
 
-describe('the build tracker reports what each phase owes the frontend', () => {
-  it('attributes every screen to the phase that delivers it', () => {
-    const byPhase = screensByPhase();
-    const counted = [...byPhase.values()].reduce((sum, screens) => sum + screens.length, 0);
-    expect(counted).toBe(222);
-    for (const phase of byPhase.keys()) expect(phase).toMatch(/^\d\d$/);
-  });
-});
-
 /**
  * The keys the catalogue test cannot see.
  *
@@ -299,20 +288,9 @@ describe('§25 · the keys built at render time all resolve', () => {
     readFileSync(join(process.cwd(), 'messages', 'ar.json'), 'utf8'),
   ) as Record<string, Record<string, Record<string, unknown>>>;
 
-  const METRIC_KEYS = [
-    ...new Set(
-      MENU.flatMap((section) =>
-        section.items.flatMap((item) => specFor(item.key, section.key).metrics),
-      ),
-    ),
-  ];
-
   const cases: readonly (readonly [string, readonly string[]])[] = [
-    ['screen.purpose', MENU.map((section) => section.key)],
     ['screen.about', [...SCREEN_ARCHETYPES]],
     ['screen.archetype', [...SCREEN_ARCHETYPES]],
-    ['screen.metric', METRIC_KEYS],
-    ['column', [...new Set(Object.values(ENTITY_COLUMNS).flatMap((set) => set.map((c) => c.key)))]],
   ];
 
   for (const [namespace, keys] of cases) {

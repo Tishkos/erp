@@ -1,5 +1,5 @@
 import { can } from '@domain/permissions';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { withCurrentUser } from '@/server/session';
 import * as audit from '@/server/services/audit';
 import * as coa from '@/server/services/chart-of-accounts';

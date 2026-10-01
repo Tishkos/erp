@@ -14,7 +14,7 @@ import { printSheet } from '@/server/print/sheet';
 import { Panel } from '@/components/ui';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as ar from '@/server/services/ar-invoice';
 import * as items from '@/server/services/items';

@@ -306,12 +306,12 @@ function savedSettingsFrom(value: AppearancePreferences): UserAppearanceSettings
 
 function PendingItem({ item }: { readonly item: MenuItem }) {
   const page = useTranslations('page');
-  const phase = useTranslations('phase');
+  const pending = useTranslations('screen');
 
   return (
     <span
       className="erp-menu-item erp-menu-item--pending"
-      title={phase('not_built')}
+      title={pending('not_built')}
     >
       <span className="erp-menu-item__label">{page(item.key)}</span>
     </span>
@@ -329,7 +329,7 @@ function ModuleContents({
 }) {
   const nav = useTranslations('nav');
   const page = useTranslations('page');
-  const phase = useTranslations('phase');
+  const pending = useTranslations('screen');
 
   return (
     <div className="erp-module-contents">
@@ -340,7 +340,7 @@ function ModuleContents({
             {section.items.map((item) => {
               // Every item in the approved tree has an address: the one its
               // module declared, or the one the screen catalogue derives. An
-              // item still drawn over samples keeps its phase badge, so the
+              // item that is not built yet keeps its pending badge, so the
               // tree says which pages are previews without refusing to open
               // them — which is what it used to do, for 176 of 218 items.
               const href = routeFor(item, section.key);
@@ -352,7 +352,7 @@ function ModuleContents({
                     className={`erp-menu-item erp-menu-item--link${preview ? ' erp-menu-item--preview' : ''}`}
                     href={href}
                     onClick={onNavigate}
-                    title={preview ? phase('not_built') : undefined}
+                    title={preview ? pending('not_built') : undefined}
                   >
                     <span className="erp-menu-item__label">{page(item.key)}</span>
                   </Link>
@@ -385,7 +385,7 @@ export function ErpShell({
 }: ErpShellProps) {
   const shell = useTranslations('shell');
   const page = useTranslations('page');
-  const phase = useTranslations('phase');
+  const pending = useTranslations('screen');
   const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
@@ -800,7 +800,7 @@ export function ErpShell({
                 ) : (
                   <span
                     className="erp-launcher__item erp-launcher__item--pending"
-                    title={phase('not_built')}
+                    title={pending('not_built')}
                     key={module.key}
                   >
                     {content}

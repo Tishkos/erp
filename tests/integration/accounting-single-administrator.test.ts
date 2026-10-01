@@ -349,7 +349,7 @@ describe('the four things that stop a fresh company posting', () => {
 // ---------------------------------------------------------------------------
 describe('once those four are configured', () => {
   beforeEach(async () => {
-    // Exactly what scripts/ops/phase1-setup.sh applies, in the same order.
+    // Exactly what scripts/ops/new-company-setup.sh applies, in the same order.
     await ownerPool.query(
       `insert into department (code, name, is_finance) values ('FIN','Finance',true)`,
     );
