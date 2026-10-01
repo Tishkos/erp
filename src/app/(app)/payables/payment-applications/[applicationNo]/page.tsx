@@ -36,6 +36,7 @@ import {
   sendApplication,
 } from '../actions';
 import { STATUS_CHIP, statusKey } from '../status';
+import { windowTone } from '../../window-tone';
 
 /**
  * One payment application — REQ-AP-001 §21.7.
@@ -113,7 +114,7 @@ export default async function PaymentApplicationPage({
       can(principal, 'reverse_cancel', applications.PERMISSION_OBJECT));
   const failing = checks.filter((check) => check.outcome === 'fail');
 
-  const statusChip = STATUS_CHIP[row.status] ?? 'draft';
+  const statusChip = windowTone(STATUS_CHIP[row.status] ?? 'draft');
   const documentHref =
     found.documentKind === 'payment' && found.documentNo
       ? `/payables/supplier-payments/${encodeURIComponent(found.documentNo)}`
@@ -169,7 +170,7 @@ export default async function PaymentApplicationPage({
         '—'
       ),
       ...(payee
-        ? { status: payee.approvalStatus === 'approved' && payee.isActive ? 'settled' : 'rejected' }
+        ? { status: payee.approvalStatus === 'approved' && payee.isActive ? 'posted' : 'rejected' }
         : {}),
     },
     { label: t('funding'), value: <bdi dir="auto">{found.fundingName}</bdi> },

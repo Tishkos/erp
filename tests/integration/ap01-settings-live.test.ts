@@ -135,14 +135,22 @@ describe('ap01 · the limits are settings, and settings are live', () => {
     expect(loud.opened).toBe(1);
   });
 
-  it('the seeded later-stage checks sit inert, named, until their build lands', async () => {
+  it('every seeded check is implemented; a check with no clock stays a named row', async () => {
     const run = await withScope(superScope(), (tx) => sweep.runSweep(tx, TODAY));
-    // Stage 3 (0232) implemented the payment clocks and Stage 4 (0233) the
-    // PD clocks; the container clocks wait for Stage 5.
-    expect(run.skipped).not.toContain('swift_pending');
-    expect(run.skipped).not.toContain('invoice_unfunded');
-    expect(run.skipped).not.toContain('pd_not_validated');
-    expect(run.skipped).not.toContain('pd_expired');
-    expect(run.skipped).toContain('container_eta_passed');
+    // Stage 3 (0232) implemented the payment clocks, Stage 4 (0233) the PD
+    // clocks and Stage 5 (0234) the container clocks. The receipt's claim is
+    // opened by the receipt itself, not by a clock, so it stays a named row.
+    for (const code of [
+      'swift_pending',
+      'invoice_unfunded',
+      'pd_not_validated',
+      'pd_expired',
+      'container_eta_passed',
+      'at_port',
+      'partly_received',
+    ]) {
+      expect(run.skipped).not.toContain(code);
+    }
+    expect(run.skipped).toContain('receipt_variance');
   });
 });

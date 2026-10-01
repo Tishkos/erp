@@ -48,6 +48,10 @@ describe('ap01 · every service that touches a payable writes its story', () => 
     // below, or its changes happen off the record (§7.2).
     expect(rows.map((row) => row.table_name)).toEqual([
       'ap_invoice',
+      // Stage 5 (0234): the B/L, every container move and the receipt write
+      // their shipment / warehouse events — ap05-shipment.
+      'bill_of_lading',
+      'container_receipt',
       // Stage 4 (0233): register / status / note / re-register each write
       // their PD_ event — ap04-customs-pd.
       'customs_pd',
@@ -65,6 +69,7 @@ describe('ap01 · every service that touches a payable writes its story', () => 
       // Stage 2 (0230): the confirmation writes SERVICE_RECEIPT_CREATED /
       // SERVICE_CONFIRMED — ap02-service-flow.
       'service_receipt',
+      'shipment_container',
       // Stage 2 (0230): link / approve / pay / settle all write through
       // payables.onAdvanceEvent — ap02-advance-link.
       'supplier_advance',

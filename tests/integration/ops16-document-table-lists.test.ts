@@ -44,7 +44,7 @@ async function documentTables(): Promise<string[]> {
       -- are table names by convention (stock-operations, ap-invoice, ...).
       select unnest(array['ap_invoice', 'ar_invoice', 'sales_return', 'goods_return',
                           'stock_transfer', 'stock_adjustment', 'opening_stock',
-                          'supplier_shipment']) as table_name
+                          'supplier_shipment', 'container_receipt']) as table_name
     ),
     headers as (
       -- The header of every line table found above: the line hangs off it.

@@ -16,6 +16,9 @@ import { expect, test, type Page } from '@playwright/test';
  *        import's Payments section; the maker cannot approve; the accounting
  *        manager approves and sends under a logged override; the register
  *        shows it waiting for the bank.
+ *   §17  Stage 5: a B/L entered from the import page with its containers
+ *        pasted in; one container moved to the port and received into a
+ *        warehouse (out of transit); the B/L counts "1 of 2 received".
  *
  * At desktop width in English and at mobile width in real Arabic (the
  * `erp-locale` cookie — every label must exist). Codes carry a per-run suffix
@@ -41,6 +44,30 @@ async function noSidewaysScroll(page: Page) {
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   expect(overflow).toBeLessThanOrEqual(1);
+}
+
+/**
+ * The accounts an item carries itself (where its stock is held, what it cost
+ * when sold) — a posted import needs them. Set once, as the invoice-to-
+ * statement spec does.
+ */
+async function itemAccounts(page: Page, code = 'ITM-SEED') {
+  await page.goto(`/master-data/items/${code}`);
+  const form = page.locator('form:has(select[name="inventoryAccountId"])').first();
+  await expect(form).toBeVisible({ timeout: 60_000 });
+  let changed = false;
+  for (const field of ['inventoryAccountId', 'cogsAccountId']) {
+    const select = form.locator(`select[name="${field}"]`);
+    if ((await select.inputValue()) !== '') continue;
+    const first = await select.locator('option:not([value=""])').first().getAttribute('value');
+    if (!first) continue;
+    await select.selectOption(first);
+    changed = true;
+  }
+  if (changed) {
+    await form.locator('button[type="submit"]').first().click();
+    await page.waitForLoadState('networkidle');
+  }
 }
 
 test.describe('A22 · payables in a browser', () => {
@@ -268,6 +295,75 @@ test.describe('A22 · payables in a browser', () => {
     await expect(page.getByRole('row', { name: new RegExp(pdNo) })).toContainText('Totally written off');
   });
 
+  test('Stage 5 · a B/L with two containers, one moved to port and received', async ({ page }) => {
+    test.setTimeout(300_000);
+    await signIn(page);
+    // Container numbers are unique while in transit; this run's are its own.
+    const digits = String(Date.now()).slice(-6);
+    const first = `EEXU${digits}1`;
+    const second = `EEXU${digits}2`;
+    const blNo = `BL-E2E-${RUN}`;
+    await itemAccounts(page);
+
+    // The import, born at its invoice and posted: the goods wait in transit.
+    await page.goto('/payables/invoices/new');
+    await page.getByLabel('Supplier Code').fill('SUP-00001');
+    await page.locator('[name="item_code_0"]').fill('ITM-SEED');
+    await page.getByLabel('Quantity').first().fill('4');
+    await page.getByLabel('Unit Price').first().fill('1500');
+    await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
+    await page.locator('input[name="is_import"]').check();
+    await page.getByRole('button', { name: 'Create' }).click();
+    await page.waitForURL(
+      (url) => url.pathname.startsWith('/payables/invoices/') && !url.pathname.endsWith('/new'),
+      { timeout: 120_000 },
+    );
+    await page.getByRole('button', { name: 'Send for approval', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Approve and post', exact: true })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole('button', { name: 'Approve and post', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Approve and post', exact: true })).toHaveCount(0, { timeout: 60_000 });
+    await page.getByRole('link', { name: 'Import tracking' }).click();
+    await page.waitForURL(/\/payables\/IMP-/);
+
+    // §17.1 — the B/L from the import page, its containers pasted in.
+    await expect(page.getByRole('heading', { name: /Shipment/ })).toBeVisible();
+    await page.getByRole('button', { name: 'New B/L' }).click();
+    const create = page.getByRole('dialog');
+    await create.getByRole('textbox', { name: 'B/L no.' }).fill(blNo);
+    await create.getByLabel('B/L date').fill('2026-09-20');
+    await create.getByLabel('ETA').fill('2026-10-20');
+    await create.getByRole('textbox', { name: 'Containers' }).fill(`${first}\n${second}`);
+    await create.getByRole('button', { name: 'New B/L' }).click();
+    await expect(page.getByRole('link', { name: blNo })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('0 of 2 received').first()).toBeVisible();
+
+    // §17.3 — one container reaches the port.
+    await page.getByRole('link', { name: first }).click();
+    await expect(page.getByRole('heading', { level: 1, name: first })).toBeVisible();
+    await page.getByRole('button', { name: 'Change stage' }).click();
+    const stage = page.getByRole('dialog');
+    await stage.getByLabel('Stage').selectOption('at_port');
+    await stage.getByRole('button', { name: 'Change stage' }).click();
+    await expect(page.getByText('At port ·').first()).toBeVisible({ timeout: 30_000 });
+
+    // §18 — received whole into WH-HQ: out of transit, at the invoice's cost.
+    await page.getByRole('button', { name: 'Receive container' }).click();
+    const receive = page.getByRole('dialog');
+    await receive.getByLabel('Warehouse').selectOption('WH-HQ');
+    await receive.getByRole('button', { name: 'Receive container' }).click();
+    await expect(page.getByText(/^Received ·/).first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/^CREC-/).first()).toBeVisible();
+
+    // The B/L counts it; the register finds it among the received.
+    await page.goto(`/payables/shipments/${encodeURIComponent(blNo)}`);
+    await expect(page.getByRole('heading', { level: 1, name: `B/L ${blNo}` })).toBeVisible();
+    await expect(page.getByText('1 of 2 received').first()).toBeVisible();
+    await page.goto(`/payables/containers?view=received&q=${first}`);
+    await expect(page.getByRole('row', { name: new RegExp(first) })).toBeVisible();
+    await page.goto(`/payables/containers?view=in_transit&q=${second}`);
+    await expect(page.getByRole('row', { name: new RegExp(second) })).toBeVisible();
+  });
+
   test('holds the line at mobile width, in Arabic, right to left', async ({ page, context }) => {
     test.setTimeout(120_000);
     await context.addCookies([{ name: 'erp-locale', value: 'ar', domain: 'localhost', path: '/' }]);
@@ -302,6 +398,13 @@ test.describe('A22 · payables in a browser', () => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await noSidewaysScroll(page);
     await page.goto('/payables/pd/asycuda');
+    await noSidewaysScroll(page);
+    // Stage 5's registers too.
+    await page.goto('/payables/shipments');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await noSidewaysScroll(page);
+    await page.goto('/payables/containers?view=all');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await noSidewaysScroll(page);
     const application = page.locator('table tbody tr td a').first();
     await page.goto('/payables/payment-applications');

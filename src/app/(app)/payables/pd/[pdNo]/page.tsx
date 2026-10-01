@@ -28,6 +28,7 @@ import * as banks from '@/server/services/banks';
 import * as customs from '@/server/services/customs-pd';
 import { addPdNote, attachToPd, changePdStatus, reRegisterPd } from '../actions';
 import { pdChip } from '../status';
+import { windowTone } from '../../window-tone';
 import { STATUS_CHIP, statusKey } from '../../payment-applications/status';
 
 /**
@@ -78,6 +79,8 @@ export default async function PdPage({
   if (!found) notFound();
   const { pd, status } = found;
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
+  const ps = (code: string, name: string) => (locale !== 'en' && t.has(`ps.${code}`) ? t(`ps.${code}`) : name);
+
   const today = new Date().toISOString().slice(0, 10);
   const hidden = { pd_no: pd.pdNo, year: String(pd.registrationYear ?? '') };
   const chip = pdChip({ ...status, statusCode: pd.statusCode });
@@ -86,7 +89,7 @@ export default async function PdPage({
 
   const fields: DocumentField[] = [
     { label: t('pd_no'), value: <bdi dir="ltr">{pd.pdNo}</bdi> },
-    { label: t('status'), value: `${status.name} · ${day(pd.statusDate)}`, status: chip },
+    { label: t('status'), value: `${ps(pd.statusCode, status.name)} · ${day(pd.statusDate)}`, status: windowTone(chip) },
     {
       label: t('import'),
       value: found.owner ? (
@@ -199,7 +202,7 @@ export default async function PdPage({
                     <Select
                       label={t('new_status')}
                       name="status_code"
-                      options={nextStatuses.map((row) => ({ value: row.code, label: row.name }))}
+                      options={nextStatuses.map((row) => ({ value: row.code, label: ps(row.code, row.name) }))}
                       required
                     />
                     <Field defaultValue={today} label={t('effective_date')} name="effective_date" required type="date" />
@@ -284,7 +287,7 @@ export default async function PdPage({
           <tbody>
             {found.history.map((row) => (
               <tr key={row.id}>
-                <td>{found.statusName(row.statusCode)}</td>
+                <td>{ps(row.statusCode, found.statusName(row.statusCode))}</td>
                 <td>
                   <bdi dir="ltr">{day(row.effectiveDate)}</bdi>
                 </td>

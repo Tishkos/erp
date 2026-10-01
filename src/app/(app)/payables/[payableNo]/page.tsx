@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import {
   AdminPage,
+  Checkbox,
   Field,
   FilterRow,
   Flash,
@@ -23,7 +24,7 @@ import { SectionTabs } from '@/components/admin/section-tabs';
 import { StopDialog } from '@/components/admin/stop-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
+import { formatBusinessDate, formatMoney, formatQuantity, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { PENDING_REASON } from '@domain/payables';
 import { visibleRoute } from '@/server/delivered';
@@ -33,6 +34,7 @@ import * as payables from '@/server/services/payables';
 import * as paymentApplications from '@/server/services/payment-applications';
 import * as customs from '@/server/services/customs-pd';
 import * as banksService from '@/server/services/banks';
+import * as shipmentsService from '@/server/services/shipments';
 import * as settingsService from '@/server/services/payables-settings';
 import * as contracts from '@/server/services/recurring-contracts';
 import * as serviceReceipts from '@/server/services/service-receipt';
@@ -51,6 +53,8 @@ import {
 import { createApplication, planInstalmentsAction } from '../payment-applications/actions';
 import { registerPd } from '../pd/actions';
 import { pdChip } from '../pd/status';
+import { createBlAction } from '../shipments/actions';
+import { containerChip } from '../containers/status';
 import { STATUS_CHIP, statusKey } from '../payment-applications/status';
 import { toDecimalString } from '@domain/money';
 
@@ -77,12 +81,14 @@ export default async function PayablePage({
   if (!visibleRoute('/payables')) notFound();
 
   const { payableNo } = await params;
-  const [t, pa, cp, admin, pageT, locale, context, outcome, query] = await Promise.all([
+  const [t, pa, cp, sh, admin, pageT, statusT, locale, context, outcome, query] = await Promise.all([
     getTranslations('admin.payables'),
     getTranslations('admin.payment_applications'),
     getTranslations('admin.customs_pd'),
+    getTranslations('admin.shipments'),
     getTranslations('admin'),
     getTranslations('page'),
+    getTranslations('status'),
     getLocale(),
     requireContext(),
     outcomeOf(searchParams),
@@ -98,6 +104,8 @@ export default async function PayablePage({
   const mayPay = can(principal, 'create', paymentApplications.PERMISSION_OBJECT);
   const mayViewPd = can(principal, 'view', customs.PERMISSION_OBJECT);
   const mayRegisterPd = can(principal, 'create', customs.PERMISSION_OBJECT);
+  const mayViewShipment = can(principal, 'view', shipmentsService.CONTAINER_OBJECT);
+  const mayCreateBl = can(principal, 'create', shipmentsService.BL_OBJECT);
 
   const laneFilter = typeof query.lane === 'string' && query.lane ? query.lane : null;
 
@@ -132,8 +140,16 @@ export default async function PayablePage({
         isImport && mayRegisterPd && !view.payable.cancelledAt && !view.payable.closedAt
           ? { banks: await banksService.listActive(tx), statuses: await customs.statuses(tx) }
           : null;
+      // §17 — the Shipment & containers section.
+      const shipment = isImport && mayViewShipment ? await shipmentsService.forPayable(tx, view.payable.id) : null;
+      const blPorts =
+        isImport && mayCreateBl && !view.payable.cancelledAt && !view.payable.closedAt
+          ? await shipmentsService.ports(tx)
+          : null;
       return {
         ...view,
+        shipment,
+        blPorts,
         log,
         config,
         people,
@@ -172,6 +188,8 @@ export default async function PayablePage({
     pickers,
     pds,
     pdPickers,
+    shipment,
+    blPorts,
   } = found;
   const openPay = query.pay === '1';
 
@@ -213,7 +231,7 @@ export default async function PayablePage({
   const stageChip = row.cancelledAt
     ? 'cancelled'
     : row.closedAt
-      ? 'closed'
+      ? 'posted'
       : row.onHold
         ? 'rejected'
         : 'submitted';
@@ -244,7 +262,7 @@ export default async function PayablePage({
     { label: t('document_date'), value: <bdi dir="ltr">{day(row.documentDate)}</bdi> },
     { label: t('due_date'), value: <bdi dir="ltr">{day(row.dueDate)}</bdi> },
     { label: t('col_branch'), value: <bdi dir="ltr">{row.branchCode}</bdi> },
-    { label: t('quantity'), value: row.quantity ?? '—' },
+    { label: t('quantity'), value: row.quantity ? <bdi dir="ltr">{formatQuantity(row.quantity, locale as Locale)}</bdi> : '—' },
     { label: t('terms'), value: row.paymentTermsText ?? '—', wide: true },
     { label: t('rail'), value: <bdi dir="auto">{railText}</bdi>, wide: true },
     { label: t('description'), value: <bdi dir="auto">{row.description}</bdi>, wide: true },
@@ -357,7 +375,9 @@ export default async function PayablePage({
                   <bdi dir="ltr">{line.itemCode ?? '—'}</bdi>
                 </td>
                 <td>{line.description}</td>
-                <td className={s.sapNum}>{line.quantity ?? '—'}</td>
+                <td className={s.sapNum}>
+                  {line.quantity ? <bdi dir="ltr">{formatQuantity(line.quantity, locale as Locale)}</bdi> : '—'}
+                </td>
                 <td className={s.sapNum}>
                   <bdi dir="ltr">{line.unitPrice ? money(line.unitPrice) : '—'}</bdi>
                 </td>
@@ -510,7 +530,7 @@ export default async function PayablePage({
                     </td>
                     <td>
                       <span className={`status status--${invoice.status}`} data-status={invoice.status}>
-                        {invoice.status}
+                        {statusT.has(invoice.status) ? statusT(invoice.status) : invoice.status}
                       </span>
                     </td>
                   </tr>
@@ -953,7 +973,7 @@ export default async function PayablePage({
                       <td className={s.sapNum}>{pd.isTerminal || pd.superseded ? '—' : pd.daysLeft}</td>
                       <td>
                         <span className={`status status--${pdChip(pd)}`} data-status={pdChip(pd)}>
-                          {pd.statusName}
+                          {cp.has(`ps.${pd.statusCode}`) && locale !== 'en' ? cp(`ps.${pd.statusCode}`) : pd.statusName}
                         </span>
                         {pd.superseded ? <div className="muted">{cp('superseded')}</div> : null}
                       </td>
@@ -995,12 +1015,158 @@ export default async function PayablePage({
                           name="status_code"
                           options={pdPickers.statuses
                             .filter((status) => status.active && !status.isTerminal)
-                            .map((status) => ({ value: status.code, label: status.name }))}
+                            .map((status) => ({ value: status.code, label: locale !== 'en' && cp.has(`ps.${status.code}`) ? cp(`ps.${status.code}`) : status.name }))}
                         />
                       </Grid>
                       <Field id="pd-register-note" label={cp('note')} name="note" wide />
                       <SubmitRow>
                         <Submit label={cp('register')} />
+                      </SubmitRow>
+                    </Form>
+                  </NewRecordDialog>
+                </SubmitRow>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {/* ── Shipment & containers (§17): the B/Ls and every container on
+          its own, "X of Y received". Imports only. ── */}
+      {shipment ? (
+        <section aria-labelledby="payable-shipment-title" className={s.sapDoc} id="shipment">
+          <div className={s.sapWindow}>
+            <h2 className={s.sapTitle} id="payable-shipment-title">
+              <span>{sh('section_title')}</span>
+              <span className={s.sapTitleMeta}>
+                {sh('x_of_y', { received: shipment.progress.received, total: shipment.progress.total })}
+              </span>
+            </h2>
+            <div className={s.sapTableWrap}>
+              <table aria-label={sh('bls')} className={s.sapTable}>
+                <thead>
+                  <tr>
+                    <th scope="col">{sh('bl_no')}</th>
+                    <th scope="col">{sh('bl_date')}</th>
+                    <th scope="col">{sh('vessel')}</th>
+                    <th scope="col">{sh('port_of_discharge')}</th>
+                    <th scope="col">{sh('eta')}</th>
+                    <th scope="col">{sh('received_x_of_y')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shipment.bls.length === 0 ? (
+                    <tr>
+                      <td className={s.sapEmptyRow} colSpan={6}>
+                        {sh('none_for_import')}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {shipment.bls.map((bl) => (
+                    <tr key={bl.id}>
+                      <td>
+                        <Link className={s.sapLink} href={`/payables/shipments/${encodeURIComponent(bl.blNo)}`}>
+                          <bdi dir="ltr">{bl.blNo}</bdi>
+                        </Link>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{day(bl.blDate)}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="auto">{[bl.vessel, bl.voyage].filter(Boolean).join(' / ') || '—'}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="auto">{bl.portName ?? '—'}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{day(bl.eta)}</bdi>
+                      </td>
+                      <td>{sh('x_of_y', { received: bl.received, total: bl.total })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {shipment.containers.length > 0 ? (
+              <div className={s.sapTableWrap}>
+                <table aria-label={sh('containers')} className={s.sapTable}>
+                  <thead>
+                    <tr>
+                      <th scope="col">{sh('container_no')}</th>
+                      <th scope="col">{sh('bl_no')}</th>
+                      <th scope="col">{sh('eta')}</th>
+                      <th scope="col">{sh('status')}</th>
+                      <th scope="col">{sh('warehouse')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shipment.containers.map((container) => (
+                      <tr key={container.id}>
+                        <td>
+                          <Link
+                            className={s.sapLink}
+                            href={`/payables/containers/${encodeURIComponent(container.containerNo)}${container.receivedOn ? `?id=${container.id}` : ''}`}
+                          >
+                            <bdi dir="ltr">{container.containerNo}</bdi>
+                          </Link>
+                        </td>
+                        <td>
+                          <bdi dir="ltr">{container.blNo}</bdi>
+                        </td>
+                        <td>
+                          <bdi dir="ltr">{day(container.eta)}</bdi>
+                        </td>
+                        <td>
+                          <span className={`status status--${containerChip(container)}`} data-status={containerChip(container)}>
+                            {locale !== 'en' && sh.has(`cs.${container.statusCode}`) ? sh(`cs.${container.statusCode}`) : container.statusName}
+                          </span>
+                        </td>
+                        <td>
+                          <bdi dir="ltr">{container.warehouseCode ?? '—'}</bdi>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            {blPorts ? (
+              <div className={s.sapBody}>
+                <SubmitRow>
+                  <NewRecordDialog
+                    buttonLabel={sh('new_bl')}
+                    closeLabel={admin('close')}
+                    title={sh('new_bl_for', { payableNo: row.payableNo })}
+                    wide
+                  >
+                    <Form action={createBlAction}>
+                      <Hidden name="payable_no" value={row.payableNo} />
+                      <Hidden name="back" value={`/payables/${encodeURIComponent(row.payableNo)}`} />
+                      <Grid>
+                        <Field label={sh('bl_no')} name="bl_no" required />
+                        <Field label={sh('bl_date')} name="bl_date" required type="date" />
+                        <Field label={sh('eta')} name="eta" type="date" />
+                        <Field label={sh('vessel')} name="vessel" />
+                        <Field label={sh('voyage')} name="voyage" />
+                        <Select
+                          emptyLabel="—"
+                          label={sh('port_of_discharge')}
+                          name="port_of_discharge"
+                          options={blPorts.map((port) => ({ value: port.code, label: port.name }))}
+                        />
+                        <Field hint={sh('size_type_hint')} label={sh('size_type')} name="size_type" />
+                      </Grid>
+                      <Field
+                        hint={sh('containers_hint')}
+                        id="bl-containers"
+                        label={sh('containers')}
+                        name="containers"
+                        type="textarea"
+                        wide
+                      />
+                      <Checkbox defaultChecked={shipment.bls.length === 0} label={sh('spread_lines')} name="spread_lines" />
+                      <SubmitRow>
+                        <Submit label={sh('new_bl')} />
                       </SubmitRow>
                     </Form>
                   </NewRecordDialog>

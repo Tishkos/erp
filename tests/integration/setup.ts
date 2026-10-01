@@ -460,6 +460,17 @@ export async function resetTestData(): Promise<void> {
     // Stage 3 (0232) — applications and the plan they pay; fixture banks.
     await client.query('delete from payment_application');
     await client.query('delete from payable_instalment');
+    // Stage 5 (0234) — B/Ls, containers and their receipts (append-only in
+    // production: a receipt is the record of what arrived).
+    await client.query('delete from container_receipt_line');
+    await client.query('delete from container_receipt');
+    await client.query('delete from shipment_container_line');
+    await client.query('truncate shipment_container_status_history');
+    await client.query('delete from shipment_container');
+    await client.query('delete from bill_of_lading');
+    await client.query('delete from port where created_by is not null');
+    await client.query('delete from container_status where created_by is not null');
+    await client.query('update container_status set active = true where created_by is null');
     // Stage 4 (0233) — the PDs and their history (append-only in production).
     await client.query('truncate customs_pd_status_history');
     await client.query('delete from customs_pd');
@@ -753,6 +764,8 @@ export async function resetTestData(): Promise<void> {
                          'PAYABLE_LOCAL_GOODS', 'PAYABLE_ADVANCE', 'RECURRING_CONTRACT',
                          -- REQ-AP-001 Stage 3, migration 0232.
                          'PAYMENT_APPLICATION', 'BANK_CODE',
+                         -- REQ-AP-001 Stage 5, migration 0234.
+                         'CONTAINER_RECEIPT', 'PORT_CODE',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

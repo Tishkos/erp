@@ -291,12 +291,13 @@ async function main() {
       ON CONFLICT DO NOTHING
     `);
 
-    // Block 8's three stages, each a warehouse of its own.
+    // Block 8's three stages, each a warehouse of its own — transit since
+    // REQ-AP-001 §17.4: goods at sea are owned, not available for sale.
     await tx.execute(sql`
-      INSERT INTO warehouse (code, name, branch_code, warehouse_type, shipment_stage) VALUES
-        ('WH-INPROC', 'In Process', 'HQ', 'main', 'in_process'),
-        ('WH-BOARD', 'On Board', 'HQ', 'main', 'on_board'),
-        ('WH-PORT', 'On Port', 'HQ', 'main', 'on_port')
+      INSERT INTO warehouse (code, name, branch_code, warehouse_type, is_transit, shipment_stage) VALUES
+        ('WH-INPROC', 'In Process', 'HQ', 'transit', true, 'in_process'),
+        ('WH-BOARD', 'On Board', 'HQ', 'transit', true, 'on_board'),
+        ('WH-PORT', 'On Port', 'HQ', 'transit', true, 'on_port')
       ON CONFLICT DO NOTHING
     `);
 

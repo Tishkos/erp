@@ -27,6 +27,7 @@ import * as holds from './payable-holds';
 import * as contracts from './recurring-contracts';
 import * as paymentApplications from './payment-applications';
 import * as customs from './customs-pd';
+import * as shipments from './shipments';
 import * as notifications from './notifications';
 
 export interface SweepResult {
@@ -41,6 +42,8 @@ export interface SweepResult {
   /** §16.2 — PDs warned of their expiry, and PDs moved to expired, in this run. */
   readonly pdsWarned: number;
   readonly pdsExpired: number;
+  /** §17.3 — containers marked Late in this run. */
+  readonly containersLate: number;
   /** Checks whose query this build does not implement yet — seeded, inert. */
   readonly skipped: string[];
 }
@@ -145,6 +148,95 @@ const CHECK_QUERIES: Readonly<Record<string, CheckQuery>> = {
       since: row.statusCode === 'rejected' ? row.registered : row.expiry,
       scope: { typeCode: row.typeCode, bankCode: row.bankCode, supplierId: row.supplierId },
       summary: () => `PD ${row.pdNo} is ${row.statusName} and not re-registered — reason required`,
+    }));
+  },
+
+  /** §17.3 — a container whose ETA passed while still loading or at sea (set Late first). */
+  container_eta_passed: async (tx) => {
+    const result = await tx.execute(sql`
+      select c.payable_id as "payableId", c.container_no as "containerNo", c.eta::text as eta,
+             p.payable_type_code as "typeCode", p.supplier_id as "supplierId", b.port_of_discharge_code as "portCode"
+        from shipment_container c
+        join payable p on p.id = c.payable_id
+        join bill_of_lading b on b.id = c.bl_id
+       where c.status_code = 'late' and c.received_on is null and c.cancelled_at is null
+         and p.cancelled_at is null and p.closed_at is null
+       order by c.eta`);
+    const rows = result.rows as {
+      payableId: string;
+      containerNo: string;
+      eta: string;
+      typeCode: string;
+      supplierId: string;
+      portCode: string | null;
+    }[];
+    return rows.map((row) => ({
+      payableId: row.payableId,
+      laneCode: 'shipment',
+      since: row.eta,
+      scope: { typeCode: row.typeCode, supplierId: row.supplierId, portCode: row.portCode },
+      summary: (limit, days) => `Container ${row.containerNo} late: ETA ${row.eta} passed ${days} days ago and it has not arrived`,
+    }));
+  },
+
+  /** D4 — a container at port (or cleared) and not received (seed 10 days). */
+  at_port: async (tx) => {
+    const result = await tx.execute(sql`
+      select c.payable_id as "payableId", c.container_no as "containerNo", c.arrived_port_on::text as since,
+             p.payable_type_code as "typeCode", p.supplier_id as "supplierId", b.port_of_discharge_code as "portCode"
+        from shipment_container c
+        join payable p on p.id = c.payable_id
+        join bill_of_lading b on b.id = c.bl_id
+       where c.status_code in ('at_port', 'customs_cleared') and c.arrived_port_on is not null
+         and c.received_on is null and c.cancelled_at is null
+         and p.cancelled_at is null and p.closed_at is null
+       order by c.arrived_port_on`);
+    const rows = result.rows as {
+      payableId: string;
+      containerNo: string;
+      since: string;
+      typeCode: string;
+      supplierId: string;
+      portCode: string | null;
+    }[];
+    return rows.map((row) => ({
+      payableId: row.payableId,
+      laneCode: 'shipment',
+      since: row.since,
+      scope: { typeCode: row.typeCode, supplierId: row.supplierId, portCode: row.portCode },
+      summary: (limit, days) =>
+        `Over time limit: ${row.containerNo} at port ${days} days, not received (limit ${limit})`,
+    }));
+  },
+
+  /** §17.5, D4 — partly received for longer than the limit (seed 30 days from the first receipt). */
+  partly_received: async (tx) => {
+    const result = await tx.execute(sql`
+      select c.payable_id as "payableId", min(c.received_on)::text as since,
+             count(*)::int as total, (count(*) filter (where s.counts_as_received))::int as received,
+             min(p.payable_type_code) as "typeCode", min(p.supplier_id::text) as "supplierId"
+        from shipment_container c
+        join container_status s on s.code = c.status_code
+        join payable p on p.id = c.payable_id
+       where c.cancelled_at is null and p.cancelled_at is null and p.closed_at is null
+       group by c.payable_id
+      having (count(*) filter (where s.counts_as_received)) > 0
+         and (count(*) filter (where s.counts_as_received)) < count(*)`);
+    const rows = result.rows as {
+      payableId: string;
+      since: string;
+      total: number;
+      received: number;
+      typeCode: string;
+      supplierId: string;
+    }[];
+    return rows.map((row) => ({
+      payableId: row.payableId,
+      laneCode: 'shipment',
+      since: row.since,
+      scope: { typeCode: row.typeCode, supplierId: row.supplierId },
+      summary: (limit, days) =>
+        `Over time limit: partly received for ${days} days — ${row.received} of ${row.total} containers in (limit ${limit})`,
     }));
   },
 
@@ -303,6 +395,10 @@ export async function runSweep(tx: Tx, asOf: string): Promise<SweepResult> {
   // to its expired status, which the pd_expired check below then stops on.
   const pdExpiry = await customs.expirySweep(tx, asOf);
 
+  // §17.3 — a container whose ETA passed while loading or at sea is Late; the
+  // container_eta_passed check below then stops the import on it.
+  const containersLate = await shipments.lateSweep(tx, asOf);
+
   const checks = await tx.select().from(sweepCheck).where(eq(sweepCheck.active, true));
 
   let checked = 0;
@@ -417,6 +513,7 @@ export async function runSweep(tx: Tx, asOf: string): Promise<SweepResult> {
     debitsMatched,
     pdsWarned: pdExpiry.warned,
     pdsExpired: pdExpiry.expired,
+    containersLate,
     skipped,
   };
 }

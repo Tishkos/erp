@@ -230,6 +230,7 @@ describe('every screen has one address', () => {
       '/payables',
       // REQ-AP-001 Stage 3 — the advances' register.
       '/payables/advances',
+      '/payables/containers',
       '/payables/contracts',
       '/payables/goods-receipts',
       // Operations build — block 4's Purchase Invoice.
@@ -244,6 +245,8 @@ describe('every screen has one address', () => {
       '/payables/pd',
       '/payables/purchase-orders',
       '/payables/service-receipts',
+      // REQ-AP-001 Stage 5 — B/Ls.
+      '/payables/shipments',
       // Block 6 — Payments and Receipts.
       '/payables/supplier-payments',
       // Blocks 2 and 3 — the Account Statement, one screen on each side.

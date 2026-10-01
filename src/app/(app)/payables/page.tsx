@@ -227,6 +227,7 @@ export default async function PayablesWorkbench({
                     {t('col_paid')}
                   </th>
                   <th scope="col">{t('col_stage')}</th>
+                  <th scope="col">{t('col_containers')}</th>
                   <th scope="col">{t('col_stopped')}</th>
                   <th scope="col">{t('col_due')}</th>
                   <th scope="col">{t('col_branch')}</th>
@@ -235,7 +236,7 @@ export default async function PayablesWorkbench({
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td className={s.sapEmptyRow} colSpan={10}>
+                    <td className={s.sapEmptyRow} colSpan={11}>
                       {t('none')}
                     </td>
                   </tr>
@@ -277,6 +278,11 @@ export default async function PayablesWorkbench({
                         {' · '}
                         {t('days_n', { count: daysSince(row.stageSince) })}
                       </span>
+                    </td>
+                    <td>
+                      {row.containersTotal > 0
+                        ? t('x_of_y', { received: row.containersReceived, total: row.containersTotal })
+                        : '—'}
                     </td>
                     <td>
                       {row.needsReason ? (

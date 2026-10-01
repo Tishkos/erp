@@ -360,6 +360,36 @@ export async function create(
   }
 
   /*
+   * REQ-AP-001 §17.4 — an import's goods are at sea when its invoice posts:
+   * owned, not available. Its stock lines land in the branch's In Process
+   * (transit) warehouse; the warehouse the accountant chose is where the
+   * containers will be received (§18), and it becomes the order's warehouse.
+   */
+  let destinationWarehouse: string | null = null;
+  if (input.isImport) {
+    const [transit] = await tx
+      .select({ code: warehouse.code })
+      .from(warehouse)
+      .where(
+        and(
+          eq(warehouse.shipmentStage, 'in_process'),
+          eq(warehouse.branchCode, input.branchCode),
+          eq(warehouse.active, true),
+        ),
+      )
+      .limit(1);
+    if (transit) {
+      destinationWarehouse =
+        input.lines.find((line) => line.warehouseCode && line.warehouseCode !== transit.code)?.warehouseCode ??
+        null;
+      input = {
+        ...input,
+        lines: input.lines.map((line) => (line.warehouseCode ? { ...line, warehouseCode: transit.code } : line)),
+      };
+    }
+  }
+
+  /*
    * §15 — the non-PO route costs a justification and a second approver.
    *
    * Unless the invoice receives its own stock. The rule exists because "the
@@ -638,6 +668,14 @@ export async function create(
   if (input.isImport) {
     let payableId = input.payableId ?? null;
     if (!payableId) {
+      // Its lines read as the invoice's do: an item by its name (`saveLine`).
+      const codes = [...new Set(input.lines.map((line) => line.itemCode).filter((code): code is string => Boolean(code)))];
+      const names = new Map(
+        (codes.length > 0
+          ? await tx.select({ code: item.code, name: item.name }).from(item).where(inArray(item.code, codes))
+          : []
+        ).map((row) => [row.code, row.name] as const),
+      );
       const opened = await payables.create(tx, ctx, {
         payableTypeCode: 'import',
         supplierReference: supplierNumber || allocated.documentNo,
@@ -651,13 +689,13 @@ export async function create(
         purchaseOrderId: input.purchaseOrderId ?? null,
         lines: input.lines.map((line) => ({
           itemCode: line.itemCode ?? null,
-          description: line.description ?? line.itemCode ?? 'Charge',
+          description: line.description ?? (line.itemCode ? names.get(line.itemCode) : undefined) ?? line.itemCode ?? 'Charge',
           quantity: formatQuantity(line.quantity),
           uomCode: line.uomCode ?? null,
           unitPrice: toDecimalString(line.unitPriceIqd, 4n),
         })),
         defaultWarehouseCode:
-          input.lines.find((line) => line.warehouseCode)?.warehouseCode ?? null,
+          destinationWarehouse ?? input.lines.find((line) => line.warehouseCode)?.warehouseCode ?? null,
       });
       payableId = opened.id;
       importPayableNo = opened.payableNo;
@@ -1457,7 +1495,9 @@ export async function post(
   // is not a flag somebody sets and forgets: it is where the goods went. An
   // invoice whose goods went anywhere else arrived by other means and has
   // nothing to follow.
-  await shipments.openForInvoice(tx, ctx, id);
+  // REQ-AP-001 §17.4 — an import is followed container by container on its
+  // B/Ls, not by the four-stage shipment; only other invoices open one.
+  if (!invoice.isImport) await shipments.openForInvoice(tx, ctx, id);
 
   await tx
     .update(apInvoice)

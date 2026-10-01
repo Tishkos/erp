@@ -71,6 +71,8 @@ export default async function PdListPage({ searchParams }: { searchParams: Searc
     statuses: mayCreate ? await customs.statuses(tx) : [],
   }));
   const shown = rows.filter((row) => matches(row, outcome.q));
+  const ps = (code: string, name: string) => (locale !== 'en' && t.has(`ps.${code}`) ? t(`ps.${code}`) : name);
+
 
   return (
     <AdminPage
@@ -254,7 +256,7 @@ export default async function PdListPage({ searchParams }: { searchParams: Searc
                         className={`status status--${pdChip(row)} ${s.sapRegisterStatus}`}
                         data-status={pdChip(row)}
                       >
-                        {row.statusName}
+                        {ps(row.statusCode, row.statusName)}
                       </span>
                       {row.superseded ? <div className="muted">{t('superseded')}</div> : null}
                     </td>

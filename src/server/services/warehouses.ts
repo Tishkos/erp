@@ -58,6 +58,26 @@ export async function listActive(tx: Tx) {
     .orderBy(asc(warehouse.code));
 }
 
+/**
+ * Every active warehouse stock can stand in — the pickers of the stock
+ * reports. Wider than `listActive`: goods at sea stand in transit warehouses
+ * (REQ-AP-001 §17.4) and are the company's, so the Stock Ledger, the Stock
+ * Movement page and the Warehouses Report must be able to show them, while
+ * nothing is sold or received into them by hand.
+ */
+export async function listForReports(tx: Tx) {
+  return tx
+    .select({
+      code: warehouse.code,
+      name: warehouse.name,
+      branchCode: warehouse.branchCode,
+      warehouseType: warehouse.warehouseType,
+    })
+    .from(warehouse)
+    .where(eq(warehouse.active, true))
+    .orderBy(asc(warehouse.code));
+}
+
 export async function get(tx: Tx, code: string) {
   const [row] = await tx.select().from(warehouse).where(eq(warehouse.code, code)).limit(1);
   return row ?? null;
@@ -269,7 +289,9 @@ export async function ensureStageWarehouses(
       code,
       name,
       branchCode: ctx.branchCode,
-      warehouseType: 'main',
+      // REQ-AP-001 §17.4 — owned, not available for sale (0234).
+      warehouseType: 'transit',
+      isTransit: true,
       shipmentStage: stage,
     });
 

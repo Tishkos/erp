@@ -75,7 +75,7 @@ export default async function StockLedgerPage({ searchParams }: { searchParams: 
         )
       : [],
     itemList: (await items.listAll(tx)).filter((row) => row.isStock),
-    houses: (await warehouses.listActive(tx)).filter(
+    houses: (await warehouses.listForReports(tx)).filter(
       (house) => house.branchCode === context.scope.branchCode,
     ),
   }));

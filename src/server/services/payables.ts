@@ -235,8 +235,27 @@ export async function gatherFacts(tx: Tx, payableId: string): Promise<StageFacts
   const allPdsWrittenOff =
     standingPds.length > 0 && standingPds.every((pd) => pd.statusCode === 'totally_written_off');
 
+  // Shipment and warehouse lanes (build Stage 5, §17-§18) — every container
+  // on its own: Y is the live containers, X those that count as received;
+  // the received quantity is Σ received over the container lines (§18).
+  const shipped = await tx.execute(sql`
+    select count(*)::int as total,
+           (count(*) filter (where s.counts_as_received))::int as received,
+           (select coalesce(sum(l.received_qty), 0)::text
+              from shipment_container_line l join shipment_container c2 on c2.id = l.container_id
+             where c2.payable_id = ${payableId} and c2.cancelled_at is null and l.superseded_at is null) as "receivedQty",
+           (select count(*)::int from container_receipt r where r.payable_id = ${payableId}) as receipts
+      from shipment_container c join container_status s on s.code = c.status_code
+     where c.payable_id = ${payableId} and c.cancelled_at is null`);
+  const shipment = shipped.rows[0] as { total: number; received: number; receivedQty: string; receipts: number };
+  const receivedQuantityMatches =
+    row.quantity !== null && parseQuantity(shipment.receivedQty) === parseQuantity(row.quantity);
+
   return {
     ...NO_FACTS,
+    containerCount: shipment.total,
+    containersReceived: shipment.received,
+    receivedQuantityMatches,
     livePdCount,
     allPdsWrittenOff,
     instalmentPlanSet: instalmentIds.length > 0,
@@ -253,7 +272,7 @@ export async function gatherFacts(tx: Tx, payableId: string): Promise<StageFacts
     approvedInvoiceCount: invoices?.approved ?? 0,
     serviceConfirmed: serviceConfirmed || (autoConfirmed?.n ?? 0) > 0,
     recurringConfirmed: serviceConfirmed || (autoConfirmed?.n ?? 0) > 0,
-    goodsReceiptPosted: (received?.n ?? 0) > 0,
+    goodsReceiptPosted: (received?.n ?? 0) > 0 || shipment.receipts > 0,
     advanceApproved: Boolean(advance && advance.status !== 'draft'),
     advancePaid: Boolean(
       advance && ['posted', 'partially_executed', 'settled', 'closed'].includes(advance.status),
@@ -1196,6 +1215,12 @@ export async function workbench(tx: Tx, filter: WorkbenchFilter = {}) {
       paidTxn: sql<string>`coalesce((
         select sum(pa.amount_txn) from payment_application pa
          where pa.payable_id = ${payable.id} and pa.status in ('confirmed', 'debited')), 0)::text`,
+      // §17.5 — X of Y, the containers counted from their rows.
+      containersTotal: sql<number>`(select count(*)::int from shipment_container c
+         where c.payable_id = ${payable.id} and c.cancelled_at is null)`,
+      containersReceived: sql<number>`(select count(*)::int from shipment_container c
+         join container_status s on s.code = c.status_code
+         where c.payable_id = ${payable.id} and c.cancelled_at is null and s.counts_as_received)`,
       stageCode: payable.stageCode,
       stageName: payableStage.name,
       stageSequence: payableStage.sequence,

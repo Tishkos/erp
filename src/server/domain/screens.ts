@@ -455,6 +455,9 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/master-data/banks',
   // REQ-AP-001 Stage 4 — PD / ASYCUDA (§16, §21.8).
   '/payables/pd',
+  // REQ-AP-001 Stage 5 — B/Ls and containers (§17, §18, §21.9).
+  '/payables/shipments',
+  '/payables/containers',
 ]);
 
 export function isDelivered(route: string): boolean {

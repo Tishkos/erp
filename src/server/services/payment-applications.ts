@@ -37,6 +37,7 @@ import {
   appUser,
   bank,
   bankCashAccount,
+  billOfLading,
   businessPartner,
   customsPd,
   fundingSource,
@@ -47,6 +48,7 @@ import {
   paymentApplication,
   paymentApplicationTransition,
   paymentMethod,
+  shipmentContainer,
   supplierAdvance,
   supplierPayment,
 } from '../db/schema';
@@ -559,8 +561,8 @@ export async function checksFor(tx: Tx, row: typeof paymentApplication.$inferSel
     belongsToSupplier: payee ? payee.partnerId === row.supplierId : false,
   });
 
-  // 4 — The instalment's trigger. B/Ls arrive with Stage 5; until then the
-  //     B/L triggers warn rather than refuse.
+  // 4 — The instalment's trigger: a B/L for the B/L triggers, nothing sailed
+  //     for "before shipment" (§15.3 check 3).
   const trigger = await triggerCheck(tx, row);
 
   return [pd, funds, payeeResult, trigger];
@@ -593,18 +595,41 @@ async function triggerCheck(tx: Tx, row: typeof paymentApplication.$inferSelect)
     return { code: 'instalment_trigger', outcome: 'not_applicable', detail: 'Not tied to an instalment.' };
   }
   if (instalment.triggerCode.startsWith('against_bl')) {
-    return {
-      code: 'instalment_trigger',
-      outcome: 'warning',
-      detail: `${instalment.name}: no B/L is recorded on the import yet — check the B/L before sending.`,
-    };
+    // §15.3 check 3 — against the B/L means a B/L exists.
+    const [bl] = await tx
+      .select({ blNo: billOfLading.blNo, blDate: billOfLading.blDate })
+      .from(billOfLading)
+      .where(and(eq(billOfLading.payableId, row.payableId), isNull(billOfLading.cancelledAt)))
+      .orderBy(asc(billOfLading.blDate))
+      .limit(1);
+    return bl
+      ? { code: 'instalment_trigger', outcome: 'pass', detail: `${instalment.name}: B/L ${bl.blNo} issued on ${bl.blDate}.` }
+      : {
+          code: 'instalment_trigger',
+          outcome: 'fail',
+          detail: `${instalment.name}: no B/L is recorded on the import yet — the bank pays this one against the B/L.`,
+        };
   }
   if (instalment.triggerCode === 'before_shipment') {
-    return {
-      code: 'instalment_trigger',
-      outcome: 'warning',
-      detail: `${instalment.name}: make sure nothing has left the port yet.`,
-    };
+    // …and before shipment means nothing has sailed.
+    const [sailed] = await tx
+      .select({ containerNo: shipmentContainer.containerNo, departedOn: shipmentContainer.departedOn })
+      .from(shipmentContainer)
+      .where(
+        and(
+          eq(shipmentContainer.payableId, row.payableId),
+          isNull(shipmentContainer.cancelledAt),
+          sql`${shipmentContainer.departedOn} is not null`,
+        ),
+      )
+      .limit(1);
+    return sailed
+      ? {
+          code: 'instalment_trigger',
+          outcome: 'fail',
+          detail: `${instalment.name}: ${sailed.containerNo} sailed on ${sailed.departedOn} — the goods have shipped.`,
+        }
+      : { code: 'instalment_trigger', outcome: 'pass', detail: `${instalment.name}: nothing has sailed yet.` };
   }
   return { code: 'instalment_trigger', outcome: 'pass', detail: `${instalment.name}.` };
 }

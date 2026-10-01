@@ -134,6 +134,15 @@ export async function documentsWithoutLedger(tx: Tx): Promise<OrphanDocument[]> 
                             where m.source_document_type = 'goods_return'
                               and m.source_document_id = r.id::text)
         union all
+        -- REQ-AP-001 §18 — a container receipt that moved goods in.
+        select 'container_receipt', r.id::text, r.receipt_no, r.branch_code
+          from container_receipt r
+         where exists (select 1 from container_receipt_line l
+                        where l.receipt_id = r.id and l.moved_qty > 0)
+           and not exists (select 1 from inventory_movement m
+                            where m.source_document_type = 'container_receipt'
+                              and m.source_document_id = r.id::text)
+        union all
         select 'opening_stock', o.id::text, o.document_no, o.branch_code
           from opening_stock o
          where o.status = 'approved'
@@ -177,6 +186,7 @@ export async function ledgerWithoutDocument(tx: Tx): Promise<OrphanMovement[]> {
                when 'stock_transfer'    then not exists (select 1 from stock_transfer d where d.id::text = m.source_document_id)
                when 'stock_adjustment'  then not exists (select 1 from stock_adjustment d where d.id::text = m.source_document_id)
                when 'opening_stock'     then not exists (select 1 from opening_stock d where d.id::text = m.source_document_id)
+               when 'container_receipt' then not exists (select 1 from container_receipt d where d.id::text = m.source_document_id)
                else false
              end
        order by m.created_at, m.id

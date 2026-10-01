@@ -112,6 +112,12 @@ ap_match_exception
 supplier_credit_memo
 goods_return_line
 goods_return
+container_receipt_line
+container_receipt
+shipment_container_line
+shipment_container_status_history
+shipment_container
+bill_of_lading
 payment_application
 payable_instalment
 customs_pd_status_history

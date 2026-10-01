@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Field, Flash, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -31,10 +31,11 @@ const OUTCOME_CHIP: Readonly<Record<string, string>> = {
 
 export default async function AsycudaPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/payables/pd')) notFound();
-  const [t, admin, page, context, outcome] = await Promise.all([
+  const [t, admin, page, locale, context, outcome] = await Promise.all([
     getTranslations('admin.customs_pd'),
     getTranslations('admin'),
     getTranslations('page'),
+    getLocale(),
     requireContext(),
     outcomeOf(searchParams),
   ]);
@@ -45,8 +46,9 @@ export default async function AsycudaPage({ searchParams }: { searchParams: Sear
   const list = typeof params.list === 'string' ? params.list : '';
 
   const diff = list.trim() ? await withCurrentUser((tx) => customs.asycudaDiff(tx, list)) : null;
+  const ps = (code: string, name: string) => (locale !== 'en' && t.has(`ps.${code}`) ? t(`ps.${code}`) : name);
   const statusName = (code: string | null) =>
-    code ? (diff?.statuses.find((row) => row.code === code)?.name ?? code) : '—';
+    code ? ps(code, diff?.statuses.find((row) => row.code === code)?.name ?? code) : '—';
   const changes = diff?.rows.filter((row) => row.outcome === 'change').length ?? 0;
 
   return (
