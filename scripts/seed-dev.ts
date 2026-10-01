@@ -299,6 +299,17 @@ async function main() {
         ('WH-PORT', 'On Port', 'HQ', 'main', 'on_port')
       ON CONFLICT DO NOTHING
     `);
+
+    // A workbench with no supplier can raise nothing, and a sales screen with
+    // no customer can sell nothing — the first partners a trading company
+    // meets, so every document screen starts usable.
+    await tx.execute(sql`
+      INSERT INTO business_partner (code, legal_name, is_supplier, is_customer, active) VALUES
+        ('SUP-00001', 'Al-Rafidain Trading Co.', true, false, true),
+        ('SUP-00002', 'Basra Freight and Forwarding', true, false, true),
+        ('CUS-00001', 'Erbil Retail Group', false, true, true)
+      ON CONFLICT DO NOTHING
+    `);
   });
 
   console.log(

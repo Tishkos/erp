@@ -59,7 +59,7 @@ type ModuleKey =
   | 'dashboard'
   | 'accounting'
   | 'sales'
-  | 'purchasing'
+  | 'payables'
   | 'logistics'
   | 'money_transfer'
   | 'crm'
@@ -141,7 +141,7 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
     sectionKeys: [
       'finance_gl',
       'finance_ar',
-      'finance_ap',
+      // finance_ap merged into the Payables module (REQ-AP-001 §21.1).
       'treasury',
       'fixed_assets',
       'budgeting',
@@ -157,7 +157,8 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
   // where the work happens, and a salesperson opening Accounting to reach
   // Customers had to read past the general ledger to find them.
   { key: 'sales', icon: ShoppingCart, sectionKeys: ['sales'] },
-  { key: 'purchasing', icon: ShoppingBag, sectionKeys: ['purchasing'] },
+  // Purchasing became Payables — one module for everything owed (REQ-AP-001 D7).
+  { key: 'payables', icon: ShoppingBag, sectionKeys: ['payables'] },
   { key: 'logistics', icon: Truck, sectionKeys: ['logistics'] },
   { key: 'money_transfer', icon: ArrowLeftRight, sectionKeys: ['money_transfer'] },
   { key: 'crm', icon: Handshake, sectionKeys: ['crm'] },

@@ -938,6 +938,7 @@
       "accounting": "Accounting",
       "sales": "Sales",
       "purchasing": "Purchasing",
+      "payables": "Payables",
       "logistics": "Logistics",
       "money_transfer": "Money Transfer",
       "crm": "CRM",
