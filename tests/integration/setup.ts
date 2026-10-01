@@ -451,6 +451,30 @@ export async function resetTestData(): Promise<void> {
       delete from goods_return;
     `);
 
+    // REQ-AP-001 — payables. The log and the hold thread are append-only in
+    // production (TRUNCATE does not fire row triggers; the partitioned parent
+    // truncates its partitions). Masters are seeded by migration: fixture rows
+    // record who created them and are removed; seed rows (created_by NULL) are
+    // restored to their seeded active state.
+    await client.query('truncate payable_event');
+    await client.query('truncate payable_hold_update');
+    await client.query('delete from payable_hold');
+    await client.query('delete from payable_order_line');
+    await client.query('delete from payable');
+    await client.query('delete from stage_time_limit where created_by is not null');
+    await client.query('delete from payable_stage where created_by is not null');
+    await client.query('delete from payable_type_lane where payable_type_code in (select code from payable_type where created_by is not null)');
+    await client.query('delete from payable_type where created_by is not null');
+    await client.query('delete from hold_reason_code where created_by is not null');
+    await client.query('delete from expense_category where created_by is not null');
+    await client.query('delete from sweep_check where created_by is not null');
+    await client.query('delete from payable_event_code where created_by is not null');
+    await client.query('update payable_type set active = true where created_by is null');
+    await client.query('update payable_stage set active = true where created_by is null');
+    await client.query('update hold_reason_code set active = true where created_by is null');
+    await client.query('update sweep_check set active = true where created_by is null');
+    await client.query('update stage_time_limit set active = true where created_by is null');
+
     // Supplier advances before the invoices they settle and the orders they
     // answer to. A settlement is a record in production (Appendix C calls it the
     // settlement history) and carries no DELETE grant; the reset is the only
@@ -706,6 +730,9 @@ export async function resetTestData(): Promise<void> {
                          'JOURNAL_ENTRY', 'WAREHOUSE_TRANSFER', 'OPENING_STOCK', 'STOCK_COUNT',
                          'PURCHASE_ORDER', 'GOODS_RECEIPT', 'SERVICE_RECEIPT', 'AP_INVOICE',
                          'SUPPLIER_ADVANCE',
+                         -- REQ-AP-001 Stage 1, migration 0225 — one per payable type.
+                         'PAYABLE_IMPORT', 'PAYABLE_SERVICE', 'PAYABLE_RECURRING',
+                         'PAYABLE_LOCAL_GOODS', 'PAYABLE_ADVANCE',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

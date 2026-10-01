@@ -19,13 +19,13 @@ export function documentHref(
   switch (documentType) {
     case 'ap_invoice':
     case 'supplier_shipment':
-      return `/purchasing/ap-invoices/${no}`;
+      return `/payables/invoices/${no}`;
     case 'ar_invoice':
       return `/sales/ar-invoices/${no}`;
     case 'sales_return':
       return `/sales/sales-returns/${no}`;
     case 'goods_return':
-      return `/purchasing/goods-returns/${no}`;
+      return `/payables/goods-returns/${no}`;
     case 'opening_stock':
       return `/inventory/opening-stock/${no}`;
     case 'stock_transfer':

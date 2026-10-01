@@ -57,6 +57,7 @@ import type { PostingLineRequest } from '../domain/posting';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
+import * as payables from './payables';
 import * as posting from './posting';
 import * as inventory from './inventory';
 import * as journal from './journal';
@@ -1308,6 +1309,19 @@ export async function post(
       .where(eq(purchaseOrderLine.id, line.purchaseOrderLineId));
   }
 
+  // REQ-AP-001 §7.2 — a payable-linked invoice writes the order lane's event
+  // and re-derives the stage, in this same transaction.
+  if (invoice.payableId) {
+    await payables.onInvoiceEvent(tx, {
+      payableId: invoice.payableId,
+      eventCode: 'INVOICE_POSTED',
+      invoiceId: id,
+      invoiceNo: invoice.invoiceNo,
+      summary: `Purchase invoice ${invoice.invoiceNo} posted — ${toDecimalString(payableIqd, 4n)} IQD`,
+      actorUserId: ctx.principal.userId,
+    });
+  }
+
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
     action: 'ap_invoice.posted',
@@ -1491,6 +1505,19 @@ export async function reverse(
     reason,
     relatedObjectId: reversal.id,
   });
+
+  // REQ-AP-001 §14 — a reversed invoice re-derives its payable's stage; the
+  // event carries the reason so the log reads as the story it is.
+  if (invoice.payableId) {
+    await payables.onInvoiceEvent(tx, {
+      payableId: invoice.payableId,
+      eventCode: 'INVOICE_REVERSED',
+      invoiceId: id,
+      invoiceNo: invoice.invoiceNo,
+      summary: `Purchase invoice ${invoice.invoiceNo} reversed — ${reason}`,
+      actorUserId: ctx.principal.userId,
+    });
+  }
 
   return { reversalEntryNo: reversal.entryNo, movementsReversed: receipts.length };
 }

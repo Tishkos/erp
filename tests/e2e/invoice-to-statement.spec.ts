@@ -148,7 +148,7 @@ async function createPartner(page: Page, screen: string, button: string, name: s
 
 /** The statement's own figures, read from the screen a person opens. */
 const STATEMENT = {
-  supplier: '/purchasing/supplier-statements',
+  supplier: '/payables/supplier-statements',
   customer: '/sales/customer-statements',
 } as const;
 
@@ -184,7 +184,7 @@ test.describe('a purchase invoice reaches the supplier statement', () => {
     await page.goto('/master-data/items/ITM-SEED');
     await itemAccounts(page);
 
-    await page.goto('/purchasing/ap-invoices/new');
+    await page.goto('/payables/invoices/new');
     await expect(page.getByRole('heading', { name: 'New invoice' })).toBeVisible({
       timeout: 60_000,
     });

@@ -293,7 +293,7 @@ export default async function PaymentTermPage({
               <ul className={s.profileFacts}>
                 {row.partners.map((partner) => {
                   const role = partner.isSupplier && !partner.isCustomer ? 'supplier' : 'customer';
-                  const route = role === 'supplier' ? '/purchasing/suppliers' : '/sales/customers';
+                  const route = role === 'supplier' ? '/payables/suppliers' : '/sales/customers';
                   return (
                     <li key={partner.code}>
                       <span>

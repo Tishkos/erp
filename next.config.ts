@@ -45,6 +45,21 @@ const config: NextConfig = {
   async redirects() {
     return [
       {
+        source: '/purchasing/ap-invoices/:path*',
+        destination: '/payables/invoices/:path*',
+        permanent: true,
+      },
+      {
+        source: '/purchasing/payables',
+        destination: '/payables/open-items',
+        permanent: true,
+      },
+      {
+        source: '/purchasing/:path*',
+        destination: '/payables/:path*',
+        permanent: true,
+      },
+      {
         source: '/master-data/customers',
         destination: '/sales/customers',
         permanent: true,
@@ -56,12 +71,12 @@ const config: NextConfig = {
       },
       {
         source: '/master-data/suppliers',
-        destination: '/purchasing/suppliers',
+        destination: '/payables/suppliers',
         permanent: true,
       },
       {
         source: '/master-data/suppliers/:code',
-        destination: '/purchasing/suppliers/:code',
+        destination: '/payables/suppliers/:code',
         permanent: true,
       },
       {
@@ -109,11 +124,11 @@ const config: NextConfig = {
           destination: '/master-data/business-partners/:code',
         },
         {
-          source: '/purchasing/suppliers',
+          source: '/payables/suppliers',
           destination: '/master-data/suppliers',
         },
         {
-          source: '/purchasing/suppliers/:code',
+          source: '/payables/suppliers/:code',
           destination: '/master-data/business-partners/:code',
         },
         {

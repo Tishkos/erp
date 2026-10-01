@@ -244,7 +244,7 @@ export default async function ItemPage({
                       <tr key={supplier.supplierId}>
                         <td>
                           <Link
-                            href={`/purchasing/suppliers/${encodeURIComponent(supplier.supplierCode)}?role=supplier`}
+                            href={`/payables/suppliers/${encodeURIComponent(supplier.supplierCode)}?role=supplier`}
                           >
                             {supplier.supplierCode}
                           </Link>{' '}

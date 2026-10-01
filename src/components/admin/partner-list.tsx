@@ -40,7 +40,7 @@ import { createPartnerInRole } from '@/app/(app)/master-data/business-partners/a
 
 const ROUTES = {
   customer: '/sales/customers',
-  supplier: '/purchasing/suppliers',
+  supplier: '/payables/suppliers',
 } as const;
 
 const PAGE_KEY = { customer: 'customers', supplier: 'suppliers' } as const;

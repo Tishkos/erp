@@ -88,21 +88,28 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   sales_reports: 'report',
   sales_settings: 'settings',
 
-  // 4 — Purchasing
+  // 4 — Payables (was Purchasing; REQ-AP-001 D7 — one module for all owed)
+  payables_workbench: 'workspace',
   procurement_dashboard: 'dashboard',
   suppliers: 'document',
   ap_statements: 'report',
   purchase_orders: 'document',
   goods_receipts: 'document',
   service_receipts: 'document',
+  recurring_contracts: 'document',
   ap_invoices: 'document',
+  payment_applications: 'document',
   supplier_advances: 'document',
   supplier_payments: 'document',
   goods_returns: 'document',
   supplier_credit_memos: 'document',
   match_exceptions: 'workspace',
+  pds: 'document',
+  shipments: 'document',
+  containers: 'list',
+  loans: 'document',
   purchasing_reports: 'report',
-  purchasing_settings: 'settings',
+  payables_settings: 'settings',
 
   // 5 — Inventory
   availability: 'workspace',
@@ -386,7 +393,7 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/master-data/cost-centres',
   '/master-data/statement-mapping',
   '/sales/customers',
-  '/purchasing/suppliers',
+  '/payables/suppliers',
   '/inventory/items',
   '/inventory/uom',
   '/master-data/bank-accounts',
@@ -409,28 +416,32 @@ const DELIVERED: ReadonlySet<string> = new Set([
   // The Stock Ledger — the movements with a running balance (2026-09-27).
   '/inventory/stock-ledger',
   // The Purchase Invoice.
-  '/purchasing/ap-invoices',
+  '/payables/invoices',
   // The Sales Invoice.
   '/sales/ar-invoices',
   // Sales Returns.
   '/sales/sales-returns',
   // Purchase Returns.
-  '/purchasing/goods-returns',
+  '/payables/goods-returns',
   // Payments and Receipts.
-  '/purchasing/supplier-payments',
+  '/payables/supplier-payments',
   '/sales/customer-receipts',
   // Invoice Status Tracking.
   '/inventory/in-transit',
   // The Account Statement, one screen on each side.
   '/sales/customer-statements',
-  '/purchasing/supplier-statements',
+  '/payables/supplier-statements',
   // Where every document that cannot name its own account says which one.
   '/finance/posting-mappings',
   // Treasury and Banking reporting — the balance, and what it is made of.
   '/treasury/reporting',
   // §15 and §16 — open items and ageing, one screen on each side.
   '/sales/receivables',
-  '/purchasing/payables',
+  // REQ-AP-001 Stage 1 — the payables workbench, the payable page's list
+  // route, and the module's settings.
+  '/payables',
+  '/administration/payables-settings',
+  '/payables/open-items',
 ]);
 
 export function isDelivered(route: string): boolean {

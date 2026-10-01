@@ -214,7 +214,7 @@ test('status chips follow the palette into the dark, on every screen that draws 
   // noticed (2026-09-29: "approved posted draft status in dark mode they
   // shouldn't be white"). One screen per rule, so a fourth copy cannot hide.
   const screens = [
-    '/purchasing/ap-invoices',
+    '/payables/invoices',
     '/finance/journals',
     '/master-data/chart-of-accounts',
   ];

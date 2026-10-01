@@ -4,7 +4,7 @@ import { flag, runAdminAndReturn, text } from '@/server/admin-action';
 import * as partners from '@/server/services/partners';
 
 const listFor = (role: partners.PartnerRole) =>
-  role === 'customer' ? '/sales/customers' : '/purchasing/suppliers';
+  role === 'customer' ? '/sales/customers' : '/payables/suppliers';
 const record = (role: partners.PartnerRole, code: string) =>
   `${listFor(role)}/${encodeURIComponent(code)}?role=${role}`;
 

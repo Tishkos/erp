@@ -125,7 +125,7 @@ export async function raiseDueNotices(
           link:
             side === 'customer'
               ? `/sales/ar-invoices/${item.invoiceNo}`
-              : `/purchasing/ap-invoices/${item.invoiceNo}`,
+              : `/payables/invoices/${item.invoiceNo}`,
         },
         { branchCode: filter.branchCode ?? null },
       );

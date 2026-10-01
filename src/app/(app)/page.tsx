@@ -148,7 +148,7 @@ export default async function Home() {
   // not a set of identities, so this is the one-hue ramp: later is darker.
   for (const [key, ageing, side, href] of [
     ['receivable', view.receivable, t('dashboard.receivable'), '/sales/ar-invoices'],
-    ['payable', view.payable, t('dashboard.payable'), '/purchasing/ap-invoices'],
+    ['payable', view.payable, t('dashboard.payable'), '/payables/invoices'],
   ] as const) {
     if (!ageing || ageing.invoices === 0) continue;
     charts.push(
@@ -425,7 +425,7 @@ export default async function Home() {
       {view.payable && view.payable.invoices > 0 ? (
         <Band
           count={view.payable.invoices}
-          href="/purchasing/ap-invoices"
+          href="/payables/invoices"
           hrefLabel={t('dashboard.open_invoices')}
           title={t('dashboard.payable')}
         >

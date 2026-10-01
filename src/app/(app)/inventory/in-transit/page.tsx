@@ -164,7 +164,7 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
                   <td>
                     <Link
                       className={s.sapLink}
-                      href={`/purchasing/ap-invoices/${encodeURIComponent(row.invoiceNo)}`}
+                      href={`/payables/invoices/${encodeURIComponent(row.invoiceNo)}`}
                     >
                       <bdi dir="ltr">{row.invoiceNo}</bdi>
                     </Link>

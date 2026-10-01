@@ -172,7 +172,7 @@ export async function OpenItemsReport({
   // A non-invoice balance links to the statement where its ledger entries can
   // be read. These balances have no invoice due date and are never aged.
   const statementRoute =
-    side === 'customer' ? '/sales/customer-statements' : '/purchasing/supplier-statements';
+    side === 'customer' ? '/sales/customer-statements' : '/payables/supplier-statements';
 
   /**
    * How late, in words a person acts on.

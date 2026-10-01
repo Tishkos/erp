@@ -98,7 +98,7 @@ test('a Purchase Invoice is raised, sent for approval, and posted by the CEO', a
     await page.waitForURL(/\/master-data\/business-partners\/[^/?]+/, { timeout: 60_000 });
     supplierCode = minted(page);
 
-    await page.goto('/purchasing/ap-invoices/new');
+    await page.goto('/payables/invoices/new');
     await page.getByLabel('Supplier Code').fill(supplierCode);
     const due = page.locator('input[name="due_date"]');
     if (!(await due.inputValue())) await due.fill(TODAY);
@@ -115,7 +115,7 @@ test('a Purchase Invoice is raised, sent for approval, and posted by the CEO', a
   });
 
   await as(browser, CEO, async (page) => {
-    await page.goto(`/purchasing/ap-invoices/${encodeURIComponent(invoiceNo)}`);
+    await page.goto(`/payables/invoices/${encodeURIComponent(invoiceNo)}`);
     await press(page, 'Approve and post', 'Posted');
   });
   expect(invoiceNo).toMatch(/^API-/);
@@ -159,7 +159,7 @@ for (const lang of ['en', 'ar'] as const) {
     page,
   }) => {
     await signIn(page, MANAGER, lang);
-    await page.goto(`/purchasing/ap-invoices/${encodeURIComponent(invoiceNo)}`);
+    await page.goto(`/payables/invoices/${encodeURIComponent(invoiceNo)}`);
     const files = await downloadAll(page, 'purchase_invoice', lang);
 
     expect(files.pdf.name).toBe(`${invoiceNo}.pdf`);

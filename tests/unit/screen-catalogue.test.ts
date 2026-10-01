@@ -92,10 +92,13 @@ describe('the screen catalogue covers the approved tree', () => {
   // one of them is still reachable, once.
   // Plus one more, by direction (2026-09-03): the Statement Mapping, where
   // Finance defines the headers and lines of its own reports.
-  it('classifies all 222 items in the approved tree', () => {
-    // 221 from the approved tree, plus the Stock Ledger added 2026-09-27.
-    expect(allMenuItems()).toHaveLength(222);
-    expect(Object.keys(SCREENS)).toHaveLength(222);
+  it('classifies all 229 items in the approved tree', () => {
+    // 221 from the approved tree, plus the Stock Ledger (2026-09-27), plus
+    // REQ-AP-001 §21.1: the Payables workbench, recurring contracts, payment
+    // applications, PDs, B/Ls, containers, loans and the module settings —
+    // eight new items — less the module-settings placeholder they replace.
+    expect(allMenuItems()).toHaveLength(229);
+    expect(Object.keys(SCREENS)).toHaveLength(229);
   });
 
   it('uses only declared archetypes', () => {
@@ -112,7 +115,7 @@ describe('the screen catalogue covers the approved tree', () => {
       (sum, item) => sum + screenCount(archetypeOf(item.key)!),
       0,
     );
-    expect(total).toBe(329);
+    expect(total).toBe(341);
   });
 });
 
@@ -165,7 +168,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(222);
+    expect(screenRoutes().size).toBe(229);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -176,6 +179,7 @@ describe('every screen has one address', () => {
       '/administration/company',
       '/administration/managers',
       '/administration/numbering',
+      '/administration/payables-settings',
       '/administration/permissions',
       '/administration/roles',
       '/administration/users',
@@ -220,17 +224,19 @@ describe('every screen has one address', () => {
       '/master-data/payment-terms',
       '/master-data/statement-mapping',
       '/master-data/warehouses',
+      // REQ-AP-001 Stage 1 — the Payables workbench.
+      '/payables',
       // Operations build — block 4's Purchase Invoice.
-      '/purchasing/ap-invoices',
+      '/payables/goods-returns',
       // Block 10 — Purchase Returns.
-      '/purchasing/goods-returns',
+      '/payables/invoices',
       // §15 — what we owe, invoice by invoice.
-      '/purchasing/payables',
+      '/payables/open-items',
       // Block 6 — Payments and Receipts.
-      '/purchasing/supplier-payments',
+      '/payables/supplier-payments',
       // Blocks 2 and 3 — the Account Statement, one screen on each side.
-      '/purchasing/supplier-statements',
-      '/purchasing/suppliers',
+      '/payables/supplier-statements',
+      '/payables/suppliers',
       // Block 5 — the Sales Invoice.
       '/sales/ar-invoices',
       // Block 6 — Receipts.
