@@ -667,20 +667,24 @@ export default async function PayablePage({
                         </>
                       ) : null}
                     </td>
-                    <td>{event.actorUserId ? '' : t('system')}</td>
+                    <td>
+                      <bdi dir="auto">{event.actorUserId ? (event.actorName ?? '—') : t('system')}</bdi>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          <Form action={addNote}>
-            <Hidden name="payable_no" value={row.payableNo} />
-            <Field id="add-note" label={t('add_note')} name="note" required wide />
-            <SubmitRow>
-              <Submit label={t('note_save')} small tone="secondary" />
-            </SubmitRow>
-          </Form>
+          <div className={s.sapBody}>
+            <Form action={addNote}>
+              <Hidden name="payable_no" value={row.payableNo} />
+              <Field id="add-note" label={t('add_note')} name="note" required wide />
+              <SubmitRow>
+                <Submit label={t('note_save')} small tone="secondary" />
+              </SubmitRow>
+            </Form>
+          </div>
         </div>
       </section>
 

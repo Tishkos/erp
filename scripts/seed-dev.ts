@@ -302,12 +302,14 @@ async function main() {
 
     // A workbench with no supplier can raise nothing, and a sales screen with
     // no customer can sell nothing — the first partners a trading company
-    // meets, so every document screen starts usable.
+    // meets, so every document screen starts usable. Active, not prospect:
+    // a purchase order (and so an import, D13) is refused against a prospect
+    // (§6), and a seed that cannot raise one is not usable.
     await tx.execute(sql`
-      INSERT INTO business_partner (code, legal_name, is_supplier, is_customer, active) VALUES
-        ('SUP-00001', 'Al-Rafidain Trading Co.', true, false, true),
-        ('SUP-00002', 'Basra Freight and Forwarding', true, false, true),
-        ('CUS-00001', 'Erbil Retail Group', false, true, true)
+      INSERT INTO business_partner (code, legal_name, is_supplier, is_customer, active, status) VALUES
+        ('SUP-00001', 'Al-Rafidain Trading Co.', true, false, true, 'active'),
+        ('SUP-00002', 'Basra Freight and Forwarding', true, false, true, 'active'),
+        ('CUS-00001', 'Erbil Retail Group', false, true, true, 'active')
       ON CONFLICT DO NOTHING
     `);
   });

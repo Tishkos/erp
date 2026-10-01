@@ -29,6 +29,7 @@ import {
   apMatchException,
   apMatchTolerance,
   businessPartner,
+  expenseCategory,
   goodsReceipt,
   goodsReceiptLine,
   goodsReturn,
@@ -217,6 +218,24 @@ export interface CreateApInvoiceInput {
   readonly expenseAccountId?: string | null;
   /** §5.1 — raised against a payable, the link is made at birth. */
   readonly payableId?: string | null;
+  /**
+   * REQ-AP-001 §8, D13 — the accountant ticked *Import*: the import
+   * application is created behind this invoice in the same transaction
+   * (or, with `payableId`, this invoice joins an existing one).
+   */
+  readonly isImport?: boolean;
+  /** D13 — the supplier's terms as written on the PDF, kept verbatim on the application. */
+  readonly paymentTermsText?: string | null;
+  /**
+   * D12 — an expense is a purchase invoice. The type of fee; its default
+   * expense account is used when the form names none, and it stands as the
+   * §15 evidence (see the non-PO rule below).
+   */
+  readonly expenseCategoryCode?: string | null;
+  /** §10, D12 — the contract and period this invoice was generated for. */
+  readonly recurringContractId?: string | null;
+  readonly periodStart?: string | null;
+  readonly periodEnd?: string | null;
 }
 
 /**
@@ -310,11 +329,28 @@ export async function receivedQuantityFor(
   return rows.reduce((total, row) => total + parseQuantity(row.quantity), 0n);
 }
 
+/** D12 — the type of fee, active, with the account it posts to by default. */
+async function expenseCategoryOf(tx: Tx, code: string) {
+  const [row] = await tx
+    .select({
+      code: expenseCategory.code,
+      name: expenseCategory.name,
+      active: expenseCategory.active,
+      defaultExpenseAccountId: expenseCategory.defaultExpenseAccountId,
+    })
+    .from(expenseCategory)
+    .where(eq(expenseCategory.code, code))
+    .limit(1);
+  if (!row) throw new Error(`No type of fee '${code}'. Choose one from Payables Settings → Expense categories.`);
+  if (!row.active) throw new Error(`The type of fee '${row.name}' is deactivated.`);
+  return row;
+}
+
 export async function create(
   tx: Tx,
   ctx: ActorContext,
   input: CreateApInvoiceInput,
-): Promise<{ id: string; invoiceNo: string; matchStatus: MatchStatus }> {
+): Promise<{ id: string; invoiceNo: string; matchStatus: MatchStatus; importPayableNo: string | null }> {
   await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, {
     branchCode: input.branchCode,
   });
@@ -342,7 +378,24 @@ export async function create(
    */
   const receivesItsOwnStock = input.lines.every((line) => Boolean(line.warehouseCode));
 
-  if (!input.purchaseOrderId && !receivesItsOwnStock) {
+  /*
+   * D12 (2026-10-01) — an expense is a purchase invoice with no order behind
+   * it: the rent, the forwarder, the broker, the utility bill. Its §15
+   * evidence is what it says it is (the expense category and the attached
+   * bill, stated in the justification), and its second person is the one who
+   * posts it — posting needs `approve` + `post`, which the person raising it
+   * does not hold. The same reasoning block 4 applied to the invoice that is
+   * its own receipt (migration 0196); the CHECK in 0232 holds it.
+   */
+  const category = input.expenseCategoryCode
+    ? await expenseCategoryOf(tx, input.expenseCategoryCode)
+    : null;
+  const isExpense = category !== null && !input.purchaseOrderId && !receivesItsOwnStock;
+  const expenseJustification = isExpense
+    ? (input.nonPoJustification?.trim() || `Expense — ${category!.name}`)
+    : null;
+
+  if (!input.purchaseOrderId && !receivesItsOwnStock && !isExpense) {
     if (
       !input.nonPoJustification ||
       input.nonPoJustification.trim().length === 0 ||
@@ -431,7 +484,8 @@ export async function create(
    * same two rules `setChosenAccounts` applies to a draft.
    */
   const payableAccountId = input.payableAccountId?.trim() || null;
-  const expenseAccountId = input.expenseAccountId?.trim() || null;
+  const expenseAccountId =
+    input.expenseAccountId?.trim() || category?.defaultExpenseAccountId || null;
   if (payableAccountId) {
     assertStatementAccount('supplier', await coa.loadAccount(tx, payableAccountId));
   }
@@ -495,9 +549,13 @@ export async function create(
       payableAccountId,
       expenseAccountId,
       receivesOwnStock: receivesItsOwnStock,
-      nonPoJustification: input.nonPoJustification?.trim() ?? null,
+      nonPoJustification: expenseJustification ?? input.nonPoJustification?.trim() ?? null,
       nonPoApprovedBy: input.nonPoApprovedBy ?? null,
       nonPoApprovedAt: input.nonPoApprovedBy ? new Date() : null,
+      expenseCategoryCode: category?.code ?? null,
+      recurringContractId: input.recurringContractId ?? null,
+      periodStart: input.periodStart ?? null,
+      periodEnd: input.periodEnd ?? null,
       duplicateApprovedBy: input.duplicateApprovedBy ?? null,
       duplicateApprovedAt: input.duplicateApprovedBy ? new Date() : null,
       duplicateApprovalReason: input.duplicateApprovalReason?.trim() ?? null,
@@ -569,6 +627,45 @@ export async function create(
     await payables.linkInvoice(tx, ctx, { payableId: input.payableId, apInvoiceId: created!.id });
   }
 
+  /*
+   * D13 — the import is born here. The CEO agreed the deal, the supplier's
+   * PDF reached the accountant, she entered it as this invoice and ticked
+   * Import: the application is created behind it in the same transaction,
+   * keyed by the supplier's number (ours when the form did not ask for it),
+   * with this invoice's lines as its lines. Nobody fills a second form.
+   */
+  let importPayableNo: string | null = null;
+  if (input.isImport) {
+    let payableId = input.payableId ?? null;
+    if (!payableId) {
+      const opened = await payables.create(tx, ctx, {
+        payableTypeCode: 'import',
+        supplierReference: supplierNumber || allocated.documentNo,
+        supplierId: input.supplierId,
+        branchCode: input.branchCode,
+        currency: input.currency ?? 'IQD',
+        documentDate: input.invoiceDate,
+        description: `Purchase invoice ${allocated.documentNo}`,
+        paymentTermsText: input.paymentTermsText ?? null,
+        dueDate,
+        purchaseOrderId: input.purchaseOrderId ?? null,
+        lines: input.lines.map((line) => ({
+          itemCode: line.itemCode ?? null,
+          description: line.description ?? line.itemCode ?? 'Charge',
+          quantity: formatQuantity(line.quantity),
+          uomCode: line.uomCode ?? null,
+          unitPrice: toDecimalString(line.unitPriceIqd, 4n),
+        })),
+        defaultWarehouseCode:
+          input.lines.find((line) => line.warehouseCode)?.warehouseCode ?? null,
+      });
+      payableId = opened.id;
+      importPayableNo = opened.payableNo;
+      await payables.linkInvoice(tx, ctx, { payableId, apInvoiceId: created!.id });
+    }
+    await tx.update(apInvoice).set({ isImport: true }).where(eq(apInvoice.id, created!.id));
+  }
+
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
     action: 'ap_invoice.created',
@@ -581,11 +678,19 @@ export async function create(
       orderNo: order?.orderNo ?? null,
       lines: input.lines.length,
       matchStatus: match.status,
+      isImport: Boolean(input.isImport),
+      importApplication: importPayableNo,
+      expenseCategory: category?.code ?? null,
     },
     outcome: 'success',
   });
 
-  return { id: created!.id, invoiceNo: allocated.documentNo, matchStatus: match.status };
+  return {
+    id: created!.id,
+    invoiceNo: allocated.documentNo,
+    matchStatus: match.status,
+    importPayableNo,
+  };
 }
 
 /**
@@ -1847,9 +1952,18 @@ export async function list(tx: Tx) {
       end`,
       status: apInvoice.status,
       branchCode: apInvoice.branchCode,
+      // D12 / D13 — what the register needs to say Unpaid / Paid / Overdue,
+      // and which rows are imports and which are expenses.
+      settledAmountIqd: apInvoice.settledAmountIqd,
+      isImport: apInvoice.isImport,
+      expenseCategoryCode: apInvoice.expenseCategoryCode,
+      recurringContractId: apInvoice.recurringContractId,
+      note: apInvoice.note,
+      payableNo: payable.payableNo,
     })
     .from(apInvoice)
     .leftJoin(businessPartner, eq(businessPartner.id, apInvoice.supplierId))
+    .leftJoin(payable, eq(payable.id, apInvoice.payableId))
     .orderBy(desc(apInvoice.invoiceDate), desc(apInvoice.invoiceNo));
 }
 

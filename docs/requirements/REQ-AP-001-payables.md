@@ -22,7 +22,7 @@ diagram disagree about the import, the diagram is the intent.
 | **Release** | 2 |
 | **Phase** | Operations build — Payables module, delivered in the eight stages of §25 |
 | **Source** | `QS_ERP_Workflow_Final.pdf` · `QS_DASHBOARD.xlsx` · the code review of 2026-10-01 (§3) · the instruction of 2026-10-01 that Purchasing becomes Payables and covers service fees such as office rent |
-| **Test case(s)** | §26 names the test file for every acceptance criterion; Stage 1's seven (A1–A7) exist and run in CI |
+| **Test case(s)** | §26 names the test file for every acceptance criterion; none exists yet |
 | **Status** | Approved for the Stage 1 build (decisions recorded in §28) |
 | **Approved by** | Baban Ali, 2026-10-01 (chat approval; §28.1 of the blueprint requires the Business Process Owner's written sign-off to be attached) |
 
@@ -306,7 +306,25 @@ No edit.
 
 ## 8. Import (the import application)
 
-A payable of type `import` is the application of the workflow diagram. Its
+**How it starts (decision D13).** The CEO agrees the purchase with the
+supplier (usually on WeChat) and receives the supplier's PDF — the PI /
+invoice with models, quantities, prices and payment terms. He sends it to the
+accountant. The accountant enters it as a **purchase invoice** on the
+existing Purchase Invoices screen (supplier, invoice number, lines, terms,
+the PDF attached) and ticks *Import* (pre-ticked for a supplier flagged
+foreign / import). **That purchase invoice is the import application**: the
+system creates the application behind it in the same transaction, keyed by
+the invoice number (the same key the sheet used, "PO no./INV."), with the
+invoice lines as its lines and the invoice's instalment plan as its terms,
+and the purchase order the ERP's own controls need (receipts, advances) is
+created silently from the lines. Nobody fills a second form and nobody types
+anything twice. An import invoice does not put goods into stock when posted —
+stock arrives container by container (§18); until then its stock lines post
+to goods-in-transit.
+
+The invoice page gets an **Import tracking** button that opens the
+application page (§21.3); the *Import applications* list shows the same
+records. A payable of type `import` is the application of the workflow diagram. Its
 order lane, bank lane, payment lane, PD lane, shipment lane and warehouse lane
 are specified in Part D, holds in Part E, cleared and landed cost in Part F —
 all carried over from REQ-APP-001 with the new names (`payable`,
@@ -432,7 +450,7 @@ ledger exactly as now.
 
 | Box | Specification |
 |---|---|
-| **Pending order / PI** | Creating the application records the proforma / pending order: supplier, PI number (= `supplier_reference`), PI date, currency, amount, and the model lines (item code, description, quantity, unit price). Lines are stored in `payable_order_line` so quantity is known before the invoice exists. **In the same transaction a purchase order is created from those lines through the existing `purchase-order` service and submitted** — approval stays a second person's act in the approvals inbox (blueprint §5.2 maker-checker; one officer must not self-approve a commitment) (the PI is the company's order; `purchase_order.reference` = the PI number) — or, when the user picks an existing approved PO of the same supplier, that PO is linked and its lines become the order lines. Event `PAYABLE_OPENED`, `PI_RECORDED`, `PO_LINKED`. |
+| **Pending order / PI** | The supplier's PDF, entered by the accountant as a purchase invoice (§8) — that entry *is* the application's birth: `supplier_reference` = the invoice number, the invoice lines are stored as `payable_order_line`, the PDF is attached. **In the same transaction a purchase order is created from those lines through the existing `purchase-order` service and submitted** — approval stays a second person's act in the approvals inbox (blueprint §5.2 maker-checker; one officer must not self-approve a commitment) (the PI is the company's order; `purchase_order.reference` = the PI number) — or, when the user picks an existing approved PO of the same supplier, that PO is linked and its lines become the order lines. Event `PAYABLE_OPENED`, `PI_RECORDED`, `PO_LINKED`. |
 | **Purchase invoice** | The existing AP invoice, created from the application page ("Create purchase invoice") with lines pre-filled from the PI, or linked afterwards by picking an existing posted invoice of the same supplier whose reference matches `supplier_reference_key`. Posting the invoice writes `INVOICE_POSTED` with amount and quantity; reversal writes `INVOICE_REVERSED` and re-derives the stage. Several invoices per application are allowed; one invoice belongs to at most one application. |
 | **Payment terms** | `payment_terms_text` (verbatim) and the structured instalment plan of §15.2, entered together. Event `TERMS_SET`; any later change `TERMS_CHANGED` with before/after. The invoice's own `due_date` (existing) is kept for AP ageing and is set from the last instalment's expected date. |
 | **Move to BL** | Automatic. The moment the first B/L is recorded (§17.1) the order lane writes `MOVED_TO_BL`; from then on quantities are tracked per container, and the PI lines become the plan to check containers against. |
@@ -860,6 +878,11 @@ Event `ITEM_COST_ALLOCATED` per model with the resulting unit cost.
 ## 21. Screen by screen
 
 Conventions: every screen is a Next.js route under `src/app/(app)/payables/…`.
+**Every screen draws the module's navigation with the existing `SectionTabs`
+component** (the screens of the same menu heading, in the menu's order) and
+never its own row of links; filters and saved views live inside the list
+area, below the tabs, next to the search box. A screen that looks different
+from the rest of the ERP is wrong.
 The menu section `purchasing` is **renamed `payables`** (key, label in `en`
 and `ar`, ordinal unchanged) and absorbs the items of `finance_ap` (supplier
 ledger, ageing, allocations, reconciliation), which section is removed from
@@ -895,7 +918,31 @@ work at mobile width and RTL. Nothing about the existing appearance changes.
 
 ### 21.2 Payables workbench `/payables`
 
-The one list for everything owed. Columns (default view): no · **type** chip ·
+The one list for everything owed — but **two experiences, one table**. An
+import is a big tracked record; a rent, a forwarder's bill or a broker's fee
+is not, and must never be shown with the import's machinery. The list area
+has two tabs:
+
+* **Imports** (default) — the full columns below, the stage, the stopped
+  chips, the "Stopped — reason required" views.
+* **Expenses** — every other type, plainly: name · who we pay · amount · due
+  date · **Unpaid / Paid / Overdue** · belongs to import (if any). No stage
+  rail, no reason codes, no hold owner. *Overdue* = due date passed and not
+  paid: the row turns red with "Overdue — N days" and an inline **Add note**
+  so someone writes why (internally the `recurring_overdue` / `service` hold
+  with reason `OTHER` and the note as detail — the data model is kept, the
+  procedure is hidden).
+
+Header actions: **Add expense** (below) — there is no "New import" button:
+an import is born when the accountant enters the supplier's invoice (§8). **Add expense** — a small dialog: type of fee (`expense_category`: rent,
+electricity, internet, freight forwarding, customs brokerage, consultant,
+bank charge, other — extensible in settings) · name · who we pay · amount +
+currency · due date · attach invoice (optional) · *belongs to import*
+(optional, for forwarder / broker / port costs) · *repeat every month*
+(creates the recurring contract and its first period) · Save. Saving creates
+a payable of type `service` (or `recurring`) and writes `PAYABLE_OPENED`.
+
+Imports tab columns (default view): no · **type** chip ·
 reference · supplier · department · description · amount (txn) · **stage**
 (+ days) · **Stopped?** (reason · owner · days) · due / expected date ·
 applied / paid / remaining · next action + due · branch. Type-specific columns
@@ -913,10 +960,16 @@ then days stopped desc, then due date. Row actions: open · stop / follow-up
 
 One layout for every type; the tabs that show are the type's lanes.
 
-* **Header band** — the chip rows of §5.2; stage rail of the type (import: 8
-  steps as drawn; service / recurring: 7); days in stage.
-* **Stop banner** — as §19: reason · owner · since · next action, with
-  *Update / Reassign / Resolve*; or "Over time limit — reason required".
+* **Header band** — for **import**: the chip rows of §5.2, the 8-step stage
+  rail as drawn, days in stage. For **every other type**: the expense fields,
+  a status chip *Unpaid / Paid / Overdue*, and the buttons **Mark paid**
+  (date, method, reference — creates the posted supplier payment through the
+  existing service in the same transaction and writes the event) and **Add
+  note**. The 7-step rails of §6 still exist internally (derived and logged)
+  but are not drawn for these types.
+* **Stop banner** (import only) — as §19: reason · owner · since · next
+  action, with *Update / Reassign / Resolve*; or "Over time limit — reason
+  required". Other types show only the red *Overdue* chip and the note.
 * **Tabs** (shown when the lane applies): Order & invoice · Service
   (receipt / confirmation; for recurring: the period and contract) · Bank &
   funding · Payments · PD / ASYCUDA · Shipment & containers · Warehouse &
@@ -1109,13 +1162,13 @@ one process.
 
 | # | Criterion | Test |
 |---|---|---|
-| A1 | Creating a payable of each seeded type allocates its series number, writes `PAYABLE_OPENED`, enforces the type's controls (PO required for import / local goods; department required for service / recurring), and refuses a duplicate supplier + normalised reference + type. | `tests/integration/ap01-payable-core.test.ts` |
-| A2 | Every service writing to a table carrying `payable_id` writes at least one `payable_event` in the same transaction; the coverage test fails any that does not. | `tests/integration/ap01-event-coverage.test.ts` |
-| A3 | UPDATE / DELETE on the append-only tables raise; DELETE on any payable table is refused for `erp_app`. | `tests/integration/ap01-append-only.test.ts` |
-| A4 | Stage derivation is correct for each seeded rail, including deposit-paid-then-shipped (import, stage 5) and advance-before-confirmation (service, stage 5 with lane "not confirmed"). | `tests/integration/ap01-stage-derivation.test.ts` |
-| A5 | The sweep, run twice, opens exactly one `PENDING_REASON` hold per payable+check over its limit (SWIFT pending, recurring overdue, PD not validated…); completing needs reason, owner, next action; the thread is append-only. | `tests/integration/ap01-holds-sweep.test.ts` |
-| A6 | A time limit changed in settings (scope type / bank / method) applies on the next sweep without deployment; the old row keeps its validity. | `tests/integration/ap01-settings-live.test.ts` |
-| A7 | The menu shows *Payables* (en/ar) with the moved `finance_ap` items; every `/purchasing/*` route redirects to `/payables/*`; permissions unchanged. | `tests/integration/ap01-menu-redirects.test.ts` |
+| A1 | Creating a payable of each seeded type allocates its series number, writes `PAYABLE_OPENED`, enforces the type's controls (PO required for import / local goods; department required for service / recurring), and refuses a duplicate supplier + normalised reference + type. | `ap01-payable-core` |
+| A2 | Every service writing to a table carrying `payable_id` writes at least one `payable_event` in the same transaction; the coverage test fails any that does not. | `ap01-event-coverage` |
+| A3 | UPDATE / DELETE on the append-only tables raise; DELETE on any payable table is refused for `erp_app`. | `ap01-append-only` |
+| A4 | Stage derivation is correct for each seeded rail, including deposit-paid-then-shipped (import, stage 5) and advance-before-confirmation (service, stage 5 with lane "not confirmed"). | `ap01-stage-derivation` |
+| A5 | The sweep, run twice, opens exactly one `PENDING_REASON` hold per payable+check over its limit (SWIFT pending, recurring overdue, PD not validated…); completing needs reason, owner, next action; the thread is append-only. | `ap01-holds-sweep` |
+| A6 | A time limit changed in settings (scope type / bank / method) applies on the next sweep without deployment; the old row keeps its validity. | `ap01-settings-live` |
+| A7 | The menu shows *Payables* (en/ar) with the moved `finance_ap` items; every `/purchasing/*` route redirects to `/payables/*`; permissions unchanged. | `ap01-menu-redirects` |
 | A8 | A monthly rent contract generates one payable per period, 30 days ahead, idempotently; auto-confirm moves it to stage 2; a period unpaid after its due date gets an automatic hold; an amendment changes future periods only. | `ap02-recurring-contract` |
 | A9 | A service payable cannot have its invoice approved without an approved service receipt when the category requires one; a category with `requires_receipt=false` approves with the note shown. | `ap02-service-flow` |
 | A10 | A forwarder's invoice line charged to an import becomes a landed-cost charge of that import and posts to the clearing account, not P&L. | `ap02-charged-to-import` |
@@ -1125,6 +1178,8 @@ one process.
 | A20 | Applied / Paid / Remaining of the 58 migrated imports match the sheet (USD 35,309,347.81 invoiced; 15,617,285.40 paid; 23,872,694.40 applied); the dry run changes nothing and lists unmatched suppliers / PDs, verify-SWIFT rows and legacy-cleared differences. | `ap08-migration` |
 | A21 | Workbench at 10,000 payables / 200,000 events < 1 s; payable page < 1.5 s. | `tests/load/payables.js` |
 | A22 | Every new route is in `domain/menu.ts` and `DELIVERED`, translated in `en` and `ar`, passes the theme-readability e2e at mobile RTL width. | `tests/e2e/payables.spec.ts` |
+| A23 | D13 — a purchase invoice ticked *Import* opens the import application behind it in the same transaction (keyed by the supplier's number, the invoice's lines, a submitted PO, `PAYABLE_OPENED` / `PO_LINKED` / `TERMS_SET`); an unticked invoice opens nothing; the database refuses an import invoice without its application. | `ap02-expenses-and-import-invoice` |
+| A24 | D12 — *Add expense* raises a non-PO invoice whose §15 evidence is the type of fee (no second approver at entry, the CEO posts it); a non-PO invoice with no type of fee is still refused; *Mark paid* posts and allocates the payment (officer refused, paying twice refused); Unpaid / Overdue / Paid read correctly; a note is dated, signed and never edited; a contract raises one purchase invoice per period. | `ap02-expenses-and-import-invoice`, `ap02-recurring-contract` |
 
 ## 27. Out of scope (this release)
 
@@ -1157,6 +1212,8 @@ one process.
 | D9 | PO from a PI (Stage 1 build, 2026-10-01) | The PO is created and *submitted* in the payable's transaction; approval is a second person's act (maker-checker). |
 | D10 | Escalation clock (Stage 1 build) | Counts from the hold's `opened_at`, not from the breach date. |
 | D11 | Order lines | No DELETE on `payable_order_line`; a changed PI line supersedes the old one and writes `FIELD_CHANGED` (follow-up to Stage 1). |
+| D12 | Two experiences, one table (2026-10-01, after the first look at the workbench) | Imports get the full tracking UI; every other type gets the simple *Add expense* dialog and *Unpaid / Paid / Overdue* with a note. The stop machinery with reason codes is drawn for imports only. Every screen uses `SectionTabs`; no screen draws its own navigation. |
+| D13 | Where an import is born (2026-10-01) | At the purchase invoice: the accountant enters the supplier's PDF as a purchase invoice ticked *Import*; the application is created behind it automatically, keyed by the invoice number; the PO is created silently for the ERP's controls. No separate form. Expenses (rent, forwarders, brokers, utilities) are ordinary purchase invoices with *Mark paid* and Unpaid/Paid/Overdue — not payables. |
 
 ---
 

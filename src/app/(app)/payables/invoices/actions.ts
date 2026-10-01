@@ -7,6 +7,7 @@ import { parseDecimal } from '@domain/money';
 import { parseQuantity } from '@domain/uom';
 import * as ap from '@/server/services/ap-invoice';
 import * as inventory from '@/server/services/inventory';
+import * as expenses from '@/server/services/expenses';
 import { LINE_ROWS } from './lines';
 
 const LIST = '/payables/invoices';
@@ -97,6 +98,9 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       // Where it posts, chosen on the form that raised it.
       payableAccountId: text(formData, 'payable_account_id').trim() || null,
       expenseAccountId: text(formData, 'expense_account_id').trim() || null,
+      // D13 — the accountant ticked Import: the application is born with it.
+      isImport: text(formData, 'is_import') === '1',
+      paymentTermsText: text(formData, 'payment_terms_text').trim() || null,
       lines,
     });
   });
@@ -206,6 +210,55 @@ export async function reverseApInvoice(formData: FormData): Promise<void> {
   const invoiceNo = text(formData, 'invoice_no');
   await runAdminAndReturn(
     (tx, ctx) => ap.reverse(tx, ctx, text(formData, 'id'), { reason: text(formData, 'reason') }),
+    record(invoiceNo),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// D12 — expenses are purchase invoices: Add expense, Mark paid, Add note.
+// ---------------------------------------------------------------------------
+
+/** "Add expense" — the quick form on the Purchase Invoices list (§21.2). */
+export async function addExpenseAction(formData: FormData): Promise<void> {
+  const outcome = await runAdmin(async (tx, ctx) => {
+    const amount = text(formData, 'amount').trim();
+    if (!amount) throw new Error('Enter the amount on the bill.');
+    return expenses.addExpense(tx, ctx, {
+      expenseCategoryCode: text(formData, 'expense_category'),
+      name: text(formData, 'name'),
+      supplierId: text(formData, 'supplier_id'),
+      branchCode: ctx.branchCode,
+      amountIqd: parseDecimal(amount, 4n),
+      invoiceDate: text(formData, 'invoice_date'),
+      dueDate: text(formData, 'due_date'),
+      supplierInvoiceNo: text(formData, 'supplier_invoice_no').trim() || null,
+      chargedToPayableId: text(formData, 'charged_to').trim() || null,
+    });
+  });
+  if (!outcome.ok) redirect(withQuery(`${LIST}?expense=1`, 'error', outcome.error!));
+  redirect(record(outcome.value!.invoiceNo));
+}
+
+/** "Mark paid" — the payment for what is still owed, posted and allocated. */
+export async function markPaidAction(formData: FormData): Promise<void> {
+  const invoiceNo = text(formData, 'invoice_no');
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      expenses.markPaid(tx, ctx, {
+        apInvoiceId: text(formData, 'id'),
+        bankCashAccountId: text(formData, 'bank_cash_account_id'),
+        paymentDate: text(formData, 'payment_date'),
+        reference: text(formData, 'reference').trim() || null,
+      }),
+    record(invoiceNo),
+  );
+}
+
+/** "Add note" — dated, signed, never edited. */
+export async function addInvoiceNoteAction(formData: FormData): Promise<void> {
+  const invoiceNo = text(formData, 'invoice_no');
+  await runAdminAndReturn(
+    (tx, ctx) => expenses.addNote(tx, ctx, text(formData, 'id'), text(formData, 'note')),
     record(invoiceNo),
   );
 }

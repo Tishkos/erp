@@ -20,6 +20,7 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as contracts from '@/server/services/recurring-contracts';
 import * as partners from '@/server/services/partners';
+import { paymentState } from '@/server/services/expenses';
 import { amendContract, approveContract, endContract, generatePeriodsNow } from '../actions';
 
 /**
@@ -42,8 +43,9 @@ export default async function ContractPage({
   if (!visibleRoute('/payables/contracts')) notFound();
 
   const { contractNo } = await params;
-  const [t, page, locale, context, outcome] = await Promise.all([
+  const [t, expenseText, page, locale, context, outcome] = await Promise.all([
     getTranslations('admin.payables_contracts'),
+    getTranslations('admin.expenses'),
     getTranslations('page'),
     getLocale(),
     requireContext(),
@@ -70,6 +72,7 @@ export default async function ContractPage({
   if (!found) notFound();
   const { contract, periods, amendments, supplier } = found;
 
+  const today = new Date().toISOString().slice(0, 10);
   const money = (amount: string, currency = contract.currency) =>
     formatMoney(amount, currency, locale as Locale);
   const day = (value: string | Date | null) =>
@@ -215,27 +218,28 @@ export default async function ContractPage({
                     <td>
                       <Link
                         className={s.sapLink}
-                        href={`/payables/${encodeURIComponent(period.payableNo)}`}
+                        href={`/payables/invoices/${encodeURIComponent(period.invoiceNo)}`}
                       >
-                        <bdi dir="ltr">{period.payableNo}</bdi>
+                        <bdi dir="ltr">{period.invoiceNo}</bdi>
                       </Link>
                     </td>
                     <td>
                       <bdi dir="ltr">{day(period.dueDate)}</bdi>
                     </td>
                     <td className={s.sapNum}>
-                      <bdi dir="ltr">{money(period.amountTxn)}</bdi>
+                      <bdi dir="ltr">{money(period.totalIqd, 'IQD')}</bdi>
                     </td>
                     <td>
-                      {period.onHold ? (
-                        <span className="status status--rejected" data-status="rejected">
-                          {t('stopped')}
-                        </span>
-                      ) : (
-                        <span className="status" data-status="submitted">
-                          {period.stageCode}
-                        </span>
-                      )}
+                      {(() => {
+                        const state = paymentState(period, today);
+                        const tone =
+                          state === 'paid' ? 'settled' : state === 'overdue' ? 'rejected' : 'submitted';
+                        return (
+                          <span className={`status status--${tone}`} data-status={tone}>
+                            {expenseText(`state_${state}`)}
+                          </span>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))}

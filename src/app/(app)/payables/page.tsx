@@ -14,7 +14,6 @@ import {
   SubmitRow,
   admin as s,
 } from '@/components/admin';
-import { NewRecordDialog } from '@/components/admin/dialog';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -22,11 +21,8 @@ import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
-import * as partners from '@/server/services/partners';
-import * as departmentsService from '@/server/services/departments';
 import * as payables from '@/server/services/payables';
 import * as settings from '@/server/services/payables-settings';
-import { createPayable } from './actions';
 
 /**
  * The Payables workbench — REQ-AP-001 §21.2, the one list for everything owed.
@@ -71,8 +67,10 @@ export default async function PayablesWorkbench({
   }
   const mayCreate = can(principal, 'create', payables.PERMISSION_OBJECT);
 
+  // D13 — the payable record is the import application; the other types are
+  // deactivated (expenses are purchase invoices). The list shows imports.
   let typeFilter: string | null =
-    typeof params.type === 'string' && params.type ? params.type : null;
+    typeof params.type === 'string' && params.type ? params.type : 'import';
   let stoppedFilter: 'yes' | 'no' | 'needs_reason' | null =
     params.stopped === 'yes' || params.stopped === 'no' || params.stopped === 'needs_reason'
       ? params.stopped
@@ -80,7 +78,7 @@ export default async function PayablesWorkbench({
   const pageNo = Number(params.page) > 0 ? Number(params.page) : 1;
   const viewParam = typeof params.view === 'string' && params.view ? params.view : null;
 
-  const { rows, total, types, suppliers, departments, categories, savedViews } =
+  const { rows, total, types, savedViews } =
     await withCurrentUser(
     async (tx) => {
       const stored = await payables.workbenchViews(tx);
@@ -112,9 +110,6 @@ export default async function PayablesWorkbench({
       return {
         ...list,
         types: config.types.filter((type) => type.active),
-        categories: config.categories.filter((c) => c.active),
-        suppliers: await partners.listActiveInRole(tx, 'supplier'),
-        departments: await departmentsService.listAll(tx),
         savedViews: stored,
       };
     },
@@ -149,89 +144,12 @@ export default async function PayablesWorkbench({
   return (
     <AdminPage
       actions={
+        // D13 — an import is born at the purchase invoice: the accountant
+        // enters the supplier's PDF and ticks Import. There is no second form.
         mayCreate ? (
-          <NewRecordDialog
-            buttonLabel={t('new')}
-            closeLabel={t('close')}
-            openOnLoad={Boolean(outcome.error)}
-            title={t('new_title')}
-            wide
-          >
-            <Form action={createPayable}>
-              <Grid>
-                <Select
-                  label={t('type')}
-                  name="payable_type"
-                  options={types.map((type) => ({ value: type.code, label: type.name }))}
-                  required
-                />
-                <Select
-                  label={t('supplier')}
-                  name="supplier_id"
-                  options={suppliers.map((p) => ({ value: p.id, label: `${p.name} (${p.code})` }))}
-                  required
-                />
-                <Field label={t('reference')} name="supplier_reference" required />
-                <Field label={t('document_date')} name="document_date" required type="date" />
-                <Field defaultValue="USD" label={t('currency')} name="currency" required />
-                <Field hint={t('amount_hint')} label={t('amount')} name="amount" />
-                <Select
-                  emptyLabel="—"
-                  label={t('department')}
-                  name="department_code"
-                  options={departments.map((d) => ({ value: d.code, label: d.name }))}
-                />
-                <Select
-                  emptyLabel="—"
-                  label={t('category')}
-                  name="expense_category"
-                  options={categories.map((c) => ({ value: c.code, label: c.name }))}
-                />
-                <Field label={t('due_date')} name="due_date" type="date" />
-              </Grid>
-              <Field label={t('description')} name="description" required wide />
-              <Field label={t('terms')} name="payment_terms" wide />
-              <input name="line_count" type="hidden" value="5" />
-              <div className={s.sapTableWrap}>
-                <table className={s.sapTable}>
-                  <thead>
-                    <tr>
-                      <th scope="col">{t('line_item')}</th>
-                      <th scope="col">{t('line_description')}</th>
-                      <th scope="col">{t('line_quantity')}</th>
-                      <th scope="col">{t('line_uom')}</th>
-                      <th scope="col">{t('line_price')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[0, 1, 2, 3, 4].map((index) => (
-                      <tr key={index}>
-                        <td>
-                          <input className={s.input} name={`line_${index}_item`} />
-                        </td>
-                        <td>
-                          <input className={s.input} name={`line_${index}_description`} />
-                        </td>
-                        <td>
-                          <input className={s.input} inputMode="decimal" name={`line_${index}_quantity`} />
-                        </td>
-                        <td>
-                          <input className={s.input} defaultValue="EA" name={`line_${index}_uom`} />
-                        </td>
-                        <td>
-                          <input className={s.input} inputMode="decimal" name={`line_${index}_price`} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="muted">{t('lines_hint')}</p>
-              <SubmitRow>
-                <Submit label={t('create')} />
-              </SubmitRow>
-            </Form>
-          </NewRecordDialog>
+          <Link className="action action--primary" href="/payables/invoices/new">
+            {t('new_from_invoice')}
+          </Link>
         ) : null
       }
       back={{ href: '/', label: admin('dashboard_label') }}

@@ -44,8 +44,9 @@ export const dynamic = 'force-dynamic';
 export default async function NewApInvoicePage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/payables/invoices')) notFound();
 
-  const [t, page, column, locale, context, outcome] = await Promise.all([
+  const [t, x, page, column, locale, context, outcome] = await Promise.all([
     getTranslations('admin'),
+    getTranslations('admin.expenses'),
     getTranslations('page'),
     getTranslations('column'),
     getLocale(),
@@ -169,6 +170,34 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
               </option>
             ))}
         </select>
+      ),
+    },
+    /*
+     * D13 (2026-10-01) — the CEO agreed the deal on WeChat, the supplier's
+     * PDF reached the accountant, and she enters it here. Ticking Import
+     * opens the import application behind this invoice when it is saved:
+     * the PD, the SWIFTs, the B/Ls and the containers then attach to it. The
+     * terms are kept as the supplier wrote them.
+     */
+    {
+      label: x('is_import'),
+      control: true,
+      value: (
+        <label>
+          <input name="is_import" type="checkbox" value="1" /> {x('is_import_hint')}
+        </label>
+      ),
+    },
+    {
+      label: x('payment_terms_text'),
+      control: true,
+      value: (
+        <input
+          aria-label={x('payment_terms_text')}
+          name="payment_terms_text"
+          placeholder={x('payment_terms_placeholder')}
+          type="text"
+        />
       ),
     },
   ];

@@ -15,6 +15,7 @@
 import { and, asc, desc, eq, isNull, lte, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
+  apInvoice,
   payable,
   recurringContract,
   recurringContractAmendment,
@@ -26,6 +27,7 @@ import * as audit from './audit';
 import * as authz from './authorization';
 import * as events from './payable-events';
 import * as payables from './payables';
+import * as ap from './ap-invoice';
 import { allocateDocumentNumber } from './numbering';
 
 export const PERMISSION_OBJECT = 'recurring_contract';
@@ -406,8 +408,17 @@ export interface GenerationResult {
 }
 
 /**
- * One payable per contract per due period, idempotently. The system actor is
- * the sweep's; a manual "generate now" passes the caller's.
+ * One **purchase invoice** per contract per due period, idempotently (D12:
+ * expenses are invoices — the rent is the contract's invoice, not a record of
+ * its own). The partial unique index on (recurring_contract_id, period_start)
+ * makes "once per period" a property of the database, not of this loop.
+ *
+ * The invoice is raised in the name of the contract's maker (the person who
+ * would otherwise type it every month) and goes through `ap.create` like any
+ * invoice: numbering, the §15 expense route, posting by the CEO, the journal.
+ * D8 — a lease is its own evidence: `auto_confirm` submits it for posting at
+ * once; a metered bill (`auto_confirm` off) waits in draft for the department
+ * to check the amount against the bill.
  */
 export async function generateDue(
   tx: Tx,
@@ -426,12 +437,12 @@ export async function generateDue(
     const periods = periodsUntil(contract, asOf);
     for (const period of periods) {
       const [existing] = await tx
-        .select({ id: payable.id })
-        .from(payable)
+        .select({ id: apInvoice.id })
+        .from(apInvoice)
         .where(
           and(
-            eq(payable.recurringContractId, contract.id),
-            eq(payable.periodStart, period.start),
+            eq(apInvoice.recurringContractId, contract.id),
+            eq(apInvoice.periodStart, period.start),
           ),
         )
         .limit(1);
@@ -439,17 +450,6 @@ export async function generateDue(
 
       const amountTxn = await amountFor(tx, contract.id, period.start);
       const label = `${contract.description} — ${period.start.slice(0, 7)}`;
-
-      const allocated = await allocateDocumentNumber(
-        tx,
-        'PAYABLE_RECURRING',
-        { branchCode: contract.branchCode, year: Number(period.start.slice(0, 4)) },
-        actor?.userId ?? contract.createdBy,
-      );
-
-      const rail = await payables.railFor(tx, 'recurring');
-      const { NO_FACTS, deriveStage, referenceKey } = await import('../domain/payables');
-      const stageCode = deriveStage(rail, NO_FACTS);
       const converted = await (await import('./exchange-rates')).convertOn(
         tx,
         parseDecimal(amountTxn, MONEY_SCALE),
@@ -457,67 +457,53 @@ export async function generateDue(
         period.start,
       );
 
-      const [created] = await tx
-        .insert(payable)
-        .values({
-          payableNo: allocated.documentNo,
-          payableTypeCode: 'recurring',
-          supplierReference: `${contract.contractNo}-${period.start.slice(0, 7)}`,
-          supplierReferenceKey: referenceKey(`${contract.contractNo}${period.start.slice(0, 7)}`),
-          supplierId: contract.supplierId,
-          branchCode: contract.branchCode,
-          departmentCode: contract.departmentCode,
-          currency: contract.currency,
-          amountTxn,
-          amountIqd: toDecimalString(converted.amountIqd),
-          documentDate: period.start,
-          description: label,
-          recurringContractId: contract.id,
-          expenseCategoryCode: contract.expenseCategoryCode,
-          dueDate: period.dueDate,
-          periodStart: period.start,
-          periodEnd: period.end,
-          stageCode,
-          source: 'contract',
-          createdBy: actor?.userId ?? contract.createdBy,
-        })
-        .returning({ id: payable.id });
+      const makerId = actor?.userId ?? contract.createdBy;
+      const principal = await authz.loadPrincipal(tx, makerId);
+      const ctx: ActorContext = { principal, branchCode: contract.branchCode };
 
-      const payableId = created!.id;
+      const created = await ap.create(tx, ctx, {
+        supplierId: contract.supplierId,
+        supplierInvoiceNo: `${contract.contractNo}-${period.start.slice(0, 7)}`,
+        branchCode: contract.branchCode,
+        invoiceDate: period.start,
+        dueDate: period.dueDate,
+        expenseCategoryCode: contract.expenseCategoryCode,
+        nonPoJustification: `Contract ${contract.contractNo} — ${label}`,
+        note: label,
+        recurringContractId: contract.id,
+        periodStart: period.start,
+        periodEnd: period.end,
+        lines: [
+          {
+            description: label,
+            quantity: 1_000_000n,
+            unitPriceIqd: converted.amountIqd,
+            isInventory: false,
+          },
+        ],
+      });
       periodsCreated += 1;
 
-      await events.record(tx, {
-        payableId,
-        eventCode: 'PERIOD_GENERATED',
-        summary: `${label} — ${contract.currency} ${amountTxn}, due ${period.dueDate}`,
-        sourceType: 'recurring_contract',
-        sourceId: contract.id,
-        sourceNo: contract.contractNo,
-        actorUserId: actor?.userId ?? null,
-      });
-      await events.record(tx, {
-        payableId,
-        eventCode: 'CONTRACT_LINKED',
-        summary: `Generated by ${contract.contractNo}`,
-        sourceType: 'recurring_contract',
-        sourceId: contract.id,
-        sourceNo: contract.contractNo,
-        actorUserId: actor?.userId ?? null,
-      });
-
-      // D8 — the lease is its own evidence; the period opens confirmed.
       if (contract.autoConfirm) {
-        await events.record(tx, {
-          payableId,
-          eventCode: 'PERIOD_AUTO_CONFIRMED',
-          summary: 'Confirmed by the contract itself (D8 — the lease is the evidence)',
-          sourceType: 'recurring_contract',
-          sourceId: contract.id,
-          sourceNo: contract.contractNo,
-          actorUserId: null,
-        });
-        await payables.recomputeStage(tx, payableId, null);
+        await ap.submit(tx, ctx, created.id);
       }
+
+      await audit.record(tx, {
+        actorUserId: actor?.userId ?? null,
+        action: 'recurring_contract.period_invoiced',
+        objectType: PERMISSION_OBJECT,
+        objectId: contract.id,
+        branchCode: contract.branchCode,
+        after: {
+          contractNo: contract.contractNo,
+          periodStart: period.start,
+          invoiceNo: created.invoiceNo,
+          amount: amountTxn,
+          currency: contract.currency,
+          submitted: contract.autoConfirm,
+        },
+        outcome: 'success',
+      });
     }
   }
 
@@ -529,19 +515,18 @@ export async function view(tx: Tx, contractNo: string) {
   const contract = await loadByNo(tx, contractNo);
   const periods = await tx
     .select({
-      id: payable.id,
-      payableNo: payable.payableNo,
-      periodStart: payable.periodStart,
-      periodEnd: payable.periodEnd,
-      dueDate: payable.dueDate,
-      amountTxn: payable.amountTxn,
-      stageCode: payable.stageCode,
-      onHold: payable.onHold,
-      cancelledAt: payable.cancelledAt,
+      id: apInvoice.id,
+      invoiceNo: apInvoice.invoiceNo,
+      periodStart: apInvoice.periodStart,
+      periodEnd: apInvoice.periodEnd,
+      dueDate: apInvoice.dueDate,
+      status: apInvoice.status,
+      totalIqd: apInvoice.totalIqd,
+      settledAmountIqd: apInvoice.settledAmountIqd,
     })
-    .from(payable)
-    .where(eq(payable.recurringContractId, contract.id))
-    .orderBy(asc(payable.periodStart));
+    .from(apInvoice)
+    .where(eq(apInvoice.recurringContractId, contract.id))
+    .orderBy(asc(apInvoice.periodStart));
   const amendments = await tx
     .select()
     .from(recurringContractAmendment)
@@ -585,15 +570,13 @@ export async function listForScreen(tx: Tx): Promise<ContractListRow[]> {
            c.currency,
            c.frequency,
            c.status,
-           (select min(p.due_date)::text from payable p
-             where p.recurring_contract_id = c.id
-               and p.cancelled_at is null and p.closed_at is null
-               and p.stage_code not in ('paid', 'closed')) as "nextDue",
-           (select count(*)::int from payable p
-             where p.recurring_contract_id = c.id
-               and p.cancelled_at is null and p.closed_at is null
-               and p.due_date < current_date
-               and p.stage_code not in ('paid', 'closed')) as "overduePeriods"
+           (select min(i.due_date)::text from ap_invoice i
+             where i.recurring_contract_id = c.id
+               and i.status not in ('settled', 'reversed', 'cancelled')) as "nextDue",
+           (select count(*)::int from ap_invoice i
+             where i.recurring_contract_id = c.id
+               and i.due_date < current_date
+               and i.status not in ('settled', 'reversed', 'cancelled')) as "overduePeriods"
       from recurring_contract c
       join business_partner bp on bp.id = c.supplier_id
       left join expense_category ec on ec.code = c.expense_category_code

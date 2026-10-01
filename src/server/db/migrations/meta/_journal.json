@@ -1086,6 +1086,13 @@
       "when": 1795900000034,
       "tag": "0230_payables_stage2",
       "breakpoints": true
+    },
+    {
+      "idx": 155,
+      "version": "7",
+      "when": 1795900000035,
+      "tag": "0231_expenses_are_invoices",
+      "breakpoints": true
     }
   ]
 }

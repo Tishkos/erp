@@ -50,7 +50,8 @@ import { documentStatus } from './workflow';
 import { chartOfAccount } from './accounting';
 import { journalEntry } from './journal';
 import { purchaseOrder, purchaseOrderLine } from './purchase-order';
-import { payable } from './payables';
+import { expenseCategory, payable } from './payables';
+import { recurringContract } from './payables-contracts';
 // (charged_to_payable_id on the line also references payable — §9.2, §20.2.)
 
 /** Appendix B's Matched / Exception, on its own axis. */
@@ -137,6 +138,29 @@ export const apInvoice = pgTable(
      * outside the payables module carries nothing.
      */
     payableId: uuid('payable_id').references(() => payable.id),
+
+    /**
+     * REQ-AP-001 §8, D13 — the accountant ticks *Import* on the supplier's
+     * invoice and the import application is created behind it in the same
+     * transaction. The CHECK in migration 0231 holds the pairing: an import
+     * invoice always has its application.
+     */
+    isImport: boolean('is_import').notNull().default(false),
+
+    /**
+     * D12 — expenses are purchase invoices. The type of fee (rent, freight
+     * forwarding, customs brokerage …) is the expense category; it carries the
+     * default expense account the line posts to.
+     */
+    expenseCategoryCode: text('expense_category_code').references(() => expenseCategory.code),
+
+    /**
+     * §10, D12 — a contract period is an invoice that knows its contract and
+     * its period. One invoice per contract per period (partial unique index).
+     */
+    recurringContractId: uuid('recurring_contract_id').references(() => recurringContract.id),
+    periodStart: date('period_start'),
+    periodEnd: date('period_end'),
 
     branchCode: text('branch_code')
       .notNull()
@@ -402,4 +426,25 @@ export const apMatchException = pgTable(
               and coalesce(btrim(${t.resolutionReason}), '') <> '')`,
     ),
   ],
+);
+
+/**
+ * D12 — "Overdue — add a note". A dated, signed line on an invoice that is
+ * never edited (append-only by trigger, migration 0231): the whole of "where
+ * is it stopped and why" for an expense.
+ */
+export const apInvoiceNote = pgTable(
+  'ap_invoice_note',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    apInvoiceId: uuid('ap_invoice_id')
+      .notNull()
+      .references(() => apInvoice.id),
+    note: text('note').notNull(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('ap_invoice_note_invoice_idx').on(t.apInvoiceId, t.createdAt)],
 );

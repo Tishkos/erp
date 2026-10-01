@@ -1,18 +1,18 @@
 /**
- * REQ-AP-001 A8 — the rent is in the system.
+ * REQ-AP-001 A8 — the rent is in the system, as purchase invoices (D12).
  *
- * A monthly contract generates one payable per period, `generate_days_ahead`
- * early, idempotently — the partial unique on (contract, period_start) is the
- * guarantee, and running the generator twice proves it. Auto-confirm (D8)
- * opens the period at stage 2; a period unpaid past its due date gets the
- * same automatic hold a late SWIFT gets; an amendment changes future periods
- * only.
+ * A monthly contract generates one **purchase invoice** per period,
+ * `generate_days_ahead` early, idempotently — the partial unique on
+ * (recurring_contract_id, period_start) is the guarantee, and running the
+ * generator twice proves it. Auto-confirm (D8) submits the period's invoice
+ * for posting at once; a period past its due date reads Overdue on the
+ * register; an amendment changes future periods only.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ownerPool, rejection, resetTestData } from './setup';
 import { withScope } from '@/server/db/client';
 import * as contracts from '@/server/services/recurring-contracts';
-import * as sweep from '@/server/services/payables-sweep';
+import * as expenses from '@/server/services/expenses';
 import {
   BRANCH,
   buildPayablesWorld,
@@ -60,8 +60,8 @@ beforeEach(async () => {
   world = await buildPayablesWorld();
 });
 
-describe('ap02 · a monthly contract pays itself into the workbench', () => {
-  it('generates one payable per period, thirty days ahead, idempotently', async () => {
+describe('ap02 · a monthly contract raises its own purchase invoices', () => {
+  it('generates one purchase invoice per period, thirty days ahead, idempotently', async () => {
     const lease = await activeLease();
 
     // §10.2 — a period is created generate_days_ahead before it starts.
@@ -83,15 +83,26 @@ describe('ap02 · a monthly contract pays itself into the workbench', () => {
     expect(again.periodsCreated).toBe(0);
 
     const { rows } = await ownerPool.query(
-      `select period_start::text as start, due_date::text as due, stage_code, description
-         from payable where recurring_contract_id = $1 order by period_start`,
+      `select period_start::text as start, due_date::text as due, status::text as status, note,
+              expense_category_code as category, payable_id
+         from ap_invoice where recurring_contract_id = $1 order by period_start`,
       [lease.id],
     );
     expect(rows.map((row) => row.start)).toEqual(['2026-09-01', '2026-10-01', '2026-11-01']);
     expect(rows[0].due).toBe('2026-09-01');
-    expect(rows[0].description).toMatch(/lease.*2026-09/);
-    // D8 — the lease is its own evidence: every period opens Confirmed.
-    expect(new Set(rows.map((row) => row.stage_code))).toEqual(new Set(['confirmed']));
+    expect(rows[0].note).toMatch(/lease.*2026-09/);
+    expect(new Set(rows.map((row) => row.category))).toEqual(new Set(['rent']));
+    // D12 — an expense is an invoice, not a payable record.
+    expect(rows.every((row) => row.payable_id === null)).toBe(true);
+    // D8 — the lease is its own evidence: every period is submitted for posting.
+    expect(new Set(rows.map((row) => row.status))).toEqual(new Set(['submitted']));
+
+    // No payable was raised for the rent.
+    const { rows: payables } = await ownerPool.query(
+      `select count(*)::int as n from payable where recurring_contract_id = $1`,
+      [lease.id],
+    );
+    expect(payables[0].n).toBe(0);
   });
 
   it('maker-checker: whoever raised the contract cannot activate it', async () => {
@@ -105,22 +116,37 @@ describe('ap02 · a monthly contract pays itself into the workbench', () => {
     expect(refusal).toMatch(/cannot approve/);
   });
 
-  it('an unpaid period past its due date is stopped like a late SWIFT', async () => {
+  it('an unpaid period past its due date reads Overdue on the register (D12)', async () => {
     await activeLease();
     await withScope(superScope(), (tx) => contracts.generateDue(tx, '2026-10-01', null));
 
-    const run = await withScope(superScope(), (tx) => sweep.runSweep(tx, '2026-10-02'));
-    // September (due 1 Sep) and October (due 1 Oct) are both past due on the
-    // 2nd; November is not.
-    expect(run.opened).toBe(2);
-
     const { rows } = await ownerPool.query(`
-      select h.check_code, h.reason_code, p.period_start::text as start
-        from payable_hold h join payable p on p.id = h.payable_id
-       order by p.period_start`);
-    expect(rows).toHaveLength(2);
-    expect(new Set(rows.map((row) => row.check_code))).toEqual(new Set(['recurring_overdue']));
-    expect(rows.map((row) => row.start)).toEqual(['2026-09-01', '2026-10-01']);
+      select i.period_start::text as start, i.status::text as status, i.due_date::text as due_date,
+             i.total_iqd::text as total, i.settled_amount_iqd::text as settled
+        from ap_invoice i where i.recurring_contract_id is not null order by i.period_start`);
+    // September (due 1 Sep) and October (due 1 Oct) are both past due on the
+    // 2nd; nothing about the rent needs a stage rail or a reason code.
+    const states = rows.map((row) =>
+      expenses.paymentState(
+        { status: row.status, dueDate: row.due_date, totalIqd: row.total, settledAmountIqd: row.settled },
+        '2026-10-02',
+      ),
+    );
+    expect(states).toEqual(['overdue', 'overdue']);
+
+    // The overdue rent carries a note, dated and signed, and the note cannot
+    // be rewritten (R3).
+    const { rows: first } = await ownerPool.query(
+      `select id from ap_invoice where recurring_contract_id is not null order by period_start limit 1`,
+    );
+    await withScope(scope(world.officer), (tx) =>
+      expenses.addNote(tx, world.officer, first[0].id, 'Landlord travelling, pays Monday'),
+    );
+    const update = await ownerPool
+      .query(`update ap_invoice_note set note = 'rewritten'`)
+      .then(() => 'allowed')
+      .catch((error: Error) => error.message);
+    expect(update).toMatch(/append-only|not allowed|immutable/i);
   });
 
   it('an amendment is a dated row that reaches future periods only', async () => {
@@ -138,22 +164,25 @@ describe('ap02 · a monthly contract pays itself into the workbench', () => {
     );
 
     // Generated periods stand at the old rent…
-    const { rows: before } = await ownerPool.query(
-      `select distinct amount_txn::numeric::text as amount from payable
-        where recurring_contract_id = $1`,
-      [lease.id],
-    );
-    expect(before.map((row) => row.amount)).toEqual(['2500.0000']);
+    const amounts = async () =>
+      (
+        await ownerPool.query(
+          `select i.period_start::text as start, l.unit_price::numeric as amount
+             from ap_invoice i join ap_invoice_line l on l.ap_invoice_id = i.id
+            where i.recurring_contract_id = $1 order by i.period_start`,
+          [lease.id],
+        )
+      ).rows.map((row) => ({ start: row.start as string, amount: Number(row.amount) }));
 
-    // …and December arrives at the new one.
+    const before = await amounts();
+    expect(new Set(before.map((row) => row.amount)).size).toBe(1);
+
+    // …and December arrives at the new one: 2750 / 2500 of the old IQD figure.
     await withScope(superScope(), (tx) => contracts.generateDue(tx, '2026-11-15', null));
-    const { rows: after } = await ownerPool.query(
-      `select period_start::text as start, amount_txn::numeric::text as amount
-         from payable where recurring_contract_id = $1 order by period_start`,
-      [lease.id],
-    );
-    expect(after.at(-1)).toEqual({ start: '2026-12-01', amount: '2750.0000' });
-    expect(after[0]!.amount).toBe('2500.0000');
+    const after = await amounts();
+    const december = after.at(-1)!;
+    expect(december.start).toBe('2026-12-01');
+    expect(december.amount / after[0]!.amount).toBeCloseTo(2750 / 2500, 6);
 
     // The amendment row itself cannot be rewritten (R3).
     const update = await ownerPool
@@ -183,7 +212,7 @@ describe('ap02 · a monthly contract pays itself into the workbench', () => {
     // September and October were generated before the end; November never
     // was, and §10.3 keeps what exists and raises nothing new.
     const { rows } = await ownerPool.query(
-      `select count(*)::int as n from payable where recurring_contract_id = $1`,
+      `select count(*)::int as n from ap_invoice where recurring_contract_id = $1`,
       [lease.id],
     );
     expect(rows[0].n).toBe(2);
