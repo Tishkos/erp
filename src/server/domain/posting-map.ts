@@ -173,6 +173,14 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     event: 'treasury.loan_commission',
     lines: [line('landed_cost_clearing', 'debit'), line('bank_commission', 'debit')],
   },
+  {
+    // REQ-AP-001 §20.2 — the import's landed cost locked: the clearing account
+    // the charges were parked on is emptied into the stock they bought (the
+    // item's inventory account) and, for what is already sold, cost of sales
+    // (the item's own account) — both properties of the item, not asked here.
+    event: 'payables.landed_cost',
+    lines: [line('landed_cost_clearing', 'credit', true)],
+  },
 ]);
 
 /** The catalogue as flat (event, role) pairs, in the order shown. */

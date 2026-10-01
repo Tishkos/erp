@@ -21,6 +21,8 @@ import { expect, test, type Page } from '@playwright/test';
  *        warehouse (out of transit); the B/L counts "1 of 2 received".
  *   §15.7 Stage 6: a loan entered by the officer, approved by a second
  *        person, disbursed and its first instalment repaid.
+ *   §20.2 Stage 7: a charge from a posted journal, the PD written off, the
+ *        landed cost locked from the import page.
  *
  * At desktop width in English and at mobile width in real Arabic (the
  * `erp-locale` cookie — every label must exist). Codes carry a per-run suffix
@@ -420,6 +422,85 @@ test.describe('A22 · payables in a browser', () => {
     const row = page.getByRole('row', { name: new RegExp(loanNo) });
     await expect(row).toContainText('750,000');
     await expect(row).toContainText('Disbursed');
+  });
+
+  test('Stage 7 · a charge from a journal, the PD written off, the landed cost locked', async ({ page }) => {
+    test.setTimeout(300_000);
+    await signIn(page);
+    await itemAccounts(page);
+    const container = `EEXU${String(Date.now()).slice(-6)}7`;
+    const pdNo = `7${RUN}`;
+
+    // An import, posted, its one container received.
+    await page.goto('/payables/invoices/new');
+    await page.getByLabel('Supplier Code').fill('SUP-00001');
+    await page.locator('[name="item_code_0"]').fill('ITM-SEED');
+    await page.getByLabel('Quantity').first().fill('2');
+    await page.getByLabel('Unit Price').first().fill('1000');
+    await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
+    await page.locator('input[name="is_import"]').check();
+    await page.getByRole('button', { name: 'Create' }).click();
+    await page.waitForURL(
+      (url) => url.pathname.startsWith('/payables/invoices/') && !url.pathname.endsWith('/new'),
+      { timeout: 120_000 },
+    );
+    const invoiceNo = decodeURIComponent(page.url().split('/payables/invoices/')[1]!.split('?')[0]!);
+    await page.getByRole('button', { name: 'Send for approval', exact: true }).click();
+    await page.getByRole('button', { name: 'Approve and post', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Approve and post', exact: true })).toHaveCount(0, { timeout: 60_000 });
+    await page.getByRole('link', { name: 'Import tracking' }).click();
+    await page.waitForURL(/\/payables\/IMP-/);
+    const importUrl = page.url().split('?')[0]!;
+
+    await page.getByRole('button', { name: 'New B/L' }).click();
+    const bl = page.getByRole('dialog');
+    await bl.getByRole('textbox', { name: 'B/L no.' }).fill(`BL-LC-${RUN}`);
+    await bl.getByLabel('B/L date').fill('2026-09-20');
+    await bl.getByRole('textbox', { name: 'Containers' }).fill(container);
+    await bl.getByRole('button', { name: 'New B/L' }).click();
+    await page.getByRole('link', { name: container }).click();
+    await page.getByRole('button', { name: 'Receive container' }).click();
+    await page.getByRole('dialog').getByLabel('Warehouse').selectOption('WH-HQ');
+    await page.getByRole('dialog').getByRole('button', { name: 'Receive container' }).click();
+    await expect(page.getByText(/^Received ·/).first()).toBeVisible({ timeout: 60_000 });
+
+    // The PD, validated, then totally written off.
+    await page.goto(importUrl);
+    await page.getByRole('button', { name: 'Register PD' }).click();
+    const register = page.getByRole('dialog');
+    await register.getByRole('textbox', { name: 'PD no.' }).fill(pdNo);
+    await register.getByLabel('Registered').fill('2026-09-02');
+    await register.getByLabel('Expires').fill('2027-03-01');
+    await register.getByRole('button', { name: 'Register PD' }).click();
+    await page.getByRole('link', { name: pdNo }).click();
+    for (const status of ['validated', 'totally_written_off']) {
+      await page.getByRole('button', { name: 'Change status' }).click();
+      const change = page.getByRole('dialog');
+      await change.getByLabel('New status').selectOption(status);
+      await change.getByRole('button', { name: 'Change status' }).click();
+      await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 30_000 });
+    }
+
+    // A posted journal to charge from — the invoice's own, for the test.
+    await page.goto(`/finance/journals?q=${encodeURIComponent(invoiceNo)}`);
+    const entryNo = (await page.locator('table tbody tr td a').first().innerText()).trim();
+
+    // §20.2 — the charge, the preview, the lock.
+    await page.goto(importUrl);
+    await expect(page.getByRole('heading', { name: /Landed cost/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Add charge' }).click();
+    const add = page.getByRole('dialog');
+    await add.getByLabel('Type of cost').selectOption('freight');
+    await add.getByRole('textbox', { name: 'Journal no.' }).fill(entryNo);
+    await add.getByRole('textbox', { name: 'Amount (IQD)' }).fill('500');
+    await add.getByRole('button', { name: 'Add charge' }).click();
+    await expect(page.getByText('Not locked', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('table', { name: 'Allocation preview' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Lock landed cost' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Lock landed cost' }).click();
+    await expect(page.getByText('Locked · 1', { exact: true }).first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole('table', { name: 'Locks' })).toContainText('500');
   });
 
   test('holds the line at mobile width, in Arabic, right to left', async ({ page, context }) => {

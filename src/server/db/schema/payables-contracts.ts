@@ -139,6 +139,10 @@ export const landedCostCharge = pgTable(
     sourceId: text('source_id').notNull(),
     sourceNo: text('source_no'),
     note: text('note'),
+    /** REQ-AP-001 §20.2 (0236) — what an `other` charge is, in words. */
+    reason: text('reason'),
+    /** REQ-AP-001 §20.2 (0236) — the lock that allocated it; null until then. */
+    lockId: uuid('lock_id'),
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
     cancelledBy: uuid('cancelled_by').references(() => appUser.id),
     cancelReason: text('cancel_reason'),

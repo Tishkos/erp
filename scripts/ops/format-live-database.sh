@@ -126,7 +126,9 @@ payable_instalment
 customs_pd_status_history
 customs_pd
 ap_invoice_note
+landed_cost_layer_adjustment
 landed_cost_charge
+landed_cost_lock
 payable_hold_update
 payable_hold
 payable_event

@@ -12,6 +12,8 @@ import { runAdminAndReturn, rowCount, text } from '@/server/admin-action';
 import * as attachments from '@/server/services/attachments';
 import * as events from '@/server/services/payable-events';
 import * as holds from '@/server/services/payable-holds';
+import * as landed from '@/server/services/landed-cost';
+import { parseDecimal } from '@/server/domain/money';
 import * as payables from '@/server/services/payables';
 
 const back = (payableNo: string, tab?: string) =>
@@ -251,4 +253,61 @@ export async function attachToPayable(form: FormData): Promise<void> {
       actorUserId: ctx.principal.userId,
     });
   }, back(payableNo, 'attachments'));
+}
+
+// ---------------------------------------------------------------------------
+// §20.2 — the landed cost: a charge from a posted journal, its withdrawal,
+// and the lock (or a dated adjustment after it).
+// ---------------------------------------------------------------------------
+
+/** Amount as typed ("3,500.00") at the money scale; null when blank. */
+function iqdOf(value: string): bigint | null {
+  const cleaned = value.replace(/[,\s]/g, '');
+  if (!cleaned) return null;
+  if (!/^\d+(\.\d{1,4})?$/.test(cleaned)) throw new landed.LandedCostError(`"${value}" is not an amount.`);
+  return parseDecimal(cleaned, 4n);
+}
+
+export async function addLandedCharge(form: FormData): Promise<void> {
+  const payableNo = text(form, 'payable_no');
+  await runAdminAndReturn(async (tx, ctx) => {
+    const row = await payables.loadByNo(tx, payableNo);
+    return landed.addCharge(tx, ctx, {
+      payableId: row.id,
+      chargeTypeCode: text(form, 'charge_type'),
+      journalEntryNo: text(form, 'journal_entry_no'),
+      amountIqd: iqdOf(text(form, 'amount')) ?? 0n,
+      reason: text(form, 'reason') || null,
+      note: text(form, 'note') || null,
+    });
+  }, back(payableNo));
+}
+
+export async function withdrawLandedCharge(form: FormData): Promise<void> {
+  const payableNo = text(form, 'payable_no');
+  await runAdminAndReturn(
+    async (tx, ctx) => landed.cancelCharge(tx, ctx, text(form, 'charge_id'), text(form, 'reason')),
+    back(payableNo),
+  );
+}
+
+export async function lockLandedCost(form: FormData): Promise<void> {
+  const payableNo = text(form, 'payable_no');
+  const count = rowCount(form, 0);
+  await runAdminAndReturn(async (tx, ctx) => {
+    const row = await payables.loadByNo(tx, payableNo);
+    const manual = new Map<string, bigint>();
+    for (let index = 0; index < count; index += 1) {
+      const model = text(form, `model_${index}`);
+      const amount = iqdOf(text(form, `amount_${index}`));
+      if (model && amount !== null) manual.set(model, amount);
+    }
+    return landed.lock(tx, ctx, {
+      payableId: row.id,
+      basisCode: text(form, 'basis') || null,
+      lockDate: text(form, 'lock_date') || null,
+      manual,
+      note: text(form, 'note') || null,
+    });
+  }, back(payableNo));
 }

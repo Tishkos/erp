@@ -36,6 +36,7 @@ import * as customs from '@/server/services/customs-pd';
 import * as banksService from '@/server/services/banks';
 import * as shipmentsService from '@/server/services/shipments';
 import * as loansService from '@/server/services/loans';
+import * as landedService from '@/server/services/landed-cost';
 import * as settingsService from '@/server/services/payables-settings';
 import * as contracts from '@/server/services/recurring-contracts';
 import * as serviceReceipts from '@/server/services/service-receipt';
@@ -55,6 +56,7 @@ import { createApplication, planInstalmentsAction } from '../payment-application
 import { registerPd } from '../pd/actions';
 import { pdChip } from '../pd/status';
 import { createBlAction } from '../shipments/actions';
+import { addLandedCharge, lockLandedCost, withdrawLandedCharge } from '../actions';
 import { containerChip } from '../containers/status';
 import { STATUS_CHIP, statusKey } from '../payment-applications/status';
 import { toDecimalString } from '@domain/money';
@@ -82,12 +84,13 @@ export default async function PayablePage({
   if (!visibleRoute('/payables')) notFound();
 
   const { payableNo } = await params;
-  const [t, pa, cp, sh, lo, admin, pageT, statusT, locale, context, outcome, query] = await Promise.all([
+  const [t, pa, cp, sh, lo, lc, admin, pageT, statusT, locale, context, outcome, query] = await Promise.all([
     getTranslations('admin.payables'),
     getTranslations('admin.payment_applications'),
     getTranslations('admin.customs_pd'),
     getTranslations('admin.shipments'),
     getTranslations('admin.loans'),
+    getTranslations('admin.landed_cost'),
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('status'),
@@ -108,6 +111,10 @@ export default async function PayablePage({
   const mayRegisterPd = can(principal, 'create', customs.PERMISSION_OBJECT);
   const mayViewShipment = can(principal, 'view', shipmentsService.CONTAINER_OBJECT);
   const mayViewLoans = can(principal, 'view', loansService.PERMISSION_OBJECT);
+  const mayViewLanded = can(principal, 'view', landedService.PERMISSION_OBJECT);
+  const mayAddCharge = can(principal, 'create', landedService.PERMISSION_OBJECT);
+  const mayLock = can(principal, 'post', landedService.PERMISSION_OBJECT);
+  const mayWithdraw = can(principal, 'reverse_cancel', landedService.PERMISSION_OBJECT);
   const mayCreateBl = can(principal, 'create', shipmentsService.BL_OBJECT);
 
   const laneFilter = typeof query.lane === 'string' && query.lane ? query.lane : null;
@@ -151,8 +158,21 @@ export default async function PayablePage({
         isImport && mayCreateBl && !view.payable.cancelledAt && !view.payable.closedAt
           ? await shipmentsService.ports(tx)
           : null;
+      // §20.2 — the landed cost: its charges, the locks, what a lock would do.
+      const landed =
+        isImport && mayViewLanded && !view.payable.cancelledAt
+          ? {
+              charges: await landedService.chargesFor(tx, view.payable.id),
+              locks: await landedService.locksFor(tx, view.payable.id),
+              state: await landedService.lockable(tx, view.payable.id),
+              preview: await landedService.preview(tx, { payableId: view.payable.id }),
+              bases: (await landedService.bases(tx)).filter((basis) => basis.active),
+              types: (await landedService.chargeTypes(tx)).filter((type) => type.code !== 'purchase'),
+            }
+          : null;
       return {
         ...view,
+        landed,
         shipment,
         blPorts,
         log,
@@ -197,6 +217,7 @@ export default async function PayablePage({
     pdPickers,
     shipment,
     blPorts,
+    landed,
   } = found;
   const openPay = query.pay === '1';
 
@@ -1244,6 +1265,334 @@ export default async function PayablePage({
                       </SubmitRow>
                     </Form>
                   </NewRecordDialog>
+                </SubmitRow>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {/* ── Landed cost (§20.2): the charges, what a lock would do, the
+          locks. Imports only. ── */}
+      {landed ? (
+        <section aria-labelledby="payable-landed-title" className={s.sapDoc} id="landed-cost">
+          <div className={s.sapWindow}>
+            <h2 className={s.sapTitle} id="payable-landed-title">
+              <span>{lc('section_title')}</span>
+              <span className={s.sapTitleMeta}>
+                {lc('meta', {
+                  total: money(
+                    landed.charges
+                      .filter((row) => !row.cancelledAt && row.chargeTypeCode !== 'purchase')
+                      .reduce((sum, row) => sum + Number(row.amountIqd), 0)
+                      .toFixed(4),
+                    'IQD',
+                  ),
+                  state:
+                    landed.state.unlocked > 0
+                      ? lc('state_pending', { count: landed.state.unlocked })
+                      : landed.state.locked
+                        ? lc('state_locked')
+                        : lc('state_open'),
+                })}
+              </span>
+            </h2>
+            <div className={s.sapTableWrap}>
+              <table aria-labelledby="payable-landed-title" className={s.sapTable}>
+                <thead>
+                  <tr>
+                    <th scope="col">{lc('col_type')}</th>
+                    <th scope="col">{lc('col_source')}</th>
+                    <th className={s.sapNum} scope="col">
+                      {lc('col_amount')}
+                    </th>
+                    <th scope="col">{lc('col_state')}</th>
+                    <th scope="col">{lc('col_note')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {landed.charges.length === 0 ? (
+                    <tr>
+                      <td className={s.sapEmptyRow} colSpan={5}>
+                        {lc('none')}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {landed.charges.map((row) => (
+                    <tr key={row.id}>
+                      <td>
+                        {locale !== 'en' && lc.has(`type_name.${row.chargeTypeCode}`)
+                          ? lc(`type_name.${row.chargeTypeCode}`)
+                          : row.chargeTypeName}
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{row.sourceNo ?? '—'}</bdi>
+                      </td>
+                      <td className={s.sapNum}>
+                        <bdi dir="ltr">{money(row.amountIqd, 'IQD')}</bdi>
+                        {row.currency !== 'IQD' ? (
+                          <div className="muted">
+                            <bdi dir="ltr">{money(row.amountTxn, row.currency)}</bdi>
+                          </div>
+                        ) : null}
+                      </td>
+                      <td>
+                        {row.cancelledAt ? (
+                          <span className="status status--cancelled" data-status="cancelled">
+                            {lc('withdrawn')}
+                          </span>
+                        ) : row.lockId ? (
+                          <span className="status status--posted" data-status="posted">
+                            {lc('locked_n', { sequence: row.lockSequence ?? 1 })}
+                          </span>
+                        ) : (
+                          <span className="status status--draft" data-status="draft">
+                            {lc('unlocked')}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <bdi dir="auto">{row.reason ?? row.note ?? row.cancelReason ?? '—'}</bdi>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {landed.state.unlocked > 0 && landed.preview.models.length > 0 ? (
+              <div className={s.sapTableWrap}>
+                <table aria-label={lc('preview_title')} className={s.sapTable}>
+                  <thead>
+                    <tr>
+                      <th scope="col">{lc('col_model')}</th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_received')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_on_hand')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_value')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_allocated')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_unit_now')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_unit_after')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {landed.preview.models.map((model) => (
+                      <tr key={model.itemCode}>
+                        <td>
+                          <bdi dir="ltr">{model.itemCode}</bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{formatQuantity(model.receivedQty, locale as Locale)}</bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{formatQuantity(model.onHandQty, locale as Locale)}</bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{money(model.valueIqd, 'IQD')}</bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{model.allocatedIqd ? money(model.allocatedIqd, 'IQD') : '—'}</bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{money(model.unitCostIqd, 'IQD')}</bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{model.unitCostAfterIqd ? money(model.unitCostAfterIqd, 'IQD') : '—'}</bdi>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+
+            {landed.locks.length > 0 ? (
+              <div className={s.sapTableWrap}>
+                <table aria-label={lc('locks_title')} className={s.sapTable}>
+                  <thead>
+                    <tr>
+                      <th scope="col">{lc('col_lock')}</th>
+                      <th scope="col">{lc('col_date')}</th>
+                      <th scope="col">{lc('col_basis')}</th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_total')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_stock')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_cogs')}
+                      </th>
+                      <th scope="col">{lc('col_journal')}</th>
+                      <th scope="col">{lc('col_by')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {landed.locks.map((row) => (
+                      <tr key={row.id}>
+                        <td>
+                          {row.sequence === 1 ? lc('lock_first') : `${lc('lock_adjustment')} ${row.sequence}`}
+                        </td>
+                        <td>
+                          <bdi dir="ltr">{day(row.lockDate)}</bdi>
+                        </td>
+                        <td>
+                          {locale !== 'en' && lc.has(`basis_name.${row.basisCode}`) ? lc(`basis_name.${row.basisCode}`) : row.basisName}
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{money(row.totalIqd, 'IQD')}</bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{money(row.inventoryIqd, 'IQD')}</bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{money(row.cogsIqd, 'IQD')}</bdi>
+                        </td>
+                        <td>
+                          <bdi dir="ltr">{row.entryNo}</bdi>
+                        </td>
+                        <td>
+                          <bdi dir="auto">{row.lockedBy ?? '—'}</bdi>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+
+            {!landed.state.pdsWrittenOff && landed.state.unlocked > 0 ? (
+              <p className={s.sapNote}>{lc('not_lockable')}</p>
+            ) : null}
+
+            {mayAddCharge || (mayLock && landed.state.pdsWrittenOff && landed.state.unlocked > 0) ? (
+              <div className={s.sapBody}>
+                <SubmitRow>
+                  {mayAddCharge ? (
+                    <NewRecordDialog
+                      buttonLabel={lc('add')}
+                      closeLabel={admin('close')}
+                      title={lc('add_title', { payableNo: row.payableNo })}
+                    >
+                      <p className="muted">{lc('add_note')}</p>
+                      <Form action={addLandedCharge}>
+                        <Hidden name="payable_no" value={row.payableNo} />
+                        <Grid>
+                          <Select
+                            label={lc('charge_type')}
+                            name="charge_type"
+                            options={landed.types.map((type) => ({
+                              value: type.code,
+                              label: locale !== 'en' && lc.has(`type_name.${type.code}`) ? lc(`type_name.${type.code}`) : type.name,
+                            }))}
+                            required
+                          />
+                          <Field id="landed-journal" label={lc('journal_entry_no')} name="journal_entry_no" required />
+                          <Field id="landed-amount" label={lc('amount')} name="amount" required />
+                          <Field hint={lc('reason_hint')} id="landed-reason" label={lc('reason')} name="reason" />
+                        </Grid>
+                        <Field id="landed-note" label={lc('note')} name="note" wide />
+                        <SubmitRow>
+                          <Submit label={lc('add')} />
+                        </SubmitRow>
+                      </Form>
+                    </NewRecordDialog>
+                  ) : null}
+                  {mayLock && landed.state.pdsWrittenOff && landed.state.unlocked > 0 ? (
+                    <NewRecordDialog
+                      buttonLabel={landed.state.locked ? lc('lock_again') : lc('lock')}
+                      closeLabel={admin('close')}
+                      title={lc('lock_title', { payableNo: row.payableNo })}
+                    >
+                      <p className="muted">{lc('lock_note', { total: money(landed.preview.total, 'IQD') })}</p>
+                      <Form action={lockLandedCost}>
+                        <Hidden name="payable_no" value={row.payableNo} />
+                        <Hidden name="line_count" value={String(landed.preview.models.length)} />
+                        <Grid>
+                          <Select
+                            defaultValue={landed.bases.find((basis) => basis.isDefault)?.code}
+                            label={lc('basis')}
+                            name="basis"
+                            options={landed.bases.map((basis) => ({
+                              value: basis.code,
+                              label:
+                                locale !== 'en' && lc.has(`basis_name.${basis.code}`) ? lc(`basis_name.${basis.code}`) : basis.name,
+                            }))}
+                          />
+                          <Field defaultValue={new Date().toISOString().slice(0, 10)} id="landed-lock-date" label={lc('lock_date')} name="lock_date" type="date" />
+                        </Grid>
+                        {landed.preview.models.length > 0 ? (
+                          <div className={s.sapTableWrap}>
+                            <table className={s.sapTable}>
+                              <thead>
+                                <tr>
+                                  <th scope="col">{lc('col_model')}</th>
+                                  <th scope="col">{lc('col_allocated')}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {landed.preview.models.map((model, index) => (
+                                  <tr key={model.itemCode}>
+                                    <td>
+                                      <Hidden name={`model_${index}`} value={model.itemCode} />
+                                      <bdi dir="ltr">{model.itemCode}</bdi>
+                                    </td>
+                                    <td>
+                                      <input
+                                        aria-label={`${lc('col_allocated')} ${model.itemCode}`}
+                                        className={s.input}
+                                        inputMode="decimal"
+                                        name={`amount_${index}`}
+                                      />
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : null}
+                        <p className="muted">{lc('manual_hint')}</p>
+                        <Field id="landed-lock-note" label={lc('note')} name="note" wide />
+                        <SubmitRow>
+                          <Submit label={landed.state.locked ? lc('lock_again') : lc('lock')} />
+                        </SubmitRow>
+                      </Form>
+                    </NewRecordDialog>
+                  ) : null}
+                  {mayWithdraw && landed.charges.some((row) => !row.lockId && !row.cancelledAt && row.sourceType === 'journal_entry') ? (
+                    <NewRecordDialog buttonLabel={lc('withdraw')} closeLabel={admin('close')} title={lc('withdraw')}>
+                      <p className="muted">{lc('withdraw_note')}</p>
+                      <Form action={withdrawLandedCharge}>
+                        <Hidden name="payable_no" value={row.payableNo} />
+                        <Select
+                          label={lc('withdraw_charge')}
+                          name="charge_id"
+                          options={landed.charges
+                            .filter((charge) => !charge.lockId && !charge.cancelledAt && charge.sourceType === 'journal_entry')
+                            .map((charge) => ({
+                              value: charge.id,
+                              label: `${charge.sourceNo ?? ''} · ${charge.chargeTypeName} · ${money(charge.amountIqd, 'IQD')}`,
+                            }))}
+                          required
+                        />
+                        <Field id="landed-withdraw-reason" label={lc('withdraw_reason')} name="reason" required wide />
+                        <SubmitRow>
+                          <Submit label={lc('withdraw')} />
+                        </SubmitRow>
+                      </Form>
+                    </NewRecordDialog>
+                  ) : null}
                 </SubmitRow>
               </div>
             ) : null}
