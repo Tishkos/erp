@@ -457,10 +457,45 @@ export async function resetTestData(): Promise<void> {
     // record who created them and are removed; seed rows (created_by NULL) are
     // restored to their seeded active state.
     await client.query('truncate payable_event');
+    // Stage 6 (0235) — what the loans funded, their schedules, the loans.
+    await client.query('delete from bank_loan_allocation');
+    await client.query('delete from bank_loan_instalment');
+    await client.query('delete from bank_loan');
+    await client.query('delete from loan_commission_treatment where created_by is not null');
+    await client.query('update loan_commission_treatment set active = true where created_by is null');
+    // Stage 3 (0232) — applications and the plan they pay; fixture banks.
+    await client.query('delete from payment_application');
+    await client.query('delete from payable_instalment');
+    // Stage 5 (0234) — B/Ls, containers and their receipts (append-only in
+    // production: a receipt is the record of what arrived).
+    await client.query('delete from container_receipt_line');
+    await client.query('delete from container_receipt');
+    await client.query('delete from shipment_container_line');
+    await client.query('truncate shipment_container_status_history');
+    await client.query('delete from shipment_container');
+    await client.query('delete from bill_of_lading');
+    await client.query('delete from port where created_by is not null');
+    await client.query('delete from container_status where created_by is not null');
+    await client.query('update container_status set active = true where created_by is null');
+    // Stage 4 (0233) — the PDs and their history (append-only in production).
+    await client.query('truncate customs_pd_status_history');
+    await client.query('delete from customs_pd');
+    await client.query('delete from pd_status where created_by is not null');
+    await client.query('update pd_status set active = true where created_by is null');
+    await client.query('delete from bank where created_by is not null');
+    // Stage 6 (0235) opened `loan`; every seeded source is active again.
+    await client.query('update funding_source set active = true where created_by is null');
+    await client.query('delete from funding_source where created_by is not null');
+    await client.query('delete from instalment_trigger where created_by is not null');
+    await client.query('update payment_application_transition set active = true');
+    await client.query('truncate recurring_contract_amendment');
+    await client.query('delete from landed_cost_charge');
+    await client.query('delete from landed_cost_type where created_by is not null');
     await client.query('truncate payable_hold_update');
     await client.query('delete from payable_hold');
     await client.query('delete from payable_order_line');
     await client.query('delete from payable');
+    await client.query('delete from recurring_contract');
     await client.query('delete from stage_time_limit where created_by is not null');
     await client.query('delete from payable_stage where created_by is not null');
     await client.query('delete from payable_type_lane where payable_type_code in (select code from payable_type where created_by is not null)');
@@ -488,6 +523,7 @@ export async function resetTestData(): Promise<void> {
     // grant in production either — they are resolved, never removed.
     await client.query(`
       delete from ap_match_exception;
+      delete from ap_invoice_note;
       delete from ap_invoice_line;
       delete from ap_invoice;
     `);
@@ -732,7 +768,13 @@ export async function resetTestData(): Promise<void> {
                          'SUPPLIER_ADVANCE',
                          -- REQ-AP-001 Stage 1, migration 0225 — one per payable type.
                          'PAYABLE_IMPORT', 'PAYABLE_SERVICE', 'PAYABLE_RECURRING',
-                         'PAYABLE_LOCAL_GOODS', 'PAYABLE_ADVANCE',
+                         'PAYABLE_LOCAL_GOODS', 'PAYABLE_ADVANCE', 'RECURRING_CONTRACT',
+                         -- REQ-AP-001 Stage 3, migration 0232.
+                         'PAYMENT_APPLICATION', 'BANK_CODE',
+                         -- REQ-AP-001 Stage 5, migration 0234.
+                         'CONTAINER_RECEIPT', 'PORT_CODE',
+                         -- REQ-AP-001 Stage 6, migration 0235.
+                         'LOAN',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

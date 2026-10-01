@@ -79,7 +79,7 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
       }),
       total: await stock.countMovements(tx, actor, filter),
       itemList: (await items.listAll(tx)).filter((row) => row.isStock),
-      houses: (await warehouses.listActive(tx)).filter(
+      houses: (await warehouses.listForReports(tx)).filter(
         (house) => house.branchCode === context.scope.branchCode,
       ),
     };

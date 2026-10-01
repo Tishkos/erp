@@ -154,6 +154,7 @@ export async function reverse(
       businessPartnerCode: source.businessPartnerCode,
       employeeCode: source.employeeCode,
       bankAccountCode: source.bankAccountCode,
+      loanNo: source.loanNo,
       lineDescription: `Reversal of line ${line.lineNo}`,
       sourceLineId: source.sourceLineId,
       postingRuleId: source.postingRuleId,

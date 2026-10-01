@@ -222,6 +222,7 @@ export async function plan(
        * the `bank` control flag.
        */
       bankAccountCode: line.bankAccountCode ?? (await bankAccountCodeFor(tx, account)),
+      loanNo: line.loanNo ?? null,
     });
   }
 
@@ -369,6 +370,7 @@ export async function post(
       postingRuleId: line.postingRuleId,
       lineRole: line.role,
       bankAccountCode: line.bankAccountCode,
+      loanNo: line.loanNo,
     });
   }
 

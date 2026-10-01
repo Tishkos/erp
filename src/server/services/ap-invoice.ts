@@ -29,11 +29,14 @@ import {
   apMatchException,
   apMatchTolerance,
   businessPartner,
+  expenseCategory,
   goodsReceipt,
   goodsReceiptLine,
   goodsReturn,
   inventoryMovement,
   journalEntry,
+  landedCostCharge,
+  payable,
   paymentProposalItem,
   supplierCreditMemo,
   warehouse,
@@ -184,6 +187,12 @@ export interface InvoiceLineInput {
   readonly warehouseCode?: string | null;
   /** Money off this line. The total is quantity x unit price less this. */
   readonly discountIqd?: bigint;
+  /**
+   * §9.2 — this line's cost belongs to an import file, not to us. It posts to
+   * the landed-cost clearing account and becomes a landed-cost charge of that
+   * file in the same transaction (A10).
+   */
+  readonly chargedToPayableId?: string | null;
 }
 
 export interface CreateApInvoiceInput {
@@ -207,6 +216,26 @@ export interface CreateApInvoiceInput {
   /** Chosen on the form that raises it — see `setChosenAccounts`. */
   readonly payableAccountId?: string | null;
   readonly expenseAccountId?: string | null;
+  /** §5.1 — raised against a payable, the link is made at birth. */
+  readonly payableId?: string | null;
+  /**
+   * REQ-AP-001 §8, D13 — the accountant ticked *Import*: the import
+   * application is created behind this invoice in the same transaction
+   * (or, with `payableId`, this invoice joins an existing one).
+   */
+  readonly isImport?: boolean;
+  /** D13 — the supplier's terms as written on the PDF, kept verbatim on the application. */
+  readonly paymentTermsText?: string | null;
+  /**
+   * D12 — an expense is a purchase invoice. The type of fee; its default
+   * expense account is used when the form names none, and it stands as the
+   * §15 evidence (see the non-PO rule below).
+   */
+  readonly expenseCategoryCode?: string | null;
+  /** §10, D12 — the contract and period this invoice was generated for. */
+  readonly recurringContractId?: string | null;
+  readonly periodStart?: string | null;
+  readonly periodEnd?: string | null;
 }
 
 /**
@@ -300,17 +329,64 @@ export async function receivedQuantityFor(
   return rows.reduce((total, row) => total + parseQuantity(row.quantity), 0n);
 }
 
+/** D12 — the type of fee, active, with the account it posts to by default. */
+async function expenseCategoryOf(tx: Tx, code: string) {
+  const [row] = await tx
+    .select({
+      code: expenseCategory.code,
+      name: expenseCategory.name,
+      active: expenseCategory.active,
+      defaultExpenseAccountId: expenseCategory.defaultExpenseAccountId,
+    })
+    .from(expenseCategory)
+    .where(eq(expenseCategory.code, code))
+    .limit(1);
+  if (!row) throw new Error(`No type of fee '${code}'. Choose one from Payables Settings → Expense categories.`);
+  if (!row.active) throw new Error(`The type of fee '${row.name}' is deactivated.`);
+  return row;
+}
+
 export async function create(
   tx: Tx,
   ctx: ActorContext,
   input: CreateApInvoiceInput,
-): Promise<{ id: string; invoiceNo: string; matchStatus: MatchStatus }> {
+): Promise<{ id: string; invoiceNo: string; matchStatus: MatchStatus; importPayableNo: string | null }> {
   await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, {
     branchCode: input.branchCode,
   });
 
   if (input.lines.length === 0) {
     throw new Error('An invoice with no lines charges nothing. Add what is being charged for.');
+  }
+
+  /*
+   * REQ-AP-001 §17.4 — an import's goods are at sea when its invoice posts:
+   * owned, not available. Its stock lines land in the branch's In Process
+   * (transit) warehouse; the warehouse the accountant chose is where the
+   * containers will be received (§18), and it becomes the order's warehouse.
+   */
+  let destinationWarehouse: string | null = null;
+  if (input.isImport) {
+    const [transit] = await tx
+      .select({ code: warehouse.code })
+      .from(warehouse)
+      .where(
+        and(
+          eq(warehouse.shipmentStage, 'in_process'),
+          eq(warehouse.branchCode, input.branchCode),
+          eq(warehouse.active, true),
+        ),
+      )
+      .limit(1);
+    if (transit) {
+      destinationWarehouse =
+        input.lines.find((line) => line.warehouseCode && line.warehouseCode !== transit.code)?.warehouseCode ??
+        null;
+      input = {
+        ...input,
+        lines: input.lines.map((line) => (line.warehouseCode ? { ...line, warehouseCode: transit.code } : line)),
+      };
+    }
   }
 
   /*
@@ -332,7 +408,24 @@ export async function create(
    */
   const receivesItsOwnStock = input.lines.every((line) => Boolean(line.warehouseCode));
 
-  if (!input.purchaseOrderId && !receivesItsOwnStock) {
+  /*
+   * D12 (2026-10-01) — an expense is a purchase invoice with no order behind
+   * it: the rent, the forwarder, the broker, the utility bill. Its §15
+   * evidence is what it says it is (the expense category and the attached
+   * bill, stated in the justification), and its second person is the one who
+   * posts it — posting needs `approve` + `post`, which the person raising it
+   * does not hold. The same reasoning block 4 applied to the invoice that is
+   * its own receipt (migration 0196); the CHECK in 0232 holds it.
+   */
+  const category = input.expenseCategoryCode
+    ? await expenseCategoryOf(tx, input.expenseCategoryCode)
+    : null;
+  const isExpense = category !== null && !input.purchaseOrderId && !receivesItsOwnStock;
+  const expenseJustification = isExpense
+    ? (input.nonPoJustification?.trim() || `Expense — ${category!.name}`)
+    : null;
+
+  if (!input.purchaseOrderId && !receivesItsOwnStock && !isExpense) {
     if (
       !input.nonPoJustification ||
       input.nonPoJustification.trim().length === 0 ||
@@ -421,12 +514,41 @@ export async function create(
    * same two rules `setChosenAccounts` applies to a draft.
    */
   const payableAccountId = input.payableAccountId?.trim() || null;
-  const expenseAccountId = input.expenseAccountId?.trim() || null;
+  const expenseAccountId =
+    input.expenseAccountId?.trim() || category?.defaultExpenseAccountId || null;
   if (payableAccountId) {
     assertStatementAccount('supplier', await coa.loadAccount(tx, payableAccountId));
   }
   if (expenseAccountId) {
     assertResultAccount('expense', await coa.loadAccount(tx, expenseAccountId));
+  }
+
+  // §9.2 — a charged line must name a real, open import, and a charged line
+  // is a cost: stock is never somebody else's landed cost.
+  for (const line of input.lines) {
+    if (!line.chargedToPayableId) continue;
+    if (line.isInventory) {
+      throw new Error('A stock line cannot be charged to an import — only a cost can (§9.2).');
+    }
+    const [target] = await tx
+      .select({
+        payableNo: payable.payableNo,
+        typeCode: payable.payableTypeCode,
+        cancelledAt: payable.cancelledAt,
+        closedAt: payable.closedAt,
+      })
+      .from(payable)
+      .where(eq(payable.id, line.chargedToPayableId))
+      .limit(1);
+    if (!target) throw new Error('No such import to charge this line to.');
+    if (target.typeCode !== 'import') {
+      throw new Error(
+        `${target.payableNo} is not an import — landed cost belongs to the goods it moved (§9.2).`,
+      );
+    }
+    if (target.cancelledAt || target.closedAt) {
+      throw new Error(`${target.payableNo} is closed — its cost is locked and takes no further charges.`);
+    }
   }
 
   const allocated = await allocateDocumentNumber(
@@ -457,9 +579,13 @@ export async function create(
       payableAccountId,
       expenseAccountId,
       receivesOwnStock: receivesItsOwnStock,
-      nonPoJustification: input.nonPoJustification?.trim() ?? null,
+      nonPoJustification: expenseJustification ?? input.nonPoJustification?.trim() ?? null,
       nonPoApprovedBy: input.nonPoApprovedBy ?? null,
       nonPoApprovedAt: input.nonPoApprovedBy ? new Date() : null,
+      expenseCategoryCode: category?.code ?? null,
+      recurringContractId: input.recurringContractId ?? null,
+      periodStart: input.periodStart ?? null,
+      periodEnd: input.periodEnd ?? null,
       duplicateApprovedBy: input.duplicateApprovedBy ?? null,
       duplicateApprovedAt: input.duplicateApprovedBy ? new Date() : null,
       duplicateApprovalReason: input.duplicateApprovalReason?.trim() ?? null,
@@ -518,10 +644,65 @@ export async function create(
       warehouseCode: line.warehouseCode ?? null,
       discountIqd: toDecimalString(line.discountIqd ?? 0n, 4n),
       receivedQuantity: formatQuantity(received),
+      chargedToPayableId: line.chargedToPayableId ?? null,
     });
   }
 
   const match = await rematch(tx, created!.id);
+
+  // §5.1 — raised against a payable, linked at birth: the draft already shows
+  // on the file it will pay, and the link validates there (same supplier, one
+  // invoice one payable, the file still open).
+  if (input.payableId) {
+    await payables.linkInvoice(tx, ctx, { payableId: input.payableId, apInvoiceId: created!.id });
+  }
+
+  /*
+   * D13 — the import is born here. The CEO agreed the deal, the supplier's
+   * PDF reached the accountant, she entered it as this invoice and ticked
+   * Import: the application is created behind it in the same transaction,
+   * keyed by the supplier's number (ours when the form did not ask for it),
+   * with this invoice's lines as its lines. Nobody fills a second form.
+   */
+  let importPayableNo: string | null = null;
+  if (input.isImport) {
+    let payableId = input.payableId ?? null;
+    if (!payableId) {
+      // Its lines read as the invoice's do: an item by its name (`saveLine`).
+      const codes = [...new Set(input.lines.map((line) => line.itemCode).filter((code): code is string => Boolean(code)))];
+      const names = new Map(
+        (codes.length > 0
+          ? await tx.select({ code: item.code, name: item.name }).from(item).where(inArray(item.code, codes))
+          : []
+        ).map((row) => [row.code, row.name] as const),
+      );
+      const opened = await payables.create(tx, ctx, {
+        payableTypeCode: 'import',
+        supplierReference: supplierNumber || allocated.documentNo,
+        supplierId: input.supplierId,
+        branchCode: input.branchCode,
+        currency: input.currency ?? 'IQD',
+        documentDate: input.invoiceDate,
+        description: `Purchase invoice ${allocated.documentNo}`,
+        paymentTermsText: input.paymentTermsText ?? null,
+        dueDate,
+        purchaseOrderId: input.purchaseOrderId ?? null,
+        lines: input.lines.map((line) => ({
+          itemCode: line.itemCode ?? null,
+          description: line.description ?? (line.itemCode ? names.get(line.itemCode) : undefined) ?? line.itemCode ?? 'Charge',
+          quantity: formatQuantity(line.quantity),
+          uomCode: line.uomCode ?? null,
+          unitPrice: toDecimalString(line.unitPriceIqd, 4n),
+        })),
+        defaultWarehouseCode:
+          destinationWarehouse ?? input.lines.find((line) => line.warehouseCode)?.warehouseCode ?? null,
+      });
+      payableId = opened.id;
+      importPayableNo = opened.payableNo;
+      await payables.linkInvoice(tx, ctx, { payableId, apInvoiceId: created!.id });
+    }
+    await tx.update(apInvoice).set({ isImport: true }).where(eq(apInvoice.id, created!.id));
+  }
 
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
@@ -535,11 +716,19 @@ export async function create(
       orderNo: order?.orderNo ?? null,
       lines: input.lines.length,
       matchStatus: match.status,
+      isImport: Boolean(input.isImport),
+      importApplication: importPayableNo,
+      expenseCategory: category?.code ?? null,
     },
     outcome: 'success',
   });
 
-  return { id: created!.id, invoiceNo: allocated.documentNo, matchStatus: match.status };
+  return {
+    id: created!.id,
+    invoiceNo: allocated.documentNo,
+    matchStatus: match.status,
+    importPayableNo,
+  };
 }
 
 /**
@@ -1124,6 +1313,12 @@ export async function post(
     );
   }
 
+  // A9 — a payable-linked invoice shows its confirmation before it posts;
+  // the guard itself knows which categories are invoiced without one.
+  if (invoice.payableId) {
+    await payables.assertReceiptEvidence(tx, invoice.payableId);
+  }
+
   const open = await tx
     .select({ id: apMatchException.id })
     .from(apMatchException)
@@ -1154,6 +1349,12 @@ export async function post(
   const postingLines: PostingLineRequest[] = [];
   let grniIqd = 0n;
   let expenseIqd = 0n;
+  const chargedLines: {
+    lineId: string;
+    lineNo: number;
+    chargedToPayableId: string;
+    valueIqd: bigint;
+  }[] = [];
   let varianceIqd = 0n;
   let payableIqd = 0n;
 
@@ -1224,6 +1425,21 @@ export async function post(
       if (line.isInventory) {
         grniIqd += supported;
         postingLines.push({ role: 'grni', debit: amount(supported), criteria, dimensions });
+      } else if (line.chargedToPayableId) {
+        // §9.2 / A10 — not our cost: it parks on the clearing account and
+        // becomes a landed-cost charge of the import it belongs to, below.
+        chargedLines.push({
+          lineId: line.id,
+          lineNo: line.lineNo,
+          chargedToPayableId: line.chargedToPayableId,
+          valueIqd: supported,
+        });
+        postingLines.push({
+          role: 'landed_cost_clearing',
+          debit: amount(supported),
+          criteria,
+          dimensions,
+        });
       } else {
         expenseIqd += supported;
         postingLines.push({
@@ -1279,7 +1495,9 @@ export async function post(
   // is not a flag somebody sets and forgets: it is where the goods went. An
   // invoice whose goods went anywhere else arrived by other means and has
   // nothing to follow.
-  await shipments.openForInvoice(tx, ctx, id);
+  // REQ-AP-001 §17.4 — an import is followed container by container on its
+  // B/Ls, not by the four-stage shipment; only other invoices open one.
+  if (!invoice.isImport) await shipments.openForInvoice(tx, ctx, id);
 
   await tx
     .update(apInvoice)
@@ -1320,6 +1538,44 @@ export async function post(
       summary: `Purchase invoice ${invoice.invoiceNo} posted — ${toDecimalString(payableIqd, 4n)} IQD`,
       actorUserId: ctx.principal.userId,
     });
+  }
+
+  // §9.2 / A10 — each charged line becomes a landed-cost charge of its
+  // import, in this same transaction, typed by this invoice's own category.
+  if (chargedLines.length > 0) {
+    const [own] = invoice.payableId
+      ? await tx
+          .select({ category: payable.expenseCategoryCode })
+          .from(payable)
+          .where(eq(payable.id, invoice.payableId))
+          .limit(1)
+      : [];
+    const chargeType =
+      own?.category === 'freight_forwarding'
+        ? 'freight'
+        : own?.category === 'customs_brokerage'
+          ? 'customs_asycuda'
+          : 'other';
+    for (const charged of chargedLines) {
+      await tx.insert(landedCostCharge).values({
+        payableId: charged.chargedToPayableId,
+        chargeTypeCode: chargeType,
+        amountTxn: toDecimalString(charged.valueIqd, 4n),
+        currency: 'IQD',
+        amountIqd: toDecimalString(charged.valueIqd, 4n),
+        sourceType: 'ap_invoice_line',
+        sourceId: charged.lineId,
+        sourceNo: invoice.invoiceNo,
+        createdBy: ctx.principal.userId,
+      });
+      await payables.onChargedToImport(tx, {
+        payableId: charged.chargedToPayableId,
+        invoiceId: id,
+        invoiceNo: invoice.invoiceNo,
+        summary: `Charged to this import: ${toDecimalString(charged.valueIqd, 4n)} IQD ${chargeType} — A/P invoice ${invoice.invoiceNo} line ${charged.lineNo}`,
+        actorUserId: ctx.principal.userId,
+      });
+    }
   }
 
   await audit.record(tx, {
@@ -1505,6 +1761,27 @@ export async function reverse(
     reason,
     relatedObjectId: reversal.id,
   });
+
+  // A10's mirror — the reversal withdraws the charges this invoice placed.
+  if (lines.length > 0) {
+    await tx
+      .update(landedCostCharge)
+      .set({
+        cancelledAt: now,
+        cancelledBy: ctx.principal.userId,
+        cancelReason: `A/P invoice ${invoice.invoiceNo} reversed — ${reason}`,
+      })
+      .where(
+        and(
+          eq(landedCostCharge.sourceType, 'ap_invoice_line'),
+          inArray(
+            landedCostCharge.sourceId,
+            lines.map((line) => line.id),
+          ),
+          isNull(landedCostCharge.cancelledAt),
+        ),
+      );
+  }
 
   // REQ-AP-001 §14 — a reversed invoice re-derives its payable's stage; the
   // event carries the reason so the log reads as the story it is.
@@ -1715,9 +1992,18 @@ export async function list(tx: Tx) {
       end`,
       status: apInvoice.status,
       branchCode: apInvoice.branchCode,
+      // D12 / D13 — what the register needs to say Unpaid / Paid / Overdue,
+      // and which rows are imports and which are expenses.
+      settledAmountIqd: apInvoice.settledAmountIqd,
+      isImport: apInvoice.isImport,
+      expenseCategoryCode: apInvoice.expenseCategoryCode,
+      recurringContractId: apInvoice.recurringContractId,
+      note: apInvoice.note,
+      payableNo: payable.payableNo,
     })
     .from(apInvoice)
     .leftJoin(businessPartner, eq(businessPartner.id, apInvoice.supplierId))
+    .leftJoin(payable, eq(payable.id, apInvoice.payableId))
     .orderBy(desc(apInvoice.invoiceDate), desc(apInvoice.invoiceNo));
 }
 

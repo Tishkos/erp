@@ -177,6 +177,13 @@ export const journalLine = pgTable(
     /** §14.2 — Bank Account. Its master arrives in Phase 07. */
     bankAccountCode: text('bank_account_code'),
 
+    /**
+     * REQ-AP-001 §15.7 — the loan subledger's party: the loan a line on a
+     * `loan` control account is against, as `bank_account_code` is the bank
+     * subledger's. Migration 0235.
+     */
+    loanNo: text('loan_no'),
+
     lineDescription: text('line_description'),
 
     /**

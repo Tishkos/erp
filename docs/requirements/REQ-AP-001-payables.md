@@ -22,7 +22,7 @@ diagram disagree about the import, the diagram is the intent.
 | **Release** | 2 |
 | **Phase** | Operations build — Payables module, delivered in the eight stages of §25 |
 | **Source** | `QS_ERP_Workflow_Final.pdf` · `QS_DASHBOARD.xlsx` · the code review of 2026-10-01 (§3) · the instruction of 2026-10-01 that Purchasing becomes Payables and covers service fees such as office rent |
-| **Test case(s)** | §26 names the test file for every acceptance criterion; Stage 1's seven (A1–A7) exist and run in CI |
+| **Test case(s)** | §26 names the test file for every acceptance criterion; none exists yet |
 | **Status** | Approved for the Stage 1 build (decisions recorded in §28) |
 | **Approved by** | Baban Ali, 2026-10-01 (chat approval; §28.1 of the blueprint requires the Business Process Owner's written sign-off to be attached) |
 
@@ -306,7 +306,25 @@ No edit.
 
 ## 8. Import (the import application)
 
-A payable of type `import` is the application of the workflow diagram. Its
+**How it starts (decision D13).** The CEO agrees the purchase with the
+supplier (usually on WeChat) and receives the supplier's PDF — the PI /
+invoice with models, quantities, prices and payment terms. He sends it to the
+accountant. The accountant enters it as a **purchase invoice** on the
+existing Purchase Invoices screen (supplier, invoice number, lines, terms,
+the PDF attached) and ticks *Import* (pre-ticked for a supplier flagged
+foreign / import). **That purchase invoice is the import application**: the
+system creates the application behind it in the same transaction, keyed by
+the invoice number (the same key the sheet used, "PO no./INV."), with the
+invoice lines as its lines and the invoice's instalment plan as its terms,
+and the purchase order the ERP's own controls need (receipts, advances) is
+created silently from the lines. Nobody fills a second form and nobody types
+anything twice. An import invoice does not put goods into stock when posted —
+stock arrives container by container (§18); until then its stock lines post
+to goods-in-transit.
+
+The invoice page gets an **Import tracking** button that opens the
+application page (§21.3); the *Import applications* list shows the same
+records. A payable of type `import` is the application of the workflow diagram. Its
 order lane, bank lane, payment lane, PD lane, shipment lane and warehouse lane
 are specified in Part D, holds in Part E, cleared and landed cost in Part F —
 all carried over from REQ-APP-001 with the new names (`payable`,
@@ -432,7 +450,7 @@ ledger exactly as now.
 
 | Box | Specification |
 |---|---|
-| **Pending order / PI** | Creating the application records the proforma / pending order: supplier, PI number (= `supplier_reference`), PI date, currency, amount, and the model lines (item code, description, quantity, unit price). Lines are stored in `payable_order_line` so quantity is known before the invoice exists. **In the same transaction a purchase order is created from those lines through the existing `purchase-order` service and approved** (the PI is the company's order; `purchase_order.reference` = the PI number) — or, when the user picks an existing approved PO of the same supplier, that PO is linked and its lines become the order lines. Event `PAYABLE_OPENED`, `PI_RECORDED`, `PO_LINKED`. |
+| **Pending order / PI** | The supplier's PDF, entered by the accountant as a purchase invoice (§8) — that entry *is* the application's birth: `supplier_reference` = the invoice number, the invoice lines are stored as `payable_order_line`, the PDF is attached. **In the same transaction a purchase order is created from those lines through the existing `purchase-order` service and submitted** — approval stays a second person's act in the approvals inbox (blueprint §5.2 maker-checker; one officer must not self-approve a commitment) (the PI is the company's order; `purchase_order.reference` = the PI number) — or, when the user picks an existing approved PO of the same supplier, that PO is linked and its lines become the order lines. Event `PAYABLE_OPENED`, `PI_RECORDED`, `PO_LINKED`. |
 | **Purchase invoice** | The existing AP invoice, created from the application page ("Create purchase invoice") with lines pre-filled from the PI, or linked afterwards by picking an existing posted invoice of the same supplier whose reference matches `supplier_reference_key`. Posting the invoice writes `INVOICE_POSTED` with amount and quantity; reversal writes `INVOICE_REVERSED` and re-derives the stage. Several invoices per application are allowed; one invoice belongs to at most one application. |
 | **Payment terms** | `payment_terms_text` (verbatim) and the structured instalment plan of §15.2, entered together. Event `TERMS_SET`; any later change `TERMS_CHANGED` with before/after. The invoice's own `due_date` (existing) is kept for AP ageing and is set from the last instalment's expected date. |
 | **Move to BL** | Automatic. The moment the first B/L is recorded (§17.1) the order lane writes `MOVED_TO_BL`; from then on quantities are tracked per container, and the PI lines become the plan to check containers against. |
@@ -780,7 +798,9 @@ same condition.
   `import.hold.opened`.
 * When a hold has no owner for longer than `escalate_after_days`, or stays open
   past the limit's escalation, the sweep writes `ESCALATED` and notifies
-  `escalate_to_role` (seed: `accounting_manager`).
+  `escalate_to_role` (seed: `accounting_manager`). The escalation clock runs
+  from when the hold was **opened**, not from the back-dated breach date —
+  otherwise an automatic hold would escalate in the same sweep that raised it.
 * Holds are visible on the existing dashboard's *Waiting on me* band for the
   owner — the only dashboard change in this requirement. (A separate alerts
   dashboard is **out of scope**, §27.)
@@ -858,6 +878,11 @@ Event `ITEM_COST_ALLOCATED` per model with the resulting unit cost.
 ## 21. Screen by screen
 
 Conventions: every screen is a Next.js route under `src/app/(app)/payables/…`.
+**Every screen draws the module's navigation with the existing `SectionTabs`
+component** (the screens of the same menu heading, in the menu's order) and
+never its own row of links; filters and saved views live inside the list
+area, below the tabs, next to the search box. A screen that looks different
+from the rest of the ERP is wrong.
 The menu section `purchasing` is **renamed `payables`** (key, label in `en`
 and `ar`, ordinal unchanged) and absorbs the items of `finance_ap` (supplier
 ledger, ageing, allocations, reconciliation), which section is removed from
@@ -893,7 +918,31 @@ work at mobile width and RTL. Nothing about the existing appearance changes.
 
 ### 21.2 Payables workbench `/payables`
 
-The one list for everything owed. Columns (default view): no · **type** chip ·
+The one list for everything owed — but **two experiences, one table**. An
+import is a big tracked record; a rent, a forwarder's bill or a broker's fee
+is not, and must never be shown with the import's machinery. The list area
+has two tabs:
+
+* **Imports** (default) — the full columns below, the stage, the stopped
+  chips, the "Stopped — reason required" views.
+* **Expenses** — every other type, plainly: name · who we pay · amount · due
+  date · **Unpaid / Paid / Overdue** · belongs to import (if any). No stage
+  rail, no reason codes, no hold owner. *Overdue* = due date passed and not
+  paid: the row turns red with "Overdue — N days" and an inline **Add note**
+  so someone writes why (internally the `recurring_overdue` / `service` hold
+  with reason `OTHER` and the note as detail — the data model is kept, the
+  procedure is hidden).
+
+Header actions: **Add expense** (below) — there is no "New import" button:
+an import is born when the accountant enters the supplier's invoice (§8). **Add expense** — a small dialog: type of fee (`expense_category`: rent,
+electricity, internet, freight forwarding, customs brokerage, consultant,
+bank charge, other — extensible in settings) · name · who we pay · amount +
+currency · due date · attach invoice (optional) · *belongs to import*
+(optional, for forwarder / broker / port costs) · *repeat every month*
+(creates the recurring contract and its first period) · Save. Saving creates
+a payable of type `service` (or `recurring`) and writes `PAYABLE_OPENED`.
+
+Imports tab columns (default view): no · **type** chip ·
 reference · supplier · department · description · amount (txn) · **stage**
 (+ days) · **Stopped?** (reason · owner · days) · due / expected date ·
 applied / paid / remaining · next action + due · branch. Type-specific columns
@@ -911,10 +960,16 @@ then days stopped desc, then due date. Row actions: open · stop / follow-up
 
 One layout for every type; the tabs that show are the type's lanes.
 
-* **Header band** — the chip rows of §5.2; stage rail of the type (import: 8
-  steps as drawn; service / recurring: 7); days in stage.
-* **Stop banner** — as §19: reason · owner · since · next action, with
-  *Update / Reassign / Resolve*; or "Over time limit — reason required".
+* **Header band** — for **import**: the chip rows of §5.2, the 8-step stage
+  rail as drawn, days in stage. For **every other type**: the expense fields,
+  a status chip *Unpaid / Paid / Overdue*, and the buttons **Mark paid**
+  (date, method, reference — creates the posted supplier payment through the
+  existing service in the same transaction and writes the event) and **Add
+  note**. The 7-step rails of §6 still exist internally (derived and logged)
+  but are not drawn for these types.
+* **Stop banner** (import only) — as §19: reason · owner · since · next
+  action, with *Update / Reassign / Resolve*; or "Over time limit — reason
+  required". Other types show only the red *Overdue* chip and the note.
 * **Tabs** (shown when the lane applies): Order & invoice · Service
   (receipt / confirmation; for recurring: the period and contract) · Bank &
   funding · Payments · PD / ASYCUDA · Shipment & containers · Warehouse &
@@ -1107,22 +1162,26 @@ one process.
 
 | # | Criterion | Test |
 |---|---|---|
-| A1 | Creating a payable of each seeded type allocates its series number, writes `PAYABLE_OPENED`, enforces the type's controls (PO required for import / local goods; department required for service / recurring), and refuses a duplicate supplier + normalised reference + type. | `tests/integration/ap01-payable-core.test.ts` |
-| A2 | Every service writing to a table carrying `payable_id` writes at least one `payable_event` in the same transaction; the coverage test fails any that does not. | `tests/integration/ap01-event-coverage.test.ts` |
-| A3 | UPDATE / DELETE on the append-only tables raise; DELETE on any payable table is refused for `erp_app`. | `tests/integration/ap01-append-only.test.ts` |
-| A4 | Stage derivation is correct for each seeded rail, including deposit-paid-then-shipped (import, stage 5) and advance-before-confirmation (service, stage 5 with lane "not confirmed"). | `tests/integration/ap01-stage-derivation.test.ts` |
-| A5 | The sweep, run twice, opens exactly one `PENDING_REASON` hold per payable+check over its limit (SWIFT pending, recurring overdue, PD not validated…); completing needs reason, owner, next action; the thread is append-only. | `tests/integration/ap01-holds-sweep.test.ts` |
-| A6 | A time limit changed in settings (scope type / bank / method) applies on the next sweep without deployment; the old row keeps its validity. | `tests/integration/ap01-settings-live.test.ts` |
-| A7 | The menu shows *Payables* (en/ar) with the moved `finance_ap` items; every `/purchasing/*` route redirects to `/payables/*`; permissions unchanged. | `tests/integration/ap01-menu-redirects.test.ts` |
+| A1 | Creating a payable of each seeded type allocates its series number, writes `PAYABLE_OPENED`, enforces the type's controls (PO required for import / local goods; department required for service / recurring), and refuses a duplicate supplier + normalised reference + type. | `ap01-payable-core` |
+| A2 | Every service writing to a table carrying `payable_id` writes at least one `payable_event` in the same transaction; the coverage test fails any that does not. | `ap01-event-coverage` |
+| A3 | UPDATE / DELETE on the append-only tables raise; DELETE on any payable table is refused for `erp_app`. | `ap01-append-only` |
+| A4 | Stage derivation is correct for each seeded rail, including deposit-paid-then-shipped (import, stage 5) and advance-before-confirmation (service, stage 5 with lane "not confirmed"). | `ap01-stage-derivation` |
+| A5 | The sweep, run twice, opens exactly one `PENDING_REASON` hold per payable+check over its limit (SWIFT pending, recurring overdue, PD not validated…); completing needs reason, owner, next action; the thread is append-only. | `ap01-holds-sweep` |
+| A6 | A time limit changed in settings (scope type / bank / method) applies on the next sweep without deployment; the old row keeps its validity. | `ap01-settings-live` |
+| A7 | The menu shows *Payables* (en/ar) with the moved `finance_ap` items; every `/purchasing/*` route redirects to `/payables/*`; permissions unchanged. | `ap01-menu-redirects` |
 | A8 | A monthly rent contract generates one payable per period, 30 days ahead, idempotently; auto-confirm moves it to stage 2; a period unpaid after its due date gets an automatic hold; an amendment changes future periods only. | `ap02-recurring-contract` |
 | A9 | A service payable cannot have its invoice approved without an approved service receipt when the category requires one; a category with `requires_receipt=false` approves with the note shown. | `ap02-service-flow` |
 | A10 | A forwarder's invoice line charged to an import becomes a landed-cost charge of that import and posts to the clearing account, not P&L. | `ap02-charged-to-import` |
-| A11 | Sending a payment application without funds / without a validated PD (import) / to an unverified supplier bank account is refused with a message naming the cause; manager override is logged. | `ap03-payment-checks` |
-| A12 | Approval reserves funds; rejection releases; confirmation (SWIFT, transfer, cash, cheque each) posts the right document dated the confirmation date and allocates it; `settled_amount_iqd` changes only then; the posted document carries `amount_txn` + `currency`. | `ap03-reserve-and-confirm` |
-| A13–A19 | The import criteria A10–A16 of REQ-APP-001 (PD lifecycle; 4 B/Ls × 10 containers partial arrival; container receipt into the ledger with idempotent `document_id`; goods at sea not on-hand; the loan example; landed cost lock; automatic Cleared and re-open). | `imp04-*`, `imp05-*`, `imp06-*`, `imp07-*` |
+| A11 | Sending a payment application without funds / without a validated PD (import) / to an unverified supplier bank account is refused with a message naming the cause; manager override is logged. | `ap03-payments` (A11 · ap03-payment-checks) |
+| A12 | Approval reserves funds; rejection releases; confirmation (SWIFT, transfer, cash, cheque each) posts the right document dated the confirmation date and allocates it; `settled_amount_iqd` changes only then; the posted document carries `amount_txn` + `currency`. | `ap03-payments` (A12 · ap03-reserve-and-confirm) |
+| A13–A15 | The shipment criteria of REQ-APP-001: B/Ls with their containers arriving part by part ("X of Y received", stage 6 then 7); each container received into the ledger once, its `document_id` the idempotency key, short or damaged goods logged with a reason and a claim hold; goods at sea owned but not available (in a transit warehouse, never in `stock_position.available`). | `ap05-shipment` (A13 / A14 · container by container; A15 · goods at sea); `tests/e2e/payables.spec.ts` (Stage 5) |
+| A16 | The loan example (A14 of REQ-APP-001): 1,000,000 at 2 % deducted at disbursement credits 980,000, books 1,000,000 liability and 20,000 commission; a 4-instalment quarterly schedule, the last absorbing rounding; 600,000 / 400,000 drawn carry 12,000 / 8,000 commission. | `ap06-loans` (A14 · the Rafidain example); `tests/unit/loans.test.ts`; `tests/e2e/payables.spec.ts` (Stage 6) |
+| A17–A19 | The remaining import criteria A10, A15–A16 of REQ-APP-001 (PD lifecycle; landed cost lock; automatic Cleared and re-open). | `ap04-customs-pd` (PD lifecycle, A10 of REQ-APP-001); `imp06-*`…`imp07-*` for the rest |
 | A20 | Applied / Paid / Remaining of the 58 migrated imports match the sheet (USD 35,309,347.81 invoiced; 15,617,285.40 paid; 23,872,694.40 applied); the dry run changes nothing and lists unmatched suppliers / PDs, verify-SWIFT rows and legacy-cleared differences. | `ap08-migration` |
 | A21 | Workbench at 10,000 payables / 200,000 events < 1 s; payable page < 1.5 s. | `tests/load/payables.js` |
 | A22 | Every new route is in `domain/menu.ts` and `DELIVERED`, translated in `en` and `ar`, passes the theme-readability e2e at mobile RTL width. | `tests/e2e/payables.spec.ts` |
+| A23 | D13 — a purchase invoice ticked *Import* opens the import application behind it in the same transaction (keyed by the supplier's number, the invoice's lines, a submitted PO, `PAYABLE_OPENED` / `PO_LINKED` / `TERMS_SET`); an unticked invoice opens nothing; the database refuses an import invoice without its application. | `ap02-expenses-and-import-invoice` |
+| A24 | D12 — *Add expense* raises a non-PO invoice whose §15 evidence is the type of fee (no second approver at entry, the CEO posts it); a non-PO invoice with no type of fee is still refused; *Mark paid* posts and allocates the payment (officer refused, paying twice refused); Unpaid / Overdue / Paid read correctly; a note is dated, signed and never edited; a contract raises one purchase invoice per period. | `ap02-expenses-and-import-invoice`, `ap02-recurring-contract` |
 
 ## 27. Out of scope (this release)
 
@@ -1152,6 +1211,29 @@ one process.
 | D6 | Accepting a short delivery as final | `accounting_manager`. |
 | D7 | Module name and scope | *Purchasing* becomes **Payables** and covers every payable type (import, service & expense, recurring contract, local goods, advance); `finance_ap` merges into it. The import application keeps its name as a type. |
 | D8 | Rent evidence | A lease with `auto_confirm` is its own receipt evidence; no service receipt is required per period. Metered utilities require the department's confirmation of the bill. |
+| D9 | PO from a PI (Stage 1 build, 2026-10-01) | The PO is created and *submitted* in the payable's transaction; approval is a second person's act (maker-checker). |
+| D10 | Escalation clock (Stage 1 build) | Counts from the hold's `opened_at`, not from the breach date. |
+| D11 | Order lines | No DELETE on `payable_order_line`; a changed PI line supersedes the old one and writes `FIELD_CHANGED` (follow-up to Stage 1). |
+| D12 | Two experiences, one table (2026-10-01, after the first look at the workbench) | Imports get the full tracking UI; every other type gets the simple *Add expense* dialog and *Unpaid / Paid / Overdue* with a note. The stop machinery with reason codes is drawn for imports only. Every screen uses `SectionTabs`; no screen draws its own navigation. |
+| D13 | Where an import is born (2026-10-01) | At the purchase invoice: the accountant enters the supplier's PDF as a purchase invoice ticked *Import*; the application is created behind it automatically, keyed by the invoice number; the PO is created silently for the ERP's controls. No separate form. Expenses (rent, forwarders, brokers, utilities) are ordinary purchase invoices with *Mark paid* and Unpaid/Paid/Overdue — not payables. |
+| D14 | What confirms a payment (Stage 3 build) | The payment method keeps its name and rail; a new `confirmation_kind` (SWIFT copy · transfer reference · cash voucher · cheque number) decides the Confirm dialog's fields, the event (`SWIFT_CONFIRMED` / `TRANSFER_CONFIRMED` / `CASH_PAID` / `CHEQUE_PAID`) and which clock watches it (`swift_pending` or `transfer_pending`). Method codes stay minted (Critical Rule 1); the four §15.3 methods are seeded as `PM-…` rows by name. |
+| D15 | The lane guard and the bank's answer (Stage 3 build) | A `PENDING_REASON` hold in the payment lane blocks Create, Approve and Send (§19.1). It does not block Confirm, Reject, Cancel or Record debit: the bank's answer is what resolves a late SWIFT, and refusing to record money that already left would make the books wrong. |
+| D16 | A deposit before the invoice posts (Stage 3 build) | Confirm creates the supplier advance through the existing service as the people who acted: requested by the application's maker, approved by its approver, paid by whoever confirms — so the advance's own maker-checker holds and its audit names real people. The approver must therefore hold `approve` on supplier advances (accounting manager). |
+| D17 | Which IQD figure (Stage 3 build) | Converted at the accounting rate when drafted, again on the application date at Send (that is what is reserved), and again on the confirmation date at Confirm (that is what is posted). Applied / Paid / Remaining are kept in the transaction currency; IQD totals use each row's own rate. |
+| D18 | The PD check before Stage 4 (Stage 3 build) | Until the PD register exists, check 1 answers *warning* ("confirm the PD is validated before the bank pays") rather than refusing; Stage 4 replaces it with the real check. The B/L triggers likewise warn until Stage 5. |
+| D19 | Reservations across branches (Stage 3 build) | An account is a company master, so its Reserved figure counts every branch's applications (a `SECURITY DEFINER` sum), never only those the reader's branch scope can see. |
+| D20 | The PD's expiry (Stage 4 build) | The day after a validated (or partly written-off) PD's expiry the sweep moves it to its expired status itself (history source *Expiry (automatic)*), and a `pd_expired` check (limit 0) stops the import with a `PENDING_REASON` hold in the PD lane until it is re-registered. A rejected PD that is not re-registered stops it the same way. A PD that expires before it was ever validated has no expired status to move to; the sweep writes `PD_EXPIRED` once instead. |
+| D21 | The PD and the paying bank (Stage 4 build) | When both the PD and the paying account name a bank, they must be the same bank (check 1, overridable by a manager with a reason). A PD or an account with no bank recorded does not fail on the bank. The PD the bank paid against is stored on the application at Send. |
+| D22 | The ASYCUDA list (Stage 4 build) | Pasted, never uploaded as a file in this build: the page reads it line by line (number, status as ASYCUDA spells it, optional date), shows the difference — will be updated / already so / no such PD / final / not read — and applies only after the person presses *Apply*. Final PDs are not changed by a list; they are re-registered. |
+| D23 | Where an import's goods wait (Stage 5 build) | An import invoice receives its stock lines into the branch's *In Process* warehouse, a transit warehouse: owned and valued, never available to sell (A15). The warehouse the accountant chose on the line becomes the import's destination (the PO lines, the payable's default warehouse). The legacy four-stage shipment is not opened for an import; containers replace it. The staging warehouses are transit warehouses from migration 0234 on, and the report pickers (Stock Ledger, Stock Movement, FIFO Valuation) list every active warehouse so stock in transit can still be read. |
+| D24 | The container receipt (Stage 5 build) | A container is received by its own document, `container_receipt` (`CREC-{BRANCH}-{YYYY}-{SERIAL}`), whose id is the form's one-time `document_id`: a repeat answers with the first receipt. It moves the counted quantity out of transit into the chosen warehouse of the same branch through `inventory.relocate` (`transfer_issue` / `transfer_receipt` on the invoice line's own FIFO layers, no journal — the value was posted with the invoice). It is refused before the invoice is posted, into another branch, or into a transit warehouse. Receipt and lines are append-only, and the document is in `resetTestData`, `format-live-database.sh` and the integrity checks. |
+| D25 | Short and damaged (Stage 5 build) | Anything not received whole makes the container *Missing / damaged* (it counts as arrived for "X of Y"), needs a reason, writes `QUANTITY_VARIANCE` and opens a `receipt_variance` hold in the warehouse lane for the claim. The short or damaged quantity stays in transit until the claim decides it; "accept short delivery as final" (D6) is left for the landed-cost stage. |
+| D26 | Deferred from Stage 5 | The §24.4 migration of `supplier_shipment` rows and the `/inventory/in-transit` redirect move to Stage 8 (migration); the container-status, port and PD-status settings tabs are seeded rows editable in the database until then. Status names are master data held in English; Arabic reads the translation of the seeded code and falls back to the stored name. |
+| D27 | The loan subledger (Stage 6 build) | `loan` joins the control-account kinds; the liability's party is the loan number, carried on `journal_line.loan_no` as a bank line carries `bank_account_code`, so the loan ledger reconciles to its control account per loan. The disbursement, each repayment and a separately paid commission post through the existing posting engine under three new mapped events (`treasury.loan_disbursement`, `treasury.loan_repayment`, `treasury.loan_commission`); the bank side is the loan's own account. The journal stays IQD (D17): each posting converts at the accounting rate of its own date — a foreign-currency loan's exchange difference is left for period-end revaluation, not booked by this stage. |
+| D28 | Commission treatments and D5 (Stage 6 build) | The treatment master carries flags (`deducted`, `spread`), so a new treatment names its behaviour. The commission goes to Landed Cost Clearing when the loan says it is capitalised (the default, D5) and to Bank Commission expense otherwise. Each draw's share — commission × drawn / principal by default; equal or typed as alternatives — is a `bank_commission` landed-cost charge of the import it paid, valued at the loan's booked rate; a released draw cancels its charge, and equal shares are re-stated when a draw comes or goes. |
+| D29 | What a loan funds (Stage 6 build) | A payment application may name a loan that is approved or disbursed, in its own currency, from the account the loan's money landed in, with the room (principal less what is drawn — the A14 example draws the whole principal although 980,000 landed). The draw is written when the application is approved and refused while the money has not arrived; rejection or cancellation releases it (`LOAN_UNLINKED`). What a loan has drawn is counted across every branch (a `SECURITY DEFINER` sum, as D19). |
+| D30 | Approving and repaying a loan (Stage 6 build) | The person who entered a loan never approves it; above the proceeds account's approval limit — and always when no limit is set, as for payments — only the CEO does. A schedule is generated at entry (equal principal to the cent, the last absorbing rounding; interest on the declining balance, actual/365, from one period before the first due date) and may be retyped until approval, never after. Instalments are repaid whole and in order; partial repayments are not in this build. The last repayment makes the loan fully repaid. The sweep marks an instalment due inside the warning window (`loan_instalment_due`, seed 7 days) and overdue after its date, and tells each funded import once (`LOAN_INSTALMENT_OVERDUE`). |
+| D31 | Loans are a company register (Stage 6 build) | A loan is not branch-scoped (as bank accounts are not); it records the booking branch for its journals. Its draws are children of the imports they fund and carry their branch scope. Loan headers are not edited after entry; a wrong loan is cancelled with a reason and entered again, before its money arrives. |
 
 ---
 

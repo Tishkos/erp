@@ -248,6 +248,11 @@ export interface PostingLineRequest {
    * party, which is a different thing and lives in its own column.
    */
   readonly bankAccountCode?: string | null;
+  /**
+   * REQ-AP-001 §15.7 — which loan a line on a `loan` control account is
+   * against: the loan subledger's party, as `bankAccountCode` is the bank's.
+   */
+  readonly loanNo?: string | null;
 }
 
 export interface PostingRequest {
@@ -295,6 +300,8 @@ export interface PlannedLine {
   readonly description: string | null;
   /** The bank subledger's party, carried from the request. */
   readonly bankAccountCode: string | null;
+  /** The loan subledger's party, carried from the request. */
+  readonly loanNo: string | null;
 }
 
 /**

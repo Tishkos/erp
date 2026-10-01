@@ -18,6 +18,7 @@ export async function createPaymentMethod(formData: FormData): Promise<void> {
         // No code: the system mints it (Critical Rule 1).
         name: text(formData, 'name'),
         kind: text(formData, 'kind'),
+        confirmationKind: text(formData, 'confirmationKind') || null,
         feePercent: text(formData, 'feePercent') || null,
         feeAccountId: text(formData, 'feeAccountId') || null,
       }),
@@ -32,6 +33,7 @@ export async function updatePaymentMethod(formData: FormData): Promise<void> {
       methods.update(tx, ctx, code, {
         name: text(formData, 'name'),
         kind: text(formData, 'kind'),
+        confirmationKind: text(formData, 'confirmationKind') || null,
         feePercent: text(formData, 'feePercent') || null,
         feeAccountId: text(formData, 'feeAccountId') || null,
       }),

@@ -28,9 +28,12 @@ import { outcomeOf, type SearchParams } from './params';
 import { Denied } from '@/components/denied';
 import { ExportMenu } from '@/components/print/export-menu';
 import { can } from '@domain/permissions';
+import { toDecimalString } from '@domain/money';
 import { AdminNotFoundError } from '@/server/services/administration';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as accounts from '@/server/services/bank-cash-accounts';
+import * as banks from '@/server/services/banks';
+import * as reservations from '@/server/services/treasury';
 import * as treasury from '@/server/services/treasury-reports';
 import * as rates from '@/server/services/exchange-rates';
 import * as users from '@/server/services/users';
@@ -82,7 +85,7 @@ export async function AccountList({
   const mayCreate = can(principal, 'create', accounts.PERMISSION_OBJECT);
   const route = ROUTES[kind];
 
-  const { rows, gl, people, moneys } = await withCurrentUser(async (tx) => ({
+  const { rows, gl, people, moneys, bankRows } = await withCurrentUser(async (tx) => ({
     rows: await accounts.listOfKind(tx, kind),
     gl: mayCreate ? await accounts.availableGlAccounts(tx) : [],
     people: mayCreate && kind === 'cash' ? await users.listAll(tx) : [],
@@ -90,6 +93,8 @@ export async function AccountList({
     // them or it is nothing: a typed code is a code nothing else in the system
     // knows, and the first payment in it would have no rate to be read at.
     moneys: mayCreate ? await rates.currencies(tx) : [],
+    // REQ-AP-001 §15.1 — the bank is a master row.
+    bankRows: mayCreate && kind === 'bank' ? await banks.listActive(tx) : [],
   }));
   const shown = rows.filter((row) => matches(row, outcome.q));
 
@@ -134,6 +139,16 @@ export async function AccountList({
                 />
                 {kind === 'bank' ? (
                   <>
+                    <Select
+                      emptyLabel="—"
+                      hint={t('bank_accounts.bank_hint')}
+                      label={t('bank_accounts.bank')}
+                      name="bankCode"
+                      options={bankRows.map((b) => ({
+                        value: b.code,
+                        label: b.swiftBic ? `${b.name} · ${b.swiftBic}` : b.name,
+                      }))}
+                    />
                     <Field label={t('bank_accounts.bank_name')} name="bankName" />
                     <Field
                       hint={t('bank_accounts.number_hint')}
@@ -278,6 +293,9 @@ export async function AccountRecord({
       const row = await accounts.detail(tx, code);
       return {
         row,
+        bankRows: mayEdit && kind === 'bank' ? await banks.listActive(tx) : [],
+        // REQ-AP-001 §15.1 — Booked / Reserved / Available.
+        reserved: await reservations.accountPosition(tx, row.id).catch(() => null),
         gl: mayEdit ? await accounts.availableGlAccounts(tx, row.glAccountId) : [],
         people: mayEdit ? await users.listAll(tx) : [],
         moneys: mayEdit ? await rates.currencies(tx) : [],
@@ -304,7 +322,7 @@ export async function AccountRecord({
     }
   });
   if (!data) notFound();
-  const { row, gl, people, moneys, position } = data;
+  const { row, gl, people, moneys, position, bankRows, reserved } = data;
   const money = (amount: string) => formatMoney(amount, row.currency, locale as Locale);
   // The address is the truth about which list this belongs on; a cash account
   // reached through the bank route is the wrong page for it.
@@ -360,6 +378,14 @@ export async function AccountRecord({
               </li>
               {kind === 'bank' ? (
                 <>
+                  <li>
+                    <span>{t('bank_accounts.bank')}</span>
+                    <span>
+                      {row.bankMasterName
+                        ? `${row.bankMasterName}${row.bankMasterSwift ? ` · ${row.bankMasterSwift}` : ''}`
+                        : t('none')}
+                    </span>
+                  </li>
                   <li>
                     <span>{t('bank_accounts.bank_name')}</span>
                     <span>{row.bankName ?? t('none')}</span>
@@ -491,6 +517,26 @@ export async function AccountRecord({
                     </strong>
                   </div>
 
+                  {/* REQ-AP-001 §15.1 — what payment applications hold on
+                      this account, and what is left to promise. Only when
+                      something is held, like the transfer tiles below. */}
+                  {reserved && reserved.committedIqd > 0n ? (
+                    <>
+                      <div className={s.holdingsFlow}>
+                        <span>{t('accounts_shared.reserved')}</span>
+                        <strong>
+                          <bdi dir="ltr">{money(toDecimalString(reserved.committedIqd, 4n))}</bdi>
+                        </strong>
+                      </div>
+                      <div className={s.holdingsFlow}>
+                        <span>{t('accounts_shared.available')}</span>
+                        <strong>
+                          <bdi dir="ltr">{money(toDecimalString(reserved.availableIqd, 4n))}</bdi>
+                        </strong>
+                      </div>
+                    </>
+                  ) : null}
+
                   {/* Only when there are any: a till that has never been part
                       of a transfer should not carry two empty tiles. */}
                   {Number(position.transfersInIqd) > 0 || Number(position.transfersOutIqd) > 0 ? (
@@ -574,6 +620,17 @@ export async function AccountRecord({
                   />
                   {kind === 'bank' ? (
                     <>
+                      <Select
+                        defaultValue={row.bankCode ?? ''}
+                        emptyLabel="—"
+                        hint={t('bank_accounts.bank_hint')}
+                        label={t('bank_accounts.bank')}
+                        name="bankCode"
+                        options={bankRows.map((b) => ({
+                          value: b.code,
+                          label: b.swiftBic ? `${b.name} · ${b.swiftBic}` : b.name,
+                        }))}
+                      />
                       <Field defaultValue={row.bankName} label={t('bank_accounts.bank_name')} name="bankName" />
                       <Field
                         defaultValue={row.accountNumber}

@@ -1072,6 +1072,55 @@
       "when": 1795900000032,
       "tag": "0228_payable_event_clock_order",
       "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "7",
+      "when": 1795900000033,
+      "tag": "0229_payable_order_lines_supersede",
+      "breakpoints": true
+    },
+    {
+      "idx": 154,
+      "version": "7",
+      "when": 1795900000034,
+      "tag": "0230_payables_stage2",
+      "breakpoints": true
+    },
+    {
+      "idx": 155,
+      "version": "7",
+      "when": 1795900000035,
+      "tag": "0231_expenses_are_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 156,
+      "version": "7",
+      "when": 1795900000036,
+      "tag": "0232_payments_and_bank",
+      "breakpoints": true
+    },
+    {
+      "idx": 157,
+      "version": "7",
+      "when": 1795900000037,
+      "tag": "0233_customs_pd",
+      "breakpoints": true
+    },
+    {
+      "idx": 158,
+      "version": "7",
+      "when": 1795900000038,
+      "tag": "0234_shipment_containers",
+      "breakpoints": true
+    },
+    {
+      "idx": 159,
+      "version": "7",
+      "when": 1795900000039,
+      "tag": "0235_bank_loans",
+      "breakpoints": true
     }
   ]
 }

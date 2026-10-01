@@ -26,7 +26,7 @@
  */
 import { and, asc, eq, inArray, isNull, not, or, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
-import { appUser, bankCashAccount, branch, chartOfAccount } from '../db/schema';
+import { appUser, bank, bankCashAccount, branch, chartOfAccount } from '../db/schema';
 import {
   AdminNotFoundError,
   AdminValidationError,
@@ -48,6 +48,8 @@ export interface AccountInput {
   readonly currency?: string | null;
   /** Bank only. */
   readonly bankName?: string | null;
+  /** REQ-AP-001 §15.1 — the bank master row; the name follows it when blank. */
+  readonly bankCode?: string | null;
   readonly accountNumber?: string | null;
   readonly iban?: string | null;
   readonly swift?: string | null;
@@ -120,8 +122,13 @@ export async function detail(tx: Tx, code: string) {
         .where(eq(appUser.id, row.custodianUserId))
         .limit(1)
     : [];
+  const [held] = row.bankCode
+    ? await tx.select({ name: bank.name, swiftBic: bank.swiftBic }).from(bank).where(eq(bank.code, row.bankCode)).limit(1)
+    : [];
   return {
     ...row,
+    bankMasterName: held?.name ?? null,
+    bankMasterSwift: held?.swiftBic ?? null,
     glAccountCode: gl?.code ?? null,
     glAccountName: gl?.name ?? null,
     custodianName: custodian?.name ?? null,
@@ -245,8 +252,19 @@ function assertCurrency(value: string | null | undefined): string {
 /** The fields that belong to one kind, checked as that kind requires. */
 async function shapeFor(tx: Tx, kind: AccountKind, input: AccountInput) {
   if (kind === 'bank') {
+    // §15.1 — the bank is a master row; the free text stays for what the
+    // master does not say (a branch, a desk) and defaults to the bank's name.
+    const code = optionalText(input.bankCode);
+    let bankName = optionalText(input.bankName);
+    if (code) {
+      const [known] = await tx.select().from(bank).where(eq(bank.code, code)).limit(1);
+      if (!known) throw new AdminValidationError('bankCode', 'is not a known bank');
+      if (!known.active) throw new AdminValidationError('bankCode', `${known.name} is no longer active`);
+      bankName = bankName ?? known.name;
+    }
     return {
-      bankName: optionalText(input.bankName),
+      bankCode: code,
+      bankName,
       // §4.4 — a bank account with no number cannot be reconciled to a statement.
       accountNumber: requireText(input.accountNumber ?? '', 'accountNumber'),
       iban: optionalText(input.iban),
@@ -260,6 +278,7 @@ async function shapeFor(tx: Tx, kind: AccountKind, input: AccountInput) {
   const custodian = await assertCustodian(tx, input.custodianUserId ?? null);
   if (!custodian) throw new AdminValidationError('custodianUserId', 'is required for a cash account');
   return {
+    bankCode: null,
     bankName: null,
     accountNumber: null,
     iban: null,

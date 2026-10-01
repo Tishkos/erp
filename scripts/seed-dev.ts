@@ -225,6 +225,11 @@ async function main() {
       ['X100020', 'Service and Expense Cost', 'X000001', null],
       ['X100030', 'Purchase Price Variance', 'X000001', null],
       ['X100040', 'Inventory Adjustments', 'X000001', null],
+      // REQ-AP-001 — the import's clearing account and the loan register's.
+      ['A100040', 'Landed Cost Clearing', 'A000001', null],
+      ['L100040', 'Bank Loans', 'L000001', 'loan'],
+      ['X100050', 'Bank Commission', 'X000001', null],
+      ['X100060', 'Loan Interest', 'X000001', null],
     ];
     for (const [code, name, parent, control] of accounts) {
       await tx.execute(sql`
@@ -257,6 +262,16 @@ async function main() {
       ['sales.customer_credit_memo', 'sales_returns', 'R100020'],
       ['inventory.opening_stock', 'opening_balance', 'E100010'],
       ['inventory.stock_adjustment', 'inventory_adjustment', 'X100040'],
+      ['purchasing.ap_invoice', 'landed_cost_clearing', 'A100040'],
+      ['treasury.loan_disbursement', 'loan_liability', 'L100040'],
+      ['treasury.loan_disbursement', 'landed_cost_clearing', 'A100040'],
+      ['treasury.loan_disbursement', 'bank_commission', 'X100050'],
+      ['treasury.loan_repayment', 'loan_liability', 'L100040'],
+      ['treasury.loan_repayment', 'loan_interest', 'X100060'],
+      ['treasury.loan_repayment', 'landed_cost_clearing', 'A100040'],
+      ['treasury.loan_repayment', 'bank_commission', 'X100050'],
+      ['treasury.loan_commission', 'landed_cost_clearing', 'A100040'],
+      ['treasury.loan_commission', 'bank_commission', 'X100050'],
     ];
     for (const [event, role, code] of mappings) {
       await tx.execute(sql`
@@ -291,12 +306,26 @@ async function main() {
       ON CONFLICT DO NOTHING
     `);
 
-    // Block 8's three stages, each a warehouse of its own.
+    // Block 8's three stages, each a warehouse of its own — transit since
+    // REQ-AP-001 §17.4: goods at sea are owned, not available for sale.
     await tx.execute(sql`
-      INSERT INTO warehouse (code, name, branch_code, warehouse_type, shipment_stage) VALUES
-        ('WH-INPROC', 'In Process', 'HQ', 'main', 'in_process'),
-        ('WH-BOARD', 'On Board', 'HQ', 'main', 'on_board'),
-        ('WH-PORT', 'On Port', 'HQ', 'main', 'on_port')
+      INSERT INTO warehouse (code, name, branch_code, warehouse_type, is_transit, shipment_stage) VALUES
+        ('WH-INPROC', 'In Process', 'HQ', 'transit', true, 'in_process'),
+        ('WH-BOARD', 'On Board', 'HQ', 'transit', true, 'on_board'),
+        ('WH-PORT', 'On Port', 'HQ', 'transit', true, 'on_port')
+      ON CONFLICT DO NOTHING
+    `);
+
+    // A workbench with no supplier can raise nothing, and a sales screen with
+    // no customer can sell nothing — the first partners a trading company
+    // meets, so every document screen starts usable. Active, not prospect:
+    // a purchase order (and so an import, D13) is refused against a prospect
+    // (§6), and a seed that cannot raise one is not usable.
+    await tx.execute(sql`
+      INSERT INTO business_partner (code, legal_name, is_supplier, is_customer, active, status) VALUES
+        ('SUP-00001', 'Al-Rafidain Trading Co.', true, false, true, 'active'),
+        ('SUP-00002', 'Basra Freight and Forwarding', true, false, true, 'active'),
+        ('CUS-00001', 'Erbil Retail Group', false, true, true, 'active')
       ON CONFLICT DO NOTHING
     `);
   });

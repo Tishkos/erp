@@ -11,7 +11,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { journalEntry } from './db/schema';
+import { bankLoan, customsPd, journalEntry, payable, paymentApplication, shipmentContainer } from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -103,6 +103,49 @@ const journalParentAccess = async (tx: Tx, principal: Principal, objectId: strin
   return Boolean(row);
 };
 
+/**
+ * REQ-AP-001 — the payable's attachments (the supplier's PI, the contract)
+ * and the payment application's (the SWIFT copy, the signed voucher). The
+ * same two questions; row-level security answers the branch.
+ */
+const payableParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'payable')) return false;
+  const [row] = await tx.select({ id: payable.id }).from(payable).where(eq(payable.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const paymentApplicationParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'payment_application')) return false;
+  const [row] = await tx
+    .select({ id: paymentApplication.id })
+    .from(paymentApplication)
+    .where(eq(paymentApplication.id, objectId))
+    .limit(1);
+  return Boolean(row);
+};
+
+const customsPdParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'customs_pd')) return false;
+  const [row] = await tx.select({ id: customsPd.id }).from(customsPd).where(eq(customsPd.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const containerParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'shipment_container')) return false;
+  const [row] = await tx
+    .select({ id: shipmentContainer.id })
+    .from(shipmentContainer)
+    .where(eq(shipmentContainer.id, objectId))
+    .limit(1);
+  return Boolean(row);
+};
+
+const loanParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'bank_loan')) return false;
+  const [row] = await tx.select({ id: bankLoan.id }).from(bankLoan).where(eq(bankLoan.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -112,6 +155,11 @@ export function registerAttachmentRuntime(): void {
   attachments.registerStorage(fileStorage);
   attachments.registerScanner(signatureScanner);
   attachments.registerParentAccessCheck('journal_entry', journalParentAccess);
+  attachments.registerParentAccessCheck('payable', payableParentAccess);
+  attachments.registerParentAccessCheck('payment_application', paymentApplicationParentAccess);
+  attachments.registerParentAccessCheck('customs_pd', customsPdParentAccess);
+  attachments.registerParentAccessCheck('shipment_container', containerParentAccess);
+  attachments.registerParentAccessCheck('bank_loan', loanParentAccess);
 }
 
 /** Streams a stored file, for a route handler that has already checked access. */

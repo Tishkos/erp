@@ -183,15 +183,19 @@ describe('ops 7 · the warehouses block 8 needs', () => {
     expect(made.every((entry) => /^WH-\d{4}$/.test(entry.code))).toBe(true);
   });
 
-  it('offers them to a picker, because the purchase invoice has to name one', async () => {
+  it('makes them transit, and keeps them out of the pickers stock is put away from (REQ-AP-001 §17.4)', async () => {
     const made = await ensure(manager);
     const inProcess = made.find((entry) => entry.stage === 'in_process')!;
 
-    // A stage warehouse is an ordinary warehouse that holds a stage. If the
-    // picker hid it, no invoice line could be booked into In Process and block
-    // 8 would never open a shipment.
+    // Since REQ-AP-001 Stage 5 (0234) goods at sea are owned, not available:
+    // a stage warehouse is a transit warehouse. Nobody books into it by hand —
+    // an import invoice puts its stock lines there itself, and the container
+    // receipt takes them out — so the everyday picker leaves it out, while the
+    // stock reports still show it.
     const picker = await withScope(scope(manager), (tx) => warehouses.listActive(tx));
-    expect(picker.some((row) => row.code === inProcess.code)).toBe(true);
+    expect(picker.some((row) => row.code === inProcess.code)).toBe(false);
+    const reports = await withScope(scope(manager), (tx) => warehouses.listForReports(tx));
+    expect(reports.find((row) => row.code === inProcess.code)?.warehouseType).toBe('transit');
   });
 
   it('creates nothing the second time, so it can be run on a live database', async () => {

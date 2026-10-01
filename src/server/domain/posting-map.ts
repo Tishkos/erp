@@ -45,7 +45,7 @@ export interface MappedLine {
    * they are needed, which is why they are listed rather than hidden.
    */
   readonly always: boolean;
-  readonly controlAccount?: 'customer' | 'supplier';
+  readonly controlAccount?: 'customer' | 'supplier' | 'loan';
 }
 
 export interface MappedDocument {
@@ -58,7 +58,7 @@ const line = (
   role: string,
   side: PostingSide,
   always = false,
-  controlAccount?: 'customer' | 'supplier',
+  controlAccount?: 'customer' | 'supplier' | 'loan',
 ): MappedLine => ({ role, side, always, ...(controlAccount ? { controlAccount } : {}) });
 
 export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
@@ -73,6 +73,9 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
       line('grni', 'debit'),
       // A service line — nothing was received into a warehouse.
       line('expense', 'debit'),
+      // §9.2 — a line charged to an import file: the cost belongs to the
+      // goods, parked on the clearing account until the file's cost is locked.
+      line('landed_cost_clearing', 'debit'),
       // §8.4 — the difference between what was ordered and what was billed,
       // which never goes into the value of the stock. Either way round: over
       // the order it is a debit, under it a credit.
@@ -140,6 +143,35 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     // credits it; the inventory side is the item's own account.
     event: 'inventory.stock_adjustment',
     lines: [line('inventory_adjustment', 'either', true)],
+  },
+  // REQ-AP-001 §15.7 — loans. The bank side of each is the loan's own account
+  // (a property of the loan, like a receipt's bank), so it is not asked here.
+  {
+    // The money arrives: the liability is the principal; a commission the
+    // bank kept is capitalised to the imports the loan funds (D5) or, when
+    // the loan says so, expensed.
+    event: 'treasury.loan_disbursement',
+    lines: [
+      line('loan_liability', 'credit', true, 'loan'),
+      line('landed_cost_clearing', 'debit'),
+      line('bank_commission', 'debit'),
+    ],
+  },
+  {
+    // An instalment leaves the account: the principal off the liability, the
+    // interest as a cost, a spread commission as at disbursement.
+    event: 'treasury.loan_repayment',
+    lines: [
+      line('loan_liability', 'debit', true, 'loan'),
+      line('loan_interest', 'debit'),
+      line('landed_cost_clearing', 'debit'),
+      line('bank_commission', 'debit'),
+    ],
+  },
+  {
+    // A commission the bank charged on its own.
+    event: 'treasury.loan_commission',
+    lines: [line('landed_cost_clearing', 'debit'), line('bank_commission', 'debit')],
   },
 ]);
 

@@ -208,6 +208,11 @@ export const paymentMethod = pgTable(
     feePercent: numeric('fee_percent', { precision: 9, scale: 6 }).notNull().default('0'),
     /** Where the fee posts. Null when no fee is charged. */
     feeAccountId: uuid('fee_account_id').references(() => chartOfAccount.id),
+    /**
+     * REQ-AP-001 §15.3 — what proves the money left: a SWIFT copy, a transfer
+     * reference, a signed cash voucher or a cheque number. Migration 0232.
+     */
+    confirmationKind: text('confirmation_kind').notNull().default('transfer'),
     active: boolean('active').notNull().default(true),
   },
   (t) => [

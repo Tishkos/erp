@@ -442,6 +442,24 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/payables',
   '/administration/payables-settings',
   '/payables/open-items',
+  // REQ-AP-001 Stage 2 — the standing commitments, the department's inbox,
+  // and the two documents that finally earn their screens (§21.4-§21.6).
+  '/payables/contracts',
+  '/payables/service-receipts',
+  '/payables/purchase-orders',
+  '/payables/goods-receipts',
+  // REQ-AP-001 Stage 3 — payments & bank (§15, §21.7): the applications, the
+  // advances' own register, and the bank master.
+  '/payables/payment-applications',
+  '/payables/advances',
+  '/master-data/banks',
+  // REQ-AP-001 Stage 4 — PD / ASYCUDA (§16, §21.8).
+  '/payables/pd',
+  // REQ-AP-001 Stage 5 — B/Ls and containers (§17, §18, §21.9).
+  '/payables/shipments',
+  '/payables/containers',
+  // REQ-AP-001 Stage 6 — bank loans (§15.7, §21.10).
+  '/payables/loans',
 ]);
 
 export function isDelivered(route: string): boolean {

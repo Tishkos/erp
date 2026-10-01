@@ -1,7 +1,21 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Flash, ListToolbar, admin as s, matches } from '@/components/admin';
+import {
+  AdminPage,
+  Field,
+  FilterRow,
+  Flash,
+  Form,
+  Grid,
+  ListToolbar,
+  Select,
+  Submit,
+  SubmitRow,
+  admin as s,
+  matches,
+} from '@/components/admin';
+import { NewRecordDialog } from '@/components/admin/dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -10,6 +24,9 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as ap from '@/server/services/ap-invoice';
+import * as expenses from '@/server/services/expenses';
+import * as partners from '@/server/services/partners';
+import { addExpenseAction } from './actions';
 
 /**
  * Purchase Invoices — Operations build, block 4.
@@ -21,14 +38,21 @@ import * as ap from '@/server/services/ap-invoice';
  * column a person actually scans for. The supplier's name is joined from the
  * partner rather than copied onto the invoice, so a supplier renamed this year
  * reads correctly on an invoice raised last year.
+ *
+ * D12 / D13 (2026-10-01) — the register is also where expenses live and where
+ * imports start. "Add expense" is the quick form for the rent, the forwarder,
+ * the broker, the bill; the Payment column says Unpaid / Paid / Overdue from
+ * what the invoice already holds; the View filter separates imports from
+ * expenses. Same register, same components — nothing new is drawn.
  */
 export const dynamic = 'force-dynamic';
 
 export default async function ApInvoicesPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/payables/invoices')) notFound();
 
-  const [t, page, column, status, locale, context, outcome] = await Promise.all([
+  const [t, x, page, column, status, locale, context, outcome] = await Promise.all([
     getTranslations('admin'),
+    getTranslations('admin.expenses'),
     getTranslations('page'),
     getTranslations('column'),
     getTranslations('status'),
@@ -43,16 +67,93 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
   }
   const mayCreate = can(principal, 'create', ap.PERMISSION_OBJECT);
 
-  const rows = await withCurrentUser((tx) => ap.list(tx));
-  const shown = rows.filter((row) => matches(row, outcome.q));
+  const params = await searchParams;
+  const viewParam = typeof params.view === 'string' ? params.view : '';
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { rows, notes, suppliers, categories, imports } = await withCurrentUser(async (tx) => ({
+    rows: await ap.list(tx),
+    notes: await expenses.latestNotes(tx),
+    suppliers: mayCreate ? await partners.listActiveInRole(tx, 'supplier') : [],
+    categories: mayCreate ? await expenses.categories(tx) : [],
+    imports: mayCreate ? await expenses.openImports(tx) : [],
+  }));
+
+  const withState = rows.map((row) => ({
+    ...row,
+    state: expenses.paymentState(
+      {
+        status: row.status,
+        dueDate: row.dueDate,
+        totalIqd: row.totalIqd,
+        settledAmountIqd: row.settledAmountIqd,
+      },
+      today,
+    ),
+  }));
+  const shown = withState
+    .filter((row) => matches(row, outcome.q))
+    .filter((row) =>
+      viewParam === 'imports'
+        ? row.isImport
+        : viewParam === 'expenses'
+          ? Boolean(row.expenseCategoryCode)
+          : viewParam === 'overdue'
+            ? row.state === 'overdue'
+            : viewParam === 'unpaid'
+              ? row.state === 'unpaid' || row.state === 'overdue'
+              : true,
+    );
 
   return (
     <AdminPage
       actions={
         mayCreate ? (
-          <Link className="action action--primary" href="/payables/invoices/new">
-            {t('ap_invoices.new')}
-          </Link>
+          <>
+            <NewRecordDialog
+              buttonLabel={x('add')}
+              closeLabel={t('close')}
+              openOnLoad={params.expense === '1' && Boolean(outcome.error)}
+              title={x('add_title')}
+            >
+              <Form action={addExpenseAction}>
+                <Grid>
+                  <Select
+                    label={x('category')}
+                    name="expense_category"
+                    options={categories.map((c) => ({ value: c.code, label: c.name }))}
+                    required
+                  />
+                  <Select
+                    label={x('supplier')}
+                    name="supplier_id"
+                    options={suppliers.map((p) => ({ value: p.id, label: `${p.name} (${p.code})` }))}
+                    required
+                  />
+                  <Field label={x('amount')} name="amount" required />
+                  <Field defaultValue={today} label={x('invoice_date')} name="invoice_date" required type="date" />
+                  <Field label={x('due_date')} name="due_date" required type="date" />
+                  <Field label={x('supplier_invoice_no')} name="supplier_invoice_no" />
+                  <Select
+                    emptyLabel="—"
+                    label={x('charged_to')}
+                    name="charged_to"
+                    options={imports.map((i) => ({
+                      value: i.id,
+                      label: `${i.payableNo} · ${i.reference} · ${i.supplierName}`,
+                    }))}
+                  />
+                </Grid>
+                <Field hint={x('name_hint')} label={x('name')} name="name" required wide />
+                <SubmitRow>
+                  <Submit label={x('save')} />
+                </SubmitRow>
+              </Form>
+            </NewRecordDialog>
+            <Link className="action action--primary" href="/payables/invoices/new">
+              {t('ap_invoices.new')}
+            </Link>
+          </>
         ) : null
       }
       back={{ href: '/', label: t('dashboard_label') }}
@@ -84,6 +185,26 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
             searchLabel={t('search')}
           />
 
+          <form className={s.filterBar} method="get">
+            <FilterRow>
+              <Select
+                defaultValue={viewParam}
+                emptyLabel={x('view_all')}
+                label={x('view')}
+                name="view"
+                options={[
+                  { value: 'imports', label: x('view_imports') },
+                  { value: 'expenses', label: x('view_expenses') },
+                  { value: 'unpaid', label: x('view_unpaid') },
+                  { value: 'overdue', label: x('view_overdue') },
+                ]}
+              />
+              <SubmitRow>
+                <Submit label={x('filter')} />
+              </SubmitRow>
+            </FilterRow>
+          </form>
+
           <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
             <table aria-labelledby="ap-list-title" className={`${s.sapTable} ${s.sapRegisterTable}`}>
               <thead>
@@ -97,12 +218,13 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
                     {column('amount')}
                   </th>
                   <th scope="col">{column('status')}</th>
+                  <th scope="col">{x('col_payment')}</th>
                 </tr>
               </thead>
               <tbody>
                 {shown.length === 0 ? (
                   <tr>
-                    <td className={s.sapEmptyRow} colSpan={7}>
+                    <td className={s.sapEmptyRow} colSpan={8}>
                       {t('ap_invoices.none')}
                     </td>
                   </tr>
@@ -116,6 +238,18 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
                       >
                         <bdi dir="ltr">{row.invoiceNo}</bdi>
                       </Link>
+                      {row.payableNo ? (
+                        <>
+                          {' · '}
+                          <Link
+                            className={s.sapLink}
+                            href={`/payables/${encodeURIComponent(row.payableNo)}`}
+                            title={x('import_tracking')}
+                          >
+                            <bdi dir="ltr">{row.payableNo}</bdi>
+                          </Link>
+                        </>
+                      ) : null}
                     </td>
                     <td>
                       <bdi dir="ltr">{formatBusinessDate(row.invoiceDate, locale as Locale)}</bdi>
@@ -139,6 +273,25 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
                       >
                         {status(row.status)}
                       </span>
+                    </td>
+                    <td>
+                      {row.state === 'reversed' ? (
+                        '—'
+                      ) : (
+                        <span
+                          className={`status status--${row.state === 'paid' ? 'settled' : row.state === 'overdue' ? 'rejected' : 'submitted'} ${s.sapRegisterStatus}`}
+                          data-status={row.state === 'paid' ? 'settled' : row.state === 'overdue' ? 'rejected' : 'submitted'}
+                        >
+                          {row.state === 'overdue'
+                            ? x('state_overdue_days', { days: expenses.daysBetween(row.dueDate, today) })
+                            : x(`state_${row.state}`)}
+                        </span>
+                      )}
+                      {row.state === 'overdue' && notes.get(row.id) ? (
+                        <div className="muted">
+                          <bdi dir="auto">{notes.get(row.id)}</bdi>
+                        </div>
+                      ) : null}
                     </td>
                   </tr>
                 ))}

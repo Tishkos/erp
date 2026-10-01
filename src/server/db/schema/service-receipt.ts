@@ -45,6 +45,7 @@ import { costCentre } from './organisation';
 import { unitOfMeasure } from './item';
 import { documentStatus } from './workflow';
 import { purchaseOrder, purchaseOrderLine } from './purchase-order';
+import { payable } from './payables';
 
 export const serviceReceipt = pgTable(
   'service_receipt',
@@ -57,10 +58,15 @@ export const serviceReceipt = pgTable(
      */
     status: documentStatus('status').notNull().default('draft'),
 
-    /** §8.2 — a confirmation always answers to an order. */
-    purchaseOrderId: uuid('purchase_order_id')
-      .notNull()
-      .references(() => purchaseOrder.id),
+    /**
+     * §8.2 — a confirmation always answers to an order — or, since
+     * REQ-AP-001 Stage 2, to the payable it confirms (§9.2): a rent or a
+     * consultant's month has no ordered line to answer to. The CHECK below
+     * holds the widened rule; the service requires the line references
+     * whenever an order is named.
+     */
+    purchaseOrderId: uuid('purchase_order_id').references(() => purchaseOrder.id),
+    payableId: uuid('payable_id').references(() => payable.id),
 
     /**
      * §8.6 — the benefiting department owns this document. Not nullable: a
@@ -97,6 +103,10 @@ export const serviceReceipt = pgTable(
   (t) => [
     uniqueIndex('service_receipt_no_uniq').on(t.receiptNo),
     index('service_receipt_order_idx').on(t.purchaseOrderId, t.status),
+    check(
+      'service_receipt_answers_to_something',
+      sql`${t.purchaseOrderId} is not null or ${t.payableId} is not null`,
+    ),
     index('service_receipt_department_idx').on(t.departmentCode, t.status),
 
     check(
@@ -125,10 +135,8 @@ export const serviceReceiptLine = pgTable(
       .references(() => serviceReceipt.id, { onDelete: 'cascade' }),
     lineNo: integer('line_no').notNull(),
 
-    /** The ordered line being confirmed. Never an inventory line (§8.2). */
-    purchaseOrderLineId: uuid('purchase_order_line_id')
-      .notNull()
-      .references(() => purchaseOrderLine.id),
+    /** The ordered line being confirmed — when an order exists (§8.2, §9.2). */
+    purchaseOrderLineId: uuid('purchase_order_line_id').references(() => purchaseOrderLine.id),
 
     description: text('description').notNull(),
     /**

@@ -74,7 +74,7 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
       // a valid search, and the matching is done in SQL by the trigram indexes
       // either way. Names only, so the list is the text a person is typing.
       stockItems: (await items.listAll(tx)).filter((row) => row.isStock),
-      houses: await warehouses.listActive(tx),
+      houses: await warehouses.listForReports(tx),
     },
   }));
 

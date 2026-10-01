@@ -37,6 +37,8 @@ export const CONTROL_ACCOUNT_KINDS = [
   'fixed_asset',
   'project',
   'service',
+  // REQ-AP-001 §15.7 — bank loans; the party is the loan number.
+  'loan',
 ] as const;
 export type ControlAccountKind = (typeof CONTROL_ACCOUNT_KINDS)[number];
 

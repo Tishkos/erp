@@ -19,6 +19,8 @@ export const BRANCH = 'BGW';
 export interface PayablesWorld {
   readonly manager: ActorContext;
   readonly officer: ActorContext;
+  /** The only role that posts an invoice — approval goes to the top (§5.2). */
+  readonly ceo: ActorContext;
   readonly supplierId: string;
   readonly supplierCode: string;
 }
@@ -28,12 +30,16 @@ export const scope = (ctx: ActorContext) => ({
   branchCode: BRANCH,
 });
 
-async function actor(role: 'accounting_manager' | 'accounting_officer'): Promise<ActorContext> {
+async function actor(role: 'accounting_manager' | 'accounting_officer' | 'ceo'): Promise<ActorContext> {
   const id = randomUUID();
   await ownerPool.query(`insert into app_user (id, email, display_name) values ($1,$2,$3)`, [
     id,
     `${id}@example.com`,
-    role === 'accounting_manager' ? 'Payables Manager' : 'Payables Officer',
+    role === 'accounting_manager'
+      ? 'Payables Manager'
+      : role === 'ceo'
+        ? 'Payables CEO'
+        : 'Payables Officer',
   ]);
   await ownerPool.query(`insert into user_role (user_id, role_code) values ($1,$2)`, [id, role]);
   await ownerPool.query(`insert into user_branch_scope (user_id, branch_code) values ($1,$2)`, [
@@ -60,6 +66,7 @@ export async function buildPayablesWorld(): Promise<PayablesWorld> {
 
   const manager = await actor('accounting_manager');
   const officer = await actor('accounting_officer');
+  const ceo = await actor('ceo');
 
   const supplierCode = 'SUP-CSA';
   const { rows } = await ownerPool.query(
@@ -76,7 +83,7 @@ export async function buildPayablesWorld(): Promise<PayablesWorld> {
     }),
   );
 
-  return { manager, officer, supplierId: rows[0].id as string, supplierCode };
+  return { manager, officer, ceo, supplierId: rows[0].id as string, supplierCode };
 }
 
 /** The sheet's own first import, as the A1 fixture. */

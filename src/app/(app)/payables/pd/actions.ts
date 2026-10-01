@@ -1,0 +1,125 @@
+'use server';
+
+import { redirect } from 'next/navigation';
+import { runAdminAndReturn, text } from '@/server/admin-action';
+import * as attachments from '@/server/services/attachments';
+import * as customs from '@/server/services/customs-pd';
+import * as events from '@/server/services/payable-events';
+import * as payables from '@/server/services/payables';
+
+/** PD / ASYCUDA — REQ-AP-001 §16, §21.8. Every verb is the service's. */
+const LIST = '/payables/pd';
+const record = (pdNo: string, year?: string | number | null) =>
+  `${LIST}/${encodeURIComponent(pdNo)}${year ? `?year=${year}` : ''}`;
+
+async function pdIdOf(tx: Parameters<Parameters<typeof runAdminAndReturn>[0]>[0], formData: FormData) {
+  const year = Number(text(formData, 'year')) || null;
+  return (await customs.viewByNo(tx, text(formData, 'pd_no'), year)).pd.id;
+}
+
+export async function registerPd(formData: FormData): Promise<void> {
+  const back = text(formData, 'back') || LIST;
+  await runAdminAndReturn(
+    async (tx, ctx) => {
+      const payableNo = text(formData, 'payable_no');
+      const payableId = payableNo ? (await payables.loadByNo(tx, payableNo)).id : text(formData, 'payable_id');
+      return customs.register(tx, ctx, {
+        payableId,
+        pdNo: text(formData, 'new_pd_no'),
+        registrationDate: text(formData, 'registration_date'),
+        expiryDate: text(formData, 'expiry_date'),
+        bankCode: text(formData, 'bank_code') || null,
+        statusCode: text(formData, 'status_code') || null,
+        note: text(formData, 'note') || null,
+      });
+    },
+    (value) => {
+      const created = value as { pdNo?: string } | null | undefined;
+      return created?.pdNo && back === LIST ? record(created.pdNo) : back;
+    },
+  );
+}
+
+export async function changePdStatus(formData: FormData): Promise<void> {
+  const pdNo = text(formData, 'pd_no');
+  const year = text(formData, 'year');
+  await runAdminAndReturn(
+    async (tx, ctx) =>
+      customs.changeStatus(tx, ctx, await pdIdOf(tx, formData), {
+        statusCode: text(formData, 'status_code'),
+        effectiveDate: text(formData, 'effective_date'),
+        note: text(formData, 'note') || null,
+        source: text(formData, 'source') === 'asycuda_screenshot' ? 'asycuda_screenshot' : 'user',
+      }),
+    record(pdNo, year),
+  );
+}
+
+export async function addPdNote(formData: FormData): Promise<void> {
+  const pdNo = text(formData, 'pd_no');
+  const year = text(formData, 'year');
+  await runAdminAndReturn(
+    async (tx, ctx) => customs.addNote(tx, ctx, await pdIdOf(tx, formData), text(formData, 'note')),
+    record(pdNo, year),
+  );
+}
+
+export async function reRegisterPd(formData: FormData): Promise<void> {
+  await runAdminAndReturn(
+    async (tx, ctx) =>
+      customs.reRegister(tx, ctx, await pdIdOf(tx, formData), {
+        pdNo: text(formData, 'new_pd_no'),
+        registrationDate: text(formData, 'registration_date'),
+        expiryDate: text(formData, 'expiry_date'),
+        bankCode: text(formData, 'bank_code') || null,
+        note: text(formData, 'note') || null,
+      }),
+    (value) => {
+      const created = value as { pdNo?: string } | null | undefined;
+      return created?.pdNo ? record(created.pdNo) : record(text(formData, 'pd_no'), text(formData, 'year'));
+    },
+  );
+}
+
+/** The ASYCUDA list, applied — the difference was shown first on its own page. */
+export async function applyAsycudaList(formData: FormData): Promise<void> {
+  await runAdminAndReturn(
+    async (tx, ctx) => customs.asycudaApply(tx, ctx, text(formData, 'list')),
+    (value) => {
+      const result = value as { changed?: number } | null | undefined;
+      return `${LIST}?applied=${result?.changed ?? 0}`;
+    },
+  );
+}
+
+/** The ASYCUDA screenshot, the customs letter — kept with the PD. */
+export async function attachToPd(formData: FormData): Promise<void> {
+  const pdNo = text(formData, 'pd_no');
+  const year = text(formData, 'year');
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(`${record(pdNo, year)}${year ? '&' : '?'}error=attachment_missing`);
+  }
+  const upload = file as File;
+  const content = Buffer.from(await upload.arrayBuffer());
+  await runAdminAndReturn(async (tx, ctx) => {
+    const view = await customs.viewByNo(tx, pdNo, Number(year) || null);
+    await attachments.upload(tx, ctx, {
+      objectType: customs.PERMISSION_OBJECT,
+      objectId: view.pd.id,
+      fileName: upload.name,
+      content,
+    });
+    if (view.pd.payableId) {
+      await events.record(tx, {
+        payableId: view.pd.payableId,
+        eventCode: 'ATTACHMENT_ADDED',
+        summary: `${upload.name} attached to PD ${view.pd.pdNo}`,
+        sourceType: customs.PERMISSION_OBJECT,
+        sourceId: view.pd.id,
+        sourceNo: view.pd.pdNo,
+        actorUserId: ctx.principal.userId,
+      });
+    }
+  }, record(pdNo, year));
+}

@@ -13,9 +13,9 @@
  * apart is what lets a lane write several events in one transaction with one
  * stage recomputation at the end.
  */
-import { and, desc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
-import { payableEvent, payableEventCode } from '../db/schema';
+import { appUser, payableEvent, payableEventCode } from '../db/schema';
 
 export interface PayableEventInput {
   readonly payableId: string;
@@ -109,13 +109,31 @@ export async function logFor(tx: Tx, payableId: string, filter: LogFilter = {}) 
       : undefined,
   );
 
-  const rows = await tx
+  const found = await tx
     .select()
     .from(payableEvent)
     .where(where)
     .orderBy(desc(payableEvent.recordedAt), desc(payableEvent.id))
     .limit(pageSize)
     .offset((page - 1) * pageSize);
+
+  // §6.3 — "date · lane · summary · who": the person, by name. The row keeps
+  // the id (evidence); the name is looked up, so a renamed user reads right.
+  const actorIds = [...new Set(found.map((row) => row.actorUserId).filter((id): id is string => Boolean(id)))];
+  const names = actorIds.length
+    ? new Map(
+        (
+          await tx
+            .select({ id: appUser.id, displayName: appUser.displayName })
+            .from(appUser)
+            .where(inArray(appUser.id, actorIds))
+        ).map((user) => [user.id, user.displayName]),
+      )
+    : new Map<string, string>();
+  const rows = found.map((row) => ({
+    ...row,
+    actorName: row.actorUserId ? (names.get(row.actorUserId) ?? null) : null,
+  }));
 
   const [{ total }] = (await tx
     .select({ total: sql<number>`count(*)::int` })

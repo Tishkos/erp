@@ -74,3 +74,8 @@ export * from './fixed-assets';
 export * from './investments';
 export * from './stock-operations';
 export * from './payables';
+export * from './payables-contracts';
+export * from './payments';
+export * from './customs';
+export * from './shipments';
+export * from './loans';

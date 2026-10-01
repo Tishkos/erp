@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
+import Link from 'next/link';
+import { AdminPage, Field, Flash, Form, Grid, Select, admin as s, Submit, SubmitRow } from '@/components/admin';
+import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
 import { InvoiceSettlement } from '@/components/admin/invoice-settlement';
@@ -19,6 +21,9 @@ import * as items from '@/server/services/items';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as partners from '@/server/services/partners';
 import * as warehouses from '@/server/services/warehouses';
+import * as expenses from '@/server/services/expenses';
+import * as bankCash from '@/server/services/bank-cash-accounts';
+import * as payables from '@/server/services/payables';
 import {
   invoiceLineAvailability,
   postApInvoice,
@@ -27,6 +32,8 @@ import {
   removeApInvoiceLine,
   saveApInvoiceLine,
   submitApInvoice,
+  addInvoiceNoteAction,
+  markPaidAction,
 } from '../actions';
 
 /**
@@ -65,8 +72,9 @@ export default async function ApInvoicePage({
 }) {
   if (!visibleRoute('/payables/invoices')) notFound();
 
-  const [t, page, column, status, locale, context, outcome, { invoiceNo }] = await Promise.all([
+  const [t, x, page, column, status, locale, context, outcome, { invoiceNo }] = await Promise.all([
     getTranslations('admin'),
+    getTranslations('admin.expenses'),
     getTranslations('page'),
     getTranslations('column'),
     getTranslations('status'),
@@ -90,6 +98,20 @@ export default async function ApInvoicePage({
       document.invoice.status === 'draft' && document.invoice.purchaseOrderId === null;
     return {
       document,
+      // D12 / D13 — the notes, the accounts a payment may leave from, and
+      // the import application behind this invoice, if any.
+      notes: await expenses.notesOf(tx, document.invoice.id),
+      categoryName: document.invoice.expenseCategoryCode
+        ? ((await expenses.categories(tx)).find((c) => c.code === document.invoice.expenseCategoryCode)
+            ?.name ?? document.invoice.expenseCategoryCode)
+        : null,
+      payFrom: [
+        ...(await bankCash.listOfKind(tx, 'bank')),
+        ...(await bankCash.listOfKind(tx, 'cash')),
+      ].filter((account) => account.active),
+      importApplication: document.invoice.payableId
+        ? await payables.load(tx, document.invoice.payableId)
+        : null,
       suppliers: await partners.listActiveInRole(tx, 'supplier'),
       stockItems: editable ? await items.invoiceChoices(tx, 'purchase') : [],
       // What may be chosen on the document: the supplier control accounts the
@@ -141,9 +163,12 @@ export default async function ApInvoicePage({
   // takes its lines from that order — §8.4's match compares the three
   // documents, and a line typed over an ordered one compares the invoice with
   // itself. Those are corrected on the order.
+  // D12 — an expense (one service line, no item) is not typed into the
+  // stock grid: it is read as it was entered by Add expense.
   const mayEdit =
     invoice.status === 'draft' &&
     invoice.purchaseOrderId === null &&
+    invoice.expenseCategoryCode === null &&
     can(principal, 'edit_draft', ap.PERMISSION_OBJECT);
   const maySubmit = invoice.status === 'draft' && can(principal, 'submit', ap.PERMISSION_OBJECT);
   const mayChooseAccounts = mayEdit;
@@ -192,8 +217,58 @@ export default async function ApInvoicePage({
     Number(invoice.settledAmountIqd) === 0 &&
     can(principal, 'reverse_cancel', ap.PERMISSION_OBJECT);
 
+  const today = new Date().toISOString().slice(0, 10);
+  const paymentState = expenses.paymentState(
+    {
+      status: invoice.status,
+      dueDate: invoice.dueDate,
+      totalIqd: invoice.totalIqd,
+      settledAmountIqd: invoice.settledAmountIqd,
+    },
+    today,
+  );
+  const stateTone =
+    paymentState === 'paid' ? 'settled' : paymentState === 'overdue' ? 'rejected' : 'submitted';
+  // "Mark paid" — offered to whoever may post a supplier payment, on a posted
+  // invoice with something still owed (D12).
+  const mayMarkPaid =
+    (invoice.status === 'posted' || invoice.status === 'partially_executed') &&
+    paymentState !== 'paid' &&
+    can(principal, 'post', 'supplier_payment');
+  const importApplication = found.importApplication;
+
   const fields: DocumentField[] = [
     { label: column('invoice_no'), value: <bdi dir="ltr">{invoice.invoiceNo}</bdi> },
+    ...(importApplication
+      ? [
+          {
+            label: x('import_application'),
+            value: (
+              <Link
+                className={s.sapLink}
+                href={`/payables/${encodeURIComponent(importApplication.payableNo)}`}
+              >
+                <bdi dir="ltr">{importApplication.payableNo}</bdi>
+              </Link>
+            ),
+          },
+        ]
+      : []),
+    ...(invoice.expenseCategoryCode
+      ? [{ label: x('category'), value: <bdi dir="auto">{found.categoryName}</bdi> }]
+      : []),
+    ...(paymentState !== 'reversed'
+      ? [
+          {
+            label: x('col_payment'),
+            value:
+              paymentState === 'overdue'
+                ? x('state_overdue_days', { days: expenses.daysBetween(invoice.dueDate, today) })
+                : x(`state_${paymentState}`),
+            status: stateTone,
+          },
+        ]
+      : []),
     { label: column('status'), value: status(invoice.status), status: invoice.status },
     { label: column('supplier_code'), value: <bdi dir="ltr">{supplier?.code ?? '—'}</bdi> },
     { label: column('supplier_name'), value: <bdi dir="auto">{supplier?.name ?? '—'}</bdi> },
@@ -267,6 +342,42 @@ export default async function ApInvoicePage({
                 <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
                 <Submit label={t('ap_invoices.approve_and_post')} variant="document" />
               </form>
+            ) : null}
+            {importApplication ? (
+              <Link
+                className="action"
+                href={`/payables/${encodeURIComponent(importApplication.payableNo)}`}
+              >
+                {x('import_tracking')}
+              </Link>
+            ) : null}
+            {mayMarkPaid ? (
+              <NewRecordDialog
+                buttonLabel={x('mark_paid')}
+                closeLabel={t('close')}
+                title={x('mark_paid_title', { invoiceNo: invoice.invoiceNo })}
+              >
+                <Form action={markPaidAction}>
+                  <input name="id" type="hidden" value={invoice.id} />
+                  <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
+                  <Grid>
+                    <Select
+                      label={x('paid_from')}
+                      name="bank_cash_account_id"
+                      options={found.payFrom.map((account) => ({
+                        value: account.id,
+                        label: `${account.name} (${account.code}) · ${account.currency}`,
+                      }))}
+                      required
+                    />
+                    <Field defaultValue={today} label={x('payment_date')} name="payment_date" required type="date" />
+                    <Field hint={x('reference_hint')} label={x('reference')} name="reference" />
+                  </Grid>
+                  <SubmitRow>
+                    <Submit label={x('mark_paid')} />
+                  </SubmitRow>
+                </Form>
+              </NewRecordDialog>
             ) : null}
             {mayReverse ? (
               <form action={reverseApInvoice} title={t('invoices.reverse_hint')}>
@@ -414,6 +525,59 @@ export default async function ApInvoicePage({
           service the Receivables and Payables reports use, so an invoice and
           the report listing it cannot disagree about its own due date. */}
       <InvoiceSettlement invoiceNo={invoice.invoiceNo} side="supplier" />
+
+      {/* D12 — "Overdue — add a note": dated, signed, never edited. */}
+      <section aria-labelledby="ap-notes-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="ap-notes-title">
+            <span>{x('notes')}</span>
+            <span className={s.sapTitleMeta}>{t('rows_shown', { count: found.notes.length })}</span>
+          </h2>
+          <div className={s.sapTableWrap}>
+            <table aria-labelledby="ap-notes-title" className={s.sapTable}>
+              <thead>
+                <tr>
+                  <th scope="col">{x('note_when')}</th>
+                  <th scope="col">{x('note_who')}</th>
+                  <th scope="col">{x('note')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {found.notes.length === 0 ? (
+                  <tr>
+                    <td className={s.sapEmptyRow} colSpan={3}>
+                      {x('no_notes')}
+                    </td>
+                  </tr>
+                ) : null}
+                {found.notes.map((note) => (
+                  <tr key={note.id}>
+                    <td>
+                      <bdi dir="ltr">{note.createdAt.slice(0, 16)}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="auto">{note.author ?? '—'}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="auto">{note.note}</bdi>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className={s.sapBody}>
+            <Form action={addInvoiceNoteAction}>
+              <input name="id" type="hidden" value={invoice.id} />
+              <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
+              <Field hint={x('note_hint')} label={x('add_note')} name="note" required wide />
+              <SubmitRow>
+                <Submit label={x('add_note')} small tone="secondary" />
+              </SubmitRow>
+            </Form>
+          </div>
+        </div>
+      </section>
 
       <RecordHistory objectId={invoice.id} objectType={ap.PERMISSION_OBJECT} />
       {sheet ? <PrintSheet {...sheet} /> : null}

@@ -42,6 +42,8 @@ export type PaymentMethodKind = (typeof PAYMENT_METHOD_KINDS)[number];
 export interface PaymentMethodInput {
   readonly name: string;
   readonly kind: string;
+  /** REQ-AP-001 §15.3 — what proves a payment by this method left. */
+  readonly confirmationKind?: string | null;
   readonly feePercent?: string | null;
   readonly feeAccountId?: string | null;
 }
@@ -52,6 +54,7 @@ export async function listAll(tx: Tx) {
       code: paymentMethod.code,
       name: paymentMethod.name,
       kind: paymentMethod.kind,
+      confirmationKind: paymentMethod.confirmationKind,
       feePercent: paymentMethod.feePercent,
       feeAccountId: paymentMethod.feeAccountId,
       feeAccountCode: chartOfAccount.code,
@@ -87,6 +90,18 @@ export async function detail(tx: Tx, code: string) {
         .limit(1)
     : [];
   return { ...row, feeAccount: account ? `${account.code} · ${account.name}` : null };
+}
+
+export const CONFIRMATION_KINDS = ['swift', 'transfer', 'cash', 'cheque'] as const;
+
+/** REQ-AP-001 §15.3 — defaults from the rail: cash is proved by a voucher, the rest by a reference. */
+function assertConfirmation(value: string | null | undefined, kind: PaymentMethodKind): string {
+  const raw = (value ?? '').trim();
+  if (!raw) return kind === 'cash' ? 'cash' : 'transfer';
+  if (!(CONFIRMATION_KINDS as readonly string[]).includes(raw)) {
+    throw new AdminValidationError('confirmationKind', 'must be SWIFT, transfer, cash or cheque');
+  }
+  return raw;
 }
 
 function assertKind(value: string): PaymentMethodKind {
@@ -140,14 +155,15 @@ export async function create(
   );
 
   const kind = assertKind(input.kind);
+  const confirmationKind = assertConfirmation(input.confirmationKind, kind);
   const fee = await assertFee(tx, input.feePercent, input.feeAccountId ?? null);
 
-  await tx.insert(paymentMethod).values({ code, name, kind, ...fee, active: true });
+  await tx.insert(paymentMethod).values({ code, name, kind, confirmationKind, ...fee, active: true });
   await recordChange(tx, ctx, {
     action: 'payment_method.created',
     objectType: PERMISSION_OBJECT,
     objectId: code,
-    after: { code, name, kind, ...fee },
+    after: { code, name, kind, confirmationKind, ...fee },
   });
   return get(tx, code);
 }
@@ -157,9 +173,13 @@ export async function update(tx: Tx, ctx: ActorContext, code: string, input: Pay
   const before = await get(tx, code);
   const name = requireText(input.name, 'name');
   const kind = assertKind(input.kind);
+  const confirmationKind = assertConfirmation(input.confirmationKind ?? before.confirmationKind, kind);
   const fee = await assertFee(tx, input.feePercent, input.feeAccountId ?? null);
 
-  await tx.update(paymentMethod).set({ name, kind, ...fee }).where(eq(paymentMethod.code, code));
+  await tx
+    .update(paymentMethod)
+    .set({ name, kind, confirmationKind, ...fee })
+    .where(eq(paymentMethod.code, code));
   await recordChange(tx, ctx, {
     action: 'payment_method.updated',
     objectType: PERMISSION_OBJECT,
@@ -167,10 +187,11 @@ export async function update(tx: Tx, ctx: ActorContext, code: string, input: Pay
     before: {
       name: before.name,
       kind: before.kind,
+      confirmationKind: before.confirmationKind,
       feePercent: before.feePercent,
       feeAccountId: before.feeAccountId,
     },
-    after: { name, kind, ...fee },
+    after: { name, kind, confirmationKind, ...fee },
   });
   return get(tx, code);
 }

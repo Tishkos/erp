@@ -239,6 +239,28 @@ export const cashAccountType = pgEnum('cash_account_type', ['bank', 'cash']);
  * reconciles against a G/L balance, and that is only a reconciliation if the
  * balance belongs to one account.
  */
+/**
+ * The banks — REQ-AP-001 §15.1. Mansour, Arab, NBI, Rafidain … a master, not
+ * a fixed list. The code is minted (BNK-0001); the SWIFT/BIC is the bank's own
+ * identifier and unique when known. Migration 0232.
+ */
+export const bank = pgTable(
+  'bank',
+  {
+    code: text('code').primaryKey(),
+    name: text('name').notNull(),
+    swiftBic: text('swift_bic'),
+    country: char('country', { length: 2 }).notNull().default('IQ'),
+    active: boolean('active').notNull().default(true),
+    createdBy: uuid('created_by').references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('bank_swift_uniq').on(t.swiftBic).where(sql`${t.swiftBic} is not null`),
+    check('bank_name_not_blank', sql`btrim(${t.name}) <> ''`),
+  ],
+);
+
 export const bankCashAccount = pgTable(
   'bank_cash_account',
   {
@@ -248,6 +270,8 @@ export const bankCashAccount = pgTable(
     accountType: cashAccountType('account_type').notNull(),
 
     bankName: text('bank_name'),
+    /** REQ-AP-001 §15.1 — the bank this account is held with (bank accounts). */
+    bankCode: text('bank_code').references(() => bank.code),
     accountNumber: text('account_number'),
     iban: text('iban'),
     swift: text('swift'),

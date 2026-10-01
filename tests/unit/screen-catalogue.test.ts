@@ -213,6 +213,8 @@ describe('every screen has one address', () => {
       '/inventory/transfers',
       '/inventory/uom',
       '/master-data/bank-accounts',
+      // REQ-AP-001 Stage 3 — the bank master.
+      '/master-data/banks',
       '/master-data/branches',
       '/master-data/cash-accounts',
       '/master-data/chart-of-accounts',
@@ -226,12 +228,27 @@ describe('every screen has one address', () => {
       '/master-data/warehouses',
       // REQ-AP-001 Stage 1 — the Payables workbench.
       '/payables',
+      // REQ-AP-001 Stage 3 — the advances' register.
+      '/payables/advances',
+      '/payables/containers',
+      '/payables/contracts',
+      '/payables/goods-receipts',
       // Operations build — block 4's Purchase Invoice.
       '/payables/goods-returns',
       // Block 10 — Purchase Returns.
       '/payables/invoices',
+      // REQ-AP-001 Stage 6 — bank loans.
+      '/payables/loans',
       // §15 — what we owe, invoice by invoice.
       '/payables/open-items',
+      // REQ-AP-001 Stage 3 — payment applications (§21.7).
+      '/payables/payment-applications',
+      // REQ-AP-001 Stage 4 — PD / ASYCUDA.
+      '/payables/pd',
+      '/payables/purchase-orders',
+      '/payables/service-receipts',
+      // REQ-AP-001 Stage 5 — B/Ls.
+      '/payables/shipments',
       // Block 6 — Payments and Receipts.
       '/payables/supplier-payments',
       // Blocks 2 and 3 — the Account Statement, one screen on each side.

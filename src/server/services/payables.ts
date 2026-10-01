@@ -26,22 +26,29 @@ import {
   apInvoice,
   branch,
   businessPartner,
+  expenseCategory,
+  goodsReceipt,
   payable,
   payableHold,
   payableOrderLine,
   payableStage,
   payableType,
+  savedView,
+  serviceReceipt,
+  supplierAdvance,
   warehouse,
 } from '../db/schema';
 import {
   NO_FACTS,
   PayableValidationError,
+  STAGE_RULES,
   deriveStage,
   referenceKey,
   type StageFacts,
   type StageRow,
 } from '../domain/payables';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
+import { totals as paymentTotalsOf } from '../domain/payment-applications';
 import { formatQuantity, parseQuantity } from '../domain/uom';
 import type { ActorContext } from './chart-of-accounts';
 import * as audit from './audit';
@@ -141,6 +148,8 @@ export async function loadByNo(tx: Tx, payableNo: string) {
  * its build stage lands, which is R2 applied to the build itself.
  */
 export async function gatherFacts(tx: Tx, payableId: string): Promise<StageFacts> {
+  const row = await load(tx, payableId);
+
   const [invoices] = await tx
     .select({
       posted: sql<number>`count(*) filter (where ${apInvoice.status} in ('posted','partially_executed','settled'))::int`,
@@ -149,10 +158,126 @@ export async function gatherFacts(tx: Tx, payableId: string): Promise<StageFacts
     .from(apInvoice)
     .where(and(eq(apInvoice.payableId, payableId), isNull(apInvoice.reversedAt)));
 
+  // Service lane (build Stage 2) — an approved confirmation of this payable.
+  const [confirmation] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(serviceReceipt)
+    .where(and(eq(serviceReceipt.payableId, payableId), eq(serviceReceipt.status, 'approved')));
+  const serviceConfirmed = (confirmation?.n ?? 0) > 0;
+
+  // D8 — a generated period under an auto-confirm contract confirmed itself;
+  // the PERIOD_AUTO_CONFIRMED event in the log is the record of it.
+  const [autoConfirmed] = row.recurringContractId
+    ? await tx.execute(sql`
+        select count(*)::int as n from payable_event
+         where payable_id = ${payableId} and event_code = 'PERIOD_AUTO_CONFIRMED'`)
+        .then((r) => r.rows as { n: number }[])
+    : [{ n: 0 }];
+
+  // Warehouse lane (§11) — a posted goods receipt against this payable's order.
+  const [received] = row.purchaseOrderId
+    ? await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(goodsReceipt)
+        .where(
+          and(
+            eq(goodsReceipt.purchaseOrderId, row.purchaseOrderId),
+            inArray(goodsReceipt.status, ['posted', 'executed', 'partially_executed']),
+            isNull(goodsReceipt.reversedAt),
+          ),
+        )
+    : [{ n: 0 }];
+
+  // Advance type (§12) — the linked supplier advance's own lifecycle.
+  const [advance] = await tx
+    .select({ status: supplierAdvance.status })
+    .from(supplierAdvance)
+    .where(and(eq(supplierAdvance.payableId, payableId), isNull(supplierAdvance.reversedAt)))
+    .orderBy(desc(supplierAdvance.createdAt))
+    .limit(1);
+
+  // Payment lane (build Stage 3, §15) — the instalment plan and the payment
+  // applications. Read here rather than through the payment-applications
+  // service, which itself records events through this module.
+  const planned = await tx.execute(sql`
+    select id from payable_instalment
+     where payable_id = ${payableId} and superseded_at is null
+     order by sequence`);
+  const instalmentIds = (planned.rows as { id: string }[]).map((r) => r.id);
+  const applied = await tx.execute(sql`
+    select status, instalment_id as "instalmentId", amount_txn::text as "amountTxn",
+           amount_iqd::text as "amountIqd"
+      from payment_application where payable_id = ${payableId}`);
+  const applications = (
+    applied.rows as { status: string; instalmentId: string | null; amountTxn: string; amountIqd: string }[]
+  ).filter((a) => a.status !== 'rejected' && a.status !== 'cancelled');
+  const paymentTotals = paymentTotalsOf(
+    parseDecimal(row.amountTxn, MONEY_SCALE),
+    applications.map((a) => ({
+      status: a.status,
+      amountTxn: parseDecimal(a.amountTxn, MONEY_SCALE),
+      amountIqd: parseDecimal(a.amountIqd, MONEY_SCALE),
+    })),
+  );
+  const paidApplications = applications.filter((a) => a.status === 'confirmed' || a.status === 'debited');
+
+  // PD lane (build Stage 4, §16) — the standing registrations: not
+  // superseded by a re-registration. Live = not rejected, not expired.
+  const pdRows = await tx.execute(sql`
+    select d.status_code as "statusCode", s.is_expired as "isExpired",
+           exists (select 1 from customs_pd n where n.supersedes_pd_id = d.id) as superseded
+      from customs_pd d join pd_status s on s.code = d.status_code
+     where d.payable_id = ${payableId}`);
+  const standingPds = (
+    pdRows.rows as { statusCode: string; isExpired: boolean; superseded: boolean }[]
+  ).filter((pd) => !pd.superseded);
+  const livePdCount = standingPds.filter((pd) => !pd.isExpired && pd.statusCode !== 'rejected').length;
+  const allPdsWrittenOff =
+    standingPds.length > 0 && standingPds.every((pd) => pd.statusCode === 'totally_written_off');
+
+  // Shipment and warehouse lanes (build Stage 5, §17-§18) — every container
+  // on its own: Y is the live containers, X those that count as received;
+  // the received quantity is Σ received over the container lines (§18).
+  const shipped = await tx.execute(sql`
+    select count(*)::int as total,
+           (count(*) filter (where s.counts_as_received))::int as received,
+           (select coalesce(sum(l.received_qty), 0)::text
+              from shipment_container_line l join shipment_container c2 on c2.id = l.container_id
+             where c2.payable_id = ${payableId} and c2.cancelled_at is null and l.superseded_at is null) as "receivedQty",
+           (select count(*)::int from container_receipt r where r.payable_id = ${payableId}) as receipts
+      from shipment_container c join container_status s on s.code = c.status_code
+     where c.payable_id = ${payableId} and c.cancelled_at is null`);
+  const shipment = shipped.rows[0] as { total: number; received: number; receivedQty: string; receipts: number };
+  const receivedQuantityMatches =
+    row.quantity !== null && parseQuantity(shipment.receivedQty) === parseQuantity(row.quantity);
+
   return {
     ...NO_FACTS,
+    containerCount: shipment.total,
+    containersReceived: shipment.received,
+    receivedQuantityMatches,
+    livePdCount,
+    allPdsWrittenOff,
+    instalmentPlanSet: instalmentIds.length > 0,
+    firstInstalmentFunded:
+      instalmentIds.length > 0 &&
+      applications.some((a) => a.instalmentId === instalmentIds[0] && a.status !== 'draft'),
+    paymentSentCount: applications.filter((a) => ['sent', 'confirmed', 'debited'].includes(a.status)).length,
+    fullyPaid: paymentTotals.fullyPaid,
+    allPaymentsConfirmed:
+      paidApplications.length > 0 &&
+      applications.every((a) => a.status === 'confirmed' || a.status === 'debited'),
+    statementMatched: paidApplications.length > 0 && paidApplications.every((a) => a.status === 'debited'),
     postedInvoiceCount: invoices?.posted ?? 0,
     approvedInvoiceCount: invoices?.approved ?? 0,
+    serviceConfirmed: serviceConfirmed || (autoConfirmed?.n ?? 0) > 0,
+    recurringConfirmed: serviceConfirmed || (autoConfirmed?.n ?? 0) > 0,
+    goodsReceiptPosted: (received?.n ?? 0) > 0 || shipment.receipts > 0,
+    advanceApproved: Boolean(advance && advance.status !== 'draft'),
+    advancePaid: Boolean(
+      advance && ['posted', 'partially_executed', 'settled', 'closed'].includes(advance.status),
+    ),
+    advanceSettled: Boolean(advance && ['settled', 'closed'].includes(advance.status)),
   };
 }
 
@@ -639,6 +764,112 @@ export async function onInvoiceEvent(
   await recomputeStage(tx, input.payableId, input.actorUserId);
 }
 
+/**
+ * A9 — "did we actually get it?" before "pay it".
+ *
+ * The invoice posting calls this for a payable-linked invoice. A service or
+ * recurring payable must show its confirmation — an approved service receipt,
+ * or the period's own auto-confirmation (D8) — unless the expense category
+ * says none is expected (`requires_receipt = false`), in which case the
+ * approver is shown the note instead of a demand. Goods payables answer to
+ * the goods receipt, not to a service confirmation.
+ */
+export async function assertReceiptEvidence(
+  tx: Tx,
+  payableId: string,
+): Promise<{ required: boolean; note?: string }> {
+  const [row] = await tx
+    .select({
+      payableNo: payable.payableNo,
+      typeCode: payable.payableTypeCode,
+      categoryCode: payable.expenseCategoryCode,
+      categoryName: expenseCategory.name,
+      requiresReceipt: expenseCategory.requiresReceipt,
+    })
+    .from(payable)
+    .leftJoin(expenseCategory, eq(expenseCategory.code, payable.expenseCategoryCode))
+    .where(eq(payable.id, payableId))
+    .limit(1);
+  if (!row) throw new PayableValidationError('payable', 'no such payable.');
+
+  if (row.typeCode !== 'service' && row.typeCode !== 'recurring') {
+    return {
+      required: false,
+      note: 'A goods payable answers to the goods receipt, not a service confirmation.',
+    };
+  }
+  if (row.requiresReceipt === false) {
+    return {
+      required: false,
+      note: `No receipt required — ${row.categoryName ?? row.categoryCode ?? 'this category'} is invoiced without a confirmation.`,
+    };
+  }
+
+  const [confirmed] = await tx
+    .select({ id: serviceReceipt.id })
+    .from(serviceReceipt)
+    .where(and(eq(serviceReceipt.payableId, payableId), eq(serviceReceipt.status, 'approved')))
+    .limit(1);
+  if (confirmed) return { required: true };
+
+  const auto = await tx.execute(sql`
+    select 1 from payable_event
+     where payable_id = ${payableId} and event_code = 'PERIOD_AUTO_CONFIRMED'
+     limit 1`);
+  if (auto.rows.length > 0) return { required: true };
+
+  throw new PayableStateError(
+    row.payableNo,
+    'the benefiting department has not confirmed the service — an approved service receipt is the evidence (A9).',
+  );
+}
+
+/** §12 — an advance that belongs to a payable writes the bank lane's story. */
+export async function onAdvanceEvent(
+  tx: Tx,
+  input: {
+    payableId: string;
+    eventCode: 'DEPOSIT_RECORDED' | 'FIELD_CHANGED';
+    advanceId: string;
+    advanceNo: string;
+    summary: string;
+    actorUserId: string | null;
+  },
+): Promise<void> {
+  await events.record(tx, {
+    payableId: input.payableId,
+    eventCode: input.eventCode,
+    summary: input.summary,
+    sourceType: 'supplier_advance',
+    sourceId: input.advanceId,
+    sourceNo: input.advanceNo,
+    actorUserId: input.actorUserId,
+  });
+  await recomputeStage(tx, input.payableId, input.actorUserId);
+}
+
+/** A10 — the charged line's mark on the import file's story (§9.2). */
+export async function onChargedToImport(
+  tx: Tx,
+  input: {
+    payableId: string;
+    invoiceId: string;
+    invoiceNo: string;
+    summary: string;
+    actorUserId: string | null;
+  },
+): Promise<void> {
+  await events.record(tx, {
+    payableId: input.payableId,
+    eventCode: 'CHARGED_TO_IMPORT',
+    summary: input.summary,
+    sourceType: 'ap_invoice',
+    sourceId: input.invoiceId,
+    sourceNo: input.invoiceNo,
+    actorUserId: input.actorUserId,
+  });
+}
+
 /** §5.1 — once invoices post, the payable's amount is their sum. */
 async function refreshFromInvoices(tx: Tx, payableId: string): Promise<void> {
   const [sums] = await tx
@@ -708,6 +939,125 @@ export async function setTerms(
     branchCode: row.branchCode,
     before: { terms: row.paymentTermsText },
     after: { terms: next },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+}
+
+/**
+ * Edits the PI — D11: a changed line supersedes the old one, never deletes
+ * it, and the story says what changed. Refused once an invoice is posted:
+ * from then on the invoice is the figure and the PI is history.
+ */
+export async function updateOrderLines(
+  tx: Tx,
+  ctx: ActorContext,
+  input: { payableId: string; lines: readonly PayableLineInput[] },
+): Promise<void> {
+  const row = await load(tx, input.payableId);
+  await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, {
+    branchCode: row.branchCode,
+    objectId: row.id,
+  });
+  await assertLaneEditable(tx, ctx, row, 'order');
+  assertOpen(row);
+
+  const [posted] = await tx
+    .select({ invoiceNo: apInvoice.invoiceNo })
+    .from(apInvoice)
+    .where(
+      and(
+        eq(apInvoice.payableId, row.id),
+        inArray(apInvoice.status, ['posted', 'partially_executed', 'settled']),
+        isNull(apInvoice.reversedAt),
+      ),
+    )
+    .limit(1);
+  if (posted) {
+    throw new PayableStateError(
+      row.payableNo,
+      `invoice ${posted.invoiceNo} is posted — the invoice is the figure now. Correct it there.`,
+    );
+  }
+
+  const current = await tx
+    .select()
+    .from(payableOrderLine)
+    .where(and(eq(payableOrderLine.payableId, row.id), isNull(payableOrderLine.supersededAt)))
+    .orderBy(asc(payableOrderLine.lineNo));
+
+  // The old lines step aside, all of them, in one stamped act…
+  await tx
+    .update(payableOrderLine)
+    .set({ supersededAt: new Date(), supersededBy: ctx.principal.userId })
+    .where(and(eq(payableOrderLine.payableId, row.id), isNull(payableOrderLine.supersededAt)));
+
+  // …and the new ones take their numbers.
+  let amountTxn = 0n;
+  let quantity = 0n;
+  let hasQuantity = false;
+  for (const [index, line] of input.lines.entries()) {
+    const qty = line.quantity ? parseQuantity(line.quantity) : null;
+    const price = line.unitPrice ? parseDecimal(line.unitPrice, MONEY_SCALE) : null;
+    if (qty) {
+      quantity += qty;
+      hasQuantity = true;
+      if (price) amountTxn += (qty * price) / 10n ** 6n;
+    }
+    await tx.insert(payableOrderLine).values({
+      payableId: row.id,
+      lineNo: index + 1,
+      itemCode: line.itemCode ?? null,
+      expenseCategoryCode: line.expenseCategoryCode ?? null,
+      description: line.description,
+      quantity: qty ? formatQuantity(qty) : null,
+      uomCode: line.uomCode ?? null,
+      unitPrice: price ? toDecimalString(price) : null,
+      amountTxn: qty && price ? toDecimalString((qty * price) / 10n ** 6n) : null,
+    });
+  }
+
+  const converted = await rateService.convertOn(tx, amountTxn, row.currency, row.documentDate);
+  await tx
+    .update(payable)
+    .set({
+      amountTxn: toDecimalString(amountTxn),
+      amountIqd: toDecimalString(converted.amountIqd),
+      quantity: hasQuantity ? formatQuantity(quantity) : null,
+      updatedAt: new Date(),
+    })
+    .where(eq(payable.id, row.id));
+
+  await events.record(tx, {
+    payableId: row.id,
+    eventCode: 'FIELD_CHANGED',
+    summary: `PI lines changed: ${current.length} line(s) superseded by ${input.lines.length}`,
+    before: {
+      lines: current.map((line) => ({
+        lineNo: line.lineNo,
+        description: line.description,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+      })),
+    },
+    after: {
+      lines: input.lines.map((line, index) => ({
+        lineNo: index + 1,
+        description: line.description,
+        quantity: line.quantity ?? null,
+        unitPrice: line.unitPrice ?? null,
+      })),
+    },
+    actorUserId: ctx.principal.userId,
+  });
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'payable.lines_changed',
+    objectType: PERMISSION_OBJECT,
+    objectId: row.id,
+    branchCode: row.branchCode,
+    after: { lines: input.lines.length },
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });
@@ -861,6 +1211,16 @@ export async function workbench(tx: Tx, filter: WorkbenchFilter = {}) {
       currency: payable.currency,
       amountTxn: payable.amountTxn,
       amountIqd: payable.amountIqd,
+      // §15.5 — Paid, from the applications (confirmed or debited); never stored.
+      paidTxn: sql<string>`coalesce((
+        select sum(pa.amount_txn) from payment_application pa
+         where pa.payable_id = ${payable.id} and pa.status in ('confirmed', 'debited')), 0)::text`,
+      // §17.5 — X of Y, the containers counted from their rows.
+      containersTotal: sql<number>`(select count(*)::int from shipment_container c
+         where c.payable_id = ${payable.id} and c.cancelled_at is null)`,
+      containersReceived: sql<number>`(select count(*)::int from shipment_container c
+         join container_status s on s.code = c.status_code
+         where c.payable_id = ${payable.id} and c.cancelled_at is null and s.counts_as_received)`,
       stageCode: payable.stageCode,
       stageName: payableStage.name,
       stageSequence: payableStage.sequence,
@@ -919,6 +1279,32 @@ export async function workbench(tx: Tx, filter: WorkbenchFilter = {}) {
   return { rows, total, page, pageSize };
 }
 
+export interface WorkbenchView {
+  readonly id: string;
+  readonly name: string;
+  /** The workbench's own filter shape: { type?, stopped? }. */
+  readonly query: Readonly<Record<string, string>>;
+}
+
+/**
+ * §21.2 — the seed views are saved-view rows (shared, listKey 'payables'),
+ * so the accountant's own views sit beside them and the list is theirs to
+ * grow. Ordered by name under a numbered prefix, so the seeds keep the
+ * diagram's order without a column for it.
+ */
+export async function workbenchViews(tx: Tx): Promise<WorkbenchView[]> {
+  const rows = await tx
+    .select({ id: savedView.id, name: savedView.name, query: savedView.query })
+    .from(savedView)
+    .where(and(eq(savedView.listKey, 'payables'), eq(savedView.isShared, true)))
+    .orderBy(asc(savedView.name));
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name.replace(/^\d+\s*·\s*/, ''),
+    query: (row.query ?? {}) as Readonly<Record<string, string>>,
+  }));
+}
+
 /** The page's header: the record, its type, rail, lanes, lines, open holds. */
 export async function view(tx: Tx, payableNo: string) {
   const row = await loadByNo(tx, payableNo);
@@ -936,7 +1322,7 @@ export async function view(tx: Tx, payableNo: string) {
   const lines = await tx
     .select()
     .from(payableOrderLine)
-    .where(eq(payableOrderLine.payableId, row.id))
+    .where(and(eq(payableOrderLine.payableId, row.id), isNull(payableOrderLine.supersededAt)))
     .orderBy(asc(payableOrderLine.lineNo));
 
   const invoices = await tx
@@ -971,10 +1357,20 @@ export async function view(tx: Tx, payableNo: string) {
     .where(eq(branch.code, row.branchCode))
     .limit(1);
 
+  // Which stages' own rules hold — so the rail ticks only what is true. The
+  // stage is the highest that holds (§6); a payment sent before the PD is
+  // registered puts the import at "Payment in progress" without pretending
+  // the PD stage was passed.
+  const facts = await gatherFacts(tx, row.id);
+  const reached = rail
+    .filter((stage) => STAGE_RULES[stage.ruleName]?.(facts) ?? false)
+    .map((stage) => stage.code);
+
   return {
     payable: row,
     type,
     rail,
+    reached,
     lanes: lanes.rows as { code: string; name: string; sort_order: number }[],
     lines,
     invoices,

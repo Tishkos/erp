@@ -79,6 +79,16 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
                     label: t(`payment_methods.kind_${kind}`),
                   }))}
                 />
+                <Select
+                  defaultValue="transfer"
+                  hint={t('payment_methods.confirmation_hint')}
+                  label={t('payment_methods.confirmation')}
+                  name="confirmationKind"
+                  options={methods.CONFIRMATION_KINDS.map((kind) => ({
+                    value: kind,
+                    label: t(`payment_methods.confirmation_${kind}`),
+                  }))}
+                />
               </Grid>
               <SubmitRow>
                 <Submit label={t('create')} />
@@ -116,6 +126,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
                 <th scope="col">{column('code')}</th>
                 <th scope="col">{column('name')}</th>
                 <th scope="col">{t('payment_methods.kind')}</th>
+                <th scope="col">{t('payment_methods.confirmation')}</th>
                 <th scope="col">{t('payment_methods.fee')}</th>
                 <th scope="col">{column('active')}</th>
               </tr>
@@ -123,7 +134,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
             <tbody>
               {shown.length === 0 ? (
                 <tr>
-                  <td colSpan={5}>{t('payment_methods.none')}</td>
+                  <td colSpan={6}>{t('payment_methods.none')}</td>
                 </tr>
               ) : null}
               {shown.map((row) => (
@@ -135,6 +146,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
                   </td>
                   <td>{row.name}</td>
                   <td>{t(`payment_methods.kind_${row.kind}`)}</td>
+                  <td>{t(`payment_methods.confirmation_${row.confirmationKind}`)}</td>
                   <td>
                     {Number(row.feePercent) === 0
                       ? t('none')
