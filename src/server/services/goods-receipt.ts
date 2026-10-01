@@ -21,7 +21,7 @@
  * wants. So the rule is: within tolerance, receive; beyond it, a manager says
  * yes in writing, and the reason is kept.
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   businessPartner,
@@ -782,3 +782,58 @@ export async function isQuarantine(tx: Tx, warehouseCode: string): Promise<boole
   return row?.type === 'quarantine';
 }
 
+
+/** §21.6 — the list: what arrived, against which order, into which warehouse. */
+export interface GoodsReceiptListRow {
+  readonly id: string;
+  readonly receiptNo: string;
+  readonly status: string;
+  readonly orderNo: string | null;
+  readonly supplierName: string | null;
+  readonly receiptDate: string;
+  readonly warehouses: string | null;
+  readonly lineCount: number;
+}
+
+export async function listForScreen(tx: Tx): Promise<GoodsReceiptListRow[]> {
+  const result = await tx.execute(sql`
+    select r.id,
+           r.receipt_no as "receiptNo",
+           r.status::text as status,
+           o.order_no as "orderNo",
+           bp.legal_name as "supplierName",
+           r.receipt_date::text as "receiptDate",
+           (select string_agg(distinct l.warehouse_code, ', ')
+              from goods_receipt_line l where l.goods_receipt_id = r.id) as warehouses,
+           (select count(*)::int from goods_receipt_line l where l.goods_receipt_id = r.id)
+             as "lineCount"
+      from goods_receipt r
+      left join purchase_order o on o.id = r.purchase_order_id
+      left join business_partner bp on bp.id = o.supplier_id
+     order by r.created_at desc
+     limit 200`);
+  return result.rows as unknown as GoodsReceiptListRow[];
+}
+
+/** §21.6 — the record, by its number. */
+export async function viewByNo(tx: Tx, receiptNo: string) {
+  const [receipt] = await tx
+    .select()
+    .from(goodsReceipt)
+    .where(eq(goodsReceipt.receiptNo, receiptNo))
+    .limit(1);
+  if (!receipt) return null;
+  const lines = await tx
+    .select()
+    .from(goodsReceiptLine)
+    .where(eq(goodsReceiptLine.goodsReceiptId, receipt.id))
+    .orderBy(asc(goodsReceiptLine.lineNo));
+  const [order] = receipt.purchaseOrderId
+    ? await tx
+        .select({ orderNo: purchaseOrder.orderNo })
+        .from(purchaseOrder)
+        .where(eq(purchaseOrder.id, receipt.purchaseOrderId))
+        .limit(1)
+    : [];
+  return { receipt, lines, orderNo: order?.orderNo ?? null };
+}

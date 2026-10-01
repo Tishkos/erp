@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import {
@@ -12,6 +11,7 @@ import {
   SubmitRow,
   admin as s,
 } from '@/components/admin';
+import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
@@ -37,9 +37,6 @@ import {
  */
 export const dynamic = 'force-dynamic';
 
-const TABS = ['types', 'stages', 'limits', 'reasons', 'categories', 'events'] as const;
-type Tab = (typeof TABS)[number];
-
 export default async function PayablesSettingsPage({
   searchParams,
 }: {
@@ -47,12 +44,12 @@ export default async function PayablesSettingsPage({
 }) {
   if (!visibleRoute('/administration/payables-settings')) notFound();
 
-  const [t, page, context, outcome, query] = await Promise.all([
+  const [t, admin, page, context, outcome] = await Promise.all([
     getTranslations('admin.payables_settings'),
+    getTranslations('admin'),
     getTranslations('page'),
     requireContext(),
     outcomeOf(searchParams),
-    searchParams,
   ]);
 
   const { principal } = context;
@@ -61,39 +58,23 @@ export default async function PayablesSettingsPage({
   }
   const mayConfigure = can(principal, 'configure', payables.SETTINGS_OBJECT);
 
-  const tab: Tab = TABS.includes(query.tab as Tab) ? (query.tab as Tab) : 'types';
   const config = await withCurrentUser((tx) => settings.overview(tx));
-  const base = '/administration/payables-settings';
 
   return (
     <AdminPage
-      back={{ href: '/administration/company', label: t('administration') }}
+      back={{ href: '/', label: admin('dashboard_label') }}
+      tabs={<SectionTabs route="/administration/payables-settings" />}
       subtitle={t('subtitle')}
       title={t('title')}
       variant="sap"
     >
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
 
-      <nav aria-label={t('tabs')} className={s.sapFootActions}>
-        {TABS.map((key) => (
-          <Link
-            aria-current={tab === key ? 'page' : undefined}
-            className={`${s.button} ${s.small}${tab === key ? ` ${s.primary}` : ''}`}
-            href={`${base}?tab=${key}`}
-            key={key}
-          >
-            {t(`tab_${key}`)}
-          </Link>
-        ))}
-      </nav>
-
-      <section aria-labelledby="settings-title" className={s.sapDoc}>
+      <section aria-labelledby="ps-types-title" className={s.sapDoc}>
         <div className={s.sapWindow}>
-          <h2 className={s.sapTitle} id="settings-title">
-            <span>{t(`tab_${tab}`)}</span>
+          <h2 className={s.sapTitle} id="ps-types-title">
+            <span>{t('tab_types')}</span>
           </h2>
-
-          {tab === 'types' ? (
             <div className={s.sapTableWrap}>
               <table className={s.sapTable}>
                 <thead>
@@ -138,9 +119,14 @@ export default async function PayablesSettingsPage({
                 </tbody>
               </table>
             </div>
-          ) : null}
+        </div>
+      </section>
 
-          {tab === 'stages' ? (
+      <section aria-labelledby="ps-stages-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="ps-stages-title">
+            <span>{t('tab_stages')}</span>
+          </h2>
             <div className={s.sapTableWrap}>
               <table className={s.sapTable}>
                 <thead>
@@ -193,9 +179,14 @@ export default async function PayablesSettingsPage({
                 </tbody>
               </table>
             </div>
-          ) : null}
+        </div>
+      </section>
 
-          {tab === 'limits' ? (
+      <section aria-labelledby="ps-limits-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="ps-limits-title">
+            <span>{t('tab_limits')}</span>
+          </h2>
             <>
               <div className={s.sapTableWrap}>
                 <table className={s.sapTable}>
@@ -250,9 +241,14 @@ export default async function PayablesSettingsPage({
                 </Form>
               ) : null}
             </>
-          ) : null}
+        </div>
+      </section>
 
-          {tab === 'reasons' ? (
+      <section aria-labelledby="ps-reasons-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="ps-reasons-title">
+            <span>{t('tab_reasons')}</span>
+          </h2>
             <>
               <div className={s.sapTableWrap}>
                 <table className={s.sapTable}>
@@ -297,9 +293,14 @@ export default async function PayablesSettingsPage({
                 </Form>
               ) : null}
             </>
-          ) : null}
+        </div>
+      </section>
 
-          {tab === 'categories' ? (
+      <section aria-labelledby="ps-categories-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="ps-categories-title">
+            <span>{t('tab_categories')}</span>
+          </h2>
             <>
               <div className={s.sapTableWrap}>
                 <table className={s.sapTable}>
@@ -341,9 +342,14 @@ export default async function PayablesSettingsPage({
                 </Form>
               ) : null}
             </>
-          ) : null}
+        </div>
+      </section>
 
-          {tab === 'events' ? (
+      <section aria-labelledby="ps-events-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="ps-events-title">
+            <span>{t('tab_events')}</span>
+          </h2>
             <div className={s.sapTableWrap}>
               <table className={s.sapTable}>
                 <thead>
@@ -384,7 +390,6 @@ export default async function PayablesSettingsPage({
                 </tbody>
               </table>
             </div>
-          ) : null}
         </div>
       </section>
     </AdminPage>

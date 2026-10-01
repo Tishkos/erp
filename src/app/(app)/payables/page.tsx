@@ -4,15 +4,18 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import {
   AdminPage,
   Field,
+  FilterRow,
   Flash,
   Form,
   Grid,
+  ListToolbar,
   Select,
   Submit,
   SubmitRow,
   admin as s,
 } from '@/components/admin';
 import { NewRecordDialog } from '@/components/admin/dialog';
+import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
@@ -30,8 +33,9 @@ import { createPayable } from './actions';
  *
  * The sort is the triage order the diagram's red band implies:
  * stopped-without-reason first, then the oldest stop, then what falls due.
- * The seed views are the filter presets the sheet's "accountant report"
- * sections became — views, not a report.
+ * The saved views are filter controls in the toolbar — a view is a stored
+ * filter, so it is offered where the filters live, in the register's own
+ * window (the Purchase Invoices list is the model).
  */
 export const dynamic = 'force-dynamic';
 
@@ -51,8 +55,9 @@ export default async function PayablesWorkbench({
 }) {
   if (!visibleRoute('/payables')) notFound();
 
-  const [t, page, locale, context, outcome, params] = await Promise.all([
+  const [t, admin, page, locale, context, outcome, params] = await Promise.all([
     getTranslations('admin.payables'),
+    getTranslations('admin'),
     getTranslations('page'),
     getLocale(),
     requireContext(),
@@ -66,16 +71,36 @@ export default async function PayablesWorkbench({
   }
   const mayCreate = can(principal, 'create', payables.PERMISSION_OBJECT);
 
-  const typeFilter = typeof params.type === 'string' ? params.type : null;
-  const stoppedFilter =
+  let typeFilter: string | null =
+    typeof params.type === 'string' && params.type ? params.type : null;
+  let stoppedFilter: 'yes' | 'no' | 'needs_reason' | null =
     params.stopped === 'yes' || params.stopped === 'no' || params.stopped === 'needs_reason'
       ? params.stopped
       : null;
   const pageNo = Number(params.page) > 0 ? Number(params.page) : 1;
+  const viewParam = typeof params.view === 'string' && params.view ? params.view : null;
 
   const { rows, total, types, suppliers, departments, categories, savedViews } =
     await withCurrentUser(
     async (tx) => {
+      const stored = await payables.workbenchViews(tx);
+      // A chosen view is a stored filter: its query becomes the filters, the
+      // same way typing them would.
+      if (viewParam) {
+        const chosen = stored.find((view) => view.id === viewParam);
+        const query = chosen
+          ? new URLSearchParams(chosen.query as Record<string, string>)
+          : new URLSearchParams(
+              PRESET_VIEWS.find((view) => view.key === viewParam)?.query ?? '',
+            );
+        typeFilter = query.get('type');
+        stoppedFilter =
+          query.get('stopped') === 'yes' ||
+          query.get('stopped') === 'no' ||
+          query.get('stopped') === 'needs_reason'
+            ? (query.get('stopped') as 'yes' | 'no' | 'needs_reason')
+            : null;
+      }
       const list = await payables.workbench(tx, {
         typeCode: typeFilter,
         stopped: stoppedFilter,
@@ -90,7 +115,7 @@ export default async function PayablesWorkbench({
         categories: config.categories.filter((c) => c.active),
         suppliers: await partners.listActiveInRole(tx, 'supplier'),
         departments: await departmentsService.listAll(tx),
-        savedViews: await payables.workbenchViews(tx),
+        savedViews: stored,
       };
     },
   );
@@ -103,6 +128,8 @@ export default async function PayablesWorkbench({
     Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 86_400_000));
 
   // §21.2 — shared saved-view rows when the seeds exist; the presets until.
+  // A view is a stored filter, so each is offered as a choice of the View
+  // filter control; choosing one submits its stored query.
   const views =
     savedViews.length > 0
       ? savedViews.map((view) => ({
@@ -111,14 +138,13 @@ export default async function PayablesWorkbench({
           query: new URLSearchParams(view.query).toString(),
         }))
       : PRESET_VIEWS.map((view) => ({ key: view.key, label: t(`view_${view.key}`), query: view.query }));
-  const viewQuery = (query: string) => (query ? `/payables?${query}` : '/payables');
   const activeView =
     views.find((view) => {
       const q = new URLSearchParams(view.query);
       return (
         (q.get('stopped') ?? null) === stoppedFilter && (q.get('type') ?? null) === typeFilter
       );
-    })?.key ?? null;
+    })?.key ?? '';
 
   return (
     <AdminPage
@@ -208,7 +234,8 @@ export default async function PayablesWorkbench({
           </NewRecordDialog>
         ) : null
       }
-      back={{ href: '/', label: t('dashboard') }}
+      back={{ href: '/', label: admin('dashboard_label') }}
+      tabs={<SectionTabs route="/payables" />}
       subtitle={t('subtitle')}
       title={t('title')}
       variant="sap"
@@ -222,35 +249,49 @@ export default async function PayablesWorkbench({
             <span className={s.sapTitleMeta}>{t('rows', { count: total })}</span>
           </h2>
 
-          <div className={s.sapFootActions}>
-            <nav aria-label={t('views')}>
-              {views.map((view) => (
-                <Link
-                  aria-current={activeView === view.key ? 'page' : undefined}
-                  className={`${s.button} ${s.small}${activeView === view.key ? ` ${s.primary}` : ''}`}
-                  href={viewQuery(view.query)}
-                  key={view.key}
-                >
-                  {view.label}
-                </Link>
-              ))}
-            </nav>
-            <form action="/payables" method="get">
-              {typeFilter ? <input name="type" type="hidden" value={typeFilter} /> : null}
-              {stoppedFilter ? <input name="stopped" type="hidden" value={stoppedFilter} /> : null}
-              <input
-                aria-label={t('search')}
-                className={s.input}
-                defaultValue={outcome.q}
-                name="q"
-                placeholder={t('search_placeholder')}
-                type="search"
+          <ListToolbar
+            clearHref="/payables"
+            clearLabel={admin('clear_search')}
+            countLabel={admin('rows_shown', { count: rows.length })}
+            placeholder={admin('search_placeholder')}
+            q={outcome.q}
+            searchLabel={admin('search')}
+          />
+
+          {/* The screen's own filters: the saved views and the two facts they
+              are made of. Choosing a view submits its stored query. */}
+          <form className={s.filterBar} method="get">
+            <FilterRow>
+              <Select
+                defaultValue={activeView}
+                emptyLabel="—"
+                label={t('views')}
+                name="view"
+                options={views.map((view) => ({ value: view.key, label: view.label }))}
               />
-              <button className={`${s.button} ${s.small}`} type="submit">
-                {t('search')}
-              </button>
-            </form>
-          </div>
+              <Select
+                defaultValue={typeFilter ?? ''}
+                emptyLabel={t('all_types')}
+                label={t('type')}
+                name="type"
+                options={types.map((type) => ({ value: type.code, label: type.name }))}
+              />
+              <Select
+                defaultValue={stoppedFilter ?? ''}
+                emptyLabel={t('all_rows')}
+                label={t('col_stopped')}
+                name="stopped"
+                options={[
+                  { value: 'yes', label: t('stopped') },
+                  { value: 'needs_reason', label: t('needs_reason') },
+                  { value: 'no', label: t('moving') },
+                ]}
+              />
+              <SubmitRow>
+                <Submit label={t('filter')} />
+              </SubmitRow>
+            </FilterRow>
+          </form>
 
           <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
             <table aria-labelledby="payables-title" className={`${s.sapTable} ${s.sapRegisterTable}`}>

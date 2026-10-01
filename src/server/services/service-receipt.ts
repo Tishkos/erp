@@ -21,7 +21,7 @@
  * also wanted is D11, open, and not something this service may decide by writing
  * a journal.
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   purchaseOrder,
@@ -726,4 +726,54 @@ export async function awaitingDepartment(tx: Tx, departmentCode: string) {
       ),
     )
     .orderBy(serviceReceipt.serviceDate);
+}
+
+/** §21.5 — the list: every confirmation, whichever department owns it. */
+export interface ServiceReceiptListRow {
+  readonly id: string;
+  readonly receiptNo: string;
+  readonly status: string;
+  readonly departmentCode: string;
+  readonly serviceDate: string;
+  readonly supplierName: string | null;
+  readonly orderNo: string | null;
+  readonly payableNo: string | null;
+  readonly description: string | null;
+}
+
+export async function listForScreen(tx: Tx): Promise<ServiceReceiptListRow[]> {
+  const result = await tx.execute(sql`
+    select r.id,
+           r.receipt_no as "receiptNo",
+           r.status::text as status,
+           r.department_code as "departmentCode",
+           r.service_date::text as "serviceDate",
+           coalesce(bpo.legal_name, bpp.legal_name) as "supplierName",
+           o.order_no as "orderNo",
+           p.payable_no as "payableNo",
+           r.note as description
+      from service_receipt r
+      left join purchase_order o on o.id = r.purchase_order_id
+      left join business_partner bpo on bpo.id = o.supplier_id
+      left join payable p on p.id = r.payable_id
+      left join business_partner bpp on bpp.id = p.supplier_id
+     order by r.created_at desc
+     limit 200`);
+  return result.rows as unknown as ServiceReceiptListRow[];
+}
+
+/** §21.3 — the payable page's Service lane: this payable's confirmations. */
+export async function listForPayable(tx: Tx, payableId: string) {
+  return tx
+    .select({
+      id: serviceReceipt.id,
+      receiptNo: serviceReceipt.receiptNo,
+      status: serviceReceipt.status,
+      serviceDate: serviceReceipt.serviceDate,
+      departmentCode: serviceReceipt.departmentCode,
+      note: serviceReceipt.note,
+    })
+    .from(serviceReceipt)
+    .where(eq(serviceReceipt.payableId, payableId))
+    .orderBy(asc(serviceReceipt.createdAt));
 }

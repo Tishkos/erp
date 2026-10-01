@@ -33,8 +33,8 @@ test.describe('A22 · the payables workbench and record', () => {
     // ── The workbench ────────────────────────────────────────────────────
     await page.goto('/payables');
     await expect(page.getByRole('heading', { level: 1, name: 'Payables' })).toBeVisible();
-    // The seed views are on the toolbar, whole.
-    await expect(page.getByRole('navigation', { name: 'Views' })).toBeVisible();
+    // The saved views are a filter control in the register's own window.
+    await expect(page.getByLabel('Views')).toBeVisible();
 
     // ── New payable (an advance: no PO, no department — the simplest type) ─
     await page.getByRole('button', { name: 'New payable' }).click();
@@ -53,12 +53,11 @@ test.describe('A22 · the payables workbench and record', () => {
     await page.waitForURL(/\/payables\/ADV-/);
     const payableNo = decodeURIComponent(page.url().split('/payables/')[1]!.split('?')[0]!);
     await expect(page.getByRole('heading', { level: 1, name: payableNo })).toBeVisible();
-    await expect(page.getByText('1. Requested', { exact: false })).toBeVisible();
+    await expect(page.getByText('1. Requested', { exact: false }).first()).toBeVisible();
     await expect(page.getByText(`E2E-${RUN}`).first()).toBeVisible();
 
-    // The story began.
-    await page.getByRole('link', { name: 'Status log' }).click();
-    // The opening event, named by its type and stamped with this run's reference.
+    // The story began — the status log is a section of the record, in view
+    // without a click, the way the statement stacks its tables.
     await expect(page.getByText(`opened — E2E-${RUN}`).first()).toBeVisible();
 
     // ── The stop/follow-up dialog (§21.12) ──────────────────────────────
@@ -72,8 +71,11 @@ test.describe('A22 · the payables workbench and record', () => {
     await stop.getByRole('textbox', { name: 'Expected by' }).fill('2026-10-15');
     await stop.getByRole('button', { name: 'Record the stop' }).click();
 
-    // The red truth, everywhere: banner on the record…
-    await expect(page.getByText('STOPPED: BANK', { exact: false }).first()).toBeVisible();
+    // The red truth, everywhere: banner on the record… (a server action and a
+    // full re-render — generous on a cold compile.)
+    await expect(page.getByText('STOPPED: BANK', { exact: false }).first()).toBeVisible({
+      timeout: 30_000,
+    });
     // …and the chip on the workbench, sorted up top.
     await page.goto('/payables?stopped=yes');
     const row = page.getByRole('row', { name: new RegExp(payableNo) });

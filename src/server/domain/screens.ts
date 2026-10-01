@@ -442,6 +442,12 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/payables',
   '/administration/payables-settings',
   '/payables/open-items',
+  // REQ-AP-001 Stage 2 — the standing commitments, the department's inbox,
+  // and the two documents that finally earn their screens (§21.4-§21.6).
+  '/payables/contracts',
+  '/payables/service-receipts',
+  '/payables/purchase-orders',
+  '/payables/goods-receipts',
 ]);
 
 export function isDelivered(route: string): boolean {

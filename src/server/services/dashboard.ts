@@ -86,12 +86,31 @@ export interface WaitingHold {
   readonly nextActionDue: string | null;
 }
 
+export interface WaitingReceipt {
+  readonly receiptNo: string;
+  readonly departmentCode: string;
+  readonly serviceDate: string;
+  readonly belongsTo: string | null;
+}
+
+export interface DuePayable {
+  readonly payableNo: string;
+  readonly supplierName: string;
+  readonly dueDate: string;
+  readonly amountTxn: string;
+  readonly currency: string;
+}
+
 export interface Waiting {
   readonly approvals: readonly WaitingItem[];
   /** §19.4 — the stops this person is answerable for. */
   readonly holdsIOwn: readonly WaitingHold[];
   /** §19.1 — automatic stops still waiting for their reason, in my lanes. */
   readonly holdsNeedingReason: readonly WaitingHold[];
+  /** §21.13 — submitted confirmations in my departments (§5.2's second half). */
+  readonly receiptsAwaiting: readonly WaitingReceipt[];
+  /** §21.13 — what falls due in the next seven days. */
+  readonly dueThisWeek: readonly DuePayable[];
   readonly unreadNotifications: number;
 }
 
@@ -148,6 +167,45 @@ async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting> {
   const holds = holdRows.rows as unknown as HoldRow[];
 
   const isManager = principal.roleCodes.includes('accounting_manager') || principal.isSuperUser;
+
+  // §21.13 — "Service receipts awaiting my confirmation": submitted, in one
+  // of this person's departments (a manager sees every department's).
+  const myDepartments = principal.departments.map((d) => d.code);
+  const receiptRows = can(principal, 'view', 'service_receipt')
+    ? await tx.execute(sql`
+        select r.receipt_no        as "receiptNo",
+               r.department_code   as "departmentCode",
+               r.service_date::text as "serviceDate",
+               coalesce(p.payable_no, o.order_no) as "belongsTo"
+          from service_receipt r
+          left join payable p on p.id = r.payable_id
+          left join purchase_order o on o.id = r.purchase_order_id
+         where r.status = 'submitted'
+         order by r.service_date
+         limit 50
+      `)
+    : { rows: [] as Record<string, unknown>[] };
+  const receiptsAwaiting = (receiptRows.rows as unknown as (WaitingReceipt & {
+    departmentCode: string;
+  })[]).filter((row) => isManager || myDepartments.includes(row.departmentCode));
+
+  // §21.13 — "Payables due this week": the next seven days, oldest first.
+  const dueRows = maySeePayables
+    ? await tx.execute(sql`
+        select p.payable_no     as "payableNo",
+               bp.legal_name    as "supplierName",
+               p.due_date::text as "dueDate",
+               p.amount_txn::text as "amountTxn",
+               p.currency
+          from payable p
+          join business_partner bp on bp.id = p.supplier_id
+         where p.due_date between current_date and current_date + 7
+           and p.cancelled_at is null and p.closed_at is null
+           and p.stage_code not in ('paid', 'closed')
+         order by p.due_date
+         limit 50
+      `)
+    : { rows: [] as Record<string, unknown>[] };
   const inMyLane = (hold: HoldRow): boolean => {
     if (isManager) return true;
     const role = LANE_DEFAULT_ROLE[hold.laneCode];
@@ -169,6 +227,8 @@ async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting> {
     holdsNeedingReason: holds.filter(
       (hold) => hold.reasonCode === 'PENDING_REASON' && inMyLane(hold),
     ),
+    receiptsAwaiting,
+    dueThisWeek: dueRows.rows as unknown as DuePayable[],
     unreadNotifications: unread.length,
   };
 }

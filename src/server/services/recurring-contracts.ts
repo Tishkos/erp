@@ -12,7 +12,7 @@
  * newest amendment at or before the period's start, and amending changes
  * future periods only — generated ones stand (A8).
  */
-import { and, asc, desc, eq, isNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, lte, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   payable,
@@ -555,4 +555,48 @@ export async function list(tx: Tx) {
     .select()
     .from(recurringContract)
     .orderBy(asc(recurringContract.contractNo));
+}
+
+/** §21.4 — one row per contract, with what the list shows and nothing else. */
+export interface ContractListRow {
+  readonly id: string;
+  readonly contractNo: string;
+  readonly supplierName: string;
+  readonly departmentCode: string;
+  readonly expenseCategoryCode: string;
+  readonly categoryName: string | null;
+  readonly amountPerPeriodTxn: string;
+  readonly currency: string;
+  readonly frequency: string;
+  readonly status: string;
+  readonly nextDue: string | null;
+  readonly overduePeriods: number;
+}
+
+export async function listForScreen(tx: Tx): Promise<ContractListRow[]> {
+  const result = await tx.execute(sql`
+    select c.id,
+           c.contract_no as "contractNo",
+           bp.legal_name as "supplierName",
+           c.department_code as "departmentCode",
+           c.expense_category_code as "expenseCategoryCode",
+           ec.name as "categoryName",
+           c.amount_per_period_txn::text as "amountPerPeriodTxn",
+           c.currency,
+           c.frequency,
+           c.status,
+           (select min(p.due_date)::text from payable p
+             where p.recurring_contract_id = c.id
+               and p.cancelled_at is null and p.closed_at is null
+               and p.stage_code not in ('paid', 'closed')) as "nextDue",
+           (select count(*)::int from payable p
+             where p.recurring_contract_id = c.id
+               and p.cancelled_at is null and p.closed_at is null
+               and p.due_date < current_date
+               and p.stage_code not in ('paid', 'closed')) as "overduePeriods"
+      from recurring_contract c
+      join business_partner bp on bp.id = c.supplier_id
+      left join expense_category ec on ec.code = c.expense_category_code
+     order by c.contract_no`);
+  return result.rows as unknown as ContractListRow[];
 }

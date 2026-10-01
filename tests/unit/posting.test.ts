@@ -457,6 +457,8 @@ describe('the catalogue the mappings screen is drawn from', () => {
       ['supplier_payable', 'credit', true],
       ['grni', 'debit', false],
       ['expense', 'debit', false],
+      // §9.2 — a line charged to an import parks on the clearing account.
+      ['landed_cost_clearing', 'debit', false],
       // Over the order it is a debit, under it a credit.
       ['purchase_variance', 'either', false],
     ]);

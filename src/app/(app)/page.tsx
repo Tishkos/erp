@@ -311,12 +311,15 @@ export default async function Home() {
       (waiting.approvals.length > 0 ||
         waiting.unreadNotifications > 0 ||
         waiting.holdsIOwn.length > 0 ||
+        waiting.receiptsAwaiting.length > 0 ||
+        waiting.dueThisWeek.length > 0 ||
         waiting.holdsNeedingReason.length > 0) ? (
         <Band
           count={
             waiting.approvals.length +
             waiting.holdsIOwn.length +
-            waiting.holdsNeedingReason.length
+            waiting.holdsNeedingReason.length +
+            waiting.receiptsAwaiting.length
           }
           href="/approvals"
           hrefLabel={t('dashboard.open_approvals')}
@@ -368,6 +371,61 @@ export default async function Home() {
               ))}
             </BandTable>
           ) : null}
+          {/* §21.13 — the department's inbox, surfaced where the day starts. */}
+          {waiting.receiptsAwaiting.length > 0 ? (
+            <BandTable
+              headings={[t('dashboard.receipts_awaiting'), column('date'), '']}
+            >
+              {waiting.receiptsAwaiting.map((receipt) => (
+                <tr key={`sr:${receipt.receiptNo}`}>
+                  <td className={s.sapAccountCell}>
+                    <bdi dir="ltr">{receipt.receiptNo}</bdi>
+                    {receipt.belongsTo ? (
+                      <>
+                        {' · '}
+                        <bdi dir="ltr">{receipt.belongsTo}</bdi>
+                      </>
+                    ) : null}
+                  </td>
+                  <td>
+                    <bdi dir="ltr">{receipt.serviceDate}</bdi>
+                  </td>
+                  <td>
+                    <Link href="/payables/service-receipts">
+                      {t('dashboard.open_service_receipts')}
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </BandTable>
+          ) : null}
+
+          {/* §21.13 — what falls due in the next seven days. */}
+          {waiting.dueThisWeek.length > 0 ? (
+            <BandTable
+              headings={[t('dashboard.due_this_week'), column('date'), column('amount')]}
+            >
+              {waiting.dueThisWeek.map((due) => (
+                <tr key={`due:${due.payableNo}`}>
+                  <td className={s.sapAccountCell}>
+                    <Link href={`/payables/${encodeURIComponent(due.payableNo)}`}>
+                      <bdi dir="ltr">{due.payableNo}</bdi>
+                    </Link>{' '}
+                    · <bdi dir="auto">{due.supplierName}</bdi>
+                  </td>
+                  <td>
+                    <bdi dir="ltr">{due.dueDate}</bdi>
+                  </td>
+                  <td>
+                    <bdi dir="ltr">
+                      {formatMoney(due.amountTxn, due.currency, locale as Locale)}
+                    </bdi>
+                  </td>
+                </tr>
+              ))}
+            </BandTable>
+          ) : null}
+
           {waiting.unreadNotifications > 0 ? (
             <Figures>
               <Figure

@@ -226,12 +226,16 @@ describe('every screen has one address', () => {
       '/master-data/warehouses',
       // REQ-AP-001 Stage 1 — the Payables workbench.
       '/payables',
+      '/payables/contracts',
+      '/payables/goods-receipts',
       // Operations build — block 4's Purchase Invoice.
       '/payables/goods-returns',
       // Block 10 — Purchase Returns.
       '/payables/invoices',
       // §15 — what we owe, invoice by invoice.
       '/payables/open-items',
+      '/payables/purchase-orders',
+      '/payables/service-receipts',
       // Block 6 — Payments and Receipts.
       '/payables/supplier-payments',
       // Blocks 2 and 3 — the Account Statement, one screen on each side.

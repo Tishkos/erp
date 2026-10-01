@@ -13,7 +13,7 @@
  * next one. Two hundred rows and a list of what is wrong with each is one
  * correction pass instead of eleven.
  */
-import { eq, sql } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { businessPartner, purchaseOrder, purchaseOrderLine } from '../db/schema';
 import { formatQuantity, parseQuantity } from '../domain/uom';
@@ -579,3 +579,64 @@ export async function openCommitments(tx: Tx) {
   return (result as unknown as { rows: Record<string, string>[] }).rows;
 }
 
+
+/** §21.6 — the list: commitment, fulfilment and billing at a glance. */
+export interface OrderListRow {
+  readonly id: string;
+  readonly orderNo: string;
+  readonly supplierName: string;
+  readonly orderDate: string;
+  readonly status: string;
+  readonly totalIqd: string;
+  readonly receivedShare: string;
+  readonly invoicedShare: string;
+  readonly payableNo: string | null;
+}
+
+export async function listForScreen(tx: Tx): Promise<OrderListRow[]> {
+  const result = await tx.execute(sql`
+    select o.id,
+           o.order_no as "orderNo",
+           bp.legal_name as "supplierName",
+           o.order_date::text as "orderDate",
+           o.status::text as status,
+           coalesce(sum(l.quantity * l.unit_price), 0)::text as "totalIqd",
+           coalesce(sum(l.received_quantity), 0)::text || ' / ' || coalesce(sum(l.quantity), 0)::text
+             as "receivedShare",
+           coalesce(sum(l.invoiced_quantity), 0)::text || ' / ' || coalesce(sum(l.quantity), 0)::text
+             as "invoicedShare",
+           (select p.payable_no from payable p where p.purchase_order_id = o.id limit 1)
+             as "payableNo"
+      from purchase_order o
+      join business_partner bp on bp.id = o.supplier_id
+      left join purchase_order_line l on l.purchase_order_id = o.id
+     group by o.id, o.order_no, bp.legal_name, o.order_date, o.status, o.created_at
+     order by o.created_at desc
+     limit 200`);
+  return result.rows as unknown as OrderListRow[];
+}
+
+/** §21.6 — the record, by its number: the order, its lines, who it binds. */
+export async function viewByNo(tx: Tx, orderNo: string) {
+  const [order] = await tx
+    .select()
+    .from(purchaseOrder)
+    .where(eq(purchaseOrder.orderNo, orderNo))
+    .limit(1);
+  if (!order) return null;
+  const lines = await tx
+    .select()
+    .from(purchaseOrderLine)
+    .where(eq(purchaseOrderLine.purchaseOrderId, order.id))
+    .orderBy(asc(purchaseOrderLine.lineNo));
+  const [supplier] = await tx
+    .select({ legalName: businessPartner.legalName, code: businessPartner.code })
+    .from(businessPartner)
+    .where(eq(businessPartner.id, order.supplierId))
+    .limit(1);
+  const linked = await tx.execute(sql`
+    select payable_no as "payableNo" from payable where purchase_order_id = ${order.id} limit 1`);
+  const payableNo =
+    ((linked.rows[0] as { payableNo?: string } | undefined)?.payableNo ?? null) as string | null;
+  return { order, lines, supplier: supplier ?? null, payableNo };
+}
