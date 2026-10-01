@@ -220,10 +220,10 @@ export class HoldIncompleteError extends Error {
 export interface HoldCompletion {
   readonly reasonCode: string;
   readonly reasonRequiresDetail: boolean;
-  readonly detail?: string | null;
-  readonly ownerUserId?: string | null;
-  readonly nextAction?: string | null;
-  readonly nextActionDue?: string | null;
+  readonly detail?: string | null | undefined;
+  readonly ownerUserId?: string | null | undefined;
+  readonly nextAction?: string | null | undefined;
+  readonly nextActionDue?: string | null | undefined;
 }
 
 /**

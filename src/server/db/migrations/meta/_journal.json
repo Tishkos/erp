@@ -1058,6 +1058,13 @@
       "when": 1795900000030,
       "tag": "0226_payable_event_partitioned",
       "breakpoints": true
+    },
+    {
+      "idx": 151,
+      "version": "7",
+      "when": 1795900000031,
+      "tag": "0227_payable_hold_notifications",
+      "breakpoints": true
     }
   ]
 }
