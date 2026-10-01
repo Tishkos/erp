@@ -85,9 +85,9 @@ export async function updateStage(
   input: {
     payableTypeCode: string;
     code: string;
-    name?: string;
-    sequence?: number;
-    active?: boolean;
+    name?: string | undefined;
+    sequence?: number | undefined;
+    active?: boolean | undefined;
   },
 ): Promise<void> {
   await permit(ctx);
@@ -329,7 +329,12 @@ export async function saveExpenseCategory(
 export async function updateEventCode(
   tx: Tx,
   ctx: ActorContext,
-  input: { code: string; name?: string; summaryTemplate?: string | null; active?: boolean },
+  input: {
+    code: string;
+    name?: string | undefined;
+    summaryTemplate?: string | null | undefined;
+    active?: boolean | undefined;
+  },
 ): Promise<void> {
   await permit(ctx);
 

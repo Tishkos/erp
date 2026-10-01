@@ -103,7 +103,7 @@ export interface OpenHoldInput {
   readonly detail?: string | null;
   readonly ownerUserId: string;
   /** Today, or an earlier date the stop actually began. */
-  readonly startedAt?: Date;
+  readonly startedAt?: Date | undefined;
   readonly nextAction: string;
   readonly nextActionDue: string;
   readonly sourceType?: string | null;
