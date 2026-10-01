@@ -457,10 +457,14 @@ export async function resetTestData(): Promise<void> {
     // record who created them and are removed; seed rows (created_by NULL) are
     // restored to their seeded active state.
     await client.query('truncate payable_event');
+    await client.query('truncate recurring_contract_amendment');
+    await client.query('delete from landed_cost_charge');
+    await client.query('delete from landed_cost_type where created_by is not null');
     await client.query('truncate payable_hold_update');
     await client.query('delete from payable_hold');
     await client.query('delete from payable_order_line');
     await client.query('delete from payable');
+    await client.query('delete from recurring_contract');
     await client.query('delete from stage_time_limit where created_by is not null');
     await client.query('delete from payable_stage where created_by is not null');
     await client.query('delete from payable_type_lane where payable_type_code in (select code from payable_type where created_by is not null)');
@@ -732,7 +736,7 @@ export async function resetTestData(): Promise<void> {
                          'SUPPLIER_ADVANCE',
                          -- REQ-AP-001 Stage 1, migration 0225 — one per payable type.
                          'PAYABLE_IMPORT', 'PAYABLE_SERVICE', 'PAYABLE_RECURRING',
-                         'PAYABLE_LOCAL_GOODS', 'PAYABLE_ADVANCE',
+                         'PAYABLE_LOCAL_GOODS', 'PAYABLE_ADVANCE', 'RECURRING_CONTRACT',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

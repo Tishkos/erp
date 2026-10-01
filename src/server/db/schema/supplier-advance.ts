@@ -39,6 +39,7 @@ import { businessPartner } from './organisation';
 import { documentStatus } from './workflow';
 import { journalEntry } from './journal';
 import { purchaseOrder } from './purchase-order';
+import { payable } from './payables';
 import { apInvoice } from './ap-invoice';
 
 export const supplierAdvance = pgTable(
@@ -69,6 +70,9 @@ export const supplierAdvance = pgTable(
     supplierId: uuid('supplier_id')
       .notNull()
       .references(() => businessPartner.id),
+
+    /** REQ-AP-001 §12 — the advance payable this document pays. */
+    payableId: uuid('payable_id').references(() => payable.id),
 
     branchCode: text('branch_code')
       .notNull()

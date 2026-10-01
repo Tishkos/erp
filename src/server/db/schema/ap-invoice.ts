@@ -51,6 +51,7 @@ import { chartOfAccount } from './accounting';
 import { journalEntry } from './journal';
 import { purchaseOrder, purchaseOrderLine } from './purchase-order';
 import { payable } from './payables';
+// (charged_to_payable_id on the line also references payable — §9.2, §20.2.)
 
 /** Appendix B's Matched / Exception, on its own axis. */
 export const MATCH_STATUSES = ['matched', 'exception'] as const;
@@ -293,6 +294,13 @@ export const apInvoiceLine = pgTable(
 
     /** Null only on the §15 non-PO route. */
     purchaseOrderLineId: uuid('purchase_order_line_id').references(() => purchaseOrderLine.id),
+
+    /**
+     * REQ-AP-001 §9.2, §20.2 — a line whose cost belongs to an import. The
+     * expense parks in the landed-cost clearing account instead of P&L, and
+     * the line becomes a landed-cost charge of that import at posting.
+     */
+    chargedToPayableId: uuid('charged_to_payable_id').references(() => payable.id),
 
     itemCode: text('item_code').references(() => item.code),
     description: text('description').notNull(),
