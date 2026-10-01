@@ -237,6 +237,7 @@ async function outstandingTable(
           balance: row.unappliedCreditsIqd,
         },
       })),
+      empty: m.admin('open_items.nothing'),
       totals: {
         label: m.admin(side === 'customer' ? 'open_items.customer_credits' : 'open_items.supplier_credits'),
         cells: { balance: sumMoney(creditRows.map((row) => row.unappliedCreditsIqd)) },
@@ -259,6 +260,7 @@ async function outstandingTable(
           balance: row.otherNonInvoiceDebitIqd,
         },
       })),
+      empty: m.admin('open_items.nothing'),
       totals: {
         label: m.admin('open_items.other_noninvoice_debits'),
         cells: { balance: sumMoney(debitRows.map((row) => row.otherNonInvoiceDebitIqd)) },
@@ -967,6 +969,7 @@ export async function openItems(
           balance: row.unappliedCreditsIqd,
         },
       })),
+      empty: m.admin('open_items.nothing'),
       totals: {
         label: m.admin(side === 'customer' ? 'open_items.customer_credits' : 'open_items.supplier_credits'),
         cells: { balance: sumMoney(creditRows.map((row) => row.unappliedCreditsIqd)) },
@@ -989,6 +992,7 @@ export async function openItems(
           balance: row.otherNonInvoiceDebitIqd,
         },
       })),
+      empty: m.admin('open_items.nothing'),
       totals: {
         label: m.admin('open_items.other_noninvoice_debits'),
         cells: { balance: sumMoney(debitRows.map((row) => row.otherNonInvoiceDebitIqd)) },

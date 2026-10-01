@@ -202,7 +202,7 @@ async function reconciliation(side: openItems.Side, partyCode?: string) {
      */
     const everyItem = await openItems.openItems(tx, manager.principal, side, AS_OF, narrow);
     const balances = await openItems.ledgerBalances(tx, manager.principal, side, AS_OF, narrow);
-    const rows = openItems.reconcile(everyItem, balances, AS_OF);
+    const rows = openItems.reconcile(everyItem, balances);
     return { items, rows, totals: openItems.reconciliationTotals(rows) };
   });
 }
@@ -280,18 +280,12 @@ describe('ops 17 · a debt raised by journal is still a debt', () => {
 
     const mine = rows.find((row) => row.partyCode === customer.code)!;
     expect(Number(mine.ledgerIqd)).toBe(700_000);
-    /*
-     * And it reads like the invoice it is: raised, paid, left.
-     *
-     * The sponsor wrote the row out by hand — *"INV-1001: 1,200,000 →
-     * 500,000 paid → 700,000 outstanding"* — and a bare 700,000 is a figure
-     * they would have to take on trust.
-     */
-    expect(Number(mine.unexplainedChargedIqd)).toBe(1_200_000);
-    expect(Number(mine.unexplainedPaidIqd)).toBe(500_000);
-    // Aged from the day the account first moved — 1 March is more than ninety
-    // days before 30 September, and calling it current would flatter it.
-    expect(mine.bucket).toBe('90+');
+    // The whole of it is a non-invoice debit — a debt the journals raised and
+    // no document explains — reported net, with the day the account first
+    // moved, so a credit controller knows how long it has been sitting.
+    expect(Number(mine.unexplainedIqd)).toBe(700_000);
+    expect(Number(mine.otherNonInvoiceDebitIqd)).toBe(700_000);
+    expect(mine.oldestDate).toBe('2026-03-01');
   });
 
   it('the ageing total is the statement’s closing balance, to the dinar', async () => {
@@ -327,19 +321,18 @@ describe('ops 17 · a debt raised by journal is still a debt', () => {
     expect(Number(totals.unexplainedIqd)).toBe(700_000);
 
     /*
-     * But its charge and its payment are the invoice's, not the journals'.
+     * And the settled invoice does not bleed into the journal row.
      *
      * The ledger moved by 1,210,000 and 510,000 across the four entries; the
-     * settled invoice accounts for 10,000 of each, so the journal row must
-     * show 1,200,000 and 500,000 — not the gross. Getting this wrong would
-     * double-count the invoice inside the very report that is meant to prove
-     * nothing is double-counted.
+     * settled invoice accounts for 10,000 of each and nets to nothing, so the
+     * unexplained balance must be the journals' own 700,000 — not the gross.
+     * Getting this wrong would double-count the invoice inside the very
+     * report that is meant to prove nothing is double-counted.
      */
     const mine = (await reconciliation('customer')).rows.find(
       (row) => row.partyCode === customer.code,
     )!;
-    expect(Number(mine.unexplainedChargedIqd)).toBe(1_200_000);
-    expect(Number(mine.unexplainedPaidIqd)).toBe(500_000);
+    expect(Number(mine.unexplainedIqd)).toBe(700_000);
   });
 
   it('reports nothing unexplained when every movement has an invoice behind it', async () => {
@@ -417,7 +410,9 @@ describe('ops 17 · the same holds for what we owe', () => {
     expect(Number(totals.ledgerIqd)).toBe(closing);
     expect(Number(totals.documentsIqd)).toBe(0);
     expect(Number(totals.unexplainedIqd)).toBe(500_000);
-    expect(rows.find((row) => row.partyCode === supplier.code)!.bucket).toBe('90+');
+    const mine = rows.find((row) => row.partyCode === supplier.code)!;
+    expect(Number(mine.otherNonInvoiceDebitIqd)).toBe(500_000);
+    expect(mine.oldestDate).toBe('2026-03-01');
   });
 
   it('reports nothing unexplained when the purchase invoice accounts for it', async () => {
@@ -481,7 +476,7 @@ describe('ops 17 · a reversal takes both sides down together', () => {
 });
 
 describe('ops 17 · the ageing bands tie too', () => {
-  it('folds what no invoice explains into the same bands as the invoices', async () => {
+  it('keeps what no invoice explains beside the bands, and the two tie to the statement', async () => {
     const customer = await partner('CUST-004', 'Mixed Ltd', 'customer');
 
     // One invoice, overdue by about four months.
@@ -496,14 +491,22 @@ describe('ops 17 · the ageing bands tie too', () => {
       { account: revenue, credit: '4000.0000' },
     ]);
 
-    const { items, rows } = await reconciliation('customer');
-    const bands = openItems.ageingWith(items, rows);
-    const banded = bands.reduce((sum, band) => sum + Number(band.amountIqd), 0);
+    const { items, totals } = await reconciliation('customer');
+    const banded = openItems
+      .ageing(items)
+      .reduce((sum, band) => sum + Number(band.amountIqd), 0);
 
     const closing = await closingOf('customer', customer.code);
     expect(closing).toBe(5_000);
-    // The bands, added up by hand, come to the statement's closing balance —
-    // which is the check a reader actually performs on a printed ageing.
-    expect(banded).toBe(closing);
+    // The bands age the invoices; the opening balance is never aged — it is
+    // its own non-invoice row. Added up by hand, the two still come to the
+    // statement's closing balance, which is the check a reader actually
+    // performs on a printed ageing.
+    expect(banded).toBe(1_000);
+    expect(Number(totals.otherNonInvoiceDebitsIqd)).toBe(4_000);
+    expect(
+      banded + Number(totals.otherNonInvoiceDebitsIqd) - Number(totals.unappliedCreditsIqd),
+    ).toBe(closing);
+    expect(totals.ties).toBe(true);
   });
 });

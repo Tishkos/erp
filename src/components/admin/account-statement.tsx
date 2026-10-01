@@ -421,14 +421,14 @@ export async function AccountStatement({
           {...{
             foot: (
               <div className={s.sapFootTotals}>
-                {[
+                {([
                   [side === 'customer' ? 'open_items.gross_customer' : 'open_items.gross_supplier', position.grossIqd],
                   ['open_items.not_yet_due', position.notYetDueIqd],
                   ['open_items.overdue_total', position.overdueIqd],
                   [side === 'customer' ? 'open_items.customer_credits' : 'open_items.supplier_credits', tie.unappliedCreditsIqd],
                   ['open_items.other_noninvoice_debits', tie.otherNonInvoiceDebitsIqd],
                   [side === 'customer' ? 'open_items.net_customer_position' : 'open_items.net_supplier_position', tie.ledgerIqd],
-                ].map(([label, amount]) => (
+                ] as [string, string][]).map(([label, amount]) => (
                   <div className={s.sapFootTotal} key={label}>
                     <span>{t(label)}</span>
                     <strong><bdi dir="ltr">{money(amount)}</bdi></strong>

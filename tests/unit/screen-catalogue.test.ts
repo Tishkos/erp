@@ -201,6 +201,7 @@ describe('every screen has one address', () => {
       '/inventory/fifo-valuation',
       // Block 8 — Invoice Status Tracking.
       '/inventory/in-transit',
+      '/inventory/items',
       // Block 7 — Opening Stock, Item Reconciliation, Stock Movement, Transfer.
       '/inventory/opening-stock',
       // The Stock Ledger (2026-09-27).
@@ -208,21 +209,18 @@ describe('every screen has one address', () => {
       '/inventory/stock-movements',
       '/inventory/stock-reconciliation',
       '/inventory/transfers',
+      '/inventory/uom',
       '/master-data/bank-accounts',
       '/master-data/branches',
       '/master-data/cash-accounts',
       '/master-data/chart-of-accounts',
       // Phase 2 — the accounting master data.
       '/master-data/cost-centres',
-      '/sales/customers',
       '/master-data/departments',
       '/master-data/exchange-rates',
-      '/inventory/items',
       '/master-data/payment-methods',
       '/master-data/payment-terms',
       '/master-data/statement-mapping',
-      '/purchasing/suppliers',
-      '/inventory/uom',
       '/master-data/warehouses',
       // Operations build — block 4's Purchase Invoice.
       '/purchasing/ap-invoices',
@@ -234,11 +232,13 @@ describe('every screen has one address', () => {
       '/purchasing/supplier-payments',
       // Blocks 2 and 3 — the Account Statement, one screen on each side.
       '/purchasing/supplier-statements',
+      '/purchasing/suppliers',
       // Block 5 — the Sales Invoice.
       '/sales/ar-invoices',
       // Block 6 — Receipts.
       '/sales/customer-receipts',
       '/sales/customer-statements',
+      '/sales/customers',
       // §16 — what is owed to us, invoice by invoice.
       '/sales/receivables',
       // Block 9 — Sales Returns.
