@@ -166,3 +166,59 @@ describe('ops 7 · changing one afterwards', () => {
     expect(picker.some((row) => row.code === code)).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('ops 7 · the warehouses block 8 needs', () => {
+  const ensure = (ctx: ActorContext) =>
+    withScope(scope(ctx), (tx) => warehouses.ensureStageWarehouses(tx, ctx));
+
+  it('makes one warehouse for each shipment stage', async () => {
+    const made = await ensure(manager);
+
+    expect(made.map((entry) => entry.stage)).toEqual(['in_process', 'on_board', 'on_port']);
+    expect(made.map((entry) => entry.name)).toEqual(['In Process', 'On Board', 'On Port']);
+    expect(made.every((entry) => entry.created)).toBe(true);
+    // Minted like any other warehouse's — Critical Rule 1 has no exception for
+    // a warehouse the system asks for rather than a person.
+    expect(made.every((entry) => /^WH-\d{4}$/.test(entry.code))).toBe(true);
+  });
+
+  it('offers them to a picker, because the purchase invoice has to name one', async () => {
+    const made = await ensure(manager);
+    const inProcess = made.find((entry) => entry.stage === 'in_process')!;
+
+    // A stage warehouse is an ordinary warehouse that holds a stage. If the
+    // picker hid it, no invoice line could be booked into In Process and block
+    // 8 would never open a shipment.
+    const picker = await withScope(scope(manager), (tx) => warehouses.listActive(tx));
+    expect(picker.some((row) => row.code === inProcess.code)).toBe(true);
+  });
+
+  it('creates nothing the second time, so it can be run on a live database', async () => {
+    const first = await ensure(manager);
+    const again = await ensure(manager);
+
+    expect(again.every((entry) => entry.created)).toBe(false);
+    expect(again.map((entry) => entry.code)).toEqual(first.map((entry) => entry.code));
+
+    const stages = await withScope(scope(manager), (tx) => warehouses.stageWarehouses(tx));
+    expect(stages).toHaveLength(3);
+  });
+
+  it('keeps a stage a company renamed its own way', async () => {
+    const [inProcess] = await ensure(manager);
+    await withScope(scope(manager), (tx) =>
+      warehouses.rename(tx, manager, inProcess!.code, 'Customs Clearance'),
+    );
+
+    // Idempotent on the stage, not on the name: a second run must not decide
+    // the renamed warehouse is a different one and make a second In Process.
+    const again = await ensure(manager);
+    expect(again[0]).toMatchObject({ code: inProcess!.code, name: 'Customs Clearance', created: false });
+    expect(await withScope(scope(manager), (tx) => warehouses.stageWarehouses(tx))).toHaveLength(3);
+  });
+
+  it('refuses somebody who may not create a warehouse', async () => {
+    await expect(ensure(officer)).rejects.toThrow();
+  });
+});

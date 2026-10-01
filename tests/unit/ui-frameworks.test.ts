@@ -95,10 +95,9 @@ describe('Appendix A · the approved menu tree', () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it('gives every item a permission object and a delivering phase', () => {
+  it('gives every item a permission object', () => {
     for (const item of allMenuItems()) {
       expect(item.object, item.key).toBeTruthy();
-      expect(item.phase, item.key).toMatch(/^\d\d(\.\d+)?$/);
     }
   });
 

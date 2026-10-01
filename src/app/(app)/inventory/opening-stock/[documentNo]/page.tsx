@@ -8,7 +8,7 @@ import { ExportMenu } from '@/components/print/export-menu';
 import { PrintSheet } from '@/components/print/print-sheet';
 import { can } from '@domain/permissions';
 import { formatQuantity, parseQuantity } from '@domain/uom';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { printSheet } from '@/server/print/sheet';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as opening from '@/server/services/opening-stock';

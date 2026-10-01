@@ -21,7 +21,7 @@ import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { formatQuantity, parseQuantity } from '@domain/uom';
 import * as items from '@/server/services/items';
@@ -39,7 +39,7 @@ import { createItem } from './actions';
 export const dynamic = 'force-dynamic';
 
 export default async function ItemsPage({ searchParams }: { searchParams: SearchParams }) {
-  if (!visibleRoute('/master-data/items')) notFound();
+  if (!visibleRoute('/inventory/items')) notFound();
 
   const [t, page, column, context, outcome] = await Promise.all([
     getTranslations('admin'),
@@ -128,7 +128,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
         ) : null
       }
       back={{ href: '/', label: t('dashboard_label') }}
-      tabs={<SectionTabs route="/master-data/items" />}
+      tabs={<SectionTabs route="/inventory/items" />}
       subtitle={t('items.subtitle')}
       title={page('items')}
       variant="sap"
@@ -142,7 +142,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
 
       <Panel flush>
         <ListToolbar
-          clearHref="/master-data/items"
+          clearHref="/inventory/items"
           clearLabel={t('clear_search')}
           countLabel={t('rows_shown', { count: shown.length })}
           placeholder={t('search_placeholder')}
@@ -171,7 +171,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
               {shown.map((row) => (
                 <tr key={row.code}>
                   <td>
-                    <Link href={`/master-data/items/${encodeURIComponent(row.code)}`}>{row.code}</Link>
+                    <Link href={`/inventory/items/${encodeURIComponent(row.code)}`}>{row.code}</Link>
                   </td>
                   <td>{row.name}</td>
                   <td>{row.isStock ? t('items.kind_stock') : t('items.kind_service')}</td>

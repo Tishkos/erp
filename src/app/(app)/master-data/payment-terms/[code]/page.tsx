@@ -24,7 +24,7 @@ import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { DUE_DATE_BASIS } from '@domain/payment-terms';
 import { AdminNotFoundError } from '@/server/services/administration';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as terms from '@/server/services/payment-terms';
 import { setPaymentTermActive, updatePaymentTerm } from '../actions';
@@ -291,16 +291,20 @@ export default async function PaymentTermPage({
               <p className="muted">{t('payment_terms.no_partners')}</p>
             ) : (
               <ul className={s.profileFacts}>
-                {row.partners.map((partner) => (
-                  <li key={partner.code}>
-                    <span>
-                      <Link href={`/master-data/business-partners/${encodeURIComponent(partner.code)}`}>
-                        {partner.code}
-                      </Link>
-                    </span>
-                    <span>{partner.name}</span>
-                  </li>
-                ))}
+                {row.partners.map((partner) => {
+                  const role = partner.isSupplier && !partner.isCustomer ? 'supplier' : 'customer';
+                  const route = role === 'supplier' ? '/purchasing/suppliers' : '/sales/customers';
+                  return (
+                    <li key={partner.code}>
+                      <span>
+                        <Link href={`${route}/${encodeURIComponent(partner.code)}?role=${role}`}>
+                          {partner.code}
+                        </Link>
+                      </span>
+                      <span>{partner.name}</span>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </Panel>

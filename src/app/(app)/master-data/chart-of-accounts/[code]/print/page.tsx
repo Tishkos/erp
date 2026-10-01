@@ -8,7 +8,7 @@ import { formatBusinessDate, formatMoney, formatTimestamp, type Locale } from '@
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '@domain/money';
 import { can } from '@domain/permissions';
 import { appUser } from '@/server/db/schema';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as companyService from '@/server/services/company';
 import { MAPPING_STATEMENTS } from '@/components/admin/account-controls';

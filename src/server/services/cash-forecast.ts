@@ -127,7 +127,7 @@ export type ForecastSource = (typeof FORECAST_SOURCES)[number];
 
 export interface SourceStatus {
   readonly source: ForecastSource;
-  /** False while the phase that produces this data has not been built. */
+  /** False while the module that produces this data has not been built. */
   readonly available: boolean;
   readonly note: string;
 }
@@ -284,7 +284,7 @@ export async function forecast(
     movements.push(...(await investmentCalls(tx, input.from, input.to, branchCode)));
   }
   // project_commitments, payroll and transfer_funding contribute nothing until
-  // their phases exist. They appear in `sources` either way, so the report says
+  // their modules exist. They appear in `sources` either way, so the report says
   // what it drew on rather than leaving the reader to assume.
   //
   // Two of those three phases now exist — Phase 11 built project commitments and

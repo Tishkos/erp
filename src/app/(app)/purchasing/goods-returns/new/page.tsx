@@ -13,7 +13,7 @@ import {
 import { can } from '@domain/permissions';
 import { matching, pickOne, pickOutcome } from '@domain/pick';
 import { formatQuantity as formatScaledQuantity, parseQuantity } from '@domain/uom';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as banks from '@/server/services/bank-cash-accounts';
 import * as gr from '@/server/services/goods-return';

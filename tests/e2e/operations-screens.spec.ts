@@ -5,7 +5,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
  *
  * A lesson rather than a formality. The Warehouses Report was written, unit
  * tested, typechecked and deployed, and answered "That page does not exist"
- * because its route was never added to the phase gate. Every check I made was
+ * because its route was never added to the delivered list. Every check I made was
  * a `curl`, and the middleware redirects an unauthenticated request to the
  * sign-in page *before* the gate runs — so the route answered 307 whether it
  * worked or not, and the first person to see the truth was the sponsor.
@@ -430,7 +430,7 @@ test.describe('the Operations Build screens open', () => {
         administrator.waitForResponse(
           (response) =>
             response.request().method() === 'POST' &&
-            response.url().includes('/master-data/items/'),
+            response.url().includes('/inventory/items/'),
           { timeout: 60_000 },
         ),
         submit(),

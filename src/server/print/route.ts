@@ -1,6 +1,6 @@
 import { getLocale } from 'next-intl/server';
 import { isLocale, type Locale } from '@/i18n/config';
-import { visibleRoute } from '../phase-gate';
+import { visibleRoute } from '../delivered';
 import { withCurrentUser } from '../session';
 import { runExport } from './export';
 import { isExportFormat } from './model';

@@ -21,7 +21,7 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
 import { DUE_DATE_BASIS } from '@domain/payment-terms';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as terms from '@/server/services/payment-terms';
 import { createPaymentTerm } from './actions';

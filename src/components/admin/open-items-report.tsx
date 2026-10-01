@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { Panel } from '@/components/ui';
-import { AdminPage, Field, FilterRow, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { AdminPage, admin as s } from '@/components/admin';
+import { ReportWindow } from './report-filter';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -157,22 +157,20 @@ export async function OpenItemsReport({
    * the whole account — an ageing filtered to "overdue only" that also
    * quietly dropped part of the ledger would tie to nothing.
    */
-  const reconciled = openItems.reconcile(everyItem, balances, asOf);
+  const reconciled = openItems.reconcile(everyItem, balances);
   const tie = openItems.reconciliationTotals(reconciled);
-  const unexplained = reconciled.filter((row) => Number(row.unexplainedIqd) !== 0);
-  const journalled = {
-    charged: String(unexplained.reduce((sum, row) => sum + Number(row.unexplainedChargedIqd), 0)),
-    paid: String(unexplained.reduce((sum, row) => sum + Number(row.unexplainedPaidIqd), 0)),
-  };
-  const buckets = openItems.ageingWith(items, reconciled);
+  const creditRows = reconciled.filter((row) => Number(row.unappliedCreditsIqd) > 0);
+  const nonInvoiceDebitRows = reconciled.filter((row) => Number(row.otherNonInvoiceDebitIqd) > 0);
+  const position = openItems.invoicePositionTotals(everyItem);
+  const buckets = openItems.ageing(everyItem);
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   const day = (value: string) => formatBusinessDate(value, locale as Locale);
   const total = (pick: (row: openItems.OpenItem) => string) =>
     String(items.reduce((sum, row) => sum + Number(pick(row)), 0));
 
   const partyColumn = side === 'customer' ? column('customer_name') : column('supplier_name');
-  // Where the entries behind an unexplained balance can actually be read: the
-  // statement lists them line by line, which this report deliberately does not.
+  // A non-invoice balance links to the statement where its ledger entries can
+  // be read. These balances have no invoice due date and are never aged.
   const statementRoute =
     side === 'customer' ? '/sales/customer-statements' : '/purchasing/supplier-statements';
 
@@ -201,6 +199,62 @@ export async function OpenItemsReport({
     return <span>{t('open_items.due_in', { days: item.daysUntilDue })}</span>;
   };
 
+  const reportFilter = (
+    <form action={route} className={s.sapFilterBar} method="get">
+      <label className={s.sapFilterField}>
+        <span className={s.sapLabel}>{t(`partners.role_${side}`)}</span>
+        <input
+          autoComplete="off"
+          defaultValue={asked}
+          list={`${side}-ageing-parties`}
+          name="code"
+          placeholder={t('open_items.party_placeholder')}
+        />
+        <datalist id={`${side}-ageing-parties`}>
+          {roll.map((row) => (
+            <option key={row.code} value={row.code}>
+              {row.legalName}
+            </option>
+          ))}
+        </datalist>
+      </label>
+      <label className={s.sapFilterField}>
+        <span className={s.sapLabel}>{t('reports.as_at_label')}</span>
+        <input defaultValue={asOf} name="as_at" required type="date" />
+      </label>
+      <label className={s.sapFilterField}>
+        <span className={s.sapLabel}>{t('open_items.show')}</span>
+        <select defaultValue={show} name="show">
+          <option value="all">{t('open_items.show_all')}</option>
+          <option value="open">{t('open_items.show_open')}</option>
+          <option value="overdue">{t('open_items.show_overdue')}</option>
+        </select>
+      </label>
+      <button className={`${s.button} ${s.primary}`} type="submit">
+        {t('stock_movements.filter')}
+      </button>
+    </form>
+  );
+
+  const reportSummary = (
+    <div className={s.sapFootTotals}>
+      {([
+        [side === 'customer' ? 'open_items.gross_customer' : 'open_items.gross_supplier', position.grossIqd],
+        ['open_items.not_yet_due', position.notYetDueIqd],
+        ['open_items.overdue_total', position.overdueIqd],
+        [side === 'customer' ? 'open_items.customer_credits' : 'open_items.supplier_credits', tie.unappliedCreditsIqd],
+        ['open_items.other_noninvoice_debits', tie.otherNonInvoiceDebitsIqd],
+        [side === 'customer' ? 'open_items.net_customer_position' : 'open_items.net_supplier_position', tie.ledgerIqd],
+        ['open_items.ledger_position', tie.ledgerIqd],
+      ] as readonly (readonly [string, string])[]).map(([label, amount]) => (
+        <div className={s.sapFootTotal} key={label}>
+          <span>{t(label)}</span>
+          <strong><bdi dir="ltr">{money(amount)}</bdi></strong>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <AdminPage
       actions={<ExportMenu exportKey={exportKey} query={params} />}
@@ -210,118 +264,15 @@ export async function OpenItemsReport({
       title={page(titleKey)}
       variant="sap"
     >
-      <Panel flush>
-        <form className={s.filterBar} method="get">
-          <FilterRow>
-            {/* The partner first: it is what the reader came to narrow, and a
-                date box ahead of it asks them to confirm today's date before
-                they may ask their question. Four hundred customers is not a
-                drop-down anybody reads, so it is typed. Empty means everybody. */}
-            <Field
-              defaultValue={asked}
-              label={t(`partners.role_${side}`)}
-              list={`${side}-ageing-parties`}
-              name="code"
-              placeholder={t('open_items.party_placeholder')}
-            />
-            <datalist id={`${side}-ageing-parties`}>
-              {roll.map((row) => (
-                <option key={row.code} value={row.code}>
-                  {row.legalName}
-                </option>
-              ))}
-            </datalist>
-            <Field defaultValue={asOf} label={t('reports.as_at_label')} name="as_at" type="date" />
-            <Select
-              defaultValue={show}
-              label={t('open_items.show')}
-              name="show"
-              // The default first, so the list reads in the order somebody
-              // narrows: everything, then what is owed, then what is late.
-              options={[
-                { value: 'all', label: t('open_items.show_all') },
-                { value: 'open', label: t('open_items.show_open') },
-                { value: 'overdue', label: t('open_items.show_overdue') },
-              ]}
-            />
-            <SubmitRow>
-              <Submit label={t('stock_movements.filter')} />
-            </SubmitRow>
-          </FilterRow>
-        </form>
 
-        {/* The ageing, above the rows it summarises — the figure a manager
-            reads first, and the rows below are its evidence. */}
-        {buckets.length > 0 ? (
-          <div className="table-wrap">
-            <table className="list">
-              <thead>
-                <tr>
-                  <th scope="col">{t('open_items.ageing')}</th>
-                  {buckets.map((bucket) => (
-                    <th key={bucket.bucket} scope="col">
-                      {t(`dashboard.${BUCKET_KEY[bucket.bucket]}`)}
-                    </th>
-                  ))}
-                  <th scope="col">{t('reports.totals')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>
-                    <strong>{t('open_items.outstanding')}</strong>
-                  </td>
-                  {buckets.map((bucket) => (
-                    <td key={bucket.bucket}>
-                      <bdi dir="ltr">{money(bucket.amountIqd)}</bdi>{' '}
-                      <span className="muted">({bucket.invoices})</span>
-                    </td>
-                  ))}
-                  <td>
-                    <strong>
-                      <bdi dir="ltr">{money(tie.ledgerIqd)}</bdi>
-                    </strong>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        ) : null}
 
-        {/* ── Does it tie? ──────────────────────────────────────────────
-            Stated on the report rather than left for somebody to work out
-            with a calculator, because the one thing an ageing must never do
-            is disagree with the statement silently. */}
-        <div className={s.tieStrip} data-ties={tie.ties ? 'yes' : 'no'}>
-          <span>
-            {t('reconciliation.ledger')}{' '}
-            <strong>
-              <bdi dir="ltr">{money(tie.ledgerIqd)}</bdi>
-            </strong>
-          </span>
-          <span>
-            {t('reconciliation.invoices')}{' '}
-            <strong>
-              <bdi dir="ltr">{money(tie.documentsIqd)}</bdi>
-            </strong>
-          </span>
-          <span>
-            {t('reconciliation.journals')}{' '}
-            <strong>
-              <bdi dir="ltr">{money(tie.unexplainedIqd)}</bdi>
-            </strong>
-          </span>
-          <span className={s.tieVerdict}>
-            {tie.ties ? t('reconciliation.ties') : t('reconciliation.explained')}
-          </span>
-        </div>
-
+      <ReportWindow
+        meta={t('statement_outstanding.as_at', { date: day(asOf) })}
+        title={t('statement_outstanding.title')}
+        filter={reportFilter}
+      >
         {items.length === 0 ? (
           <p className="muted" style={{ padding: '0 1rem 1rem' }}>
-            {/* Which of the three it is: nothing matched the filters, or the
-                name typed names nobody, or it names more than one. A report
-                that answered "nothing outstanding" to a misspelt customer
-                would be read as good news. */}
             {outcome === 'none'
               ? t('partners.statement_party_unknown', { side: t(`partners.role_${side}`) })
               : outcome === 'ambiguous'
@@ -329,8 +280,7 @@ export async function OpenItemsReport({
                 : t('open_items.nothing')}
           </p>
         ) : (
-          <div className="table-wrap">
-            <table className="list">
+          <table className={`${s.sapTable} ${s.sapReportTable}`}>
               <thead>
                 <tr>
                   <th scope="col">{partyColumn}</th>
@@ -338,9 +288,15 @@ export async function OpenItemsReport({
                   <th scope="col">{column('invoice_date')}</th>
                   <th scope="col">{column('due_date')}</th>
                   <th scope="col">{t('open_items.terms')}</th>
-                  <th scope="col">{column('total_price')}</th>
-                  <th scope="col">{t('open_items.paid')}</th>
-                  <th scope="col">{t('open_items.outstanding')}</th>
+                  <th className={s.sapNum} scope="col">{column('total_price')}</th>
+                  <th className={s.sapNum} scope="col">{side === 'customer' ? t('open_items.allocated_payments') : t('open_items.paid')}</th>
+                  {side === 'customer' ? (
+                    <>
+                      <th className={s.sapNum} scope="col">{t('open_items.credits_applied')}</th>
+                      <th className={s.sapNum} scope="col">{t('open_items.other_adjustments_applied')}</th>
+                    </>
+                  ) : null}
+                  <th className={s.sapNum} scope="col">{t('open_items.outstanding')}</th>
                   <th scope="col">{column('status')}</th>
                   <th scope="col">{t('open_items.lateness')}</th>
                 </tr>
@@ -350,50 +306,35 @@ export async function OpenItemsReport({
                   <tr key={item.invoiceId}>
                     <td>
                       <bdi dir="auto">{item.partyName}</bdi>{' '}
-                      <span className="muted">
-                        <bdi dir="ltr">{item.partyCode}</bdi>
-                      </span>
+                      <span className="muted"><bdi dir="ltr">{item.partyCode}</bdi></span>
                     </td>
                     <td className={s.sapAccountCell}>
-                      <Link href={invoiceHref(item.invoiceNo)}>
-                        <bdi dir="ltr">{item.invoiceNo}</bdi>
-                      </Link>
-                      {/* Partial payment, made legible: each payment with its
-                          own date and amount, so a history is kept rather than
-                          collapsed into one number. */}
+                      <Link href={invoiceHref(item.invoiceNo)}><bdi dir="ltr">{item.invoiceNo}</bdi></Link>
                       {item.payments.length > 0 ? (
                         <div className="muted" style={{ fontSize: '0.68rem' }}>
                           {item.payments.map((payment, index) => (
                             <div key={`${payment.documentNo}-${index}`}>
                               <bdi dir="ltr">
-                                {day(payment.paidOn)} · {money(payment.amountIqd)}
-                                {payment.documentNo ? ` · ${payment.documentNo}` : ''}
+                                {day(payment.paidOn)} ? {money(payment.amountIqd)}
+                                {payment.documentNo ? ` ? ${payment.documentNo}` : ''}
                               </bdi>
                             </div>
                           ))}
                         </div>
                       ) : null}
                     </td>
-                    <td>
-                      <bdi dir="ltr">{day(item.invoiceDate)}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="ltr">{day(item.dueDate)}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="auto">{item.paymentTermsName ?? item.paymentTermsCode ?? '—'}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="ltr">{money(item.totalIqd)}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="ltr">{money(item.paidIqd)}</bdi>
-                    </td>
-                    <td>
-                      <strong>
-                        <bdi dir="ltr">{money(item.outstandingIqd)}</bdi>
-                      </strong>
-                    </td>
+                    <td><bdi dir="ltr">{day(item.invoiceDate)}</bdi></td>
+                    <td><bdi dir="ltr">{day(item.dueDate)}</bdi></td>
+                    <td><bdi dir="auto">{item.paymentTermsName ?? item.paymentTermsCode ?? '?'}</bdi></td>
+                    <td className={s.sapNum}><bdi dir="ltr">{money(item.totalIqd)}</bdi></td>
+                    <td className={s.sapNum}><bdi dir="ltr">{money(item.paidIqd)}</bdi></td>
+                    {side === 'customer' ? (
+                      <>
+                        <td className={s.sapNum}><bdi dir="ltr">{money(item.creditsAppliedIqd)}</bdi></td>
+                        <td className={s.sapNum}><bdi dir="ltr">{money(item.otherAppliedIqd)}</bdi></td>
+                      </>
+                    ) : null}
+                    <td className={s.sapNum}><strong><bdi dir="ltr">{money(item.outstandingIqd)}</bdi></strong></td>
                     <td>
                       <span className={`status status--${item.status}`} data-status={item.status}>
                         {item.status.replace(/_/g, ' ')}
@@ -402,129 +343,132 @@ export async function OpenItemsReport({
                     <td>{lateness(item)}</td>
                   </tr>
                 ))}
-                {/* ── Raised without an invoice ────────────────────────
-                    In the same table, because the reader asked for every
-                    invoice and this is one in all but name: a debt charged to
-                    the account by journal, what has come off it, and what is
-                    left. It has no document to open, so the reference is a
-                    way through to the statement, where the entries behind it
-                    are listed one by one. */}
-                {unexplained.map((row) => (
-                  <tr key={`journal-${row.partyCode}`}>
-                    <td>
-                      <bdi dir="auto">{row.partyName}</bdi>{' '}
-                      <span className="muted">
-                        <bdi dir="ltr">{row.partyCode}</bdi>
-                      </span>
-                    </td>
-                    <td>
-                      <Link href={`${statementRoute}?code=${encodeURIComponent(row.partyCode)}`}>
-                        {t('reconciliation.by_journal')}
-                      </Link>
-                    </td>
-                    <td>
-                      <bdi dir="ltr">{row.oldestDate ? day(row.oldestDate) : '—'}</bdi>
-                    </td>
-                    <td>—</td>
-                    <td>—</td>
-                    <td>
-                      <bdi dir="ltr">{money(row.unexplainedChargedIqd)}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="ltr">{money(row.unexplainedPaidIqd)}</bdi>
-                    </td>
-                    <td>
-                      <strong>
-                        <bdi dir="ltr">{money(row.unexplainedIqd)}</bdi>
-                      </strong>
-                    </td>
-                    <td>
-                      <span className="muted">{t('reconciliation.no_document')}</span>
-                    </td>
-                    <td>{t(`dashboard.${BUCKET_KEY[row.bucket]}`)}</td>
-                  </tr>
-                ))}
-                {/* What the invoice rows come to — named as their subtotal
-                    rather than "Totals", because it is not the total of the
-                    report. Read on its own beside a ledger balance of 700,000
-                    an unlabelled "0" reads as a contradiction. */}
-                <tr>
-                  <td colSpan={5}>
-                    <strong>{t('reconciliation.invoices')}</strong>
-                  </td>
-                  <td>
-                    <strong>
-                      <bdi dir="ltr">{money(total((row) => row.totalIqd))}</bdi>
-                    </strong>
-                  </td>
-                  <td>
-                    <strong>
-                      <bdi dir="ltr">{money(total((row) => row.paidIqd))}</bdi>
-                    </strong>
-                  </td>
-                  <td>
-                    <strong>
-                      <bdi dir="ltr">{money(total((row) => row.outstandingIqd))}</bdi>
-                    </strong>
-                  </td>
-                  <td colSpan={2} />
-                </tr>
-                {/* …and then the figure somebody actually came for, which is
-                    the statement's closing balance and the sum of everything
-                    this report has shown. */}
-                {Number(tie.unexplainedIqd) !== 0 ? (
-                  <tr>
-                    <td colSpan={5}>
-                      <strong>{t('reconciliation.journals')}</strong>
-                    </td>
-                    <td>
-                      <strong>
-                        <bdi dir="ltr">{money(journalled.charged)}</bdi>
-                      </strong>
-                    </td>
-                    <td>
-                      <strong>
-                        <bdi dir="ltr">{money(journalled.paid)}</bdi>
-                      </strong>
-                    </td>
-                    <td>
-                      <strong>
-                        <bdi dir="ltr">{money(tie.unexplainedIqd)}</bdi>
-                      </strong>
-                    </td>
-                    <td colSpan={2} />
-                  </tr>
-                ) : null}
-                <tr>
-                  <td colSpan={5}>
-                    <strong>{t('reconciliation.owed_total')}</strong>
-                  </td>
-                  <td>
-                    <strong>
-                      <bdi dir="ltr">
-                        {money(String(Number(total((row) => row.totalIqd)) + Number(journalled.charged)))}
-                      </bdi>
-                    </strong>
-                  </td>
-                  <td>
-                    <strong>
-                      <bdi dir="ltr">
-                        {money(String(Number(total((row) => row.paidIqd)) + Number(journalled.paid)))}
-                      </bdi>
-                    </strong>
-                  </td>
-                  <td>
-                    <strong>
-                      <bdi dir="ltr">{money(tie.ledgerIqd)}</bdi>
-                    </strong>
-                  </td>
+                <tr className={s.sapTotalRow} data-rule="double">
+                  <td colSpan={5}><strong>{t('open_items.invoice_balances')}</strong></td>
+                  <td className={s.sapNum}><strong><bdi dir="ltr">{money(total((row) => row.totalIqd))}</bdi></strong></td>
+                  <td className={s.sapNum}><strong><bdi dir="ltr">{money(total((row) => row.paidIqd))}</bdi></strong></td>
+                  {side === 'customer' ? (
+                    <>
+                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(total((row) => row.creditsAppliedIqd))}</bdi></strong></td>
+                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(total((row) => row.otherAppliedIqd))}</bdi></strong></td>
+                    </>
+                  ) : null}
+                  <td className={s.sapNum}><strong><bdi dir="ltr">{money(total((row) => row.outstandingIqd))}</bdi></strong></td>
                   <td colSpan={2} />
                 </tr>
               </tbody>
-            </table>
-          </div>
+          </table>
         )}
-      </Panel>
+      </ReportWindow>
+
+        {creditRows.length > 0 ? (
+          <ReportWindow
+            meta={t('statement_outstanding.as_at', { date: day(asOf) })}
+            title={t(side === 'customer' ? 'open_items.credit_advance_title' : 'open_items.supplier_credit_advance_title')}
+          >
+              <table className={`${s.sapTable} ${s.sapReportTable}`}>
+                <thead><tr>
+                  <th scope="col">{partyColumn}</th>
+                  <th scope="col">{t('open_items.on_account_since')}</th>
+                  <th scope="col">{t('open_items.credit_advance_balance')}</th>
+                </tr></thead>
+                <tbody>
+                  {creditRows.map((row) => (
+                    <tr key={`credit-${row.partyCode}`}>
+                      <td>
+                        <Link href={`${statementRoute}?code=${encodeURIComponent(row.partyCode)}`}>
+                          <bdi dir="auto">{row.partyName}</bdi>
+                        </Link>{' '}<span className="muted"><bdi dir="ltr">{row.partyCode}</bdi></span>
+                      </td>
+                      <td><bdi dir="ltr">{row.oldestDate ? day(row.oldestDate) : '?'}</bdi></td>
+                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(row.unappliedCreditsIqd)}</bdi></strong></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+          </ReportWindow>
+        ) : null}
+
+        {nonInvoiceDebitRows.length > 0 ? (
+          <ReportWindow
+            meta={t('statement_outstanding.as_at', { date: day(asOf) })}
+            title={t('open_items.noninvoice_debit_title')}
+          >
+              <table className={`${s.sapTable} ${s.sapReportTable}`}>
+                <thead><tr>
+                  <th scope="col">{partyColumn}</th>
+                  <th scope="col">{t('open_items.on_account_since')}</th>
+                  <th scope="col">{t('open_items.noninvoice_debit_balance')}</th>
+                </tr></thead>
+                <tbody>
+                  {nonInvoiceDebitRows.map((row) => (
+                    <tr key={`debit-${row.partyCode}`}>
+                      <td>
+                        <Link href={`${statementRoute}?code=${encodeURIComponent(row.partyCode)}`}>
+                          <bdi dir="auto">{row.partyName}</bdi>
+                        </Link>{' '}<span className="muted"><bdi dir="ltr">{row.partyCode}</bdi></span>
+                      </td>
+                      <td><bdi dir="ltr">{row.oldestDate ? day(row.oldestDate) : '?'}</bdi></td>
+                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(row.otherNonInvoiceDebitIqd)}</bdi></strong></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+          </ReportWindow>
+        ) : null}
+      <ReportWindow
+        foot={reportSummary}
+        meta={t('statement_outstanding.as_at', { date: day(asOf) })}
+        title={t(side === 'customer'
+          ? 'open_items.reconciliation_title_customer'
+          : 'open_items.reconciliation_title_supplier')}
+      >
+
+        {/* Buckets are calculated from invoice balances only. */}
+        {buckets.length > 0 ? (
+          <table className={`${s.sapTable} ${s.sapReportTable}`}>
+              <thead>
+                <tr>
+                  <th scope="col">{t('open_items.ageing')}</th>
+                  {buckets.map((bucket) => (
+                  <th className={s.sapNum} key={bucket.bucket} scope="col">
+                      {t(`dashboard.${BUCKET_KEY[bucket.bucket]}`)}
+                    </th>
+                  ))}
+                  <th className={s.sapNum} scope="col">{t('reports.totals')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <strong>{t('open_items.invoice_balances')}</strong>
+                  </td>
+                  {buckets.map((bucket) => (
+                    <td className={s.sapNum} key={bucket.bucket}>
+                      <bdi dir="ltr">{money(bucket.amountIqd)}</bdi>{' '}
+                      <span className="muted">({bucket.invoices})</span>
+                    </td>
+                  ))}
+                  <td className={s.sapNum}>
+                    <strong>
+                      <bdi dir="ltr">{money(position.grossIqd)}</bdi>
+                    </strong>
+                  </td>
+                </tr>
+              </tbody>
+          </table>
+        ) : null}
+
+        {/* ── Does it tie? ──────────────────────────────────────────────
+            Stated on the report rather than left for somebody to work out
+            with a calculator, because the one thing an ageing must never do
+            is disagree with the statement silently. */}
+        <div className={s.tieStrip} data-ties={tie.ties ? 'yes' : 'no'}>
+          <span className={s.tieVerdict}>
+            {tie.ties ? t('reconciliation.ties') : t('reconciliation.explained')}
+          </span>
+        </div>
+      </ReportWindow>
     </AdminPage>
   );
 }

@@ -23,7 +23,7 @@ import { Denied } from '@/components/denied';
 import { ExportMenu } from '@/components/print/export-menu';
 import { can } from '@domain/permissions';
 import { formatQuantity, parseQuantity } from '@domain/uom';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as items from '@/server/services/items';
 import * as stock from '@/server/services/stock-operations';

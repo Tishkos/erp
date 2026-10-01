@@ -109,7 +109,7 @@ test.describe('Appendix A · the shell', () => {
     // It used to be shown as inert text. Every screen in the tree now has an
     // address — the one its module declared, or one the screen catalogue
     // derives — so the item opens, and what marks it as not-yet-live is the
-    // phase badge here plus the preview banner on the screen itself. An item
+    // pending badge here plus the preview banner on the screen itself. An item
     // that renders but refuses to open was the worse of the two honesty
     // signals: it left 176 of 218 functions with no way to see them at all.
     const pending = nav.getByRole('link', { name: 'Price Lists', exact: true });
@@ -122,7 +122,7 @@ test.describe('Appendix A · the shell', () => {
     // reaches says plainly that its figures are samples.
     await page.goto('/master-data/price-lists');
     await expect(page.getByRole('heading', { name: 'Price Lists', level: 1 })).toBeVisible();
-    // No sample figures anywhere: an unbuilt screen says which phase delivers it.
+    // No sample figures anywhere: an unbuilt screen says so in as many words.
     await expect(page.getByText('This screen is not available yet.', { exact: true })).toBeVisible();
   });
 

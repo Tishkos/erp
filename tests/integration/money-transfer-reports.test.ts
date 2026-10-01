@@ -25,13 +25,13 @@ import {
   createUser,
   OTHER_BRANCH,
   scopeOf,
-  type Phase09World,
-} from './phase09-fixture';
+  type MoneyTransferWorld,
+} from './money-transfer-fixture';
 
 const iqd = (value: string) => parseDecimal(value, 4n);
 const FEB = '2026-02-10';
 
-let world: Phase09World;
+let world: MoneyTransferWorld;
 
 beforeEach(async () => {
   await resetTestData();
@@ -402,7 +402,7 @@ describe('09.11 — the §12.7 report set', () => {
     expect(rows[0]!.transferNo).toBe(transfer.transferNo);
     // Phase 10 exists now, and D16 merged the two registers: the job names the
     // file, so a file with no job reports none rather than carrying a text
-    // reference to something that may not exist. phase10-logistics asserts the
+    // reference to something that may not exist. The logistics suite asserts the
     // link where there is a job to assert it against.
     expect(rows[0]!.logisticsJobNo).toBeNull();
   });

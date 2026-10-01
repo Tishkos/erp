@@ -7,8 +7,8 @@ that screen."*
 This is that proof. The screen exists, the tests named below run in CI, and every
 acceptance criterion in §15 names the test that holds it up. It is written after
 the fact for one screen deliberately: a template nobody has filled in is not
-known to be workable, and the cost of discovering that on Phase 06's fifty-two
-gate items is a phase.
+known to be workable, and the cost of discovering that
+across fifty-two gate items at once is a rewrite.
 
 | | |
 |---|---|
@@ -183,7 +183,7 @@ When   they open /master-data/chart-of-accounts
 Then   the accounts appear in code order
 ```
 → `tests/e2e/shell.spec.ts` › *lists the chart, in code order*
-→ `tests/integration/phase01-list-framework.test.ts` › *returns the seeded account groups in code order*
+→ `tests/integration/platform-list-framework.test.ts` › *returns the seeded account groups in code order*
 
 ```
 Given  a list of accounts
@@ -191,7 +191,7 @@ When   the user searches for "Liabilit"
 Then   only matching accounts are shown
 ```
 → `tests/e2e/shell.spec.ts` › *searches, and says plainly when nothing matches*
-→ `tests/integration/phase01-list-framework.test.ts` › *searches the text columns, case-insensitively*
+→ `tests/integration/platform-list-framework.test.ts` › *searches the text columns, case-insensitively*
 
 ```
 Given  a search that matches nothing
@@ -206,7 +206,7 @@ When   they request the export URL directly
 Then   the request is refused
 ```
 → `tests/e2e/shell.spec.ts` › *refuses the export to someone without the export permission*
-→ `tests/integration/phase01-list-framework.test.ts` › *refuses the export to someone who may view but not export*
+→ `tests/integration/platform-list-framework.test.ts` › *refuses the export to someone who may view but not export*
 
 ```
 Given  a user holding `export`, viewing a filtered list
@@ -214,14 +214,14 @@ When   they export
 Then   the file contains exactly the rows on screen — no more
 ```
 → `tests/e2e/shell.spec.ts` › *gives the manager the same rows the screen showed*
-→ `tests/integration/phase01-list-framework.test.ts` › *carries every filter through to the export*
+→ `tests/integration/platform-list-framework.test.ts` › *carries every filter through to the export*
 
 ```
 Given  any export
 When   it completes
 Then   the audit trail records the actor, the filters and the row count, and not the rows
 ```
-→ `tests/integration/phase01-list-framework.test.ts` › *records who exported what, without copying the rows into the audit trail*
+→ `tests/integration/platform-list-framework.test.ts` › *records who exported what, without copying the rows into the audit trail*
 
 ```
 Given  a signed-in user with no grants at all

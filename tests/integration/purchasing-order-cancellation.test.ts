@@ -7,7 +7,7 @@
  *   - There is no path that reverses a receipt through PO cancellation
  *   - Cancellation requires a reason and releases the commitment
  *
- * The first and last are also covered in `phase05-purchase-order.test.ts`,
+ * The first and last are also covered in `purchasing-purchase-order.test.ts`,
  * which could prove them without a receipt. These two needed 05.2.
  */
 import { beforeEach, describe, expect, it } from 'vitest';

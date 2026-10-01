@@ -203,7 +203,6 @@ notification_delivery
 notification
 job_outbox
 job_run
-job_queue
 import_row
 import_batch
 audit_event

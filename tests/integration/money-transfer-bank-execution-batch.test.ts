@@ -24,13 +24,13 @@ import {
   BRANCH,
   buildWorld,
   scopeOf,
-  type Phase09World,
-} from './phase09-fixture';
+  type MoneyTransferWorld,
+} from './money-transfer-fixture';
 
 const iqd = (value: string) => parseDecimal(value, 4n);
 const FEB = '2026-02-10';
 
-let world: Phase09World;
+let world: MoneyTransferWorld;
 
 beforeEach(async () => {
   await resetTestData();

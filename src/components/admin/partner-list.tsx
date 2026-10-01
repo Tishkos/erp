@@ -39,14 +39,11 @@ import { createPartnerInRole } from '@/app/(app)/master-data/business-partners/a
  */
 
 const ROUTES = {
-  customer: '/master-data/customers',
-  supplier: '/master-data/suppliers',
+  customer: '/sales/customers',
+  supplier: '/purchasing/suppliers',
 } as const;
 
 const PAGE_KEY = { customer: 'customers', supplier: 'suppliers' } as const;
-
-/** Both screens open a partner at the same address: one record, one page. */
-const RECORD = '/master-data/business-partners';
 
 export async function PartnerList({
   role,
@@ -166,7 +163,7 @@ export async function PartnerList({
               {shown.map((row) => (
                 <tr key={row.code}>
                   <td>
-                    <Link href={`${RECORD}/${encodeURIComponent(row.code)}`}>{row.code}</Link>
+                    <Link href={`${route}/${encodeURIComponent(row.code)}?role=${role}`}>{row.code}</Link>
                   </td>
                   <td>{row.legalName}</td>
                   <td>{t(`partners.status_${row.status}`)}</td>

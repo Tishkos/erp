@@ -169,7 +169,12 @@ export async function detail(tx: Tx, code: string, exampleDate: string) {
   const row = await get(tx, code);
   const instalments = await instalmentsOf(tx, code);
   const partners = await tx
-    .select({ code: businessPartner.code, name: businessPartner.legalName })
+    .select({
+      code: businessPartner.code,
+      name: businessPartner.legalName,
+      isCustomer: businessPartner.isCustomer,
+      isSupplier: businessPartner.isSupplier,
+    })
     .from(businessPartner)
     .where(eq(businessPartner.paymentTermsCode, code))
     .orderBy(asc(businessPartner.code));

@@ -3,7 +3,7 @@
 import { flag, runAdminAndReturn, text } from '@/server/admin-action';
 import * as uom from '@/server/services/units-of-measure';
 
-const LIST = '/master-data/uom';
+const LIST = '/inventory/uom';
 const record = (code: string) => `${LIST}/${encodeURIComponent(code)}`;
 
 /** The service derives the code when nobody typed one, so it reports it back. */

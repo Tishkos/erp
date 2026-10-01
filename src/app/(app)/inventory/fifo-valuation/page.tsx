@@ -16,7 +16,7 @@ import { IntegrityBanner } from '@/components/admin/integrity-banner';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as items from '@/server/services/items';
 import * as reports from '@/server/services/inventory-reports';

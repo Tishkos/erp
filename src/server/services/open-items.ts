@@ -4,7 +4,7 @@ import { AGEING_BUCKETS, bucketFor, daysBetween, type AgeingBucket } from '../do
 import { assertCan, type Principal } from '../domain/permissions';
 
 /**
- * Open items — what is owed to us and what we owe, invoice by invoice.
+ * Open items — invoice balances, kept separate from the partner's other balances.
  *
  * ── One shape, two sides ──────────────────────────────────────────────────
  * Receivables and payables are the same report in a mirror: an invoice, a due
@@ -15,12 +15,10 @@ import { assertCan, type Principal } from '../domain/permissions';
  * as separate screens six months apart.
  *
  * ── Where the figures come from ───────────────────────────────────────────
- * The invoice's own columns. `ar_invoice.allocated_iqd` and
- * `ap_invoice.settled_amount_iqd` are maintained by the allocation services in
- * the same transaction that records the allocation, so "paid" here is the same
- * number the invoice's own page shows and the same one the payment screen
- * decremented. Nothing is re-added from the receipt side; a second sum would
- * be a second answer.
+ * A/R payment totals come only from receipt allocations that name this invoice.
+ * Credit memos and write-offs are shown as their own invoice applications.
+ * Unallocated receipt and credit balances stay on the partner account and do
+ * not reduce or age an invoice.
  *
  * The payment *history* is read from the allocation rows, which is what makes
  * partial payment legible rather than merely permitted: three payments against
@@ -62,7 +60,12 @@ export interface OpenItem {
   readonly paymentTermsName: string | null;
   readonly status: string;
   readonly totalIqd: string;
+  /** Receipt allocations posted against this invoice. */
   readonly paidIqd: string;
+  /** Credit memos / returns allocated against this invoice. */
+  readonly creditsAppliedIqd: string;
+  /** Other explicit invoice adjustments, such as an approved write-off. */
+  readonly otherAppliedIqd: string;
   readonly outstandingIqd: string;
   /** Days remaining until it falls due. Negative once it has passed. */
   readonly daysUntilDue: number;
@@ -210,7 +213,30 @@ export async function openItems(
 
   // A reversed allocation is money that came back; it is not a payment and
   // must not appear in the history or the paid total.
-  const live = s.reversible ? sql`and a.reversed_at is null` : sql``;
+  const live = s.reversible ? sql`and a.reversed_at is null` : sql`and d.reversed_at is null`;
+  const allocatedPayments =
+    side === 'customer'
+      ? sql`coalesce((
+          select sum(a.amount_iqd)
+            from customer_receipt_allocation a
+            join customer_receipt r on r.id = a.customer_receipt_id
+           where a.ar_invoice_id = i.id
+             and r.reversed_at is null
+        ), 0)`
+      : sql`i.${s.paid}`;
+  const creditsApplied =
+    side === 'customer'
+      ? sql`coalesce((
+          select sum(m.allocated_iqd)
+            from customer_credit_memo m
+           where m.ar_invoice_id = i.id
+             and m.reversed_at is null
+        ), 0)`
+      : sql`0::numeric`;
+  const otherApplied =
+    side === 'customer'
+      ? sql`i.${s.paid} - (${allocatedPayments}) - (${creditsApplied})`
+      : sql`0::numeric`;
 
   const result = await tx.execute(sql`
     select p.code                                    as "partyCode",
@@ -223,7 +249,9 @@ export async function openItems(
            t.name                                    as "paymentTermsName",
            i.status::text                            as "status",
            i.${s.total}::text                        as "totalIqd",
-           i.${s.paid}::text                         as "paidIqd",
+           (${allocatedPayments})::text              as "paidIqd",
+           (${creditsApplied})::text                 as "creditsAppliedIqd",
+           (${otherApplied})::text                   as "otherAppliedIqd",
            (i.${s.total} - i.${s.paid})::text        as "outstandingIqd",
            coalesce((
              select json_agg(json_build_object(
@@ -314,6 +342,31 @@ export function ageing(items: readonly OpenItem[]): BucketTotal[] {
   }));
 }
 
+/** Invoice-only totals. Non-invoice debits and credits never enter these figures. */
+export interface InvoicePositionTotals {
+  readonly grossIqd: string;
+  readonly notYetDueIqd: string;
+  readonly overdueIqd: string;
+}
+
+export function invoicePositionTotals(items: readonly OpenItem[]): InvoicePositionTotals {
+  let gross = 0;
+  let notYetDue = 0;
+  let overdue = 0;
+  for (const item of items) {
+    const outstanding = Math.max(0, Number(item.outstandingIqd));
+    if (outstanding === 0) continue;
+    gross += outstanding;
+    if (item.daysOverdue > 0) overdue += outstanding;
+    else notYetDue += outstanding;
+  }
+  return {
+    grossIqd: String(gross),
+    notYetDueIqd: String(notYetDue),
+    overdueIqd: String(overdue),
+  };
+}
+
 /** One party's position: what they owe in total, and how much of it is late. */
 export interface PartyTotal {
   readonly partyCode: string;
@@ -364,36 +417,23 @@ export function byParty(items: readonly OpenItem[]): PartyTotal[] {
  *
  *   · an opening balance journalled in when the books were loaded;
  *   · a write-off, an interest charge or a correction posted by journal;
- *   · and — until the posting map was constrained — a receipt whose credit
- *     was mapped to a cash account instead of Trade Receivables, so the
- *     invoice said Paid while the ledger still said owed.
+ *   · a receipt or credit memo that has not been allocated to an invoice.
  *
- * The answer is not to guess which of the two is right. It is to state both
- * and name the difference, so the ageing's total *is* the statement's closing
- * balance by construction: the invoices, plus whatever else reached the
- * account, equals the ledger. A difference becomes a thing to look at rather
- * than a silent disagreement between two screens.
+ * The report shows invoice balances, non-invoice debits and credits, and the
+ * ledger's net position. Only invoices are assigned due dates or ageing
+ * buckets.
  * ---------------------------------------------------------------------- */
 
 /** Which subledger each side reconciles to (§1.2). */
 const SUBLEDGER: Readonly<Record<Side, string>> = { customer: 'customer', supplier: 'supplier' };
 
-/** What the subledger says one party owes as at a date — the statement's figure. */
+/** What the subledger says one party's net position is as at a date. */
 export interface LedgerBalance {
   readonly partyCode: string;
   readonly partyName: string;
   /** Owed *to* us on the customer side, owed *by* us on the supplier side. */
   readonly balanceIqd: string;
-  /**
-   * What was charged to the account, and what came off it.
-   *
-   * Both, not merely the net, because the reader is looking for an invoice:
-   * "1,200,000 raised, 500,000 paid, 700,000 left" is a line somebody
-   * recognises, and a bare 700,000 is a number they have to take on trust.
-   */
-  readonly chargedIqd: string;
-  readonly paidIqd: string;
-  /** The oldest entry on the account, for ageing what no invoice explains. */
+  /** The oldest entry on the account, for following up an unallocated balance. */
   readonly oldestDate: string | null;
 }
 
@@ -425,15 +465,11 @@ export async function ledgerBalances(
 
   // "Charged" is the side that increases the debt, which is the debit for a
   // customer and the credit for a supplier — the mirror the statement uses.
-  const charged = side === 'customer' ? sql`sum(s.debit_iqd)` : sql`sum(s.credit_iqd)`;
-  const paid = side === 'customer' ? sql`sum(s.credit_iqd)` : sql`sum(s.debit_iqd)`;
 
   const result = await tx.execute(sql`
     select s.party_code                         as "partyCode",
            coalesce(p.legal_name, s.party_code) as "partyName",
            coalesce(${owed}, 0)::text           as "balanceIqd",
-           coalesce(${charged}, 0)::text        as "chargedIqd",
-           coalesce(${paid}, 0)::text           as "paidIqd",
            min(s.posting_date)::text            as "oldestDate"
       from subledger_entry s
       left join business_partner p on p.code = s.party_code
@@ -447,107 +483,72 @@ export async function ledgerBalances(
   return result.rows as unknown as LedgerBalance[];
 }
 
-/** One party, reconciled: what the ledger says, what the invoices say, the gap. */
+/** One party's invoice balance and the separate non-invoice position. */
 export interface Reconciliation {
   readonly partyCode: string;
   readonly partyName: string;
-  /** The statement's closing balance for this party. */
   readonly ledgerIqd: string;
-  /** What the open invoices on this report account for. */
   readonly documentsIqd: string;
-  /** Everything else that reached the control account. May be negative. */
+  /** Ledger balance less open invoice balances; positive is a debit balance. */
   readonly unexplainedIqd: string;
-  /**
-   * The unexplained part, as an invoice reads: raised, paid, left.
-   *
-   * Derived by taking what the invoices account for off the ledger's own
-   * totals, so a journalled-in debt that was later part-paid shows both
-   * halves rather than only its remainder.
-   */
-  readonly unexplainedChargedIqd: string;
-  readonly unexplainedPaidIqd: string;
-  /** When the account first moved — what the unexplained part is aged from. */
+  readonly unappliedCreditsIqd: string;
+  readonly otherNonInvoiceDebitIqd: string;
+  /** Follow-up date only; non-invoice balances are never aged. */
   readonly oldestDate: string | null;
-  readonly bucket: AgeingBucket;
 }
 
-/**
- * The two figures side by side, party by party.
- *
- * Every party with a ledger balance appears, including those with no open
- * invoice at all — which is precisely the case the report used to be blind
- * to, and the one the sponsor found: a customer whose whole debt had been
- * journalled in showed nothing owing.
- */
+/** Invoice balances and control-account balances, reconciled per party. */
 export function reconcile(
   items: readonly OpenItem[],
   balances: readonly LedgerBalance[],
-  asOf: string,
 ): Reconciliation[] {
-  const documents = new Map<string, { open: number; charged: number; paid: number }>();
+  const documents = new Map<string, number>();
   const names = new Map<string, string>();
   for (const item of items) {
     names.set(item.partyCode, item.partyName);
-    const held = documents.get(item.partyCode) ?? { open: 0, charged: 0, paid: 0 };
-    documents.set(item.partyCode, {
-      open: held.open + Math.max(0, Number(item.outstandingIqd)),
-      // Every invoice's own totals, settled ones included: they are movement
-      // on the control account whether or not anything is left on them, and
-      // leaving them out would attribute their charge to the journals.
-      charged: held.charged + Number(item.totalIqd),
-      paid: held.paid + Number(item.paidIqd),
-    });
+    documents.set(
+      item.partyCode,
+      (documents.get(item.partyCode) ?? 0) + Math.max(0, Number(item.outstandingIqd)),
+    );
   }
 
-  const parties = new Map<
-    string,
-    { name: string; ledger: number; charged: number; paid: number; oldest: string | null }
-  >();
+  const parties = new Map<string, { name: string; ledger: number; oldest: string | null }>();
   for (const balance of balances) {
     parties.set(balance.partyCode, {
       name: balance.partyName,
       ledger: Number(balance.balanceIqd),
-      charged: Number(balance.chargedIqd),
-      paid: Number(balance.paidIqd),
       oldest: balance.oldestDate,
     });
   }
-  // A party the invoices know about but the subledger does not is still worth
-  // a row: its ledger side is nought, and the difference then says so.
   for (const [partyCode, name] of names) {
-    if (!parties.has(partyCode)) {
-      parties.set(partyCode, { name, ledger: 0, charged: 0, paid: 0, oldest: null });
-    }
+    if (!parties.has(partyCode)) parties.set(partyCode, { name, ledger: 0, oldest: null });
   }
 
   return [...parties]
     .map(([partyCode, held]) => {
-      const documented = documents.get(partyCode) ?? { open: 0, charged: 0, paid: 0 };
+      const documentsIqd = documents.get(partyCode) ?? 0;
+      const unexplained = held.ledger - documentsIqd;
       return {
         partyCode,
         partyName: held.name,
         ledgerIqd: String(held.ledger),
-        documentsIqd: String(documented.open),
-        unexplainedIqd: String(held.ledger - documented.open),
-        unexplainedChargedIqd: String(held.charged - documented.charged),
-        unexplainedPaidIqd: String(held.paid - documented.paid),
+        documentsIqd: String(documentsIqd),
+        unexplainedIqd: String(unexplained),
+        unappliedCreditsIqd: String(Math.max(0, -unexplained)),
+        otherNonInvoiceDebitIqd: String(Math.max(0, unexplained)),
         oldestDate: held.oldest,
-        // No invoice means no due date, so it is due from the day it was
-        // raised. An opening balance journalled in last year is a year old,
-        // and an ageing that called it current would be flattering it.
-        bucket: held.oldest ? bucketFor(held.oldest, asOf) : 'current',
       };
     })
     .filter((row) => Number(row.ledgerIqd) !== 0 || Number(row.documentsIqd) !== 0)
     .sort((a, b) => Number(b.ledgerIqd) - Number(a.ledgerIqd));
 }
 
-/** What the whole report ties to — every figure a reader might add up by hand. */
 export interface ReconciliationTotals {
   readonly ledgerIqd: string;
   readonly documentsIqd: string;
   readonly unexplainedIqd: string;
-  /** True when the invoices and the ledger agree to the dinar. */
+  readonly unappliedCreditsIqd: string;
+  readonly otherNonInvoiceDebitsIqd: string;
   readonly ties: boolean;
 }
 
@@ -555,41 +556,16 @@ export function reconciliationTotals(rows: readonly Reconciliation[]): Reconcili
   const sum = (pick: (row: Reconciliation) => string) =>
     rows.reduce((total, row) => total + Number(pick(row)), 0);
   const unexplained = sum((row) => row.unexplainedIqd);
+  const ledger = sum((row) => row.ledgerIqd);
+  const documents = sum((row) => row.documentsIqd);
+  const debits = sum((row) => row.otherNonInvoiceDebitIqd);
+  const credits = sum((row) => row.unappliedCreditsIqd);
   return {
-    ledgerIqd: String(sum((row) => row.ledgerIqd)),
-    documentsIqd: String(sum((row) => row.documentsIqd)),
+    ledgerIqd: String(ledger),
+    documentsIqd: String(documents),
     unexplainedIqd: String(unexplained),
-    ties: unexplained === 0,
+    unappliedCreditsIqd: String(credits),
+    otherNonInvoiceDebitsIqd: String(debits),
+    ties: Math.abs(documents + debits - credits - ledger) < 0.00005,
   };
-}
-
-/**
- * The ageing, with what no invoice explains folded into the same bands.
- *
- * So the bucket row adds up to the ledger too, not merely the grand total —
- * otherwise "1–30 days late" would still quietly be a different report from
- * the statement sitting next to it.
- */
-export function ageingWith(
-  items: readonly OpenItem[],
-  rows: readonly Reconciliation[],
-): BucketTotal[] {
-  const totals = new Map<AgeingBucket, { amount: number; invoices: number }>();
-  const add = (bucket: AgeingBucket, amount: number, documents: number) => {
-    if (amount === 0) return;
-    const held = totals.get(bucket) ?? { amount: 0, invoices: 0 };
-    totals.set(bucket, { amount: held.amount + amount, invoices: held.invoices + documents });
-  };
-
-  for (const item of items) {
-    const outstanding = Number(item.outstandingIqd);
-    if (outstanding > 0) add(item.bucket, outstanding, 1);
-  }
-  for (const row of rows) add(row.bucket, Number(row.unexplainedIqd), 0);
-
-  return AGEING_BUCKETS.filter((bucket) => totals.has(bucket)).map((bucket) => ({
-    bucket,
-    amountIqd: String(totals.get(bucket)!.amount),
-    invoices: totals.get(bucket)!.invoices,
-  }));
 }

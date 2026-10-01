@@ -20,7 +20,7 @@ import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as periods from '@/server/services/periods';
 import { createFiscalYear, setPeriodStatus } from './actions';
@@ -203,7 +203,7 @@ export default async function PeriodsPage({ searchParams }: { searchParams: Sear
                     <tr key={period.id}>
                       <td className={s.mono}>
                         {/* The month opens its own journals. Invoices and the
-                            rest join this link as later phases land them. */}
+                            rest join this link as later modules land them. */}
                         <Link
                           className={s.sapLink}
                           href={`/finance/journals?month=${period.startsOn.slice(0, 7)}`}

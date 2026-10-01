@@ -9,7 +9,7 @@ import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { levelFrom, maxLevel, rollUp } from '@domain/report-levels';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as trialBalance from '@/server/services/trial-balance';
 

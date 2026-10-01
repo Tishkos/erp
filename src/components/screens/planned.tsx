@@ -7,12 +7,12 @@ import { AdminPage, Pill, admin as s } from '@/components/admin';
 import { Panel } from '@/components/ui';
 
 /**
- * A screen the approved tree names and no phase has built yet.
+ * A screen the approved tree names and nobody has built yet.
  *
- * It says exactly that — what the screen is, which module owns it, which
- * phase delivers it, what shape it will take — and offers the live screens
- * in the same section. It draws no figures: an invented number on an ERP
- * screen is worse than an empty one, because someone will act on it.
+ * It says exactly that — what the screen is, which module owns it, what
+ * shape it will take — and offers the live screens in the same section. It
+ * draws no figures: an invented number on an ERP screen is worse than an
+ * empty one, because someone will act on it.
  */
 const ARCHETYPE_ICON: Record<string, LucideIcon> = {};
 

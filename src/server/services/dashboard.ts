@@ -166,70 +166,9 @@ function bucketed(
   };
 }
 
-/**
- * What reached a control account with no invoice behind it, as rows the
- * bucketing can take.
- *
- * Read through `open-items.ts`, so this band and the Ageing report it sits
- * beside state one figure. A dashboard quietly disagreeing with the report it
- * links to is worse than a dashboard with no band at all — the reader has no
- * reason to doubt either, and will act on whichever they saw first.
- *
- * Only what is owed. A credit on account — money in that no invoice has taken
- * yet — is not late, and letting it shorten a band would flatter the ageing.
- * It still shows on the Ageing report, which is where it can be acted on.
- */
-async function journalRaised(
-  tx: Tx,
-  principal: Principal,
-  side: openItems.Side,
-  branchCode: string,
-  asOf: string,
-  /**
-   * What the invoices already on this band account for, per partner.
-   *
-   * Passed in rather than re-read. `openItems.openItems` assembles each
-   * invoice's payment history as aggregated JSON, which is right for a report
-   * somebody asked for and wrong for the screen every session opens on: the
-   * dashboard needs one number per partner, not every payment ever made.
-   */
-  documented: ReadonlyMap<string, bigint>,
-): Promise<{ dueDate: string; outstanding: bigint }[]> {
-  const balances = await openItems
-    .ledgerBalances(tx, principal, side, asOf, { branchCode })
-    .catch(() => []);
-
-  return balances
-    .map((balance) => ({
-      oldestDate: balance.oldestDate,
-      unexplained:
-        parseDecimal(balance.balanceIqd, MONEY) - (documented.get(balance.partyCode) ?? 0n),
-    }))
-    .filter((row) => row.unexplained > 0n)
-    .map((row) => ({
-      // No invoice means no due date, so it is due from the day it was
-      // raised — the same rule the Ageing report ages it by.
-      dueDate: row.oldestDate ?? asOf,
-      outstanding: row.unexplained,
-    }));
-}
-
-/** Outstanding per partner, from rows already loaded for the band. */
-function owedByParty(
-  rows: readonly { partyCode: string | null; outstanding: bigint }[],
-): Map<string, bigint> {
-  const totals = new Map<string, bigint>();
-  for (const row of rows) {
-    if (!row.partyCode || row.outstanding <= 0n) continue;
-    totals.set(row.partyCode, (totals.get(row.partyCode) ?? 0n) + row.outstanding);
-  }
-  return totals;
-}
-
 /** What customers still owe — `net − allocated`, the invoice's own arithmetic. */
 async function receivableAgeing(
   tx: Tx,
-  principal: Principal,
   branchCode: string,
   asOf: string,
 ): Promise<Ageing> {
@@ -238,12 +177,8 @@ async function receivableAgeing(
       dueDate: arInvoice.dueDate,
       net: arInvoice.netIqd,
       allocated: arInvoice.allocatedIqd,
-      // Carried so the journal-raised part can be worked out by difference
-      // without loading every invoice a second time.
-      partyCode: businessPartner.code,
     })
     .from(arInvoice)
-    .leftJoin(businessPartner, eq(businessPartner.id, arInvoice.customerId))
     .where(
       and(
         eq(arInvoice.branchCode, branchCode),
@@ -254,24 +189,16 @@ async function receivableAgeing(
   const invoices = open
     .map((row) => ({
       dueDate: row.dueDate,
-      partyCode: row.partyCode,
       outstanding: parseDecimal(row.net, MONEY) - parseDecimal(row.allocated, MONEY),
     }))
     .filter((row) => row.outstanding > 0n);
 
-  return bucketed(
-    [
-      ...invoices,
-      ...(await journalRaised(tx, principal, 'customer', branchCode, asOf, owedByParty(invoices))),
-    ],
-    asOf,
-  );
+  return bucketed(invoices, asOf);
 }
 
 /** What the company still owes — `total − settled`. */
 async function payableAgeing(
   tx: Tx,
-  principal: Principal,
   branchCode: string,
   asOf: string,
 ): Promise<Ageing> {
@@ -280,10 +207,8 @@ async function payableAgeing(
       dueDate: apInvoice.dueDate,
       total: apInvoice.totalIqd,
       settled: apInvoice.settledAmountIqd,
-      partyCode: businessPartner.code,
     })
     .from(apInvoice)
-    .leftJoin(businessPartner, eq(businessPartner.id, apInvoice.supplierId))
     .where(
       and(
         eq(apInvoice.branchCode, branchCode),
@@ -294,18 +219,11 @@ async function payableAgeing(
   const invoices = open
     .map((row) => ({
       dueDate: row.dueDate,
-      partyCode: row.partyCode,
       outstanding: parseDecimal(row.total, MONEY) - parseDecimal(row.settled, MONEY),
     }))
     .filter((row) => row.outstanding > 0n);
 
-  return bucketed(
-    [
-      ...invoices,
-      ...(await journalRaised(tx, principal, 'supplier', branchCode, asOf, owedByParty(invoices))),
-    ],
-    asOf,
-  );
+  return bucketed(invoices, asOf);
 }
 
 export interface AccountBalance {
@@ -585,11 +503,11 @@ export async function forPrincipal(
         : Promise.resolve(null),
 
       can(principal, 'view', 'ar_invoice')
-        ? band('receivable', () => receivableAgeing(tx, principal, branchCode, asOf))
+        ? band('receivable', () => receivableAgeing(tx, branchCode, asOf))
         : Promise.resolve(null),
 
       can(principal, 'view', 'ap_invoice')
-        ? band('payable', () => payableAgeing(tx, principal, branchCode, asOf))
+        ? band('payable', () => payableAgeing(tx, branchCode, asOf))
         : Promise.resolve(null),
 
       // Income and what it cost, for the year so far. `profitOrLoss` is the

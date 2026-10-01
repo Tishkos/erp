@@ -35,7 +35,7 @@ export const dimensionDefinition = pgTable(
   {
     dimension: dimensionType('dimension').primaryKey(),
     label: text('label').notNull(),
-    /** Table holding this dimension's values; null until its phase lands. */
+    /** Table holding this dimension's values; null until its module lands. */
     sourceTable: text('source_table'),
     /** Column in that table carrying the code a posting references. */
     sourceCodeColumn: text('source_code_column'),

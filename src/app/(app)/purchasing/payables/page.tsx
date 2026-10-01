@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { OpenItemsReport } from '@/components/admin/open-items-report';
 import type { SearchParams } from '@/components/admin/params';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 
 /** Payables — the supplier's side of the same mirror. See Receivables. */
 export const dynamic = 'force-dynamic';

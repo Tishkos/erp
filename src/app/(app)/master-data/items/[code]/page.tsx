@@ -23,7 +23,7 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
 import { AdminNotFoundError } from '@/server/services/administration';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { formatQuantity, parseQuantity } from '@domain/uom';
 import { formatMoney, type Locale } from '@/i18n/config';
@@ -57,7 +57,7 @@ export default async function ItemPage({
   params: Promise<{ code: string }>;
   searchParams: SearchParams;
 }) {
-  if (!visibleRoute('/master-data/items')) notFound();
+  if (!visibleRoute('/inventory/items')) notFound();
 
   const [t, page, column, locale, context, outcome, { code: rawCode }] = await Promise.all([
     getTranslations('admin'),
@@ -101,7 +101,7 @@ export default async function ItemPage({
   return (
     <AdminPage
       actions={<AuditLogButton label={t('history')} />}
-      back={{ href: '/master-data/items', label: t('back') }}
+      back={{ href: '/inventory/items', label: t('back') }}
       title={`${row.code} · ${row.name}`}
       trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"
@@ -244,7 +244,7 @@ export default async function ItemPage({
                       <tr key={supplier.supplierId}>
                         <td>
                           <Link
-                            href={`/master-data/business-partners/${encodeURIComponent(supplier.supplierCode)}`}
+                            href={`/purchasing/suppliers/${encodeURIComponent(supplier.supplierCode)}?role=supplier`}
                           >
                             {supplier.supplierCode}
                           </Link>{' '}

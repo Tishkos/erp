@@ -22,7 +22,7 @@ import * as imports from '@/server/services/client-import';
 import * as inventory from '@/server/services/inventory';
 import { AVAILABILITY_BUCKETS, availableQuantity } from '@domain/inventory';
 import { parseDecimal, toDecimalString } from '@domain/money';
-import { BRANCH, buildWorld, scopeOf, type Phase09World } from './phase09-fixture';
+import { BRANCH, buildWorld, scopeOf, type MoneyTransferWorld } from './money-transfer-fixture';
 
 const iqd = (value: string) => parseDecimal(value, 4n);
 const show = (value: bigint) => toDecimalString(value, 4n);
@@ -31,7 +31,7 @@ const FEB = '2026-02-10';
 const ITEM = 'ITM-CLIENT-GOODS';
 const WAREHOUSE = `WH-${BRANCH}`;
 
-let world: Phase09World;
+let world: MoneyTransferWorld;
 let clientAccountId: string;
 
 beforeEach(async () => {
@@ -312,7 +312,7 @@ describe('09.10 — client goods never enter company inventory (§11.3, §12.4)'
     expect(rows[0]!.transferNo).toBeNull();
     // Since D16 the job names the file rather than the file naming a text
     // reference, so an import file with no logistics job reports none. That the
-    // link resolves when a job *does* exist is asserted in phase10-logistics,
+    // link resolves when a job *does* exist is asserted in the logistics suite,
     // where there is a job to resolve to.
     expect(rows[0]!.logisticsJobNo).toBeNull();
   });

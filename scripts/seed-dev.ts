@@ -1,5 +1,5 @@
 /**
- * Development and end-to-end seed — Phase 01.12.
+ * Development and end-to-end seed.
  *
  * Creates the minimum a person needs to sign in and reach a screen: one branch,
  * one department, and two users who differ only in role, so that the
@@ -160,7 +160,7 @@ async function main() {
     await setPassword(tx, adminId, PASSWORD, { temporary: false });
   });
 
-  // Stock to look at and to issue from — Phase 04. Written through raw SQL
+  // Stock to look at and to issue from. Written through raw SQL
   // rather than the service because a seed is not a user, and the availability
   // rules it would exercise are proved by the tests, not by the seed.
   await db.transaction(async (tx) => {

@@ -3,18 +3,19 @@
 import { flag, runAdminAndReturn, text } from '@/server/admin-action';
 import * as partners from '@/server/services/partners';
 
-const RECORD = '/master-data/business-partners';
-const record = (code: string) => `${RECORD}/${encodeURIComponent(code)}`;
+const listFor = (role: partners.PartnerRole) =>
+  role === 'customer' ? '/sales/customers' : '/purchasing/suppliers';
+const record = (role: partners.PartnerRole, code: string) =>
+  `${listFor(role)}/${encodeURIComponent(code)}?role=${role}`;
 
 /**
  * Customers and suppliers are two lists over one record, so a create returns
  * to the list it came from and everything else returns to the record.
  */
-const listFor = (role: partners.PartnerRole) =>
-  role === 'customer' ? '/master-data/customers' : '/master-data/suppliers';
-
 const roleOf = (formData: FormData): partners.PartnerRole =>
   text(formData, 'role') === 'supplier' ? 'supplier' : 'customer';
+const returnRoleOf = (formData: FormData): partners.PartnerRole =>
+  text(formData, 'returnRole') === 'supplier' ? 'supplier' : 'customer';
 
 function inputFrom(formData: FormData) {
   return {
@@ -43,7 +44,7 @@ export async function createPartnerInRole(formData: FormData): Promise<void> {
       }),
     (value) => {
       const created = value as { code?: string } | null | undefined;
-      return created?.code ? record(created.code) : listFor(role);
+      return created?.code ? record(role, created.code) : listFor(role);
     },
   );
 }
@@ -52,16 +53,19 @@ export async function updatePartnerRecord(formData: FormData): Promise<void> {
   const code = text(formData, 'code');
   await runAdminAndReturn(
     (tx, ctx) => partners.updateByCode(tx, ctx, code, inputFrom(formData)),
-    record(code),
+    record(returnRoleOf(formData), code),
   );
 }
 
 /** §6 — a partner may hold either role, or both, but never neither. */
 export async function setPartnerRole(formData: FormData): Promise<void> {
   const code = text(formData, 'code');
+  const role = roleOf(formData);
+  const held = flag(formData, 'held');
+  const destinationRole = held ? role : role === 'customer' ? 'supplier' : 'customer';
   await runAdminAndReturn(
-    (tx, ctx) => partners.setRole(tx, ctx, code, roleOf(formData), flag(formData, 'held')),
-    record(code),
+    (tx, ctx) => partners.setRole(tx, ctx, code, role, held),
+    record(destinationRole, code),
   );
 }
 
@@ -70,6 +74,6 @@ export async function setPartnerActive(formData: FormData): Promise<void> {
   await runAdminAndReturn(
     (tx, ctx) =>
       partners.setActive(tx, ctx, code, flag(formData, 'active'), text(formData, 'reason')),
-    record(code),
+    record(returnRoleOf(formData), code),
   );
 }

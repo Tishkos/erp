@@ -1,6 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 import { Submit } from '@/components/admin';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { notFound } from 'next/navigation';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';

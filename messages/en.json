@@ -545,10 +545,6 @@
     "reversed": "Reversed",
     "closed": "Closed"
   },
-  "phase": {
-    "not_built": "Not yet built",
-    "explanation": "The menu shows the whole system. A page that is not ready yet is greyed out."
-  },
   "screen": {
     "preview_badge": "Preview",
     "preview_note": "This screen shows the approved design over sample data.",
@@ -676,7 +672,9 @@
     "planned_body": "It is part of the system and is not ready yet. Nothing here is invented: there are no sample figures, and nothing can be entered until it is ready.",
     "planned_shape": "What it will be",
     "planned_live_in_section": "Live now in this section",
-    "planned_back": "Dashboard"
+    "planned_back": "Dashboard",
+    "not_built": "Not yet built",
+    "explanation": "The menu shows the whole system. A page that is not ready yet is greyed out."
   },
   "error": {
     "not_found": "That record does not exist, or is outside the data you may see.",
@@ -941,7 +939,7 @@
     "my_profile": "My profile",
     "change_password": "Change password",
     "footer_copyright": "© {year} Qimah Al-Safinah",
-    "footer_phase": "v1.0.0",
+    "footer_version": "v1.0.0",
     "system_healthy": "System is healthy",
     "system_degraded": "System is degraded",
     "search": "Search",
@@ -2144,10 +2142,10 @@
       "by_journal": "Posted by journal — open the statement",
       "ledger": "Ledger says",
       "invoices": "Invoices account for",
-      "journals": "No invoice accounts for",
+      "journals": "Non-invoice balance",
       "ties": "Ties to the statement",
       "explained": "Difference is listed above",
-      "owed_total": "Total owed — agrees with the statement",
+      "owed_total": "Net position — agrees with the statement",
       "no_document": "No document — see the statement",
       "by_journal_plain": "Posted by journal"
     },
@@ -2230,6 +2228,30 @@
       "ageing": "How late",
       "outstanding": "Outstanding",
       "paid": "Paid",
+      "settled": "Settled",
+      "allocated_payments": "Allocated Payments",
+      "credits_applied": "Credits / Returns Applied",
+      "other_adjustments_applied": "Other Adjustments Applied",
+      "invoice_balances": "Invoice Balances",
+      "gross_customer": "Gross Receivables",
+      "gross_supplier": "Gross Payables",
+      "not_yet_due": "Not Yet Due",
+      "overdue_total": "Overdue",
+      "customer_credits": "Unapplied Customer Credits / Advances",
+      "supplier_credits": "Unapplied Supplier Credits / Advances",
+      "net_customer_position": "Net Customer Position",
+      "net_supplier_position": "Net Supplier Position",
+      "ledger_position": "Ledger balance",
+      "reconciliation_title_customer": "Customer credits / advances reconciliation",
+      "reconciliation_title_supplier": "Supplier credits / advances reconciliation",
+      "other_noninvoice_debits": "Other Non-invoice Debits",
+      "other_noninvoice_credits": "Other Non-invoice Credits",
+      "credit_advance_title": "Customer Credits / Advances",
+      "supplier_credit_advance_title": "Supplier Credits / Advances",
+      "credit_advance_balance": "Credit / advance balance",
+      "noninvoice_debit_title": "Other Non-invoice Debits",
+      "noninvoice_debit_balance": "Other non-invoice debit",
+      "on_account_since": "On account since",
       "terms": "Payment terms",
       "lateness": "Status against terms",
       "show": "Show",
@@ -2246,7 +2268,7 @@
       "last_payment": "Last payment"
     },
     "statement_outstanding": {
-      "title": "What is still owed",
+      "title": "Invoice Balances",
       "as_at": "Open as at {date}",
       "overdue": "Of which overdue",
       "show_all": "All",
