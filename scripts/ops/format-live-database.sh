@@ -112,6 +112,17 @@ ap_match_exception
 supplier_credit_memo
 goods_return_line
 goods_return
+payment_application
+payable_instalment
+ap_invoice_note
+landed_cost_charge
+payable_hold_update
+payable_hold
+payable_event
+payable_order_line
+payable
+recurring_contract_amendment
+recurring_contract
 supplier_payment_allocation
 supplier_payment
 supplier_advance_settlement

@@ -7,6 +7,7 @@ import {
   FilterRow,
   Flash,
   Form,
+  Grid,
   Hidden,
   ReasonForm,
   Select,
@@ -15,6 +16,7 @@ import {
   admin as s,
 } from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
+import { NewRecordDialog } from '@/components/admin/dialog';
 import { Attachments } from '@/components/admin/attachments';
 import { RecordHistory } from '@/components/admin/history';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -28,6 +30,7 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as events from '@/server/services/payable-events';
 import * as payables from '@/server/services/payables';
+import * as paymentApplications from '@/server/services/payment-applications';
 import * as settingsService from '@/server/services/payables-settings';
 import * as contracts from '@/server/services/recurring-contracts';
 import * as serviceReceipts from '@/server/services/service-receipt';
@@ -43,6 +46,9 @@ import {
   updateHold,
   updatePiLines,
 } from '../actions';
+import { createApplication, planInstalmentsAction } from '../payment-applications/actions';
+import { STATUS_CHIP, statusKey } from '../payment-applications/status';
+import { toDecimalString } from '@domain/money';
 
 /**
  * The payable page — REQ-AP-001 §21.3, the one record everybody opens.
@@ -67,8 +73,9 @@ export default async function PayablePage({
   if (!visibleRoute('/payables')) notFound();
 
   const { payableNo } = await params;
-  const [t, admin, pageT, locale, context, outcome, query] = await Promise.all([
+  const [t, pa, admin, pageT, locale, context, outcome, query] = await Promise.all([
     getTranslations('admin.payables'),
+    getTranslations('admin.payment_applications'),
     getTranslations('admin'),
     getTranslations('page'),
     getLocale(),
@@ -83,6 +90,7 @@ export default async function PayablePage({
   }
   const mayEdit = can(principal, 'edit_draft', payables.PERMISSION_OBJECT);
   const mayCancel = can(principal, 'reverse_cancel', payables.PERMISSION_OBJECT);
+  const mayPay = can(principal, 'create', paymentApplications.PERMISSION_OBJECT);
 
   const laneFilter = typeof query.lane === 'string' && query.lane ? query.lane : null;
 
@@ -102,7 +110,16 @@ export default async function PayablePage({
       const contract = view.payable.recurringContractId
         ? await contracts.load(tx, view.payable.recurringContractId)
         : null;
-      return { ...view, log, config, people, receipts, contract };
+      // §15 — the Payments section: the plan, the applications, the totals.
+      const isImport = view.payable.payableTypeCode === 'import';
+      const instalments = isImport ? await paymentApplications.instalmentsFor(tx, view.payable.id) : [];
+      const applied = isImport ? await paymentApplications.list(tx, { payableId: view.payable.id }) : [];
+      const paymentTotals = isImport ? await paymentApplications.totalsFor(tx, view.payable.id) : null;
+      const pickers =
+        isImport && mayPay && !view.payable.cancelledAt && !view.payable.closedAt
+          ? await paymentApplications.pickersFor(tx, view.payable.id)
+          : null;
+      return { ...view, log, config, people, receipts, contract, instalments, applied, paymentTotals, pickers };
     } catch {
       return null;
     }
@@ -123,7 +140,12 @@ export default async function PayablePage({
     people,
     receipts,
     contract,
+    instalments,
+    applied,
+    paymentTotals,
+    pickers,
   } = found;
+  const openPay = query.pay === '1';
 
   const money = (amount: string, currency = row.currency) =>
     formatMoney(amount, currency, locale as Locale);
@@ -151,7 +173,11 @@ export default async function PayablePage({
   const railText = activeRail
     .map((stage) => {
       const mark =
-        stage.sequence < currentSeq ? ' ✓' : stage.code === row.stageCode ? ` ← ${t('rail_now')}` : '';
+        stage.code === row.stageCode
+          ? ` ← ${t('rail_now')}`
+          : stage.sequence < currentSeq && found.reached.includes(stage.code)
+            ? ' ✓'
+            : '';
       return `${stage.sequence}. ${railName(stage)}${mark}`;
     })
     .join('  ·  ');
@@ -181,7 +207,9 @@ export default async function PayablePage({
       label: t('col_amount'),
       value: (
         <bdi dir="ltr">
-          {money(row.amountTxn)} · {money(row.amountIqd, 'IQD')}
+          {row.currency === 'IQD'
+            ? money(row.amountIqd, 'IQD')
+            : `${money(row.amountTxn)} · ${money(row.amountIqd, 'IQD')}`}
         </bdi>
       ),
     },
@@ -259,7 +287,15 @@ export default async function PayablePage({
         linesCount={lines.length}
         linesTitle={t('tab_order')}
         number={row.payableNo}
-        totals={[{ label: t('col_amount'), value: money(row.amountTxn) }]}
+        totals={[
+          { label: t('col_amount'), value: money(row.amountTxn) },
+          ...(paymentTotals
+            ? [
+                { label: pa('paid'), value: money(toDecimalString(paymentTotals.paidTxn, 4n)) },
+                { label: pa('remaining'), value: money(toDecimalString(paymentTotals.remainingTxn, 4n)) },
+              ]
+            : []),
+        ]}
       >
         <table aria-labelledby="payable-document-lines-heading" className={s.sapTable}>
           <thead>
@@ -529,6 +565,311 @@ export default async function PayablePage({
           ) : null}
         </div>
       </section>
+
+      {/* ── Payments (§15): the plan, the applications, Applied / Paid /
+          Remaining. Imports only; drawn as the invoices register above. ── */}
+      {paymentTotals ? (
+        <section aria-labelledby="payable-payments-title" className={s.sapDoc} id="payments">
+          <div className={s.sapWindow}>
+            <h2 className={s.sapTitle} id="payable-payments-title">
+              <span>{pa('section_title')}</span>
+              <span className={s.sapTitleMeta}>
+                <bdi dir="ltr">
+                  {pa('applied')} {money(toDecimalString(paymentTotals.appliedTxn, 4n))} · {pa('paid')}{' '}
+                  {money(toDecimalString(paymentTotals.paidTxn, 4n))} · {pa('remaining')}{' '}
+                  {money(toDecimalString(paymentTotals.remainingTxn, 4n))}
+                </bdi>
+              </span>
+            </h2>
+
+            <div className={s.sapTableWrap}>
+              <table aria-label={pa('instalments')} className={s.sapTable}>
+                <thead>
+                  <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">{pa('instalment')}</th>
+                    <th scope="col">{pa('trigger')}</th>
+                    <th scope="col">{pa('expected_date')}</th>
+                    <th className={s.sapNum} scope="col">
+                      {pa('share')}
+                    </th>
+                    <th className={s.sapNum} scope="col">
+                      {pa('col_amount')}
+                    </th>
+                    <th scope="col">{pa('col_status')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {instalments.length === 0 ? (
+                    <tr>
+                      <td className={s.sapEmptyRow} colSpan={7}>
+                        {pa('no_instalments')}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {instalments.map((instalment) => (
+                    <tr key={instalment.id}>
+                      <td>{instalment.sequence}</td>
+                      <td>
+                        <bdi dir="auto">{instalment.label}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="auto">
+                          {instalment.triggerName}
+                          {instalment.triggerDays !== null ? ` · ${instalment.triggerDays}` : ''}
+                        </bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{day(instalment.expectedDate)}</bdi>
+                      </td>
+                      <td className={s.sapNum}>
+                        <bdi dir="ltr">{instalment.percent ? `${Number(instalment.percent)}%` : '—'}</bdi>
+                      </td>
+                      <td className={s.sapNum}>
+                        <bdi dir="ltr">{money(instalment.amountTxn)}</bdi>
+                      </td>
+                      <td>
+                        <span
+                          className={`status status--${instalment.status === 'paid' ? 'settled' : instalment.status === 'applied' ? 'submitted' : 'draft'}`}
+                          data-status={instalment.status === 'paid' ? 'settled' : instalment.status === 'applied' ? 'submitted' : 'draft'}
+                        >
+                          {pa(`instalment_${instalment.status}`)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className={s.sapTableWrap}>
+              <table aria-label={pa('section_applications')} className={s.sapTable}>
+                <thead>
+                  <tr>
+                    <th scope="col">{pa('col_no')}</th>
+                    <th scope="col">{pa('col_method')}</th>
+                    <th scope="col">{pa('col_account')}</th>
+                    <th scope="col">{pa('col_application_date')}</th>
+                    <th className={s.sapNum} scope="col">
+                      {pa('col_amount')}
+                    </th>
+                    <th scope="col">{pa('col_status')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {applied.length === 0 ? (
+                    <tr>
+                      <td className={s.sapEmptyRow} colSpan={6}>
+                        {pa('none_for_import')}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {applied.map((application) => (
+                    <tr key={application.id}>
+                      <td>
+                        <Link
+                          className={s.sapLink}
+                          href={`/payables/payment-applications/${encodeURIComponent(application.applicationNo)}`}
+                        >
+                          <bdi dir="ltr">{application.applicationNo}</bdi>
+                        </Link>
+                      </td>
+                      <td>
+                        <bdi dir="auto">{application.methodName}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{application.accountCode}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{day(application.applicationDate)}</bdi>
+                        {application.daysWaiting !== null ? (
+                          <div className="muted">{pa('days_n', { count: application.daysWaiting })}</div>
+                        ) : null}
+                      </td>
+                      <td className={s.sapNum}>
+                        <bdi dir="ltr">{money(application.amountTxn)}</bdi>
+                      </td>
+                      <td>
+                        <span
+                          className={`status status--${STATUS_CHIP[application.status] ?? 'draft'}`}
+                          data-status={STATUS_CHIP[application.status] ?? 'draft'}
+                        >
+                          {pa(statusKey(application.status, application.methodKind))}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {pickers ? (
+              <div className={s.sapBody}>
+                <SubmitRow>
+                  <NewRecordDialog
+                    buttonLabel={pa('plan')}
+                    closeLabel={admin('close')}
+                    title={pa('plan_title', { payableNo: row.payableNo })}
+                    wide
+                  >
+                    <p className="muted">{pa('plan_note', { amount: money(row.amountTxn) })}</p>
+                    <Form action={planInstalmentsAction}>
+                      <Hidden name="payable_no" value={row.payableNo} />
+                      <input name="row_count" type="hidden" value="6" />
+                      <div className={s.sapTableWrap}>
+                        <table className={s.sapTable}>
+                          <thead>
+                            <tr>
+                              <th scope="col">{pa('instalment')}</th>
+                              <th scope="col">{pa('basis')}</th>
+                              <th scope="col">{pa('value')}</th>
+                              <th scope="col">{pa('trigger')}</th>
+                              <th scope="col">{pa('trigger_days')}</th>
+                              <th scope="col">{pa('expected_date')}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[0, 1, 2, 3, 4, 5].map((index) => {
+                              const current = instalments.filter((i) => i.status === 'planned')[index];
+                              return (
+                                <tr key={index}>
+                                  <td>
+                                    <input
+                                      aria-label={`${pa('instalment')} ${index + 1}`}
+                                      className={s.input}
+                                      defaultValue={current?.label ?? (index === 0 ? pa('deposit') : index === 1 ? pa('balance') : '')}
+                                      name={`label_${index}`}
+                                    />
+                                  </td>
+                                  <td>
+                                    <select
+                                      aria-label={`${pa('basis')} ${index + 1}`}
+                                      className={s.select}
+                                      defaultValue={current?.basis ?? 'percent'}
+                                      name={`basis_${index}`}
+                                    >
+                                      <option value="percent">{pa('basis_percent')}</option>
+                                      <option value="amount">{pa('basis_amount')}</option>
+                                    </select>
+                                  </td>
+                                  <td>
+                                    <input
+                                      aria-label={`${pa('value')} ${index + 1}`}
+                                      className={s.input}
+                                      defaultValue={
+                                        current ? (current.basis === 'percent' ? Number(current.percent).toString() : current.amountTxn) : ''
+                                      }
+                                      inputMode="decimal"
+                                      name={`value_${index}`}
+                                    />
+                                  </td>
+                                  <td>
+                                    <select
+                                      aria-label={`${pa('trigger')} ${index + 1}`}
+                                      className={s.select}
+                                      defaultValue={current?.triggerCode ?? (index === 0 ? 'on_order' : 'against_bl_copy')}
+                                      name={`trigger_${index}`}
+                                    >
+                                      {pickers.triggers.map((trigger) => (
+                                        <option key={trigger.code} value={trigger.code}>
+                                          {trigger.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </td>
+                                  <td>
+                                    <input
+                                      aria-label={`${pa('trigger_days')} ${index + 1}`}
+                                      className={s.input}
+                                      defaultValue={current?.triggerDays ?? ''}
+                                      inputMode="numeric"
+                                      name={`days_${index}`}
+                                    />
+                                  </td>
+                                  <td>
+                                    <input
+                                      aria-label={`${pa('expected_date')} ${index + 1}`}
+                                      className={`${s.input} ${s.dateInput}`}
+                                      defaultValue={current?.expectedDate ?? ''}
+                                      name={`expected_${index}`}
+                                      type="date"
+                                    />
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <SubmitRow>
+                        <Submit label={pa('plan_save')} />
+                      </SubmitRow>
+                    </Form>
+                  </NewRecordDialog>
+
+                  <NewRecordDialog
+                    buttonLabel={pa('new')}
+                    closeLabel={admin('close')}
+                    openOnLoad={openPay}
+                    title={pa('new_for', { payableNo: row.payableNo })}
+                  >
+                    <Form action={createApplication}>
+                      <Hidden name="payable_no" value={row.payableNo} />
+                      <Grid>
+                        <Select
+                          emptyLabel={pa('no_instalment')}
+                          label={pa('instalment')}
+                          name="instalment_id"
+                          options={pickers.instalments.map((instalment) => ({
+                            value: instalment.id,
+                            label: `${instalment.sequence}. ${instalment.label} — ${money(instalment.amountTxn)}`,
+                          }))}
+                        />
+                        <Field hint={pa('amount_hint')} label={pa('col_amount')} name="amount" />
+                        <Select
+                          label={pa('col_method')}
+                          name="payment_method"
+                          options={pickers.methods.map((method) => ({ value: method.code, label: method.name }))}
+                          required
+                        />
+                        <Select
+                          label={pa('col_account')}
+                          name="bank_cash_account_id"
+                          options={pickers.accounts.map((account) => ({
+                            value: account.id,
+                            label: `${account.code} · ${account.name}${account.bankName ? ` · ${account.bankName}` : ''} — ${pa('available_short')} ${money(account.availableIqd, 'IQD')}`,
+                          }))}
+                          required
+                        />
+                        <Select
+                          emptyLabel="—"
+                          hint={pa('payee_hint')}
+                          label={pa('payee')}
+                          name="payee_bank_account_id"
+                          options={pickers.payees.map((payee) => ({
+                            value: payee.id,
+                            label: `${payee.bankName} · ${payee.accountNumber}${payee.swift ? ` · ${payee.swift}` : ''}${payee.verified ? '' : ` (${pa('unverified')})`}`,
+                          }))}
+                        />
+                        <Select
+                          defaultValue="own_funds"
+                          label={pa('funding')}
+                          name="funding_source"
+                          options={pickers.funding.map((source) => ({ value: source.code, label: source.name }))}
+                        />
+                      </Grid>
+                      <Field label={pa('note')} name="note" wide />
+                      <SubmitRow>
+                        <Submit label={pa('create')} />
+                      </SubmitRow>
+                    </Form>
+                  </NewRecordDialog>
+                </SubmitRow>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       {/* ── The service lane: confirmations and the contract (§21.3) ──── */}
       {receipts.length > 0 || contract || type.code === 'service' || type.code === 'recurring' ? (

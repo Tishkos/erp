@@ -19,6 +19,7 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
+import { parseDecimal, toDecimalString } from '@domain/money';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as payables from '@/server/services/payables';
@@ -222,6 +223,9 @@ export default async function PayablesWorkbench({
                   <th className={s.sapNum} scope="col">
                     {t('col_amount')}
                   </th>
+                  <th className={s.sapNum} scope="col">
+                    {t('col_paid')}
+                  </th>
                   <th scope="col">{t('col_stage')}</th>
                   <th scope="col">{t('col_stopped')}</th>
                   <th scope="col">{t('col_due')}</th>
@@ -231,7 +235,7 @@ export default async function PayablesWorkbench({
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td className={s.sapEmptyRow} colSpan={9}>
+                    <td className={s.sapEmptyRow} colSpan={10}>
                       {t('none')}
                     </td>
                   </tr>
@@ -252,6 +256,20 @@ export default async function PayablesWorkbench({
                     </td>
                     <td className={s.sapNum}>
                       <bdi dir="ltr">{money(row.amountTxn, row.currency)}</bdi>
+                    </td>
+                    <td className={s.sapNum}>
+                      <bdi dir="ltr">{money(row.paidTxn, row.currency)}</bdi>
+                      {Number(row.paidTxn) > 0 ? (
+                        <div className="muted">
+                          {t('remaining_short')}{' '}
+                          <bdi dir="ltr">
+                            {money(
+                              toDecimalString(parseDecimal(row.amountTxn, 4n) - parseDecimal(row.paidTxn, 4n), 4n),
+                              row.currency,
+                            )}
+                          </bdi>
+                        </div>
+                      ) : null}
                     </td>
                     <td>
                       <span className={`status ${s.sapRegisterStatus}`} data-status="submitted">

@@ -65,8 +65,9 @@ export interface AccountBalance {
  * Branch filters scope journal and document activity. Bank/cash accounts are
  * company-wide masters.
  *
- * Two things commit money — an approved transfer out, and an approved payment
- * batch's unsent lines. Both have to count, and the second is why: without it,
+ * Three things commit money — an approved transfer out, an approved payment
+ * batch's unsent lines, and (REQ-AP-001 §15.1) a payment application approved
+ * or sent to the bank and not yet confirmed. Both have to count, and the second is why: without it,
  * two payment runs approved on the same morning would each see the whole balance
  * and between them promise it twice (§15, *"available cash"*).
  */
@@ -79,7 +80,41 @@ export async function balances(
   await authz.authorize(ctx.principal, 'view', PERMISSION_OBJECT, {
     branchCode: ctx.branchCode,
   });
+  return balancesQuery(tx, asOf, filter);
+}
 
+/**
+ * REQ-AP-001 §15.1 — one account's Booked / Reserved / Available, for a
+ * document that has already authorised its own action (the payment
+ * application's funds check). The figures are the same query as `balances`.
+ */
+export async function accountPosition(
+  tx: Tx,
+  bankCashAccountId: string,
+): Promise<{ accountCode: string; currency: string; balanceIqd: bigint; committedIqd: bigint; availableIqd: bigint }> {
+  const [account] = await tx
+    .select({ code: bankCashAccount.code })
+    .from(bankCashAccount)
+    .where(eq(bankCashAccount.id, bankCashAccountId))
+    .limit(1);
+  if (!account) throw new Error(`No bank or cash account with id '${bankCashAccountId}'.`);
+  const [row] = await balancesQuery(tx, '9999-12-31', { accountCode: account.code });
+  const balanceIqd = parseDecimal(row?.balanceIqd ?? '0', 4n);
+  const committedIqd = parseDecimal(row?.committedIqd ?? '0', 4n);
+  return {
+    accountCode: account.code,
+    currency: row?.currency ?? 'IQD',
+    balanceIqd,
+    committedIqd,
+    availableIqd: balanceIqd - committedIqd,
+  };
+}
+
+async function balancesQuery(
+  tx: Tx,
+  asOf: string,
+  filter: { branchCode?: string | null; accountCode?: string | null },
+): Promise<AccountBalance[]> {
   const result = await tx.execute(sql`
     select b.code                                  as "accountCode",
            b.name                                  as "accountName",
@@ -109,7 +144,11 @@ export async function balances(
                 and p.status = 'approved'
                 and l.status = 'pending'
                 and (${filter.branchCode ?? null}::text is null or p.branch_code = ${filter.branchCode ?? null})
-           ), 0::numeric(19,4)))::text             as "committedIqd"
+           ), 0::numeric(19,4))
+            -- REQ-AP-001 §15.1 — money held for payment applications approved
+            -- or sent to the bank and not yet confirmed.
+            -- (company-wide, like the account: see migration 0232).
+            + payment_application_reserved_iqd(b.id))::text as "committedIqd"
       from bank_cash_account b
       join chart_of_account a on a.id = b.gl_account_id
      where b.active

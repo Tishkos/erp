@@ -68,6 +68,9 @@ const EVENTS = [
   'sales.customer_receipt_identified',
   'sales.customer_credit_memo',
   'inventory.goods_return',
+  // REQ-AP-001 Stage 3 — a deposit confirmed before the invoice posts.
+  'purchasing.supplier_advance_payment',
+  'purchasing.supplier_advance_settlement',
 ] as const;
 
 export async function buildTradingWorld(): Promise<TradingWorld> {
@@ -88,6 +91,7 @@ export async function buildTradingWorld(): Promise<TradingWorld> {
     ['customer_receivable', 'A000001', 'Trade Receivables', 'customer'],
     ['customer_clearing', 'A000001', 'Receipts Not Yet Identified', null],
     ['bank', 'A000001', 'Bank Current Account', null],
+    ['supplier_advance', 'A000001', 'Supplier Advances', null],
     ['grni', 'L000001', 'Goods Received Not Invoiced', null],
     ['supplier_payable', 'L000001', 'Trade Payables', 'supplier'],
     ['return_clearing', 'L000001', 'Return Clearing', null],
@@ -223,6 +227,7 @@ export async function buildTradingWorld(): Promise<TradingWorld> {
     'supplier_credit_memo',
     'customer_credit_memo',
     'sales_return',
+    'supplier_advance',
   ]) {
     await ownerPool.query(
       `insert into document_type_dimension (document_type_code, dimension, requirement)

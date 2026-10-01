@@ -213,6 +213,8 @@ describe('every screen has one address', () => {
       '/inventory/transfers',
       '/inventory/uom',
       '/master-data/bank-accounts',
+      // REQ-AP-001 Stage 3 — the bank master.
+      '/master-data/banks',
       '/master-data/branches',
       '/master-data/cash-accounts',
       '/master-data/chart-of-accounts',
@@ -226,6 +228,8 @@ describe('every screen has one address', () => {
       '/master-data/warehouses',
       // REQ-AP-001 Stage 1 — the Payables workbench.
       '/payables',
+      // REQ-AP-001 Stage 3 — the advances' register.
+      '/payables/advances',
       '/payables/contracts',
       '/payables/goods-receipts',
       // Operations build — block 4's Purchase Invoice.
@@ -234,6 +238,8 @@ describe('every screen has one address', () => {
       '/payables/invoices',
       // §15 — what we owe, invoice by invoice.
       '/payables/open-items',
+      // REQ-AP-001 Stage 3 — payment applications (§21.7).
+      '/payables/payment-applications',
       '/payables/purchase-orders',
       '/payables/service-receipts',
       // Block 6 — Payments and Receipts.

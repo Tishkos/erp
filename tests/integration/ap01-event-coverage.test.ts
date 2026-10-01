@@ -54,7 +54,11 @@ describe('ap01 · every service that touches a payable writes its story', () => 
       'payable_event',
       'payable_hold',
       'payable_hold_update',
+      // Stage 3 (0232): planning writes INSTALMENT_PLANNED; every application
+      // move writes its event — ap03-payments.
+      'payable_instalment',
       'payable_order_line',
+      'payment_application',
       // Stage 2 (0230): the confirmation writes SERVICE_RECEIPT_CREATED /
       // SERVICE_CONFIRMED — ap02-service-flow.
       'service_receipt',

@@ -1093,6 +1093,13 @@
       "when": 1795900000035,
       "tag": "0231_expenses_are_invoices",
       "breakpoints": true
+    },
+    {
+      "idx": 156,
+      "version": "7",
+      "when": 1795900000036,
+      "tag": "0232_payments_and_bank",
+      "breakpoints": true
     }
   ]
 }

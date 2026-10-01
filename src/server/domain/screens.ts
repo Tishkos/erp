@@ -448,6 +448,11 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/payables/service-receipts',
   '/payables/purchase-orders',
   '/payables/goods-receipts',
+  // REQ-AP-001 Stage 3 — payments & bank (§15, §21.7): the applications, the
+  // advances' own register, and the bank master.
+  '/payables/payment-applications',
+  '/payables/advances',
+  '/master-data/banks',
 ]);
 
 export function isDelivered(route: string): boolean {

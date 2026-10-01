@@ -24,6 +24,7 @@ function inputFrom(formData: FormData) {
     glAccountId: text(formData, 'glAccountId'),
     currency: text(formData, 'currency') || null,
     bankName: text(formData, 'bankName') || null,
+    bankCode: text(formData, 'bankCode') || null,
     accountNumber: text(formData, 'accountNumber') || null,
     iban: text(formData, 'iban') || null,
     swift: text(formData, 'swift') || null,

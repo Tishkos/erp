@@ -22,10 +22,11 @@
  * grow without limit and never reconcile, and §8.5 asks in terms for settlement
  * and refund. There is no second treatment to choose between.
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   apInvoice,
+  appUser,
   bankCashAccount,
   businessPartner,
   purchaseOrder,
@@ -839,4 +840,98 @@ export async function settlementHistory(tx: Tx, supplierAdvanceId: string) {
 export async function view(tx: Tx, id: string) {
   const advance = await load(tx, id);
   return { advance, balance: availableBalance(advance) };
+}
+
+// ---------------------------------------------------------------------------
+// REQ-AP-001 Stage 3 (§21.1) — the Advances screen reads these.
+// ---------------------------------------------------------------------------
+
+/** The register: every advance, newest first, with its order, supplier and import. */
+export async function listForScreen(tx: Tx) {
+  return tx
+    .select({
+      id: supplierAdvance.id,
+      advanceNo: supplierAdvance.advanceNo,
+      status: supplierAdvance.status,
+      orderNo: purchaseOrder.orderNo,
+      supplierCode: businessPartner.code,
+      supplierName: businessPartner.legalName,
+      payableNo: payable.payableNo,
+      requestDate: sql<string>`${supplierAdvance.requestDate}::text`,
+      paidDate: sql<string | null>`${supplierAdvance.paidDate}::text`,
+      currency: supplierAdvance.currency,
+      amountIqd: supplierAdvance.amountIqd,
+      amountTxn: supplierAdvance.amountTxn,
+      settledAmountIqd: supplierAdvance.settledAmountIqd,
+      refundedAmountIqd: supplierAdvance.refundedAmountIqd,
+      branchCode: supplierAdvance.branchCode,
+    })
+    .from(supplierAdvance)
+    .innerJoin(businessPartner, eq(businessPartner.id, supplierAdvance.supplierId))
+    .innerJoin(purchaseOrder, eq(purchaseOrder.id, supplierAdvance.purchaseOrderId))
+    .leftJoin(payable, eq(payable.id, supplierAdvance.payableId))
+    .orderBy(sql`${supplierAdvance.createdAt} desc`);
+}
+
+export async function viewByNo(tx: Tx, advanceNo: string) {
+  const [row] = await tx
+    .select({ id: supplierAdvance.id })
+    .from(supplierAdvance)
+    .where(eq(supplierAdvance.advanceNo, advanceNo))
+    .limit(1);
+  if (!row) throw new SupplierAdvanceNotFoundError(advanceNo);
+  const advance = await load(tx, row.id);
+  const [order] = await tx
+    .select({ orderNo: purchaseOrder.orderNo })
+    .from(purchaseOrder)
+    .where(eq(purchaseOrder.id, advance.purchaseOrderId))
+    .limit(1);
+  const [supplier] = await tx
+    .select({ code: businessPartner.code, name: businessPartner.legalName })
+    .from(businessPartner)
+    .where(eq(businessPartner.id, advance.supplierId))
+    .limit(1);
+  const [owner] = advance.payableId
+    ? await tx
+        .select({ payableNo: payable.payableNo })
+        .from(payable)
+        .where(eq(payable.id, advance.payableId))
+        .limit(1)
+    : [];
+  const people = await tx
+    .select({ id: appUser.id, name: appUser.displayName })
+    .from(appUser)
+    .where(
+      inArray(
+        appUser.id,
+        [advance.createdBy, advance.approvedBy, advance.paidBy].filter((v): v is string => Boolean(v)),
+      ),
+    );
+  const nameOf = (id: string | null) => people.find((p) => p.id === id)?.name ?? null;
+  return {
+    advance,
+    balance: availableBalance(advance),
+    orderNo: order?.orderNo ?? null,
+    supplier: supplier ?? null,
+    payableNo: owner?.payableNo ?? null,
+    requestedBy: nameOf(advance.createdBy),
+    approvedBy: nameOf(advance.approvedBy),
+    paidBy: nameOf(advance.paidBy),
+    settlements: await settlementHistory(tx, advance.id),
+  };
+}
+
+/** Orders an advance may be paid against: committed, not cancelled (§8.5). */
+export async function orderChoices(tx: Tx) {
+  return tx
+    .select({
+      id: purchaseOrder.id,
+      orderNo: purchaseOrder.orderNo,
+      supplierName: businessPartner.legalName,
+      branchCode: purchaseOrder.branchCode,
+    })
+    .from(purchaseOrder)
+    .innerJoin(businessPartner, eq(businessPartner.id, purchaseOrder.supplierId))
+    .where(sql`${purchaseOrder.status} not in ('draft', 'cancelled', 'closed', 'rejected')`)
+    .orderBy(sql`${purchaseOrder.createdAt} desc`);
 }

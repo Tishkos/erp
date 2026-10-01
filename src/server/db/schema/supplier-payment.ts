@@ -69,6 +69,8 @@ export const supplierPayment = pgTable(
     paymentDate: date('payment_date').notNull(),
     currency: text('currency').notNull().default('IQD'),
     amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+    /** REQ-AP-001 §15.4 — the amount in its own currency (the SWIFT amount); the journal stays IQD. */
+    amountTxn: numeric('amount_txn', { precision: 19, scale: 4 }),
     /** How much of the payment has been put against invoices. */
     allocatedAmountIqd: numeric('allocated_amount_iqd', { precision: 19, scale: 4 })
       .notNull()

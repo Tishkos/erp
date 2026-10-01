@@ -100,6 +100,10 @@ export default async function PaymentMethodPage({
                 <span>{t(`payment_methods.kind_${row.kind}`)}</span>
               </li>
               <li>
+                <span>{t('payment_methods.confirmation')}</span>
+                <span>{t(`payment_methods.confirmation_${row.confirmationKind}`)}</span>
+              </li>
+              <li>
                 <span>{t('payment_methods.fee')}</span>
                 <span>{Number(row.feePercent) === 0 ? t('none') : `${row.feePercent}%`}</span>
               </li>
@@ -154,6 +158,16 @@ export default async function PaymentMethodPage({
                     options={methods.PAYMENT_METHOD_KINDS.map((kind) => ({
                       value: kind,
                       label: t(`payment_methods.kind_${kind}`),
+                    }))}
+                  />
+                  <Select
+                    defaultValue={row.confirmationKind}
+                    hint={t('payment_methods.confirmation_hint')}
+                    label={t('payment_methods.confirmation')}
+                    name="confirmationKind"
+                    options={methods.CONFIRMATION_KINDS.map((kind) => ({
+                      value: kind,
+                      label: t(`payment_methods.confirmation_${kind}`),
                     }))}
                   />
                   <Field

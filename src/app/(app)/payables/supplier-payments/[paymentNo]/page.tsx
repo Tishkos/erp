@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
@@ -14,6 +15,7 @@ import { toDecimalString } from '@domain/money';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as payments from '@/server/services/supplier-payment';
+import * as paymentApplications from '@/server/services/payment-applications';
 import { allocateOldestFirstPayment, allocatePayment, postPayment } from '../actions';
 
 /**
@@ -71,11 +73,14 @@ export default async function PaymentPage({
       // twice and the second submit was refused as an over-allocation.
       plan: await payments.planFor(tx, seen.payment),
       parties: await payments.partiesOf(tx, seen.payment.id),
+      // REQ-AP-001 §21.13 — a payment confirmed from a payment application
+      // links back to it.
+      application: await paymentApplications.forSupplierPayment(tx, seen.payment.id),
     };
   });
 
   if (!found) notFound();
-  const { payment, unallocated, open, plan, parties } = found;
+  const { payment, unallocated, open, plan, parties, application } = found;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   const mayAllocate = unallocated > 0n && can(principal, 'post', payments.PERMISSION_OBJECT);
@@ -113,6 +118,29 @@ export default async function PaymentPage({
       label: t('supplier_payments.reference'),
       value: <bdi dir="auto">{payment.reference ?? '—'}</bdi>,
     },
+    ...(application
+      ? [
+          {
+            label: t('payment_applications.document_type'),
+            value: (
+              <Link
+                className={s.sapLink}
+                href={`/payables/payment-applications/${encodeURIComponent(application.applicationNo)}`}
+              >
+                <bdi dir="ltr">{application.applicationNo}</bdi>
+              </Link>
+            ),
+          },
+        ]
+      : []),
+    ...(payment.amountTxn && payment.currency !== 'IQD'
+      ? [
+          {
+            label: t('payment_applications.col_amount'),
+            value: <bdi dir="ltr">{formatMoney(payment.amountTxn, payment.currency, locale as Locale)}</bdi>,
+          },
+        ]
+      : []),
   ];
 
   const sheet = await printSheet('supplier_payment', payment.paymentNo);

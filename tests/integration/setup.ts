@@ -457,6 +457,14 @@ export async function resetTestData(): Promise<void> {
     // record who created them and are removed; seed rows (created_by NULL) are
     // restored to their seeded active state.
     await client.query('truncate payable_event');
+    // Stage 3 (0232) — applications and the plan they pay; fixture banks.
+    await client.query('delete from payment_application');
+    await client.query('delete from payable_instalment');
+    await client.query('delete from bank where created_by is not null');
+    await client.query('update funding_source set active = (code <> \'loan\') where created_by is null');
+    await client.query('delete from funding_source where created_by is not null');
+    await client.query('delete from instalment_trigger where created_by is not null');
+    await client.query('update payment_application_transition set active = true');
     await client.query('truncate recurring_contract_amendment');
     await client.query('delete from landed_cost_charge');
     await client.query('delete from landed_cost_type where created_by is not null');
@@ -492,6 +500,7 @@ export async function resetTestData(): Promise<void> {
     // grant in production either — they are resolved, never removed.
     await client.query(`
       delete from ap_match_exception;
+      delete from ap_invoice_note;
       delete from ap_invoice_line;
       delete from ap_invoice;
     `);
@@ -737,6 +746,8 @@ export async function resetTestData(): Promise<void> {
                          -- REQ-AP-001 Stage 1, migration 0225 — one per payable type.
                          'PAYABLE_IMPORT', 'PAYABLE_SERVICE', 'PAYABLE_RECURRING',
                          'PAYABLE_LOCAL_GOODS', 'PAYABLE_ADVANCE', 'RECURRING_CONTRACT',
+                         -- REQ-AP-001 Stage 3, migration 0232.
+                         'PAYMENT_APPLICATION', 'BANK_CODE',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

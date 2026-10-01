@@ -41,12 +41,14 @@ import {
 import {
   NO_FACTS,
   PayableValidationError,
+  STAGE_RULES,
   deriveStage,
   referenceKey,
   type StageFacts,
   type StageRow,
 } from '../domain/payables';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
+import { totals as paymentTotalsOf } from '../domain/payment-applications';
 import { formatQuantity, parseQuantity } from '../domain/uom';
 import type { ActorContext } from './chart-of-accounts';
 import * as audit from './audit';
@@ -194,8 +196,43 @@ export async function gatherFacts(tx: Tx, payableId: string): Promise<StageFacts
     .orderBy(desc(supplierAdvance.createdAt))
     .limit(1);
 
+  // Payment lane (build Stage 3, §15) — the instalment plan and the payment
+  // applications. Read here rather than through the payment-applications
+  // service, which itself records events through this module.
+  const planned = await tx.execute(sql`
+    select id from payable_instalment
+     where payable_id = ${payableId} and superseded_at is null
+     order by sequence`);
+  const instalmentIds = (planned.rows as { id: string }[]).map((r) => r.id);
+  const applied = await tx.execute(sql`
+    select status, instalment_id as "instalmentId", amount_txn::text as "amountTxn",
+           amount_iqd::text as "amountIqd"
+      from payment_application where payable_id = ${payableId}`);
+  const applications = (
+    applied.rows as { status: string; instalmentId: string | null; amountTxn: string; amountIqd: string }[]
+  ).filter((a) => a.status !== 'rejected' && a.status !== 'cancelled');
+  const paymentTotals = paymentTotalsOf(
+    parseDecimal(row.amountTxn, MONEY_SCALE),
+    applications.map((a) => ({
+      status: a.status,
+      amountTxn: parseDecimal(a.amountTxn, MONEY_SCALE),
+      amountIqd: parseDecimal(a.amountIqd, MONEY_SCALE),
+    })),
+  );
+  const paidApplications = applications.filter((a) => a.status === 'confirmed' || a.status === 'debited');
+
   return {
     ...NO_FACTS,
+    instalmentPlanSet: instalmentIds.length > 0,
+    firstInstalmentFunded:
+      instalmentIds.length > 0 &&
+      applications.some((a) => a.instalmentId === instalmentIds[0] && a.status !== 'draft'),
+    paymentSentCount: applications.filter((a) => ['sent', 'confirmed', 'debited'].includes(a.status)).length,
+    fullyPaid: paymentTotals.fullyPaid,
+    allPaymentsConfirmed:
+      paidApplications.length > 0 &&
+      applications.every((a) => a.status === 'confirmed' || a.status === 'debited'),
+    statementMatched: paidApplications.length > 0 && paidApplications.every((a) => a.status === 'debited'),
     postedInvoiceCount: invoices?.posted ?? 0,
     approvedInvoiceCount: invoices?.approved ?? 0,
     serviceConfirmed: serviceConfirmed || (autoConfirmed?.n ?? 0) > 0,
@@ -1139,6 +1176,10 @@ export async function workbench(tx: Tx, filter: WorkbenchFilter = {}) {
       currency: payable.currency,
       amountTxn: payable.amountTxn,
       amountIqd: payable.amountIqd,
+      // §15.5 — Paid, from the applications (confirmed or debited); never stored.
+      paidTxn: sql<string>`coalesce((
+        select sum(pa.amount_txn) from payment_application pa
+         where pa.payable_id = ${payable.id} and pa.status in ('confirmed', 'debited')), 0)::text`,
       stageCode: payable.stageCode,
       stageName: payableStage.name,
       stageSequence: payableStage.sequence,
@@ -1275,10 +1316,20 @@ export async function view(tx: Tx, payableNo: string) {
     .where(eq(branch.code, row.branchCode))
     .limit(1);
 
+  // Which stages' own rules hold — so the rail ticks only what is true. The
+  // stage is the highest that holds (§6); a payment sent before the PD is
+  // registered puts the import at "Payment in progress" without pretending
+  // the PD stage was passed.
+  const facts = await gatherFacts(tx, row.id);
+  const reached = rail
+    .filter((stage) => STAGE_RULES[stage.ruleName]?.(facts) ?? false)
+    .map((stage) => stage.code);
+
   return {
     payable: row,
     type,
     rail,
+    reached,
     lanes: lanes.rows as { code: string; name: string; sort_order: number }[],
     lines,
     invoices,

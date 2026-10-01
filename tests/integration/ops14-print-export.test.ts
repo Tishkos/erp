@@ -218,6 +218,8 @@ beforeAll(async () => {
   for (const [role, parent, name, control] of [
     ['inventory', 'A000001', 'Inventory', null],
     ['bank', 'A000001', 'Bank Current Account', null],
+    // REQ-AP-001 §9.2 — the posting map's landed-cost clearing role (Stage 2).
+    ['landed_cost_clearing', 'A000001', 'Landed Cost Clearing', null],
     ['customer_receivable', 'A000001', 'Trade Receivables', 'customer'],
     ['customer_clearing', 'A000001', 'Receipts Not Yet Identified', null],
     ['supplier_payable', 'L000001', 'Trade Payables', 'supplier'],

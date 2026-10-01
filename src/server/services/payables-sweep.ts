@@ -25,6 +25,7 @@ import { limitInForce, type LimitScope, type TimeLimitRow } from '../domain/paya
 import * as events from './payable-events';
 import * as holds from './payable-holds';
 import * as contracts from './recurring-contracts';
+import * as paymentApplications from './payment-applications';
 import * as notifications from './notifications';
 
 export interface SweepResult {
@@ -34,6 +35,8 @@ export interface SweepResult {
   readonly escalated: number;
   /** §10.4 — contract periods the generator raised in this run. */
   readonly periodsGenerated: number;
+  /** §15.4 — confirmed payments the bank reconciliation has shown debited. */
+  readonly debitsMatched: number;
   /** Checks whose query this build does not implement yet — seeded, inert. */
   readonly skipped: string[];
 }
@@ -115,7 +118,95 @@ const CHECK_QUERIES: Readonly<Record<string, CheckQuery>> = {
         `Over time limit: due ${row.due}, unpaid for ${days} days (limit ${limit})`,
     }));
   },
+
+  /** §15.4, D4 — a SWIFT sent to the bank and not confirmed. Per method and bank. */
+  swift_pending: (tx) => pendingApplications(tx, 'swift'),
+
+  /** D4 — a local transfer, cheque or cash payment sent and not confirmed. */
+  transfer_pending: (tx) => pendingApplications(tx, 'other'),
+
+  /**
+   * D4 — an import whose invoice is posted and owing, with nothing asked of
+   * the bank: no payment application approved, sent or paid. The clock runs
+   * from the invoice's posting.
+   */
+  invoice_unfunded: async (tx) => {
+    const result = await tx.execute(sql`
+      select p.id, p.payable_type_code as "typeCode", p.supplier_id as "supplierId",
+             min(i.posted_at)::date::text as since, string_agg(i.invoice_no, ', ') as invoices
+        from payable p
+        join ap_invoice i on i.payable_id = p.id
+                         and i.status in ('posted', 'partially_executed')
+                         and i.reversed_at is null
+                         and i.total_iqd > i.settled_amount_iqd
+       where p.cancelled_at is null and p.closed_at is null
+         and not exists (
+               select 1 from payment_application pa
+                where pa.payable_id = p.id
+                  and pa.status in ('approved', 'sent', 'confirmed', 'debited'))
+       group by p.id`);
+    const rows = result.rows as {
+      id: string;
+      typeCode: string;
+      supplierId: string;
+      since: string;
+      invoices: string;
+    }[];
+    return rows.map((row) => ({
+      payableId: row.id,
+      laneCode: 'bank',
+      since: row.since,
+      scope: { typeCode: row.typeCode, supplierId: row.supplierId },
+      summary: (limit, days) =>
+        `Over time limit: invoice ${row.invoices} posted ${days} days ago and not funded — no payment application approved (limit ${limit})`,
+    }));
+  },
 };
+
+/**
+ * The applications sent and waiting for the bank's answer, one offender per
+ * application (the hold is per payable and check, so the oldest opens it).
+ */
+async function pendingApplications(tx: Tx, which: 'swift' | 'other'): Promise<Offender[]> {
+  const result = await tx.execute(sql`
+    select pa.payable_id as "payableId", pa.application_no as "applicationNo",
+           pa.application_date::text as since, pa.payment_method_code as "methodCode",
+           b.bank_code as "bankCode", p.payable_type_code as "typeCode", p.supplier_id as "supplierId",
+           b.code as "accountCode"
+      from payment_application pa
+      join payment_method m on m.code = pa.payment_method_code
+      join bank_cash_account b on b.id = pa.bank_cash_account_id
+      join payable p on p.id = pa.payable_id
+     where pa.status = 'sent'
+       and p.cancelled_at is null and p.closed_at is null
+       and ${which === 'swift' ? sql`m.confirmation_kind = 'swift'` : sql`m.confirmation_kind <> 'swift'`}
+     order by pa.application_date`);
+  const rows = result.rows as {
+    payableId: string;
+    applicationNo: string;
+    since: string;
+    methodCode: string;
+    bankCode: string | null;
+    typeCode: string;
+    supplierId: string;
+    accountCode: string;
+  }[];
+  return rows.map((row) => ({
+    payableId: row.payableId,
+    laneCode: 'payment',
+    since: row.since,
+    scope: {
+      typeCode: row.typeCode,
+      bankCode: row.bankCode,
+      methodCode: row.methodCode,
+      supplierId: row.supplierId,
+    },
+    summary: (limit, days) =>
+      which === 'swift'
+        ? `Over time limit: SWIFT pending ${days} days (limit ${limit}) — ${row.applicationNo} at ${row.accountCode}, NOT PAID`
+        : `Over time limit: payment pending ${days} days (limit ${limit}) — ${row.applicationNo} at ${row.accountCode}`,
+  }));
+}
 
 async function limitsFor(tx: Tx, checkCode: string): Promise<TimeLimitRow[]> {
   const rows = await tx
@@ -146,6 +237,10 @@ export async function runSweep(tx: Tx, asOf: string): Promise<SweepResult> {
   // checks, so a period born due today is also checked today. Idempotent, as
   // the generator itself is.
   const generated = await contracts.generateDue(tx, asOf, null);
+
+  // §15.4 — a confirmed payment whose bank line the reconciliation matched is
+  // debit-final; read before the checks so a matched one stops being pending.
+  const debitsMatched = await paymentApplications.syncDebits(tx);
 
   const checks = await tx.select().from(sweepCheck).where(eq(sweepCheck.active, true));
 
@@ -252,5 +347,13 @@ export async function runSweep(tx: Tx, asOf: string): Promise<SweepResult> {
     escalated += 1;
   }
 
-  return { asOf, checked, opened, escalated, periodsGenerated: generated.periodsCreated, skipped };
+  return {
+    asOf,
+    checked,
+    opened,
+    escalated,
+    periodsGenerated: generated.periodsCreated,
+    debitsMatched,
+    skipped,
+  };
 }
