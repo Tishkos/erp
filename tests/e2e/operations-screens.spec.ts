@@ -430,7 +430,7 @@ test.describe('the Operations Build screens open', () => {
         administrator.waitForResponse(
           (response) =>
             response.request().method() === 'POST' &&
-            response.url().includes('/master-data/items/'),
+            response.url().includes('/inventory/items/'),
           { timeout: 60_000 },
         ),
         submit(),

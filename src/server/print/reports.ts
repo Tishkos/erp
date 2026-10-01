@@ -143,105 +143,130 @@ async function outstandingTable(
   partyCode: string,
   asOf: string,
   view: openItemsService.OpenItemView,
-): Promise<{ readonly tables: Table[]; readonly ageing: openItemsService.BucketTotal[] }> {
+): Promise<{
+  readonly tables: Table[];
+  readonly ageing: openItemsService.BucketTotal[];
+  readonly position: openItemsService.InvoicePositionTotals;
+  readonly reconciliation: openItemsService.ReconciliationTotals;
+}> {
   const { m } = ctx;
   const narrow = { branchCode: ctx.branchCode, partyCode };
+  const items = await openItemsService.openItems(ctx.tx, ctx.principal, side, asOf, {
+    ...narrow,
+    outstandingOnly: true,
+    ...openItemsService.viewFilter(view),
+  }).catch(() => []);
+  const everyItem = await openItemsService.openItems(ctx.tx, ctx.principal, side, asOf, narrow).catch(() => []);
+  const balances = await openItemsService.ledgerBalances(ctx.tx, ctx.principal, side, asOf, narrow).catch(() => []);
+  const reconciled = openItemsService.reconcile(everyItem, balances);
+  const creditRows = reconciled.filter((row) => Number(row.unappliedCreditsIqd) > 0);
+  const debitRows = reconciled.filter((row) => Number(row.otherNonInvoiceDebitIqd) > 0);
+  const ageing = openItemsService.ageing(everyItem);
+  const position = openItemsService.invoicePositionTotals(everyItem);
+  const reconciliation = openItemsService.reconciliationTotals(reconciled);
+  const tables: Table[] = [];
 
-  const items = await openItemsService
-    .openItems(ctx.tx, ctx.principal, side, asOf, {
-      ...narrow,
-      outstandingOnly: true,
-      // The copy answers the question the screen was answering when Print was
-      // pressed: a statement headed "Overdue" that lists everything is worse
-      // than no statement.
-      ...openItemsService.viewFilter(view),
-    })
-    .catch(() => []);
-
-  /*
-   * …and what reached the account without an invoice behind it.
-   *
-   * A printed statement is the document a conversation about money happens
-   * over. This table sitting under a closing balance it disagreed with was
-   * the worst instance of the whole problem: the reader has both figures in
-   * front of them on one sheet and no way to tell which is wrong.
-   */
-  const everyItem = await openItemsService
-    .openItems(ctx.tx, ctx.principal, side, asOf, narrow)
-    .catch(() => []);
-  const balances = await openItemsService
-    .ledgerBalances(ctx.tx, ctx.principal, side, asOf, narrow)
-    .catch(() => []);
-  const reconciled = openItemsService.reconcile(everyItem, balances, asOf);
-  const unexplained = reconciled.filter((row) => Number(row.unexplainedIqd) !== 0);
-  const tie = openItemsService.reconciliationTotals(reconciled);
-
-  if (items.length === 0 && unexplained.length === 0) return { tables: [], ageing: [] };
-
-  return {
-    ageing: openItemsService.ageingWith(items, reconciled),
-    tables: [
-    {
-      title: m.admin('statement_outstanding.title'),
-      columns: [
-        { key: 'invoice', label: m.column('invoice_no'), kind: 'code', weight: 1.4 },
-        { key: 'invoice_date', label: m.column('invoice_date'), kind: 'date' },
-        { key: 'due_date', label: m.column('due_date'), kind: 'date' },
-        { key: 'terms', label: m.admin('open_items.terms'), kind: 'text' },
-        { key: 'total', label: m.column('total_price'), kind: 'money' },
-        { key: 'paid', label: m.admin('open_items.paid'), kind: 'money' },
-        { key: 'outstanding', label: m.admin('open_items.outstanding'), kind: 'money' },
-        { key: 'late', label: m.admin('open_items.lateness'), kind: 'text' },
-      ],
-      rows: [
-        ...unexplained.map((row) => ({
-          cells: {
-            invoice: m.admin('reconciliation.by_journal_plain'),
-            invoice_date: row.oldestDate ?? '',
-            due_date: '',
-            terms: '',
-            total: row.unexplainedChargedIqd,
-            paid: row.unexplainedPaidIqd,
-            outstanding: row.unexplainedIqd,
-            late: m.admin(`dashboard.${AGEING_LABEL[row.bucket] ?? 'bucket_current'}`),
-          },
-        })),
-        ...items.map((item) => ({
-          cells: {
-            invoice: item.invoiceNo,
-            invoice_date: item.invoiceDate,
-            due_date: item.dueDate,
-            terms: item.paymentTermsName ?? item.paymentTermsCode ?? '',
-            total: item.totalIqd,
-            paid: item.paidIqd,
-            outstanding: item.outstandingIqd,
-            late:
-              item.daysOverdue > 0
-                ? m.admin('open_items.overdue_by', { days: item.daysOverdue })
-                : m.admin('open_items.due_in', { days: item.daysUntilDue }),
-          },
-        })),
-      ],
-      empty: m.admin('open_items.nothing'),
-      // The foot is the statement's closing balance, so the two figures on
-      // the sheet are the same figure.
-      totals: {
-        label: m.admin('reconciliation.owed_total'),
+  if (items.length > 0) {
+    const columns: Column[] = [
+      { key: 'invoice', label: m.column('invoice_no'), kind: 'code', weight: 1.4 },
+      { key: 'invoice_date', label: m.column('invoice_date'), kind: 'date' },
+      { key: 'due_date', label: m.column('due_date'), kind: 'date' },
+      { key: 'terms', label: m.admin('open_items.terms'), kind: 'text' },
+      { key: 'total', label: m.column('total_price'), kind: 'money' },
+      { key: 'paid', label: m.admin(side === 'customer' ? 'open_items.allocated_payments' : 'open_items.paid'), kind: 'money' },
+      ...(side === 'customer'
+        ? [
+            { key: 'credits', label: m.admin('open_items.credits_applied'), kind: 'money' as const },
+            { key: 'adjustments', label: m.admin('open_items.other_adjustments_applied'), kind: 'money' as const },
+          ]
+        : []),
+      { key: 'outstanding', label: m.admin('open_items.outstanding'), kind: 'money' },
+      { key: 'late', label: m.admin('open_items.lateness'), kind: 'text' },
+    ];
+    tables.push({
+      title: m.admin('open_items.invoice_balances'),
+      columns,
+      rows: items.map((item) => ({
         cells: {
-          total: sumMoney([
-            ...items.map((item) => item.totalIqd),
-            ...unexplained.map((row) => row.unexplainedChargedIqd),
-          ]),
-          paid: sumMoney([
-            ...items.map((item) => item.paidIqd),
-            ...unexplained.map((row) => row.unexplainedPaidIqd),
-          ]),
-          outstanding: tie.ledgerIqd,
+          invoice: item.invoiceNo,
+          invoice_date: item.invoiceDate,
+          due_date: item.dueDate,
+          terms: item.paymentTermsName ?? item.paymentTermsCode ?? '',
+          total: item.totalIqd,
+          paid: item.paidIqd,
+          ...(side === 'customer'
+            ? { credits: item.creditsAppliedIqd, adjustments: item.otherAppliedIqd }
+            : {}),
+          outstanding: item.outstandingIqd,
+          late:
+            item.daysOverdue > 0
+              ? m.admin('open_items.overdue_by', { days: item.daysOverdue })
+              : m.admin('open_items.due_in', { days: item.daysUntilDue }),
+        },
+      })),
+      empty: m.admin('open_items.nothing'),
+      totals: {
+        label: m.admin('open_items.invoice_balances'),
+        cells: {
+          total: sumMoney(items.map((item) => item.totalIqd)),
+          paid: sumMoney(items.map((item) => item.paidIqd)),
+          ...(side === 'customer'
+            ? {
+                credits: sumMoney(items.map((item) => item.creditsAppliedIqd)),
+                adjustments: sumMoney(items.map((item) => item.otherAppliedIqd)),
+              }
+            : {}),
+          outstanding: sumMoney(items.map((item) => item.outstandingIqd)),
         },
       },
-    },
-    ],
-  };
+    });
+  }
+
+  if (creditRows.length > 0) {
+    tables.push({
+      title: m.admin(side === 'customer' ? 'open_items.credit_advance_title' : 'open_items.supplier_credit_advance_title'),
+      columns: [
+        { key: 'party', label: m.admin(`partners.role_${side}`), kind: 'text' },
+        { key: 'since', label: m.admin('open_items.on_account_since'), kind: 'date' },
+        { key: 'balance', label: m.admin('open_items.credit_advance_balance'), kind: 'money' },
+      ],
+      rows: creditRows.map((row) => ({
+        cells: {
+          party: `${row.partyName} / ${row.partyCode}`,
+          since: row.oldestDate ?? '',
+          balance: row.unappliedCreditsIqd,
+        },
+      })),
+      totals: {
+        label: m.admin(side === 'customer' ? 'open_items.customer_credits' : 'open_items.supplier_credits'),
+        cells: { balance: sumMoney(creditRows.map((row) => row.unappliedCreditsIqd)) },
+      },
+    });
+  }
+
+  if (debitRows.length > 0) {
+    tables.push({
+      title: m.admin('open_items.noninvoice_debit_title'),
+      columns: [
+        { key: 'party', label: m.admin(`partners.role_${side}`), kind: 'text' },
+        { key: 'since', label: m.admin('open_items.on_account_since'), kind: 'date' },
+        { key: 'balance', label: m.admin('open_items.noninvoice_debit_balance'), kind: 'money' },
+      ],
+      rows: debitRows.map((row) => ({
+        cells: {
+          party: `${row.partyName} / ${row.partyCode}`,
+          since: row.oldestDate ?? '',
+          balance: row.otherNonInvoiceDebitIqd,
+        },
+      })),
+      totals: {
+        label: m.admin('open_items.other_noninvoice_debits'),
+        cells: { balance: sumMoney(debitRows.map((row) => row.otherNonInvoiceDebitIqd)) },
+      },
+    });
+  }
+
+  return { tables, ageing, position, reconciliation };
 }
 
 /** Customer or Supplier Account Statement — blocks 2 and 3. */
@@ -305,6 +330,36 @@ export async function partnerStatement(
           value: formatStatementAmount(bucket.amountIqd, currency, locale),
           ltr: true,
         })),
+         {
+           label: m.admin(side === 'customer' ? 'open_items.gross_customer' : 'open_items.gross_supplier'),
+           value: formatStatementAmount(outstanding.position.grossIqd, currency, locale),
+           ltr: true,
+         },
+         {
+           label: m.admin('open_items.not_yet_due'),
+           value: formatStatementAmount(outstanding.position.notYetDueIqd, currency, locale),
+           ltr: true,
+         },
+         {
+           label: m.admin('open_items.overdue_total'),
+           value: formatStatementAmount(outstanding.position.overdueIqd, currency, locale),
+           ltr: true,
+         },
+         {
+           label: m.admin(side === 'customer' ? 'open_items.customer_credits' : 'open_items.supplier_credits'),
+           value: formatStatementAmount(outstanding.reconciliation.unappliedCreditsIqd, currency, locale),
+           ltr: true,
+         },
+         {
+           label: m.admin('open_items.other_noninvoice_debits'),
+           value: formatStatementAmount(outstanding.reconciliation.otherNonInvoiceDebitsIqd, currency, locale),
+           ltr: true,
+         },
+         {
+           label: m.admin(side === 'customer' ? 'open_items.net_customer_position' : 'open_items.net_supplier_position'),
+           value: formatStatementAmount(outstanding.reconciliation.ledgerIqd, currency, locale),
+           ltr: true,
+         },
       ],
       fileName: `${side}-statement_${chosen.code}_${from}_${to}`,
     }),
@@ -789,10 +844,12 @@ export async function openItems(
     asked && !chosen
       ? []
       : await openItemsService.ledgerBalances(ctx.tx, ctx.principal, side, asOf, narrow);
-  const reconciled = openItemsService.reconcile(everyItem, balances, asOf);
+  const reconciled = openItemsService.reconcile(everyItem, balances);
   const tie = openItemsService.reconciliationTotals(reconciled);
-  const unexplained = reconciled.filter((row) => Number(row.unexplainedIqd) !== 0);
-  const buckets = openItemsService.ageingWith(items, reconciled);
+  const creditRows = reconciled.filter((row) => Number(row.unappliedCreditsIqd) > 0);
+  const debitRows = reconciled.filter((row) => Number(row.otherNonInvoiceDebitIqd) > 0);
+  const buckets = openItemsService.ageing(everyItem);
+  const position = openItemsService.invoicePositionTotals(everyItem);
 
   const bucketLabel = (bucket: string) =>
     m.admin(
@@ -820,58 +877,51 @@ export async function openItems(
       })),
       empty: m.admin('open_items.nothing'),
       totals: {
-        label: m.admin('reconciliation.owed_total'),
-        cells: { amount: tie.ledgerIqd },
+        label: m.admin(side === 'customer' ? 'open_items.gross_customer' : 'open_items.gross_supplier'),
+        cells: { amount: position.grossIqd },
       },
     },
-    {
+  ];
+
+  if (items.length > 0) {
+    const columns: Column[] = [
+      {
+        key: 'party',
+        label: m.column(side === 'customer' ? 'customer_name' : 'supplier_name'),
+        kind: 'text',
+        weight: 1.6,
+      },
+      { key: 'invoice', label: m.column('invoice_no'), kind: 'code', weight: 1.4 },
+      { key: 'invoice_date', label: m.column('invoice_date'), kind: 'date' },
+      { key: 'due_date', label: m.column('due_date'), kind: 'date' },
+      { key: 'terms', label: m.admin('open_items.terms'), kind: 'text' },
+      { key: 'total', label: m.column('total_price'), kind: 'money' },
+      { key: 'paid', label: m.admin(side === 'customer' ? 'open_items.allocated_payments' : 'open_items.paid'), kind: 'money' },
+      ...(side === 'customer'
+        ? [
+            { key: 'credits', label: m.admin('open_items.credits_applied'), kind: 'money' as const },
+            { key: 'adjustments', label: m.admin('open_items.other_adjustments_applied'), kind: 'money' as const },
+          ]
+        : []),
+      { key: 'outstanding', label: m.admin('open_items.outstanding'), kind: 'money' },
+      { key: 'status', label: m.column('status'), kind: 'text' },
+      { key: 'late', label: m.admin('open_items.lateness'), kind: 'text' },
+    ];
+    tables.push({
       title: m.page(side === 'customer' ? 'ar_open_items' : 'ap_open_items'),
-      columns: [
-        {
-          key: 'party',
-          label: m.column(side === 'customer' ? 'customer_name' : 'supplier_name'),
-          kind: 'text',
-          weight: 1.6,
-        },
-        { key: 'invoice', label: m.column('invoice_no'), kind: 'code', weight: 1.4 },
-        { key: 'invoice_date', label: m.column('invoice_date'), kind: 'date' },
-        { key: 'due_date', label: m.column('due_date'), kind: 'date' },
-        { key: 'terms', label: m.admin('open_items.terms'), kind: 'text' },
-        { key: 'total', label: m.column('total_price'), kind: 'money' },
-        { key: 'paid', label: m.admin('open_items.paid'), kind: 'money' },
-        { key: 'outstanding', label: m.admin('open_items.outstanding'), kind: 'money' },
-        { key: 'status', label: m.column('status'), kind: 'text' },
-        { key: 'late', label: m.admin('open_items.lateness'), kind: 'text' },
-      ],
-      rows: [
-        ...unexplained.map((row) => ({
-          cells: {
-            party: `${row.partyName} · ${row.partyCode}`,
-            // No document to name, so the row says what it is rather than
-            // leaving a blank somebody would read as a missing reference.
-            // The plain wording, not the screen's: a printed page inviting
-            // the reader to "open the statement" is inviting them to click
-            // a piece of paper.
-            invoice: m.admin('reconciliation.by_journal_plain'),
-            invoice_date: row.oldestDate ?? '',
-            due_date: '',
-            terms: '',
-            total: row.unexplainedChargedIqd,
-            paid: row.unexplainedPaidIqd,
-            outstanding: row.unexplainedIqd,
-            status: m.admin('reconciliation.no_document'),
-            late: bucketLabel(row.bucket),
-          },
-        })),
-        ...items.map((item) => ({
+      columns,
+      rows: items.map((item) => ({
         cells: {
-          party: `${item.partyName} · ${item.partyCode}`,
+          party: `${item.partyName} / ${item.partyCode}`,
           invoice: item.invoiceNo,
           invoice_date: item.invoiceDate,
           due_date: item.dueDate,
           terms: item.paymentTermsName ?? item.paymentTermsCode ?? '',
           total: item.totalIqd,
           paid: item.paidIqd,
+          ...(side === 'customer'
+            ? { credits: item.creditsAppliedIqd, adjustments: item.otherAppliedIqd }
+            : {}),
           outstanding: item.outstandingIqd,
           status: m.status(item.status),
           late:
@@ -884,26 +934,67 @@ export async function openItems(
                 : m.admin('open_items.due_in', { days: item.daysUntilDue }),
         },
       })),
-      ],
       empty: m.admin('open_items.nothing'),
-      // Everything the table lists, invoices and journals together, so the
-      // foot of the printed copy is the statement's closing balance.
       totals: {
-        label: m.admin('reconciliation.owed_total'),
+        label: m.admin('open_items.invoice_balances'),
         cells: {
-          total: sumMoney([
-            ...items.map((item) => item.totalIqd),
-            ...unexplained.map((row) => row.unexplainedChargedIqd),
-          ]),
-          paid: sumMoney([
-            ...items.map((item) => item.paidIqd),
-            ...unexplained.map((row) => row.unexplainedPaidIqd),
-          ]),
-          outstanding: tie.ledgerIqd,
+          total: sumMoney(items.map((item) => item.totalIqd)),
+          paid: sumMoney(items.map((item) => item.paidIqd)),
+          ...(side === 'customer'
+            ? {
+                credits: sumMoney(items.map((item) => item.creditsAppliedIqd)),
+                adjustments: sumMoney(items.map((item) => item.otherAppliedIqd)),
+              }
+            : {}),
+          outstanding: sumMoney(items.map((item) => item.outstandingIqd)),
         },
       },
-    },
-  ];
+    });
+  }
+
+  if (creditRows.length > 0) {
+    tables.push({
+      title: m.admin(side === 'customer' ? 'open_items.credit_advance_title' : 'open_items.supplier_credit_advance_title'),
+      columns: [
+        { key: 'party', label: m.admin(`partners.role_${side}`), kind: 'text' },
+        { key: 'since', label: m.admin('open_items.on_account_since'), kind: 'date' },
+        { key: 'balance', label: m.admin('open_items.credit_advance_balance'), kind: 'money' },
+      ],
+      rows: creditRows.map((row) => ({
+        cells: {
+          party: `${row.partyName} / ${row.partyCode}`,
+          since: row.oldestDate ?? '',
+          balance: row.unappliedCreditsIqd,
+        },
+      })),
+      totals: {
+        label: m.admin(side === 'customer' ? 'open_items.customer_credits' : 'open_items.supplier_credits'),
+        cells: { balance: sumMoney(creditRows.map((row) => row.unappliedCreditsIqd)) },
+      },
+    });
+  }
+
+  if (debitRows.length > 0) {
+    tables.push({
+      title: m.admin('open_items.noninvoice_debit_title'),
+      columns: [
+        { key: 'party', label: m.admin(`partners.role_${side}`), kind: 'text' },
+        { key: 'since', label: m.admin('open_items.on_account_since'), kind: 'date' },
+        { key: 'balance', label: m.admin('open_items.noninvoice_debit_balance'), kind: 'money' },
+      ],
+      rows: debitRows.map((row) => ({
+        cells: {
+          party: `${row.partyName} / ${row.partyCode}`,
+          since: row.oldestDate ?? '',
+          balance: row.otherNonInvoiceDebitIqd,
+        },
+      })),
+      totals: {
+        label: m.admin('open_items.other_noninvoice_debits'),
+        cells: { balance: sumMoney(debitRows.map((row) => row.otherNonInvoiceDebitIqd)) },
+      },
+    });
+  }
 
   return built(
     ctx,
@@ -922,6 +1013,38 @@ export async function openItems(
               },
             ]
           : []),
+      ],
+      summary: [
+        {
+          label: m.admin(side === 'customer' ? 'open_items.gross_customer' : 'open_items.gross_supplier'),
+          value: formatStatementAmount(position.grossIqd, 'IQD', locale),
+          ltr: true,
+        },
+        {
+          label: m.admin('open_items.not_yet_due'),
+          value: formatStatementAmount(position.notYetDueIqd, 'IQD', locale),
+          ltr: true,
+        },
+        {
+          label: m.admin('open_items.overdue_total'),
+          value: formatStatementAmount(position.overdueIqd, 'IQD', locale),
+          ltr: true,
+        },
+        {
+          label: m.admin(side === 'customer' ? 'open_items.customer_credits' : 'open_items.supplier_credits'),
+          value: formatStatementAmount(tie.unappliedCreditsIqd, 'IQD', locale),
+          ltr: true,
+        },
+        {
+          label: m.admin('open_items.other_noninvoice_debits'),
+          value: formatStatementAmount(tie.otherNonInvoiceDebitsIqd, 'IQD', locale),
+          ltr: true,
+        },
+        {
+          label: m.admin(side === 'customer' ? 'open_items.net_customer_position' : 'open_items.net_supplier_position'),
+          value: formatStatementAmount(tie.ledgerIqd, 'IQD', locale),
+          ltr: true,
+        },
       ],
       tables,
       fileName: chosen

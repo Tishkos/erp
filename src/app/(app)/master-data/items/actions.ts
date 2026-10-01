@@ -3,7 +3,7 @@
 import { flag, runAdminAndReturn, text } from '@/server/admin-action';
 import * as items from '@/server/services/items';
 
-const LIST = '/master-data/items';
+const LIST = '/inventory/items';
 const record = (code: string) => `${LIST}/${encodeURIComponent(code)}`;
 
 const createdRecord = (value: unknown) => {

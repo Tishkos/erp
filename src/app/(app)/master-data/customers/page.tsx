@@ -7,6 +7,6 @@ import { visibleRoute } from '@/server/phase-gate';
 export const dynamic = 'force-dynamic';
 
 export default async function CustomersPage({ searchParams }: { searchParams: SearchParams }) {
-  if (!visibleRoute('/master-data/customers')) notFound();
+  if (!visibleRoute('/sales/customers')) notFound();
   return <PartnerList role="customer" searchParams={searchParams} />;
 }

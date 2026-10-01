@@ -41,6 +41,100 @@ const config: NextConfig = {
       bodySizeLimit: '4mb', // Excel paste blocks — §7.2, §8.3
     },
   },
+
+  async redirects() {
+    return [
+      {
+        source: '/master-data/customers',
+        destination: '/sales/customers',
+        permanent: true,
+      },
+      {
+        source: '/master-data/customers/:code',
+        destination: '/sales/customers/:code',
+        permanent: true,
+      },
+      {
+        source: '/master-data/suppliers',
+        destination: '/purchasing/suppliers',
+        permanent: true,
+      },
+      {
+        source: '/master-data/suppliers/:code',
+        destination: '/purchasing/suppliers/:code',
+        permanent: true,
+      },
+      {
+        source: '/master-data/items',
+        destination: '/inventory/items',
+        permanent: true,
+      },
+      {
+        source: '/master-data/items/:code',
+        destination: '/inventory/items/:code',
+        permanent: true,
+      },
+      {
+        source: '/master-data/uom',
+        destination: '/inventory/uom',
+        permanent: true,
+      },
+      {
+        source: '/master-data/uom/:code',
+        destination: '/inventory/uom/:code',
+        permanent: true,
+      },
+      {
+        source: '/master-data/business-partners',
+        destination: '/sales/customers',
+        permanent: true,
+      },
+      {
+        source: '/master-data/business-partners/:code',
+        destination: '/sales/customers/:code',
+        permanent: true,
+      },
+    ];
+  },
+
+  async rewrites() {
+    return {
+      beforeFiles: [
+        {
+          source: '/sales/customers',
+          destination: '/master-data/customers',
+        },
+        {
+          source: '/sales/customers/:code',
+          destination: '/master-data/business-partners/:code',
+        },
+        {
+          source: '/purchasing/suppliers',
+          destination: '/master-data/suppliers',
+        },
+        {
+          source: '/purchasing/suppliers/:code',
+          destination: '/master-data/business-partners/:code',
+        },
+        {
+          source: '/inventory/items',
+          destination: '/master-data/items',
+        },
+        {
+          source: '/inventory/items/:code',
+          destination: '/master-data/items/:code',
+        },
+        {
+          source: '/inventory/uom',
+          destination: '/master-data/uom',
+        },
+        {
+          source: '/inventory/uom/:code',
+          destination: '/master-data/uom/:code',
+        },
+      ],
+    };
+  },
 };
 
 export default withNextIntl(config);

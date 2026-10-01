@@ -36,7 +36,7 @@ export default async function UomRecordPage({
   params: Promise<{ code: string }>;
   searchParams: SearchParams;
 }) {
-  if (!visibleRoute('/master-data/uom')) notFound();
+  if (!visibleRoute('/inventory/uom')) notFound();
 
   const [t, page, context, outcome, { code: rawCode }] = await Promise.all([
     getTranslations('admin'),
@@ -68,7 +68,7 @@ export default async function UomRecordPage({
   return (
     <AdminPage
       actions={<AuditLogButton label={t('history')} />}
-      back={{ href: '/master-data/uom', label: t('back') }}
+      back={{ href: '/inventory/uom', label: t('back') }}
       title={`${row.code} · ${row.name}`}
       trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"
@@ -150,7 +150,7 @@ export default async function UomRecordPage({
                 {items.map((row2) => (
                   <li key={row2.id}>
                     <span>
-                      <Link href={`/master-data/items/${encodeURIComponent(row2.code)}`}>{row2.code}</Link>
+                      <Link href={`/inventory/items/${encodeURIComponent(row2.code)}`}>{row2.code}</Link>
                     </span>
                     <span>{row2.name}</span>
                   </li>

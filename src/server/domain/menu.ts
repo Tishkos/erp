@@ -102,7 +102,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ordinal: 3,
     items: [
       page('sales_dashboard', 'sales_dashboard', '06'),
-      page('customers', 'business_partner', '02', '/master-data/customers'),
+      page('customers', 'business_partner', '02', '/sales/customers'),
       // A customer's account statement, beside the customer whose account it
       // is. Appendix A filed it under Receivables; the sponsor asked for it
       // here (2026-09-23), which is the same refinement that moved Customers
@@ -137,7 +137,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ordinal: 4,
     items: [
       page('procurement_dashboard', 'procurement_dashboard', '05'),
-      page('suppliers', 'business_partner', '02', '/master-data/suppliers'),
+      page('suppliers', 'business_partner', '02', '/purchasing/suppliers'),
       // The supplier's side of the same mirror. See the note under Sales.
       page('ap_statements', 'business_partner', '05', '/purchasing/supplier-statements'),
       page('purchase_orders', 'purchase_order', '05'),
@@ -169,8 +169,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('inventory_returns', 'inventory_return', '04'),
       page('damaged_goods', 'damage_report', '04'),
       page('serial_batch_tracking', 'serial_batch', '04'),
-      page('items', 'item', '02', '/master-data/items'),
-      page('uom', 'uom', '02', '/master-data/uom'),
+      page('items', 'item', '02', '/inventory/items'),
+      page('uom', 'uom', '02', '/inventory/uom'),
       page('stock_reconciliation', 'stock_reconciliation', '04', '/inventory/stock-reconciliation'),
       page('fifo_valuation', 'fifo_valuation', '04'),
       page('inventory_reports', 'inventory_report', '04'),

@@ -34,7 +34,7 @@ import { createUom } from './actions';
 export const dynamic = 'force-dynamic';
 
 export default async function UomPage({ searchParams }: { searchParams: SearchParams }) {
-  if (!visibleRoute('/master-data/uom')) notFound();
+  if (!visibleRoute('/inventory/uom')) notFound();
 
   const [t, page, column, context, outcome] = await Promise.all([
     getTranslations('admin'),
@@ -77,7 +77,7 @@ export default async function UomPage({ searchParams }: { searchParams: SearchPa
         ) : null
       }
       back={{ href: '/', label: t('dashboard_label') }}
-      tabs={<SectionTabs route="/master-data/uom" />}
+      tabs={<SectionTabs route="/inventory/uom" />}
       subtitle={t('uom.subtitle')}
       title={page('md_uom')}
       variant="sap"
@@ -91,7 +91,7 @@ export default async function UomPage({ searchParams }: { searchParams: SearchPa
 
       <Panel flush>
         <ListToolbar
-          clearHref="/master-data/uom"
+          clearHref="/inventory/uom"
           clearLabel={t('clear_search')}
           countLabel={t('rows_shown', { count: shown.length })}
           placeholder={t('search_placeholder')}
@@ -116,7 +116,7 @@ export default async function UomPage({ searchParams }: { searchParams: SearchPa
               {shown.map((row) => (
                 <tr key={row.code}>
                   <td>
-                    <Link href={`/master-data/uom/${encodeURIComponent(row.code)}`}>{row.code}</Link>
+                    <Link href={`/inventory/uom/${encodeURIComponent(row.code)}`}>{row.code}</Link>
                   </td>
                   <td>{row.name}</td>
                   <td>

@@ -48,15 +48,16 @@ export default async function BusinessPartnerPage({
   params: Promise<{ code: string }>;
   searchParams: SearchParams;
 }) {
-  if (!visibleRoute('/master-data/business-partners')) notFound();
+  if (!visibleRoute('/sales/customers') && !visibleRoute('/purchasing/suppliers')) notFound();
 
-  const [t, page, column, locale, context, outcome, { code: rawCode }] = await Promise.all([
+  const [t, page, column, locale, context, outcome, query, { code: rawCode }] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('column'),
     getLocale(),
     requireContext(),
     outcomeOf(searchParams),
+    searchParams,
     params,
   ]);
   const code = decodeURIComponent(rawCode);
@@ -80,6 +81,11 @@ export default async function BusinessPartnerPage({
   });
   if (!data) notFound();
   const { row, paymentTerms } = data;
+  const routeRole: partners.PartnerRole =
+    query.role === 'supplier' || (query.role !== 'customer' && !row.isCustomer && row.isSupplier)
+      ? 'supplier'
+      : 'customer';
+  const listRoute = routeRole === 'customer' ? '/sales/customers' : '/purchasing/suppliers';
 
   return (
     <AdminPage
@@ -92,7 +98,7 @@ export default async function BusinessPartnerPage({
           <Link
             className={s.backButton}
             href={`${
-              row.isCustomer ? '/sales/customer-statements' : '/purchasing/supplier-statements'
+              routeRole === 'customer' ? '/sales/customer-statements' : '/purchasing/supplier-statements'
             }?code=${encodeURIComponent(code)}`}
           >
             {t('partners.statement')}
@@ -101,7 +107,7 @@ export default async function BusinessPartnerPage({
         </>
       }
       back={{
-        href: row.isCustomer ? '/master-data/customers' : '/master-data/suppliers',
+        href: listRoute,
         label: t('back'),
       }}
       title={`${row.code} · ${row.legalName}`}
@@ -227,7 +233,7 @@ export default async function BusinessPartnerPage({
               {row.active ? (
                 <ReasonForm
                   action={setPartnerActive}
-                  hidden={{ code: row.code }}
+                  hidden={{ code: row.code, returnRole: routeRole }}
                   label={t('deactivate')}
                   reasonLabel={t('reason')}
                   reasonPlaceholder={t('reason_placeholder')}
@@ -235,7 +241,7 @@ export default async function BusinessPartnerPage({
               ) : (
                 <ActionButton
                   action={setPartnerActive}
-                  hidden={{ code: row.code, active: '1' }}
+                  hidden={{ code: row.code, active: '1', returnRole: routeRole }}
                   label={t('reactivate')}
                   small={false}
                   tone="primary"
@@ -250,6 +256,7 @@ export default async function BusinessPartnerPage({
             <Panel title={t('update')}>
               <Form action={updatePartnerRecord}>
                 <input name="code" type="hidden" value={row.code} />
+                <input name="returnRole" type="hidden" value={routeRole} />
                 <Grid>
                   <Field
                     defaultValue={row.legalName}
