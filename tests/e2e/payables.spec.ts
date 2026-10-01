@@ -19,6 +19,8 @@ import { expect, test, type Page } from '@playwright/test';
  *   §17  Stage 5: a B/L entered from the import page with its containers
  *        pasted in; one container moved to the port and received into a
  *        warehouse (out of transit); the B/L counts "1 of 2 received".
+ *   §15.7 Stage 6: a loan entered by the officer, approved by a second
+ *        person, disbursed and its first instalment repaid.
  *
  * At desktop width in English and at mobile width in real Arabic (the
  * `erp-locale` cookie — every label must exist). Codes carry a per-run suffix
@@ -364,6 +366,62 @@ test.describe('A22 · payables in a browser', () => {
     await expect(page.getByRole('row', { name: new RegExp(second) })).toBeVisible();
   });
 
+  test('Stage 6 · a loan entered, approved by a second person, disbursed and repaid', async ({ page, browser }) => {
+    test.setTimeout(240_000);
+    const purpose = `Import finance ${RUN}`;
+
+    // The officer enters the bank's offer (§15.7).
+    await signIn(page, 'officer@example.com');
+    await page.goto('/payables/loans');
+    await expect(page.getByRole('heading', { level: 1, name: 'Bank Loans' })).toBeVisible();
+    await page.getByRole('button', { name: 'New loan' }).click();
+    const create = page.getByRole('dialog');
+    await create.getByLabel('Bank', { exact: true }).selectOption({ label: 'Rafidain Bank' });
+    await create.getByLabel('Proceeds land in').selectOption({ index: 0 });
+    await create.getByRole('textbox', { name: 'Principal' }).fill('1000000');
+    await create.getByRole('textbox', { name: 'Commission %' }).fill('2');
+    await create.getByLabel('Commission taken').selectOption('deducted_at_disbursement');
+    await create.getByRole('textbox', { name: 'Instalments' }).fill('4');
+    await create.getByLabel('Repaid').selectOption('quarterly');
+    await create.getByLabel('First instalment due').fill('2026-12-31');
+    await create.getByRole('textbox', { name: 'Purpose' }).fill(purpose);
+    await create.getByRole('button', { name: 'Create loan' }).click();
+    await page.waitForURL(/\/payables\/loans\/LOAN-/, { timeout: 60_000 });
+    const loanNo = decodeURIComponent(page.url().split('/payables/loans/')[1]!.split('?')[0]!);
+    await expect(page.getByRole('heading', { level: 1, name: loanNo })).toBeVisible();
+    await expect(page.getByText('980,000', { exact: false }).first()).toBeVisible();
+    await expect(page.getByRole('cell', { name: '250,000 IQD' }).first()).toBeVisible();
+    // The person who entered it does not approve it.
+    await expect(page.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0);
+
+    // A second person approves, records the money arriving, pays the first quarter.
+    const second = await browser.newContext();
+    const admin = await second.newPage();
+    await signIn(admin);
+    await admin.goto(`/payables/loans/${encodeURIComponent(loanNo)}`);
+    await admin.getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect(admin.getByText('Approved', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+
+    await admin.getByRole('button', { name: 'Record disbursement' }).click();
+    const disburse = admin.getByRole('dialog');
+    await disburse.getByRole('textbox', { name: 'Bank reference' }).fill(`RAF-CR-${RUN}`);
+    await disburse.getByRole('button', { name: 'Record disbursement' }).click();
+    await expect(admin.getByText('Disbursed', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+
+    await admin.getByRole('button', { name: 'Pay instalment' }).click();
+    const pay = admin.getByRole('dialog');
+    await pay.getByRole('textbox', { name: 'Bank reference' }).fill(`RAF-DR-${RUN}`);
+    await pay.getByRole('button', { name: 'Pay instalment' }).click();
+    await expect(admin.getByText(`RAF-DR-${RUN}`).first()).toBeVisible({ timeout: 30_000 });
+    await second.close();
+
+    // The register: 750,000 still owed on it.
+    await page.goto(`/payables/loans?q=${loanNo}`);
+    const row = page.getByRole('row', { name: new RegExp(loanNo) });
+    await expect(row).toContainText('750,000');
+    await expect(row).toContainText('Disbursed');
+  });
+
   test('holds the line at mobile width, in Arabic, right to left', async ({ page, context }) => {
     test.setTimeout(120_000);
     await context.addCookies([{ name: 'erp-locale', value: 'ar', domain: 'localhost', path: '/' }]);
@@ -405,6 +463,10 @@ test.describe('A22 · payables in a browser', () => {
     await noSidewaysScroll(page);
     await page.goto('/payables/containers?view=all');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await noSidewaysScroll(page);
+    // …and Stage 6's.
+    await page.goto('/payables/loans?view=all');
+    await expect(page.getByRole('heading', { level: 1, name: 'القروض المصرفية' })).toBeVisible();
     await noSidewaysScroll(page);
     const application = page.locator('table tbody tr td a').first();
     await page.goto('/payables/payment-applications');

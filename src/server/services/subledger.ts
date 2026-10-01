@@ -27,7 +27,7 @@ import type { Tx } from '../db/client';
  * Phases 12 and 03. A line posting to one of those control accounts must carry
  * an explicit party, and is refused if it does not.
  */
-const PARTY_SOURCE: Readonly<Record<ControlAccountKind, DimensionType | 'bank_account' | null>> = {
+const PARTY_SOURCE: Readonly<Record<ControlAccountKind, DimensionType | 'bank_account' | 'loan' | null>> = {
   customer: 'business_partner',
   supplier: 'business_partner',
   inventory: 'warehouse',
@@ -35,6 +35,8 @@ const PARTY_SOURCE: Readonly<Record<ControlAccountKind, DimensionType | 'bank_ac
   project: 'project',
   fixed_asset: null,
   service: null,
+  // REQ-AP-001 §15.7 — the loan the line is against (journal_line.loan_no).
+  loan: 'loan',
 };
 
 export class MissingSubledgerPartyError extends Error {
@@ -132,6 +134,8 @@ function resolveParty(
       return line.projectCode;
     case 'bank_account':
       return line.bankAccountCode;
+    case 'loan':
+      return line.loanNo;
     default:
       // No dimension carries it yet — the posting must have supplied one
       // explicitly, which for now means the business partner field.

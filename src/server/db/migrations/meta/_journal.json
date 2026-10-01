@@ -1114,6 +1114,13 @@
       "when": 1795900000038,
       "tag": "0234_shipment_containers",
       "breakpoints": true
+    },
+    {
+      "idx": 159,
+      "version": "7",
+      "when": 1795900000039,
+      "tag": "0235_bank_loans",
+      "breakpoints": true
     }
   ]
 }

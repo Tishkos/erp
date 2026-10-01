@@ -120,6 +120,10 @@ beforeEach(async () => {
     ['bank', 'A000001', 'Bank Current Account', null],
     // REQ-AP-001 §9.2 — the posting map's landed-cost clearing role (Stage 2).
     ['landed_cost_clearing', 'A000001', 'Landed Cost Clearing', null],
+    // REQ-AP-001 §15.7 — the loan register's roles (Stage 6).
+    ['loan_liability', 'L000001', 'Bank Loans', 'loan'],
+    ['bank_commission', 'X000001', 'Bank Commission', null],
+    ['loan_interest', 'X000001', 'Loan Interest', null],
     ['customer_receivable', 'A000001', 'Trade Receivables', 'customer'],
     ['customer_clearing', 'A000001', 'Receipts Not Yet Identified', null],
     ['supplier_payable', 'L000001', 'Trade Payables', 'supplier'],

@@ -35,6 +35,7 @@ import * as paymentApplications from '@/server/services/payment-applications';
 import * as customs from '@/server/services/customs-pd';
 import * as banksService from '@/server/services/banks';
 import * as shipmentsService from '@/server/services/shipments';
+import * as loansService from '@/server/services/loans';
 import * as settingsService from '@/server/services/payables-settings';
 import * as contracts from '@/server/services/recurring-contracts';
 import * as serviceReceipts from '@/server/services/service-receipt';
@@ -81,11 +82,12 @@ export default async function PayablePage({
   if (!visibleRoute('/payables')) notFound();
 
   const { payableNo } = await params;
-  const [t, pa, cp, sh, admin, pageT, statusT, locale, context, outcome, query] = await Promise.all([
+  const [t, pa, cp, sh, lo, admin, pageT, statusT, locale, context, outcome, query] = await Promise.all([
     getTranslations('admin.payables'),
     getTranslations('admin.payment_applications'),
     getTranslations('admin.customs_pd'),
     getTranslations('admin.shipments'),
+    getTranslations('admin.loans'),
     getTranslations('admin'),
     getTranslations('page'),
     getTranslations('status'),
@@ -105,6 +107,7 @@ export default async function PayablePage({
   const mayViewPd = can(principal, 'view', customs.PERMISSION_OBJECT);
   const mayRegisterPd = can(principal, 'create', customs.PERMISSION_OBJECT);
   const mayViewShipment = can(principal, 'view', shipmentsService.CONTAINER_OBJECT);
+  const mayViewLoans = can(principal, 'view', loansService.PERMISSION_OBJECT);
   const mayCreateBl = can(principal, 'create', shipmentsService.BL_OBJECT);
 
   const laneFilter = typeof query.lane === 'string' && query.lane ? query.lane : null;
@@ -130,6 +133,8 @@ export default async function PayablePage({
       const instalments = isImport ? await paymentApplications.instalmentsFor(tx, view.payable.id) : [];
       const applied = isImport ? await paymentApplications.list(tx, { payableId: view.payable.id }) : [];
       const paymentTotals = isImport ? await paymentApplications.totalsFor(tx, view.payable.id) : null;
+      // §15.7 — the loans that fund it, with the commission each draw carries.
+      const funding = isImport && mayViewLoans ? await loansService.forPayable(tx, view.payable.id) : [];
       const pickers =
         isImport && mayPay && !view.payable.cancelledAt && !view.payable.closedAt
           ? await paymentApplications.pickersFor(tx, view.payable.id)
@@ -158,6 +163,7 @@ export default async function PayablePage({
         instalments,
         applied,
         paymentTotals,
+        funding,
         pickers,
         pds,
         pdPickers,
@@ -185,6 +191,7 @@ export default async function PayablePage({
     instalments,
     applied,
     paymentTotals,
+    funding,
     pickers,
     pds,
     pdPickers,
@@ -751,6 +758,61 @@ export default async function PayablePage({
               </table>
             </div>
 
+            {funding.length > 0 ? (
+              <div className={s.sapTableWrap}>
+                <table aria-label={lo('import_section')} className={s.sapTable}>
+                  <thead>
+                    <tr>
+                      <th scope="col">{lo('import_section')}</th>
+                      <th scope="col">{lo('col_bank')}</th>
+                      <th scope="col">{lo('col_application')}</th>
+                      <th className={s.sapNum} scope="col">
+                        {lo('col_drawn')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lo('col_share')}
+                      </th>
+                      <th scope="col">{lo('col_next_due')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {funding.map((draw) => (
+                      <tr key={draw.id}>
+                        <td>
+                          <Link className={s.sapLink} href={`/payables/loans/${encodeURIComponent(draw.loanNo)}`}>
+                            <bdi dir="ltr">{draw.loanNo}</bdi>
+                          </Link>
+                        </td>
+                        <td>
+                          <bdi dir="auto">{draw.bankName}</bdi>
+                        </td>
+                        <td>
+                          <bdi dir="ltr">{draw.applicationNo}</bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{money(draw.amountTxn, draw.currency)}</bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{money(draw.commissionShareTxn, draw.currency)}</bdi>
+                          <div className="muted">{draw.capitalised ? lo('capitalised_yes') : lo('capitalised_no')}</div>
+                        </td>
+                        <td>
+                          <bdi dir="ltr">{day(draw.nextDue)}</bdi>
+                          {draw.overdue ? (
+                            <div>
+                              <span className="status status--rejected" data-status="rejected">
+                                {lo('overdue_flag')}
+                              </span>
+                            </div>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+
             {pickers ? (
               <div className={s.sapBody}>
                 <SubmitRow>
@@ -905,6 +967,18 @@ export default async function PayablePage({
                           name="funding_source"
                           options={pickers.funding.map((source) => ({ value: source.code, label: source.name }))}
                         />
+                        {pickers.loans.length > 0 ? (
+                          <Select
+                            emptyLabel="—"
+                            hint={pa('loan_hint')}
+                            label={pa('loan')}
+                            name="loan_id"
+                            options={pickers.loans.map((loan) => ({
+                              value: loan.id,
+                              label: `${loan.loanNo} · ${loan.bankName} · ${loan.accountCode} — ${money(loan.unallocatedTxn)}`,
+                            }))}
+                          />
+                        ) : null}
                       </Grid>
                       <Field id="payapp-note" label={pa('note')} name="note" wide />
                       <SubmitRow>

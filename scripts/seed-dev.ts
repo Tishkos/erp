@@ -225,6 +225,11 @@ async function main() {
       ['X100020', 'Service and Expense Cost', 'X000001', null],
       ['X100030', 'Purchase Price Variance', 'X000001', null],
       ['X100040', 'Inventory Adjustments', 'X000001', null],
+      // REQ-AP-001 — the import's clearing account and the loan register's.
+      ['A100040', 'Landed Cost Clearing', 'A000001', null],
+      ['L100040', 'Bank Loans', 'L000001', 'loan'],
+      ['X100050', 'Bank Commission', 'X000001', null],
+      ['X100060', 'Loan Interest', 'X000001', null],
     ];
     for (const [code, name, parent, control] of accounts) {
       await tx.execute(sql`
@@ -257,6 +262,16 @@ async function main() {
       ['sales.customer_credit_memo', 'sales_returns', 'R100020'],
       ['inventory.opening_stock', 'opening_balance', 'E100010'],
       ['inventory.stock_adjustment', 'inventory_adjustment', 'X100040'],
+      ['purchasing.ap_invoice', 'landed_cost_clearing', 'A100040'],
+      ['treasury.loan_disbursement', 'loan_liability', 'L100040'],
+      ['treasury.loan_disbursement', 'landed_cost_clearing', 'A100040'],
+      ['treasury.loan_disbursement', 'bank_commission', 'X100050'],
+      ['treasury.loan_repayment', 'loan_liability', 'L100040'],
+      ['treasury.loan_repayment', 'loan_interest', 'X100060'],
+      ['treasury.loan_repayment', 'landed_cost_clearing', 'A100040'],
+      ['treasury.loan_repayment', 'bank_commission', 'X100050'],
+      ['treasury.loan_commission', 'landed_cost_clearing', 'A100040'],
+      ['treasury.loan_commission', 'bank_commission', 'X100050'],
     ];
     for (const [event, role, code] of mappings) {
       await tx.execute(sql`

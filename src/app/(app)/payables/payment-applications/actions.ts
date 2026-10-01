@@ -45,6 +45,7 @@ export async function createApplication(formData: FormData): Promise<void> {
         bankCashAccountId: text(formData, 'bank_cash_account_id'),
         payeeBankAccountId: text(formData, 'payee_bank_account_id') || null,
         fundingSourceCode: text(formData, 'funding_source') || null,
+        loanId: text(formData, 'loan_id') || null,
         amountTxn: amountOf(text(formData, 'amount')),
         note: text(formData, 'note') || null,
       });

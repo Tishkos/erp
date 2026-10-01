@@ -457,6 +457,12 @@ export async function resetTestData(): Promise<void> {
     // record who created them and are removed; seed rows (created_by NULL) are
     // restored to their seeded active state.
     await client.query('truncate payable_event');
+    // Stage 6 (0235) — what the loans funded, their schedules, the loans.
+    await client.query('delete from bank_loan_allocation');
+    await client.query('delete from bank_loan_instalment');
+    await client.query('delete from bank_loan');
+    await client.query('delete from loan_commission_treatment where created_by is not null');
+    await client.query('update loan_commission_treatment set active = true where created_by is null');
     // Stage 3 (0232) — applications and the plan they pay; fixture banks.
     await client.query('delete from payment_application');
     await client.query('delete from payable_instalment');
@@ -477,7 +483,8 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from pd_status where created_by is not null');
     await client.query('update pd_status set active = true where created_by is null');
     await client.query('delete from bank where created_by is not null');
-    await client.query('update funding_source set active = (code <> \'loan\') where created_by is null');
+    // Stage 6 (0235) opened `loan`; every seeded source is active again.
+    await client.query('update funding_source set active = true where created_by is null');
     await client.query('delete from funding_source where created_by is not null');
     await client.query('delete from instalment_trigger where created_by is not null');
     await client.query('update payment_application_transition set active = true');
@@ -766,6 +773,8 @@ export async function resetTestData(): Promise<void> {
                          'PAYMENT_APPLICATION', 'BANK_CODE',
                          -- REQ-AP-001 Stage 5, migration 0234.
                          'CONTAINER_RECEIPT', 'PORT_CODE',
+                         -- REQ-AP-001 Stage 6, migration 0235.
+                         'LOAN',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

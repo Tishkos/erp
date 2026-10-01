@@ -173,7 +173,19 @@ export default async function PaymentApplicationPage({
         ? { status: payee.approvalStatus === 'approved' && payee.isActive ? 'posted' : 'rejected' }
         : {}),
     },
-    { label: t('funding'), value: <bdi dir="auto">{found.fundingName}</bdi> },
+    {
+      label: t('funding'),
+      value: found.loan ? (
+        <>
+          <bdi dir="auto">{found.fundingName}</bdi> ·{' '}
+          <Link className={s.sapLink} href={`/payables/loans/${encodeURIComponent(found.loan.loanNo)}`}>
+            <bdi dir="ltr">{found.loan.loanNo}</bdi>
+          </Link>
+        </>
+      ) : (
+        <bdi dir="auto">{found.fundingName}</bdi>
+      ),
+    },
     {
       label: t('pd'),
       value: found.pd ? (

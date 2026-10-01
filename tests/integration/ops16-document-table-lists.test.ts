@@ -50,10 +50,14 @@ async function documentTables(): Promise<string[]> {
       -- The header of every line table found above: the line hangs off it.
       -- A header is recognised by name — ap_invoice_line hangs off
       -- ap_invoice — which keeps the lookups a line also points at (an item,
-      -- a reason code, a category) out of the answer.
+      -- a reason code, a category) out of the answer. And a header is a
+      -- document, with an id: \`bank_loan\` names its lender in \`bank\`, a
+      -- master keyed by its code, not a header it hangs off (REQ-AP-001 §15.7).
       select distinct parent as table_name from fks
        where child in (select table_name from referencing)
          and child like parent || '\\_%'
+         and exists (select 1 from information_schema.columns c
+                      where c.table_schema = 'public' and c.table_name = parent and c.column_name = 'id')
     )
     select table_name from anchors
     union select table_name from referencing

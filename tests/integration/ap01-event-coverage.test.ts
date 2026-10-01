@@ -48,6 +48,9 @@ describe('ap01 · every service that touches a payable writes its story', () => 
     // below, or its changes happen off the record (§7.2).
     expect(rows.map((row) => row.table_name)).toEqual([
       'ap_invoice',
+      // Stage 6 (0235): a draw writes LOAN_LINKED / COMMISSION_RECORDED, its
+      // release LOAN_UNLINKED — ap06-loans.
+      'bank_loan_allocation',
       // Stage 5 (0234): the B/L, every container move and the receipt write
       // their shipment / warehouse events — ap05-shipment.
       'bill_of_lading',

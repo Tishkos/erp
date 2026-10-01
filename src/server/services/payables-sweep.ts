@@ -28,6 +28,7 @@ import * as contracts from './recurring-contracts';
 import * as paymentApplications from './payment-applications';
 import * as customs from './customs-pd';
 import * as shipments from './shipments';
+import * as loans from './loans';
 import * as notifications from './notifications';
 
 export interface SweepResult {
@@ -44,6 +45,9 @@ export interface SweepResult {
   readonly pdsExpired: number;
   /** §17.3 — containers marked Late in this run. */
   readonly containersLate: number;
+  /** §15.7 — loan instalments that came due, and fell overdue, in this run. */
+  readonly loanInstalmentsDue: number;
+  readonly loanInstalmentsOverdue: number;
   /** Checks whose query this build does not implement yet — seeded, inert. */
   readonly skipped: string[];
 }
@@ -399,6 +403,10 @@ export async function runSweep(tx: Tx, asOf: string): Promise<SweepResult> {
   // container_eta_passed check below then stops the import on it.
   const containersLate = await shipments.lateSweep(tx, asOf);
 
+  // §15.6 — a loan instalment inside the warning window is due; one past it
+  // is overdue, and every import the loan funds is told once.
+  const loanInstalments = await loans.instalmentSweep(tx, asOf);
+
   const checks = await tx.select().from(sweepCheck).where(eq(sweepCheck.active, true));
 
   let checked = 0;
@@ -514,6 +522,8 @@ export async function runSweep(tx: Tx, asOf: string): Promise<SweepResult> {
     pdsWarned: pdExpiry.warned,
     pdsExpired: pdExpiry.expired,
     containersLate,
+    loanInstalmentsDue: loanInstalments.due,
+    loanInstalmentsOverdue: loanInstalments.overdue,
     skipped,
   };
 }

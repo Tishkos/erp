@@ -84,6 +84,7 @@ import * as events from './payable-events';
 import * as payables from './payables';
 import * as advances from './supplier-advance';
 import * as customs from './customs-pd';
+import * as loans from './loans';
 import * as payments from './supplier-payment';
 import * as rateService from './exchange-rates';
 import * as treasury from './treasury';
@@ -365,6 +366,9 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateInput) {
   if (funding.requiresLoan && !input.loanId) {
     throw new PaymentApplicationError(`${funding.name} names the loan that funds it.`);
   }
+  if (!funding.requiresLoan && input.loanId) {
+    throw new PaymentApplicationError(`${funding.name} is not a loan; choose the loan as the funding source.`);
+  }
 
   let instalmentId: string | null = null;
   let amountTxn = input.amountTxn ?? null;
@@ -409,6 +413,17 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateInput) {
           `(${row.currency} ${money(unapplied)}). Applications never total more than is owed.`,
       );
     }
+  }
+
+  // §15.3 / §15.7 — a loan funds a payment in its own currency, from the
+  // account its money landed in, while it has the room.
+  if (input.loanId) {
+    await loans.assertCanFund(tx, {
+      loanId: input.loanId,
+      currency: row.currency,
+      bankCashAccountId: account.id,
+      amountTxn,
+    });
   }
 
   const onDate = input.onDate || today();
@@ -500,6 +515,9 @@ export async function approve(tx: Tx, ctx: ActorContext, id: string) {
     .update(paymentApplication)
     .set({ status: 'approved', approvedBy: ctx.principal.userId, approvedAt: new Date(), updatedAt: new Date() })
     .where(eq(paymentApplication.id, id));
+  // §15.7 — approval draws on the loan that funds it (refused while its money
+  // has not arrived, or when it has no room left).
+  if (row.loanId) await loans.allocate(tx, ctx, row);
 
   await events.record(tx, {
     payableId: row.payableId,
@@ -1067,6 +1085,8 @@ async function close(
     sourceNo: row.applicationNo,
     actorUserId: ctx.principal.userId,
   });
+  // §15.7 — the loan's draw goes back to it.
+  if (row.loanId) await loans.release(tx, ctx, row, `${to}: ${text}`);
   if (isReserved(row.status)) {
     await events.record(tx, {
       payableId: row.payableId,
@@ -1274,6 +1294,7 @@ export async function view(tx: Tx, applicationNo: string) {
     payee: payee ?? null,
     instalment: instalment ?? null,
     fundingName: funding?.name ?? row.fundingSourceCode,
+    loan: await loans.forApplication(tx, row.loanId),
     pd: pdRow ?? null,
     documentNo: paymentDoc?.no ?? advanceDoc?.no ?? null,
     documentKind: paymentDoc ? ('payment' as const) : advanceDoc ? ('advance' as const) : null,
@@ -1341,12 +1362,13 @@ export async function pickersFor(tx: Tx, payableId: string) {
     .from(fundingSource)
     .where(eq(fundingSource.active, true));
   const instalments = (await instalmentsFor(tx, payableId)).filter((i) => i.status === 'planned');
+  const fundingLoans = await loans.fundingChoices(tx, owner.currency);
   const triggers = await tx
     .select({ code: instalmentTrigger.code, name: instalmentTrigger.name, needsDays: instalmentTrigger.needsDays })
     .from(instalmentTrigger)
     .where(eq(instalmentTrigger.active, true))
     .orderBy(asc(instalmentTrigger.sortOrder));
-  return { methods, accounts: withAvailable, payees, funding, instalments, triggers };
+  return { methods, accounts: withAvailable, payees, funding, loans: fundingLoans, instalments, triggers };
 }
 
 /** §21.13 — the application a supplier payment was confirmed from, if any. */

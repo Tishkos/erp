@@ -440,9 +440,10 @@ describe('the catalogue the mappings screen is drawn from', () => {
     for (const document of POSTING_MAP) {
       for (const line of document.lines) {
         if (!line.controlAccount) continue;
-        // Only the two party subledgers are designated from a mapping; the
-        // rest are decided by the record the posting names.
-        expect(['customer', 'supplier']).toContain(line.controlAccount);
+        // Only the party subledgers are designated from a mapping — the two
+        // partner ledgers and, since REQ-AP-001 Stage 6, the loan register;
+        // the rest are decided by the record the posting names.
+        expect(['customer', 'supplier', 'loan']).toContain(line.controlAccount);
         expect(requiredControlAccount(document.event, line.role)).toBe(line.controlAccount);
       }
     }

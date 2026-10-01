@@ -78,3 +78,4 @@ export * from './payables-contracts';
 export * from './payments';
 export * from './customs';
 export * from './shipments';
+export * from './loans';
