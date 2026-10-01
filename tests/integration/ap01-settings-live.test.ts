@@ -137,11 +137,12 @@ describe('ap01 · the limits are settings, and settings are live', () => {
 
   it('the seeded later-stage checks sit inert, named, until their build lands', async () => {
     const run = await withScope(superScope(), (tx) => sweep.runSweep(tx, TODAY));
-    // Stage 3 (0232) implemented the payment clocks; the PD and container
-    // clocks wait for Stages 4 and 5.
+    // Stage 3 (0232) implemented the payment clocks and Stage 4 (0233) the
+    // PD clocks; the container clocks wait for Stage 5.
     expect(run.skipped).not.toContain('swift_pending');
     expect(run.skipped).not.toContain('invoice_unfunded');
-    expect(run.skipped).toContain('pd_not_validated');
+    expect(run.skipped).not.toContain('pd_not_validated');
+    expect(run.skipped).not.toContain('pd_expired');
     expect(run.skipped).toContain('container_eta_passed');
   });
 });

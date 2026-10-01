@@ -174,6 +174,19 @@ export default async function PaymentApplicationPage({
     },
     { label: t('funding'), value: <bdi dir="auto">{found.fundingName}</bdi> },
     {
+      label: t('pd'),
+      value: found.pd ? (
+        <Link
+          className={s.sapLink}
+          href={`/payables/pd/${encodeURIComponent(found.pd.pdNo)}${found.pd.year ? `?year=${found.pd.year}` : ''}`}
+        >
+          <bdi dir="ltr">{found.pd.pdNo}</bdi>
+        </Link>
+      ) : (
+        '—'
+      ),
+    },
+    {
       label: t('col_amount'),
       value: (
         <bdi dir="ltr">

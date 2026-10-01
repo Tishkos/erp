@@ -114,6 +114,8 @@ goods_return_line
 goods_return
 payment_application
 payable_instalment
+customs_pd_status_history
+customs_pd
 ap_invoice_note
 landed_cost_charge
 payable_hold_update

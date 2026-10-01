@@ -460,6 +460,11 @@ export async function resetTestData(): Promise<void> {
     // Stage 3 (0232) — applications and the plan they pay; fixture banks.
     await client.query('delete from payment_application');
     await client.query('delete from payable_instalment');
+    // Stage 4 (0233) — the PDs and their history (append-only in production).
+    await client.query('truncate customs_pd_status_history');
+    await client.query('delete from customs_pd');
+    await client.query('delete from pd_status where created_by is not null');
+    await client.query('update pd_status set active = true where created_by is null');
     await client.query('delete from bank where created_by is not null');
     await client.query('update funding_source set active = (code <> \'loan\') where created_by is null');
     await client.query('delete from funding_source where created_by is not null');

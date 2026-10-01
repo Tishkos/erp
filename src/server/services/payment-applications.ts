@@ -38,6 +38,7 @@ import {
   bank,
   bankCashAccount,
   businessPartner,
+  customsPd,
   fundingSource,
   instalmentTrigger,
   partnerBankAccount,
@@ -80,6 +81,7 @@ import * as authz from './authorization';
 import * as events from './payable-events';
 import * as payables from './payables';
 import * as advances from './supplier-advance';
+import * as customs from './customs-pd';
 import * as payments from './supplier-payment';
 import * as rateService from './exchange-rates';
 import * as treasury from './treasury';
@@ -532,8 +534,7 @@ export async function checksFor(tx: Tx, row: typeof paymentApplication.$inferSel
   const method = await methodOf(tx, row.paymentMethodCode);
   const account = await accountOf(tx, row.bankCashAccountId);
 
-  // 1 — Needs validated PD (imports only). The PD register is Stage 4's; until
-  //     it exists the check has nothing to read and says so.
+  // 1 — Needs validated PD (imports only): the PD register (Stage 4).
   const pd: SendCheck =
     owner.payableTypeCode === 'import'
       ? await pdCheck(tx, row)
@@ -565,13 +566,17 @@ export async function checksFor(tx: Tx, row: typeof paymentApplication.$inferSel
   return [pd, funds, payeeResult, trigger];
 }
 
-/** Check 1 — overridden by Stage 4, which brings the PD register. */
-async function pdCheck(_tx: Tx, _row: typeof paymentApplication.$inferSelect): Promise<SendCheck> {
-  return {
-    code: 'pd_validated',
-    outcome: 'warning',
-    detail: 'PDs are not recorded in the ERP yet — confirm the PD is validated before the bank pays.',
-  };
+/**
+ * Check 1 — needs a validated PD (§15.3): the PD register's answer for the
+ * day the file goes to the bank, from the account the money leaves.
+ */
+async function pdCheck(tx: Tx, row: typeof paymentApplication.$inferSelect): Promise<SendCheck> {
+  const account = await accountOf(tx, row.bankCashAccountId);
+  const readiness = await customs.paymentCheck(tx, row.payableId, {
+    asOf: row.applicationDate ?? today(),
+    accountBankCode: account.bankCode,
+  });
+  return { code: 'pd_validated', outcome: readiness.outcome, detail: readiness.detail };
 }
 
 async function triggerCheck(tx: Tx, row: typeof paymentApplication.$inferSelect): Promise<SendCheck> {
@@ -634,7 +639,7 @@ export async function send(tx: Tx, ctx: ActorContext, id: string, input: SendInp
     row.currency,
     input.applicationDate,
   );
-  const atDate = { ...row, amountIqd: money(converted.amountIqd) };
+  const atDate = { ...row, amountIqd: money(converted.amountIqd), applicationDate: input.applicationDate };
 
   const checks = await checksFor(tx, atDate);
   const failed = failing(checks);
@@ -645,11 +650,21 @@ export async function send(tx: Tx, ctx: ActorContext, id: string, input: SendInp
   }
 
   const method = await methodOf(tx, row.paymentMethodCode);
+  // §15.3 — the PD the bank pays against, recorded on the application.
+  const owner2 = await payables.load(tx, row.payableId);
+  const pd =
+    owner2.payableTypeCode === 'import'
+      ? await customs.paymentCheck(tx, row.payableId, {
+          asOf: input.applicationDate,
+          accountBankCode: account.bankCode,
+        })
+      : null;
   await tx
     .update(paymentApplication)
     .set({
       status: 'sent',
       applicationDate: input.applicationDate,
+      pdId: pd?.pdId ?? null,
       bankReference: input.bankReference?.trim() || null,
       amountIqd: money(converted.amountIqd),
       rateId: converted.txnRateId ?? row.rateId,
@@ -1186,6 +1201,14 @@ export async function view(tx: Tx, applicationNo: string) {
         .limit(1)
     : [];
 
+  const [pdRow] = row.pdId
+    ? await tx
+        .select({ pdNo: customsPd.pdNo, year: customsPd.registrationYear })
+        .from(customsPd)
+        .where(eq(customsPd.id, row.pdId))
+        .limit(1)
+    : [];
+
   const people = await tx
     .select({ id: appUser.id, name: appUser.displayName })
     .from(appUser)
@@ -1226,6 +1249,7 @@ export async function view(tx: Tx, applicationNo: string) {
     payee: payee ?? null,
     instalment: instalment ?? null,
     fundingName: funding?.name ?? row.fundingSourceCode,
+    pd: pdRow ?? null,
     documentNo: paymentDoc?.no ?? advanceDoc?.no ?? null,
     documentKind: paymentDoc ? ('payment' as const) : advanceDoc ? ('advance' as const) : null,
     people: {

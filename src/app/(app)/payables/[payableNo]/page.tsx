@@ -31,6 +31,8 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as events from '@/server/services/payable-events';
 import * as payables from '@/server/services/payables';
 import * as paymentApplications from '@/server/services/payment-applications';
+import * as customs from '@/server/services/customs-pd';
+import * as banksService from '@/server/services/banks';
 import * as settingsService from '@/server/services/payables-settings';
 import * as contracts from '@/server/services/recurring-contracts';
 import * as serviceReceipts from '@/server/services/service-receipt';
@@ -47,6 +49,8 @@ import {
   updatePiLines,
 } from '../actions';
 import { createApplication, planInstalmentsAction } from '../payment-applications/actions';
+import { registerPd } from '../pd/actions';
+import { pdChip } from '../pd/status';
 import { STATUS_CHIP, statusKey } from '../payment-applications/status';
 import { toDecimalString } from '@domain/money';
 
@@ -73,9 +77,10 @@ export default async function PayablePage({
   if (!visibleRoute('/payables')) notFound();
 
   const { payableNo } = await params;
-  const [t, pa, admin, pageT, locale, context, outcome, query] = await Promise.all([
+  const [t, pa, cp, admin, pageT, locale, context, outcome, query] = await Promise.all([
     getTranslations('admin.payables'),
     getTranslations('admin.payment_applications'),
+    getTranslations('admin.customs_pd'),
     getTranslations('admin'),
     getTranslations('page'),
     getLocale(),
@@ -91,6 +96,8 @@ export default async function PayablePage({
   const mayEdit = can(principal, 'edit_draft', payables.PERMISSION_OBJECT);
   const mayCancel = can(principal, 'reverse_cancel', payables.PERMISSION_OBJECT);
   const mayPay = can(principal, 'create', paymentApplications.PERMISSION_OBJECT);
+  const mayViewPd = can(principal, 'view', customs.PERMISSION_OBJECT);
+  const mayRegisterPd = can(principal, 'create', customs.PERMISSION_OBJECT);
 
   const laneFilter = typeof query.lane === 'string' && query.lane ? query.lane : null;
 
@@ -119,7 +126,26 @@ export default async function PayablePage({
         isImport && mayPay && !view.payable.cancelledAt && !view.payable.closedAt
           ? await paymentApplications.pickersFor(tx, view.payable.id)
           : null;
-      return { ...view, log, config, people, receipts, contract, instalments, applied, paymentTotals, pickers };
+      // §16 — the PD / ASYCUDA section.
+      const pds = isImport && mayViewPd ? await customs.list(tx, { payableId: view.payable.id, view: 'all' }) : [];
+      const pdPickers =
+        isImport && mayRegisterPd && !view.payable.cancelledAt && !view.payable.closedAt
+          ? { banks: await banksService.listActive(tx), statuses: await customs.statuses(tx) }
+          : null;
+      return {
+        ...view,
+        log,
+        config,
+        people,
+        receipts,
+        contract,
+        instalments,
+        applied,
+        paymentTotals,
+        pickers,
+        pds,
+        pdPickers,
+      };
     } catch {
       return null;
     }
@@ -144,6 +170,8 @@ export default async function PayablePage({
     applied,
     paymentTotals,
     pickers,
+    pds,
+    pdPickers,
   } = found;
   const openPay = query.pay === '1';
 
@@ -858,9 +886,121 @@ export default async function PayablePage({
                           options={pickers.funding.map((source) => ({ value: source.code, label: source.name }))}
                         />
                       </Grid>
-                      <Field label={pa('note')} name="note" wide />
+                      <Field id="payapp-note" label={pa('note')} name="note" wide />
                       <SubmitRow>
                         <Submit label={pa('create')} />
+                      </SubmitRow>
+                    </Form>
+                  </NewRecordDialog>
+                </SubmitRow>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {/* ── PD / ASYCUDA (§16): every registration of this import, the
+          soonest to expire first. Imports only. ── */}
+      {type.code === 'import' && mayViewPd ? (
+        <section aria-labelledby="payable-pd-title" className={s.sapDoc} id="pd">
+          <div className={s.sapWindow}>
+            <h2 className={s.sapTitle} id="payable-pd-title">
+              <span>{cp('section_title')}</span>
+              <span className={s.sapTitleMeta}>{t('rows', { count: pds.length })}</span>
+            </h2>
+            <div className={s.sapTableWrap}>
+              <table aria-labelledby="payable-pd-title" className={s.sapTable}>
+                <thead>
+                  <tr>
+                    <th scope="col">{cp('pd_no')}</th>
+                    <th scope="col">{cp('bank')}</th>
+                    <th scope="col">{cp('registered')}</th>
+                    <th scope="col">{cp('expires')}</th>
+                    <th className={s.sapNum} scope="col">
+                      {cp('days_left')}
+                    </th>
+                    <th scope="col">{cp('status')}</th>
+                    <th scope="col">{cp('note')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pds.length === 0 ? (
+                    <tr>
+                      <td className={s.sapEmptyRow} colSpan={7}>
+                        {cp('none_for_import')}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {pds.map((pd) => (
+                    <tr key={pd.id}>
+                      <td>
+                        <Link
+                          className={s.sapLink}
+                          href={`/payables/pd/${encodeURIComponent(pd.pdNo)}?year=${pd.registrationYear}`}
+                        >
+                          <bdi dir="ltr">{pd.pdNo}</bdi>
+                        </Link>
+                      </td>
+                      <td>
+                        <bdi dir="auto">{pd.bankName ?? '—'}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{day(pd.registrationDate)}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{day(pd.expiryDate)}</bdi>
+                      </td>
+                      <td className={s.sapNum}>{pd.isTerminal || pd.superseded ? '—' : pd.daysLeft}</td>
+                      <td>
+                        <span className={`status status--${pdChip(pd)}`} data-status={pdChip(pd)}>
+                          {pd.statusName}
+                        </span>
+                        {pd.superseded ? <div className="muted">{cp('superseded')}</div> : null}
+                      </td>
+                      <td>
+                        <bdi dir="auto">{pd.lastNote ?? ''}</bdi>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {pdPickers ? (
+              <div className={s.sapBody}>
+                <SubmitRow>
+                  <NewRecordDialog
+                    buttonLabel={cp('register')}
+                    closeLabel={admin('close')}
+                    title={cp('register_for', { payableNo: row.payableNo })}
+                  >
+                    <Form action={registerPd}>
+                      <Hidden name="payable_no" value={row.payableNo} />
+                      <Hidden name="back" value={`/payables/${encodeURIComponent(row.payableNo)}`} />
+                      <Grid>
+                        <Field hint={cp('pd_no_hint')} label={cp('pd_no')} name="new_pd_no" required />
+                        <Field label={cp('registered')} name="registration_date" required type="date" />
+                        <Field hint={cp('expiry_hint')} label={cp('expires')} name="expiry_date" required type="date" />
+                        <Select
+                          emptyLabel="—"
+                          label={cp('bank')}
+                          name="bank_code"
+                          options={pdPickers.banks.map((b) => ({
+                            value: b.code,
+                            label: b.swiftBic ? `${b.name} · ${b.swiftBic}` : b.name,
+                          }))}
+                        />
+                        <Select
+                          defaultValue="submitted"
+                          label={cp('status')}
+                          name="status_code"
+                          options={pdPickers.statuses
+                            .filter((status) => status.active && !status.isTerminal)
+                            .map((status) => ({ value: status.code, label: status.name }))}
+                        />
+                      </Grid>
+                      <Field id="pd-register-note" label={cp('note')} name="note" wide />
+                      <SubmitRow>
+                        <Submit label={cp('register')} />
                       </SubmitRow>
                     </Form>
                   </NewRecordDialog>

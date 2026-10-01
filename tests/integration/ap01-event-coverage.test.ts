@@ -48,6 +48,9 @@ describe('ap01 · every service that touches a payable writes its story', () => 
     // below, or its changes happen off the record (§7.2).
     expect(rows.map((row) => row.table_name)).toEqual([
       'ap_invoice',
+      // Stage 4 (0233): register / status / note / re-register each write
+      // their PD_ event — ap04-customs-pd.
+      'customs_pd',
       // Stage 2 (0230): the charge writes CHARGED_TO_IMPORT in its own
       // transaction — ap02-charged-to-import.
       'landed_cost_charge',

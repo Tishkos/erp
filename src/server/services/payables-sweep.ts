@@ -26,6 +26,7 @@ import * as events from './payable-events';
 import * as holds from './payable-holds';
 import * as contracts from './recurring-contracts';
 import * as paymentApplications from './payment-applications';
+import * as customs from './customs-pd';
 import * as notifications from './notifications';
 
 export interface SweepResult {
@@ -37,6 +38,9 @@ export interface SweepResult {
   readonly periodsGenerated: number;
   /** §15.4 — confirmed payments the bank reconciliation has shown debited. */
   readonly debitsMatched: number;
+  /** §16.2 — PDs warned of their expiry, and PDs moved to expired, in this run. */
+  readonly pdsWarned: number;
+  readonly pdsExpired: number;
   /** Checks whose query this build does not implement yet — seeded, inert. */
   readonly skipped: string[];
 }
@@ -119,6 +123,31 @@ const CHECK_QUERIES: Readonly<Record<string, CheckQuery>> = {
     }));
   },
 
+  /** §16.2, D4 — a PD submitted or pre-approved and not validated (seed 7 days). */
+  pd_not_validated: async (tx) => {
+    const rows = await standingPds(tx, sql`d.status_code in ('submitted', 'pre_approved')`);
+    return rows.map((row) => ({
+      payableId: row.payableId,
+      laneCode: 'pd',
+      since: row.registered,
+      scope: { typeCode: row.typeCode, bankCode: row.bankCode, supplierId: row.supplierId },
+      summary: (limit, days) =>
+        `Over time limit: PD ${row.pdNo} ${row.statusName} for ${days} days, not validated (limit ${limit})`,
+    }));
+  },
+
+  /** §16.2 — a PD rejected or expired and not re-registered: the import stops on it. */
+  pd_expired: async (tx) => {
+    const rows = await standingPds(tx, sql`(s.is_expired or d.status_code = 'rejected')`);
+    return rows.map((row) => ({
+      payableId: row.payableId,
+      laneCode: 'pd',
+      since: row.statusCode === 'rejected' ? row.registered : row.expiry,
+      scope: { typeCode: row.typeCode, bankCode: row.bankCode, supplierId: row.supplierId },
+      summary: () => `PD ${row.pdNo} is ${row.statusName} and not re-registered — reason required`,
+    }));
+  },
+
   /** §15.4, D4 — a SWIFT sent to the bank and not confirmed. Per method and bank. */
   swift_pending: (tx) => pendingApplications(tx, 'swift'),
 
@@ -162,6 +191,34 @@ const CHECK_QUERIES: Readonly<Record<string, CheckQuery>> = {
     }));
   },
 };
+
+/** §16.2 — the standing PDs of open imports, for the two PD clocks. */
+async function standingPds(tx: Tx, where: ReturnType<typeof sql>) {
+  const result = await tx.execute(sql`
+    select d.id, d.pd_no as "pdNo", d.payable_id as "payableId", d.status_code as "statusCode",
+           d.registration_date::text as registered, d.expiry_date::text as expiry,
+           d.bank_code as "bankCode", s.name as "statusName",
+           p.payable_type_code as "typeCode", p.supplier_id as "supplierId"
+      from customs_pd d
+      join pd_status s on s.code = d.status_code
+      join payable p on p.id = d.payable_id
+     where p.cancelled_at is null and p.closed_at is null
+       and not exists (select 1 from customs_pd n where n.supersedes_pd_id = d.id)
+       and ${where}
+     order by d.registration_date`);
+  return result.rows as {
+    id: string;
+    pdNo: string;
+    payableId: string;
+    statusCode: string;
+    registered: string;
+    expiry: string;
+    bankCode: string | null;
+    statusName: string;
+    typeCode: string;
+    supplierId: string;
+  }[];
+}
 
 /**
  * The applications sent and waiting for the bank's answer, one offender per
@@ -241,6 +298,10 @@ export async function runSweep(tx: Tx, asOf: string): Promise<SweepResult> {
   // §15.4 — a confirmed payment whose bank line the reconciliation matched is
   // debit-final; read before the checks so a matched one stops being pending.
   const debitsMatched = await paymentApplications.syncDebits(tx);
+
+  // §16.2 — PD_EXPIRING inside the warning window; past its expiry a PD moves
+  // to its expired status, which the pd_expired check below then stops on.
+  const pdExpiry = await customs.expirySweep(tx, asOf);
 
   const checks = await tx.select().from(sweepCheck).where(eq(sweepCheck.active, true));
 
@@ -354,6 +415,8 @@ export async function runSweep(tx: Tx, asOf: string): Promise<SweepResult> {
     escalated,
     periodsGenerated: generated.periodsCreated,
     debitsMatched,
+    pdsWarned: pdExpiry.warned,
+    pdsExpired: pdExpiry.expired,
     skipped,
   };
 }

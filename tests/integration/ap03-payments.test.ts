@@ -4,8 +4,7 @@
  *   A11  Sending a payment application without funds / to an unverified
  *        supplier bank account is refused with a message naming the cause;
  *        a manager's override with a reason is stored and logged; an
- *        officer's is not accepted. (The PD check is Stage 4's and warns
- *        until the PD register exists.)
+ *        officer's is not accepted. (The PD half of A11 is ap04-customs-pd.)
  *   A12  Approval reserves funds; rejection releases; confirmation (SWIFT,
  *        transfer, cash, cheque) posts the right document dated the
  *        confirmation date and allocates it; `settled_amount_iqd` changes
@@ -20,6 +19,7 @@ import { ownerPool, rejection } from './setup';
 import { withScope } from '@/server/db/client';
 import * as ap from '@/server/services/ap-invoice';
 import * as applications from '@/server/services/payment-applications';
+import * as customs from '@/server/services/customs-pd';
 import * as sweep from '@/server/services/payables-sweep';
 import * as treasury from '@/server/services/treasury';
 import * as banks from '@/server/services/bank-cash-accounts';
@@ -193,6 +193,18 @@ beforeEach(async () => {
   );
   payeeId = payee[0].id;
   ({ invoiceId, payableId, payableNo } = await importInvoice());
+  // Stage 4 — the bank pays an import only against a validated PD (ap04).
+  const pd = await withScope(scope(world.clerk), (tx) =>
+    customs.register(tx, world.clerk, {
+      payableId,
+      pdNo: '8800',
+      registrationDate: '2026-09-02',
+      expiryDate: '2027-03-01',
+    }),
+  );
+  await withScope(scope(world.clerk), (tx) =>
+    customs.changeStatus(tx, world.clerk, pd.id, { statusCode: 'validated', effectiveDate: '2026-09-05' }),
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -290,13 +302,13 @@ describe('A11 · ap03-payment-checks', () => {
     expect(await rejection(send(none.id))).toMatch(/Name the supplier bank account/);
   });
 
-  it('the PD check warns until the PD register exists, and does not refuse', async () => {
+  it('with a validated PD, funds and a verified account, every check passes', async () => {
     await fund(world.accounts.bank!, '5000000');
     const made = await draft();
     const checks = await withScope(scope(world.clerk), async (tx) =>
       applications.checksFor(tx, await applications.loadByNo(tx, made.applicationNo)),
     );
-    expect(checks.find((c) => c.code === 'pd_validated')?.outcome).toBe('warning');
+    expect(checks.find((c) => c.code === 'pd_validated')?.outcome).toBe('pass');
     expect(checks.find((c) => c.code === 'funds')?.outcome).toBe('pass');
     expect(checks.find((c) => c.code === 'payee_account')?.outcome).toBe('pass');
   });

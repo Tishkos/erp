@@ -221,8 +221,24 @@ export async function gatherFacts(tx: Tx, payableId: string): Promise<StageFacts
   );
   const paidApplications = applications.filter((a) => a.status === 'confirmed' || a.status === 'debited');
 
+  // PD lane (build Stage 4, §16) — the standing registrations: not
+  // superseded by a re-registration. Live = not rejected, not expired.
+  const pdRows = await tx.execute(sql`
+    select d.status_code as "statusCode", s.is_expired as "isExpired",
+           exists (select 1 from customs_pd n where n.supersedes_pd_id = d.id) as superseded
+      from customs_pd d join pd_status s on s.code = d.status_code
+     where d.payable_id = ${payableId}`);
+  const standingPds = (
+    pdRows.rows as { statusCode: string; isExpired: boolean; superseded: boolean }[]
+  ).filter((pd) => !pd.superseded);
+  const livePdCount = standingPds.filter((pd) => !pd.isExpired && pd.statusCode !== 'rejected').length;
+  const allPdsWrittenOff =
+    standingPds.length > 0 && standingPds.every((pd) => pd.statusCode === 'totally_written_off');
+
   return {
     ...NO_FACTS,
+    livePdCount,
+    allPdsWrittenOff,
     instalmentPlanSet: instalmentIds.length > 0,
     firstInstalmentFunded:
       instalmentIds.length > 0 &&

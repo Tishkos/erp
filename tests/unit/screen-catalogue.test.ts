@@ -240,6 +240,8 @@ describe('every screen has one address', () => {
       '/payables/open-items',
       // REQ-AP-001 Stage 3 — payment applications (§21.7).
       '/payables/payment-applications',
+      // REQ-AP-001 Stage 4 — PD / ASYCUDA.
+      '/payables/pd',
       '/payables/purchase-orders',
       '/payables/service-receipts',
       // Block 6 — Payments and Receipts.

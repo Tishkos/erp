@@ -11,7 +11,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { journalEntry, payable, paymentApplication } from './db/schema';
+import { customsPd, journalEntry, payable, paymentApplication } from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -124,6 +124,12 @@ const paymentApplicationParentAccess = async (tx: Tx, principal: Principal, obje
   return Boolean(row);
 };
 
+const customsPdParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'customs_pd')) return false;
+  const [row] = await tx.select({ id: customsPd.id }).from(customsPd).where(eq(customsPd.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -135,6 +141,7 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('journal_entry', journalParentAccess);
   attachments.registerParentAccessCheck('payable', payableParentAccess);
   attachments.registerParentAccessCheck('payment_application', paymentApplicationParentAccess);
+  attachments.registerParentAccessCheck('customs_pd', customsPdParentAccess);
 }
 
 /** Streams a stored file, for a route handler that has already checked access. */

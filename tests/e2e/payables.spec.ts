@@ -10,6 +10,8 @@ import { expect, test, type Page } from '@playwright/test';
  *   D12  An expense is a purchase invoice: "Add expense" on the Purchase
  *        Invoices list, a note on the invoice, Unpaid / Paid / Overdue on the
  *        register.
+ *   §16  Stage 4: a PD registered on the import, validated on its record,
+ *        and the ASYCUDA list read into a difference before it is applied.
  *   §15  Stage 3: the instalment plan and a payment application from the
  *        import's Payments section; the maker cannot approve; the accounting
  *        manager approves and sends under a logged override; the register
@@ -213,6 +215,59 @@ test.describe('A22 · payables in a browser', () => {
     await expect(page.getByRole('row', { name: new RegExp(applicationNo) })).toBeVisible();
   });
 
+  test('Stage 4 · register a PD on the import, validate it, read the ASYCUDA list', async ({ page }) => {
+    test.setTimeout(240_000);
+    await signIn(page);
+    const pdNo = `9${RUN}`;
+
+    await page.goto('/payables/invoices/new');
+    await page.getByLabel('Supplier Code').fill('SUP-00001');
+    await page.locator('[name="item_code_0"]').fill('ITM-SEED');
+    await page.getByLabel('Quantity').first().fill('5');
+    await page.getByLabel('Unit Price').first().fill('2000');
+    await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
+    await page.locator('input[name="is_import"]').check();
+    await page.getByRole('button', { name: 'Create' }).click();
+    await page.waitForURL(
+      (url) => url.pathname.startsWith('/payables/invoices/') && !url.pathname.endsWith('/new'),
+      { timeout: 120_000 },
+    );
+    await page.getByRole('link', { name: 'Import tracking' }).click();
+    await page.waitForURL(/\/payables\/IMP-/);
+
+    // §16.1 — the PD, as the ASYCUDA screen shows it.
+    await page.getByRole('button', { name: 'Register PD' }).click();
+    const register = page.getByRole('dialog');
+    await register.getByRole('textbox', { name: 'PD no.' }).fill(pdNo);
+    await register.getByLabel('Registered').fill('2026-09-02');
+    await register.getByLabel('Expires').fill('2027-03-01');
+    await register.getByLabel('Bank').selectOption({ label: 'Arab Bank · ARABIQBAXXX' });
+    await register.getByRole('button', { name: 'Register PD' }).click();
+    const pdLink = page.getByRole('link', { name: pdNo });
+    await expect(pdLink).toBeVisible({ timeout: 30_000 });
+
+    // Validated — one history row, the status in the header.
+    await pdLink.click();
+    await expect(page.getByRole('heading', { level: 1, name: `PD ${pdNo}` })).toBeVisible();
+    await page.getByRole('button', { name: 'Change status' }).click();
+    const change = page.getByRole('dialog');
+    await change.getByLabel('New status').selectOption('validated');
+    await change.getByRole('button', { name: 'Change status' }).click();
+    await expect(page.getByText('Validated ·').first()).toBeVisible({ timeout: 30_000 });
+
+    // §21.8 — the ASYCUDA list: the difference first, then applied.
+    await page.goto('/payables/pd/asycuda');
+    await page.getByRole('textbox', { name: 'List' }).fill(`${pdNo}\tTotally Written Off\n12345 Lost`);
+    await page.getByRole('button', { name: 'Show the difference' }).click();
+    await expect(page.getByText('Will be updated')).toBeVisible();
+    await expect(page.getByText('Not read')).toBeVisible();
+    await page.getByRole('button', { name: 'Apply 1 changes' }).click();
+    await page.waitForURL(/\/payables\/pd\?applied=1/);
+    await expect(page.getByText('1 PD statuses updated from the ASYCUDA list.')).toBeVisible();
+    await page.goto(`/payables/pd?view=final&q=${pdNo}`);
+    await expect(page.getByRole('row', { name: new RegExp(pdNo) })).toContainText('Totally written off');
+  });
+
   test('holds the line at mobile width, in Arabic, right to left', async ({ page, context }) => {
     test.setTimeout(120_000);
     await context.addCookies([{ name: 'erp-locale', value: 'ar', domain: 'localhost', path: '/' }]);
@@ -242,6 +297,11 @@ test.describe('A22 · payables in a browser', () => {
     await page.goto('/payables/advances');
     await noSidewaysScroll(page);
     await page.goto('/master-data/banks');
+    await noSidewaysScroll(page);
+    await page.goto('/payables/pd');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await noSidewaysScroll(page);
+    await page.goto('/payables/pd/asycuda');
     await noSidewaysScroll(page);
     const application = page.locator('table tbody tr td a').first();
     await page.goto('/payables/payment-applications');
