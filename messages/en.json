@@ -2402,7 +2402,9 @@
       "system": "system",
       "no_events": "Nothing recorded yet.",
       "add_note": "Add a note",
-      "note_save": "Add note"
+      "note_save": "Add note",
+      "edit_lines": "Edit PI lines (supersedes — the old lines stay in the record)",
+      "lines_save": "Save lines"
     },
     "payables_settings": {
       "title": "Payables Settings",

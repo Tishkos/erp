@@ -310,7 +310,11 @@ export const payable = pgTable(
   ],
 );
 
-/** The PI / quote / contract lines — §5.1. Quantity is known before any invoice. */
+/**
+ * The PI / quote / contract lines — §5.1. Quantity is known before any
+ * invoice — and a changed line supersedes the old one rather than replacing
+ * it (D11): the PI is evidence, and evidence gains rows, never loses them.
+ */
 export const payableOrderLine = pgTable(
   'payable_order_line',
   {
@@ -327,12 +331,22 @@ export const payableOrderLine = pgTable(
     uomCode: text('uom_code').references(() => unitOfMeasure.code),
     unitPrice: numeric('unit_price', { precision: 19, scale: 4 }),
     amountTxn: numeric('amount_txn', { precision: 19, scale: 4 }),
+    /** D11 — set when a later edit replaced this line. The row stands. */
+    supersededAt: timestamp('superseded_at', { withTimezone: true }),
+    supersededBy: uuid('superseded_by').references(() => appUser.id),
   },
   (t) => [
-    uniqueIndex('payable_order_line_no_uniq').on(t.payableId, t.lineNo),
+    uniqueIndex('payable_order_line_no_uniq')
+      .on(t.payableId, t.lineNo)
+      .where(sql`superseded_at is null`),
     check(
       'payable_order_line_quantity_positive',
       sql`${t.quantity} is null or ${t.quantity} > 0`,
+    ),
+    check(
+      'payable_order_line_supersede_complete',
+      sql`(${t.supersededAt} is null and ${t.supersededBy} is null)
+          or (${t.supersededAt} is not null and ${t.supersededBy} is not null)`,
     ),
   ],
 );

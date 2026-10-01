@@ -37,6 +37,7 @@ import {
   resolveHold,
   setTerms,
   updateHold,
+  updatePiLines,
 } from '../actions';
 
 /**
@@ -412,6 +413,79 @@ export default async function PayablePage({
                 </tbody>
               </table>
             </div>
+
+            {mayEdit && !row.cancelledAt && !row.closedAt && invoices.length === 0 ? (
+              <details className={s.sapNote}>
+                {/* D11 — editing supersedes; nothing under a payable deletes. */}
+                <summary>{t('edit_lines')}</summary>
+                <Form action={updatePiLines}>
+                  <Hidden name="payable_no" value={row.payableNo} />
+                  <input name="line_count" type="hidden" value="6" />
+                  <div className={s.sapTableWrap}>
+                    <table className={s.sapTable}>
+                      <thead>
+                        <tr>
+                          <th scope="col">{t('line_item')}</th>
+                          <th scope="col">{t('line_description')}</th>
+                          <th scope="col">{t('line_quantity')}</th>
+                          <th scope="col">{t('line_uom')}</th>
+                          <th scope="col">{t('line_price')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[0, 1, 2, 3, 4, 5].map((index) => {
+                          const line = lines[index];
+                          return (
+                            <tr key={index}>
+                              <td>
+                                <input
+                                  className={s.input}
+                                  defaultValue={line?.itemCode ?? ''}
+                                  name={`line_${index}_item`}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  className={s.input}
+                                  defaultValue={line?.description ?? ''}
+                                  name={`line_${index}_description`}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  className={s.input}
+                                  defaultValue={line?.quantity ?? ''}
+                                  inputMode="decimal"
+                                  name={`line_${index}_quantity`}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  className={s.input}
+                                  defaultValue={line?.uomCode ?? ''}
+                                  name={`line_${index}_uom`}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  className={s.input}
+                                  defaultValue={line?.unitPrice ?? ''}
+                                  inputMode="decimal"
+                                  name={`line_${index}_price`}
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <SubmitRow>
+                    <Submit label={t('lines_save')} small tone="secondary" />
+                  </SubmitRow>
+                </Form>
+              </details>
+            ) : null}
 
             {mayEdit && !row.cancelledAt && !row.closedAt ? (
               <div className={s.sapFootActions}>

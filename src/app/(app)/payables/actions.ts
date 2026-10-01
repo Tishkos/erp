@@ -102,6 +102,35 @@ export async function linkInvoice(form: FormData): Promise<void> {
   );
 }
 
+export async function updatePiLines(form: FormData): Promise<void> {
+  const payableNo = text(form, 'payable_no');
+  const lines: Array<{
+    itemCode: string | null;
+    description: string;
+    quantity: string | null;
+    uomCode: string | null;
+    unitPrice: string | null;
+  }> = [];
+  for (let index = 0; index < rowCount(form, 0); index++) {
+    const description = text(form, `line_${index}_description`).trim();
+    if (!description) continue;
+    lines.push({
+      itemCode: text(form, `line_${index}_item`) || null,
+      description,
+      quantity: text(form, `line_${index}_quantity`) || null,
+      uomCode: text(form, `line_${index}_uom`) || null,
+      unitPrice: text(form, `line_${index}_price`) || null,
+    });
+  }
+  await runAdminAndReturn(
+    async (tx, ctx) => {
+      const row = await payables.loadByNo(tx, payableNo);
+      await payables.updateOrderLines(tx, ctx, { payableId: row.id, lines });
+    },
+    back(payableNo),
+  );
+}
+
 export async function cancelPayable(form: FormData): Promise<void> {
   const payableNo = text(form, 'payable_no');
   await runAdminAndReturn(

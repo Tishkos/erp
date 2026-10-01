@@ -713,6 +713,125 @@ export async function setTerms(
   });
 }
 
+/**
+ * Edits the PI — D11: a changed line supersedes the old one, never deletes
+ * it, and the story says what changed. Refused once an invoice is posted:
+ * from then on the invoice is the figure and the PI is history.
+ */
+export async function updateOrderLines(
+  tx: Tx,
+  ctx: ActorContext,
+  input: { payableId: string; lines: readonly PayableLineInput[] },
+): Promise<void> {
+  const row = await load(tx, input.payableId);
+  await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, {
+    branchCode: row.branchCode,
+    objectId: row.id,
+  });
+  await assertLaneEditable(tx, ctx, row, 'order');
+  assertOpen(row);
+
+  const [posted] = await tx
+    .select({ invoiceNo: apInvoice.invoiceNo })
+    .from(apInvoice)
+    .where(
+      and(
+        eq(apInvoice.payableId, row.id),
+        inArray(apInvoice.status, ['posted', 'partially_executed', 'settled']),
+        isNull(apInvoice.reversedAt),
+      ),
+    )
+    .limit(1);
+  if (posted) {
+    throw new PayableStateError(
+      row.payableNo,
+      `invoice ${posted.invoiceNo} is posted — the invoice is the figure now. Correct it there.`,
+    );
+  }
+
+  const current = await tx
+    .select()
+    .from(payableOrderLine)
+    .where(and(eq(payableOrderLine.payableId, row.id), isNull(payableOrderLine.supersededAt)))
+    .orderBy(asc(payableOrderLine.lineNo));
+
+  // The old lines step aside, all of them, in one stamped act…
+  await tx
+    .update(payableOrderLine)
+    .set({ supersededAt: new Date(), supersededBy: ctx.principal.userId })
+    .where(and(eq(payableOrderLine.payableId, row.id), isNull(payableOrderLine.supersededAt)));
+
+  // …and the new ones take their numbers.
+  let amountTxn = 0n;
+  let quantity = 0n;
+  let hasQuantity = false;
+  for (const [index, line] of input.lines.entries()) {
+    const qty = line.quantity ? parseQuantity(line.quantity) : null;
+    const price = line.unitPrice ? parseDecimal(line.unitPrice, MONEY_SCALE) : null;
+    if (qty) {
+      quantity += qty;
+      hasQuantity = true;
+      if (price) amountTxn += (qty * price) / 10n ** 6n;
+    }
+    await tx.insert(payableOrderLine).values({
+      payableId: row.id,
+      lineNo: index + 1,
+      itemCode: line.itemCode ?? null,
+      expenseCategoryCode: line.expenseCategoryCode ?? null,
+      description: line.description,
+      quantity: qty ? formatQuantity(qty) : null,
+      uomCode: line.uomCode ?? null,
+      unitPrice: price ? toDecimalString(price) : null,
+      amountTxn: qty && price ? toDecimalString((qty * price) / 10n ** 6n) : null,
+    });
+  }
+
+  const converted = await rateService.convertOn(tx, amountTxn, row.currency, row.documentDate);
+  await tx
+    .update(payable)
+    .set({
+      amountTxn: toDecimalString(amountTxn),
+      amountIqd: toDecimalString(converted.amountIqd),
+      quantity: hasQuantity ? formatQuantity(quantity) : null,
+      updatedAt: new Date(),
+    })
+    .where(eq(payable.id, row.id));
+
+  await events.record(tx, {
+    payableId: row.id,
+    eventCode: 'FIELD_CHANGED',
+    summary: `PI lines changed: ${current.length} line(s) superseded by ${input.lines.length}`,
+    before: {
+      lines: current.map((line) => ({
+        lineNo: line.lineNo,
+        description: line.description,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+      })),
+    },
+    after: {
+      lines: input.lines.map((line, index) => ({
+        lineNo: index + 1,
+        description: line.description,
+        quantity: line.quantity ?? null,
+        unitPrice: line.unitPrice ?? null,
+      })),
+    },
+    actorUserId: ctx.principal.userId,
+  });
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'payable.lines_changed',
+    objectType: PERMISSION_OBJECT,
+    objectId: row.id,
+    branchCode: row.branchCode,
+    after: { lines: input.lines.length },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+}
+
 /** A note is the lightest event — §7.2 `NOTE_ADDED`. Allowed even when closed. */
 export async function addNote(
   tx: Tx,
@@ -936,7 +1055,7 @@ export async function view(tx: Tx, payableNo: string) {
   const lines = await tx
     .select()
     .from(payableOrderLine)
-    .where(eq(payableOrderLine.payableId, row.id))
+    .where(and(eq(payableOrderLine.payableId, row.id), isNull(payableOrderLine.supersededAt)))
     .orderBy(asc(payableOrderLine.lineNo));
 
   const invoices = await tx
