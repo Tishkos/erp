@@ -674,6 +674,8 @@ export async function runRecognition(tx: Tx, ctx: ActorContext, projectCode: str
   const rule = await policy(tx);
   if (!rule.ratified) throw new ProjectSystemError('policy', 'the recognition method is not ratified by Finance (D-PM-1); nothing posts until it is — the figures show what would post');
   if (row.status === 'draft') throw new ProjectSystemError('status', `${projectCode} is not released; it has nothing to recognise`);
+  const [settled] = (await tx.execute(sql`select settlement_no from project_settlement where project_code = ${projectCode} and status = 'posted' limit 1`)).rows as { settlement_no: string }[];
+  if (settled) throw new ProjectSystemError('status', `${projectCode} is settled (${settled.settlement_no}); its result stands and nothing more is recognised`);
   const period = await periods.periodFor(tx, end);
   if (period.endsOn !== end) throw new ProjectSystemError('period_end', `${end} is not the last day of a period (${period.name} ends ${period.endsOn})`);
   if (period.status === 'closed') throw new ProjectSystemError('period_end', `period_is_closed: ${period.name} is closed; recognition is posted before the close`);
@@ -692,24 +694,7 @@ export async function runRecognition(tx: Tx, ctx: ActorContext, projectCode: str
   const dimensions = { branch: criteria.branchCode, project: projectCode, department: row.departmentCode ?? null, business_line: row.businessLineCode ?? null };
 
   // The earlier run, reversed on the first day of this period.
-  const open = await tx
-    .select()
-    .from(projectRecognition)
-    .where(and(eq(projectRecognition.projectCode, projectCode), isNull(projectRecognition.reversedOn), sql`${projectRecognition.journalEntryId} is not null`));
-  for (const prior of open) {
-    const adjustment = parseDecimal(prior.adjustmentIqd, MONEY);
-    const reversal = await posting.post(tx, ctx, {
-      eventType: 'projects.recognition',
-      documentTypeCode: RECOGNITION_DOCUMENT_TYPE,
-      source: { module: 'projects', documentId: prior.id, event: 'reversed' },
-      branchCode: criteria.branchCode,
-      documentDate: period.startsOn,
-      postingDate: period.startsOn,
-      description: `Revenue recognition ${projectCode} to ${prior.periodEnd} — reversed`,
-      lines: recognitionLines(adjustment, true, criteria, dimensions),
-    });
-    await tx.update(projectRecognition).set({ reversalJournalEntryId: reversal.journalEntryId, reversedOn: period.startsOn }).where(eq(projectRecognition.id, prior.id));
-  }
+  const reversed = await reverseOpen(tx, ctx, projectCode, period.startsOn, criteria, dimensions);
 
   const figures = await recognitionFigures(tx, projectCode, end);
   const id = randomUUID();
@@ -753,10 +738,55 @@ export async function runRecognition(tx: Tx, ctx: ActorContext, projectCode: str
       billedIqd: money(figures.billedIqd),
       adjustmentIqd: money(figures.adjustmentIqd),
       journalEntryId,
-      reversedEarlier: open.length,
+      reversedEarlier: reversed.length,
     },
   });
-  return { id, figures, journalEntryId, reversed: open.length };
+  return { id, figures, journalEntryId, reversed: reversed.length };
+}
+
+/** Every run not yet reversed, reversed on a day by its own journal through the same event. */
+async function reverseOpen(
+  tx: Tx,
+  ctx: ActorContext,
+  projectCode: string,
+  on: string,
+  criteria: { branchCode: string; projectCode: string },
+  dimensions: Record<string, string | null>,
+): Promise<string[]> {
+  const open = await tx
+    .select()
+    .from(projectRecognition)
+    .where(and(eq(projectRecognition.projectCode, projectCode), isNull(projectRecognition.reversedOn), sql`${projectRecognition.journalEntryId} is not null`));
+  const journals: string[] = [];
+  for (const prior of open) {
+    const adjustment = parseDecimal(prior.adjustmentIqd, MONEY);
+    const reversal = await posting.post(tx, ctx, {
+      eventType: 'projects.recognition',
+      documentTypeCode: RECOGNITION_DOCUMENT_TYPE,
+      source: { module: 'projects', documentId: prior.id, event: 'reversed' },
+      branchCode: criteria.branchCode,
+      documentDate: on,
+      postingDate: on,
+      description: `Revenue recognition ${projectCode} to ${prior.periodEnd} — reversed`,
+      lines: recognitionLines(adjustment, true, criteria, dimensions),
+    });
+    await tx.update(projectRecognition).set({ reversalJournalEntryId: reversal.journalEntryId, reversedOn: on }).where(eq(projectRecognition.id, prior.id));
+    journals.push(reversal.journalEntryId);
+  }
+  return journals;
+}
+
+/**
+ * PM-6 §12 — settlement clears WIP and deferred revenue: the run still
+ * standing is reversed on the settlement's date, leaving the billed revenue
+ * and the costs as the result. The journal, or null when nothing stood.
+ */
+export async function reverseOpenRecognition(tx: Tx, ctx: ActorContext, projectCode: string, on: string): Promise<string | null> {
+  const row = await load(tx, projectCode);
+  const criteria = { branchCode: row.branchCode ?? ctx.branchCode, projectCode };
+  const dimensions = { branch: criteria.branchCode, project: projectCode, department: row.departmentCode ?? null, business_line: row.businessLineCode ?? null };
+  const journals = await reverseOpen(tx, ctx, projectCode, on, criteria, dimensions);
+  return journals[journals.length - 1] ?? null;
 }
 
 export async function recognitionHistory(tx: Tx, projectCode: string) {
@@ -805,6 +835,8 @@ export async function missingRecognition(tx: Tx, periodEnd: string): Promise<{ r
          and (exists (select 1 from project_cost k where k.project_code = p.code and k.incurred_on <= ${periodEnd}::date)
               or exists (select 1 from project_certificate c where c.project_code = p.code and c.status = 'posted' and c.certified_on <= ${periodEnd}::date))
          and not exists (select 1 from project_recognition r where r.project_code = p.code and r.period_end = ${periodEnd}::date)
+         -- PM-6 — a settled project's result stands; it is not recognised again.
+         and not exists (select 1 from project_settlement s where s.project_code = p.code and s.status = 'posted' and s.settled_on <= ${periodEnd}::date)
        order by p.code`)
   ).rows as { code: string }[];
   return { ratified: true, projects: rows.map((r) => r.code) };

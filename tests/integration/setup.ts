@@ -317,7 +317,11 @@ export async function resetTestData(): Promise<void> {
   // REQ-PM-001 PM-3 — the material issues name their movements and cost rows.
   await client.query('delete from project_material_issue_line');
   await client.query('delete from project_material_issue');
+  // REQ-PM-001 PM-6 — the hours name their runs; the cost rows name their settlement.
+  await client.query('delete from project_timesheet');
+  await client.query('delete from project_timesheet_run');
   await client.query('delete from project_cost');
+  await client.query('delete from project_settlement');
   await client.query('delete from project_commitment');
   // REQ-PM-001 PM-2 — the plan, the budget documents and the change orders' lines.
   await client.query('delete from project_plan_line');
@@ -859,7 +863,7 @@ export async function resetTestData(): Promise<void> {
                          -- REQ-AP-001 Stage 6, migration 0235.
                          'LOAN',
                          -- REQ-HR-001 Stage HR-1, migration 0241.
-                         'EMPLOYEE', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE',
+                         'EMPLOYEE', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

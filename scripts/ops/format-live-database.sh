@@ -199,6 +199,9 @@ project_certificate
 project_progress
 project_material_issue_line
 project_material_issue
+project_timesheet
+project_timesheet_run
+project_settlement
 project_plan_line
 project_plan_version
 project_budget_document_line

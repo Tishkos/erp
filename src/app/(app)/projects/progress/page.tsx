@@ -14,16 +14,20 @@ import { isNotFoundError } from '@/server/not-found';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as psch from '@/server/services/project-schedule';
 import * as ps from '@/server/services/project-system';
+import * as closing from '@/server/services/project-close';
 import { chipOf } from '../chip';
-import { approveMeasurement, approveMilestone, measureProgress, reachMilestone } from './actions';
+import { approveHours, approveMeasurement, approveMilestone, bookHours, cancelHours, measureProgress, postLabour, reachMilestone } from './actions';
 
 /**
  * Progress — REQ-PM-001 §10, §13. Copies the WBS workspace: one window with
  * the project and the day as filters, the tree as the register with the
  * earned-value figures to that day; then the measurements, the milestones
- * and the milestone trend stacked underneath.
+ * and the milestone trend stacked underneath — and (PM-6, D-PM-8) the hours
+ * booked on the elements, approved by somebody else and posted by month.
  */
 export const dynamic = 'force-dynamic';
+
+const HOURS_CHIP: Record<string, string> = { draft: 'draft', approved: 'approved', posted: 'posted', cancelled: 'cancelled' };
 
 export default async function ProgressPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/projects/progress')) notFound();
@@ -48,7 +52,7 @@ export default async function ProgressPage({ searchParams }: { searchParams: Sea
   const data = await withCurrentUser(async (tx) => {
     const choices = (await ps.list(tx, { pageSize: 100 })).rows;
     const code = asked || choices.find((c) => c.status === 'active')?.code || choices[0]?.code || '';
-    if (!code) return { choices, view: null, ev: [], measured: [], plan: null, trend: null };
+    if (!code) return { choices, view: null, ev: [], measured: [], plan: null, trend: null, hours: [], people: [], runs: [], codes: [] };
     try {
       const view = await ps.record(tx, actor, code);
       return {
@@ -58,13 +62,17 @@ export default async function ProgressPage({ searchParams }: { searchParams: Sea
         measured: await psch.measurements(tx, code),
         plan: await psch.activities(tx, code),
         trend: await psch.milestoneTrend(tx, code),
+        hours: await closing.timesheets(tx, code),
+        people: await closing.bookable(tx),
+        runs: await closing.labourRuns(tx, code),
+        codes: (await ps.costCodes(tx)).filter((c) => c.active),
       };
     } catch (error) {
-      if (isNotFoundError(error)) return { choices, view: null, ev: [], measured: [], plan: null, trend: null };
+      if (isNotFoundError(error)) return { choices, view: null, ev: [], measured: [], plan: null, trend: null, hours: [], people: [], runs: [], codes: [] };
       throw error;
     }
   });
-  const { choices, view, ev, measured, plan, trend } = data;
+  const { choices, view, ev, measured, plan, trend, hours, people, runs, codes } = data;
   const money = (value: string) => formatMoney(value, 'IQD', locale as Locale);
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
   const mayMeasure = Boolean(view) && can(principal, 'edit_draft', psch.PERMISSION_OBJECT) && ['active', 'on_hold', 'closing'].includes(view!.project.status);
@@ -72,27 +80,76 @@ export default async function ProgressPage({ searchParams }: { searchParams: Sea
   const mayReach = Boolean(view) && can(principal, 'submit', psch.PERMISSION_OBJECT) && view!.project.status === 'active';
   const milestones = plan ? plan.activities.filter((a) => a.kind === 'milestone') : [];
   const today = businessToday();
+  const mayBook = Boolean(view) && can(principal, 'create', psch.PERMISSION_OBJECT) && ['active', 'closing'].includes(view!.project.status);
+  const mayPostLabour = Boolean(view) && can(principal, 'post', psch.PERMISSION_OBJECT) && can(principal, 'view', 'employee_compensation') && ['active', 'closing'].includes(view!.project.status);
+  // The twelve months before this one: labour is posted once a month has ended.
+  const recentMonths = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(`${today.slice(0, 8)}01T00:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() - 1 - i);
+    return d.toISOString().slice(0, 7);
+  });
+  const lastMonth = recentMonths[0]!;
 
   return (
     <AdminPage
       actions={
-        mayMeasure && view ? (
-          <NewRecordDialog buttonLabel={x('measure')} closeLabel={t('close')} openOnLoad={Boolean(outcome.error)} title={x('measure_title')}>
-            <Form action={measureProgress}>
-              <Hidden name="project_code" value={view.project.code} />
-              <Hidden name="as_of" value={asOf} />
-              <Grid>
-                <Select label={x('element')} name="wbs_code" options={view.tree.filter((e) => e.active).map((e) => ({ value: e.code, label: `${e.code} · ${e.name}` }))} required />
-                <Field defaultValue={today} label={x('measured_on')} name="measured_on" required type="date" />
-                <Field label={x('percent_complete')} name="percent_complete" required />
-              </Grid>
-              <Field label={x('note')} name="note" wide />
-              <p className={s.sapNote}>{x('measure_note')}</p>
-              <SubmitRow>
-                <Submit label={t('save')} />
-              </SubmitRow>
-            </Form>
-          </NewRecordDialog>
+        (mayMeasure || mayBook) && view ? (
+          <>
+            {mayMeasure ? (
+              <NewRecordDialog buttonLabel={x('measure')} closeLabel={t('close')} openOnLoad={Boolean(outcome.error)} title={x('measure_title')}>
+                <Form action={measureProgress}>
+                  <Hidden name="project_code" value={view.project.code} />
+                  <Hidden name="as_of" value={asOf} />
+                  <Grid>
+                    <Select label={x('element')} name="wbs_code" options={view.tree.filter((e) => e.active).map((e) => ({ value: e.code, label: `${e.code} · ${e.name}` }))} required />
+                    <Field defaultValue={today} label={x('measured_on')} name="measured_on" required type="date" />
+                    <Field label={x('percent_complete')} name="percent_complete" required />
+                  </Grid>
+                  <Field label={x('note')} name="note" wide />
+                  <p className={s.sapNote}>{x('measure_note')}</p>
+                  <SubmitRow>
+                    <Submit label={t('save')} />
+                  </SubmitRow>
+                </Form>
+              </NewRecordDialog>
+            ) : null}
+            {mayBook ? (
+              <NewRecordDialog buttonLabel={x('book_hours')} closeLabel={t('close')} title={x('book_hours_title')}>
+                <Form action={bookHours}>
+                  <Hidden name="project_code" value={view.project.code} />
+                  <Hidden name="as_of" value={asOf} />
+                  <Grid>
+                    <Select
+                      label={x('element')}
+                      name="wbs_code"
+                      options={view.tree.filter((e) => e.active && e.isAccountAssignment).map((e) => ({ value: e.code, label: `${e.code} · ${e.name}` }))}
+                      required
+                    />
+                    <Select
+                      label={x('employee')}
+                      name="employee_id"
+                      options={people.map((p) => ({ value: p.id, label: `${p.employeeNo} · ${locale === 'ar' && p.fullNameAr ? p.fullNameAr : p.fullNameEn}` }))}
+                      required
+                    />
+                    <Field defaultValue={today} label={x('work_date')} name="work_date" required type="date" />
+                    <Field hint={x('hours_hint')} label={x('hours')} name="hours" required />
+                    <Select
+                      defaultValue="LAB"
+                      label={x('cost_code')}
+                      name="cost_code"
+                      options={codes.map((c) => ({ value: c.code, label: `${c.code} · ${locale === 'ar' && c.nameAr ? c.nameAr : c.nameEn}` }))}
+                      required
+                    />
+                  </Grid>
+                  <Field label={x('note')} name="note" wide />
+                  <p className={s.sapNote}>{x('book_hours_note')}</p>
+                  <SubmitRow>
+                    <Submit label={t('save')} />
+                  </SubmitRow>
+                </Form>
+              </NewRecordDialog>
+            ) : null}
+          </>
         ) : undefined
       }
       back={{ href: '/', label: t('dashboard_label') }}
@@ -315,7 +372,10 @@ export default async function ProgressPage({ searchParams }: { searchParams: Sea
                         <bdi dir="ltr">{day(m.reachedOn)}</bdi>
                       </td>
                       <td>
-                        <span className={`status status--${m.status === 'done' ? 'executed' : m.status === 'cancelled' ? 'cancelled' : m.reachedOn ? 'submitted' : 'active'} ${s.sapRegisterStatus}`} data-status={m.status === 'done' ? 'executed' : m.status === 'cancelled' ? 'cancelled' : m.reachedOn ? 'submitted' : 'active'}>
+                        <span
+                          className={`status status--${m.status === 'done' ? 'executed' : m.status === 'cancelled' ? 'cancelled' : m.reachedOn ? 'submitted' : 'active'} ${s.sapRegisterStatus}`}
+                          data-status={m.status === 'done' ? 'executed' : m.status === 'cancelled' ? 'cancelled' : m.reachedOn ? 'submitted' : 'active'}
+                        >
                           {m.status === 'open' && m.reachedOn ? x('reached_waiting') : x(`activity_status_${m.status}`)}
                         </span>
                       </td>
@@ -343,6 +403,136 @@ export default async function ProgressPage({ searchParams }: { searchParams: Sea
                 </tbody>
               </table>
             </div>
+          </div>
+        </section>
+      ) : null}
+
+      {view ? (
+        <section aria-labelledby="progress-hours-title" className={s.sapDoc}>
+          <div className={s.sapWindow}>
+            <h2 className={s.sapTitle} id="progress-hours-title">
+              <span>{x('timesheets')}</span>
+              <span className={s.sapTitleMeta}>{t('rows_shown', { count: hours.length })}</span>
+            </h2>
+            {mayPostLabour ? (
+              <Form action={postLabour}>
+                <Hidden name="project_code" value={view.project.code} />
+                <Hidden name="as_of" value={asOf} />
+                <FilterRow>
+                  <Select defaultValue={lastMonth} label={x('labour_month')} name="month" options={recentMonths.map((m) => ({ value: m, label: m }))} required />
+                  <SubmitRow>
+                    <Submit label={x('post_labour')} tone="secondary" />
+                  </SubmitRow>
+                </FilterRow>
+              </Form>
+            ) : null}
+            <div className={s.sapTableWrap}>
+              <table aria-labelledby="progress-hours-title" className={s.sapTable}>
+                <thead>
+                  <tr>
+                    <th scope="col">{x('work_date')}</th>
+                    <th scope="col">{x('employee')}</th>
+                    <th scope="col">{x('element')}</th>
+                    <th scope="col">{x('cost_code')}</th>
+                    <th className={s.sapNum} scope="col">
+                      {x('hours')}
+                    </th>
+                    <th className={s.sapNum} scope="col">
+                      {x('labour_amount')}
+                    </th>
+                    <th scope="col">{column('status')}</th>
+                    <th scope="col">{t('actions')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hours.length === 0 ? (
+                    <tr>
+                      <td className={s.sapEmptyRow} colSpan={8}>
+                        {x('no_timesheets')}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {hours.map((h) => (
+                    <tr key={h.id}>
+                      <td>
+                        <bdi dir="ltr">{day(h.workDate)}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{h.employeeNo}</bdi> <bdi dir="auto">{locale === 'ar' && h.employeeNameAr ? h.employeeNameAr : h.employeeName}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{h.wbsCode}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{h.costCode}</bdi>
+                      </td>
+                      <td className={s.sapNum}>{Number(h.hours)}</td>
+                      <td className={s.sapNum}>{h.amountIqd ? money(h.amountIqd) : '—'}</td>
+                      <td>
+                        <span className={`status status--${HOURS_CHIP[h.status] ?? 'draft'} ${s.sapRegisterStatus}`} data-status={HOURS_CHIP[h.status] ?? 'draft'}>
+                          {x(`hours_${h.status}`)}
+                        </span>
+                      </td>
+                      <td>
+                        {h.status === 'draft' && mayApprove && h.createdBy !== principal.userId ? (
+                          <Form action={approveHours}>
+                            <Hidden name="project_code" value={view.project.code} />
+                            <Hidden name="as_of" value={asOf} />
+                            <Hidden name="timesheet_id" value={h.id} />
+                            <Submit label={x('approve_measurement')} small tone="secondary" />
+                          </Form>
+                        ) : null}
+                        {(h.status === 'draft' || h.status === 'approved') && can(principal, 'edit_draft', psch.PERMISSION_OBJECT) ? (
+                          <Form action={cancelHours}>
+                            <Hidden name="project_code" value={view.project.code} />
+                            <Hidden name="as_of" value={asOf} />
+                            <Hidden name="timesheet_id" value={h.id} />
+                            <input aria-label={t('reason')} name="reason" placeholder={x('cancel_reason')} required type="text" />
+                            <Submit label={x('cancel_line')} small tone="secondary" />
+                          </Form>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {runs.length > 0 ? (
+              <div className={s.sapTableWrap}>
+                <table aria-label={x('labour_runs')} className={s.sapTable}>
+                  <thead>
+                    <tr>
+                      <th scope="col">{x('labour_month')}</th>
+                      <th scope="col">{x('posted_on')}</th>
+                      <th className={s.sapNum} scope="col">
+                        {x('hours')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {x('labour_amount')}
+                      </th>
+                      <th scope="col">{x('journal')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {runs.map((r) => (
+                      <tr key={r.id}>
+                        <td>
+                          <bdi dir="ltr">{r.month.slice(0, 7)}</bdi>
+                        </td>
+                        <td>
+                          <bdi dir="ltr">{day(r.postedOn)}</bdi>
+                        </td>
+                        <td className={s.sapNum}>{Number(r.hours)}</td>
+                        <td className={s.sapNum}>{money(r.amountIqd)}</td>
+                        <td>
+                          <bdi dir="ltr">{r.entryNo}</bdi>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
           </div>
         </section>
       ) : null}

@@ -221,8 +221,9 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       // REQ-PM-001 PM-5 — the billing plan, certificates, recognition; the forecast at completion.
       page('project_billing', 'project', '/projects/billing'),
       page('project_forecast', 'project', '/projects/forecast'),
-      page('project_close', 'project_close'),
-      page('project_reports', 'project_report'),
+      // REQ-PM-001 PM-6 — close and settlement; the four reports.
+      page('project_close', 'project', '/projects/close'),
+      page('project_reports', 'project', '/projects/reports'),
     ],
   },
   {

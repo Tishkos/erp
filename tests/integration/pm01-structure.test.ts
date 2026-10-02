@@ -15,6 +15,7 @@ import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
 import * as projects from '@/server/services/projects';
 import * as ps from '@/server/services/project-system';
+import * as closing from '@/server/services/project-close';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
 import { parseDecimal } from '@domain/money';
 
@@ -203,7 +204,10 @@ describe('PM3 · pm01-status-profile — CRTD → REL → (hold ⇄) → TECO �
     await withScope(scope(manager), (tx) => ps.technicalComplete(tx, manager, projectCode));
     expect(await rejection(withScope(scope(manager), (tx) => ps.reopen(tx, manager, projectCode, 'again')))).toMatch(/already reopened once/);
 
-    // Close from technical completion only, through Phase 11's blockers.
+    // Close from technical completion only, through Phase 11's blockers and PM-6's: the settlement first.
+    expect(await rejection(withScope(scope(other), (tx) => ps.close(tx, other, projectCode, 'done')))).toMatch(/settlement is not posted/);
+    const { settlementNo } = await withScope(scope(engineer), (tx) => closing.createSettlement(tx, engineer, projectCode, { settledOn: '2026-10-01' }));
+    await withScope(scope(other), (tx) => closing.postSettlement(tx, other, settlementNo));
     await withScope(scope(other), (tx) => ps.close(tx, other, projectCode, 'done'));
     expect((await ownerPool.query(`select status from project where code = $1`, [projectCode])).rows[0].status).toBe('closed');
     expect(await rejection(withScope(scope(manager), (tx) => ps.hold(tx, manager, projectCode, 'x')))).toMatch(/allowed from active only/);

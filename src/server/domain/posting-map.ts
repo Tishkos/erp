@@ -216,6 +216,25 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
       line('project_revenue', 'either', true),
     ],
   },
+  {
+    // REQ-PM-001 PM-6 (D-PM-13) — a Material Issue document: the stock's
+    // FIFO cost leaves the item's inventory account for the element's cost;
+    // a return the other way, at the cost it went out at.
+    event: 'projects.material_issue',
+    lines: [line('project_material_cost', 'either', true), line('inventory', 'either', true)],
+  },
+  {
+    // REQ-PM-001 PM-6 (D-PM-8) — a month's approved hours at the employees'
+    // rates: the project's labour cost against the absorption account.
+    event: 'projects.timesheet',
+    lines: [line('project_labour', 'debit', true), line('labour_absorption', 'credit', true)],
+  },
+  {
+    // REQ-PM-001 PM-6 (D-PM-7) — an investment project settled: its cost
+    // leaves the accounts it was posted to for the asset under construction.
+    event: 'projects.settlement',
+    lines: [line('project_auc', 'debit', true), line('project_cost', 'credit', true)],
+  },
 ]);
 
 /** The catalogue as flat (event, role) pairs, in the order shown. */

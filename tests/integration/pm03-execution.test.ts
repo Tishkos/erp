@@ -50,6 +50,8 @@ const as = <T>(ctx: ActorContext, fn: (tx: Parameters<Parameters<typeof withScop
 beforeEach(async () => {
   world = await buildTradingWorld();
   releaser = await anotherManager();
+  // PM-6 (D-PM-13) — a Material Issue posts its cost; the trading world's expense account takes it.
+  await ownerPool.query(`insert into posting_rule (event_type, line_role, account_id, is_active, created_by) values ('projects.material_issue','project_material_cost',$1,true,$2)`, [world.accounts.expense, world.manager.principal.userId]);
 });
 
 /** A released internal project: root, one child element, an original budget of 5,000,000 SUB on the child. */
@@ -233,6 +235,19 @@ describe('PM7 · pm03-line-items — the Material Issues document and the sum of
     expect(record.lines[0]).toMatchObject({ costIqd: '400000.0000' });
     expect(record.lines[0]!.movementId).not.toBeNull();
     expect(record.lines[0]!.costId).not.toBeNull();
+    // D-PM-13 — the document's journal: the element's cost against the item's inventory account, the project on both lines.
+    const { rows: je } = await ownerPool.query(
+      `select l.account_id, l.debit_iqd::text as dr, l.credit_iqd::text as cr, l.project_code from journal_line l
+         join project_material_issue d on d.journal_entry_id = l.journal_entry_id where d.document_no = $1 order by l.line_no`,
+      [made.documentNo],
+    );
+    const side = (id: string) => (id === world.accounts.expense ? 'cost' : id === world.accounts.inventory ? 'inventory' : id);
+    expect(je.map((r) => [side(r.account_id), r.dr, r.cr, r.project_code])).toEqual([
+      ['cost', '400000.0000', '0.0000', projectCode],
+      ['inventory', '0.0000', '400000.0000', projectCode],
+    ]);
+    const { rows: indexed } = await ownerPool.query(`select count(*)::int as n from project_cost where source_id = $1 and journal_entry_id is not null`, [made.documentNo]);
+    expect(indexed[0].n).toBe(1);
 
     // A return at the cost it went out at.
     const back = await as(world.clerk, (tx) =>
