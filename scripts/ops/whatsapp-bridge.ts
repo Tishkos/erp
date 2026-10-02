@@ -27,7 +27,9 @@
  * Configuration (environment, TECHSTACK A13): DATABASE_URL (the application
  * role), WA_POLL_SECONDS (20), ANTHROPIC_API_KEY (optional — without it the
  * phrase patterns alone route; with it the small router model fills the gaps),
- * WA_ROUTER_MODEL overrides the model in the settings table.
+ * WA_ROUTER_MODEL and WA_AGENT_MODEL override the two models in the settings
+ * table, and WA_BRAIN (cli | api) which transport thinks; WA_CLI_EFFORT is how
+ * hard it thinks (low … max, high by direction).
  */
 import 'dotenv/config';
 import makeWASocket, {
@@ -46,7 +48,18 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import qrcode from 'qrcode-terminal';
 import { pool, withScope, type RequestScope } from '../../src/server/db/client';
-import { detectLocale, digestDue, e164ToJid, helpText, isGroupJid, jidToE164, parseCommand, words } from '../../src/server/domain/whatsapp';
+import {
+  checkingLine,
+  detectLocale,
+  greetingLine,
+  digestDue,
+  e164ToJid,
+  helpText,
+  isGroupJid,
+  jidToE164,
+  parseCommand,
+  words,
+} from '../../src/server/domain/whatsapp';
 import * as audit from '../../src/server/services/audit';
 import * as runner from '../../src/server/services/notification-runner';
 import * as wa from '../../src/server/services/whatsapp';
@@ -56,6 +69,21 @@ import { runAgentFor, type AgentClient } from '../../src/server/services/whatsap
 import { cliAgentClient, cliReady } from '../../src/server/services/whatsapp-cli-brain';
 
 const POLL_SECONDS = Math.max(5, Number(process.env.WA_POLL_SECONDS ?? '20'));
+/**
+ * How hard the brain thinks. High by direction (2026-10-02): the questions
+ * are the company's own books, where a wrong figure costs more than a slow
+ * answer. The CLI takes low, medium, high, xhigh and max.
+ */
+const effort = process.env.WA_CLI_EFFORT?.trim() || 'high';
+/*
+ * Which model answers.
+ *
+ * The settings table is the ordinary place for this — the WhatsApp screen
+ * writes it — and the environment wins, the way it already does for the
+ * router. It is how the brain can be moved on a running server before the
+ * migration that changes the stored default has been deployed there.
+ */
+const AGENT_MODEL_OVERRIDE = process.env.WA_AGENT_MODEL?.trim() || null;
 const RESET = process.argv.includes('--reset-pairing');
 /** WA-5 — print the groups the bot is in, with their ids, and exit. */
 const LIST_GROUPS = process.argv.includes('--list-groups');
@@ -271,6 +299,26 @@ async function handleInbound(
   // the last few turns of this chat for context. The catalogue's phrases are
   // the fallback when there is no key.
   const history = await withScope(scope, (tx) => wa.recentTurns(tx, { groupJid, e164 }));
+
+  /*
+   * While he reads: a word, not silence.
+   *
+   * By direction (2026-10-02). Only if the answer is actually slow — a
+   * greeting or a one-line explanation comes straight back and saying "let
+   * me check" about it would be theatre. Six seconds is the line between
+   * answering and going to look.
+   *
+   * Not recorded as an answer: it carries no figure and no data from the
+   * books, which is what W-R4 exists to keep a record of.
+   */
+  let checked = false;
+  const checking = setTimeout(() => {
+    checked = true;
+    void send({ e164, ...(groupJid ? { groupJid } : {}) }, { text: checkingLine(locale) }).catch(() => {
+      /* a courtesy that fails is not the answer failing */
+    });
+  }, 6_000);
+
   let reply: wa.Reply;
   try {
     reply = await wa.answer({
@@ -282,11 +330,19 @@ async function handleInbound(
       ...(agentClient
         ? {
             agent: (ctx, question, userName) =>
-              runAgentFor({ client: agentClient, model: settings.agentModel, ctx, question, history, userName }),
+              runAgentFor({
+                client: agentClient,
+                model: AGENT_MODEL_OVERRIDE ?? settings.agentModel,
+                ctx,
+                question,
+                history,
+                userName,
+              }),
           }
         : {}),
     });
   } catch (error) {
+    clearTimeout(checking);
     const detail = error instanceof Error ? error.message : String(error);
     log(`inbound from ${e164}: failed — ${detail}`);
     await withScope(scope, (tx) => wa.finishInbound(tx, inboundId, { status: 'failed', intent: null, errorMessage: detail }));
@@ -297,6 +353,8 @@ async function handleInbound(
     }
     return;
   }
+
+  clearTimeout(checking);
 
   // 4. Send, then record what was sent (W-R4). Asked in the group, answered
   // in the group — the attachment with it, so the PDF lands where the
@@ -320,7 +378,9 @@ async function handleInbound(
       await wa.finishInbound(tx, inboundId, { status: 'answered', intent: reply.intent.kind, detail: reply.detail });
       await wa.auditAnswer(tx, reply, { inboundId, question: text });
     });
-    log(`inbound from ${e164}: ${reply.intent.kind} answered${reply.attachment ? ` + ${reply.attachment.fileName}` : ''}`);
+    log(
+      `inbound from ${e164}: ${reply.intent.kind} answered${reply.attachment ? ` + ${reply.attachment.fileName}` : ''}${checked ? ' (said he was checking first)' : ''}`,
+    );
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     await withScope(scope, async (tx) => {
@@ -508,10 +568,8 @@ let lastGreetingAt = 0;
  * Says hello in the group when the bridge comes up, so the room can see it is
  * listening.
  *
- * One line, as a colleague arriving would. It used to recite the catalogue of
- * phrases it understood, which was honest when phrases were all it had and
- * became wrong the moment it could hold a conversation: a list of commands
- * teaches people to type commands.
+ * One line, as a colleague arriving would, and a different one each time —
+ * the words are in `domain/whatsapp`, with the reasoning for them.
  */
 async function greet(scope: RequestScope, send: wa.Transport, botE164: string | null): Promise<void> {
   const settings = await withScope(scope, (tx) => wa.settings(tx));
@@ -522,11 +580,7 @@ async function greet(scope: RequestScope, send: wa.Transport, botE164: string | 
   if (Date.now() - lastGreetingAt < GREETING_QUIET_MS) return;
   lastGreetingAt = Date.now();
 
-  const locale = settings.digestLocale;
-  const text =
-    locale === 'ar'
-      ? '👋 أهلاً، أنا معكم. اسألوني عن أي شيء في الشركة — المخازن، الزبائن، المورّدين، الذمم، الحسابات.'
-      : '👋 Hello — I am here. Ask me anything about the company: stock, customers, suppliers, payables, the books.';
+  const text = greetingLine(settings.digestLocale);
 
   try {
     const outId = botE164
@@ -584,6 +638,7 @@ async function main(): Promise<void> {
   let settings = await withScope(scope, (tx) => wa.settings(tx));
   const routerClient = await anthropicClient(process.env.ANTHROPIC_API_KEY);
   const routerModel = process.env.WA_ROUTER_MODEL?.trim() || settings.routerModel;
+  const agentModel = AGENT_MODEL_OVERRIDE ?? settings.agentModel;
   const router = routerClient ? modelRouter(routerClient, routerModel) : undefined;
   /*
    * WA-3 — which brain, and is it there?
@@ -605,7 +660,9 @@ async function main(): Promise<void> {
   if (useCli) {
     const cliOptions = {
       ...(process.env.WA_CLI_COMMAND ? { command: process.env.WA_CLI_COMMAND } : {}),
-      timeoutSeconds: Math.max(30, Number(process.env.WA_CLI_TIMEOUT_SECONDS ?? '120')),
+      // Opus thinking hard about three reports is not a ten-second errand.
+      timeoutSeconds: Math.max(30, Number(process.env.WA_CLI_TIMEOUT_SECONDS ?? '240')),
+      effort,
     };
     const ready = await cliReady(cliOptions);
     if (ready.ok) agent = cliAgentClient(cliOptions);
@@ -616,7 +673,7 @@ async function main(): Promise<void> {
   log(
     `brain: ${
       agent
-        ? `agent on ${settings.agentModel} via ${useCli ? 'the claude CLI (subscription)' : 'the API'}`
+        ? `agent on ${agentModel} via ${useCli ? `the claude CLI (subscription, effort ${effort})` : 'the API'}`
         : router
           ? `router ${routerModel} only`
           : 'phrase patterns only'

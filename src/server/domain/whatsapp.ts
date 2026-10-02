@@ -333,6 +333,83 @@ export function helpText(locale: BotLocale): string {
   return WORDS[locale].help.join('\n');
 }
 
+/*
+ * What a person says while they go and look.
+ *
+ * By direction (2026-10-02): a question that takes real work should not be
+ * met with silence. Opus reading three reports takes the better part of a
+ * minute, and a minute of nothing is how a bot behaves. So the group is told
+ * — the way a colleague would say it, and not in the same words every time,
+ * which is the whole complaint about bots.
+ */
+const CHECKING = {
+  en: [
+    "Give me a moment — I'll check it properly before I answer.",
+    "Let me look it up, I'd rather give you the right figure than a quick one.",
+    'One second, reading it now.',
+    "I'll check the system first — I don't want to guess at it.",
+    'Looking now. Bear with me.',
+    'Let me go through it and come back to you with something solid.',
+  ],
+  ar: [
+    'لحظة، أتأكد من النظام قبل ما أجاوبك.',
+    'خلي أشوفه بالنظام حتى أعطيك الرقم الصحيح.',
+    'ثانية واحدة، أقرأه هسه.',
+    'أراجع النظام أول، ما أريد أخمّن.',
+    'أتحقق هسه، لحظة وياي.',
+    'خلي أراجعه زين وأرجعلك بجواب مضبوط.',
+  ],
+} as const;
+
+/**
+ * One of those lines, a different one each time.
+ *
+ * The counter walks the list rather than picking at random, so nobody in the
+ * group hears the same sentence twice running — which is what made the old
+ * bot sound like a bot.
+ */
+let checkingAt = 0;
+export function checkingLine(locale: BotLocale): string {
+  const list = CHECKING[locale];
+  const line = list[checkingAt % list.length]!;
+  checkingAt += 1;
+  return line;
+}
+
+/*
+ * What he says when he comes back on.
+ *
+ * The first version of this recited the phrases the bot understood, and the
+ * sponsor's objection to it is the reason the agent exists at all: a list of
+ * commands teaches people to type commands. It is one line now, in his own
+ * voice, and a different line each time — a bridge that reconnects twice in
+ * an evening should not post the same sentence twice.
+ *
+ * He names himself, because a room needs to know who has just arrived.
+ */
+const GREETINGS = {
+  en: [
+    "Noah here — I'm back on. Ask me anything about the system.",
+    "Noah, back online. What do you need?",
+    "I'm here. Anything you want to know about the books or the stock, just ask.",
+    "Back up and listening — Noah.",
+  ],
+  ar: [
+    'نوح هنا، رجعت أشتغل. اسألوني عن أي شيء بالنظام.',
+    'نوح، رجعت. شتحتاجون؟',
+    'آني موجود. أي شيء عن الحسابات أو المخازن، اسألوني.',
+    'رجعت أشتغل وأسمعكم — نوح.',
+  ],
+} as const;
+
+let greetingAt = 0;
+export function greetingLine(locale: BotLocale): string {
+  const list = GREETINGS[locale];
+  const line = list[greetingAt % list.length]!;
+  greetingAt += 1;
+  return line;
+}
+
 /** W-R7 — every reply names when it was read, under which branch, as whom. */
 export function footer(locale: BotLocale, input: { readonly at: Date; readonly branchCode: string; readonly userName: string }): string {
   const at = input.at.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
@@ -430,7 +507,7 @@ export type SettingKey = (typeof SETTING_KEYS)[number];
 
 export const DEFAULT_SETTINGS: BotSettings = {
   routerModel: 'claude-haiku-4-5-20251001',
-  agentModel: 'claude-sonnet-5',
+  agentModel: 'claude-opus-5-5',
   inlineRows: 15,
   exportRowsCap: 5000,
   throttlePerMinute: 60,
@@ -503,7 +580,7 @@ export function validateSetting(key: string, value: string): { readonly key: Set
   switch (k) {
     case 'router_model':
     case 'agent_model':
-      if (!/^[a-z0-9][a-z0-9.-]{2,80}$/i.test(raw)) throw new WhatsappValidationError(k, 'must be a model id such as claude-sonnet-5-5');
+      if (!/^[a-z0-9][a-z0-9.-]{2,80}$/i.test(raw)) throw new WhatsappValidationError(k, 'must be a model id such as claude-opus-5-5');
       return { key: k, value: raw };
     case 'inline_rows':
       return { key: k, value: String(bounded(k, raw, 1, 100)) };

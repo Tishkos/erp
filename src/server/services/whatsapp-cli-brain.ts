@@ -35,6 +35,18 @@ import type { AgentClient, AgentMessage } from '../domain/whatsapp-agent';
 
 const chr10 = String.fromCharCode(10);
 
+/*
+ * Two flags were learned the hard way on the server, 2026-10-02:
+ *
+ *   * `--bare` must NOT be used. It skips the settings the CLI keeps its
+ *     subscription credentials beside, so a host that `claude auth status`
+ *     reports as signed in answers every call with "Not logged in - Please
+ *     run /login". The flag looks like exactly what a bot wants; it is not.
+ *   * the host's own MCP servers must be pinned off. A personal Google Drive
+ *     connector on this account announced itself in the middle of a trial
+ *     answer, and a company group's reply is no place for it.
+ */
+
 /** Claude Code's own tools. None of them belong in a group chat. */
 const DENIED = [
   'Bash',
@@ -52,6 +64,31 @@ const DENIED = [
   'Artifact',
 ];
 
+/**
+ * One call's arguments.
+ *
+ * Named here, apart from the spawn, so a test can hold the two rules above:
+ * the deny list is passed, and `--bare` is not.
+ */
+export function cliArgsFor(model: string, mcpConfigPath: string, effort: string): string[] {
+  return [
+    '-p',
+    '--output-format',
+    'json',
+    '--model',
+    model,
+    // By direction (2026-10-02): think hard. The questions are a company's
+    // own books and a wrong figure is worse than a slow one.
+    '--effort',
+    effort,
+    '--disallowedTools',
+    DENIED.join(','),
+    '--strict-mcp-config',
+    '--mcp-config',
+    mcpConfigPath,
+  ];
+}
+
 export interface CliBrainOptions {
   /** The binary, when it is not simply `claude` on the path. */
   readonly command?: string;
@@ -59,6 +96,8 @@ export interface CliBrainOptions {
   readonly timeoutSeconds?: number;
   /** Where the CLI runs. Defaults to an empty temporary directory. */
   readonly cwd?: string;
+  /** How hard to think: low, medium, high, xhigh, max. High by direction. */
+  readonly effort?: string;
 }
 
 export class CliBrainError extends Error {
@@ -82,7 +121,7 @@ function runCli(
       // Windows machine it is a .cmd shim, which Node refuses to spawn
       // directly (EINVAL) — hence the shell there, and only there. Safe
       // because every argument below is a short flag or a path: the
-      // instructions travel in a file precisely so nothing long or
+      // instructions travel on stdin precisely so nothing long or
       // newline-bearing is ever quoted.
       shell: process.platform === 'win32',
     });
@@ -185,9 +224,14 @@ export function cliAgentClient(options: CliBrainOptions = {}): AgentClient {
   // On Windows the installed `claude` is a .cmd shim, which `spawn` cannot
   // start by bare name; on the server it is an ordinary executable.
   const command = options.command ?? (process.platform === 'win32' ? 'claude.cmd' : 'claude');
-  const timeoutSeconds = options.timeoutSeconds ?? 120;
+  const timeoutSeconds = options.timeoutSeconds ?? 180;
+  const effort = options.effort ?? 'high';
   // Nothing to read, nothing to change: the CLI runs where there is nothing.
   const cwd = options.cwd ?? mkdtempSync(join(tmpdir(), 'qs-wa-brain-'));
+  // An empty server list, as a file rather than a JSON argument: a path needs
+  // no quoting, and the Windows shim below would mangle the braces.
+  const mcpConfig = join(cwd, 'mcp.json');
+  writeFileSync(mcpConfig, '{"mcpServers":{}}', 'utf8');
 
   return {
     create: async (input) => {
@@ -195,31 +239,23 @@ export function cliAgentClient(options: CliBrainOptions = {}): AgentClient {
         .map((tool) => `• ${tool.name} — ${tool.description}\n  arguments: ${JSON.stringify(tool.input_schema)}`)
         .join('\n');
       const system = [input.system, PROTOCOL, '', 'THE TOOLS:', tools].join(chr10);
-      const prompt = `${promptFrom(input.messages)}${chr10}${chr10}Reply with one JSON object now.`;
 
-      // The instructions and nineteen tool schemas are several kilobytes: a
-      // file, not an argument. An argv that long is at best fragile and on
-      // Windows is quoted by a shim that would mangle the newlines.
-      const systemFile = join(cwd, 'system-prompt.txt');
-      writeFileSync(systemFile, system, 'utf8');
+      // Everything travels on stdin: the instructions, the nineteen tool
+      // schemas and the conversation. They come to several kilobytes, which
+      // `--system-prompt` would carry as one enormous argument; the
+      // `--system-prompt-file` of later builds is not in this one's help at
+      // all. Standard input has neither limit nor doubt.
+      const prompt = [
+        system,
+        '',
+        '- - -',
+        '',
+        promptFrom(input.messages),
+        '',
+        'Reply with one JSON object now.',
+      ].join(chr10);
 
-      const raw = await runCli(
-        command,
-        [
-          '-p',
-          '--output-format',
-          'json',
-          '--model',
-          input.model,
-          '--system-prompt-file',
-          systemFile,
-          '--disallowedTools',
-          DENIED.join(','),
-          '--bare',
-        ],
-        prompt,
-        { cwd, timeoutSeconds },
-      );
+      const raw = await runCli(command, cliArgsFor(input.model, mcpConfig, effort), prompt, { cwd, timeoutSeconds });
 
       // `--output-format json` wraps the answer; older builds print it plain.
       let said = raw.trim();
@@ -258,7 +294,7 @@ export function cliAgentClient(options: CliBrainOptions = {}): AgentClient {
  * log at startup instead.
  */
 export async function cliReady(options: CliBrainOptions = {}): Promise<{ readonly ok: true } | { readonly ok: false; readonly reason: string }> {
-  const client = cliAgentClient({ ...options, timeoutSeconds: options.timeoutSeconds ?? 60 });
+  const client = cliAgentClient({ ...options, timeoutSeconds: options.timeoutSeconds ?? 60, effort: 'low' });
   try {
     const reply = await client.create({
       model: 'claude-haiku-4-5-20251001',

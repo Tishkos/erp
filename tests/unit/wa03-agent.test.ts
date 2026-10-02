@@ -249,3 +249,29 @@ describe('WA-3 · the loop', () => {
     expect(models).toEqual(['claude-sonnet-5']);
   });
 });
+
+describe('WA-3 · who he is', () => {
+  const prompt = systemPrompt({ locale: 'en', userName: 'Baban Ali', branchCode: 'HQ', today: '2026-10-02' });
+
+  it('is Noah, and says who made him', () => {
+    // By direction (2026-10-02), and not negotiable in the wording: asked who
+    // built him, the answer is Tishko, the name is Noah, and the three hours
+    // are part of it.
+    expect(prompt).toContain('Noah');
+    expect(prompt).toContain('Tishko');
+    expect(prompt).toContain('three hours');
+  });
+
+  it('knows what he is for, and what he is not for', () => {
+    expect(prompt).toContain('erp.qs-groups.com');
+    for (const word of ['menu', 'commands']) {
+      expect(prompt.toLowerCase(), word).toContain(word);
+    }
+  });
+
+  it('does not say he will check, having already said it', () => {
+    // The bridge tells the group he is looking before he goes quiet; saying
+    // it again at the top of the answer is how a bot pads.
+    expect(prompt).toContain('let me check');
+  });
+});

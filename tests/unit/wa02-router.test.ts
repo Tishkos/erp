@@ -3,6 +3,7 @@
  * whitelist) — the pure parts of the bot, held from text alone.
  */
 import { describe, expect, it } from 'vitest';
+import { checkingLine, greetingLine } from '@/server/domain/whatsapp';
 import {
   DELIVERY_MAX_ATTEMPTS,
   isDeliveryDue,
@@ -141,7 +142,7 @@ describe('settings', () => {
     expect(s.throttlePerMinute).toBe(60);
     // The seed used to name `claude-sonnet-5-5`, which is not a model: the
     // first free-form question would have failed against the API.
-    expect(s.agentModel).toBe('claude-sonnet-5');
+    expect(s.agentModel).toBe('claude-opus-5-5');
     expect(s.digestLocale).toBe('ar');
     expect(validateSetting('digest_locale', 'en')).toEqual({ key: 'digest_locale', value: 'en' });
     expect(() => validateSetting('digest_locale', 'fr')).toThrow(WhatsappValidationError);
@@ -215,5 +216,28 @@ describe('W5 · the model router chooses from the whitelist or nothing', () => {
     expect(seen!.model).toBe('claude-haiku-4-5-20251001');
     expect(seen!.tool_choice).toEqual({ type: 'any', disable_parallel_tool_use: true });
     expect(seen!.tools.map((t) => t.name)).toEqual(INTENT_TOOLS.map((t) => t.name));
+  });
+});
+
+describe('WA-5 · the words he says as a person would', () => {
+  it('does not say the same thing twice running', () => {
+    // The whole of the sponsor's objection to the old bot was that it said
+    // the same sentence every time ("always saying this words"). Four calls,
+    // four different lines, in either language.
+    const en = [checkingLine('en'), checkingLine('en'), checkingLine('en'), checkingLine('en')];
+    expect(new Set(en).size).toBe(4);
+    const ar = [checkingLine('ar'), checkingLine('ar'), checkingLine('ar')];
+    expect(new Set(ar).size).toBe(3);
+  });
+
+  it('greets in Arabic in Arabic and in English in English', () => {
+    expect(greetingLine('ar')).toMatch(/[\u0600-\u06FF]/);
+    expect(greetingLine('en')).not.toMatch(/[\u0600-\u06FF]/);
+  });
+
+  it('introduces himself by name and not by a list of commands', () => {
+    const lines = [greetingLine('en'), greetingLine('en'), greetingLine('en'), greetingLine('en')];
+    expect(lines.some((line) => line.includes('Noah'))).toBe(true);
+    for (const line of lines) expect(line).not.toMatch(/approve <|type |command/i);
   });
 });

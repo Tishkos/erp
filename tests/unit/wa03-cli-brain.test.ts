@@ -9,7 +9,7 @@
  * way, and never a parse error.
  */
 import { describe, expect, it } from 'vitest';
-import { firstJsonObject, promptFrom } from '@/server/services/whatsapp-cli-brain';
+import { cliArgsFor, firstJsonObject, promptFrom } from '@/server/services/whatsapp-cli-brain';
 import type { AgentMessage } from '@/server/domain/whatsapp-agent';
 
 describe('WA-3 CLI · reading one object out of the reply', () => {
@@ -79,5 +79,46 @@ describe('WA-3 CLI · the transcript', () => {
   it('keeps Arabic as it was written', () => {
     const prompt = promptFrom([{ role: 'user', content: 'شنو موجود بمخزن النجف؟' }]);
     expect(prompt).toContain('شنو موجود بمخزن النجف؟');
+  });
+});
+
+describe('WA-3 CLI · the arguments', () => {
+  const args = cliArgsFor('claude-opus-5-5', '/tmp/x/mcp.json', 'high');
+
+  it('does not pass --bare, whatever it looks like it is for', () => {
+    // The flag reads as exactly what a bot wants — no hooks, no plugins, no
+    // settings — and it skips the settings the subscription credentials live
+    // beside. A host that `claude auth status` calls signed in then answers
+    // every single call with "Not logged in". Found on the server,
+    // 2026-10-02; this test is the only thing standing between the next
+    // reader and the same afternoon.
+    expect(args).not.toContain('--bare');
+  });
+
+  it('asks for the model and the effort it was told to use', () => {
+    expect(args).toContain('--model');
+    expect(args[args.indexOf('--model') + 1]).toBe('claude-opus-5-5');
+    expect(args).toContain('--effort');
+    expect(args[args.indexOf('--effort') + 1]).toBe('high');
+  });
+
+  it('denies the CLI its own tools', () => {
+    const denied = args[args.indexOf('--disallowedTools') + 1] ?? '';
+    for (const tool of ['Bash', 'Read', 'Write', 'Edit', 'WebFetch', 'Task']) {
+      expect(denied.split(','), tool).toContain(tool);
+    }
+  });
+
+  it('pins the host\'s own MCP servers off', () => {
+    // A personal Google Drive connector on the signed-in account announced
+    // itself in the middle of a trial answer. The group's answers are the
+    // ERP's, and nothing else's.
+    expect(args).toContain('--strict-mcp-config');
+    expect(args[args.indexOf('--mcp-config') + 1]).toBe('/tmp/x/mcp.json');
+  });
+
+  it('asks for JSON back, in print mode', () => {
+    expect(args).toContain('-p');
+    expect(args[args.indexOf('--output-format') + 1]).toBe('json');
   });
 });
