@@ -8,6 +8,15 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-PM-001 PM-1 — the Project System's structure: project types,
+  tolerance profiles and cost codes as master data on the **Project
+  Settings** screen; the `PRJ-{BRANCH}-{YYYY}-{SERIAL}` series; the WBS
+  coding mask (five levels) with the planning, account-assignment and
+  billing indicators, read by `recordCost` and `issueToProject`; the status
+  profile (release by another person, hold and resume with reasons,
+  technical completion, reopen once, close); the **Project Master** list
+  and record, **Contracts** and the **WBS** workspace under the Projects
+  section. Migration 0245.
 - REQ-HARDEN-001 HARDEN-3/4 (part) — detail pages tell a missing record
   from a failed read (E1–E3, HD12 gate), the foreign-key indexes the hot
   paths join on (migration 0244, HD13), the dashboard's receipts filtered

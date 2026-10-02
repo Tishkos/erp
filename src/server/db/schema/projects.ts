@@ -26,6 +26,7 @@
  */
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   check,
   date,
   index,
@@ -65,6 +66,20 @@ export const projectWbs = pgTable(
     plannedEndsOn: date('planned_ends_on'),
     /** §10 — a milestone is a WBS element somebody bills against. */
     isMilestone: text('is_milestone').notNull().default('false'),
+
+    // ---- REQ-PM-001 PM-1: where it sits, and what it may receive (§5) ----
+    /** 1 at the top; the parent's plus one below, held by trigger. */
+    level: smallint('level').notNull().default(1),
+    /** Costs may be planned here. */
+    isPlanning: boolean('is_planning').notNull().default(true),
+    /** Costs, commitments and issues may be posted here. */
+    isAccountAssignment: boolean('is_account_assignment').notNull().default(true),
+    /** Certificates and the billing plan hang here. */
+    isBilling: boolean('is_billing').notNull().default(false),
+    active: boolean('active').notNull().default(true),
+    description: text('description'),
+    createdBy: uuid('created_by').references(() => appUser.id),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -427,3 +442,55 @@ export const projectVariation = pgTable(
     ),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// REQ-PM-001 PM-1 — configuration as master data (R4)
+// ---------------------------------------------------------------------------
+
+export const PROJECT_KINDS = ['customer', 'internal', 'investment'] as const;
+export type ProjectKind = (typeof PROJECT_KINDS)[number];
+
+/** §4 — what kind of project: decides the screens that apply and where it settles. */
+export const projectType = pgTable(
+  'project_type',
+  {
+    code: text('code').primaryKey(),
+    nameEn: text('name_en').notNull(),
+    nameAr: text('name_ar'),
+    kind: text('kind').notNull(),
+    active: boolean('active').notNull().default(true),
+    createdBy: uuid('created_by').references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check('project_type_kind', sql`${t.kind} in ('customer', 'internal', 'investment')`)],
+);
+
+/** §7 — availability control: warn at one line, stop at the other. */
+export const projectToleranceProfile = pgTable(
+  'project_tolerance_profile',
+  {
+    code: text('code').primaryKey(),
+    nameEn: text('name_en').notNull(),
+    nameAr: text('name_ar'),
+    warnPercent: numeric('warn_percent', { precision: 9, scale: 4 }).notNull().default('90'),
+    stopPercent: numeric('stop_percent', { precision: 9, scale: 4 }).notNull().default('100'),
+    active: boolean('active').notNull().default(true),
+    createdBy: uuid('created_by').references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check('project_tolerance_profile_lines', sql`${t.warnPercent} > 0 and ${t.warnPercent} <= ${t.stopPercent} and ${t.stopPercent} <= 200`)],
+);
+
+/** §7 — the cost codes a budget line may use, each with the account it posts to. */
+export const projectCostCode = pgTable('project_cost_code', {
+  code: text('code').primaryKey(),
+  nameEn: text('name_en').notNull(),
+  nameAr: text('name_ar'),
+  accountId: uuid('account_id').references(() => chartOfAccount.id),
+  active: boolean('active').notNull().default(true),
+  createdBy: uuid('created_by').references(() => appUser.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

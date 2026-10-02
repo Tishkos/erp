@@ -8,7 +8,7 @@
 | **Status** | DRAFT — written 2026-10-02 at the sponsor's direction ("a new req for module Project Management … one of the best, the SAP ERP Project System"); the §15 decisions are proposed defaults, taken as proposed while the build runs unattended and listed for ratification |
 | **Approved by** | *Not yet approved.* |
 
-**Status: DRAFT for review — the decisions in §15 are OPEN, not final.**
+**Status: IN BUILD — PM-1 built on `feat/pm-stage-1-structure` (migration 0245, PM1–PM3 and PM14 held by tests); the decisions under §15 Decisions stand as taken alone and are open to the sponsor's review.**
 Written 2026-10-02, in the manner of REQ-AP-001: the rules first, the
 objects and their life cycle, the screens after, delivery in stages with
 numbered criteria, and a decision register the sponsor ratifies.
@@ -305,9 +305,9 @@ milestone usages, settlement rules, recognition method.
 
 | # | Criterion | Test |
 |---|---|---|
-| PM1 | A project is created with a type, coded by its mask; its level-1 element exists; an element's code follows the mask and its parent; a cycle is refused (existing). | `pm01-structure` |
-| PM2 | A cost, a commitment or an issue naming an element without the account-assignment indicator is refused by the service and by the posting engine; one naming an element with it is accepted and rolls up the tree. | `pm01-indicators` |
-| PM3 | Release writes the baseline once and refuses the creator; hold refuses new commitments; technical completion refuses while an activity is open; reopen is allowed once with a reason; close refuses while a blocker stands. | `pm01-status-profile` |
+| PM1 | A project is created with a type, coded by its mask; its level-1 element exists; an element's code follows the mask and its parent; a cycle is refused (existing). | `pm01-structure` → `tests/integration/pm01-structure.test.ts` › *allocates PRJ-{BRANCH}-{YYYY}-{SERIAL}, writes the type, and creates the level-1 element* · → `tests/integration/pm01-structure.test.ts` › *elements follow the mask under their parent, five levels at most, and a typed code is checked* · `tests/unit/pm01-project-system.test.ts` |
+| PM2 | A cost, a commitment or an issue naming an element without the account-assignment indicator is refused by the service and by the posting engine; one naming an element with it is accepted and rolls up the tree. | `pm01-indicators` → `tests/integration/pm01-structure.test.ts` › *refuses a cost and an issue on an element that may not receive them, and accepts one that may, rolled up the tree* |
+| PM3 | Release writes the baseline once and refuses the creator; hold refuses new commitments; technical completion refuses while an activity is open; reopen is allowed once with a reason; close refuses while a blocker stands. | `pm01-status-profile` → `tests/integration/pm01-structure.test.ts` › *release refuses the creator and needs the baseline dates; then the baseline is fixed* · → `tests/integration/pm01-structure.test.ts` › *hold refuses new spending and resumes with a reason; technical completion, one reopen, then close* (the activity blocker arrives with PM-4) |
 | PM4 | Budget by element is the sum of approved budget documents; the original writes `baseline_iqd` once; a supplement, a return and a transfer move the current figure and leave the baseline; a document is not approved by its raiser. | `pm02-budget-documents` |
 | PM5 | Availability control warns at the profile's first line (a notification to the responsible person) and stops at the second (the commitment refused); a raised line with a reason admits the commitment and is audited. | `pm02-availability-control` |
 | PM6 | A payable approved with an element assigned is a commitment; posting its invoice converts it to actual without double-counting; cancelling releases it with a reason (extends Phase 11's order case). | `pm03-commitments` |
@@ -318,7 +318,7 @@ milestone usages, settlement rules, recognition method.
 | PM11 | With the recognition method ratified, the period journal posts contract value × (actual ÷ EAC) less billed to WIP or deferred revenue, reverses next period, and is refused in a closed period; before ratification nothing posts. | `pm05-recognition` |
 | PM12 | Settlement moves an investment project's cost to its asset under construction and clears WIP for the rest; close needs it; a closed project refuses every posting. | `pm06-settlement-close` |
 | PM13 | The four reports print and export through the ERP's renderers with the same figures as the screens; the hierarchy report's roll-up equals the line items' sum. | `pm06-reports` |
-| PM14 | Every screen copies its model: the theme suite passes, the mobile RTL suite covers the new routes, and the two side-by-side screenshots per screen are shown. | `pm-screens` (`tests/e2e/projects.spec.ts`, `tests/e2e/mobile-rtl.spec.ts`) |
+| PM14 | Every screen copies its model: the theme suite passes, the mobile RTL suite covers the new routes, and the two side-by-side screenshots per screen are shown. | `pm-screens` → `tests/e2e/projects.spec.ts` › *a project is created, structured, released by another person, and read on every screen* · `tests/e2e/mobile-rtl.spec.ts` (every project route at 390 px in Arabic) |
 
 ## 16. Data model additions (summary; Phase 11's tables stay)
 
