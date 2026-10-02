@@ -462,6 +462,16 @@ export async function resetTestData(): Promise<void> {
     // REQ-LEGACY-001 — the old books' history and the runs that wrote it.
     await client.query('delete from legacy_document');
     await client.query('delete from legacy_import_run');
+    // REQ-HR-001 — people and their dated rows; the seeded masters stay, a
+    // test's own masters (created_by set) go.
+    await client.query('delete from employee_compensation');
+    await client.query('delete from employee_history');
+    await client.query('delete from employee');
+    await client.query('delete from position');
+    await client.query('delete from working_calendar_holiday where calendar_code in (select code from working_calendar where created_by is not null)');
+    await client.query('delete from working_calendar where created_by is not null');
+    await client.query('delete from leave_type where created_by is not null');
+    await client.query('delete from pay_component where created_by is not null');
     // Stage 6 (0235) — what the loans funded, their schedules, the loans.
     await client.query('delete from bank_loan_allocation');
     await client.query('delete from bank_loan_instalment');
@@ -793,6 +803,8 @@ export async function resetTestData(): Promise<void> {
                          'CONTAINER_RECEIPT', 'PORT_CODE',
                          -- REQ-AP-001 Stage 6, migration 0235.
                          'LOAN',
+                         -- REQ-HR-001 Stage HR-1, migration 0241.
+                         'EMPLOYEE',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

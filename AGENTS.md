@@ -96,3 +96,8 @@ Standing rule (by direction, 2026-10-01; see also newsettings.md: "DO NOT CHANGE
 * The posting event `legacy.opening_balance` reuses the `customer_receivable`, `supplier_payable` and `opening_balance` roles; 0240 copies their rules.
 * `legacy_document` and `legacy_import_run` are in `resetTestData`. Do not re-post the old registers as documents: the balances already carry the position.
 
+## HR (REQ-HR-001 Stage HR-1)
+
+* `services/employees.ts` is the only writer of `employee`, `employee_history` and `employee_compensation` (`tests/unit/hr01-event-coverage.test.ts` holds it): every move is a dated history row, identity is audited in place, compensation is a dated row under its own grant that the database policy checks itself (`app_has_grant`). `services/hr-settings.ts` holds positions, pay components, leave types and calendars — deactivated with a reason, never deleted.
+* The HR screens live under `/hr/…` and `/administration/hr-settings`; the section's remaining items arrive with HR-2 to HR-4. The series `EMPLOYEE` is kept by `resetTestData`.
+

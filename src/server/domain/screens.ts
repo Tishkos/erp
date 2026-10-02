@@ -112,6 +112,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   payables_settings: 'settings',
   payables_migration: 'settings',
   legacy_import: 'settings',
+  hr_settings: 'settings',
 
   // 5 — Inventory
   availability: 'workspace',
@@ -469,6 +470,10 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/administration/backup-health',
   // REQ-LEGACY-001 — the old system's books, once.
   '/administration/legacy-import',
+  // REQ-HR-001 Stage HR-1 — people and organisation.
+  '/hr/employees',
+  '/hr/organisation',
+  '/administration/hr-settings',
 ]);
 
 export function isDelivered(route: string): boolean {

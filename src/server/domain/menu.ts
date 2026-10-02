@@ -359,8 +359,9 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'hr_payroll',
     ordinal: 15,
     items: [
-      page('employees', 'employee'),
-      page('organisation', 'org_structure'),
+      // REQ-HR-001 Part E — the section's screens live under /hr.
+      page('employees', 'employee', '/hr/employees'),
+      page('organisation', 'org_structure', '/hr/organisation'),
       page('attendance', 'attendance'),
       page('leave', 'leave_request'),
       page('payroll', 'payroll_run'),
@@ -438,6 +439,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('backup_health', 'system_health'),
       // REQ-LEGACY-001 — the old system's books, once.
       page('legacy_import', 'legacy_import', '/administration/legacy-import'),
+      // REQ-HR-001 §12 — positions, pay components, leave types, calendars.
+      page('hr_settings', 'hr_setting', '/administration/hr-settings'),
     ],
   },
   {

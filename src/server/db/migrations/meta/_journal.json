@@ -1156,6 +1156,13 @@
       "when": 1795900000044,
       "tag": "0240_legacy_books_import",
       "breakpoints": true
+    },
+    {
+      "idx": 165,
+      "version": "7",
+      "when": 1795900000045,
+      "tag": "0241_hr_people",
+      "breakpoints": true
     }
   ]
 }

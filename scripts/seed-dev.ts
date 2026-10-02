@@ -126,6 +126,21 @@ async function main() {
           ON CONFLICT DO NOTHING
         `);
       }
+      // REQ-HR-001 — the development manager also runs HR, so the people
+      // screens can be exercised without a third account; the officer keeps
+      // identity only (D-HR-7), which is what the compensation gate is tested on.
+      if (role === 'accounting_manager') {
+        await tx.execute(sql`
+          INSERT INTO user_role (user_id, role_code) VALUES (${userId}, 'hr_manager')
+          ON CONFLICT DO NOTHING
+        `);
+      }
+      if (role === 'accounting_officer') {
+        await tx.execute(sql`
+          INSERT INTO user_role (user_id, role_code) VALUES (${userId}, 'hr_officer')
+          ON CONFLICT DO NOTHING
+        `);
+      }
 
       // §5.2 — the manager toggle is per department, so it is set on the row.
       await tx.execute(sql`
