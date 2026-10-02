@@ -307,6 +307,13 @@ export async function resetTestData(): Promise<void> {
   await client.query('delete from project_variation');
   await client.query('delete from project_budget_line');
   await client.query('delete from project_wbs');
+  // REQ-PM-001 — the configuration a test added goes; the seeded rows stay active.
+  await client.query('delete from project_type where created_by is not null');
+  await client.query('delete from project_tolerance_profile where created_by is not null');
+  await client.query('delete from project_cost_code where created_by is not null');
+  await client.query('update project_type set active = true where created_by is null');
+  await client.query('update project_tolerance_profile set active = true where created_by is null');
+  await client.query('update project_cost_code set active = true where created_by is null');
 
   // Phase 08 — CRM. Before the sales orders an opportunity converted into and
   // before the partners everything here points at. Nothing in this block posts,
@@ -821,7 +828,7 @@ export async function resetTestData(): Promise<void> {
                          -- REQ-AP-001 Stage 6, migration 0235.
                          'LOAN',
                          -- REQ-HR-001 Stage HR-1, migration 0241.
-                         'EMPLOYEE',
+                         'EMPLOYEE', 'PROJECT',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

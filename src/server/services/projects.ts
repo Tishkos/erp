@@ -510,6 +510,8 @@ export async function recordCost(
     // availability when the commitment was made.
     input.consumesCommitmentId ? 0n : input.amountIqd,
   );
+  // REQ-PM-001 §5 — an element named on a cost must be one that may receive it.
+  if (input.wbsCode) await assertAccountAssignmentElement(tx, projectCode, input.wbsCode);
 
   if (input.consumesCommitmentId) {
     await tx
@@ -564,6 +566,32 @@ export async function recordCost(
  * question and a caller that remembered two of them would be a caller whose
  * spending is *nearly* controlled.
  */
+/**
+ * REQ-PM-001 §5 — the operative indicator: only an active account-assignment
+ * element receives a cost, a commitment or an issue. Kept here, beside the
+ * three refusals above, so a caller cannot reach the spending without it.
+ */
+export class WbsNotAssignableError extends Error {
+  readonly code = 'WBS_NOT_ASSIGNABLE';
+  constructor(projectCode: string, wbsCode: string, detail: string) {
+    super(`${projectCode} / ${wbsCode}: ${detail}`);
+    this.name = 'WbsNotAssignableError';
+  }
+}
+
+export async function assertAccountAssignmentElement(tx: Tx, projectCode: string, wbsCode: string): Promise<void> {
+  const [element] = await tx
+    .select({ isAccountAssignment: projectWbs.isAccountAssignment, active: projectWbs.active })
+    .from(projectWbs)
+    .where(and(eq(projectWbs.projectCode, projectCode), eq(projectWbs.code, wbsCode)))
+    .limit(1);
+  if (!element) throw new WbsNotAssignableError(projectCode, wbsCode, 'there is no such element');
+  if (!element.active) throw new WbsNotAssignableError(projectCode, wbsCode, 'the element is deactivated');
+  if (!element.isAccountAssignment) {
+    throw new WbsNotAssignableError(projectCode, wbsCode, 'the element is not an account-assignment element — nothing posts to it (REQ-PM-001 §5)');
+  }
+}
+
 async function assertSpendable(
   tx: Tx,
   ctx: ActorContext,
@@ -634,6 +662,8 @@ export async function issueToProject(
       'nothing can be issued to a project that is not active (§10).',
     );
   }
+  // REQ-PM-001 §5 — refused before the stock moves, not after.
+  if (input.wbsCode) await assertAccountAssignmentElement(tx, projectCode, input.wbsCode);
 
   const movement = await inventory.issue(tx, ctx, {
     itemCode: input.itemCode,
