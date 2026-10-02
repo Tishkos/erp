@@ -73,6 +73,10 @@ describe('ap01 · every service that touches a payable writes its story', () => 
       'payable_instalment',
       'payable_order_line',
       'payment_application',
+      // REQ-PM-001 PM-3 (0247): the commitment an order-less payable makes on
+      // its project element is written by payables.create (PAYABLE_OPENED)
+      // and released by payables.cancel (CANCELLED) — no event of its own.
+      'project_commitment',
       // Stage 2 (0230): the confirmation writes SERVICE_RECEIPT_CREATED /
       // SERVICE_CONFIRMED — ap02-service-flow.
       'service_receipt',

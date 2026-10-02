@@ -42,6 +42,7 @@ import { AdminNotFoundError, normaliseCode, optionalText, permit, recordChange, 
 import type { ActorContext } from './chart-of-accounts';
 import { allocateDocumentNumber } from './numbering';
 import * as budget from './project-budget';
+import * as schedule from './project-schedule';
 import * as projects from './projects';
 
 export const PERMISSION_OBJECT = projects.PERMISSION_OBJECT;
@@ -307,6 +308,9 @@ export async function technicalComplete(tx: Tx, ctx: ActorContext, projectCode: 
   const row = await load(tx, projectCode);
   await permit(ctx, 'approve', PERMISSION_OBJECT, projectCode);
   const to = assertTransition('technical_complete', row.status as ProjectStatus, projectCode);
+  // §6 — TECO: no open activity; every milestone reached or cancelled (PM-4).
+  const open = await schedule.openActivities(tx, projectCode);
+  if (open.length > 0) throw new ProjectSystemError('status', `${projectCode} still has open work: ${open.join(', ')} — finish, reach or cancel it first`);
   await tx
     .update(project)
     .set({ status: to, technicallyCompleteAt: new Date(), technicallyCompleteBy: ctx.principal.userId, updatedAt: new Date() })

@@ -195,6 +195,13 @@ money_transfer_deposit
 project_balance_movement
 project_certificate
 project_progress
+project_material_issue_line
+project_material_issue
+project_plan_line
+project_plan_version
+project_budget_document_line
+project_budget_document
+project_variation_line
 project_variation
 project_cost
 project_commitment
@@ -347,6 +354,10 @@ delete from investment_proposal;
 delete from investment;
 delete from project_cost;
 delete from project_budget_line;
+-- REQ-PM-001 PM-4: the milestone trend is append-only; TRUNCATE skips its row trigger.
+truncate project_milestone_history;
+delete from project_activity_dependency;
+delete from project_activity;
 delete from project;
 delete from ap_match_tolerance;
 delete from partner_bank_account;

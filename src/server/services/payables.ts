@@ -58,6 +58,7 @@ import * as events from './payable-events';
 import * as purchaseOrders from './purchase-order';
 import * as rateService from './exchange-rates';
 import { allocateDocumentNumber } from './numbering';
+import * as execution from './project-execution';
 
 export const PERMISSION_OBJECT = 'payable';
 export const SETTINGS_OBJECT = 'payables_settings';
@@ -472,6 +473,10 @@ export interface CreatePayableInput {
   readonly lines?: readonly PayableLineInput[];
   /** Link an existing approved order instead of creating one from the lines. */
   readonly purchaseOrderId?: string | null;
+  /** REQ-PM-001 §8 — the project, the element and the cost code the payable is assigned to; the three together, or none. */
+  readonly projectCode?: string | null;
+  readonly wbsCode?: string | null;
+  readonly costCode?: string | null;
   /** Where goods-type order lines are ordered to; defaults to the branch's first main warehouse. */
   readonly defaultWarehouseCode?: string | null;
 }
@@ -624,6 +629,10 @@ export async function create(
         currency: input.currency,
         reference: input.supplierReference,
         note: `Raised from payable (${type.name}) — the PI is the company's order (REQ-AP-001 §14).`,
+        // REQ-PM-001 §8 — the order carries the assignment; its approval commits.
+        projectCode: input.projectCode ?? null,
+        wbsCode: input.wbsCode ?? null,
+        costCode: input.costCode ?? null,
         lines: orderLines,
       });
       // §5.2 — submitted here; approved by a second person in the approvals
@@ -633,6 +642,9 @@ export async function create(
       orderNo = created.orderNo;
     }
   }
+
+  // REQ-PM-001 §8 — checked before the number is spent.
+  const assignment = await execution.checkAssignment(tx, input);
 
   const year = Number(input.documentDate.slice(0, 4));
   const allocated = await allocateDocumentNumber(
@@ -665,6 +677,9 @@ export async function create(
       purchaseOrderId,
       expenseCategoryCode: input.expenseCategoryCode ?? null,
       dueDate: input.dueDate ?? null,
+      projectCode: assignment?.projectCode ?? null,
+      wbsCode: assignment?.wbsCode ?? null,
+      costCode: assignment?.costCode ?? null,
       stageCode,
       createdBy: ctx.principal.userId,
     })
@@ -742,6 +757,9 @@ export async function create(
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });
+
+  // REQ-PM-001 §8 — a payable without an order is the promise itself.
+  if (!purchaseOrderId && assignment) await execution.commitForPayable(tx, ctx, payableId);
 
   return { id: payableId, payableNo: allocated.documentNo };
 }
@@ -1244,6 +1262,8 @@ export async function cancel(
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });
+  // REQ-PM-001 §8 — what the payable still promised is given back.
+  await execution.releaseFor(tx, ctx, { payableId: row.id }, `Payable ${row.payableNo} cancelled: ${reason}`);
 }
 
 // ---------------------------------------------------------------------------

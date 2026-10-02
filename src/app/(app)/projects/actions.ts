@@ -7,6 +7,7 @@
  */
 import { flag, runAdminAndReturn, text, withQuery } from '@/server/admin-action';
 import * as pb from '@/server/services/project-budget';
+import * as psch from '@/server/services/project-schedule';
 import * as ps from '@/server/services/project-system';
 
 const LIST = '/projects';
@@ -147,4 +148,85 @@ export async function setWbsElementActive(form: FormData): Promise<void> {
 export async function raiseStopLine(form: FormData): Promise<void> {
   const code = text(form, 'project_code');
   await runAdminAndReturn((tx, ctx) => pb.raiseStopLine(tx, ctx, code, text(form, 'wbs_code'), text(form, 'stop_percent') || null, text(form, 'reason')), back(form, code));
+}
+
+// ---------------------------------------------------------------------------
+// PM-4 — the schedule, on the WBS workspace
+// ---------------------------------------------------------------------------
+
+const wbsPage = (form: FormData) => wbs(text(form, 'project_code'));
+
+export async function addProjectActivity(form: FormData): Promise<void> {
+  const code = text(form, 'project_code');
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      psch.addActivity(tx, ctx, code, {
+        wbsCode: text(form, 'wbs_code'),
+        code: text(form, 'code') || null,
+        name: text(form, 'name'),
+        kind: text(form, 'kind') || 'activity',
+        milestoneUsage: text(form, 'milestone_usage') || null,
+        progressPercent: text(form, 'progress_percent') || null,
+        durationDays: text(form, 'duration_days') || null,
+        notBefore: text(form, 'not_before') || null,
+        responsibleUserId: text(form, 'responsible_user_id') || null,
+      }),
+    wbsPage(form),
+  );
+}
+
+export async function updateProjectActivity(form: FormData): Promise<void> {
+  const code = text(form, 'project_code');
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      psch.updateActivity(tx, ctx, code, text(form, 'activity_code'), {
+        name: text(form, 'name'),
+        durationDays: text(form, 'duration_days') || null,
+        notBefore: text(form, 'not_before') || null,
+        responsibleUserId: text(form, 'responsible_user_id') || null,
+        progressPercent: text(form, 'progress_percent') || null,
+      }),
+    wbsPage(form),
+  );
+}
+
+export async function cancelProjectActivity(form: FormData): Promise<void> {
+  await runAdminAndReturn((tx, ctx) => psch.cancelActivity(tx, ctx, text(form, 'project_code'), text(form, 'activity_code'), text(form, 'reason')), wbsPage(form));
+}
+
+export async function recordActivityActual(form: FormData): Promise<void> {
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      psch.recordActual(tx, ctx, text(form, 'project_code'), text(form, 'activity_code'), {
+        actualStart: text(form, 'actual_start') || null,
+        actualFinish: text(form, 'actual_finish') || null,
+        percentComplete: text(form, 'percent_complete') || null,
+      }),
+    wbsPage(form),
+  );
+}
+
+export async function linkActivities(form: FormData): Promise<void> {
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      psch.addDependency(tx, ctx, text(form, 'project_code'), {
+        predecessorCode: text(form, 'predecessor_code'),
+        successorCode: text(form, 'successor_code'),
+        kind: text(form, 'kind') || 'FS',
+        lagDays: text(form, 'lag_days') || null,
+      }),
+    wbsPage(form),
+  );
+}
+
+export async function unlinkActivities(form: FormData): Promise<void> {
+  await runAdminAndReturn((tx, ctx) => psch.removeDependency(tx, ctx, text(form, 'project_code'), text(form, 'dependency_id')), wbsPage(form));
+}
+
+export async function scheduleProject(form: FormData): Promise<void> {
+  const code = text(form, 'project_code');
+  await runAdminAndReturn(async (tx, ctx) => {
+    if (form.has('calendar_code')) await psch.setCalendar(tx, ctx, code, text(form, 'calendar_code') || null);
+    return psch.scheduleProject(tx, ctx, code, text(form, 'reason') || null);
+  }, wbsPage(form));
 }

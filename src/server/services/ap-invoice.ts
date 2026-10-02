@@ -70,6 +70,7 @@ import * as terms from './payment-terms';
 import * as coa from './chart-of-accounts';
 import { assertResultAccount, assertStatementAccount } from '../domain/posting-map';
 import { allocateDocumentNumber } from './numbering';
+import * as execution from './project-execution';
 
 export const DOCUMENT_TYPE = 'ap_invoice';
 export const PERMISSION_OBJECT = 'ap_invoice';
@@ -236,6 +237,10 @@ export interface CreateApInvoiceInput {
   readonly recurringContractId?: string | null;
   readonly periodStart?: string | null;
   readonly periodEnd?: string | null;
+  /** REQ-PM-001 §8 — the project, the element and the cost code; the three together, or none. Inherited from the order when it carries one. */
+  readonly projectCode?: string | null;
+  readonly wbsCode?: string | null;
+  readonly costCode?: string | null;
 }
 
 /**
@@ -488,6 +493,13 @@ export async function create(
       .limit(1);
     if (!order) throw new Error(`No purchase order with id '${input.purchaseOrderId}'.`);
   }
+  // REQ-PM-001 §8 — the invoice stands where its order stands; typed when
+  // there is no order, or none on it.
+  const assignment = await execution.checkAssignment(tx, {
+    projectCode: input.projectCode ?? order?.projectCode ?? null,
+    wbsCode: input.wbsCode ?? order?.wbsCode ?? null,
+    costCode: input.costCode ?? order?.costCode ?? null,
+  });
 
   /*
    * §16 — the due date the supplier's terms give, when the document does not
@@ -586,6 +598,9 @@ export async function create(
       recurringContractId: input.recurringContractId ?? null,
       periodStart: input.periodStart ?? null,
       periodEnd: input.periodEnd ?? null,
+      projectCode: assignment?.projectCode ?? null,
+      wbsCode: assignment?.wbsCode ?? null,
+      costCode: assignment?.costCode ?? null,
       duplicateApprovedBy: input.duplicateApprovedBy ?? null,
       duplicateApprovedAt: input.duplicateApprovedBy ? new Date() : null,
       duplicateApprovalReason: input.duplicateApprovalReason?.trim() ?? null,
@@ -687,6 +702,9 @@ export async function create(
         paymentTermsText: input.paymentTermsText ?? null,
         dueDate,
         purchaseOrderId: input.purchaseOrderId ?? null,
+        projectCode: assignment?.projectCode ?? null,
+        wbsCode: assignment?.wbsCode ?? null,
+        costCode: assignment?.costCode ?? null,
         lines: input.lines.map((line) => ({
           itemCode: line.itemCode ?? null,
           description: line.description ?? (line.itemCode ? names.get(line.itemCode) : undefined) ?? line.itemCode ?? 'Charge',
@@ -1336,7 +1354,8 @@ export async function post(
 
   const amount = (value: bigint) => toDecimalString(value < 0n ? -value : value, 4n);
   const criteria = { branchCode: invoice.branchCode };
-  const base = { branch: invoice.branchCode, business_partner: supplier?.code ?? null };
+  // REQ-PM-001 §8 — an assigned invoice's lines carry the project dimension.
+  const base = { branch: invoice.branchCode, business_partner: supplier?.code ?? null, project: invoice.projectCode ?? null };
 
   // Posted line by line rather than rolled up.
   //
@@ -1526,6 +1545,22 @@ export async function post(
       })
       .where(eq(purchaseOrderLine.id, line.purchaseOrderLineId));
   }
+
+  // REQ-PM-001 §8 — the posting converts the promise to an actual: the cost
+  // row names this journal and this invoice, consumes the order's (or the
+  // payable's) open commitment, and only what exceeds it is checked anew.
+  // Services are the project's cost here; goods are stock until a material
+  // issue takes them to the element (§9), so their value only settles the
+  // promise the order made.
+  await execution.recordInvoiceCost(tx, ctx, {
+    invoiceId: id,
+    invoiceNo: invoice.invoiceNo,
+    supplierCode: supplier?.code ?? null,
+    journalEntryId: result.journalEntryId,
+    costIqd: expenseIqd + varianceIqd,
+    stockIqd: grniIqd + lines.filter((line) => line.warehouseCode).reduce((sum, line) => sum + lineValue(line), 0n),
+    incurredOn: invoice.invoiceDate,
+  });
 
   // REQ-AP-001 §7.2 — a payable-linked invoice writes the order lane's event
   // and re-derives the stage, in this same transaction.
@@ -1760,6 +1795,14 @@ export async function reverse(
     },
     reason,
     relatedObjectId: reversal.id,
+  });
+
+  // REQ-PM-001 §8 — the project's analysis follows the journal's reversal.
+  await execution.reverseInvoiceCost(tx, ctx, {
+    invoiceId: id,
+    reason,
+    journalEntryId: reversal.id,
+    stockIqd: lines.filter((line) => line.isInventory || line.warehouseCode).reduce((sum, line) => sum + lineValue(line), 0n),
   });
 
   // A10's mirror — the reversal withdraws the charges this invoice placed.

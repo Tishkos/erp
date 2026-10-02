@@ -302,6 +302,14 @@ export async function resetTestData(): Promise<void> {
   await client.query('delete from project_balance_movement');
   await client.query('delete from project_certificate');
   await client.query('delete from project_progress');
+  // REQ-PM-001 PM-4 — the trend rows are append-only (TRUNCATE skips the
+  // row trigger); the activities and their links go with them.
+  await client.query('truncate project_milestone_history');
+  await client.query('delete from project_activity_dependency');
+  await client.query('delete from project_activity');
+  // REQ-PM-001 PM-3 — the material issues name their movements and cost rows.
+  await client.query('delete from project_material_issue_line');
+  await client.query('delete from project_material_issue');
   await client.query('delete from project_cost');
   await client.query('delete from project_commitment');
   // REQ-PM-001 PM-2 — the plan, the budget documents and the change orders' lines.
@@ -498,6 +506,8 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from employee_history');
     await client.query('delete from employee');
     await client.query('delete from position');
+    // REQ-PM-001 PM-4 — a project may count in a test's calendar.
+    await client.query('update project set calendar_code = null where calendar_code is not null');
     await client.query('delete from working_calendar_holiday where calendar_code in (select code from working_calendar where created_by is not null)');
     await client.query('delete from working_calendar where created_by is not null');
     await client.query('delete from leave_type where created_by is not null');
@@ -834,7 +844,7 @@ export async function resetTestData(): Promise<void> {
                          -- REQ-AP-001 Stage 6, migration 0235.
                          'LOAN',
                          -- REQ-HR-001 Stage HR-1, migration 0241.
-                         'EMPLOYEE', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION',
+                         'EMPLOYEE', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',
