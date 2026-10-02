@@ -21,6 +21,7 @@ import * as authz from './authorization';
 import * as events from './payable-events';
 import * as notifications from './notifications';
 import * as payables from './payables';
+import { businessToday } from '../domain/business-date';
 
 export class HoldNotFoundError extends Error {
   readonly code = 'HOLD_NOT_FOUND';
@@ -183,7 +184,7 @@ export async function open(
       eventType: 'payable.hold.opened',
       objectType: 'payable',
       objectId: parent.id,
-      occurrence: new Date().toISOString().slice(0, 10),
+      occurrence: businessToday(),
     },
     { payableNo: parent.payableNo, reason: code.name, lane: input.laneCode },
     { branchCode: parent.branchCode, actorUserId: ctx.principal.userId },
@@ -286,7 +287,7 @@ export async function openAutomatic(
       eventType: 'payable.hold.opened',
       objectType: 'payable',
       objectId: parent.id,
-      occurrence: new Date().toISOString().slice(0, 10),
+      occurrence: businessToday(),
     },
     { payableNo: parent.payableNo, reason: 'Over time limit — reason required', lane: input.laneCode },
     { branchCode: parent.branchCode },

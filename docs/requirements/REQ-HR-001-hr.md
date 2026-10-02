@@ -5,7 +5,7 @@
 | **Requirement ID** | `REQ-HR-001` |
 | **Release** | 2 |
 | **Test case(s)** | *Named per criterion in this document; each gains its link when its stage is built (00.6).* |
-| **Status** | Draft — decisions OPEN |
+| **Status** | IN BUILD — Stage HR-1 built 2026-10-02 on `feat/hr-stage-1-people` (unattended; §12 decisions taken as proposed, see §14); HR-2 to HR-4 as drafted |
 | **Approved by** | *Not yet approved.* |
 
 **Status: DRAFT for review — the decisions in §12 are OPEN, not final.**
@@ -187,7 +187,7 @@ Every screen copies its model per the AGENTS.md design rule. In brief:
 
 | Stage | Delivers | Depends on |
 |---|---|---|
-| **HR-1 — People & organisation** | §4, §5, employee + organisation screens, `hr_officer` / `hr_manager` roles and grants, series `EMP`, history append-only, user link, HR settings (components/types/calendars as masters, inert until used) | — |
+| **HR-1 — People & organisation** · *built* | §4, §5, employee + organisation screens, `hr_officer` / `hr_manager` roles and grants, series `EMP`, history append-only, user link, HR settings (components/types/calendars as masters, inert until used). Migration `0241_hr_people`. | — |
 | **HR-2 — Time** | §7, §8: calendars, leave types/requests/balances, attendance day sheet, the sweep rows (balance warnings, contract expiry) | HR-1 |
 | **HR-3 — Payroll** | §6 components live, §9 whole: run lifecycle, posting mappings, the payroll payable (§27 hook), payslips, reversal | HR-1, HR-2, payables Stage 3 (payment applications) |
 | **HR-4 — Advances, claims, travel, assets** | §10, the four screens, settlement into payroll deductions | HR-3 |
@@ -196,14 +196,14 @@ Every screen copies its model per the AGENTS.md design rule. In brief:
 
 | # | Criterion | Test |
 |---|---|---|
-| H1 | Creating an employee allocates `EMP-…`, writes the first history row; every change of department/manager/salary is a new dated row; UPDATE on history raises. | `hr01-employee-core` |
-| H2 | Compensation is invisible to a role without the grant — the service refuses, the screen hides, RLS holds at the database. | `hr01-compensation-scope` |
+| H1 | Creating an employee allocates `EMP-…`, writes the first history row; every change of department/manager/salary is a new dated row; UPDATE on history raises. | → `tests/integration/hr01-employee-core.test.ts` › *allocates EMP-{BRANCH}-{SERIAL} and writes the first history rows* · → `tests/integration/hr01-employee-core.test.ts` › *a history row cannot be changed or removed, even by the owner* |
+| H2 | Compensation is invisible to a role without the grant — the service refuses, the screen hides, RLS holds at the database. | → `tests/integration/hr01-employee-core.test.ts` › *the HR officer is refused by the service, the refusal is written, and the database returns no row* · → `tests/e2e/hr.spec.ts` › *an employee is created from the list, moved on the record, and the officer sees no salary* |
 | H3 | A leave request over the balance is refused naming the balance; approval writes the attendance rows; the balance derives correctly across carry-over and half-days. | `hr02-leave` |
 | H4 | A payroll run computes each line from components + attendance (a typed total is impossible); maker-checker holds; posting books the mapped journal **and** raises the payroll payable; reversal mirrors both. | `hr03-payroll-run` |
 | H5 | The worked example (§12 D-HR-3 fixes the numbers): one employee, base + two allowances, one absence day, employee/employer social security and tax at the seeded rates — payslip, journal and payable match to the dinar. | `hr03-worked-example` |
 | H6 | An advance is recovered by payroll deduction rows until zero; settling more than remains is refused; the sweep ages what is unsettled. | `hr04-advances` |
-| H7 | Every HR route is in `domain/menu.ts` + `DELIVERED`, translated en/ar, passes theme readability at mobile RTL; every screen is indistinguishable in style from its model. | `tests/e2e/hr.spec.ts` |
-| H8 | Every service writing to a table carrying `employee_id` writes history/events in the same transaction (the A2 pattern). | `hr01-event-coverage` |
+| H7 | Every HR route is in `domain/menu.ts` + `DELIVERED`, translated en/ar, passes theme readability at mobile RTL; every screen is indistinguishable in style from its model. | → `tests/e2e/hr.spec.ts` › *the section is in the navbar and every screen opens, in both languages* (HR-1's three screens; the rest with their stages) |
+| H8 | Every service writing to a table carrying `employee_id` writes history/events in the same transaction (the A2 pattern). | → `tests/unit/hr01-event-coverage.test.ts` › *every exported function in employees.ts that writes a row also writes its history or audit* · → `tests/integration/hr01-employee-core.test.ts` › *positions, components, leave types and calendars are rows with their audit* |
 
 ## 13. Out of scope (this requirement)
 
@@ -226,3 +226,17 @@ USD) · loans to employees beyond the advance mechanism · shift planning.
 | D-HR-6 | Negative leave balances | Refused by default; a type may allow a bounded negative (e.g. sick −5). |
 | D-HR-7 | Who may see identity vs compensation | Identity: `hr_officer`+; compensation: `hr_manager`, `accounting_manager`, CEO; own payslip: the linked user. |
 | D-HR-8 | Attendance granularity | Day status only in HR-2 (present/absent/leave); in/out times optional columns, no overtime computation from times until a later requirement. |
+
+---
+
+# §14 Decisions taken in the HR-1 build (2026-10-02, unattended; the sponsor may reverse any)
+
+| # | Decision |
+|---|---|
+| B-HR-1 | D-HR-7 as proposed: `hr_officer` holds identity (`employee` view/create/edit/configure), `hr_manager` adds `administer` (status, sign-in link) and the compensation grant; the accounting manager and the CEO read compensation; the system administrator and the HR manager configure the settings. The database asks for the grant itself (`app_has_grant`) in the compensation policy, so a query that forgets the service still returns nothing. |
+| B-HR-2 | The history records *that* the salary changed (`base_salary_iqd`, no values); the figures are the dated `employee_compensation` rows, readable only under their grant. A history readable by whoever reads the employee cannot carry the number. |
+| B-HR-3 | Identity (names, national id, phone, address, emergency contact) is corrected in place and audited, not history: a typo is not an event. Branch, department, position, manager, kind and status are history. |
+| B-HR-4 | A deactivation of a position, component or leave type needs a reason (§5.4 as the audit already enforces); a calendar's holiday may be removed, since nothing references one yet. |
+| B-HR-5 | The HR screens live under `/hr/…` (Part E) with `/administration/hr-settings`; the section's other nine items keep their derived addresses until their stages. The Organisation screen copies the supplier-statement manner (stacked registers), indenting a seat under its parent with the dash the registers already use. |
+| B-HR-6 | D-HR-3's rates are seeded as rows (employee 5 %, employer 12 %, income tax manual) for the accountant to confirm before HR-3; D-HR-6 seeded with sick leave allowed 5 days below zero; the Iraqi 2026 calendar seeded with six public holidays as a starting list. |
+

@@ -313,7 +313,9 @@ describe('01.12 gate · an invalid action is rejected server-side, not only disa
           }),
         ),
       ).then((message) => message),
-    ).toMatch(/not available while this document is 'submitted'/);
+      // HD6 — the grant is checked first, through `authorize`, so the refusal
+      // names the permission and is written to the audit trail.
+    ).toMatch(/Permission denied: 'approve' on 'chart_of_account'/);
   });
 
   it('tells the caller what to do next, rather than only refusing', async () => {

@@ -89,11 +89,12 @@ import * as payments from './supplier-payment';
 import * as rateService from './exchange-rates';
 import * as treasury from './treasury';
 import { allocateDocumentNumber } from './numbering';
+import { businessDateOf, businessToday } from '../domain/business-date';
 
 export const PERMISSION_OBJECT = 'payment_application';
 const SEQUENCE_KEY = 'PAYMENT_APPLICATION';
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => businessToday();
 const money = (value: bigint) => toDecimalString(value, MONEY_SCALE);
 
 export class PaymentApplicationNotFoundError extends Error {
@@ -110,6 +111,17 @@ export class PaymentApplicationNotFoundError extends Error {
 
 async function load(tx: Tx, id: string) {
   const [row] = await tx.select().from(paymentApplication).where(eq(paymentApplication.id, id)).limit(1);
+  if (!row) throw new PaymentApplicationNotFoundError(id);
+  return row;
+}
+
+/**
+ * HD9 — the row, locked for the transition about to be made. Two concurrent
+ * confirms then serialise: the second reads `confirmed` and the status
+ * machine refuses it, rather than both posting and both drawing the loan.
+ */
+async function lock(tx: Tx, id: string) {
+  const [row] = await tx.select().from(paymentApplication).where(eq(paymentApplication.id, id)).for('update');
   if (!row) throw new PaymentApplicationNotFoundError(id);
   return row;
 }
@@ -496,7 +508,7 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateInput) {
 // ---------------------------------------------------------------------------
 
 export async function approve(tx: Tx, ctx: ActorContext, id: string) {
-  const row = await load(tx, id);
+  const row = await lock(tx, id);
   await authz.authorize(ctx.principal, 'approve', PERMISSION_OBJECT, { branchCode: row.branchCode });
   await move(tx, row, 'approved');
   if (row.createdBy === ctx.principal.userId) {
@@ -660,7 +672,7 @@ export interface SendInput {
 }
 
 export async function send(tx: Tx, ctx: ActorContext, id: string, input: SendInput) {
-  const row = await load(tx, id);
+  const row = await lock(tx, id);
   await authz.authorize(ctx.principal, 'execute', PERMISSION_OBJECT, { branchCode: row.branchCode });
   await move(tx, row, 'sent');
   if (!input.applicationDate) {
@@ -791,7 +803,7 @@ export interface ConfirmInput {
 }
 
 export async function confirm(tx: Tx, ctx: ActorContext, id: string, input: ConfirmInput) {
-  const row = await load(tx, id);
+  const row = await lock(tx, id);
   await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, { branchCode: row.branchCode });
   await move(tx, row, 'confirmed');
   const method = await methodOf(tx, row.paymentMethodCode);
@@ -975,7 +987,7 @@ export async function confirm(tx: Tx, ctx: ActorContext, id: string, input: Conf
  * leaves after the cut-over is confirmed by `confirm`, which posts it.
  */
 export async function confirmBeforeCutOver(tx: Tx, ctx: ActorContext, id: string, input: ConfirmInput) {
-  const row = await load(tx, id);
+  const row = await lock(tx, id);
   await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, { branchCode: row.branchCode });
   if (row.source !== 'sheet_import') {
     throw new PaymentApplicationError(
@@ -987,7 +999,7 @@ export async function confirmBeforeCutOver(tx: Tx, ctx: ActorContext, id: string
   const reference = input.reference?.trim() ?? '';
   if (!input.confirmedOn) throw new PaymentApplicationError('Give the SWIFT date from the bank’s copy.');
   if (!reference) throw new PaymentApplicationError('Give the SWIFT (MT103) reference from the bank’s copy.');
-  const cutOver = row.createdAt.toISOString().slice(0, 10);
+  const cutOver = businessDateOf(row.createdAt);
   if (input.confirmedOn > cutOver) {
     throw new PaymentApplicationError(
       `${row.applicationNo} was migrated on ${cutOver}; money that left on ${input.confirmedOn} is confirmed with ` +
@@ -1060,7 +1072,7 @@ export async function recordDebit(
   id: string,
   input: { debitDate: string; statementLineId?: string | null },
 ) {
-  const row = await load(tx, id);
+  const row = await lock(tx, id);
   if (ctx) await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, { branchCode: row.branchCode });
   await move(tx, row, 'debited');
   if (!input.debitDate) throw new PaymentApplicationError('Give the date the statement shows the debit.');
@@ -1141,7 +1153,7 @@ async function close(
   to: 'rejected' | 'cancelled',
   reason: string,
 ) {
-  const row = await load(tx, id);
+  const row = await lock(tx, id);
   // The bank's refusal, or the manager's, is an approver's act; withdrawing
   // one's own draft is the maker's.
   const verb = to === 'rejected' ? 'approve' : row.status === 'draft' ? 'edit_draft' : 'reverse_cancel';

@@ -8,6 +8,7 @@
  * key, a name with a hidden space, a missing date filled from another column)
  * is noted as a *fix* with its original value, for the report.
  */
+import { MONEY_SCALE, parseDecimal } from './money';
 import { referenceKey } from './payables';
 import { parseContainerList } from './shipments';
 
@@ -457,17 +458,20 @@ export function clearingFromSheet(
   pds: readonly PdRow[],
   bls: readonly BlRow[],
 ): ClearingVerdict {
-  const minor = (value: string | null) => Math.round(Number(value ?? 0) * 100);
-  const paid = payments.filter((p) => p.swiftDate).reduce((sum, p) => sum + minor(p.amount), 0);
-  const fullyPaid = minor(input.amount) > 0 && paid >= minor(input.amount) && payments.every((p) => p.swiftDate);
+  // HD8 — the sheet's amounts are decimal strings with at most four places
+  // (`amountOf`); they are compared as scaled integers, never as doubles.
+  const scaled = (value: string | null) => parseDecimal(value ?? '0', MONEY_SCALE);
+  const paid = payments.filter((p) => p.swiftDate).reduce((sum, p) => sum + scaled(p.amount), 0n);
+  const invoiced = scaled(input.amount);
+  const fullyPaid = invoiced > 0n && paid >= invoiced && payments.every((p) => p.swiftDate);
   const containers = bls.flatMap((bl) => bl.containers.map(() => containerStatusOf(bl.shippingStatus)));
   const received = bls
     .filter((bl) => containerStatusOf(bl.shippingStatus) === 'received')
-    .reduce((sum, bl) => sum + Number(bl.totalQty ?? 0), 0);
+    .reduce((sum, bl) => sum + scaled(bl.totalQty), 0n);
   const allReceived =
     containers.length > 0 &&
     containers.every((status) => status === 'received') &&
-    Math.round(received * 1e6) === Math.round(Number(input.quantity ?? 0) * 1e6);
+    received === scaled(input.quantity);
   const pdsWrittenOff = pds.length > 0 && pds.every((pd) => pdStatusOf(pd.statusLabel) === 'totally_written_off');
   return { fullyPaid, allReceived, pdsWrittenOff, cleared: fullyPaid && allReceived && pdsWrittenOff };
 }

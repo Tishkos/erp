@@ -17,6 +17,9 @@ if (!url) {
   process.exit(1);
 }
 
+import { refuseOnLive } from './lib/live-guard';
+
+refuseOnLive('reset the database');
 if (process.env.APP_ENV === 'production' || process.env.NODE_ENV === 'production') {
   console.error('Refusing to reset a production database.');
   process.exit(1);

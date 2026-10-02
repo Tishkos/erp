@@ -111,6 +111,9 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   purchasing_reports: 'report',
   payables_settings: 'settings',
   payables_migration: 'settings',
+  legacy_import: 'settings',
+  hr_settings: 'settings',
+  whatsapp: 'settings',
 
   // 5 — Inventory
   availability: 'workspace',
@@ -463,6 +466,17 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/payables/loans',
   // REQ-AP-001 Stage 8 — the sheet import and its sign-off (§24.3).
   '/administration/payables-migration',
+  // REQ-IMPROVE-001 Stage 1 — the two screens the menu promised (OP-4).
+  '/administration/jobs',
+  '/administration/backup-health',
+  // REQ-LEGACY-001 — the old system's books, once.
+  '/administration/legacy-import',
+  // REQ-HR-001 Stage HR-1 — people and organisation.
+  '/hr/employees',
+  '/hr/organisation',
+  '/administration/hr-settings',
+  // REQ-WA-001 WA-1/WA-2 — the WhatsApp bridge.
+  '/administration/whatsapp',
 ]);
 
 export function isDelivered(route: string): boolean {

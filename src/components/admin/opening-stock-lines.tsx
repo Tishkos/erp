@@ -3,6 +3,7 @@
 import { useId, useMemo, useState } from 'react';
 import styles from './admin.module.css';
 import { ColumnGrip, useColumnWidths } from './column-widths';
+import { MONEY_PLACES, QUANTITY_PLACES, scaled, toNumber } from '@/lib/decimal';
 
 /**
  * The lines of an Opening Stock document — Operations build, block 7:
@@ -102,17 +103,16 @@ export function OpeningStockLines({
   const drop = (key: string) =>
     setRows((current) => settle(current.filter((row) => row.key !== key)));
 
+  // HD8 — integers: the average is value ÷ quantity at money's four places.
   const averageOf = (row: Row) => {
-    const quantity = Number(row.quantity);
-    const total = Number(row.total);
-    if (!row.quantity || !row.total || !Number.isFinite(quantity) || quantity <= 0) return '';
-    return (total / quantity).toLocaleString('en-US', { maximumFractionDigits: 4 });
+    const quantity = scaled(row.quantity, QUANTITY_PLACES);
+    const total = scaled(row.total, MONEY_PLACES);
+    if (quantity === null || total === null || quantity <= 0n) return '';
+    const average = (total * 10n ** BigInt(QUANTITY_PLACES)) / quantity;
+    return toNumber(average, MONEY_PLACES).toLocaleString('en-US', { maximumFractionDigits: 4 });
   };
 
-  const documentTotal = rows.reduce((sum, row) => {
-    const value = Number(row.total);
-    return Number.isFinite(value) ? sum + value : sum;
-  }, 0);
+  const documentTotal = rows.reduce((sum, row) => sum + (scaled(row.total, MONEY_PLACES) ?? 0n), 0n);
 
   return (
     <>
@@ -249,7 +249,7 @@ export function OpeningStockLines({
               <td colSpan={4}>{labels.documentTotal}</td>
               <td className={styles.sapNum}>
                 <bdi dir="ltr">
-                  {documentTotal.toLocaleString('en-US', { maximumFractionDigits: 4 })}
+                  {toNumber(documentTotal, MONEY_PLACES).toLocaleString('en-US', { maximumFractionDigits: 4 })}
                 </bdi>
               </td>
               <td colSpan={2} />

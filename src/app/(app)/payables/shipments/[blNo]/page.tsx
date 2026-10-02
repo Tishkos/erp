@@ -15,6 +15,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as shipments from '@/server/services/shipments';
 import { addContainersAction, blStatusAction } from '../actions';
 import { containerChip } from '../../containers/status';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * One B/L — REQ-AP-001 §17.1, §21.9. The Purchase Invoice's window: the B/L
@@ -61,7 +62,7 @@ export default async function BlPage({
   if (!found) notFound();
   const { bl, owner, containers, progress } = found;
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const cs = (code: string, name: string) => (locale !== 'en' && t.has(`cs.${code}`) ? t(`cs.${code}`) : name);
   const statusName = (code: string) => cs(code, found.statuses.find((row) => row.code === code)?.name ?? code);
 

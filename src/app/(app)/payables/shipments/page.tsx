@@ -26,6 +26,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as customs from '@/server/services/customs-pd';
 import * as shipments from '@/server/services/shipments';
 import { createBlAction } from './actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Shipments — REQ-AP-001 §21.9: the B/Ls, newest first, each with its
@@ -51,7 +52,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Se
     return <Denied object={page('shipments')} />;
   }
   const mayCreate = can(principal, 'create', shipments.BL_OBJECT);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
 
   const { rows, imports, ports } = await withCurrentUser(async (tx) => ({
     rows: await shipments.listBls(tx),

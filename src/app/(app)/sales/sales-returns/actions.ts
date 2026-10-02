@@ -5,6 +5,7 @@ import { runAdmin, runAdminAndReturn, text, withQuery } from '@/server/admin-act
 import { parseQuantity } from '@domain/uom';
 import * as sr from '@/server/services/sales-return';
 import { LINE_ROWS } from './lines';
+import { businessToday } from '@/server/domain/business-date';
 
 const LIST = '/sales/sales-returns';
 const record = (returnNo: string) => `${LIST}/${encodeURIComponent(returnNo)}`;
@@ -81,7 +82,7 @@ export async function acceptReturn(formData: FormData): Promise<void> {
     const raised = await sr.view(tx, id);
     if (raised.status === 'submitted') {
       await sr.receiveGoods(tx, ctx, id, {
-        receivedOn: new Date().toISOString().slice(0, 10),
+        receivedOn: businessToday(),
         lines: raised.lines.map((line) => ({
           salesReturnLineId: line.id,
           quantity: parseQuantity(line.requestedQuantity),

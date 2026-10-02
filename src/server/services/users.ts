@@ -11,6 +11,7 @@
  * is immediate), and an account is never deleted: its id is cited by the audit
  * trail and by everything it ever approved.
  */
+import { bumpPermissions } from './authorization';
 import { randomBytes } from 'node:crypto';
 import { and, asc, eq } from 'drizzle-orm';
 import type { Tx } from '../db/client';
@@ -218,6 +219,7 @@ export async function setActive(
   if (!active) {
     await revokeAllSessionsFor(tx, ctx, id, `Account deactivated: ${reason!.trim()}`);
   }
+  await bumpPermissions(tx, id);
   await recordChange(tx, ctx, {
     action: active ? 'app_user.reactivated' : 'app_user.deactivated',
     objectType: PERMISSION_OBJECT,
@@ -268,6 +270,7 @@ export async function setRole(
   } else {
     await tx.delete(userRole).where(and(eq(userRole.userId, id), eq(userRole.roleCode, roleCode)));
   }
+  await bumpPermissions(tx, id);
   if (!options.quiet) {
     await recordChange(tx, ctx, {
       action: on ? 'app_user.role_granted' : 'app_user.role_revoked',
@@ -296,6 +299,7 @@ export async function setBranchScope(
       .delete(userBranchScope)
       .where(and(eq(userBranchScope.userId, id), eq(userBranchScope.branchCode, branchCode)));
   }
+  await bumpPermissions(tx, id);
   if (!options.quiet) {
     await recordChange(tx, ctx, {
       action: on ? 'app_user.branch_scope_granted' : 'app_user.branch_scope_revoked',
@@ -325,6 +329,7 @@ export async function setDefaultBranch(
     .update(userBranchScope)
     .set({ isDefault: true })
     .where(and(eq(userBranchScope.userId, id), eq(userBranchScope.branchCode, branchCode)));
+  await bumpPermissions(tx, id);
   if (!options.quiet) {
     await recordChange(tx, ctx, {
       action: 'app_user.default_branch_set',
@@ -365,6 +370,7 @@ export async function setDepartmentScope(
       .set({ managerUserId: null })
       .where(and(eq(department.code, departmentCode), eq(department.managerUserId, id)));
   }
+  await bumpPermissions(tx, id);
   if (!options.quiet) {
     await recordChange(tx, ctx, {
       action: on ? 'app_user.department_scope_granted' : 'app_user.department_scope_revoked',

@@ -29,6 +29,7 @@ import * as items from '@/server/services/items';
 import * as stock from '@/server/services/stock-operations';
 import * as warehouses from '@/server/services/warehouses';
 import { createAdjustment } from './actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Item Reconciliation — Operations build, block 7.
@@ -69,7 +70,7 @@ export default async function ReconciliationPage({ searchParams }: { searchParam
       : [],
   }));
   const shown = rows.filter((row) => matches(row, outcome.q));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
 
   return (
     <AdminPage

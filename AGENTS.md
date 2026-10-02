@@ -12,6 +12,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 `scripts/seed-dev.ts` uses `DATABASE_URL`, not `DATABASE_URL_OWNER`. Setting only the owner URL does not redirect the seed. For isolated verification, explicitly point `DATABASE_URL` and `DATABASE_URL_TEST` at the intended isolated database, and verify the running development server uses that same database before browser tests. Never rely on `.env` defaults for a seed or test run.
 
+## Business dates and money (REQ-HARDEN-001 HARDEN-2)
+
+* "Today" is `businessToday()` from `src/server/domain/business-date.ts` (Asia/Baghdad, `ERP_TIMEZONE`); a timestamp becomes a date with `businessDateOf(instant)`. Never `new Date().toISOString().slice(0, 10)` — it is UTC and reads yesterday for the first three hours of every Baghdad day. `tests/integration/hd07-business-today.test.ts` greps for it and fails the build. SQL that needs today binds `${businessToday()}::date`, never `current_date`.
+* Money and quantities are compared and summed as scaled bigints (`parseDecimal` / `parseQuantity` / `divideHalfUp` / `toDecimalString`), never as `Number()`; in the browser the same through `src/lib/decimal.ts`. A `Number()` is only ever the last step before `Intl.NumberFormat`.
+* A transition reads its row with `FOR UPDATE` (`lock(tx, id)` in payment-applications, loans, customs-pd, payables; `importOf(…, { lock: true })` in landed-cost) before it checks the status, so a double submit posts once. `tests/integration/hd09-double-submit.test.ts` holds it.
+
 ## Audit timestamp payloads
 
 Pass timestamps to `audit.record` as ISO strings, not JavaScript `Date` objects: a Date in an audit before-value was serialized as `{}` by the current audit pipeline. Existing audit rows remain immutable; any correction must be an append-only supplement with verified source evidence.
@@ -73,3 +79,32 @@ Standing rule (by direction, 2026-10-01; see also newsettings.md: "DO NOT CHANGE
 * Only classes that already exist in `src/components/admin/admin.module.css` and `src/components/ui/*.module.css`. No new CSS classes, modules, inline styles, colours, fonts, spacing values, icons or layout patterns. If something cannot be expressed with what exists, stop and ask.
 * Never draw your own navigation, header rows, tab rows, chip rows or banners. Navigation is SectionTabs; status is the existing status chip (`status status--<x>` + `data-status`); a warning or stop is the existing Flash / `s.sapNote` banner in its existing colours.
 * Before a screen is called done: `npx playwright test tests/e2e/theme-readability.spec.ts --workers=1` passes, and two side-by-side screenshots (the new screen beside the model it copies, desktop EN and mobile AR) are shown for approval. If a reviewer could tell which one is new from the layout alone, it is not done.
+
+## Operations (REQ-IMPROVE-001 IMPROVE-1)
+
+* `/healthz` answers 200 only when the database answers and the migrations are at head (`services/system-health.probe`); the footer light and `deploy.sh` read it. A migration that the application role must read (the `drizzle` schema) is granted in 0239 — keep it.
+* Every script that writes fixtures refuses while `var/LIVE` exists (`scripts/lib/live-guard.ts` / `.sh`); a script whose purpose is the live database is listed with its reason in `tests/unit/im04-live-guard.test.ts`. Add a new writing script to one or the other.
+* Scheduled jobs are lines in `scripts/ops/crontab.erp`, each through `run-job.sh` (flock, timeout, log, `var/jobs/<job>.last`); the Background Jobs screen parses that file. A new job is a line there, nothing else.
+* Exports: read and audit inside the transaction (`prepareExport`), render after it (`renderExport`); `EXPORT_ROW_CAP` (20,000) over every table of the model. A new report that lists many rows reads `EXPORT_ROW_CAP + 1` rows so the cap trips rather than the list's page size.
+* Request id: `currentRequestId()` (`src/server/request-id.ts`) — nginx's `X-Request-ID` or a minted UUID — goes on every audit row from `runAdmin`; errors are logged by `src/instrumentation.ts` with the digest the error page shows.
+* The host, the environment keys, nginx, pm2, the crontab and the escrow are `docs/RUNBOOK-host-build.md`; backups, drill and recovery are `docs/RUNBOOK-database-recovery.md`. A release is `docs/RELEASE.md` (version, CHANGELOG, tag, deploy from `main`).
+* `vitest` is pinned at 4.1.10 (B-IM-6): npm 10 cannot resolve 4.1.11's peer set, and the server's npm 10 rejects a lock from npm 11. Do not "fix" the audit by bumping it without checking `npm ci --dry-run`.
+
+## Legacy books import (REQ-LEGACY-001)
+
+* `src/server/domain/legacy-books.ts` reads the old system's export as data (header recognition, Arabic amounts/units/dates); `src/server/xls-read.ts` reads BIFF8 `.xls` with nothing but Node; `services/legacy-import.ts` dry-runs and applies. The partner code is the old account number; dollar balances post in dinars at the old books' implied rate (B-LG-3); opening stock is raised and submitted, never approved by the import (B-LG-2); the in-transit warehouse and negative quantities are never stock.
+* The posting event `legacy.opening_balance` reuses the `customer_receivable`, `supplier_payable` and `opening_balance` roles; 0240 copies their rules.
+* `legacy_document` and `legacy_import_run` are in `resetTestData`. Do not re-post the old registers as documents: the balances already carry the position.
+
+## HR (REQ-HR-001 Stage HR-1)
+
+* `services/employees.ts` is the only writer of `employee`, `employee_history` and `employee_compensation` (`tests/unit/hr01-event-coverage.test.ts` holds it): every move is a dated history row, identity is audited in place, compensation is a dated row under its own grant that the database policy checks itself (`app_has_grant`). `services/hr-settings.ts` holds positions, pay components, leave types and calendars — deactivated with a reason, never deleted.
+* The HR screens live under `/hr/…` and `/administration/hr-settings`; the section's remaining items arrive with HR-2 to HR-4. The series `EMPLOYEE` is kept by `resetTestData`.
+
+
+## WhatsApp bridge and the delivery runner (REQ-WA-001 WA-1/WA-2)
+
+* A question from WhatsApp is answered by `services/whatsapp.answer` **as the asking user, in a transaction PostgreSQL holds read-only** (`withReadOnlyScope`: the asker's RLS scope plus `set local transaction_read_only = on`). Only a user holding the `ceo` role whose contact row allows queries is answered; everyone else gets silence and a `whatsapp.refused` audit row. Never widen this: a new intent is a read-only service call added to `domain/whatsapp.ts` (the phrase patterns) *and* `services/whatsapp-router.ts` (`INTENT_TOOLS`, the model's whitelist) *and* `services/whatsapp.ts` (`draft`), with a case in `tests/unit/wa02-router.test.ts` and `tests/integration/wa02-intents.test.ts`. The two lists are held equal by the unit test.
+* Attachments are the ERP's own print models through the ERP's own renderers (`print/reports.ts` builders, `renderPdf`/`renderXlsx`): a PDF from WhatsApp is byte-identical to the export route's. The bridge writes the audit rows the screen would have (`auditAnswer`) after sending.
+* `notifications.deliver` leaves a channel with no registered sender **pending** for the process that owns it; `DeliverySuppressed` marks a row `suppressed` (no address, notifications off, mail unconfigured); failed rows retry per `domain/notifications.isDeliveryDue` (1 / 10 / 60 min, three attempts). `scripts/ops/deliver-notifications.ts` (cron, every five minutes) owns e-mail; `scripts/ops/whatsapp-bridge.ts` (a service, `deploy/whatsapp-bridge.service`) owns WhatsApp. Both run `services/notification-runner.runOnce` as the system operator.
+* `whatsapp_message` and `whatsapp_contact` are never deleted (triggers); retention blanks message bodies (`redactExpired`), rows stay. `resetTestData` truncates them and restores the seeded `whatsapp_setting` rows. The pairing could not be exercised in the build sandbox (no route to WhatsApp's servers): the first run on a host that has one is the test — `docs/RUNBOOK-whatsapp.md`.

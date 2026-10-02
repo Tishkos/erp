@@ -186,3 +186,19 @@ export function counts(row: Row): boolean {
 export function isNumeric(column: Column): boolean {
   return column.kind === 'money' || column.kind === 'quantity';
 }
+
+/**
+ * REQ-IMPROVE-001 OP-9 (IM6) — the most rows one file may carry.
+ *
+ * An export is rendered in memory, and a reader who asks for "all movements
+ * since 2019" as a PDF would hold the server's memory for as long as the
+ * render takes. Above the cap the answer is a sentence — narrow the filters
+ * — rather than a file that may or may not arrive. The cap is counted over
+ * every table in the model, so a document with a thousand allocations is
+ * measured the same way as a report.
+ */
+export const EXPORT_ROW_CAP = Number(process.env.EXPORT_ROW_CAP ?? 20_000);
+
+export function rowsIn(model: PrintModel): number {
+  return model.tables.reduce((n, table) => n + table.rows.length, 0);
+}

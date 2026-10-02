@@ -7,7 +7,7 @@ import { renderDocx } from './docx';
 import { safeFileName } from './format';
 import { messagesFor } from './i18n';
 import { letterheadFor } from './letterhead';
-import { CONTENT_TYPE, type ExportFormat, type Letterhead, type PrintModel } from './model';
+import { CONTENT_TYPE, EXPORT_ROW_CAP, rowsIn, type ExportFormat, type Letterhead, type PrintModel } from './model';
 import { renderPdf } from './pdf';
 import { exportable, type ExportInput, type ExportKey } from './registry';
 import { renderXlsx } from './xlsx';
@@ -36,7 +36,22 @@ export type ExportResult =
       readonly model: PrintModel;
       readonly head: Letterhead;
     }
-  | { readonly status: 403 | 404 };
+  | { readonly status: 403 | 404 }
+  | { readonly status: 413; readonly rows: number; readonly cap: number };
+
+/** What is read and recorded inside the transaction; the file is made after it. */
+export type PreparedExport =
+  | {
+      readonly status: 200;
+      readonly fileName: string;
+      readonly contentType: string;
+      readonly format: ExportFormat;
+      readonly model: PrintModel;
+      readonly head: Letterhead;
+    }
+  | { readonly status: 403 | 404 }
+  | { readonly status: 413; readonly rows: number; readonly cap: number };
+
 
 export interface ExportRequest {
   readonly key: ExportKey;
@@ -47,11 +62,17 @@ export interface ExportRequest {
   readonly at?: string;
 }
 
-export async function runExport(
+/**
+ * Steps 1–4 above, inside the caller's transaction. Rendering is *not* here:
+ * a PDF of twenty thousand rows takes seconds, and a transaction held open
+ * for them keeps its locks and its connection from everyone else (OP-9).
+ * `exportResponse` renders after the transaction has committed.
+ */
+export async function prepareExport(
   tx: Tx,
   reader: { readonly principal: Principal; readonly branchCode: string },
   request: ExportRequest,
-): Promise<ExportResult> {
+): Promise<PreparedExport> {
   const definition = exportable(request.key);
   const { principal } = reader;
   if (!can(principal, 'view', definition.object)) return { status: 404 };
@@ -86,12 +107,8 @@ export async function runExport(
     at,
   });
   const model = built.model;
-  const body =
-    request.format === 'pdf'
-      ? await renderPdf(model, head)
-      : request.format === 'xlsx'
-        ? await renderXlsx(model, head)
-        : await renderDocx(model, head);
+  const rows = rowsIn(model);
+  if (rows > EXPORT_ROW_CAP) return { status: 413, rows, cap: EXPORT_ROW_CAP };
   const fileName = `${safeFileName(model.fileName)}.${request.format}`;
 
   await audit.record(tx, {
@@ -113,5 +130,26 @@ export async function runExport(
     },
   });
 
-  return { status: 200, body, fileName, contentType: CONTENT_TYPE[request.format], model, head };
+  return { status: 200, fileName, contentType: CONTENT_TYPE[request.format], format: request.format, model, head };
+}
+
+/** The file itself — called once the transaction that prepared it has committed. */
+export async function renderExport(prepared: Extract<PreparedExport, { status: 200 }>): Promise<Buffer> {
+  return prepared.format === 'pdf'
+    ? renderPdf(prepared.model, prepared.head)
+    : prepared.format === 'xlsx'
+      ? renderXlsx(prepared.model, prepared.head)
+      : renderDocx(prepared.model, prepared.head);
+}
+
+/** Prepare and render in one call — for tests and scripts that hold their own transaction. */
+export async function runExport(
+  tx: Tx,
+  reader: { readonly principal: Principal; readonly branchCode: string },
+  request: ExportRequest,
+): Promise<ExportResult> {
+  const prepared = await prepareExport(tx, reader, request);
+  if (prepared.status !== 200) return prepared;
+  const body = await renderExport(prepared);
+  return { status: 200, body, fileName: prepared.fileName, contentType: prepared.contentType, model: prepared.model, head: prepared.head };
 }

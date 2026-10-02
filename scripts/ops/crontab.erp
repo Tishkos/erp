@@ -1,0 +1,36 @@
+# QS ERP — the scheduled jobs, in one file (REQ-IMPROVE-001 OP-7, IM5).
+#
+# Installed by scripts/ops/install-cron.sh (which deploy.sh runs) as root's
+# crontab section between the two markers; edit this file, not the crontab.
+#
+# Every line: flock so two runs never overlap, timeout so a hung run ends,
+# a log of its own under /var/log/qs-erp (rotated by logrotate), and the
+# exit code recorded by the wrapper so health-check.ts can report a job that
+# failed. Times are the server's clock; the runbook keeps that in Baghdad
+# time (Asia/Baghdad) — set the host's zone accordingly.
+#
+#   01:00 daily     backup.sh              the nightly set (IM1)
+#   02:15 daily     inventory-integrity    ledger ↔ documents (INCIDENTS 2026-09-27)
+#   06:10 daily     payables-sweep         time limits, holds, escalation (§19.3)
+#   06:20 daily     due-notices            receivables due notices
+#   06:40 daily     health-check           backups fresh, partitions ahead, fiscal year
+#                                          open, disk, failed jobs → in-app notice
+#   */5 minutes     deliver-notifications  the outbox: in-app rows complete, e-mail
+#                                          sent, retries (REQ-WA-001 WA-1, HARDEN F1–F3)
+#   03:00 Sunday    restore-drill          restore the newest set, verify it
+#
+# The WhatsApp bridge is not a cron job: it is a long-running service
+# (deploy/whatsapp-bridge.service) that owns the whatsapp channel itself.
+#
+PATH=/usr/local/bin:/usr/bin:/bin
+APP=/opt/qs-erp-next
+LOG=/var/log/qs-erp
+RUN=/opt/qs-erp-next/scripts/ops/run-job.sh
+
+0  1 * * *   $RUN backup              3600 $APP/scripts/ops/backup.sh --local
+15 2 * * *   $RUN inventory-integrity 1800 npx tsx $APP/scripts/ops/inventory-integrity-check.ts
+10 6 * * *   $RUN payables-sweep      1800 npx tsx $APP/scripts/ops/payables-sweep.ts
+20 6 * * *   $RUN due-notices         1800 npx tsx $APP/scripts/ops/due-notices.ts
+40 6 * * *   $RUN health-check        900  npx tsx $APP/scripts/ops/health-check.ts
+*/5 * * * *  $RUN deliver-notifications 240 npx tsx $APP/scripts/ops/deliver-notifications.ts
+0  3 * * 0   $RUN restore-drill       5400 $APP/scripts/ops/restore-drill.sh --local

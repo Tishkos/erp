@@ -27,6 +27,7 @@ import * as items from '@/server/services/items';
 import * as opening from '@/server/services/opening-stock';
 import * as warehouses from '@/server/services/warehouses';
 import { createOpeningStock } from './actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Opening Stock — Operations build, block 7.
@@ -66,7 +67,7 @@ export default async function OpeningStockPage({ searchParams }: { searchParams:
       : [],
   }));
   const shown = rows.filter((row) => matches(row, outcome.q));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
 
   return (
     <AdminPage

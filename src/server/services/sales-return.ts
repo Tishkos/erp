@@ -900,6 +900,12 @@ export async function reject(
 
 export async function close(tx: Tx, ctx: ActorContext, id: string): Promise<void> {
   const returnDoc = await load(tx, id);
+  // HD6 — closing a return is an act on it, authorised as the acceptance was.
+  await authz.authorize(ctx.principal, 'execute', PERMISSION_OBJECT, {
+    branchCode: returnDoc.branchCode,
+    objectId: id,
+    requestId: ctx.requestId ?? null,
+  });
 
   await statuses.assertTransitionAllowed(tx, DOCUMENT_TYPE, returnDoc.status, 'closed');
 

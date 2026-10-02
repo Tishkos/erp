@@ -13,6 +13,7 @@ import { levelFrom } from '@domain/report-levels';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as statements from '@/server/services/financial-statements';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * The Balance Sheet — the Statement of Financial Position, Phase 1
@@ -44,7 +45,7 @@ export default async function BalanceSheetPage({ searchParams }: { searchParams:
     return <Denied object={page('balance_sheet')} />;
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const asAt = typeof params.to === 'string' ? params.to : today;
   const currency = currencyFrom(params.currency);
   const level = levelFrom(params.level, LEVELS);

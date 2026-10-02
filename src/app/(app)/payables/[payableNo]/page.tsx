@@ -59,7 +59,8 @@ import { createBlAction } from '../shipments/actions';
 import { addLandedCharge, lockLandedCost, withdrawLandedCharge } from '../actions';
 import { containerChip } from '../containers/status';
 import { STATUS_CHIP, statusKey } from '../payment-applications/status';
-import { toDecimalString } from '@domain/money';
+import { businessDateOf, businessToday } from '@/server/domain/business-date';
+import { MONEY_SCALE, parseDecimal, toDecimalString } from '@domain/money';
 
 /**
  * The payable page — REQ-AP-001 §21.3, the one record everybody opens.
@@ -224,7 +225,7 @@ export default async function PayablePage({
   const money = (amount: string, currency = row.currency) =>
     formatMoney(amount, currency, locale as Locale);
   const day = (value: string | Date | null) =>
-    value ? formatBusinessDate(new Date(value).toISOString().slice(0, 10), locale as Locale) : '—';
+    value ? formatBusinessDate(businessDateOf(new Date(value)), locale as Locale) : '—';
   const daysSince = (since: Date | string) =>
     Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 86_400_000));
 
@@ -1282,10 +1283,12 @@ export default async function PayablePage({
               <span className={s.sapTitleMeta}>
                 {lc('meta', {
                   total: money(
-                    landed.charges
-                      .filter((row) => !row.cancelledAt && row.chargeTypeCode !== 'purchase')
-                      .reduce((sum, row) => sum + Number(row.amountIqd), 0)
-                      .toFixed(4),
+                    toDecimalString(
+                      landed.charges
+                        .filter((row) => !row.cancelledAt && row.chargeTypeCode !== 'purchase')
+                        .reduce((sum, row) => sum + parseDecimal(row.amountIqd, MONEY_SCALE), 0n),
+                      MONEY_SCALE,
+                    ),
                     'IQD',
                   ),
                   state:
@@ -1530,7 +1533,7 @@ export default async function PayablePage({
                                 locale !== 'en' && lc.has(`basis_name.${basis.code}`) ? lc(`basis_name.${basis.code}`) : basis.name,
                             }))}
                           />
-                          <Field defaultValue={new Date().toISOString().slice(0, 10)} id="landed-lock-date" label={lc('lock_date')} name="lock_date" type="date" />
+                          <Field defaultValue={businessToday()} id="landed-lock-date" label={lc('lock_date')} name="lock_date" type="date" />
                         </Grid>
                         {landed.preview.models.length > 0 ? (
                           <div className={s.sapTableWrap}>

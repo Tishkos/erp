@@ -459,6 +459,36 @@ export async function resetTestData(): Promise<void> {
     await client.query('truncate payable_event');
     // Stage 8 (0237) — the sheet import's runs and their sign-off.
     await client.query('delete from payables_migration_run');
+    // REQ-LEGACY-001 — the old books' history and the runs that wrote it.
+    await client.query('delete from legacy_document');
+    await client.query('delete from legacy_import_run');
+    // REQ-WA-001 — the bridge's log, allow-list and pairing; the seeded
+    // settings are restored, the bridge's heartbeat keys go.
+    await client.query('truncate whatsapp_message, whatsapp_contact restart identity cascade');
+    await client.query('delete from whatsapp_session');
+    await client.query(`delete from whatsapp_setting where key like 'bridge_%'`);
+    await client.query(`
+      update whatsapp_setting set value = case key
+        when 'router_model' then 'claude-haiku-4-5-20251001'
+        when 'agent_model' then 'claude-sonnet-5-5'
+        when 'inline_rows' then '15'
+        when 'export_rows_cap' then '5000'
+        when 'throttle_per_minute' then '60'
+        when 'retention_days' then '90'
+        when 'digest_hour' then '08'
+        when 'digest_locale' then 'ar'
+        else value end`);
+    await client.query(`delete from whatsapp_setting where key = 'digest_last_sent_day'`);
+    // REQ-HR-001 — people and their dated rows; the seeded masters stay, a
+    // test's own masters (created_by set) go.
+    await client.query('delete from employee_compensation');
+    await client.query('delete from employee_history');
+    await client.query('delete from employee');
+    await client.query('delete from position');
+    await client.query('delete from working_calendar_holiday where calendar_code in (select code from working_calendar where created_by is not null)');
+    await client.query('delete from working_calendar where created_by is not null');
+    await client.query('delete from leave_type where created_by is not null');
+    await client.query('delete from pay_component where created_by is not null');
     // Stage 6 (0235) — what the loans funded, their schedules, the loans.
     await client.query('delete from bank_loan_allocation');
     await client.query('delete from bank_loan_instalment');
@@ -638,6 +668,7 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from payment_method');
 
     await client.query('delete from item_uom');
+    await client.query('delete from item_supplier');
     await client.query('delete from item');
     await client.query('delete from bank_cash_account');
     await client.query(`
@@ -726,6 +757,12 @@ export async function resetTestData(): Promise<void> {
       begin
         delete from doc_number_allocation
          where document_no not in (select code from chart_of_account where is_system);
+        -- A root re-allocated by a test names that test's user, who is about
+        -- to go; with the FK triggers off here the row would be left pointing
+        -- at nobody — and a dump of this database would then not restore
+        -- (IM1). The seed's own allocations carry no allocator either.
+        update doc_number_allocation set allocated_by = null
+         where document_no in (select code from chart_of_account where is_system);
       end $$;
     `);
 
@@ -783,6 +820,8 @@ export async function resetTestData(): Promise<void> {
                          'CONTAINER_RECEIPT', 'PORT_CODE',
                          -- REQ-AP-001 Stage 6, migration 0235.
                          'LOAN',
+                         -- REQ-HR-001 Stage HR-1, migration 0241.
+                         'EMPLOYEE',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',
@@ -874,6 +913,7 @@ export async function resetTestData(): Promise<void> {
     // Sessions and credentials cascade from the user, but a revoked session is
     // protected from reinstatement by a trigger that also guards the token — off
     // for the delete, back on after.
+    await client.query('delete from sign_in_attempt');
     await client.query('delete from auth_session');
     await client.query('delete from auth_account');
     await client.query('delete from auth_verification');
@@ -907,8 +947,10 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from user_branch_scope');
     await client.query('delete from user_department_scope');
 
-    // Roles seeded by a migration stay.
+    // Roles seeded by a migration stay, with their grants; a test's role goes
+    // with its grants, or the grants would outlive it (the FK triggers are off).
     await client.query('delete from app_user');
+    await client.query('delete from role_grant g where not exists (select 1 from role r where r.code = g.role_code and r.is_system)');
     await client.query('delete from role where not is_system');
     await client.query(`
       delete from branch;

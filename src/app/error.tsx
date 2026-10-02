@@ -12,10 +12,19 @@ import styles from './route-states.module.css';
  * second line: nothing was written. A failure that leaves someone unsure
  * whether their document posted is worse than the failure itself.
  *
+ * The reference line is React's error digest, which `instrumentation.ts`
+ * wrote on the log line for this failure; it is what support asks for.
+ *
  * `reset` is React's own retry — it re-renders the segment without a full page
  * load, so the reader keeps their place in the shell.
  */
-export default function ScreenError({ reset }: { readonly reset: () => void }) {
+export default function ScreenError({
+  error,
+  reset,
+}: {
+  readonly error: Error & { digest?: string };
+  readonly reset: () => void;
+}) {
   const t = useTranslations('error');
 
   return (
@@ -26,6 +35,8 @@ export default function ScreenError({ reset }: { readonly reset: () => void }) {
         </span>
         <h1>{t('error_title')}</h1>
         <p>{t('error_body')}</p>
+        {/* OP-5 — the digest is on the server's log line for this failure. */}
+        {error.digest ? <p>{t('error_reference', { digest: error.digest })}</p> : null}
         <button className={styles.stateAction} onClick={reset} type="button">
           {t('error_action')}
         </button>

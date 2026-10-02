@@ -11,6 +11,10 @@
 #     path .next/standalone/server.js, so a releases/current symlink scheme
 #     would leave pm2 running the old code. Do not "improve" this into
 #     symlinked releases without also changing ecosystem.config.cjs.
+#   * The build happens in a sibling copy (/opt/qs-erp-next-build) while the
+#     old .next keeps serving; the finished .next is moved into place in the
+#     migration window and the old one kept as .next-prev (REQ-IMPROVE-001
+#     OP-2). Building in place took the site down for every build.
 #   * It listens on 3200, behind nginx. Not 3000.
 #   * `next build` with output: 'standalone' does not put the static assets
 #     inside the bundle. They are copied in below. Skip that and every page
@@ -53,7 +57,20 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 COMMIT=$(git rev-parse --short HEAD)
-echo "shipping $(git rev-parse --abbrev-ref HEAD) @ $COMMIT"
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+echo "shipping $BRANCH @ $COMMIT"
+
+# REQ-IMPROVE-001 OP-11 — what ships is on main and pushed, so the server
+# never runs a commit nobody else can see. DEPLOY_ANY_BRANCH=<reason> is the
+# recorded exception (a hotfix branch), like SKIP_INTEGRATION.
+git fetch -q origin
+if [[ -z "${DEPLOY_ANY_BRANCH:-}" ]]; then
+  [[ "$BRANCH" == "main" ]] || { echo "Deploy from main, not $BRANCH (DEPLOY_ANY_BRANCH=<reason> overrides)." >&2; exit 1; }
+  git merge-base --is-ancestor HEAD origin/main || { echo "HEAD is not on origin/main — push first." >&2; exit 1; }
+else
+  printf '%s  %s  deployed from %s: %s\n' "$STAMP" "$COMMIT" "$BRANCH" "$DEPLOY_ANY_BRANCH" >> var/deploy-skips.log
+fi
+REVISION="$(git rev-parse HEAD) $BRANCH $(git log -1 --format=%cI)"
 
 say "Type check and unit tests"
 npm run typecheck
@@ -93,8 +110,10 @@ APP=$APP
 STAMP=$STAMP
 PM2_NAME=$PM2_NAME
 PORT=$PORT
+REVISION="$REVISION"
+DEPLOYER="$(git config user.email || echo "$USER")"
 
-mkdir -p /root/erp-backups
+mkdir -p /root/erp-backups "\$APP/var"
 PW=\$(grep -oP '^DATABASE_URL_OWNER=postgres://erp_owner:\K[^@]+' "\$APP/.env")
 
 # Both backups before anything moves. The database one is the only way back
@@ -103,7 +122,7 @@ PW=\$(grep -oP '^DATABASE_URL_OWNER=postgres://erp_owner:\K[^@]+' "\$APP/.env")
 PGPASSWORD="\$PW" pg_dump -h 127.0.0.1 -p 5434 -U erp_owner -d erp -Fc \
   -f "/root/erp-backups/db-before-\$STAMP.dump"
 tar -czf "/root/erp-backups/app-before-\$STAMP.tgz" \
-  -C /opt --exclude=qs-erp-next/node_modules qs-erp-next
+  -C /opt --exclude=qs-erp-next/node_modules --exclude=qs-erp-next/var/attachments --exclude='qs-erp-next/.next*' qs-erp-next
 echo "backups in /root/erp-backups"
 
 cd "\$APP"
@@ -113,43 +132,65 @@ cd "\$APP"
 rm -rf src messages tests scripts
 tar -xzf "$TARBALL" -C "\$APP"
 rm -f "$TARBALL"
+echo "\$REVISION" > "\$APP/REVISION"
 
 npm ci
 
 set -a; . ./.env; set +a
-# Build while the old schema and old application are both still live. The
-# branch/cash decoupling migration removes a column, so stop the old process
-# only for the short migration window; otherwise an old request could query a
-# column after it has been dropped.
-npm run build
+export DEPLOYMENT_ID="\$STAMP"
 
+# REQ-IMPROVE-001 OP-2 (IM2) — build *beside* the running application, not
+# over it. next build empties its dist directory first, and the old
+# .next/standalone is what pm2 is serving: building in place took the site
+# down for the length of every build. The build runs in a sibling copy of the
+# tree (node_modules shared), and its finished .next is moved into place in
+# the short window the migration already needs.
+BUILD_DIR="\$APP-build"
+rm -rf "\$BUILD_DIR"
+mkdir -p "\$BUILD_DIR"
+tar -C "\$APP" --exclude=node_modules --exclude='.next*' --exclude=var -cf - . | tar -C "\$BUILD_DIR" -xf -
+ln -s "\$APP/node_modules" "\$BUILD_DIR/node_modules"
+( cd "\$BUILD_DIR" && npm run build )
 # The standalone bundle ships server.js and its node_modules, but not these.
-rm -rf .next/standalone/.next/static
-cp -r .next/static .next/standalone/.next/static
-[ -d public ] && cp -r public .next/standalone/public
+rm -rf "\$BUILD_DIR/.next/standalone/.next/static"
+cp -r "\$BUILD_DIR/.next/static" "\$BUILD_DIR/.next/standalone/.next/static"
+[ -d "\$BUILD_DIR/public" ] && cp -r "\$BUILD_DIR/public" "\$BUILD_DIR/.next/standalone/public"
+cp "\$APP/REVISION" "\$BUILD_DIR/.next/standalone/REVISION"
 
 # Apply migrations with no application requests in flight. Migrations run in
-# one transaction. If one fails, restore the previous app archive and bring it
+# one transaction. If one fails, the old build is still in place: bring it
 # back against the unchanged schema.
 pm2 stop "\$PM2_NAME"
 if ! npm run db:migrate; then
-  echo "Migration failed; restoring the previous application and restarting it." >&2
-  tar -xzf "/root/erp-backups/app-before-\$STAMP.tgz" -C /opt
+  echo "Migration failed; the previous build is untouched — restarting it." >&2
   pm2 restart "\$PM2_NAME" --update-env
+  printf '%s  %s  %s  FAILED migration\n' "\$STAMP" "\$(cut -c1-12 REVISION)" "\$DEPLOYER" >> "\$APP/var/deploys.log"
   exit 1
 fi
 
+# The swap: the previous build is kept as .next-prev for a rollback by hand.
+rm -rf "\$APP/.next-prev"
+[ -d "\$APP/.next" ] && mv "\$APP/.next" "\$APP/.next-prev"
+mv "\$BUILD_DIR/.next" "\$APP/.next"
+rm -rf "\$BUILD_DIR"
+
 pm2 restart "\$PM2_NAME" --update-env
 pm2 save
+
+# OP-7 — the crontab is the file in the repository.
+APP="\$APP" bash "\$APP/scripts/ops/install-cron.sh"
+printf '%s  %s  %s  deployed\n' "\$STAMP" "\$(cut -c1-12 REVISION)" "\$DEPLOYER" >> "\$APP/var/deploys.log"
 REMOTE
 
 # ── Did it come up? ───────────────────────────────────────────────────────
-# pm2 reports the process started, which is not the same as the app answering.
+# OP-4 (IM3): /healthz answers 200 only when the database answers and the
+# migrations are at head; a 200 from /sign-in proved neither.
 say "Health check"
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
-  code=$(ssh "$ERP_SSH" "curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://127.0.0.1:$PORT/sign-in" || true)
+  code=$(ssh "$ERP_SSH" "curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://127.0.0.1:$PORT/healthz" || true)
   if [[ "$code" == "200" ]]; then
-    echo "app on :$PORT -> 200"
+    echo "app on :$PORT -> healthz 200"
+    ssh "$ERP_SSH" "curl -s --max-time 15 http://127.0.0.1:$PORT/healthz"; echo
     public=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$PUBLIC_URL" || echo "?")
     echo "$PUBLIC_URL -> $public"
     say "Deployed $COMMIT"
@@ -159,8 +200,8 @@ for attempt in 1 2 3 4 5 6 7 8 9 10; do
   sleep 5
 done
 
-echo "The app did not answer 200. It is running the new build; roll back if needed." >&2
+echo "The app did not answer healthz 200. It is running the new build; roll back if needed." >&2
 echo "Logs:     ssh $ERP_SSH 'pm2 logs $PM2_NAME --lines 80'" >&2
-echo "Rollback: ssh $ERP_SSH 'cd /opt && tar -xzf /root/erp-backups/app-before-$STAMP.tgz && pm2 restart $PM2_NAME'" >&2
-echo "Database: ssh $ERP_SSH 'pg_restore -h 127.0.0.1 -p 5434 -U erp_owner -d erp -c /root/erp-backups/db-before-$STAMP.dump'" >&2
+echo "Rollback: ssh $ERP_SSH 'cd $APP && pm2 stop $PM2_NAME && rm -rf .next && mv .next-prev .next && pm2 restart $PM2_NAME'" >&2
+echo "          — then, if the migration must be undone, follow docs/RUNBOOK-database-recovery.md (restore into a NEW database, never over the live one)." >&2
 exit 1

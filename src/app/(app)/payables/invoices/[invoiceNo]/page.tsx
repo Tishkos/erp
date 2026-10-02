@@ -35,6 +35,9 @@ import {
   addInvoiceNoteAction,
   markPaidAction,
 } from '../actions';
+import { businessToday } from '@/server/domain/business-date';
+import { MONEY_SCALE, parseDecimal, toDecimalString } from '@/server/domain/money';
+import { QUANTITY_FACTOR, parseQuantity } from '@/server/domain/uom';
 
 /**
  * One Purchase Invoice — Operations build, block 4.
@@ -151,13 +154,15 @@ export default async function ApInvoicePage({
   // The sponsor's "Total Price" is not a stored column and should not be: it is
   // quantity x unit price less the discount, and a fourth copy of it could
   // disagree with the three figures beside it on the same row.
+  // HD8 — in integers, the database's own scales.
   const lineTotal = (line: { quantity: string; unitPrice: string; discountIqd: string }) =>
-    Number(line.quantity) * Number(line.unitPrice) - Number(line.discountIqd);
+    (parseQuantity(line.quantity) * parseDecimal(line.unitPrice, MONEY_SCALE)) / QUANTITY_FACTOR -
+    parseDecimal(line.discountIqd, MONEY_SCALE);
 
   // Summed from the lines, as the Journal Entry sums its own. `totalIqd` is
   // written at posting and is deliberately zero until then, so printing it on a
   // draft shows nothing next to lines that plainly come to something.
-  const total = lines.reduce((sum, line) => sum + lineTotal(line), 0);
+  const total = lines.reduce((sum, line) => sum + lineTotal(line), 0n);
 
   // A draft raised on its own is typed into. One raised from a purchase order
   // takes its lines from that order — §8.4's match compares the three
@@ -214,10 +219,10 @@ export default async function ApInvoicePage({
   // been paid against it; the service refuses the rest and says why.
   const mayReverse =
     invoice.status === 'posted' &&
-    Number(invoice.settledAmountIqd) === 0 &&
+    parseDecimal(invoice.settledAmountIqd, MONEY_SCALE) === 0n &&
     can(principal, 'reverse_cancel', ap.PERMISSION_OBJECT);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const paymentState = expenses.paymentState(
     {
       status: invoice.status,
@@ -397,7 +402,7 @@ export default async function ApInvoicePage({
         linesCount={lines.length}
         linesTitle={t('ap_invoices.lines')}
         number={invoice.invoiceNo}
-        totals={[{ label: column('total_price'), value: money(String(total)) }]}
+        totals={[{ label: column('total_price'), value: money(toDecimalString(total, MONEY_SCALE)) }]}
       >
         {mayEdit ? (
           <InvoiceLinesGrid
@@ -500,7 +505,7 @@ export default async function ApInvoicePage({
                     <bdi dir="ltr">{money(line.discountIqd)}</bdi>
                   </td>
                   <td className={s.sapNum}>
-                    <bdi dir="ltr">{money(String(lineTotal(line)))}</bdi>
+                    <bdi dir="ltr">{money(toDecimalString(lineTotal(line), MONEY_SCALE))}</bdi>
                   </td>
                   <td>
                     <bdi dir="ltr">{line.warehouseCode ?? '—'}</bdi>
@@ -512,7 +517,7 @@ export default async function ApInvoicePage({
               <tr className={s.sapTotalRow}>
                 <td colSpan={6}>{t('reports.totals')}</td>
                 <td className={s.sapNum}>
-                  <bdi dir="ltr">{money(String(total))}</bdi>
+                  <bdi dir="ltr">{money(toDecimalString(total, MONEY_SCALE))}</bdi>
                 </td>
                 <td />
               </tr>

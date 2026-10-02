@@ -13,6 +13,7 @@
  *
  *   npm run db:seed
  */
+import { refuseOnLive } from './lib/live-guard';
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 import { db, applyScope } from '../src/server/db/client';
@@ -41,6 +42,7 @@ const ADMIN_EMAIL = 'admin@example.com';
 const PASSWORD = 'Ledger-Trial-Balance-7';
 
 async function main() {
+  refuseOnLive('seed development fixtures');
   if (process.env.NODE_ENV === 'production') {
     throw new Error('The development seed must not run against production.');
   }
@@ -112,6 +114,30 @@ async function main() {
       if (role) {
         await tx.execute(sql`
           INSERT INTO user_role (user_id, role_code) VALUES (${userId}, ${role})
+          ON CONFLICT DO NOTHING
+        `);
+      }
+      // The CEO also administers the system here, as the sponsor does: role
+      // assignment needs the CEO's hat *and* `administer permission`
+      // (`permitCeo`), and nobody else in the seed holds both.
+      if (role === 'ceo') {
+        await tx.execute(sql`
+          INSERT INTO user_role (user_id, role_code) VALUES (${userId}, 'system_administrator')
+          ON CONFLICT DO NOTHING
+        `);
+      }
+      // REQ-HR-001 — the development manager also runs HR, so the people
+      // screens can be exercised without a third account; the officer keeps
+      // identity only (D-HR-7), which is what the compensation gate is tested on.
+      if (role === 'accounting_manager') {
+        await tx.execute(sql`
+          INSERT INTO user_role (user_id, role_code) VALUES (${userId}, 'hr_manager')
+          ON CONFLICT DO NOTHING
+        `);
+      }
+      if (role === 'accounting_officer') {
+        await tx.execute(sql`
+          INSERT INTO user_role (user_id, role_code) VALUES (${userId}, 'hr_officer')
           ON CONFLICT DO NOTHING
         `);
       }

@@ -12,6 +12,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import { pickOne, pickOutcome } from '@domain/pick';
 import * as openItems from '@/server/services/open-items';
 import * as partners from '@/server/services/partners';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Receivables and Payables — §15 and §16, written once.
@@ -60,7 +61,7 @@ export async function OpenItemsReport({
   }
 
   const one = (key: string) => (typeof params[key] === 'string' ? (params[key] as string).trim() : '');
-  const asOf = one('as_at') || new Date().toISOString().slice(0, 10);
+  const asOf = one('as_at') || businessToday();
   /*
    * Everything by default, paid invoices included.
    *

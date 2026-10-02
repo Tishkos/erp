@@ -17,6 +17,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as banks from '@/server/services/bank-cash-accounts';
 import * as sr from '@/server/services/sales-return';
 import { createSalesReturn } from '../actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Raising a Sales Return — Operations build, block 9.
@@ -91,7 +92,7 @@ export default async function NewSalesReturnPage({ searchParams }: { searchParam
     (row) => [row.invoiceNo, row.customerCode, row.customerName, row.invoiceDate],
   );
   const partners = [...new Map(invoices.map((row) => [row.customerCode, row])).values()];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const open = lines.filter((line) => Number(line.returnable) > 0);
 
   return (

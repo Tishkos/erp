@@ -13,6 +13,7 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as reports from '@/server/services/treasury-reports';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Bank and Cash Reporting — §17.
@@ -54,7 +55,7 @@ export default async function TreasuryReportingPage({ searchParams }: { searchPa
   const one = (key: string) => (typeof params[key] === 'string' ? (params[key] as string).trim() : '');
   const year = new Date().getFullYear();
   const from = one('from') || `${year}-01-01`;
-  const to = one('to') || new Date().toISOString().slice(0, 10);
+  const to = one('to') || businessToday();
   const kind = one('kind') === 'bank' || one('kind') === 'cash' ? (one('kind') as 'bank' | 'cash') : null;
   const chosen = one('account') || null;
 

@@ -62,12 +62,13 @@ import * as holds from './payable-holds';
 import * as inventory from './inventory';
 import * as payables from './payables';
 import { allocateDocumentNumber } from './numbering';
+import { businessToday } from '../domain/business-date';
 
 export const BL_OBJECT = 'bill_of_lading';
 export const CONTAINER_OBJECT = 'shipment_container';
 export const RECEIPT_DOCUMENT_TYPE = 'container_receipt';
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => businessToday();
 const qty = (value: bigint) => formatQuantity(value);
 
 export class ShipmentNotFoundError extends Error {

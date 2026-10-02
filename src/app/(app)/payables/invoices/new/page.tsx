@@ -20,6 +20,7 @@ import * as paymentTerms from '@/server/services/payment-terms';
 import * as warehouses from '@/server/services/warehouses';
 import { gapsFor } from '@domain/setup-gaps';
 import { createApInvoice, invoiceLineAvailability } from '../actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Raising a Purchase Invoice — Operations build, block 4.
@@ -92,7 +93,7 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
   );
 
   const sellable = stockItems;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
 
   // Each supplier beside the terms they are on, which is all the due date
   // needs: the partner chosen in the header decides which schedule applies.

@@ -13,6 +13,7 @@ import * as partners from '@/server/services/partners';
 import * as receipts from '@/server/services/customer-receipt';
 import { gapsFor } from '@domain/setup-gaps';
 import { createReceipt } from '../actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Recording a Receipt — Operations build, block 6.
@@ -61,7 +62,7 @@ export default async function NewReceiptPage({ searchParams }: { searchParams: S
   // offering it here would only produce a document that fails on posting;
   // the count above still sees it, so the setup hint says one is unusable.
   const open = accounts.filter((account) => account.active && account.glAccountCode);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
 
   const missing = gapsFor([
     { kind: 'customers', total: allCustomers.length, usable: customers.length },

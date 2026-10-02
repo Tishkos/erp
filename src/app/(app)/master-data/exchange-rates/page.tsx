@@ -26,6 +26,7 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as rates from '@/server/services/exchange-rates';
 import { createCurrency, publishRate, setCurrencyActive } from './actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * The accounting rates.
@@ -80,7 +81,7 @@ export default async function ExchangeRatesPage({ searchParams }: { searchParams
     return <Denied object={page('currencies_rates')} />;
   }
   const mayPublish = can(principal, 'create', rates.PERMISSION_OBJECT);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
 
   const { live, ledger, moneys } = await withCurrentUser(async (tx) => ({
     live: await tx

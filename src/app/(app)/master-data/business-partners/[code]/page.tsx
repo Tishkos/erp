@@ -20,11 +20,12 @@ import {
 import { AuditLogButton, RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { formatTimestamp, type Locale } from '@/i18n/config';
+import { formatBusinessDate, formatMoney, formatQuantity, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { AdminNotFoundError } from '@/server/services/administration';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
+import * as legacy from '@/server/services/legacy-import';
 import * as partners from '@/server/services/partners';
 import * as terms from '@/server/services/payment-terms';
 import { setPartnerActive, setPartnerRole, updatePartnerRecord } from '../actions';
@@ -70,9 +71,12 @@ export default async function BusinessPartnerPage({
 
   const data = await withCurrentUser(async (tx) => {
     try {
+      const row = await partners.detail(tx, code);
       return {
-        row: await partners.detail(tx, code),
+        row,
         paymentTerms: mayEdit ? await terms.listActive(tx) : [],
+        // REQ-LEGACY-001 — what the old books say about this partner.
+        history: await legacy.historyOf(tx, row.id),
       };
     } catch (error) {
       if (error instanceof AdminNotFoundError) return null;
@@ -80,7 +84,8 @@ export default async function BusinessPartnerPage({
     }
   });
   if (!data) notFound();
-  const { row, paymentTerms } = data;
+  const { row, paymentTerms, history } = data;
+  const legacyT = await getTranslations('admin.legacy_import');
   const routeRole: partners.PartnerRole =
     query.role === 'supplier' || (query.role !== 'customer' && !row.isCustomer && row.isSupplier)
       ? 'supplier'
@@ -303,6 +308,47 @@ export default async function BusinessPartnerPage({
                   <Submit label={t('save')} />
                 </SubmitRow>
               </Form>
+            </Panel>
+          ) : null}
+
+          {history.length > 0 ? (
+            <Panel flush title={legacyT('history_title')}>
+              <div className="table-wrap">
+                <table className="list">
+                  <thead>
+                    <tr>
+                      <th scope="col">{legacyT('col_kind')}</th>
+                      <th scope="col">{legacyT('col_code')}</th>
+                      <th scope="col">{legacyT('col_when')}</th>
+                      <th scope="col">{legacyT('col_item')}</th>
+                      <th className="numeric" scope="col">
+                        {legacyT('col_quantity')}
+                      </th>
+                      <th className="numeric" scope="col">
+                        {legacyT('col_amount')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((doc) => (
+                      <tr key={doc.id}>
+                        <td>{legacyT(`archive_${doc.kind === 'sale' ? 'sales' : doc.kind === 'purchase' ? 'purchases' : doc.kind === 'receipt' ? 'receipts' : 'payments'}`)}</td>
+                        <td>
+                          <bdi dir="ltr">{doc.legacyNo}</bdi>
+                        </td>
+                        <td>{doc.documentDate ? formatBusinessDate(doc.documentDate, locale as Locale) : '—'}</td>
+                        <td>
+                          <bdi dir="auto">{doc.itemName ?? doc.operation ?? '—'}</bdi>
+                        </td>
+                        <td className="numeric">{doc.quantity ? `${formatQuantity(doc.quantity, locale as Locale)} ${doc.unit ?? ''}`.trim() : '—'}</td>
+                        <td className="numeric">
+                          <bdi dir="ltr">{doc.amount ? formatMoney(doc.amount, doc.currency === 'USD' ? 'USD' : 'IQD', locale as Locale) : '—'}</bdi>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </Panel>
           ) : null}
 

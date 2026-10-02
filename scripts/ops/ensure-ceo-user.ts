@@ -13,6 +13,7 @@
  *
  *   npx tsx scripts/ops/ensure-ceo-user.ts
  */
+import { refuseOnLive } from '../lib/live-guard';
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
@@ -24,6 +25,9 @@ const NAME = 'CEO';
 const PASSWORD = process.env.SEED_PASSWORD ?? 'Ledger-Trial-Balance-7';
 
 async function main(): Promise<void> {
+  // IM4 — on the live system this would create an active account with a
+  // known password: refused while the marker exists, whatever the address.
+  refuseOnLive('create the development CEO account');
   const url = process.env.DATABASE_URL ?? '';
   if (!/localhost|127\.0\.0\.1/.test(url)) {
     throw new Error(`Refusing to run against a database that is not local: ${url.replace(/:[^:@]*@/, ':***@')}`);

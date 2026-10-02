@@ -8,6 +8,7 @@ import { appUser, notification } from '@/server/db/schema';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { AppFooter } from './app-footer';
 import { ErpShell } from './erp-shell';
+import { PermissionsWatch } from './permissions-watch';
 import type { UserAppearanceSettings } from '@/server/domain/appearance';
 
 /**
@@ -26,9 +27,11 @@ export async function AppShell({
   readonly appearanceSettingsSaved: boolean;
 }) {
   const t = await getTranslations();
-  const { principal, scope } = await requireContext();
+  // HD2 / HD4 — a restricted session gets the shell with no menu; the page
+  // it is allowed is the only one it can reach, and sign-out is in the header.
+  const { principal, scope, restriction, permissionsVersion } = await requireContext({ allowRestricted: true });
   // Only the delivered screens exist, on every surface.
-  const sections = visibleMenu(principal)
+  const sections = (restriction ? [] : visibleMenu(principal))
     .map((section) => ({
       ...section,
       items: section.items.filter(
@@ -60,7 +63,7 @@ export async function AppShell({
       .where(eq(notification.recipientUserId, principal.userId))
       .orderBy(desc(notification.createdAt))
       .limit(10),
-  }));
+  }), { allowRestricted: true });
 
   return (
     <ErpShell
@@ -85,6 +88,7 @@ export async function AppShell({
       }))}
       footer={<AppFooter />}
     >
+      <PermissionsWatch version={permissionsVersion} />
       {children}
     </ErpShell>
   );

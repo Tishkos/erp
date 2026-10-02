@@ -31,6 +31,7 @@ import * as items from '@/server/services/items';
 import * as stock from '@/server/services/stock-operations';
 import * as warehouses from '@/server/services/warehouses';
 import { createTransfer } from './actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Transfer — Operations build, block 7: *"Items can be transferred between
@@ -71,7 +72,7 @@ export default async function TransfersPage({ searchParams }: { searchParams: Se
       : [],
   }));
   const shown = rows.filter((row) => matches(row, outcome.q));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const warehouseOptions = houses.map((house) => ({
     value: house.code,
     label: `${house.code} · ${house.name}`,

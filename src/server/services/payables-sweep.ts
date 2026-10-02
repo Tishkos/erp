@@ -30,6 +30,7 @@ import * as customs from './customs-pd';
 import * as shipments from './shipments';
 import * as loans from './loans';
 import * as notifications from './notifications';
+import { businessDateOf, businessToday } from '../domain/business-date';
 
 export interface SweepResult {
   readonly asOf: string;
@@ -361,6 +362,55 @@ async function pendingApplications(tx: Tx, which: 'swift' | 'other'): Promise<Of
   }));
 }
 
+/**
+ * The SWIFT applications sent and still waiting for the bank — the same rows
+ * the `swift_pending` check reads, with what a person asking "what swift is
+ * pending" wants beside them: the supplier, the amount, how many days.
+ * REQ-WA-001 §4 reads it; the sweep's offenders are the same set.
+ */
+export async function swiftPendingApplications(
+  tx: Tx,
+  options: { readonly minDays?: number; readonly asOf?: string } = {},
+): Promise<
+  Array<{
+    applicationNo: string;
+    payableNo: string;
+    supplierName: string;
+    amountTxn: string;
+    currency: string;
+    accountCode: string;
+    bankCode: string | null;
+    sentOn: string;
+    days: number;
+    sentByName: string | null;
+  }>
+> {
+  const asOf = options.asOf ?? businessToday();
+  const result = await tx.execute(sql`
+    select pa.application_no        as "applicationNo",
+           p.payable_no             as "payableNo",
+           bp.legal_name            as "supplierName",
+           pa.amount_txn::text      as "amountTxn",
+           pa.currency              as "currency",
+           b.code                   as "accountCode",
+           b.bank_code              as "bankCode",
+           coalesce(pa.sent_at::date, pa.application_date)::text as "sentOn",
+           (${asOf}::date - coalesce(pa.sent_at::date, pa.application_date))::int as "days",
+           u.display_name           as "sentByName"
+      from payment_application pa
+      join payment_method m on m.code = pa.payment_method_code
+      join bank_cash_account b on b.id = pa.bank_cash_account_id
+      join payable p on p.id = pa.payable_id
+      join business_partner bp on bp.id = p.supplier_id
+      left join app_user u on u.id = pa.sent_by
+     where pa.status = 'sent'
+       and p.cancelled_at is null and p.closed_at is null
+       and m.confirmation_kind = 'swift'
+       and (${asOf}::date - coalesce(pa.sent_at::date, pa.application_date)) >= ${options.minDays ?? 0}
+     order by pa.application_date, pa.application_no`);
+  return result.rows as never;
+}
+
 async function limitsFor(tx: Tx, checkCode: string): Promise<TimeLimitRow[]> {
   const rows = await tx
     .select({
@@ -474,7 +524,7 @@ export async function runSweep(tx: Tx, asOf: string): Promise<SweepResult> {
     // From when the hold was OPENED, not from the backdated breach: the
     // escalation is about nobody answering, and nobody could answer before
     // the question existed.
-    const waited = daysBetween(hold.createdAt.toISOString().slice(0, 10), asOf);
+    const waited = daysBetween(businessDateOf(hold.createdAt), asOf);
     if (waited <= rule.escalateAfterDays) continue;
 
     const toRole = rule.escalateToRole ?? 'accounting_manager';

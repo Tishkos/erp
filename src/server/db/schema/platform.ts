@@ -127,6 +127,10 @@ export const appUser = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     /** A6 — optimistic concurrency. */
     version: integer('version').notNull().default(1),
+    /** HD1 — moves whenever a role, grant or scope of this user changes. */
+    permissionsVersion: integer('permissions_version').notNull().default(1),
+    /** HD4 — when the first privileged sign-in started the enrolment grace. */
+    mfaRequiredSince: timestamp('mfa_required_since', { withTimezone: true }),
   },
   (t) => [
     uniqueIndex('app_user_email_uniq').on(sql`lower(${t.email})`),

@@ -1135,6 +1135,41 @@
       "when": 1795900000041,
       "tag": "0237_payables_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 162,
+      "version": "7",
+      "when": 1795900000042,
+      "tag": "0238_harden_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 163,
+      "version": "7",
+      "when": 1795900000043,
+      "tag": "0239_improve_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 164,
+      "version": "7",
+      "when": 1795900000044,
+      "tag": "0240_legacy_books_import",
+      "breakpoints": true
+    },
+    {
+      "idx": 165,
+      "version": "7",
+      "when": 1795900000045,
+      "tag": "0241_hr_people",
+      "breakpoints": true
+    },
+    {
+      "idx": 166,
+      "version": "7",
+      "when": 1795900000046,
+      "tag": "0242_whatsapp_bridge",
+      "breakpoints": true
     }
   ]
 }

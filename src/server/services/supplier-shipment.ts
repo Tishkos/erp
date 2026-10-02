@@ -40,7 +40,6 @@ import {
   businessPartner,
   costLayer,
   inventoryMovement,
-  notification,
   shipmentWatcher,
   supplierShipment,
   warehouse,
@@ -50,7 +49,9 @@ import { parseDecimal } from '../domain/money';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
+import * as notifications from './notifications';
 import * as inventory from './inventory';
+import { businessToday } from '../domain/business-date';
 
 export const PERMISSION_OBJECT = 'supplier_shipment';
 
@@ -312,7 +313,7 @@ async function move(
     .from(apInvoice)
     .where(eq(apInvoice.id, apInvoiceId))
     .limit(1);
-  const movementDate = invoice?.invoiceDate ?? new Date().toISOString().slice(0, 10);
+  const movementDate = invoice?.invoiceDate ?? businessToday();
 
   for (const line of lines) {
     if (!line.itemCode) continue;
@@ -399,26 +400,22 @@ async function tell(
 
   let sent = 0;
   for (const watcher of watchers) {
-    const inserted = await tx
-      .insert(notification)
-      .values({
-        ruleCode: null,
-        eventType: 'shipment.status_changed',
-        objectType: PERMISSION_OBJECT,
-        objectId: message.shipmentId,
-        recipientUserId: watcher.userId,
-        subject: message.subject,
-        body: message.body,
-        context: { shipmentId: message.shipmentId },
-        // One per recipient per status change: the subject carries the stage,
-        // so moving on and moving back would be two messages, not one
-        // suppressed.
-        dedupeKey: `shipment:${message.shipmentId}:${message.subject}:${watcher.userId}`,
-        branchCode: message.branchCode,
-      })
-      .onConflictDoNothing({ target: notification.dedupeKey })
-      .returning({ id: notification.id });
-    sent += inserted.length;
+    const inserted = await notifications.insertNotification(tx, {
+      ruleCode: null,
+      eventType: 'shipment.status_changed',
+      objectType: PERMISSION_OBJECT,
+      objectId: message.shipmentId,
+      recipientUserId: watcher.userId,
+      subject: message.subject,
+      body: message.body,
+      context: { shipmentId: message.shipmentId },
+      // One per recipient per status change: the subject carries the stage,
+      // so moving on and moving back would be two messages, not one
+      // suppressed.
+      dedupeKey: `shipment:${message.shipmentId}:${message.subject}:${watcher.userId}`,
+      branchCode: message.branchCode,
+    });
+    if (inserted !== null) sent += 1;
   }
   return sent;
 }

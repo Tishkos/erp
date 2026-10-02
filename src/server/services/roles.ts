@@ -10,6 +10,7 @@
  * System roles keep their code and name; their grants may still be edited,
  * because which sections Finance reaches is a business decision.
  */
+import { bumpPermissionsForRole } from './authorization';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { role, roleGrant, userRole } from '../db/schema';
@@ -166,6 +167,7 @@ export async function setGrants(
       .onConflictDoNothing();
   }
 
+  await bumpPermissionsForRole(tx, code);
   await recordChange(tx, ctx, {
     action: 'role.grants_set',
     objectType: PERMISSION_OBJECT,

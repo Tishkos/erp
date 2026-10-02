@@ -19,7 +19,8 @@
  */
 
 /** §21 — the two channels this release delivers on. */
-export const NOTIFICATION_CHANNELS = ['in_app', 'email'] as const;
+// REQ-WA-001 — the WhatsApp bridge delivers the third channel (2026-10-02).
+export const NOTIFICATION_CHANNELS = ['in_app', 'email', 'whatsapp'] as const;
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
 
 export const DELIVERY_STATUSES = ['pending', 'sent', 'failed', 'suppressed'] as const;
@@ -211,4 +212,29 @@ export function renderNotification(
 function humanise(value: string): string {
   const spaced = value.replace(/[._]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+// ---------------------------------------------------------------------------
+// Delivery retries — REQ-HARDEN-001 D-HD-4, delivered with REQ-WA-001 WA-1
+// ---------------------------------------------------------------------------
+
+/** Three attempts, then it stays failed and visible: 1 min, 10 min, 60 min. */
+export const DELIVERY_RETRY_DELAYS_SECONDS = [60, 600, 3600] as const;
+export const DELIVERY_MAX_ATTEMPTS = DELIVERY_RETRY_DELAYS_SECONDS.length;
+
+/**
+ * Whether a delivery is due another attempt: a pending row always is; a
+ * failed one when it has attempts left and the back-off since the last has
+ * elapsed; a sent or suppressed one never.
+ */
+export function isDeliveryDue(
+  delivery: { readonly status: DeliveryStatus; readonly attempts: number; readonly lastAttemptAt: Date | null },
+  now: Date,
+): boolean {
+  if (delivery.status === 'pending') return true;
+  if (delivery.status !== 'failed') return false;
+  if (delivery.attempts >= DELIVERY_MAX_ATTEMPTS) return false;
+  const wait = DELIVERY_RETRY_DELAYS_SECONDS[Math.max(0, delivery.attempts - 1)] ?? DELIVERY_RETRY_DELAYS_SECONDS[DELIVERY_RETRY_DELAYS_SECONDS.length - 1]!;
+  const since = delivery.lastAttemptAt ? (now.getTime() - delivery.lastAttemptAt.getTime()) / 1000 : Infinity;
+  return since >= wait;
 }

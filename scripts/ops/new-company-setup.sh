@@ -20,7 +20,14 @@
 #
 set -euo pipefail
 
-APP=/opt/qs-erp-next
+APP="${APP:-/opt/qs-erp-next}"
+
+# REQ-IMPROVE-001 OP-6 (IM4) — a company that is already live has its finance
+# department, its roles, its fiscal year and its rate; running this against it
+# would only ever add a second of something. --i-know-this-is-live is the
+# recorded exception for the day the marker is set before the setup is run.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/live-guard.sh"
+[[ "${1:-}" == "--i-know-this-is-live" ]] || refuse_on_live "set up a new company"
 PW=$(grep -oP '^DATABASE_URL_OWNER=postgres://erp_owner:\K[^@]+' "$APP/.env")
 export PGPASSWORD="$PW"
 PSQL=(psql -h 127.0.0.1 -p 5434 -U erp_owner -d erp -v ON_ERROR_STOP=1)

@@ -69,6 +69,7 @@ import * as events from './payable-events';
 import * as payables from './payables';
 import * as rateService from './exchange-rates';
 import { allocateDocumentNumber } from './numbering';
+import { businessToday } from '../domain/business-date';
 
 export const PERMISSION_OBJECT = 'payables_migration';
 export const SHEET_SOURCE = 'sheet_import';
@@ -78,7 +79,7 @@ const SHEET_CURRENCY = 'USD';
 
 const money = (value: bigint) => toDecimalString(value, MONEY_SCALE);
 const dec = (value: string | null | undefined) => parseDecimal(value ?? '0', MONEY_SCALE);
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => businessToday();
 const addDays = (date: string, days: number) => {
   const value = new Date(`${date}T00:00:00Z`);
   value.setUTCDate(value.getUTCDate() + days);

@@ -2,7 +2,8 @@ import { getLocale } from 'next-intl/server';
 import { isLocale, type Locale } from '@/i18n/config';
 import { visibleRoute } from '../delivered';
 import { withCurrentUser } from '../session';
-import { runExport } from './export';
+import { prepareExport, renderExport } from './export';
+import { messagesFor } from './i18n';
 import { isExportFormat } from './model';
 import { EXPORT_ACCESS, type ExportKey } from './access';
 
@@ -28,14 +29,23 @@ export async function exportResponse(request: Request, key: ExportKey, id: strin
   query.delete('format');
   query.delete('lang');
 
-  const result = await withCurrentUser((tx, context) =>
-    runExport(
+  // OP-9 — the read and the audit record happen in the transaction; the
+  // render happens after it has committed, so a slow PDF holds no lock.
+  const prepared = await withCurrentUser((tx, context) =>
+    prepareExport(
       tx,
       { principal: context.principal, branchCode: context.scope.branchCode },
       { key, format, locale, input: { id, query } },
     ),
   );
-  if (result.status !== 200) return new Response(null, { status: result.status });
+  if (prepared.status === 413) {
+    return new Response(messagesFor(locale).print('too_many_rows', { rows: prepared.rows, cap: prepared.cap }), {
+      status: 413,
+      headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store, private' },
+    });
+  }
+  if (prepared.status !== 200) return new Response(null, { status: prepared.status });
+  const result = { ...prepared, body: await renderExport(prepared) };
 
   const ascii = result.fileName.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '');
   return new Response(new Uint8Array(result.body), {

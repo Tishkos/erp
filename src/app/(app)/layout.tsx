@@ -46,10 +46,14 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
   const context = await optionalContext();
   const fallback = { palette: DEFAULT_PALETTE, accent: DEFAULT_ACCENT };
   const appearance = context
-    ? await withCurrentUser(async (tx) => ({
-        colors: await companyService.appearanceFor(tx, context.principal.userId),
-        settings: await userAppearance.settingsFor(tx, context.principal.userId),
-      })).catch(() => ({
+    ? await withCurrentUser(
+        async (tx) => ({
+          colors: await companyService.appearanceFor(tx, context.principal.userId),
+          settings: await userAppearance.settingsFor(tx, context.principal.userId),
+        }),
+        // HD2 / HD4 — the shell dresses a restricted session too; the page decides.
+        { allowRestricted: true },
+      ).catch(() => ({
         colors: fallback,
         settings: { settings: DEFAULT_USER_APPEARANCE, saved: true },
       }))

@@ -3,7 +3,7 @@
 import { useId, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import type { KeyboardEvent } from 'react';
-import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, TriangleAlert } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff, KeyRound, Loader2, Lock, Mail, TriangleAlert } from 'lucide-react';
 import styles from '@/app/sign-in/sign-in.module.css';
 
 /**
@@ -39,6 +39,42 @@ export function EmailField({
         />
         <span aria-hidden="true" className={styles.icon}>
           <Mail className="size-[18px]" />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** HD4 — the six-digit authenticator code, asked for when the account requires one. */
+export function CodeField({
+  id,
+  label,
+  placeholder,
+}: {
+  readonly id: string;
+  readonly label: string;
+  readonly placeholder: string;
+}) {
+  return (
+    <div className={styles.field}>
+      <label className={styles.label} htmlFor={id}>
+        {label}
+      </label>
+      <div className="relative">
+        <input
+          autoComplete="one-time-code"
+          className={styles.input}
+          id={id}
+          inputMode="numeric"
+          maxLength={7}
+          name="code"
+          pattern="[0-9 ]{6,7}"
+          placeholder={placeholder}
+          required
+          type="text"
+        />
+        <span aria-hidden="true" className={styles.icon}>
+          <KeyRound className="size-[18px]" />
         </span>
       </div>
     </div>

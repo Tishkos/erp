@@ -23,10 +23,21 @@ say() { printf '\n\033[1m== %s\033[0m\n' "$*" >&2; }
 
 say "Resetting the statement mapping on $ERP_SSH"
 
+FORCE="${1:-}"
+
 ssh "$ERP_SSH" bash -euo pipefail -s <<REMOTE
 APP=/opt/qs-erp-next
 STAMP=$STAMP
+FORCE="$FORCE"
 set -a; . "\$APP/.env"; set +a
+
+# REQ-IMPROVE-001 OP-6 (IM4) — the mapping on the live books is Finance's
+# work; it is reset there only with --i-know-this-is-live, after the dump.
+if [[ -e "\$APP/var/LIVE" && "\$FORCE" != "--i-know-this-is-live" ]]; then
+  echo "Refusing to reset the statement mapping: \$APP/var/LIVE marks this database as the live books (\$(cat "\$APP/var/LIVE" 2>/dev/null))." >&2
+  echo "Pass --i-know-this-is-live to do it anyway; the mapping is dumped first either way." >&2
+  exit 1
+fi
 
 # The mapping is configuration, not a ledger — but it is still someone's work,
 # so it is dumped before it is replaced.

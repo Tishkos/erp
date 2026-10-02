@@ -29,6 +29,7 @@ import * as events from './payable-events';
 import * as payables from './payables';
 import * as ap from './ap-invoice';
 import { allocateDocumentNumber } from './numbering';
+import { businessToday } from '../domain/business-date';
 
 export const PERMISSION_OBJECT = 'recurring_contract';
 const SEQUENCE_KEY = 'RECURRING_CONTRACT';
@@ -575,7 +576,7 @@ export async function listForScreen(tx: Tx): Promise<ContractListRow[]> {
                and i.status not in ('settled', 'reversed', 'cancelled')) as "nextDue",
            (select count(*)::int from ap_invoice i
              where i.recurring_contract_id = c.id
-               and i.due_date < current_date
+               and i.due_date < ${businessToday()}::date
                and i.status not in ('settled', 'reversed', 'cancelled')) as "overduePeriods"
       from recurring_contract c
       join business_partner bp on bp.id = c.supplier_id

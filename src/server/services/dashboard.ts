@@ -1,5 +1,6 @@
 import { and, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
+import { logger } from '../logging';
 import { apInvoice, arInvoice, businessPartner, customerReceipt } from '../db/schema';
 import { AGEING_BUCKETS, bucketFor, type AgeingBucket } from '../domain/ageing';
 import { parseDecimal, toDecimalString } from '../domain/money';
@@ -13,6 +14,7 @@ import { rows as listRows } from './list';
 import * as notifications from './notifications';
 import * as openItems from './open-items';
 import * as statement from './partner-statement';
+import { businessToday } from '../domain/business-date';
 
 /**
  * What the dashboard shows — REQ-DASH-001.
@@ -50,7 +52,7 @@ export type Band<T> = T | null;
 
 const OPEN_INVOICE_STATUSES = ['posted', 'partially_executed', 'settled'] as const;
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => businessToday();
 
 /**
  * Runs one band's read, and swallows nothing.
@@ -63,7 +65,7 @@ async function band<T>(name: string, read: () => Promise<T>): Promise<Band<T>> {
   try {
     return await read();
   } catch (cause) {
-    console.error(`[dashboard] the ${name} band could not be read`, cause);
+    logger.error('dashboard band could not be read', { error: cause, band: name });
     return null;
   }
 }
@@ -137,7 +139,7 @@ const LANE_DEFAULT_ROLE: Readonly<Record<string, string>> = {
   cost: 'accounting_officer',
 };
 
-async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting> {
+export async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting> {
   const maySeePayables = can(principal, 'view', 'payable');
   const [inbox, unread, holdRows] = await Promise.all([
     can(principal, 'view', approvals.PERMISSION_OBJECT)
@@ -199,7 +201,7 @@ async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting> {
                p.currency
           from payable p
           join business_partner bp on bp.id = p.supplier_id
-         where p.due_date between current_date and current_date + 7
+         where p.due_date between ${businessToday()}::date and ${businessToday()}::date + 7
            and p.cancelled_at is null and p.closed_at is null
            and p.stage_code not in ('paid', 'closed')
          order by p.due_date

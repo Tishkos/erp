@@ -39,6 +39,7 @@ import {
 import { INSTALMENT_CHIP, LOAN_CHIP } from '../status';
 import { STATUS_CHIP } from '../../payment-applications/status';
 import { windowTone } from '../../window-tone';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * One bank loan — REQ-AP-001 §15.7, §21.10.
@@ -87,7 +88,7 @@ export default async function LoanPage({
   const { loan, treatment, schedule, allocations, totals } = found;
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
   const money = (value: string, currency = loan.currency) => formatMoney(value, currency, locale as Locale);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const hidden = { loan_no: loan.loanNo };
 
   const mine = loan.createdBy === principal.userId;
