@@ -7,7 +7,7 @@
  * leaves with 3, without running the command. Then the crontab itself: every
  * line goes through the wrapper, with a timeout, naming a script that exists.
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -30,7 +30,15 @@ function run(name: string, ...command: string[]): Promise<{ code: number | null 
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-describe('IM5 · run-job.sh', () => {
+/**
+ * `run-job.sh` locks with `flock`, which exists on the server and in CI but
+ * not in Git Bash on Windows. Without it the wrapper cannot do the one thing
+ * these two tests assert, so they are skipped rather than failed there — the
+ * crontab tests below run everywhere, and CI still proves the locking.
+ */
+const hasFlock = spawnSync('bash', ['-c', 'command -v flock'], { stdio: 'ignore' }).status === 0;
+
+describe.skipIf(!hasFlock)('IM5 · run-job.sh', () => {
   it('lets one of two overlapping runs through and turns the other away', async () => {
     const [first, second] = await Promise.all([run('im05', 'sleep', '2'), new Promise<{ code: number | null }>((r) => setTimeout(() => run('im05', 'sleep', '2').then(r), 300))]);
     expect([first.code, second.code].sort()).toEqual([0, 3]);

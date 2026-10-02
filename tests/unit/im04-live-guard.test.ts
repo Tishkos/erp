@@ -50,7 +50,11 @@ function scripts(): string[] {
   const out: string[] = [];
   const walk = (dir: string) => {
     for (const entry of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
-      const rel = join(dir, entry.name);
+      // Forward slashes, whatever the platform: the list below is written the
+      // way the repository spells its paths, and on Windows `join` produces
+      // backslashes — so every lookup missed and the test failed on the
+      // developer's machine while passing in CI.
+      const rel = `${dir}/${entry.name}`;
       if (entry.isDirectory()) walk(rel);
       else if (/\.(ts|sh)$/.test(entry.name) && !rel.startsWith('scripts/lib/') && !rel.startsWith('scripts/sql/')) out.push(rel);
     }
