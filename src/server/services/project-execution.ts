@@ -35,6 +35,7 @@ import { ProjectSystemError } from '../domain/project-system';
 import { AdminNotFoundError, optionalText, permit, recordChange, requireText } from './administration';
 import type { ActorContext } from './chart-of-accounts';
 import { allocateDocumentNumber } from './numbering';
+import * as posting from './posting';
 import * as projects from './projects';
 
 /** A literal, as in `project-budget.ts`: this module and the purchasing services import each other. */
@@ -389,9 +390,20 @@ export async function postIssue(tx: Tx, ctx: ActorContext, documentNo: string): 
       .set({ movementId, costId: cost?.id ?? null, costIqd: toDecimalString(costIqd, MONEY) })
       .where(eq(projectMaterialIssueLine.id, line.id));
   }
+  // D-PM-13 — the document posts: the stock's FIFO cost leaves the items'
+  // inventory accounts for the element's cost (the cost code's account when
+  // it names one, the project_material_cost mapping otherwise); a return the
+  // other way. One journal per document, its cost rows pointed at it.
+  const journalEntryId = await postIssueJournal(tx, ctx, doc, documentNo);
+  if (journalEntryId) {
+    const costIds = (await tx.select({ costId: projectMaterialIssueLine.costId }).from(projectMaterialIssueLine).where(eq(projectMaterialIssueLine.issueId, doc.id)))
+      .map((l) => l.costId)
+      .filter((id): id is string => Boolean(id));
+    if (costIds.length) await tx.update(projectCost).set({ journalEntryId }).where(inArray(projectCost.id, costIds));
+  }
   await tx
     .update(projectMaterialIssue)
-    .set({ status: 'posted', postedBy: ctx.principal.userId, postedAt: new Date(), totalCostIqd: toDecimalString(total, MONEY), updatedAt: new Date() })
+    .set({ status: 'posted', postedBy: ctx.principal.userId, postedAt: new Date(), totalCostIqd: toDecimalString(total, MONEY), journalEntryId, updatedAt: new Date() })
     .where(eq(projectMaterialIssue.id, doc.id));
   await recordChange(tx, ctx, {
     action: 'project_material_issue.posted',
@@ -402,6 +414,45 @@ export async function postIssue(tx: Tx, ctx: ActorContext, documentNo: string): 
     after: { status: 'posted', totalCostIqd: toDecimalString(total, MONEY), lines: lines.length },
   });
   return { totalCostIqd: total };
+}
+
+async function postIssueJournal(tx: Tx, ctx: ActorContext, doc: typeof projectMaterialIssue.$inferSelect, documentNo: string): Promise<string | null> {
+  const lines = (
+    await tx.execute(sql`
+      select i.inventory_account_id as account, coalesce(sum(l.cost_iqd), 0)::text as cost
+        from project_material_issue_line l
+        join item i on i.code = l.item_code
+       where l.issue_id = ${doc.id}::uuid
+       group by i.inventory_account_id`)
+  ).rows as { account: string | null; cost: string }[];
+  const total = lines.reduce((sum, l) => sum + parseDecimal(l.cost, MONEY), 0n);
+  if (total === 0n) return null;
+  const [owner] = await tx.select({ departmentCode: project.departmentCode, businessLineCode: project.businessLineCode }).from(project).where(eq(project.code, doc.projectCode)).limit(1);
+  const [code] = await tx.select({ accountId: projectCostCode.accountId }).from(projectCostCode).where(eq(projectCostCode.code, doc.costCode)).limit(1);
+  const criteria = { branchCode: doc.branchCode, projectCode: doc.projectCode, warehouseCode: doc.warehouseCode };
+  const dimensions = { branch: doc.branchCode, project: doc.projectCode, warehouse: doc.warehouseCode, department: owner?.departmentCode ?? null, business_line: owner?.businessLineCode ?? null };
+  const issue = doc.kind === 'issue';
+  const amount = (v: bigint) => toDecimalString(v < 0n ? -v : v, MONEY);
+  const costLine = { role: 'project_material_cost', ...(code?.accountId ? { accountId: code.accountId } : {}), criteria, dimensions };
+  const result = await posting.post(tx, ctx, {
+    eventType: 'projects.material_issue',
+    documentTypeCode: ISSUE_DOCUMENT_TYPE,
+    source: { module: 'projects', documentId: doc.id, event: 'posted' },
+    branchCode: doc.branchCode,
+    documentDate: doc.movementDate,
+    postingDate: doc.movementDate,
+    description: `${issue ? 'Material issue' : 'Material return'} ${documentNo} — ${doc.projectCode} / ${doc.wbsCode}`,
+    lines: [
+      issue ? { ...costLine, debit: amount(total) } : { ...costLine, credit: amount(total) },
+      ...lines
+        .filter((l) => parseDecimal(l.cost, MONEY) !== 0n)
+        .map((l) => {
+          const stock = { role: 'inventory', ...(l.account ? { itemAccountId: l.account } : {}), criteria, dimensions };
+          return issue ? { ...stock, credit: amount(parseDecimal(l.cost, MONEY)) } : { ...stock, debit: amount(parseDecimal(l.cost, MONEY)) };
+        }),
+    ],
+  });
+  return result.journalEntryId;
 }
 
 export async function cancelIssue(tx: Tx, ctx: ActorContext, documentNo: string, reason: string): Promise<void> {

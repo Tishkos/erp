@@ -273,6 +273,7 @@ describe('every screen has one address', () => {
       '/projects/billing',
       '/projects/budgets',
       '/projects/change-orders',
+      '/projects/close',
       '/projects/contracts',
       '/projects/costs',
       '/projects/forecast',
@@ -280,6 +281,7 @@ describe('every screen has one address', () => {
       '/projects/plan',
       '/projects/procurement',
       '/projects/progress',
+      '/projects/reports',
       '/projects/wbs',
       // Block 5 — the Sales Invoice.
       '/sales/ar-invoices',

@@ -26,11 +26,11 @@ export async function letterheadFor(
     readonly at?: string;
   },
 ): Promise<Letterhead> {
-  const [company, [me], [place]] = await Promise.all([
-    companyService.current(tx),
-    tx.select({ name: appUser.displayName }).from(appUser).where(eq(appUser.id, input.userId)).limit(1),
-    tx.select({ code: branch.code, name: branch.name }).from(branch).where(eq(branch.code, input.branchCode)).limit(1),
-  ]);
+  // Sequential, not `Promise.all`: a transaction is one connection, and
+  // concurrent queries on it are deprecated in `pg` and an error from pg@9.
+  const company = await companyService.current(tx);
+  const [me] = await tx.select({ name: appUser.displayName }).from(appUser).where(eq(appUser.id, input.userId)).limit(1);
+  const [place] = await tx.select({ code: branch.code, name: branch.name }).from(branch).where(eq(branch.code, input.branchCode)).limit(1);
   const english = messagesFor('en');
   const arabic = messagesFor('ar');
   const t = messagesFor(input.locale).print;

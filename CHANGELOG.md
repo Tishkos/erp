@@ -8,6 +8,18 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-PM-001 PM-6 — close, settlement, labour and the reports: hours booked
+  on an element by one person, approved by another and posted by Finance
+  once the month has ended at the base salary ÷ the calendar's working days
+  ÷ 8 (D-PM-8); a Material Issue document now posts its cost against the
+  items' inventory accounts (D-PM-13); the **Close** workspace — Phase 11's
+  five blockers and five more, technical completion, the settlement (an
+  investment project's cost to the asset under construction, the rest's
+  WIP cleared; drafted by one, posted by another; one per project) and the
+  close; the **Reports** screen — the hierarchy cost report, line items,
+  milestone trend analysis and earned value, printed and exported through
+  the ERP's renderers from the same models the screen draws. A settled
+  project refuses any further cost, recognition or reopen. Migration 0250.
 - REQ-PM-001 PM-5 — billing, revenue recognition and forecast: a customer
   project's **billing plan** (per billing element, due on a billing
   milestone reached and approved, or on a date; a share of the contract as

@@ -531,7 +531,7 @@ export async function recordCost(
     const open = promise.releasedOn ? 0n : parseDecimal(promise.amountIqd, 4n) - parseDecimal(promise.consumedIqd, 4n);
     uncommitted = input.amountIqd > open ? input.amountIqd - open : 0n;
   }
-  const row = await assertSpendable(tx, ctx, projectCode, input.costCode, uncommitted, input.wbsCode ?? null);
+  const row = await assertSpendable(tx, ctx, projectCode, input.costCode, uncommitted, input.wbsCode ?? null, true);
   // REQ-PM-001 §5 — an element named on a cost must be one that may receive it.
   if (input.wbsCode) await assertAccountAssignmentElement(tx, projectCode, input.wbsCode);
 
@@ -682,6 +682,12 @@ async function assertSpendable(
   costCode: string,
   amountIqd: bigint,
   wbsCode: string | null = null,
+  /**
+   * REQ-PM-001 §6 — technical completion refuses new commitments and issues,
+   * not the cost of work already done: an invoice for an order still open, a
+   * month's hours. Only `recordCost` passes it.
+   */
+  allowClosing = false,
 ) {
   const row = await load(tx, projectCode);
 
@@ -689,7 +695,13 @@ async function assertSpendable(
     branchCode: row.branchCode ?? ctx.branchCode,
   });
 
-  if (row.status !== 'active') {
+  // PM-6 §12 — once settled, the project's cost is where the settlement put it.
+  const settled = ((await tx.execute(sql`select settlement_no from project_settlement where project_code = ${projectCode} and status = 'posted' limit 1`)) as unknown as { rows: { settlement_no: string }[] }).rows[0];
+  if (settled) {
+    throw new ProjectStateError(row.code, row.status, `it is settled (${settled.settlement_no}); no further cost is taken.`);
+  }
+
+  if (row.status !== 'active' && !(allowClosing && row.status === 'closing')) {
     throw new ProjectStateError(
       row.code,
       row.status,
@@ -1355,9 +1367,11 @@ export async function closeoutState(tx: Tx, projectCode: string): Promise<Closeo
           and c.consumed_iqd < c.amount_iqd)                              as "openPurchaseOrders",
       (select count(*)::int from project_cost k
         where k.project_code = ${projectCode} and k.kind = 'material_issue'
-          and k.billed = 'false')                                        as "unreturnedStockItems",
+          and k.billed = 'false' and k.settlement_id is null)            as "unreturnedStockItems",
+      -- REQ-PM-001 PM-6 §12 — a cost settled (to the asset or the result) is accounted for.
       (select coalesce(sum(k.amount_iqd), 0)::text from project_cost k
-        where k.project_code = ${projectCode} and k.billed = 'false')         as "unbilledCostIqd",
+        where k.project_code = ${projectCode} and k.billed = 'false'
+          and k.settlement_id is null)                                   as "unbilledCostIqd",
       (select count(*)::int from project_variation v
         where v.project_code = ${projectCode} and v.status <> 'approved'
           and v.status <> 'cancelled')                                   as "unapprovedVariations"

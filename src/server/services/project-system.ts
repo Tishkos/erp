@@ -42,6 +42,7 @@ import { AdminNotFoundError, normaliseCode, optionalText, permit, recordChange, 
 import type { ActorContext } from './chart-of-accounts';
 import { allocateDocumentNumber } from './numbering';
 import * as budget from './project-budget';
+import * as closing from './project-close';
 import * as schedule from './project-schedule';
 import * as projects from './projects';
 
@@ -323,6 +324,8 @@ export async function reopen(tx: Tx, ctx: ActorContext, projectCode: string, rea
   const row = await load(tx, projectCode);
   await permit(ctx, 'approve', PERMISSION_OBJECT, projectCode);
   const to = assertTransition('reopen', row.status as ProjectStatus, projectCode);
+  const [settled] = (await tx.execute(sql`select settlement_no from project_settlement where project_code = ${projectCode} and status = 'posted' limit 1`)).rows as { settlement_no: string }[];
+  if (settled) throw new ProjectSystemError('status', `${projectCode} is settled (${settled.settlement_no}); settled work is not reopened — rework is a new project`);
   if (row.reopenedAt) throw new ProjectSystemError('status', `${projectCode} was already reopened once (${row.reopenedAt.toISOString().slice(0, 10)}); a second rework is a new project`);
   const why = requireText(reason, 'reason');
   await tx
@@ -332,11 +335,11 @@ export async function reopen(tx: Tx, ctx: ActorContext, projectCode: string, rea
   await recordChange(tx, ctx, { action: 'project.reopened', objectType: projects.DOCUMENT_TYPE, objectId: projectCode, branchCode: row.branchCode, before: { status: row.status }, after: { status: to }, reason: why });
 }
 
-/** CLSD — Phase 11's close, from technical completion only. */
+/** CLSD — from technical completion only, every PM-6 check passed (settlement posted among them), then Phase 11's close. */
 export async function close(tx: Tx, ctx: ActorContext, projectCode: string, note: string): Promise<void> {
   const row = await load(tx, projectCode);
   assertTransition('close', row.status as ProjectStatus, projectCode);
-  await projects.close(tx, ctx, projectCode, note);
+  await closing.close(tx, ctx, projectCode, note);
 }
 
 // ---------------------------------------------------------------------------

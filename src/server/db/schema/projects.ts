@@ -49,6 +49,7 @@ import { arInvoice } from './ar-invoice';
 import { documentStatus } from './workflow';
 import { journalEntry } from './journal';
 import { chartOfAccount } from './accounting';
+import { employee } from './hr';
 
 /** §10 — the work breakdown structure. A tree; cycles refused by trigger. */
 export const projectWbs = pgTable(
@@ -227,6 +228,8 @@ export const projectCost = pgTable(
     consumedCommitmentId: uuid('consumed_commitment_id').references(() => projectCommitment.id),
     /** True once the cost has been included in a certificate. */
     billed: text('billed').notNull().default('false'),
+    /** PM-6 §12 — the settlement that took this row (to the asset, or to the result). */
+    settlementId: uuid('settlement_id'),
 
     createdBy: uuid('created_by')
       .notNull()
@@ -715,6 +718,8 @@ export const projectMaterialIssue = pgTable(
     movementDate: date('movement_date').notNull(),
     description: text('description'),
     totalCostIqd: numeric('total_cost_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    /** PM-6 (D-PM-13) — the journal its posting wrote: the cost against the items' inventory accounts. */
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => appUser.id),
@@ -967,4 +972,94 @@ export const projectEtc = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('project_etc_element_idx').on(t.projectCode, t.wbsCode, t.asOf)],
+);
+
+// ---------------------------------------------------------------------------
+// REQ-PM-001 PM-6 — settlement and labour (§8, §12)
+// ---------------------------------------------------------------------------
+
+/** One per project (D-PM-7): to the asset under construction, or to the result. */
+export const projectSettlement = pgTable(
+  'project_settlement',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    settlementNo: text('settlement_no').notNull(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    kind: text('kind').notNull(),
+    settledOn: date('settled_on').notNull(),
+    status: text('status').notNull().default('draft'),
+    costIqd: numeric('cost_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    glCostIqd: numeric('gl_cost_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    billedIqd: numeric('billed_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    recognitionReversalEntryId: uuid('recognition_reversal_entry_id').references(() => journalEntry.id),
+    note: text('note'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    postedBy: uuid('posted_by').references(() => appUser.id),
+    postedAt: timestamp('posted_at', { withTimezone: true }),
+    cancelledBy: uuid('cancelled_by').references(() => appUser.id),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+  },
+  (t) => [uniqueIndex('project_settlement_no_uniq').on(t.settlementNo)],
+);
+
+/** A month's approved hours on one project, posted at the employees' rates (D-PM-8). */
+export const projectTimesheetRun = pgTable('project_timesheet_run', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectCode: text('project_code')
+    .notNull()
+    .references(() => project.code, { onDelete: 'cascade' }),
+  month: date('month').notNull(),
+  postedOn: date('posted_on').notNull(),
+  hours: numeric('hours', { precision: 9, scale: 2 }).notNull(),
+  amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+  journalEntryId: uuid('journal_entry_id')
+    .notNull()
+    .references(() => journalEntry.id),
+  createdBy: uuid('created_by')
+    .notNull()
+    .references(() => appUser.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Hours an employee worked on an element, booked by one person and approved by another. */
+export const projectTimesheet = pgTable(
+  'project_timesheet',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    wbsCode: text('wbs_code').notNull(),
+    costCode: text('cost_code').notNull(),
+    employeeId: uuid('employee_id')
+      .notNull()
+      .references(() => employee.id),
+    workDate: date('work_date').notNull(),
+    hours: numeric('hours', { precision: 5, scale: 2 }).notNull(),
+    note: text('note'),
+    status: text('status').notNull().default('draft'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    approvedBy: uuid('approved_by').references(() => appUser.id),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    runId: uuid('run_id').references(() => projectTimesheetRun.id),
+    rateIqd: numeric('rate_iqd', { precision: 19, scale: 4 }),
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }),
+    cancelledBy: uuid('cancelled_by').references(() => appUser.id),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+  },
+  (t) => [index('project_timesheet_project_idx').on(t.projectCode, t.workDate), index('project_timesheet_employee_idx').on(t.employeeId, t.workDate)],
 );

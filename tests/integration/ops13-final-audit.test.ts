@@ -133,6 +133,12 @@ beforeEach(async () => {
     ['project_retention_receivable', 'A000001', 'Retention Receivable', 'customer'],
     ['project_wip', 'A000001', 'Unbilled Contract Work', null],
     ['project_deferred_revenue', 'L000001', 'Billings in Excess of Work', null],
+    // REQ-PM-001 PM-6 — material issues, labour and settlement.
+    ['project_material_cost', 'X000001', 'Project Material Cost', null],
+    ['project_labour', 'X000001', 'Project Labour Cost', null],
+    ['labour_absorption', 'X000001', 'Labour Absorbed', null],
+    ['project_auc', 'A000001', 'Assets Under Construction', null],
+    ['project_cost', 'X000001', 'Project Cost Settled', null],
   ] as const) {
     const { rows: parents } = await ownerPool.query(
       `select id, account_type from chart_of_account where code = $1`,
