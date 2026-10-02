@@ -1,5 +1,13 @@
 # REQ-WA-001 — The WhatsApp bridge and the query bot (Baileys)
 
+| | |
+|---|---|
+| **Requirement ID** | `REQ-WA-001` |
+| **Release** | 2 |
+| **Test case(s)** | *Named per criterion in this document; each gains its link when its stage is built (00.6).* |
+| **Status** | Draft — decisions OPEN |
+| **Approved by** | *Not yet approved.* |
+
 **Status: DRAFT for review — the decisions in §10 are OPEN, not final.**
 Written 2026-10-02, in the manner of REQ-AP-001. One sentence of purpose:
 the CEO (and whoever else is allowed) messages the company's WhatsApp

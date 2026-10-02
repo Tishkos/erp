@@ -1,5 +1,13 @@
 # REQ-HR-001 — Human Resources
 
+| | |
+|---|---|
+| **Requirement ID** | `REQ-HR-001` |
+| **Release** | 2 |
+| **Test case(s)** | *Named per criterion in this document; each gains its link when its stage is built (00.6).* |
+| **Status** | Draft — decisions OPEN |
+| **Approved by** | *Not yet approved.* |
+
 **Status: DRAFT for review — the decisions in §12 are OPEN, not final.**
 Written 2026-10-02, in the manner of REQ-AP-001: the rules first, the screens
 after, delivery in stages with numbered criteria, and a decision register the

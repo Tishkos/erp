@@ -1,0 +1,237 @@
+# REQ-HARDEN-001 — Hardening the payables release
+
+| | |
+|---|---|
+| **Requirement ID** | `REQ-HARDEN-001` |
+| **Release** | 1 (before go-live of REQ-AP-001 Stage 8 cut-over) |
+| **Source** | Full-system audit of 2026-10-02 on `main` (stages 1–8 merged): three read-only sweeps (security · correctness · operations), the complete test battery, and hand-verification of the two defects the sponsor reported. |
+| **Test case(s)** | Named per finding below; each fix lands with its test (the A2 discipline). |
+| **Status** | DRAFT — findings are verified with file:line evidence; the fixes are proposed, not built. |
+| **Approved by** | *Not yet approved.* |
+
+**How to read this document.** §1 is what the audit proved healthy. §2 is the
+two defects the sponsor reported, with their root causes. §3 is the full
+findings catalogue — every issue the sweeps surfaced, by theme, with severity
+and evidence. §4 turns the catalogue into four delivery stages with numbered
+criteria (HD1–HD20). §5 is the open decision register. Nothing in this
+document has been implemented; the only change shipped with it is the
+traceability header block on REQ-HR-001 and REQ-WA-001, which were failing
+the 00.6 gate on `main`.
+
+---
+
+# §1 — Verified healthy (what the audit could NOT break)
+
+* **The whole test battery passes on `main`**: 18/18 integration suites, 107
+  passed + 1 conditionally skipped (the Stage-8 A20 replay of the real
+  `QS_DASHBOARD.xlsx`, which skips itself where the sheet file is absent and
+  will run at cut-over). Units: 1,315/1,317 — the two failures are the
+  missing traceability headers fixed alongside this document.
+* **Migrations discipline held through all eight stages**: nothing applied
+  was rewritten, the journal's 161 timestamps are strictly increasing, and
+  every new document table is in `resetTestData` and
+  `format-live-database.sh`.
+* **The design rule held**: zero new CSS files, zero inline styles, 
+  SectionTabs and the standard windows on all 19 payables screens.
+* **No committed secrets** (`.env*` ignored; every hit is `process.env`).
+* **All 16 `SECURITY DEFINER` functions pin `search_path`**; dynamic SQL uses
+  `format('%I'/'%L')`.
+* **Every one of the 116 pages authenticates** through
+  `requireContext`/`withCurrentUser`; deny-by-default stands.
+* **The principal is read fresh every request** (no role caching server-side),
+  and deactivating a user revokes all their sessions.
+* **File storage is traversal-safe** (uuid/sha keys, encoded download names,
+  `nosniff`, `Content-Disposition: attachment`).
+* The payables sweep **does** have its ops wrapper and documented cron
+  (`scripts/ops/payables-sweep.ts`, runbook §cron) — an earlier worry,
+  disproven.
+
+---
+
+# §2 — The two reported defects, root-caused
+
+## 2.1 "Gave the permission but it didn't update for the user"
+
+**Root cause (confirmed):** the navigation shell is rendered by the layout,
+and the layout deliberately persists across navigations —
+`src/app/(app)/layout.tsx` documents it: *"the header, navigation and user
+menu stay mounted … only the page segment below is replaced."* The server
+reloads the principal per request, so the **pages** are always current — but
+the **menu** the user is looking at is not re-rendered until a hard refresh
+or a fresh sign-in. A granted section does not appear; a revoked one does
+not disappear. Hence "sometimes works": it works after the user happens to
+reload.
+
+**Fix (HD1):** version the permission state — bump a `permissions_version`
+(per user) whenever `user_role` / `role_grant` / scopes change; the shell
+compares the version on each navigation response (one lightweight header or
+a tiny route handler) and calls `router.refresh()` when stale, which
+re-renders the layout. Criterion: grant → the user's next navigation shows
+the new menu entry without a manual reload; revoke → entry gone the same
+way; test `hd01-permission-refresh` (e2e, two browser contexts).
+
+## 2.2 The temporary password
+
+**Root cause (confirmed):** the enforcement gate exists but is wired to
+nothing. `assertPasswordNotTemporary`
+(`src/server/domain/authentication.ts:154`) — whose own comment says a
+temp-password session *"may do exactly one thing"* — has **zero production
+callers**. Sign-in never routes a `mustChangePassword` user to the change
+form; the flag's only appearance is a pill on the admin's user page; and
+temp passwords **never expire** (`passwordChangedAt` is written and read
+nowhere). An admin-issued temporary password is a permanent password.
+
+**Fix (HD2):** call the gate in `currentContext` (or a layout guard) so a
+`mustChangePassword` session can reach only the change-password form and
+sign-out; sign-in redirects there directly; temp passwords expire 72 h after
+issue (re-issue replaces); the change clears the flag atomically. Test
+`hd02-temp-password` (integration + e2e).
+
+---
+
+# §3 — Findings catalogue
+
+Severity: **H** = wrong money, silent data exposure, or a defeated control ·
+**M** = correctness/operational risk needing conditions · **L** = hygiene.
+Every finding carries its evidence; none has been fixed yet unless marked.
+
+## 3.A Security and access
+
+| # | Sev | Finding | Evidence |
+|---|---|---|---|
+| A1 | H | **MFA is never enforced at sign-in** — `assertSecondFactor` has no production caller; a privileged role signs in on password alone. | `services/authentication.ts:233`, `app/sign-in/page.tsx:44` |
+| A2 | H | **No rate limit / lockout / captcha on sign-in**; scrypt at N=2¹⁶ (~64 MB per guess) also makes the endpoint an unauthenticated memory-DoS path. | `app/sign-in/page.tsx:28-52`, `server/auth/index.ts:127` |
+| A3 | H | **Temp-password gate unwired, no expiry** (= §2.2). | `domain/authentication.ts:154` |
+| A4 | H | **No authentication audit events** — neither success nor failure is recorded; the sign-in action swallows errors with `.catch(() => null)`. | `app/sign-in/page.tsx:51` |
+| A5 | H | **`attachment` / `attachment_access` have no RLS** — any authenticated query path can read every file row regardless of branch. | `migrations/0017:144-145` |
+| A6 | H | **`bank_loan` / `bank_loan_instalment` lack RLS** while sibling `bank_loan_allocation` in the same migration has it — drift, not design. | `migrations/0235:325-326` vs `:274-276` |
+| A7 | M | RLS absent on further business tables: `project_*` (8 tables, 0148), `client_kyc_record`/`_document` (0120 — identity PII), `ap_invoice_note` (0231), `payment_application_transition` (0232), `payables_migration_run` (0237), `cost_layer_consumption` (0025), `supplier_advance_settlement` (0037), `crm_contact` (0147), `notification` (0016), `import_batch`/`import_row` (0013). Also: `user_role`, `role_grant`, `user_branch_scope`, `user_department_scope` carry no policies. | per-file lines in the audit log |
+| A8 | M | Mutations without `authz.authorize`: `document-actions.perform` (also skips the refusal audit), `ar-collections.resolvePromise`, `pick-list.complete`, `sales-return.close`, `workflow.submit` (trusts `submittedBy` from input). | `document-actions.ts:110`, `ar-collections.ts:413`, `pick-list.ts:547`, `sales-return.ts:901`, `workflow.ts:161-196` |
+| A9 | M | `notifications.markRead`/`markActed` take no principal — any caller can clear another user's notification. | `notifications.ts:297,312` |
+| A10 | M | **Open redirect**: `record-action.ts` passes form-supplied `returnTo` straight to `redirect()`. | `server/record-action.ts:31,51` |
+| A11 | M | `attachments.recordDenial` opens a transaction without `applyScope` — works only because A5 exists; fixing A5 would silently drop denial records. | `services/attachments.ts:320` |
+| A12 | M | Password max-age not implemented (`passwordChangedAt` never read). | `services/authentication.ts:114` |
+| A13 | L | Upload typing is a blocklist (`.svg`/`.html` → `text/plain`); mitigated by download headers. | `domain/attachments.ts:156-186` |
+| A14 | L | Unescaped `companyName` in the temp-password e-mail HTML. | `services/mail.ts:69-70,91` |
+| A15 | L | Sign-in timing oracle (unknown e-mail returns before scrypt). | `services/authentication.ts:125-134` |
+| A16 | L | `verifyPassword` trusts KDF parameters parsed from the stored hash. | `server/auth/index.ts:153-158` |
+| A17 | L | `payable_event` child partitions carry no policies of their own (mitigated: only the parent is granted; the creator function should add them anyway). | `migrations/0226:47-115` |
+| A18 | L | Partner name/code existence probeable before authorization. | `services/partners.ts:174-179,240` |
+
+## 3.B Money correctness (floating point where money lives)
+
+| # | Sev | Finding | Evidence |
+|---|---|---|---|
+| B1 | H | **Stored unit cost computed by float division** — `BigInt(Math.round((Number(value)/qty)*10_000))` feeds the cost layer and the GL. | `services/stock-operations.ts:327-329,458,462` |
+| B2 | H | **Migration "cleared" verdict decided in float** (`Math.round(Number(v)*100)`; quantity equality via `*1e6` rounding). | `domain/payables-migration.ts:460-470` |
+| B3 | H | **Reconciliation variance = double subtraction re-stringified as money** (`unexplainedIqd` etc. printed on statements). | `services/open-items.ts:513-553` |
+| B4 | M | `ties` epsilon (0.00005) is finer than double resolution at IQD magnitudes — balanced books can read unbalanced. | `open-items.ts:571` |
+| B5 | M | Display totals in float that users reconcile against posted figures: AP invoice line/total, landed-cost section total (`.toFixed(4)` → `money()`), client line grids. | `invoices/[invoiceNo]/page.tsx:154-160`, `payables/[payableNo]/page.tsx:1286-1289`, `invoice-lines-grid.tsx:226-231`, `opening-stock-lines.tsx:106-115` |
+| B6 | M | `formatMoney`/`formatQuantity` route all amounts through `Number()` — round-trip breaks above ≈9.0e15 minor units. | `i18n/config.ts:60,95,117` |
+| B7 | L | Float display math: GL inquiry balances, dashboard ordering, FIFO valuation page. | `gl-inquiry/*:73-74`, `dashboard.ts:541-574` |
+| B8 | M | `mayReverse` compares settled money with `Number(x) === 0` (service re-checks; UI can hide the action). | `invoices/[invoiceNo]/page.tsx:217` |
+
+## 3.C Concurrency (read-then-write without row locks)
+
+| # | Sev | Finding | Evidence |
+|---|---|---|---|
+| C1 | H | **Payment applications**: `approve`/`send`/`confirm` transition on an unlocked read — two concurrent confirms both post and both allocate the loan draw. | `payment-applications.ts:111-115,499,663,794` |
+| C2 | H | **Loans**: `payInstalment` (and approve/disburse/allocate/release) read unlocked — a double submit posts the repayment twice. | `loans.ts:97-101,521-540` |
+| C3 | H | **Landed-cost lock**: `importOf → unlockedCharges → allocate → distribute` with no lock — two simultaneous locks allocate the same charges twice into inventory/COGS. | `landed-cost.ts:408-440` |
+| C4 | M | Customs-PD `changeStatus` guards on an unlocked read; `payables.load` recomputes stage without a lock. | `customs-pd.ts:239-274`, `payables.ts:125-129` |
+| C5 | — | Clean contrast: the older document services all lock (`ap-invoice.ts:253`, `shipments.ts:627`, `inventory.ts:1083` …) — the pattern exists; the newer services skipped it. | — |
+
+## 3.D Business dates (UTC "today" in a UTC+3 business)
+
+| # | Sev | Finding | Evidence |
+|---|---|---|---|
+| D1 | H | **~60 sites stamp `new Date().toISOString().slice(0,10)`** while all display is `Asia/Baghdad`: between 00:00–03:00 Baghdad every "today" is yesterday. The hazard is even documented (`db/types.ts:8-12`) — but no business-today helper exists. | repo-wide |
+| D2 | H | Stored dates affected: stock-issue `movementDate` (availability page), sales-return `receivedOn`, contract `generateDue` (its idempotency key is the date), the per-service `today()` helpers in customs-pd/loans/payment-applications/landed-cost (lock date)/shipments/migration/journal-reversal. | per-file lines in the audit log |
+| D3 | H | **The nightly sweeps take UTC today as `asOf`** — a small-hours Baghdad cron runs PD-expiry/container-late/instalment/due-notice passes dated one day early. | `scripts/ops/payables-sweep.ts:20`, `due-notices.ts:25` |
+| D4 | M | SQL `current_date` (session zone) mixed with app-side UTC dates in the same result (loans overdue count, contracts, dashboard due-this-week). | `loans.ts:1092,1261`, `recurring-contracts.ts:578`, `dashboard.ts:202` |
+| D5 | M | Hold notification `occurrence` dates (the de-dup/ageing key) stamped UTC. | `payable-holds.ts:186,289` |
+
+**One fix for the family:** a single `businessToday()` (Asia/Baghdad) in
+`domain/`, used everywhere a business date is stamped or compared; SQL
+comparisons switch to a bound parameter from the same helper. Decision
+D-HD-2 below fixes the zone authoritatively.
+
+## 3.E Error handling
+
+| # | Sev | Finding | Evidence |
+|---|---|---|---|
+| E1 | H | **Bare `catch { return null } → notFound()`** wraps the whole data load of every newer payables detail page (payable, payment-application, loan, PD, B/L, container, contract, advance) — any DB error renders as "record does not exist". The master-data pages show the correct pattern (narrow on `AdminNotFoundError`, rethrow the rest). | `payables/[payableNo]/page.tsx:191-194` + 7 siblings |
+| E2 | M | Journal entry page swallows its whole load the same way. | `finance/journals/[entryNo]/page.tsx:88-92` |
+| E3 | M | `posting.mappedAccountFor` returns `null` on engine failure — indistinguishable from "no mapping configured". | `posting.ts:816-818` |
+| E4 | L | Landed-cost preview hides allocation failures (`safeAllocate → null`). | `landed-cost.ts:346-349` |
+
+## 3.F Jobs and delivery (the unplugged layer)
+
+| # | Sev | Finding | Evidence |
+|---|---|---|---|
+| F1 | H | **No channel sender is registered anywhere** — every non-in-app delivery would throw "No sender is registered". | `notifications.ts:176,223` |
+| F2 | H | **The delivery job handler is never installed** and **no job runner process exists** — `pg-boss` is a dependency never imported; `notification_delivery` rows stay `pending` forever and the outbox grows unbounded. | `notifications.ts:439`, `jobs.ts:117,436` |
+| F3 | M | A failed delivery can never be retried: the forward-only trigger blocks `failed → pending`. | `notifications.ts:245-257`, `migrations/0016:103` |
+| F4 | M | All recurring jobs exist only as hand-installed crontab lines — a fresh VPS silently runs none (sweep, due-notices, integrity, statement checks, restore drill). | `scripts/ops/*`, runbook |
+| F5 | M | The Sunday restore drill is known-broken on `CASH-ACCOUNTANT_ERBIL` (deleted chart account) — tracked only in prose, no guard. | runbook §cron |
+| F6 | L | No exchange-rate fetch job (manual entry only); `nodemailer` installed, never imported. | `package.json:40,48` |
+
+## 3.G Performance
+
+| # | Sev | Finding | Evidence |
+|---|---|---|---|
+| G1 | H | **The payable page issues ~25 service calls strictly sequentially** in one transaction — latency is the sum of every round trip. | `payables/[payableNo]/page.tsx:122-194` |
+| G2 | H | `users.listAll` — unbounded, no active filter — loaded on **every** payable view just to fill owner dropdowns inside collapsed `<details>`. | same page `:131`, `users.ts:55-72` |
+| G3 | M | `settings.overview` fires 8 full-table reads for the 1 list the page uses; the landed-cost block adds 6 more unbounded sequential calls; Attachments + RecordHistory each open their own extra transaction (3 DB sessions per view). | same page `:130,162-172,1754,1765` |
+| G4 | H | **Missing FK indexes** (Postgres does not auto-index FKs): `payment_application.supplier_id` (0232), `container_receipt_line.container_line_id`, `container_receipt.payable_id/warehouse/branch`, `shipment_container_line.container_id` (only a partial unique), `landed_cost_layer_adjustment.payable_id/item/warehouse/via_layer`, `bank_loan_allocation.landed_cost_charge_id`, `bank_loan.bank_code`, `customs_pd.bank_code/branch_code`. 0231/0237 are clean. | per-migration lines in the audit log |
+| G5 | M | Registers truncate silently at `limit 200` with no count/paging (goods-receipts, purchase-orders, service-receipts) — while the newer registers (PD, loans, payment applications, shipments, contracts) have **no limit at all** and filter/sort in JS. The proper list engine (`list.ts`, LIMIT/OFFSET + count) exists and is bypassed by both. | `goods-receipt.ts:814` etc. vs `customs-pd.ts:659-700` etc. |
+| G6 | M | Dashboard "receipts awaiting" applies `limit 50` **before** the department filter — a manager's own rows can be cut off by other departments'. | `dashboard.ts:185-189` |
+
+## 3.H UI / i18n
+
+| # | Sev | Finding | Evidence |
+|---|---|---|---|
+| H1 | M | Raw enum rendered on the payable page's service chip (`{receipt.status}`) while sibling pages translate it; invoice-status fallback prints the English code in Arabic. | `payables/[payableNo]/page.tsx:1664,560` |
+| H2 | L | PD/container/charge/basis names fall back to the stored English name in non-English locales without failing any gate. | same page `:1071,1216,1324,1451` |
+| H3 | L | The same 11 status labels are maintained in ≥3 namespaces (drift risk per locale) instead of reusing the global `status` namespace. | `messages/en.json:2575+` |
+
+## 3.I Test coverage
+
+| # | Sev | Finding | Evidence |
+|---|---|---|---|
+| I1 | H | **Playwright has exactly one project: Desktop Chrome** — no mobile viewport exists anywhere, so no screen has mobile e2e coverage; the RTL spec only visits sign-in and chart-of-accounts. | `playwright.config.ts:27`, `tests/e2e/rtl.spec.ts` |
+| I2 | M | Screens with no e2e at any viewport: service-receipts, contracts, open-items, purchase-orders, goods-receipts, banks master; shipments/advances are smoke-only. | `tests/e2e/payables.spec.ts` route list |
+| I3 | M | A21 (10k payables < 1 s) has a load script but has never been run; the 90-combination theme e2e has not been run over the stage-3-8 screens. | `tests/load/payables.js` |
+
+## 3.J Hygiene
+
+| # | Sev | Finding | Evidence |
+|---|---|---|---|
+| J1 | M | `.claude-prt.mjs` — a committed one-off scratch script with the seeded password hardcoded — should be deleted. | repo root |
+| J2 | L | REQ-HR-001 / REQ-WA-001 lacked the 00.6 traceability header (**fixed in this commit** — the only change shipped with this document). | `tests/unit/requirement-traceability.test.ts` |
+| J3 | L | Root-level working notes (`NAVBAR_NAVIGATION.md`, `improvements.md`, `newsettings.md`) belong under `docs/` or out of the tree. | repo root |
+
+---
+
+# §4 — Delivery stages
+
+| Stage | Delivers | Criteria |
+|---|---|---|
+| **HARDEN-1 — Access & accounts** | §2.1 + §2.2 (the sponsor's two bugs); sign-in rate limiting + lockout + auth audit events (A2, A4); MFA enforcement for privileged roles (A1); the RLS batch (A5–A7) with `recordDenial` scoped first (A11); the authz gaps (A8, A9); the open redirect (A10). | HD1 `hd01-permission-refresh` · HD2 `hd02-temp-password` · HD3 `hd03-signin-hardening` · HD4 `hd04-mfa-gate` · HD5 `hd05-rls-coverage` (schema-driven: every granted business table has a policy or a recorded exemption) · HD6 `hd06-authz-coverage` |
+| **HARDEN-2 — Money & time** | `businessToday()` and the D-family migration off UTC stamps (D1–D5); the float eliminations where money is stored or compared (B1–B4, B8); row locks for payment applications, loans, landed-cost lock, PD transitions (C1–C4) with double-submit tests. | HD7 `hd07-business-today` (a 01:00 Baghdad posting lands on the Baghdad date, sweep included) · HD8 `hd08-money-integer` (B1–B3 reproduced then fixed; property-based rounding test on the allocator) · HD9 `hd09-double-submit` (concurrent confirm/instalment/lock each post exactly once) |
+| **HARDEN-3 — Delivery & jobs** | The job runner process + `registerDeliveryHandler` + the email sender (F1–F3, retry policy decided in D-HD-4); jobs install added to `deploy.sh` (F4); the restore-drill defect re-linked (F5); error-handling pattern fix across the detail pages (E1–E3). | HD10 `hd10-outbox-delivers` (pending → sent on a live SMTP stub; failed → retried per policy) · HD11 `hd11-jobs-installed` (deploy on a clean host registers every cron) · HD12 `hd12-errors-not-404` (a forced DB error on a detail page renders the error state, not notFound) |
+| **HARDEN-4 — Performance & coverage** | FK index migration (G4); payable-page diet (parallelise, drop `users.listAll`/`overview` to targeted reads — G1–G3); registers onto the list engine with real paging (G5, G6); mobile viewport project + RTL/e2e for the uncovered screens (I1, I2); A21 load run + theme run recorded (I3); i18n chips (H1–H3); hygiene deletions (J1, J3). | HD13 index migration additive-only · HD14 payable page ≤ 4 round trips, measured · HD15 every register pages at 50 with a true count · HD16 mobile-RTL e2e over the stage-3-8 screens · HD17 A21 executed with numbers in the doc · HD18 no raw enum reaches the DOM (grep-gate test) |
+
+Order: HARDEN-1 and 2 before the Stage-8 **cut-over**; 3 and 4 may land in
+the same week but must not delay go-live beyond D-HD-1.
+
+# §5 — Decisions, OPEN
+
+| # | Question | Proposed default |
+|---|---|---|
+| D-HD-1 | Does go-live wait for all four stages? | Cut-over waits for HARDEN-1 + HARDEN-2 only; 3–4 follow within two weeks. |
+| D-HD-2 | The business time zone, authoritatively | `Asia/Baghdad` for every business date; UTC remains for timestamps (`timestamptz`); `businessToday()` is the only sanctioned "today". |
+| D-HD-3 | Lockout policy | 5 failures → 15-minute lock per account+IP; audit row per refusal; no captcha this release. |
+| D-HD-4 | Delivery retry policy | 3 attempts, exponential backoff (1 m / 10 m / 60 m); a new `retry` column rather than reverting the forward-only trigger; terminal failures surface on the administration notifications screen. |
+| D-HD-5 | MFA scope | CEO + accounting_manager + any role holding `post` or `approve` on money documents; enrolment grace of 7 days from first privileged sign-in. |
+| D-HD-6 | RLS exemptions | Pure lookup/seed tables may be exempt but must be listed in the hd05 test's explicit exemption list — silence is a failure. |
