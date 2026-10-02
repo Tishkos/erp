@@ -41,6 +41,8 @@ const LIVE_USE: Readonly<Record<string, string>> = {
   'scripts/ops/statement-coverage.ts': 'reads',
   'scripts/ops/stock-movement-trace.ts': 'reads',
   'scripts/ops/run-job.sh': 'runs another script; the guard is theirs',
+  'scripts/ops/create-first-user.ts':
+    'the first sign-in on an install that has nobody — which is a live install by the time it is needed; it refuses the moment any user exists, so it cannot add a second way in',
 };
 
 const WRITE = /\b(insert into|update\s+[a-z_"]+\s+set|delete from|truncate|drop database|create database|pg_restore)\b|\.(insert|update|delete)\(/i;
