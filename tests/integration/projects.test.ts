@@ -923,12 +923,17 @@ describe('11.8 gate · retention and advances are their own balances (§10)', ()
     ).rejects.toThrow(/project_certificate_net_is_the_remainder/);
   });
 
-  it('has no journal on the certificate — recognition is D1’s to decide', async () => {
-    const { rows } = await ownerPool.query(
-      `select column_name from information_schema.columns
-        where table_name = 'project_certificate' and column_name like '%journal%'`,
+  it('has no journal on a certificate until somebody else approves it (REQ-PM-001 D-PM-11)', async () => {
+    await certifiable();
+    const certificate = await withScope(scope(manager), (tx) =>
+      projects.certify(tx, manager, PRJ, { certifiedOn: '2026-03-05', percentComplete: pct('50'), grossIqd: price('100000') }),
     );
-    expect(rows).toHaveLength(0);
+    const { rows } = await ownerPool.query(`select status, journal_entry_id from project_certificate where id = $1`, [certificate.id]);
+    expect(rows[0]).toEqual({ status: 'draft', journal_entry_id: null });
+    // The table refuses a posted certificate without its journal, and its raiser as its approver.
+    await expect(ownerPool.query(`update project_certificate set status = 'posted', approved_by = created_by, approved_at = now() where id = $1`, [certificate.id])).rejects.toThrow(
+      /project_certificate_four_eyes|project_certificate_posted_has_journal/,
+    );
   });
 });
 
@@ -1219,7 +1224,7 @@ describe('11.12 gate · the project shows everything related to it (§10 criteri
   });
 });
 
-describe('11.10 · revenue recognition is not built, and says so (D1)', () => {
+describe('11.10 · revenue recognition waits for Finance (D1, now REQ-PM-001 D-PM-1)', () => {
   it('has a configuration slot and no default', async () => {
     await activeProject();
     const { rows } = await ownerPool.query(
@@ -1231,11 +1236,12 @@ describe('11.10 · revenue recognition is not built, and says so (D1)', () => {
     expect(rows[0].recognition_method).toBeNull();
   });
 
-  it('has no WIP table to post into', async () => {
-    const { rows } = await ownerPool.query(
-      `select table_name from information_schema.tables
-        where table_name like '%wip%' or table_name like '%recognition%'`,
-    );
-    expect(rows).toHaveLength(0);
+  it('posts nothing to WIP until Finance ratifies the method', async () => {
+    // PM-5 built the method §10 asked Finance to choose, and seeded it unratified:
+    // until somebody with the settings' configure grant ratifies it, no run posts.
+    const { rows: policy } = await ownerPool.query(`select method, ratified_at from project_recognition_policy where code = 'DEFAULT'`);
+    expect(policy).toEqual([{ method: 'poc_cost_to_cost', ratified_at: null }]);
+    const { rows } = await ownerPool.query(`select count(*)::int as n from project_recognition`);
+    expect(rows[0].n).toBe(0);
   });
 });

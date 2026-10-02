@@ -325,6 +325,10 @@ export const projectCertificate = pgTable(
       .references(() => appUser.id),
     approvedBy: uuid('approved_by').references(() => appUser.id),
     approvedAt: timestamp('approved_at', { withTimezone: true }),
+    /** PM-5 (D-PM-11) — the progress-billing journal the approval posted. */
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    /** PM-5 — raised from measured progress or from a billing-plan line. */
+    basis: text('basis').notNull().default('progress'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -869,4 +873,98 @@ export const projectMilestoneHistory = pgTable(
     recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex('project_milestone_history_uniq').on(t.activityId, t.scheduleRun)],
+);
+
+// ---------------------------------------------------------------------------
+// REQ-PM-001 PM-5 — billing plan, recognition, forecast (§11)
+// ---------------------------------------------------------------------------
+
+/** A customer project's billing plan: due on a billing milestone or a date, for a share of the contract or an amount. */
+export const projectBillingPlanLine = pgTable(
+  'project_billing_plan_line',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    wbsCode: text('wbs_code').notNull(),
+    lineNo: smallint('line_no').notNull(),
+    description: text('description').notNull(),
+    dueTrigger: text('due_trigger').notNull(),
+    activityId: uuid('activity_id').references(() => projectActivity.id),
+    dueOn: date('due_on'),
+    basis: text('basis').notNull(),
+    percentOfContract: numeric('percent_of_contract', { precision: 9, scale: 4 }),
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }),
+    status: text('status').notNull().default('planned'),
+    dueSince: date('due_since'),
+    certificateId: uuid('certificate_id').references(() => projectCertificate.id),
+    cancelledBy: uuid('cancelled_by').references(() => appUser.id),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('project_billing_plan_line_no_uniq').on(t.projectCode, t.lineNo)],
+);
+
+/** D-PM-1 — the method Finance ratifies before any recognition posts. */
+export const projectRecognitionPolicy = pgTable('project_recognition_policy', {
+  code: text('code').primaryKey(),
+  method: text('method').notNull(),
+  description: text('description').notNull(),
+  ratifiedBy: uuid('ratified_by').references(() => appUser.id),
+  ratifiedAt: timestamp('ratified_at', { withTimezone: true }),
+  ratifiedNote: text('ratified_note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One project and period end: the figures, the journal, and its reversal next period. */
+export const projectRecognition = pgTable(
+  'project_recognition',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    periodEnd: date('period_end').notNull(),
+    contractValueIqd: numeric('contract_value_iqd', { precision: 19, scale: 4 }).notNull(),
+    actualIqd: numeric('actual_iqd', { precision: 19, scale: 4 }).notNull(),
+    eacIqd: numeric('eac_iqd', { precision: 19, scale: 4 }).notNull(),
+    percentComplete: numeric('percent_complete', { precision: 9, scale: 4 }).notNull(),
+    recognisedIqd: numeric('recognised_iqd', { precision: 19, scale: 4 }).notNull(),
+    billedIqd: numeric('billed_iqd', { precision: 19, scale: 4 }).notNull(),
+    adjustmentIqd: numeric('adjustment_iqd', { precision: 19, scale: 4 }).notNull(),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    reversalJournalEntryId: uuid('reversal_journal_entry_id').references(() => journalEntry.id),
+    reversedOn: date('reversed_on'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('project_recognition_period_uniq').on(t.projectCode, t.periodEnd)],
+);
+
+/** §11 — the manager's estimate to complete for an element, dated and reasoned; the latest one counts. */
+export const projectEtc = pgTable(
+  'project_etc',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    wbsCode: text('wbs_code').notNull(),
+    asOf: date('as_of').notNull(),
+    etcIqd: numeric('etc_iqd', { precision: 19, scale: 4 }).notNull(),
+    reason: text('reason').notNull(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('project_etc_element_idx').on(t.projectCode, t.wbsCode, t.asOf)],
 );

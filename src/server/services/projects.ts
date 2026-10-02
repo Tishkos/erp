@@ -995,7 +995,17 @@ export async function certify(
   tx: Tx,
   ctx: ActorContext,
   projectCode: string,
-  input: { certifiedOn: string; percentComplete: bigint; grossIqd: bigint },
+  input: {
+    certifiedOn: string;
+    percentComplete: bigint;
+    grossIqd: bigint;
+    /**
+     * REQ-PM-001 PM-5 — `billing_plan`: raised from a due billing-plan line,
+     * whose evidence is the reached milestone or the contract date, not a
+     * measurement; the measured-progress cap does not apply to it.
+     */
+    basis?: 'progress' | 'billing_plan';
+  },
 ): Promise<{ id: string; certificateNo: string; retentionIqd: bigint; netIqd: bigint }> {
   const row = await load(tx, projectCode);
 
@@ -1012,8 +1022,10 @@ export async function certify(
   }
 
   // §10 — never beyond what somebody measured and somebody else approved.
-  const measured = await approvedProgressPercent(tx, projectCode, input.certifiedOn);
-  assertWithinMeasuredProgress(measured, input.percentComplete);
+  if ((input.basis ?? 'progress') === 'progress') {
+    const measured = await approvedProgressPercent(tx, projectCode, input.certifiedOn);
+    assertWithinMeasuredProgress(measured, input.percentComplete);
+  }
 
   const advanceOutstanding = await balanceOf(tx, projectCode, 'advance');
 
@@ -1045,6 +1057,7 @@ export async function certify(
       retentionIqd: toDecimalString(bill.retentionIqd, 4n),
       advanceRecoveredIqd: toDecimalString(bill.advanceRecoveredIqd, 4n),
       netIqd: toDecimalString(bill.netIqd, 4n),
+      basis: input.basis ?? 'progress',
       createdBy: ctx.principal.userId,
     })
     .returning({ id: projectCertificate.id });

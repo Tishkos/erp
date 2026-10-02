@@ -87,6 +87,12 @@ describe('§4 · the catalogue, in both languages', () => {
     ['كشف حساب المورد SUP-000012', { kind: 'supplier', party: 'SUP-000012' }],
     ['customer balance Ahmed Trading', { kind: 'customer', party: 'Ahmed Trading' }],
     ['رصيد الزبون احمد', { kind: 'customer', party: 'احمد' }],
+    ['project status PRJ-HQ-2026-000004', { kind: 'project', project: 'PRJ-HQ-2026-000004' }],
+    ['how is PRJ-hq-2026-000004 doing?', { kind: 'project', project: 'PRJ-HQ-2026-000004' }],
+    ['project status Basra cold store', { kind: 'project', project: 'Basra cold store' }],
+    ['status of project Basra cold store?', { kind: 'project', project: 'Basra cold store' }],
+    ['حالة المشروع مخزن التبريد', { kind: 'project', project: 'مخزن التبريد' }],
+    ['مشروع البصرة', { kind: 'project', project: 'البصرة' }],
     ['what is the weather', { kind: 'none' }],
     ['', { kind: 'none' }],
   ];

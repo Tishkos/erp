@@ -50,6 +50,9 @@ import * as payables from './payables';
 import * as payablesSweep from './payables-sweep';
 import * as paymentApplications from './payment-applications';
 import * as audit from './audit';
+import * as projectBilling from './project-billing';
+import * as projectSchedule from './project-schedule';
+import * as projectSystem from './project-system';
 import { letterheadFor } from '../print/letterhead';
 import { messagesFor } from '../print/i18n';
 import { CONTENT_TYPE, rowsIn, type Letterhead, type PrintModel } from '../print/model';
@@ -875,6 +878,8 @@ async function draft(ctx: ReadContext, intent: Intent): Promise<Drafted> {
       return partnerBalance(ctx, 'supplier', intent.party);
     case 'customer':
       return partnerBalance(ctx, 'customer', intent.party);
+    case 'project':
+      return projectStatus(ctx, intent.project);
   }
 }
 
@@ -1152,3 +1157,50 @@ async function partnerBalance(ctx: ReadContext, side: 'supplier' | 'customer', a
 }
 
 export { businessPartner, payableHold };
+
+/**
+ * REQ-PM-001 D-PM-10 — one project: the five amounts (budget, committed,
+ * actual, forecast at completion, available), percent complete, CPI and SPI
+ * to today, and the next milestone — the Progress and Forecast screens'
+ * own figures, read as the asker.
+ */
+async function projectStatus(ctx: ReadContext, asked: string): Promise<Drafted> {
+  if (!can(ctx.principal, 'view', projectSystem.PERMISSION_OBJECT)) return denied(ctx);
+  const w = words(ctx.locale);
+  const roll = (await projectSystem.list(ctx.tx, { pageSize: 100 })).rows;
+  const askedCode = asked.trim().toUpperCase();
+  let matches = roll.filter((p) => p.code.toUpperCase() === askedCode);
+  if (matches.length === 0) {
+    const key = nameKey(asked);
+    matches = key ? roll.filter((p) => nameKey(p.name).includes(key) || p.code.toUpperCase().includes(askedCode)) : [];
+  }
+  const what = L(ctx.locale, 'project', 'مشروع');
+  if (matches.length === 0) return { text: w.noMatch(what, roll.slice(0, 10).map((p) => `${p.code} · ${p.name}`)), detail: { asked } };
+  if (matches.length > 1) return { text: w.choose(what, matches.slice(0, 15).map((p) => `${p.code} · ${p.name}`)), detail: { asked, candidates: matches.slice(0, 15).map((p) => p.code) } };
+  const chosen = matches[0]!;
+  const ev = (await projectSchedule.earnedValueTree(ctx.tx, chosen.code, ctx.today)).find((r) => r.level === 1);
+  const fc = (await projectBilling.forecast(ctx.tx, chosen.code, ctx.today)).find((r) => r.level === 1);
+  const budget = Number(chosen.budgetIqd);
+  const committed = Number(chosen.committedIqd);
+  const actual = Number(chosen.actualIqd);
+  const next = (await projectSchedule.openActivities(ctx.tx, chosen.code)).length;
+  const plan = await projectSchedule.activities(ctx.tx, chosen.code);
+  const milestone = plan.activities
+    .filter((a) => a.kind === 'milestone' && a.status === 'open')
+    .sort((a, b) => (a.earliestFinish ?? '9999').localeCompare(b.earliestFinish ?? '9999'))[0];
+  const lines = [
+    `*${chosen.code}* · ${chosen.name} · ${chosen.status}`,
+    L(ctx.locale, `Budget: ${money(budget, 'IQD')} · Committed: ${money(committed, 'IQD')} · Actual: ${money(actual, 'IQD')}`, `الموازنة: ${money(budget, 'IQD')} · الملتزم: ${money(committed, 'IQD')} · الفعلي: ${money(actual, 'IQD')}`),
+    L(ctx.locale, `Forecast at completion: ${money(fc?.eacIqd ?? '0', 'IQD')} · Available: ${money(budget - committed - actual, 'IQD')}`, `المتوقع عند الإنجاز: ${money(fc?.eacIqd ?? '0', 'IQD')} · المتاح: ${money(budget - committed - actual, 'IQD')}`),
+    L(
+      ctx.locale,
+      `Complete: ${ev?.percentComplete === null || ev?.percentComplete === undefined ? '—' : `${ev.percentComplete} %`} · CPI ${ev?.cpi ?? '—'} · SPI ${ev?.spi ?? '—'}`,
+      `الإنجاز: ${ev?.percentComplete === null || ev?.percentComplete === undefined ? '—' : `${ev.percentComplete} %`} · CPI ${ev?.cpi ?? '—'} · SPI ${ev?.spi ?? '—'}`,
+    ),
+    milestone
+      ? L(ctx.locale, `Next milestone: ${milestone.code} ${milestone.name} — ${milestone.earliestFinish ?? 'not scheduled'}`, `المعلم التالي: ${milestone.code} ${milestone.name} — ${milestone.earliestFinish ?? 'غير مجدول'}`)
+      : L(ctx.locale, 'No open milestone.', 'لا يوجد معلم مفتوح.'),
+    L(ctx.locale, `Open activities: ${next}`, `الأنشطة المفتوحة: ${next}`),
+  ];
+  return { text: lines.join('\n'), detail: { project: chosen.code, eacIqd: fc?.eacIqd ?? null, cpi: ev?.cpi ?? null, spi: ev?.spi ?? null, nextMilestone: milestone?.code ?? null } };
+}

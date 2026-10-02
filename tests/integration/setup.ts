@@ -299,6 +299,13 @@ export async function resetTestData(): Promise<void> {
 
   // Phase 11 — projects. Before the journals its costs point at, and before the
   // project dimension row every one of them hangs off. Children first.
+  // REQ-PM-001 PM-5 — the plan lines name their certificates; recognition
+  // names its journals; the ETC rows their elements; the policy is put back
+  // to unratified (D-PM-1) and lets go of the user who ratified it.
+  await client.query('delete from project_billing_plan_line');
+  await client.query('delete from project_recognition');
+  await client.query('delete from project_etc');
+  await client.query(`update project_recognition_policy set ratified_by = null, ratified_at = null, ratified_note = null`);
   await client.query('delete from project_balance_movement');
   await client.query('delete from project_certificate');
   await client.query('delete from project_progress');

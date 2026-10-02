@@ -205,6 +205,21 @@ export async function report(tx: Tx, period: FiscalPeriod): Promise<CloseReport>
   ).rows as { code: string; name: string; role: string; balance: string }[];
   checks.push(outcome('clearing_balances', 'warning', clearing.length > 0, String(clearing.length), clearing.map((c) => `${c.code} ${c.name} (${c.role}): ${c.balance}`), '/finance/gl-inquiry'));
 
+  // 12. REQ-PM-001 §11 — revenue recognised to the period's end for every running customer project.
+  // Loaded when asked: the billing service reaches the posting engine, which a catalogue test of these codes need not load.
+  const projectBilling = await import('./project-billing');
+  const recognition = await projectBilling.missingRecognition(tx, asOf);
+  checks.push(
+    outcome(
+      'project_recognition',
+      'warning',
+      recognition.projects.length > 0,
+      recognition.ratified ? String(recognition.projects.length) : 'not ratified',
+      recognition.ratified ? recognition.projects.slice(0, 50) : ['the recognition method is not ratified (D-PM-1); nothing posts'],
+      '/projects/billing',
+    ),
+  );
+
   const blockingFailures = checks.filter((c) => c.state === 'fail').map((c) => c.code);
   const warnings = checks.filter((c) => c.state === 'warn').map((c) => c.code);
   return { period, asOf, checks, mayClose: blockingFailures.length === 0, blockingFailures, warnings };
@@ -223,6 +238,7 @@ export const CHECK_CODES = [
   'bank_reconciled',
   'fx_rate_current',
   'clearing_balances',
+  'project_recognition',
 ] as const;
 export type CheckCode = (typeof CHECK_CODES)[number];
 

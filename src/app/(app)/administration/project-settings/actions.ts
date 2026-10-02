@@ -7,6 +7,7 @@
  */
 import { runAdminAndReturn, text } from '@/server/admin-action';
 import * as ps from '@/server/services/project-system';
+import * as billing from '@/server/services/project-billing';
 
 const BACK = '/administration/project-settings';
 
@@ -49,4 +50,9 @@ export async function saveCostCode(form: FormData): Promise<void> {
 
 export async function setCostCodeActive(form: FormData): Promise<void> {
   await runAdminAndReturn((tx, ctx) => ps.setCostCodeActive(tx, ctx, text(form, 'code'), text(form, 'active') === '1', text(form, 'reason') || null), BACK);
+}
+
+/** REQ-PM-001 D-PM-1 — Finance ratifies the recognition method, with its note. */
+export async function ratifyRecognition(form: FormData): Promise<void> {
+  await runAdminAndReturn((tx, ctx) => billing.ratifyPolicy(tx, ctx, text(form, 'note')), BACK);
 }
