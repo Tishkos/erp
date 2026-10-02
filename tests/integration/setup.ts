@@ -571,6 +571,8 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from landed_cost_basis where created_by is not null');
     await client.query('update landed_cost_basis set active = (code not in (\'by_weight\', \'by_volume\')) where created_by is null');
     await client.query('delete from landed_cost_type where created_by is not null');
+    // REQ-FIX-001 FX8 (0253) — the exchange differences an import closed on.
+    await client.query('delete from payable_exchange_difference');
     await client.query('truncate payable_hold_update');
     await client.query('delete from payable_hold');
     await client.query('delete from payable_order_line');

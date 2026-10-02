@@ -8,6 +8,14 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-FIX-001 FIX-3 — the import and its invoices agree: a deposit is applied
+  to the import's invoice when it posts; an import agreed in dinars takes its
+  amount from its invoices (discounts and a second invoice included); an
+  import agreed in another currency closes on its exchange difference (gain
+  or loss) once fully paid, or says it waits for the exchange accounts;
+  *Part paid* on the invoice screens; Invoice Status Tracking keeps imports
+  out. The supplier advance's events and the exchange difference are on
+  Posting Mappings (0253).
 - REQ-FIX-001 FIX-2 — Availability is a register like every other: the
   Inventory tabs, search, a warehouse filter and "only items with stock",
   item names, fifty rows a page with the true count; issuing stock is a

@@ -2808,7 +2808,8 @@
       "project_cost_code": "Project cost code",
       "payment_terms_text": "Payment terms (as on the PDF)",
       "payment_terms_placeholder": "e.g. 30% deposit, 70% against B/L",
-      "import_application_new": "New — opened by this invoice"
+      "import_application_new": "New — opened by this invoice",
+      "state_part_paid": "Part paid"
     },
     "payment_applications": {
       "subtitle": "The company’s requests to its banks and cashier to pay a supplier — longest waiting first.",
@@ -2948,7 +2949,9 @@
       "loan": "Loan",
       "loan_hint": "When the funding source is a bank loan: the loan, its account and what it has left to fund.",
       "confirm_before_cut_over": "Paid before the cut-over",
-      "confirm_before_cut_over_note": "For an application migrated from the sheet whose money left before the cut-over: the SWIFT date and reference from the bank’s copy are recorded and nothing is posted — that payment is already in the books the ERP opened with. Money that left after the cut-over is confirmed with the button beside this one, which posts it."
+      "confirm_before_cut_over_note": "For an application migrated from the sheet whose money left before the cut-over: the SWIFT date and reference from the bank’s copy are recorded and nothing is posted — that payment is already in the books the ERP opened with. Money that left after the cut-over is confirmed with the button beside this one, which posts it.",
+      "exchange_open": "Fully paid in its currency; in dinars its invoices still owe {owed} and its payments are {over} over them. That is the exchange difference: it is booked once the exchange gain and loss are mapped on Posting Mappings.",
+      "exchange_settle": "Settle exchange difference"
     },
     "supplier_advances": {
       "subtitle": "Money paid to a supplier before the invoice — the deposits on imports, and advances against orders.",
@@ -4563,7 +4566,11 @@
       "projects_recognition": "Project revenue recognition",
       "projects_material_issue": "Project material issue",
       "projects_timesheet": "Project labour (timesheets)",
-      "projects_settlement": "Project settlement"
+      "projects_settlement": "Project settlement",
+      "purchasing_supplier_advance_payment": "Supplier advance (deposit) paid",
+      "purchasing_supplier_advance_settlement": "Supplier advance applied to an invoice",
+      "purchasing_supplier_advance_refund": "Supplier advance refunded",
+      "payables_exchange_difference": "Import exchange difference"
     },
     "role": {
       "supplier_payable": "What the company owes the supplier",
@@ -4589,7 +4596,11 @@
       "project_labour": "Project labour cost",
       "labour_absorption": "Labour absorbed",
       "project_auc": "Asset under construction",
-      "project_cost": "Project cost settled"
+      "project_cost": "Project cost settled",
+      "supplier_advance": "Money paid to suppliers ahead of the invoice (advances)",
+      "bank": "The bank or cash account, when none is named",
+      "exchange_gain": "Realised exchange gain",
+      "exchange_loss": "Realised exchange loss"
     }
   },
   "print": {

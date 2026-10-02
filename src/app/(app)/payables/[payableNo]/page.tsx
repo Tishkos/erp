@@ -57,7 +57,7 @@ import { createApplication, planInstalmentsAction } from '../payment-application
 import { registerPd } from '../pd/actions';
 import { pdChip } from '../pd/status';
 import { createBlAction } from '../shipments/actions';
-import { addLandedCharge, lockLandedCost, withdrawLandedCharge } from '../actions';
+import { addLandedCharge, lockLandedCost, settleExchangeDifference, withdrawLandedCharge } from '../actions';
 import { containerChip } from '../containers/status';
 import { STATUS_CHIP, statusKey } from '../payment-applications/status';
 import { businessDateOf, businessToday } from '@/server/domain/business-date';
@@ -150,6 +150,7 @@ export default async function PayablePage({
     instalments,
     applied,
     paymentTotals,
+    exchangeOpen,
     funding,
     pickers,
     pds,
@@ -594,6 +595,24 @@ export default async function PayablePage({
                 </bdi>
               </span>
             </h2>
+
+            {exchangeOpen ? (
+              // REQ-FIX-001 FX8 — fully paid in its currency, the dinars still to close.
+              <div className={s.sapNote}>
+                <bdi dir="auto">
+                  {pa('exchange_open', {
+                    owed: money(toDecimalString(exchangeOpen.owedIqd, 4n), 'IQD'),
+                    over: money(toDecimalString(exchangeOpen.overpaidIqd + exchangeOpen.unusedDepositIqd, 4n), 'IQD'),
+                  })}
+                </bdi>
+                {can(principal, 'post', paymentApplications.PERMISSION_OBJECT) ? (
+                  <form action={settleExchangeDifference}>
+                    <Hidden name="payable_no" value={row.payableNo} />
+                    <Submit label={pa('exchange_settle')} small />
+                  </form>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className={s.sapTableWrap}>
               <table aria-label={pa('instalments')} className={s.sapTable}>

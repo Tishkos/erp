@@ -22,7 +22,7 @@
  * grow without limit and never reconcile, and §8.5 asks in terms for settlement
  * and refund. There is no second treatment to choose between.
  */
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   apInvoice,
@@ -469,6 +469,22 @@ export async function settle(
   await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, {
     branchCode: advance.branchCode,
   });
+  return settleChecked(tx, ctx, advance, input);
+}
+
+/** The settlement itself, once the caller's right to it is established. */
+async function settleChecked(
+  tx: Tx,
+  ctx: ActorContext,
+  advance: Awaited<ReturnType<typeof load>>,
+  input: {
+    supplierAdvanceId: string;
+    apInvoiceId: string;
+    amountIqd: bigint;
+    settlementDate: string;
+    automatic?: boolean;
+  },
+): Promise<{ settlementId: string; journalEntryId: string; advanceBalance: bigint }> {
 
   if (advance.status !== 'posted' && advance.status !== 'partially_executed') {
     throw new SupplierAdvanceStateError(
@@ -682,6 +698,68 @@ export async function settleAutomatically(
   });
 
   return { settlementId: result.settlementId, amountIqd };
+}
+
+/**
+ * REQ-FIX-001 FX6 — a deposit is applied to the invoice it was paid ahead of.
+ *
+ * Confirming a payment before the import's invoice posts pays a supplier
+ * advance (§15.4), linked to the import; nothing applied it when the invoice arrived, so the import
+ * read *Fully paid* while its invoice stayed part-owed and the supplier's
+ * account showed the debt **and** the unapplied advance. Called by
+ * `ap-invoice.post` in the posting transaction: every paid advance of the
+ * same supplier held against this invoice's import is
+ * applied, oldest first, until the invoice owes nothing or the advances are
+ * spent — Dr Supplier A/P, Cr Supplier Advance, dated the invoice's day.
+ *
+ * Authorised by the posting it belongs to: whoever may post the invoice
+ * posts the consequences of its posting, as confirming an application posts
+ * the supplier payment it makes.
+ */
+export async function applyToPostedInvoice(
+  tx: Tx,
+  ctx: ActorContext,
+  apInvoiceId: string,
+): Promise<{ advanceNo: string; amountIqd: bigint }[]> {
+  const [invoice] = await tx.select().from(apInvoice).where(eq(apInvoice.id, apInvoiceId)).limit(1);
+  if (!invoice || (invoice.status !== 'posted' && invoice.status !== 'partially_executed')) return [];
+  // The deposits of the payable this invoice belongs to — an import's, paid
+  // through its payment applications. An advance raised by hand against a
+  // purchase order stays for the accountant to settle (§8.5, manual or
+  // automatic, on the advance).
+  if (!invoice.payableId) return [];
+
+  const held = await tx
+    .select()
+    .from(supplierAdvance)
+    .where(
+      and(
+        eq(supplierAdvance.supplierId, invoice.supplierId),
+        inArray(supplierAdvance.status, ['posted', 'partially_executed']),
+        eq(supplierAdvance.payableId, invoice.payableId),
+      ),
+    )
+    .orderBy(asc(supplierAdvance.paidDate), asc(supplierAdvance.createdAt))
+    .for('update');
+
+  const applied: { advanceNo: string; amountIqd: bigint }[] = [];
+  for (const advance of held) {
+    const [current] = await tx.select().from(apInvoice).where(eq(apInvoice.id, apInvoiceId)).limit(1);
+    const owed = invoiceBalance(current!);
+    if (owed <= 0n) break;
+    const available = availableBalance(advance);
+    const amountIqd = available < owed ? available : owed;
+    if (amountIqd <= 0n) continue;
+    await settleChecked(tx, ctx, advance, {
+      supplierAdvanceId: advance.id,
+      apInvoiceId,
+      amountIqd,
+      settlementDate: invoice.invoiceDate,
+      automatic: true,
+    });
+    applied.push({ advanceNo: advance.advanceNo, amountIqd });
+  }
+  return applied;
 }
 
 /**

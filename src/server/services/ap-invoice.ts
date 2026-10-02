@@ -71,6 +71,7 @@ import * as coa from './chart-of-accounts';
 import { assertResultAccount, assertStatementAccount } from '../domain/posting-map';
 import { allocateDocumentNumber } from './numbering';
 import * as execution from './project-execution';
+import * as advances from './supplier-advance';
 
 export const DOCUMENT_TYPE = 'ap_invoice';
 export const PERMISSION_OBJECT = 'ap_invoice';
@@ -1574,6 +1575,11 @@ export async function post(
       actorUserId: ctx.principal.userId,
     });
   }
+
+  // REQ-FIX-001 FX6 — a deposit paid ahead of this invoice (on its import or
+  // its purchase order) is applied to it now, so the invoice, the import and
+  // the supplier's account agree on what is still owed.
+  await advances.applyToPostedInvoice(tx, ctx, id);
 
   // §9.2 / A10 — each charged line becomes a landed-cost charge of its
   // import, in this same transaction, typed by this invoice's own category.

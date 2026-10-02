@@ -12,6 +12,7 @@ import * as settingsService from '@/server/services/payables-settings';
 import * as contracts from '@/server/services/recurring-contracts';
 import * as serviceReceipts from '@/server/services/service-receipt';
 import * as users from '@/server/services/users';
+import * as exchange from '@/server/services/import-exchange';
 import { readAttachments } from '@/components/admin/attachments';
 import { readHistory } from '@/components/admin/history';
 
@@ -66,6 +67,10 @@ export async function loadPayableRecord(tx: Tx, input: PayableRecordInput) {
     const instalments = isImport ? await paymentApplications.instalmentsFor(tx, view.payable.id) : [];
     const applied = isImport ? await paymentApplications.list(tx, { payableId: view.payable.id }) : [];
     const paymentTotals = isImport ? await paymentApplications.totalsFor(tx, view.payable.id) : null;
+    // REQ-FIX-001 FX8 — an import agreed in another currency, fully paid in it:
+    // what its dinars still have to close on (read only then; none for IQD).
+    const exchangeResidual =
+      paymentTotals?.fullyPaid && view.payable.currency !== 'IQD' ? await exchange.residualOf(tx, view.payable.id) : null;
     // §15.7 — the loans that fund it, with the commission each draw carries.
     const funding = isImport && may.viewLoans ? await loansService.forPayable(tx, view.payable.id) : [];
     const pickers = isImport && may.pay && open ? await paymentApplications.pickersFor(tx, view.payable.id) : null;
@@ -109,6 +114,7 @@ export async function loadPayableRecord(tx: Tx, input: PayableRecordInput) {
       instalments,
       applied,
       paymentTotals,
+      exchangeOpen: exchangeResidual !== null && exchange.isOpen(view.payable.currency, exchangeResidual) ? exchangeResidual : null,
       funding,
       pickers,
       pds,

@@ -178,3 +178,10 @@ Standing rule (by direction, 2026-10-01; see also docs/notes/newsettings.md: "DO
 * `/inventory/availability` reads `services/availability.ts` (the `stock_position` view, which has no row-level security of its own, so the branch rule is applied in the query — keep it there). Issuing is `execute` on `inventory_movement`, from a dialog, with the warehouse's branch.
 * `/password` is `src/app/password/` — outside `(app)`, drawn with `sign-in.module.css` like sign-in. `RESTRICTION_ROUTE.password` still names it; `PasswordField` takes `name`, `autoComplete` and `hint`.
 
+## The import and its invoices (REQ-FIX-001 FIX-3)
+
+* `ap-invoice.post` applies the deposits of the invoice's own import (`supplier-advance.applyToPostedInvoice`, authorised by the posting). An advance raised by hand against an order is the accountant's (D-FX-6).
+* `payables.refreshFromInvoices` sets `amount_txn` from the posted invoices when the payable is in IQD; a foreign-currency import keeps its agreed amount and closes on `services/import-exchange.ts` (`payables.exchange_difference`: supplier payable, supplier advance, exchange gain/loss) when `payment-applications.confirm` makes it fully paid — in a savepoint, so an unmapped role leaves the payment confirmed and an `EXCHANGE_DIFFERENCE` "waits" event; `settleExchangeDifference` books it later. One `payable_exchange_difference` row per document closed.
+* The supplier advance's three events are on `POSTING_MAP`; a new role there needs an account in the `ops13/14/15` fixtures.
+* Invoice Status Tracking (`supplier-shipment`) excludes `is_import` invoices and refuses to advance one.
+
