@@ -3780,7 +3780,6 @@
       "setting_group_notifications": "إرسال التنبيهات إلى المجموعة (on / off)",
       "setting_group_digest": "إرسال ملخّص الصباح إلى المجموعة (on / off)",
       "group_hint": "مجموعة واحدة بمعرّفها. أضف البوت إلى المجموعة، ثم نفّذ \"npm run whatsapp-bridge -- --list-groups\" والصق المعرّف هنا. أي مجموعة أخرى تُتجاهل."
-      "redacted": "(أُزيل النص بعد مدة الاحتفاظ)"
     },
     "projects": {
       "title": "سجل المشاريع",

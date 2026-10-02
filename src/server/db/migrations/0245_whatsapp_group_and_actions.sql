@@ -53,8 +53,17 @@ CREATE TABLE IF NOT EXISTS "whatsapp_action" (
 	CONSTRAINT "whatsapp_action_settled_has_status" CHECK (("status" = 'awaiting') = ("settled_at" is null))
 );--> statement-breakpoint
 
-ALTER TABLE "whatsapp_action" ADD CONSTRAINT "whatsapp_action_contact_id_whatsapp_contact_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."whatsapp_contact"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "whatsapp_action" ADD CONSTRAINT "whatsapp_action_user_id_app_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."app_user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+-- Guarded (2026-10-02 merge repair): the merge of WA-5 left this file out of
+-- the journal, so it runs after 0248 on every database — including one that
+-- ran it from the WA-5 branch. Every statement is safe to meet twice.
+DO $$ BEGIN
+	IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'whatsapp_action_contact_id_whatsapp_contact_id_fk') THEN
+		ALTER TABLE "whatsapp_action" ADD CONSTRAINT "whatsapp_action_contact_id_whatsapp_contact_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."whatsapp_contact"("id") ON DELETE no action ON UPDATE no action;
+	END IF;
+	IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'whatsapp_action_user_id_app_user_id_fk') THEN
+		ALTER TABLE "whatsapp_action" ADD CONSTRAINT "whatsapp_action_user_id_app_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."app_user"("id") ON DELETE no action ON UPDATE no action;
+	END IF;
+END $$;--> statement-breakpoint
 
 -- One code at a time per person: a second request replaces the first, so a
 -- stale code can never be completed by accident.
@@ -64,7 +73,11 @@ CREATE INDEX IF NOT EXISTS "whatsapp_action_document_idx" ON "whatsapp_action" U
 
 ALTER TABLE "whatsapp_action" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "whatsapp_action" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-CREATE POLICY whatsapp_action_scope ON "whatsapp_action" USING (app_signed_in()) WITH CHECK (app_signed_in());--> statement-breakpoint
+DO $$ BEGIN
+	IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'whatsapp_action' AND policyname = 'whatsapp_action_scope') THEN
+		CREATE POLICY whatsapp_action_scope ON "whatsapp_action" USING (app_signed_in()) WITH CHECK (app_signed_in());
+	END IF;
+END $$;--> statement-breakpoint
 
 DO $$ BEGIN
 	GRANT SELECT, INSERT, UPDATE ON "whatsapp_action" TO erp_app;
