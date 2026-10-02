@@ -6,6 +6,7 @@
  * it, and the baseline moves only while the project is a draft (R2).
  */
 import { flag, runAdminAndReturn, text, withQuery } from '@/server/admin-action';
+import * as pb from '@/server/services/project-budget';
 import * as ps from '@/server/services/project-system';
 
 const LIST = '/projects';
@@ -140,4 +141,10 @@ export async function setWbsElementActive(form: FormData): Promise<void> {
     (tx, ctx) => ps.setElementActive(tx, ctx, code, text(form, 'wbs_code'), text(form, 'active') === '1', text(form, 'reason') || null),
     back(form, code),
   );
+}
+
+/** PM-2 D-PM-5 — the stop line raised for one element with a reason; blank restores the profile's. */
+export async function raiseStopLine(form: FormData): Promise<void> {
+  const code = text(form, 'project_code');
+  await runAdminAndReturn((tx, ctx) => pb.raiseStopLine(tx, ctx, code, text(form, 'wbs_code'), text(form, 'stop_percent') || null, text(form, 'reason')), back(form, code));
 }

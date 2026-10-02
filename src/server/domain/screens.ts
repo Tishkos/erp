@@ -137,6 +137,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   project_master: 'document',
   contracts: 'document',
   wbs: 'workspace',
+  cost_plan: 'workspace',
   project_budgets: 'document',
   change_orders: 'document',
   project_costs: 'list',
@@ -482,6 +483,9 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/projects',
   '/projects/contracts',
   '/projects/wbs',
+  '/projects/plan',
+  '/projects/budgets',
+  '/projects/change-orders',
   '/administration/project-settings',
 ]);
 

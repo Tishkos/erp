@@ -14,6 +14,7 @@ import { visibleRoute } from '@/server/delivered';
 import { isNotFoundError } from '@/server/not-found';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as departments from '@/server/services/departments';
+import * as pb from '@/server/services/project-budget';
 import * as ps from '@/server/services/project-system';
 import {
   addWbsElement,
@@ -39,11 +40,12 @@ export const dynamic = 'force-dynamic';
 
 export default async function ProjectPage({ params, searchParams }: { params: Promise<{ code: string }>; searchParams: SearchParams }) {
   if (!visibleRoute('/projects')) notFound();
-  const [t, x, page, column, locale, context, outcome, { code: rawCode }] = await Promise.all([
+  const [t, x, page, column, statusT, locale, context, outcome, { code: rawCode }] = await Promise.all([
     getTranslations('admin'),
     getTranslations('admin.projects'),
     getTranslations('page'),
     getTranslations('column'),
+    getTranslations('status'),
     getLocale(),
     requireContext(),
     outcomeOf(searchParams),
@@ -61,7 +63,12 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       const view = await ps.record(tx, actor, code);
       const pickers = await ps.pickers(tx);
       const depts = (await departments.listAll(tx)).filter((d) => d.active);
-      return { view, pickers, depts };
+      // PM-2 — the budget by element, its documents, the change orders and the plan.
+      const elements = await pb.budgetSummary(tx, code);
+      const documents = (await pb.budgetDocuments(tx, { projectCode: code, pageSize: 20 })).rows;
+      const changes = (await pb.changeOrders(tx, { projectCode: code, pageSize: 20 })).rows;
+      const plan = await pb.planByElement(tx, code);
+      return { view, pickers, depts, elements, documents, changes, plan };
     } catch (error) {
       // E1 — a missing record is a 404; anything else reaches the error boundary.
       if (isNotFoundError(error)) return null;
@@ -69,7 +76,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     }
   });
   if (!found) notFound();
-  const { view, pickers, depts } = found;
+  const { view, pickers, depts, elements, documents, changes, plan } = found;
   const row = view.project;
   const status = row.status;
   const kind = view.type?.kind ?? 'customer';
@@ -309,6 +316,218 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
         </table>
       </DocumentWindow>
 
+      <section aria-labelledby="project-elements-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="project-elements-title">
+            <span>{x('budget_by_element')}</span>
+            <span className={s.sapTitleMeta}>{plan.version ? x('plan_version_meta', { version: plan.version.version, name: plan.version.name }) : x('no_plan_yet')}</span>
+          </h2>
+          <div className={s.sapTableWrap}>
+            <table aria-labelledby="project-elements-title" className={s.sapTable}>
+              <thead>
+                <tr>
+                  <th scope="col">{x('element')}</th>
+                  <th className={s.sapNum} scope="col">
+                    {x('planned')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {x('kind_original')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {x('supplements')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {x('returns')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {x('transfers')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {x('current_budget')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {x('rolled_up')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {x('assigned')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {x('available')}
+                  </th>
+                  <th scope="col">{x('stop_line')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {elements.map((e) => (
+                  <tr key={e.wbsCode}>
+                    <td>
+                      <bdi dir="ltr">{`${'· '.repeat(Math.max(0, e.level - 1))}${e.wbsCode}`}</bdi> <bdi dir="auto">{e.name}</bdi>
+                    </td>
+                    <td className={s.sapNum}>{money(toDecimalString(plan.planned.get(e.wbsCode) ?? 0n, 4n))}</td>
+                    <td className={s.sapNum}>{money(e.originalIqd)}</td>
+                    <td className={s.sapNum}>{money(e.supplementsIqd)}</td>
+                    <td className={s.sapNum}>{money(e.returnsIqd)}</td>
+                    <td className={s.sapNum}>{money(e.transfersIqd)}</td>
+                    <td className={s.sapNum}>{money(e.currentIqd)}</td>
+                    <td className={s.sapNum}>{money(e.rolledUpIqd)}</td>
+                    <td className={s.sapNum}>{money(e.assignedIqd)}</td>
+                    <td className={s.sapNum}>{money(e.availableIqd)}</td>
+                    <td>
+                      <bdi dir="ltr">{e.stopPercentRaised === null ? (view.profile ? `${Number(view.profile.stopPercent)} %` : '—') : x('raised_to', { percent: e.stopPercentRaised })}</bdi>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className={s.sapNote}>
+            <Link className={s.sapLink} href={`/projects/plan?project=${encodeURIComponent(row.code)}`}>
+              {page('cost_plan')}
+            </Link>
+          </p>
+        </div>
+      </section>
+
+      <section aria-labelledby="project-documents-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="project-documents-title">
+            <span>{x('budget_documents')}</span>
+            <span className={s.sapTitleMeta}>{t('rows_shown', { count: documents.length })}</span>
+          </h2>
+          <div className={s.sapTableWrap}>
+            <table aria-labelledby="project-documents-title" className={s.sapTable}>
+              <thead>
+                <tr>
+                  <th scope="col">{column('document_no')}</th>
+                  <th scope="col">{x('kind')}</th>
+                  <th scope="col">{column('date')}</th>
+                  <th scope="col">{column('description')}</th>
+                  <th className={s.sapNum} scope="col">
+                    {column('amount')}
+                  </th>
+                  <th scope="col">{x('raised_by')}</th>
+                  <th scope="col">{column('status')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {documents.length === 0 ? (
+                  <tr>
+                    <td className={s.sapEmptyRow} colSpan={7}>
+                      {x('no_budgets')}
+                    </td>
+                  </tr>
+                ) : null}
+                {documents.map((d) => (
+                  <tr key={d.documentNo}>
+                    <td>
+                      <Link className={s.sapLink} href={`/projects/budgets/${encodeURIComponent(d.documentNo)}`}>
+                        <bdi dir="ltr">{d.documentNo}</bdi>
+                      </Link>
+                    </td>
+                    <td>{x(`kind_${d.kind}`)}</td>
+                    <td>
+                      <bdi dir="ltr">{day(d.raisedOn)}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="auto">{d.description}</bdi>
+                    </td>
+                    <td className={s.sapNum}>{money(d.totalIqd)}</td>
+                    <td>
+                      <bdi dir="auto">{d.raisedBy}</bdi>
+                    </td>
+                    <td>
+                      <span className={`status status--${d.status}`} data-status={d.status}>
+                        {statusT(d.status)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {mayEdit && can(principal, 'create', ps.PERMISSION_OBJECT) ? (
+            <p className={s.sapNote}>
+              <Link className={s.sapLink} href={`/projects/budgets/new?project=${encodeURIComponent(row.code)}`}>
+                {x('new_budget')}
+              </Link>
+            </p>
+          ) : null}
+        </div>
+      </section>
+
+      <section aria-labelledby="project-changes-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="project-changes-title">
+            <span>{x('change_orders')}</span>
+            <span className={s.sapTitleMeta}>{t('rows_shown', { count: changes.length })}</span>
+          </h2>
+          <div className={s.sapTableWrap}>
+            <table aria-labelledby="project-changes-title" className={s.sapTable}>
+              <thead>
+                <tr>
+                  <th scope="col">{column('document_no')}</th>
+                  <th scope="col">{column('date')}</th>
+                  <th scope="col">{column('description')}</th>
+                  <th className={s.sapNum} scope="col">
+                    {x('contract_delta')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {x('budget_delta')}
+                  </th>
+                  <th scope="col">{x('schedule_delta')}</th>
+                  <th scope="col">{x('approvals')}</th>
+                  <th scope="col">{column('status')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {changes.length === 0 ? (
+                  <tr>
+                    <td className={s.sapEmptyRow} colSpan={8}>
+                      {x('no_change_orders')}
+                    </td>
+                  </tr>
+                ) : null}
+                {changes.map((c) => (
+                  <tr key={c.variationNo}>
+                    <td>
+                      <Link className={s.sapLink} href={`/projects/change-orders/${encodeURIComponent(c.variationNo)}`}>
+                        <bdi dir="ltr">{c.variationNo}</bdi>
+                      </Link>
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{day(c.raisedOn)}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="auto">{c.description}</bdi>
+                    </td>
+                    <td className={s.sapNum}>{money(c.contractDeltaIqd)}</td>
+                    <td className={s.sapNum}>{money(c.budgetDeltaIqd)}</td>
+                    <td>
+                      <bdi dir="ltr">{c.revisedEndsOn ? day(c.revisedEndsOn) : c.scheduleDeltaDays ? x('days', { count: c.scheduleDeltaDays }) : '—'}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{[c.commercialIn ? x('approval_commercial') : null, c.budgetIn ? x('approval_budget') : null].filter(Boolean).join(' · ') || '—'}</bdi>
+                    </td>
+                    <td>
+                      <span className={`status status--${c.status}`} data-status={c.status}>
+                        {statusT(c.status)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {(status === 'active' || status === 'on_hold') && can(principal, 'create', ps.PERMISSION_OBJECT) ? (
+            <p className={s.sapNote}>
+              <Link className={s.sapLink} href={`/projects/change-orders/new?project=${encodeURIComponent(row.code)}`}>
+                {x('new_change_order')}
+              </Link>
+            </p>
+          ) : null}
+        </div>
+      </section>
+
       <section aria-labelledby="project-budget-title" className={s.sapDoc}>
         <div className={s.sapWindow}>
           <h2 className={s.sapTitle} id="project-budget-title">
@@ -347,7 +566,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
                 {view.budget.length === 0 ? (
                   <tr>
                     <td className={s.sapEmptyRow} colSpan={9}>
-                      {x('no_budget')}
+                      {x('no_budget_lines')}
                     </td>
                   </tr>
                 ) : null}
@@ -410,7 +629,9 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
                     <td>
                       <bdi dir="ltr">{c.costCode}</bdi>
                     </td>
-                    <td>—</td>
+                    <td>
+                      <bdi dir="ltr">{c.wbsCode ?? '—'}</bdi>
+                    </td>
                     <td>
                       <bdi dir="auto">{c.releasedOn ? `${day(c.releasedOn)} · ${c.releaseReason ?? ''}` : x('commitment_open', { consumed: money(c.consumedIqd) })}</bdi>
                     </td>

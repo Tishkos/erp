@@ -144,8 +144,17 @@ export function assertWithinBudget(
   costCode: string,
   position: BudgetPosition,
   requestedIqd: bigint,
+  /** REQ-PM-001 §7 — the tolerance profile's stop line (or the element's raised one), in percent of the revised budget. */
+  stopPercent = 100,
 ): void {
-  if (requestedIqd > position.availableIqd) {
+  if (stopPercent === 100) {
+    if (requestedIqd > position.availableIqd) {
+      throw new BudgetExceededError(costCode, position.availableIqd, requestedIqd);
+    }
+    return;
+  }
+  const assignedAfter = position.committedIqd + position.actualIqd + requestedIqd;
+  if (assignedAfter * 1_000_000n > position.revisedIqd * BigInt(Math.round(stopPercent * 10000))) {
     throw new BudgetExceededError(costCode, position.availableIqd, requestedIqd);
   }
 }

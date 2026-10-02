@@ -77,6 +77,11 @@ export const projectWbs = pgTable(
     /** Certificates and the billing plan hang here. */
     isBilling: boolean('is_billing').notNull().default(false),
     active: boolean('active').notNull().default(true),
+    /** PM-2 §7 — the stop line raised for this element, with its reason (D-PM-5). */
+    stopPercentRaised: numeric('stop_percent_raised', { precision: 9, scale: 4 }),
+    stopRaisedReason: text('stop_raised_reason'),
+    stopRaisedBy: uuid('stop_raised_by').references(() => appUser.id),
+    stopRaisedAt: timestamp('stop_raised_at', { withTimezone: true }),
     description: text('description'),
     createdBy: uuid('created_by').references(() => appUser.id),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -152,6 +157,8 @@ export const projectCommitment = pgTable(
       .notNull()
       .references(() => project.code, { onDelete: 'cascade' }),
     costCode: text('cost_code').notNull(),
+    /** PM-2 §8 — the element the commitment stands on; availability is read there. */
+    wbsCode: text('wbs_code'),
     purchaseOrderId: uuid('purchase_order_id').references(() => purchaseOrder.id),
 
     amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
@@ -407,6 +414,13 @@ export const projectVariation = pgTable(
       .default('0'),
     revisedEndsOn: date('revised_ends_on'),
 
+    /** PM-2 §7 — the scope and schedule effect. */
+    scopeNote: text('scope_note'),
+    scheduleDeltaDays: integer('schedule_delta_days').notNull().default(0),
+    rejectedBy: uuid('rejected_by').references(() => appUser.id),
+    rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+    rejectedReason: text('rejected_reason'),
+
     /** §10 — commercial approval and budget approval, separately. */
     commercialApprovedBy: uuid('commercial_approved_by').references(() => appUser.id),
     commercialApprovedAt: timestamp('commercial_approved_at', { withTimezone: true }),
@@ -494,3 +508,156 @@ export const projectCostCode = pgTable('project_cost_code', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// REQ-PM-001 PM-2 — planning, budget documents, availability control (§7)
+// ---------------------------------------------------------------------------
+
+export const BUDGET_DOCUMENT_KINDS = ['original', 'supplement', 'return', 'transfer'] as const;
+export type BudgetDocumentKind = (typeof BUDGET_DOCUMENT_KINDS)[number];
+
+/** §7 — the cost plan's versions: 0 the original, 1…n the re-plans; one current. */
+export const projectPlanVersion = pgTable(
+  'project_plan_version',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    version: smallint('version').notNull(),
+    name: text('name').notNull(),
+    note: text('note'),
+    isCurrent: boolean('is_current').notNull().default(true),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('project_plan_version_uniq').on(t.projectCode, t.version),
+    uniqueIndex('project_plan_version_current_uniq').on(t.projectCode).where(sql`${t.isCurrent}`),
+    check('project_plan_version_number', sql`${t.version} >= 0`),
+  ],
+);
+
+/** §7 — element × cost code × month: the spread BCWS reads (§10). */
+export const projectPlanLine = pgTable(
+  'project_plan_line',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    versionId: uuid('version_id')
+      .notNull()
+      .references(() => projectPlanVersion.id, { onDelete: 'cascade' }),
+    wbsCode: text('wbs_code').notNull(),
+    costCode: text('cost_code')
+      .notNull()
+      .references(() => projectCostCode.code),
+    /** The first day of the month. */
+    period: date('period').notNull(),
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    updatedBy: uuid('updated_by').references(() => appUser.id),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('project_plan_line_uniq').on(t.versionId, t.wbsCode, t.costCode, t.period),
+    index('project_plan_line_project_idx').on(t.projectCode, t.wbsCode, t.period),
+    check('project_plan_line_amount_not_negative', sql`${t.amountIqd} >= 0`),
+  ],
+);
+
+/**
+ * §7 — the budget as a document: original, supplement, return, transfer.
+ * Raised by one person, approved by another (the table holds it); the budget
+ * by element is the sum of the approved ones. The original writes
+ * `project_budget_line.baseline_iqd` once; nothing else does.
+ */
+export const projectBudgetDocument = pgTable(
+  'project_budget_document',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    documentNo: text('document_no').notNull(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    status: documentStatus('status').notNull().default('draft'),
+    raisedOn: date('raised_on').notNull(),
+    description: text('description').notNull(),
+    /** The change order this supplement came from, where it did. */
+    variationId: uuid('variation_id').references(() => projectVariation.id),
+    /** The sum of the lines: a supplement adds, a return takes, a transfer nets to zero. */
+    totalIqd: numeric('total_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    submittedBy: uuid('submitted_by').references(() => appUser.id),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    approvedBy: uuid('approved_by').references(() => appUser.id),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    rejectedBy: uuid('rejected_by').references(() => appUser.id),
+    rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+    rejectedReason: text('rejected_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('project_budget_document_no_uniq').on(t.documentNo),
+    index('project_budget_document_project_idx').on(t.projectCode, t.status, t.kind),
+    check('project_budget_document_kind', sql`${t.kind} in ('original', 'supplement', 'return', 'transfer')`),
+    check('project_budget_document_four_eyes', sql`${t.approvedBy} is null or ${t.approvedBy} <> ${t.createdBy}`),
+  ],
+);
+
+export const projectBudgetDocumentLine = pgTable(
+  'project_budget_document_line',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => projectBudgetDocument.id, { onDelete: 'cascade' }),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    lineNo: smallint('line_no').notNull(),
+    wbsCode: text('wbs_code').notNull(),
+    costCode: text('cost_code')
+      .notNull()
+      .references(() => projectCostCode.code),
+    /** Signed: positive adds budget to the element, negative takes it. */
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+    description: text('description'),
+  },
+  (t) => [
+    uniqueIndex('project_budget_document_line_uniq').on(t.documentId, t.lineNo),
+    index('project_budget_document_line_element_idx').on(t.projectCode, t.wbsCode, t.costCode),
+    check('project_budget_document_line_amount_nonzero', sql`${t.amountIqd} <> 0`),
+  ],
+);
+
+/** §7 — what a change order moves, element by element: the supplement it raises. */
+export const projectVariationLine = pgTable(
+  'project_variation_line',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    variationId: uuid('variation_id')
+      .notNull()
+      .references(() => projectVariation.id, { onDelete: 'cascade' }),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    lineNo: smallint('line_no').notNull(),
+    wbsCode: text('wbs_code').notNull(),
+    costCode: text('cost_code')
+      .notNull()
+      .references(() => projectCostCode.code),
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+    description: text('description'),
+  },
+  (t) => [
+    uniqueIndex('project_variation_line_uniq').on(t.variationId, t.lineNo),
+    check('project_variation_line_amount_nonzero', sql`${t.amountIqd} <> 0`),
+  ],
+);

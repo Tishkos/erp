@@ -92,15 +92,15 @@ describe('the screen catalogue covers the approved tree', () => {
   // one of them is still reachable, once.
   // Plus one more, by direction (2026-09-03): the Statement Mapping, where
   // Finance defines the headers and lines of its own reports.
-  it('classifies all 234 items in the approved tree', () => {
+  it('classifies all 235 items in the approved tree', () => {
     // 221 from the approved tree, plus the Stock Ledger (2026-09-27), plus
     // REQ-AP-001 §21.1: the Payables workbench, recurring contracts, payment
     // applications, PDs, B/Ls, containers, loans and the module settings —
     // eight new items — less the module-settings placeholder they replace;
     // plus REQ-AP-001 Stage 8's Sheet Migration (§24.3); plus REQ-LEGACY-001's
     // Legacy Books Import and REQ-HR-001's HR Settings (2026-10-02).
-    expect(allMenuItems()).toHaveLength(234);
-    expect(Object.keys(SCREENS)).toHaveLength(234);
+    expect(allMenuItems()).toHaveLength(235);
+    expect(Object.keys(SCREENS)).toHaveLength(235);
   });
 
   it('uses only declared archetypes', () => {
@@ -117,7 +117,7 @@ describe('the screen catalogue covers the approved tree', () => {
       (sum, item) => sum + screenCount(archetypeOf(item.key)!),
       0,
     );
-    expect(total).toBe(346);
+    expect(total).toBe(347);
   });
 });
 
@@ -170,7 +170,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(234);
+    expect(screenRoutes().size).toBe(235);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -270,7 +270,10 @@ describe('every screen has one address', () => {
       '/payables/suppliers',
       // REQ-PM-001 PM-1 — the Project System's structure.
       '/projects',
+      '/projects/budgets',
+      '/projects/change-orders',
       '/projects/contracts',
+      '/projects/plan',
       '/projects/wbs',
       // Block 5 — the Sales Invoice.
       '/sales/ar-invoices',
