@@ -3122,7 +3122,16 @@
       "asycuda_pasted": "ملصقة يدوياً",
       "asycuda_status_previewed": "غير مطبّقة",
       "asycuda_status_applied": "مطبّقة",
-      "asycuda_nothing_given": "اختر تقرير ASYCUDA أو الصق القائمة."
+      "asycuda_nothing_given": "اختر تقرير ASYCUDA أو الصق القائمة.",
+      "asycuda_standing": "وضع التصاريح الحالي",
+      "asycuda_standing_meta": "{total} سارية · {expiring} تنتهي خلال {days} يوم",
+      "asycuda_no_pds": "لم يُسجَّل أي تصريح بعد.",
+      "asycuda_not_linked": "غير مرتبط بطلب استيراد",
+      "asycuda_pays": "يسمح بالدفع",
+      "asycuda_days": "{days} يوم",
+      "asycuda_expired_days": "منذ {days} يوم",
+      "yes": "نعم",
+      "no": "كلا"
     },
     "shipments": {
       "subtitle": "بوالص الشحن لكل استيراد، مع حاوياتها محسوبةً عند وصولها.",

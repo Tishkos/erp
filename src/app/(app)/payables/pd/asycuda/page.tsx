@@ -72,10 +72,15 @@ export default async function AsycudaPage({ searchParams }: { searchParams: Sear
   const params = await searchParams;
   const runId = typeof params.run === 'string' ? params.run : '';
 
-  const { current, statuses, history } = await withCurrentUser(async (tx) => ({
+  const { current, statuses, history, standing, warningDays } = await withCurrentUser(async (tx) => ({
     current: runId ? await asycuda.run(tx, runId) : null,
     statuses: await customs.statuses(tx),
     history: await asycuda.runs(tx),
+    // What the declarations say right now — the thing a customs officer opens
+    // this screen to see, whether or not they are about to read a report.
+    // Soonest expiry first, because that is the order the work happens in.
+    standing: await customs.listForScreen(tx, { pageSize: 50 }),
+    warningDays: await customs.warningDays(tx),
   }));
 
   const report = (current?.report ?? null) as { rows?: ReportRow[]; unreadable?: ReportUnreadable[] } | null;
@@ -220,6 +225,97 @@ export default async function AsycudaPage({ searchParams }: { searchParams: Sear
           </div>
         </section>
       ) : null}
+
+      {/*
+        Where the declarations stand.
+
+        The screen used to be a box to paste into and nothing else, so it said
+        nothing at all until somebody uploaded a file. What a customs officer
+        opens it to know is which declarations are live, which expire first,
+        and which of them are holding up a payment — the ASYCUDA list is read
+        *against* this. Soonest expiry first, because that is the order the
+        work actually happens in.
+      */}
+      <section aria-labelledby="asycuda-standing-title" className={`${s.sapDoc} ${s.sapRegister}`}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="asycuda-standing-title">
+            <span>{t('asycuda_standing')}</span>
+            <span className={s.sapTitleMeta}>
+              {t('asycuda_standing_meta', {
+                total: standing.total,
+                expiring: standing.rows.filter((row) => row.daysLeft !== null && row.daysLeft <= warningDays && !row.isTerminal).length,
+                days: warningDays,
+              })}
+            </span>
+          </h2>
+          <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
+            <table aria-labelledby="asycuda-standing-title" className={`${s.sapTable} ${s.sapRegisterTable}`}>
+              <thead>
+                <tr>
+                  <th scope="col">{t('pd_no')}</th>
+                  <th scope="col">{t('import')}</th>
+                  <th scope="col">{t('supplier')}</th>
+                  <th scope="col">{t('status')}</th>
+                  <th scope="col">{t('registered')}</th>
+                  <th scope="col">{t('expires')}</th>
+                  <th scope="col">{t('days_left')}</th>
+                  <th scope="col">{t('asycuda_pays')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {standing.rows.length === 0 ? (
+                  <tr>
+                    <td className={s.sapEmptyRow} colSpan={8}>
+                      {t('asycuda_no_pds')}
+                    </td>
+                  </tr>
+                ) : null}
+                {standing.rows.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <Link className={s.sapLink} href={`/payables/pd/${encodeURIComponent(row.pdNo)}?year=${row.registrationYear}`}>
+                        <bdi dir="ltr">{row.pdNo}</bdi>
+                      </Link>
+                    </td>
+                    <td>
+                      {row.payableNo ? (
+                        <Link className={s.sapLink} href={`/payables/${encodeURIComponent(row.payableNo)}`}>
+                          <bdi dir="ltr">{row.payableNo}</bdi>
+                        </Link>
+                      ) : (
+                        <span className="muted">{t('asycuda_not_linked')}</span>
+                      )}
+                    </td>
+                    <td>
+                      <bdi dir="auto">{row.supplierName ?? '—'}</bdi>
+                    </td>
+                    <td>{ps(row.statusCode, row.statusName)}</td>
+                    <td>
+                      <bdi dir="ltr">{row.registrationDate}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{row.expiryDate}</bdi>
+                    </td>
+                    <td className={s.sapNum}>
+                      {row.daysLeft === null ? (
+                        '—'
+                      ) : (
+                        <span
+                          className={`status status--${row.daysLeft < 0 ? 'rejected' : row.daysLeft <= warningDays ? 'pending' : 'approved'} ${s.sapRegisterStatus}`}
+                          data-status={row.daysLeft < 0 ? 'rejected' : row.daysLeft <= warningDays ? 'pending' : 'approved'}
+                        >
+                          {row.daysLeft < 0 ? t('asycuda_expired_days', { days: -row.daysLeft }) : t('asycuda_days', { days: row.daysLeft })}
+                        </span>
+                      )}
+                    </td>
+                    <td>{row.allowsPayment ? t('yes') : t('no')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
 
       <section aria-labelledby="asycuda-runs-title" className={`${s.sapDoc} ${s.sapRegister}`}>
         <div className={s.sapWindow}>

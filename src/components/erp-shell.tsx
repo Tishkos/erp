@@ -251,17 +251,21 @@ function isActiveHref(pathname: string, href: string): boolean {
  * module that actually lists the screen is the module that lights up. Routing
  * a screen under another module's path stays a thing you can do.
  */
-function activeModuleKey(pathname: string, modules: readonly ModuleGroup[]): string | null {
-  let best: { readonly key: string; readonly length: number } | null = null;
+function activeLink(pathname: string, modules: readonly ModuleGroup[]): { readonly moduleKey: string; readonly href: string } | null {
+  let best: { moduleKey: string; href: string } | null = null;
   for (const module of modules) {
     for (const section of module.sections) {
       for (const item of section.items) {
-        if (!item.href || !isActiveHref(pathname, item.href)) continue;
-        if (!best || item.href.length > best.length) best = { key: module.key, length: item.href.length };
+        // The address the link actually goes to, which is not always the one
+        // the menu declares — `routeFor` is what the <Link> is built from, so
+        // matching on anything else compares against a page nobody opened.
+        const href = routeFor(item, section.key);
+        if (!isActiveHref(pathname, href)) continue;
+        if (!best || href.length > best.href.length) best = { moduleKey: module.key, href };
       }
     }
   }
-  return best?.key ?? null;
+  return best;
 }
 
 function firstModuleHref(module: ModuleGroup): string | null {
@@ -354,10 +358,13 @@ function PendingItem({ item }: { readonly item: MenuItem }) {
 function ModuleContents({
   module,
   pathname,
+  activeHref,
   onNavigate,
 }: {
   readonly module: ModuleGroup;
   readonly pathname: string;
+  /** The one deepest link that matches the path, worked out once by the shell. */
+  readonly activeHref: string | null;
   readonly onNavigate: () => void;
 }) {
   const nav = useTranslations('nav');
@@ -381,7 +388,11 @@ function ModuleContents({
               return (
                 <li className="erp-module-section__item" key={item.key}>
                   <Link
-                    aria-current={isActiveHref(pathname, href) ? 'page' : undefined}
+                    // The one deepest link, not every link the path starts
+                    // with: Update from ASYCUDA lives under Customs
+                    // Pre-Declarations' address, so both used to read as the
+                    // open screen (reported 2026-10-02).
+                    aria-current={activeHref === href ? 'page' : undefined}
                     className={`erp-menu-item erp-menu-item--link${preview ? ' erp-menu-item--preview' : ''}`}
                     href={href}
                     onClick={onNavigate}
@@ -423,7 +434,8 @@ export function ErpShell({
   const pathname = usePathname();
   const router = useRouter();
   const modules = useMemo(() => groupSections(sections), [sections]);
-  const activeKey = useMemo(() => activeModuleKey(pathname, modules), [pathname, modules]);
+  const active = useMemo(() => activeLink(pathname, modules), [pathname, modules]);
+  const activeKey = active?.moduleKey ?? null;
   const [openPopover, setOpenPopover] = useState<OpenPopover>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openMobileModules, setOpenMobileModules] = useState<readonly ModuleKey[]>([]);
@@ -713,6 +725,7 @@ export function ErpShell({
                         <ModuleContents
                           module={module}
                           pathname={pathname}
+                          activeHref={active?.href ?? null}
                           onNavigate={closeNavigation}
                         />
                       </div>
@@ -1009,6 +1022,7 @@ export function ErpShell({
                     <ModuleContents
                       module={module}
                       pathname={pathname}
+                      activeHref={active?.href ?? null}
                       onNavigate={closeNavigation}
                     />
                   </details>

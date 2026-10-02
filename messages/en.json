@@ -3122,7 +3122,16 @@
       "asycuda_pasted": "Pasted in",
       "asycuda_status_previewed": "Not applied",
       "asycuda_status_applied": "Applied",
-      "asycuda_nothing_given": "Choose the ASYCUDA report, or paste the list."
+      "asycuda_nothing_given": "Choose the ASYCUDA report, or paste the list.",
+      "asycuda_standing": "Where the declarations stand",
+      "asycuda_standing_meta": "{total} live · {expiring} expiring within {days} days",
+      "asycuda_no_pds": "No declaration has been registered yet.",
+      "asycuda_not_linked": "not linked to an import",
+      "asycuda_pays": "Releases payment",
+      "asycuda_days": "{days} days",
+      "asycuda_expired_days": "{days} days ago",
+      "yes": "Yes",
+      "no": "No"
     },
     "shipments": {
       "subtitle": "The bills of lading of every import, each with its containers counted as they arrive.",
