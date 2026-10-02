@@ -20,6 +20,7 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as shipments from '@/server/services/supplier-shipment';
+import { CONTAINER_OBJECT } from '@/server/services/shipments';
 import * as warehouses from '@/server/services/warehouses';
 import * as users from '@/server/services/users';
 import { advanceShipment, setShipmentWatchers } from './actions';
@@ -70,6 +71,9 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
     return <Denied object={page('in_transit')} />;
   }
   const mayMove = can(principal, 'execute', shipments.PERMISSION_OBJECT);
+  // REQ-AP-001 §17.4 / D38 — imports are tracked container by container now;
+  // this page keeps the shipments of invoices that are not imports.
+  const seesContainers = visibleRoute('/payables/containers') && can(principal, 'view', CONTAINER_OBJECT);
 
   const status =
     typeof params.status === 'string' &&
@@ -106,6 +110,14 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
         saved={outcome.saved}
         savedLabel={t('saved')}
       />
+      {seesContainers ? (
+        <p className={s.sapNote}>
+          {t('in_transit.containers_note')}{' '}
+          <Link className={s.sapLink} href="/payables/containers">
+            {page('containers')}
+          </Link>
+        </p>
+      ) : null}
 
       {/* One picker rather than five links. Four stages is a list, and a list
           belongs in a control the reader already knows — the same Select every

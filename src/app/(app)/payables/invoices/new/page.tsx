@@ -14,6 +14,7 @@ import * as ap from '@/server/services/ap-invoice';
 import * as items from '@/server/services/items';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as partners from '@/server/services/partners';
+import * as payables from '@/server/services/payables';
 import * as posting from '@/server/services/posting';
 import * as paymentTerms from '@/server/services/payment-terms';
 import * as warehouses from '@/server/services/warehouses';
@@ -58,7 +59,7 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
     return <Denied object={page('ap_invoices')} />;
   }
 
-  const { suppliers, allSuppliers, stockItems, allItems, houses, schedules, accounts, mapped } =
+  const { suppliers, allSuppliers, stockItems, allItems, houses, schedules, accounts, mapped, imports } =
     await withCurrentUser(async (tx) => ({
       suppliers: await partners.listActiveInRole(tx, 'supplier'),
       // The whole list too, so an empty picker can say which of the two things is
@@ -84,6 +85,9 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
           context.scope.branchCode,
         ),
       },
+      // §24.3 — an import already open (migrated from the sheet) takes its
+      // supplier invoice here rather than opening a second application.
+      imports: await payables.openImportsForInvoice(tx),
     }),
   );
 
@@ -186,6 +190,20 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
         <label>
           <input name="is_import" type="checkbox" value="1" /> {x('is_import_hint')}
         </label>
+      ),
+    },
+    {
+      label: x('import_application'),
+      control: true,
+      value: (
+        <select aria-label={x('import_application')} defaultValue="" name="payable_id">
+          <option value="">{x('import_application_new')}</option>
+          {imports.map((row) => (
+            <option key={row.id} value={row.id}>
+              {`${row.payableNo} · ${row.reference} · ${row.supplierName}`}
+            </option>
+          ))}
+        </select>
       ),
     },
     {

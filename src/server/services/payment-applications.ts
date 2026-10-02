@@ -965,6 +965,91 @@ export async function confirm(tx: Tx, ctx: ActorContext, id: string, input: Conf
   return { documentNo, supplierPaymentId, supplierAdvanceId };
 }
 
+/**
+ * §24.3 / D37 — a migrated application the sheet left *sent* although the
+ * money had already gone (the "verify the SWIFT date" rows). The bank's copy
+ * gives the date and reference; nothing is posted, because a payment made
+ * before the cut-over is in the books the ERP opened with, and posting it
+ * again would pay the supplier twice. Only for rows the sheet import wrote,
+ * and only for a date on or before the day they were migrated — money that
+ * leaves after the cut-over is confirmed by `confirm`, which posts it.
+ */
+export async function confirmBeforeCutOver(tx: Tx, ctx: ActorContext, id: string, input: ConfirmInput) {
+  const row = await load(tx, id);
+  await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, { branchCode: row.branchCode });
+  if (row.source !== 'sheet_import') {
+    throw new PaymentApplicationError(
+      `${row.applicationNo} was raised in the ERP; confirm it with the bank's copy, which posts the payment.`,
+    );
+  }
+  await move(tx, row, 'confirmed');
+  const method = await methodOf(tx, row.paymentMethodCode);
+  const reference = input.reference?.trim() ?? '';
+  if (!input.confirmedOn) throw new PaymentApplicationError('Give the SWIFT date from the bank’s copy.');
+  if (!reference) throw new PaymentApplicationError('Give the SWIFT (MT103) reference from the bank’s copy.');
+  const cutOver = row.createdAt.toISOString().slice(0, 10);
+  if (input.confirmedOn > cutOver) {
+    throw new PaymentApplicationError(
+      `${row.applicationNo} was migrated on ${cutOver}; money that left on ${input.confirmedOn} is confirmed with ` +
+        'the bank’s copy as any payment is, and posted.',
+    );
+  }
+  if (row.applicationDate && input.confirmedOn < row.applicationDate) {
+    throw new PaymentApplicationError(
+      `The money cannot have left on ${input.confirmedOn}, before the file went to the bank on ${row.applicationDate}.`,
+    );
+  }
+  const owner = await payables.load(tx, row.payableId);
+
+  await tx
+    .update(paymentApplication)
+    .set({
+      status: 'confirmed',
+      confirmedOn: input.confirmedOn,
+      confirmationReference: reference,
+      confirmedBy: ctx.principal.userId,
+      confirmedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(paymentApplication.id, id));
+
+  await events.record(tx, {
+    payableId: row.payableId,
+    eventCode: confirmationEvent(method.kind),
+    summary:
+      `SWIFT confirmed — ${row.applicationNo}, SWIFT date ${input.confirmedOn}, ref ${reference}: ` +
+      `${row.currency} ${shown(parseDecimal(row.amountTxn, MONEY_SCALE))} PAID before the cut-over ` +
+      `(${cutOver}); recorded from the bank's copy, not posted — the payment is in the opening books`,
+    sourceType: PERMISSION_OBJECT,
+    sourceId: row.id,
+    sourceNo: row.applicationNo,
+    after: { confirmedOn: input.confirmedOn, reference, posted: false },
+    actorUserId: ctx.principal.userId,
+  });
+  const summary = await totalsFor(tx, row.payableId);
+  if (summary.fullyPaid) {
+    await events.record(tx, {
+      payableId: row.payableId,
+      eventCode: 'FULLY_PAID',
+      summary: `Fully paid — ${owner.currency} ${shown(summary.paidTxn)} of ${owner.currency} ${shown(parseDecimal(owner.amountTxn, MONEY_SCALE))}`,
+      actorUserId: ctx.principal.userId,
+    });
+  }
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'payment_application.confirmed_before_cut_over',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: row.branchCode,
+    before: { status: row.status },
+    after: { status: 'confirmed', confirmedOn: input.confirmedOn, reference, posted: false, cutOver },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+  await payables.recomputeStage(tx, row.payableId, ctx.principal.userId);
+  return { applicationNo: row.applicationNo };
+}
+
 // ---------------------------------------------------------------------------
 // §15.4 / §15.6 — debit final
 // ---------------------------------------------------------------------------

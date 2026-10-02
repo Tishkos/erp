@@ -457,6 +457,8 @@ export async function resetTestData(): Promise<void> {
     // record who created them and are removed; seed rows (created_by NULL) are
     // restored to their seeded active state.
     await client.query('truncate payable_event');
+    // Stage 8 (0237) — the sheet import's runs and their sign-off.
+    await client.query('delete from payables_migration_run');
     // Stage 6 (0235) — what the loans funded, their schedules, the loans.
     await client.query('delete from bank_loan_allocation');
     await client.query('delete from bank_loan_instalment');

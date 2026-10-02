@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import writeXlsxFile from 'write-excel-file/node';
 
 /**
  * REQ-AP-001 A22 — the Payables screens, driven in a browser, after D12/D13.
@@ -23,6 +24,9 @@ import { expect, test, type Page } from '@playwright/test';
  *        person, disbursed and its first instalment repaid.
  *   §20.2 Stage 7: a charge from a posted journal, the PD written off, the
  *        landed cost locked from the import page.
+ *   §24.3 Stage 8: a small workbook in the sheet's shape dry-run (the report
+ *        names what is skipped and the holding list), applied, and its
+ *        holding-list PD linked to the migrated import.
  *
  * At desktop width in English and at mobile width in real Arabic (the
  * `erp-locale` cookie — every label must exist). Codes carry a per-run suffix
@@ -503,6 +507,70 @@ test.describe('A22 · payables in a browser', () => {
     await expect(page.getByRole('table', { name: 'Locks' })).toContainText('500');
   });
 
+  test('Stage 8 · the sheet dry-run, applied, and its holding-list PD linked', async ({ page }) => {
+    test.setTimeout(300_000);
+    await signIn(page);
+    const reference = `E2E-${RUN}`;
+    const held = `82${RUN}`;
+    const serial = (iso: string) => Math.round(Date.parse(`${iso}T00:00:00Z`) / 86_400_000) + 25569;
+    const rows = (data: unknown[][]) => data.map((row) => row.map((value) => (value === null ? null : { value })));
+    const buffer = (await writeXlsxFile([
+      {
+        sheet: 'dashboard',
+        data: rows([
+          ['PO no./ INV.', 'INV. Date', 'Supplier', 'INV. Amount', 'INV. Qty', 'Pmt Terms', 'Products', 'PD. No.', 'Registration Date', 'Expire Date', 'PD. Status', 'Paid Amount (SWIFT)', 'Pmt Remaining', 'Applied Amount', 'BL No.', 'Inbounded Qty', 'Clear?'],
+          [reference, serial('2026-09-01'), 'Al-Rafidain Trading Co.', 1000, 10, 'CFR', 'panel', null, null, null, null, 0, 1000, 0, null, null, null],
+        ]),
+      },
+      {
+        sheet: 'PMT',
+        data: rows([
+          ['PO/INV. no.', 'Supplier', 'INV. Date', 'Bank', 'Application AMT.', 'Application date', 'Swift date', 'Payment Status'],
+          [`${reference}-X`, 'NOBODY', null, 'MANSOUR', 500, serial('2026-09-05'), null, 'NOT PAID'],
+        ]),
+      },
+      {
+        sheet: 'PD',
+        data: rows([
+          ['PO no./ INV.', 'INV. Date', 'Supplier', 'PD No.', 'Registration Date', 'Expire Date', 'Status', 'Bank Code', 'SWIFT', 'Notes'],
+          [null, null, null, held, serial('2026-09-02'), serial('2027-03-01'), 'Validated', null, null, null],
+        ]),
+      },
+    ] as never).toBuffer()) as Buffer;
+    const file = { name: `QS_DASHBOARD-${RUN}.xlsx`, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer };
+
+    // Dry run first: the report, and nothing applied.
+    await page.goto('/administration/payables-migration');
+    await expect(page.getByRole('heading', { level: 1, name: 'Sheet Migration' })).toBeVisible();
+    await page.locator('input[name="file"]').setInputFiles(file);
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Payment applications not imported' })).toContainText(
+      'No dashboard row has this PO / invoice number.',
+      { timeout: 60_000 },
+    );
+    await expect(page.getByRole('table', { name: 'PDs with no import' })).toContainText(held);
+
+    // Apply the same file.
+    await page.locator('input[name="file"]').setInputFiles(file);
+    await page.getByLabel('Run', { exact: true }).selectOption('apply');
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
+    await expect(page.locator('#migration-latest-title')).toContainText('Apply ·', { timeout: 60_000 });
+
+    // The customs officer's holding list: the PD, linked to the migrated import.
+    await page.goto('/payables/pd?view=holding');
+    await page.getByRole('link', { name: held }).click();
+    await page.getByRole('button', { name: 'Link to an import' }).click();
+    const link = page.getByRole('dialog');
+    const option = link.locator('select[name="payable_id"] option', { hasText: reference });
+    await link.locator('select[name="payable_id"]').selectOption((await option.getAttribute('value'))!);
+    await link.getByRole('button', { name: 'Link to an import' }).click();
+    await expect(page.getByRole('link', { name: new RegExp(reference) }).first()).toBeVisible({ timeout: 30_000 });
+
+    // Invoice Status Tracking points imports to their containers.
+    await page.goto('/inventory/in-transit');
+    await expect(page.getByRole('link', { name: /Containers$/ })).toHaveAttribute('href', '/payables/containers');
+  });
+
   test('holds the line at mobile width, in Arabic, right to left', async ({ page, context }) => {
     test.setTimeout(120_000);
     await context.addCookies([{ name: 'erp-locale', value: 'ar', domain: 'localhost', path: '/' }]);
@@ -548,6 +616,13 @@ test.describe('A22 · payables in a browser', () => {
     // …and Stage 6's.
     await page.goto('/payables/loans?view=all');
     await expect(page.getByRole('heading', { level: 1, name: 'القروض المصرفية' })).toBeVisible();
+    await noSidewaysScroll(page);
+    // …and Stage 8's.
+    await page.goto('/administration/payables-migration');
+    await expect(page.getByRole('heading', { level: 1, name: 'ترحيل الجدول' })).toBeVisible();
+    await noSidewaysScroll(page);
+    await page.goto('/payables/pd?view=holding');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await noSidewaysScroll(page);
     const application = page.locator('table tbody tr td a').first();
     await page.goto('/payables/payment-applications');

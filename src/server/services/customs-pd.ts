@@ -354,6 +354,57 @@ export async function addNote(tx: Tx, ctx: ActorContext, pdId: string, note: str
   });
 }
 
+/**
+ * §24.3 — a PD the sheet could not match waits with no import (the holding
+ * list) until the customs officer names it. Linking is the only change an
+ * unlinked PD takes besides its status: once, to an open import, which then
+ * carries it (`PD_LINKED`, and the PD's status as it stands).
+ */
+export async function linkToImport(tx: Tx, ctx: ActorContext, pdId: string, payableId: string) {
+  const pd = await load(tx, pdId);
+  await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, { branchCode: pd.branchCode });
+  if (pd.payableId) throw new PdValidationError(`PD ${pd.pdNo} is already linked to an import.`);
+  const owner = await payables.load(tx, payableId);
+  await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, { branchCode: owner.branchCode });
+  if (owner.payableTypeCode !== 'import') {
+    throw new PdValidationError(`${owner.payableNo} is not an import; only imports are declared to customs.`);
+  }
+  if (owner.cancelledAt || owner.closedAt) throw new PdValidationError(`${owner.payableNo} is closed.`);
+
+  const [status] = await tx.select().from(pdStatus).where(eq(pdStatus.code, pd.statusCode)).limit(1);
+  const [linked] = await tx
+    .update(customsPd)
+    .set({ payableId: owner.id, branchCode: owner.branchCode, updatedAt: new Date() })
+    .where(and(eq(customsPd.id, pd.id), isNull(customsPd.payableId)))
+    .returning({ id: customsPd.id });
+  if (!linked) throw new PdValidationError(`PD ${pd.pdNo} is already linked to an import.`);
+
+  await events.record(tx, {
+    payableId: owner.id,
+    eventCode: 'PD_LINKED',
+    summary:
+      `PD ${pd.pdNo} (registered ${pd.registrationDate}, valid until ${pd.expiryDate}) linked from the holding list` +
+      ` — ${status?.name ?? pd.statusCode} since ${pd.statusDate}`,
+    sourceType: PERMISSION_OBJECT,
+    sourceId: pd.id,
+    sourceNo: pd.pdNo,
+    actorUserId: ctx.principal.userId,
+  });
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'customs_pd.linked',
+    objectType: PERMISSION_OBJECT,
+    objectId: pd.id,
+    branchCode: owner.branchCode,
+    before: { payableNo: null, branchCode: pd.branchCode },
+    after: { payableNo: owner.payableNo, branchCode: owner.branchCode },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+  await payables.recomputeStage(tx, owner.id, ctx.principal.userId);
+  return { id: pd.id, pdNo: pd.pdNo, payableNo: owner.payableNo };
+}
+
 /** §16.2 — a rejected or expired PD is re-registered as a new row that supersedes it. */
 export async function reRegister(
   tx: Tx,
@@ -601,7 +652,7 @@ export async function expirySweep(tx: Tx, asOf: string): Promise<{ warned: numbe
 // ---------------------------------------------------------------------------
 
 export interface PdListFilter {
-  readonly view?: 'live' | 'expiring' | 'final' | 'all' | null;
+  readonly view?: 'live' | 'expiring' | 'final' | 'holding' | 'all' | null;
   readonly payableId?: string | null;
 }
 
@@ -644,6 +695,8 @@ export async function list(tx: Tx, filter: PdListFilter = {}) {
       return withDays.filter((row) => !row.isTerminal && !row.superseded && row.daysLeft <= warning);
     case 'final':
       return withDays.filter((row) => row.isTerminal || row.superseded);
+    case 'holding':
+      return withDays.filter((row) => row.payableNo === null);
     default:
       return withDays;
   }

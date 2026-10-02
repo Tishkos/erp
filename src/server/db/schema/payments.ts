@@ -169,6 +169,9 @@ export const paymentApplication = pgTable(
 
     note: text('note'),
     closedReason: text('closed_reason'),
+    /** REQ-AP-001 §24.3 (0237) — 'erp' | 'sheet_import' | 'shipment_migration', and the sheet row. */
+    source: text('source').notNull().default('erp'),
+    sourceRow: text('source_row'),
 
     createdBy: uuid('created_by')
       .notNull()

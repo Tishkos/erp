@@ -26,7 +26,7 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as banks from '@/server/services/banks';
 import * as customs from '@/server/services/customs-pd';
-import { addPdNote, attachToPd, changePdStatus, reRegisterPd } from '../actions';
+import { addPdNote, attachToPd, changePdStatus, linkPd, reRegisterPd } from '../actions';
 import { pdChip } from '../status';
 import { windowTone } from '../../window-tone';
 import { STATUS_CHIP, statusKey } from '../../payment-applications/status';
@@ -71,7 +71,12 @@ export default async function PdPage({
   const found = await withCurrentUser(async (tx) => {
     try {
       const view = await customs.viewByNo(tx, pdNo, year);
-      return { ...view, statuses: await customs.statuses(tx), bankRows: await banks.listActive(tx) };
+      return {
+        ...view,
+        statuses: await customs.statuses(tx),
+        bankRows: await banks.listActive(tx),
+        imports: !view.owner && mayEdit ? await customs.importChoices(tx) : [],
+      };
     } catch {
       return null;
     }
@@ -245,6 +250,30 @@ export default async function PdPage({
                   <Field id="pd-reregister-note" label={t('note')} name="note" wide />
                   <SubmitRow>
                     <Submit label={t('reregister')} />
+                  </SubmitRow>
+                </Form>
+              </NewRecordDialog>
+            ) : null}
+            {!found.owner && mayEdit ? (
+              <NewRecordDialog buttonLabel={t('link')} closeLabel={admin('close')} title={t('link')}>
+                <p className="muted">{t('link_note', { pdNo: pd.pdNo })}</p>
+                <Form action={linkPd}>
+                  {Object.entries(hidden).map(([name, value]) => (
+                    <Hidden key={name} name={name} value={value} />
+                  ))}
+                  <Grid>
+                    <Select
+                      label={t('import')}
+                      name="payable_id"
+                      options={found.imports.map((row) => ({
+                        value: row.id,
+                        label: `${row.payableNo} · ${row.reference} · ${row.supplierName}`,
+                      }))}
+                      required
+                    />
+                  </Grid>
+                  <SubmitRow>
+                    <Submit label={t('link')} />
                   </SubmitRow>
                 </Form>
               </NewRecordDialog>
