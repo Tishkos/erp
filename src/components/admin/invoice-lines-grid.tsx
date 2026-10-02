@@ -13,7 +13,7 @@ import {
 import styles from './admin.module.css';
 import { ColumnGrip, useColumnWidths } from './column-widths';
 import { PAIRED_CHOICE } from './paired-picker';
-import { MONEY_PLACES, lineTotal, toNumber } from '@/lib/decimal';
+import { MONEY_PLACES, lineTotal, scaled, toNumber, toText } from '@/lib/decimal';
 
 /**
  * The lines of an invoice, typed straight into the grid.
@@ -42,6 +42,17 @@ export interface LineItem {
   readonly name: string;
   /** The item's own unit, sent with the line rather than assumed to be each. */
   readonly uomCode?: string | null;
+  /**
+   * REQ-FIX-001 FIX-4 — the units it is kept in: one of them = numerator /
+   * denominator base units. A grid with `unitColumn` offers them per line.
+   */
+  readonly units?: readonly {
+    readonly code: string;
+    readonly numerator: string;
+    readonly denominator: string;
+    readonly isPurchaseDefault: boolean;
+    readonly isSalesDefault: boolean;
+  }[];
   /** Whose stock this line draws from; empty when the item has no links. */
   readonly suppliers?: readonly {
     readonly id: string;
@@ -66,6 +77,8 @@ export interface SavedInvoiceLine {
   readonly discount: string;
   readonly supplierId: string;
   readonly warehouseCode: string;
+  /** The unit the line is written in (FIX-4). */
+  readonly uomCode?: string | null;
 }
 
 interface Outcome {
@@ -102,6 +115,8 @@ export interface InvoiceLineLabels {
   readonly stockUnavailable: string;
   readonly availableStock: string;
   readonly availabilityHint: string;
+  /** The Unit column's heading, when the grid has one (FIX-4). */
+  readonly unit?: string;
 }
 
 interface Row {
@@ -119,6 +134,8 @@ interface Row {
    */
   itemName: string;
   quantity: string;
+  /** The unit the line is in — the item's purchase (or sales) default until chosen (FIX-4). */
+  uomCode: string;
   unitPrice: string;
   discount: string;
   supplierId: string;
@@ -147,6 +164,7 @@ const COLUMN_KEYS = [
   'code',
   'name',
   'qty',
+  'unit',
   'price',
   'discount',
   'total',
@@ -167,6 +185,7 @@ const blank = (warehouseCode: string): Row => ({
   itemCode: '',
   itemName: '',
   quantity: '',
+  uomCode: '',
   unitPrice: '',
   discount: '',
   supplierId: '',
@@ -193,6 +212,7 @@ const fromLine = (line: SavedInvoiceLine, nameOf: (code: string) => string): Row
   itemCode: line.itemCode,
   itemName: nameOf(line.itemCode),
   quantity: trimZeros(line.quantity),
+  uomCode: line.uomCode ?? '',
   unitPrice: trimZeros(line.unitPrice),
   discount: Number(line.discount) === 0 ? '' : trimZeros(line.discount),
   supplierId: line.supplierId,
@@ -240,6 +260,7 @@ export function InvoiceLinesGrid({
   locale,
   headingId,
   live,
+  unitColumn = false,
 }: {
   readonly items: readonly LineItem[];
   readonly warehouses: readonly LineWarehouse[];
@@ -273,6 +294,8 @@ export function InvoiceLinesGrid({
   readonly headingId: string;
   /** Present on a draft that already exists: each row saves itself. */
   readonly live?: LiveLines | undefined;
+  /** REQ-FIX-001 FIX-4 — a Unit column: each line in one of its item's units. */
+  readonly unitColumn?: boolean;
 }) {
   const router = useRouter();
   const codeList = useId();
@@ -334,16 +357,39 @@ export function InvoiceLinesGrid({
     [chosenPurchaseSupplier, mode],
   );
 
+  /** The unit a new line starts in: the item's purchase (sales) default, else its own. */
+  const defaultUnitFor = useCallback(
+    (item: LineItem | undefined) => {
+      if (!item) return '';
+      const preferred = item.units?.find((unit) => (mode === 'sale' ? unit.isSalesDefault : unit.isPurchaseDefault));
+      return preferred?.code ?? item.uomCode ?? '';
+    },
+    [mode],
+  );
+
+  /**
+   * A default price is per base unit; a line in a carton of 24 starts at 24
+   * of it. Exact in integers (HD8): price × numerator ÷ denominator.
+   */
+  const priceIn = useCallback((item: LineItem | undefined, basePrice: string, uomCode: string) => {
+    if (!item || !basePrice) return basePrice;
+    const unit = item.units?.find((candidate) => candidate.code === uomCode);
+    if (!unit || unit.numerator === unit.denominator) return basePrice;
+    const value = scaled(basePrice, MONEY_PLACES);
+    if (value === null) return basePrice;
+    return toText((value * BigInt(unit.numerator)) / BigInt(unit.denominator), MONEY_PLACES);
+  }, []);
+
   useEffect(() => {
     if (mode !== 'purchase') return;
     setRows((current) =>
       current.map((row) =>
         row.lineId === null && !row.priceEdited && row.itemCode
-          ? { ...row, unitPrice: defaultPriceFor(itemsByCode.get(row.itemCode)) }
+          ? { ...row, unitPrice: priceIn(itemsByCode.get(row.itemCode), defaultPriceFor(itemsByCode.get(row.itemCode)), row.uomCode) }
           : row,
       ),
     );
-  }, [chosenPurchaseSupplier, defaultPriceFor, itemsByCode, mode]);
+  }, [chosenPurchaseSupplier, defaultPriceFor, itemsByCode, mode, priceIn]);
 
   const savedLines = live?.lines;
 
@@ -489,7 +535,8 @@ export function InvoiceLinesGrid({
                 itemCode,
                 itemName: match ? match.name : row.itemName,
                 quantity: match && row.quantity.trim() === '' ? '1' : row.quantity,
-                unitPrice: match ? defaultPriceFor(match) : row.unitPrice,
+                uomCode: match ? defaultUnitFor(match) : row.uomCode,
+                unitPrice: match ? priceIn(match, defaultPriceFor(match), defaultUnitFor(match)) : row.unitPrice,
                 priceEdited: false,
                 supplierId: '',
                 dirty: true,
@@ -512,7 +559,8 @@ export function InvoiceLinesGrid({
                 itemName,
                 itemCode: match ? match.code : row.itemCode,
                 quantity: match && row.quantity.trim() === '' ? '1' : row.quantity,
-                unitPrice: match ? defaultPriceFor(match) : row.unitPrice,
+                uomCode: match ? defaultUnitFor(match) : row.uomCode,
+                unitPrice: match ? priceIn(match, defaultPriceFor(match), defaultUnitFor(match)) : row.unitPrice,
                 priceEdited: match ? false : row.priceEdited,
                 supplierId: match ? '' : row.supplierId,
                 dirty: true,
@@ -545,6 +593,7 @@ export function InvoiceLinesGrid({
     if (row.lineId) form.set('lineId', row.lineId);
     form.set('itemCode', row.itemCode);
     form.set('quantity', row.quantity.trim());
+    if (row.uomCode) form.set('uomCode', row.uomCode);
     form.set('unitPrice', row.unitPrice.trim());
     form.set('discount', row.discount.trim());
     form.set('warehouseCode', row.warehouseCode);
@@ -596,7 +645,7 @@ export function InvoiceLinesGrid({
 
   const filled = rows.filter(written);
   const total = filled.reduce((sum, row) => sum + totalOf(row), 0n);
-  const columns = showSupplier ? 10 : 9;
+  const columns = (showSupplier ? 10 : 9) + (unitColumn ? 1 : 0);
 
   /** Only a form posts its rows; a live grid has already sent them. */
   const field = (name: string, index: number) => (live ? {} : { name: `${name}_${index}` });
@@ -620,6 +669,7 @@ export function InvoiceLinesGrid({
           <col className={styles.colCode} style={widthOf('code')} />
           <col className={styles.colName} style={widthOf('name')} />
           <col className={styles.colQty} style={widthOf('qty')} />
+          {unitColumn ? <col className={styles.colDiscount} style={widthOf('unit')} /> : null}
           <col className={styles.colPrice} style={widthOf('price')} />
           <col className={styles.colDiscount} style={widthOf('discount')} />
           <col className={styles.colTotal} style={widthOf('total')} />
@@ -644,6 +694,12 @@ export function InvoiceLinesGrid({
               {labels.quantity}
               <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('qty')} />
             </th>
+            {unitColumn ? (
+              <th scope="col">
+                {labels.unit}
+                <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('unit')} />
+              </th>
+            ) : null}
             <th className={styles.sapNum} scope="col">
               {labels.unitPrice}
               <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('price')} />
@@ -728,7 +784,7 @@ export function InvoiceLinesGrid({
                   )}
                   {/* The item's own unit travels with the line. Without it every
                       line is billed in "each", whatever the item is measured in. */}
-                  {live ? null : (
+                  {live || unitColumn ? null : (
                     <input name={`uom_code_${index}`} type="hidden" value={item?.uomCode ?? ''} />
                   )}
                   {locked ? <span className={styles.sapCellNote}>{labels.saving}</span> : null}
@@ -785,6 +841,31 @@ export function InvoiceLinesGrid({
                     </span>
                   ) : null}
                 </td>
+                {unitColumn ? (
+                  <td>
+                    <select
+                      aria-label={labels.unit}
+                      disabled={locked || !item}
+                      onChange={(event) => {
+                        const uomCode = event.target.value;
+                        patch(row.key, {
+                          uomCode,
+                          // A price still the item's default follows the unit; a typed one stays.
+                          ...(row.priceEdited ? {} : { unitPrice: priceIn(item, defaultPriceFor(item), uomCode) }),
+                        });
+                      }}
+                      value={row.uomCode || defaultUnitFor(item)}
+                      {...field('uom_code', index)}
+                    >
+                      {(item?.units ?? (item?.uomCode ? [{ code: item.uomCode, numerator: '1', denominator: '1', isPurchaseDefault: true, isSalesDefault: true }] : [])).map((unit) => (
+                        <option key={unit.code} value={unit.code}>
+                          {unit.code}
+                          {unit.numerator === unit.denominator ? '' : ` (${toText((BigInt(unit.numerator) * 1_000_000n) / BigInt(unit.denominator), 6)} ${item?.uomCode ?? ''})`}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                ) : null}
                 <td className={styles.sapNum}>
                   <input
                     aria-label={labels.unitPrice}
@@ -892,7 +973,7 @@ export function InvoiceLinesGrid({
           {/* What the document comes to, live, the way the journal sums its own
               grid as it is typed rather than after a round trip. */}
           <tr className={styles.sapTotalRow}>
-            <td colSpan={6}>
+            <td colSpan={unitColumn ? 7 : 6}>
               {labels.documentTotal}
               {pending ? <span className={styles.sapNote}> · {labels.saving}</span> : null}
             </td>

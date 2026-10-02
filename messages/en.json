@@ -1968,7 +1968,18 @@
       "inventory_account_hint": "Where this item’s stock is held. Debited when bought, credited when sold.",
       "cogs_account": "COGS account",
       "cogs_account_hint": "What this item costs when it is sold.",
-      "full_name": "Item Full Name"
+      "full_name": "Item Full Name",
+      "units_title": "Units ({count})",
+      "unit": "Unit",
+      "unit_holds": "One unit holds",
+      "unit_holds_hint": "How many {base} one of this unit holds — 24 for a carton of 24, 0.5 for half.",
+      "unit_purchase_default": "Bought in",
+      "unit_sales_default": "Sold in",
+      "base_unit": "Base unit",
+      "base_unit_hint": "The unit its stock is counted in. Other units (a carton, a roll) are added on the item.",
+      "units_hint": "Stock is counted in {base}; a line in another unit is converted at the movement, exactly, or refused.",
+      "add_unit": "Add unit",
+      "unit_barcode": "Barcode"
     },
     "partners": {
       "subtitle_customer": "Who we sell to. One record per company, whatever else they are to us.",

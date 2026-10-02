@@ -40,6 +40,7 @@ import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
 import * as inventory from './inventory';
+import * as units from './item-units';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
 import { countOf, registerPage, whereOf, type RegisterPage, type RegisterPaging } from './register-page';
@@ -517,12 +518,15 @@ export async function post(
   const movementIds: string[] = [];
 
   for (const plan of planned) {
+    // REQ-FIX-001 FIX-4 — received in the order's unit, counted in the base.
+    const baseQuantity = await units.toBaseQuantity(tx, plan.line.itemCode, plan.line.uomCode, plan.quantity);
     const movement = await inventory.receive(tx, ctx, {
       itemCode: plan.line.itemCode,
       warehouseCode: plan.line.warehouseCode,
       branchCode: receipt.branchCode,
-      quantity: plan.quantity,
-      unitCostIqd: plan.unitCostIqd,
+      quantity: baseQuantity,
+      // The order's price is per its unit; a base unit costs that share of it.
+      unitCostIqd: baseQuantity === plan.quantity || baseQuantity === 0n ? plan.unitCostIqd : (plan.unitCostIqd * plan.quantity) / baseQuantity,
       movementDate: receipt.receiptDate,
       kind: 'goods_receipt',
       sourceDocumentType: PERMISSION_OBJECT,

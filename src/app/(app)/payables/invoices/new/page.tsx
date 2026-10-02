@@ -290,12 +290,14 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
               items={sellable}
               loadAvailability={invoiceLineAvailability}
               mode="purchase"
+              unitColumn
               purchaseSupplierField="supplier_id"
               widthsKey={`erp.lines.ap.${context.principal.userId}`}
               labels={{
                 itemCode: column('item_code'),
                 itemName: column('item_name'),
                 quantity: column('quantity'),
+              unit: column('unit'),
                 unitPrice: column('unit_price'),
                 discount: column('discount'),
                 total: column('total_price'),
