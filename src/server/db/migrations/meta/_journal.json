@@ -1233,6 +1233,13 @@
       "when": 1795900000055,
       "tag": "0250_project_close",
       "breakpoints": true
+    },
+    {
+      "idx": 176,
+      "version": "7",
+      "when": 1795900000056,
+      "tag": "0251_whatsapp_agent_model",
+      "breakpoints": true
     }
   ]
 }

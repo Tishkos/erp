@@ -143,6 +143,8 @@ stage 1.
   remaining table, business dates in Asia/Baghdad, integer money everywhere.
 
 ### Changed
+- WhatsApp bot: the agent model is `claude-sonnet-5-5` again (migration 0251),
+  by direction; 0245 had replaced it with `claude-sonnet-5`.
 - `next` 16.3.8 (security), `nodemailer` 10; `package.json` version is real.
 - Deploys build beside the running application and swap; the previous build
   is kept as `.next-prev`; a deploy ships only what is on `origin/main`.
