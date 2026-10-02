@@ -8,6 +8,11 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-IMPROVE-001 IMPROVE-2a — closing controls: the closed-period lock at
+  the database (journals, stock movements, close in sequence; migration
+  0243), the period-close checklist on the Accounting Periods screen with
+  the hard close refused while a blocking check fails, the nightly
+  `closing-checks` job, and `docs/CONTROLS.md` with its gate test.
 - REQ-WA-001 WA-1/WA-2 — the WhatsApp bridge (`npm run whatsapp-bridge`,
   Baileys, pairing kept in the database), the `whatsapp` notification channel
   with its contacts, settings and message log on the **WhatsApp** screen, and
@@ -26,7 +31,7 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
   Migration 0240.
 
 ### Migration notes
-- 0240–0242 are additive. 0242 adds an enum value (`whatsapp`) and must run
+- 0240–0243 are additive. 0243 adds triggers: after it, a period that is `closed` refuses postings and stock movements at the table, and a period cannot be closed before the earlier ones of its year. 0242 adds an enum value (`whatsapp`) and must run
   on its own before the bridge starts (the migrator runs it as one
   transaction; nothing in the same file uses the value).
 - After deploying: install the crontab (`install-cron.sh`, done by

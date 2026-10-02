@@ -84,6 +84,13 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
 
     // Twelve monthly periods, and the calendar says which are open.
     await expect(page.getByRole('cell', { name: `FY${YEAR}` }).first()).toBeVisible();
+
+    // REQ-IMPROVE-001 FC-2 — the close checklist is on the same screen, for
+    // the next period to close, with every check named and judged.
+    await expect(page.getByRole('heading', { name: 'Period close checks' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Earlier periods are closed' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Sub-ledgers equal their control accounts' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Run checks' })).toBeVisible();
   });
 
   test('1b · a rate is published, so postings can be measured', async ({ page }) => {

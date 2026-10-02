@@ -39,6 +39,22 @@ export const PERMISSION_OBJECT = 'fiscal_period';
  */
 export const OVERRIDE_VERB = 'execute' as const;
 
+/**
+ * REQ-IMPROVE-001 FC-2 — a hard close is refused while a blocking check of
+ * the period-close checklist fails. The message names the checks, so the
+ * person is sent to the screen that shows the figure, not to a guess.
+ */
+export class PeriodCloseBlockedError extends Error {
+  readonly code = 'PERIOD_CLOSE_BLOCKED';
+  constructor(
+    periodName: string,
+    readonly failed: readonly string[],
+  ) {
+    super(`${periodName} cannot be closed while these checks fail: ${failed.join(', ')}. Open Period Close to see the figures.`);
+    this.name = 'PeriodCloseBlockedError';
+  }
+}
+
 export class PeriodStatusChangeError extends Error {
   readonly code = 'PERIOD_STATUS_CHANGE_INVALID';
   constructor(detail: string) {
@@ -244,9 +260,20 @@ export async function setPeriodStatus(
     );
   }
 
+  // FC-2 — a hard close passes the checklist first; its warnings go on the
+  // record beside the reason, so a close taken over a warning says so.
+  let warnings: readonly string[] = [];
+  if (status === 'closed' && row.status !== 'closed') {
+    const [yearRow] = await tx.select({ code: fiscalYear.code }).from(fiscalYear).where(eq(fiscalYear.id, row.fiscalYearId)).limit(1);
+    const closing = await import('./closing-checks');
+    const checked = await closing.report(tx, toPeriod(row, yearRow?.code ?? ''));
+    if (!checked.mayClose) throw new PeriodCloseBlockedError(row.name, checked.blockingFailures);
+    warnings = checked.warnings;
+  }
+
   await tx
     .update(fiscalPeriod)
-    .set({ status, statusChangedBy: ctx.principal.userId })
+    .set({ status, statusChangedBy: ctx.principal.userId, statusChangedAt: new Date() })
     .where(eq(fiscalPeriod.id, periodId));
 
   await audit.record(tx, {
@@ -256,11 +283,24 @@ export async function setPeriodStatus(
     objectId: periodId,
     branchCode: ctx.branchCode,
     before: { status: row.status },
-    after: { status },
+    after: { status, ...(warnings.length ? { warnings } : {}) },
     reason,
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });
+}
+
+/** The checklist for a period, for the screen. */
+export async function closeReport(tx: Tx, periodId: string) {
+  const [row] = await tx
+    .select({ period: fiscalPeriod, yearCode: fiscalYear.code })
+    .from(fiscalPeriod)
+    .innerJoin(fiscalYear, eq(fiscalYear.id, fiscalPeriod.fiscalYearId))
+    .where(eq(fiscalPeriod.id, periodId))
+    .limit(1);
+  if (!row) throw new PeriodStatusChangeError(`No fiscal period with id '${periodId}'.`);
+  const closing = await import('./closing-checks');
+  return closing.report(tx, toPeriod(row.period, row.yearCode));
 }
 
 /**

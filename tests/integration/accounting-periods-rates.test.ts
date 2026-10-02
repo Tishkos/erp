@@ -80,6 +80,22 @@ async function periodNamed(name: string): Promise<string> {
   return rows[0].id;
 }
 
+/**
+ * REQ-IMPROVE-001 FC-2 — periods close in sequence, so closing July means
+ * closing January to June first, each through the service and its checklist.
+ */
+async function closeThrough(name: string): Promise<string> {
+  const target = await periodNamed(name);
+  const { rows } = await ownerPool.query(
+    `select id from fiscal_period where period_no <= (select period_no from fiscal_period where id = $1) and status <> 'closed' order by period_no`,
+    [target],
+  );
+  for (const row of rows) {
+    await withScope(scopeOf(manager), (tx) => periods.setPeriodStatus(tx, manager, row.id, 'closed', 'Year-end'));
+  }
+  return target;
+}
+
 // ---------------------------------------------------------------------------
 describe('02.2 · the fiscal calendar', () => {
   it('lays out twelve contiguous monthly periods', async () => {
@@ -319,10 +335,7 @@ describe('02.2 · soft close (§14.6)', () => {
   });
 
   it('refuses everyone once a period is closed', async () => {
-    const july = await periodNamed('July 2026');
-    await withScope(scopeOf(manager), (tx) =>
-      periods.setPeriodStatus(tx, manager, july, 'closed', 'Year-end'),
-    );
+    const july = await closeThrough('July 2026');
 
     await expect(
       withScope(scopeOf(manager), (tx) =>
@@ -336,10 +349,7 @@ describe('02.2 · soft close (§14.6)', () => {
   });
 
   it('does not reopen a closed period from here', async () => {
-    const july = await periodNamed('July 2026');
-    await withScope(scopeOf(manager), (tx) =>
-      periods.setPeriodStatus(tx, manager, july, 'closed', 'Year-end'),
-    );
+    const july = await closeThrough('July 2026');
 
     await expect(
       withScope(scopeOf(manager), (tx) =>

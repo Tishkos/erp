@@ -17,6 +17,8 @@
 #                                          open, disk, failed jobs → in-app notice
 #   */5 minutes     deliver-notifications  the outbox: in-app rows complete, e-mail
 #                                          sent, retries (REQ-WA-001 WA-1, HARDEN F1–F3)
+#   02:30 daily     closing-checks         the month to close, checked; blockers → in-app
+#                                          notice (REQ-IMPROVE-001 FC-4)
 #   03:00 Sunday    restore-drill          restore the newest set, verify it
 #
 # The WhatsApp bridge is not a cron job: it is a long-running service
@@ -29,6 +31,7 @@ RUN=/opt/qs-erp-next/scripts/ops/run-job.sh
 
 0  1 * * *   $RUN backup              3600 $APP/scripts/ops/backup.sh --local
 15 2 * * *   $RUN inventory-integrity 1800 npx tsx $APP/scripts/ops/inventory-integrity-check.ts
+30 2 * * *   $RUN closing-checks      1800 npx tsx $APP/scripts/ops/closing-checks.ts
 10 6 * * *   $RUN payables-sweep      1800 npx tsx $APP/scripts/ops/payables-sweep.ts
 20 6 * * *   $RUN due-notices         1800 npx tsx $APP/scripts/ops/due-notices.ts
 40 6 * * *   $RUN health-check        900  npx tsx $APP/scripts/ops/health-check.ts
