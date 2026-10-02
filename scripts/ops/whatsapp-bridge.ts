@@ -46,7 +46,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import qrcode from 'qrcode-terminal';
 import { pool, withScope, type RequestScope } from '../../src/server/db/client';
-import { detectLocale, e164ToJid, jidToE164, words } from '../../src/server/domain/whatsapp';
+import { detectLocale, digestDue, e164ToJid, jidToE164, words } from '../../src/server/domain/whatsapp';
 import * as audit from '../../src/server/services/audit';
 import * as runner from '../../src/server/services/notification-runner';
 import * as wa from '../../src/server/services/whatsapp';
@@ -260,6 +260,35 @@ async function handleInbound(
 }
 
 // ---------------------------------------------------------------------------
+// The morning digest (WA-4): today's summary to every opted-in CEO contact,
+// once a day, at the digest hour or as soon after it as the bridge is up.
+// ---------------------------------------------------------------------------
+
+async function sendDigest(scope: RequestScope, send: wa.Transport, settings: Awaited<ReturnType<typeof wa.settings>>): Promise<void> {
+  const lastSentDay = await withScope(scope, (tx) => wa.digestLastSentDay(tx));
+  const { due, day } = digestDue({ digestHour: settings.digestHour, lastSentDay, at: new Date() });
+  if (!due) return;
+  // Marked first: a digest that fails to send is retried tomorrow, not every poll.
+  await withScope(scope, (tx) => wa.markDigestSent(tx, day));
+  const recipients = await withScope(scope, (tx) => wa.digestRecipients(tx));
+  for (const recipient of recipients) {
+    try {
+      const reply = await wa.answer({ userId: recipient.userId, text: 'summary', settings, locale: settings.digestLocale });
+      const outId = await withScope(scope, (tx) => wa.recordOutbound(tx, { e164: recipient.e164, body: reply.text, sender: recipient, intent: 'digest', detail: reply.detail }));
+      try {
+        const { waMessageId } = await send({ e164: recipient.e164 }, { text: reply.text });
+        await withScope(scope, (tx) => wa.markOutbound(tx, outId, { status: 'sent', waMessageId }));
+      } catch (error) {
+        await withScope(scope, (tx) => wa.markOutbound(tx, outId, { status: 'failed', errorMessage: error instanceof Error ? error.message : String(error) }));
+      }
+    } catch (error) {
+      log(`digest for ${recipient.e164} failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  log(`digest for ${day}: ${recipients.length} recipient(s)`);
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -356,6 +385,7 @@ async function main(): Promise<void> {
         const r = result.channels.whatsapp;
         if (result.dispatched || (r && (r.sent || r.failed || r.suppressed))) log(runner.describe(result));
       }
+      if (socket) await sendDigest(scope, send, settings);
       if (Date.now() - lastRedaction > 3_600_000) {
         lastRedaction = Date.now();
         const blanked = await withScope(scope, (tx) => wa.redactExpired(tx, settings.retentionDays));

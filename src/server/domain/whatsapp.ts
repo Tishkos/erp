@@ -306,8 +306,10 @@ export interface BotSettings {
   readonly throttlePerMinute: number;
   /** Message bodies are blanked after this many days (D-WA-8). */
   readonly retentionDays: number;
-  /** The hour (00–23, server clock) the daily digest goes out (WA-4). */
+  /** The hour (00–23, business time) the daily digest goes out (WA-4). */
   readonly digestHour: number;
+  /** The language the digest is written in. */
+  readonly digestLocale: BotLocale;
 }
 
 export const SETTING_KEYS = [
@@ -318,6 +320,7 @@ export const SETTING_KEYS = [
   'throttle_per_minute',
   'retention_days',
   'digest_hour',
+  'digest_locale',
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
@@ -329,6 +332,7 @@ export const DEFAULT_SETTINGS: BotSettings = {
   throttlePerMinute: 60,
   retentionDays: 90,
   digestHour: 8,
+  digestLocale: 'ar',
 };
 
 export class WhatsappValidationError extends Error {
@@ -366,6 +370,7 @@ export function settingsFrom(rows: ReadonlyArray<{ readonly key: string; readonl
     throttlePerMinute: num('throttle_per_minute', DEFAULT_SETTINGS.throttlePerMinute, 1, 600),
     retentionDays: num('retention_days', DEFAULT_SETTINGS.retentionDays, 7, 3650),
     digestHour: num('digest_hour', DEFAULT_SETTINGS.digestHour, 0, 23),
+    digestLocale: str('digest_locale', DEFAULT_SETTINGS.digestLocale) === 'en' ? 'en' : 'ar',
   };
 }
 
@@ -389,5 +394,29 @@ export function validateSetting(key: string, value: string): { readonly key: Set
       return { key: k, value: String(bounded(k, raw, 7, 3650)) };
     case 'digest_hour':
       return { key: k, value: String(bounded(k, raw, 0, 23)).padStart(2, '0') };
+    case 'digest_locale':
+      if (raw !== 'ar' && raw !== 'en') throw new WhatsappValidationError(k, 'must be ar or en');
+      return { key: k, value: raw };
   }
+}
+
+// ---------------------------------------------------------------------------
+// The morning digest (WA-4)
+// ---------------------------------------------------------------------------
+
+/** The business day and hour of an instant, in the company's zone. */
+export function businessHour(at: Date, zone = 'Asia/Baghdad'): { readonly day: string; readonly hour: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(at);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return { day: `${get('year')}-${get('month')}-${get('day')}`, hour: Number(get('hour')) };
+}
+
+/**
+ * Whether the digest is owed now: the business day has reached the digest
+ * hour and nothing was sent for that day yet. A bridge that was asleep at
+ * eight sends when it wakes, once; never twice in a day.
+ */
+export function digestDue(input: { readonly digestHour: number; readonly lastSentDay: string | null; readonly at: Date; readonly zone?: string }): { readonly due: boolean; readonly day: string } {
+  const { day, hour } = businessHour(input.at, input.zone);
+  return { due: hour >= input.digestHour && input.lastSentDay !== day, day };
 }

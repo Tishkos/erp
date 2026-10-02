@@ -318,3 +318,23 @@ describe('W4 · wa01-readonly — the database refuses a write from a question',
     expect(after.rows[0].n).toBe(before.rows[0].n);
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('WA-4 · the digest goes to opted-in CEO contacts, once a day', () => {
+  it('recipients are the active contacts opted in who may ask; the day is marked', async () => {
+    await withScope(scope(admin), (tx) =>
+      wa.saveContact(tx, admin, { userId: ceo.principal.userId, e164: '+9647701234567', allowNotifications: true, allowQueries: true, allowDigest: true }),
+    );
+    await withScope(scope(admin), (tx) =>
+      wa.saveContact(tx, admin, { userId: manager.principal.userId, e164: '+9647701112233', allowNotifications: true, allowQueries: false, allowDigest: true }),
+    );
+    const recipients = await withScope(systemScope(), (tx) => wa.digestRecipients(tx));
+    expect(recipients.map((r) => r.userId)).toEqual([ceo.principal.userId]); // the manager is not a CEO
+    expect(await withScope(systemScope(), (tx) => wa.digestLastSentDay(tx))).toBeNull();
+    await withScope(systemScope(), (tx) => wa.markDigestSent(tx, '2026-10-02'));
+    expect(await withScope(systemScope(), (tx) => wa.digestLastSentDay(tx))).toBe('2026-10-02');
+    const digest = await wa.answer({ userId: ceo.principal.userId, text: 'summary', locale: 'ar' });
+    expect(digest.intent).toEqual({ kind: 'summary' });
+    expect(digest.text).toContain('اليوم ');
+  });
+});

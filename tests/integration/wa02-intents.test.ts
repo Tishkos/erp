@@ -116,7 +116,7 @@ const ask = (text: string, settings?: Partial<Parameters<typeof wa.answer>[0]['s
   wa.answer({
     userId: ceo.principal.userId,
     text,
-    ...(settings ? { settings: { routerModel: 'x', agentModel: 'y', inlineRows: 15, exportRowsCap: 5000, throttlePerMinute: 60, retentionDays: 90, digestHour: 8, ...settings } } : {}),
+    ...(settings ? { settings: { routerModel: 'x', agentModel: 'y', inlineRows: 15, exportRowsCap: 5000, throttlePerMinute: 60, retentionDays: 90, digestHour: 8, digestLocale: 'ar' as const, ...settings } } : {}),
     ...(at ? { now: at } : {}),
   });
 

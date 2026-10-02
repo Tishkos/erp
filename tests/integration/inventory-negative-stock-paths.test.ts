@@ -260,6 +260,9 @@ describe('04.4 gate · no configuration permits negative stock', () => {
     );
 
     expect(rows.map((r) => `${r.table_name}.${r.column_name}`)).toEqual([
+      // REQ-HR-001 §7: days of leave a person may take before earning them —
+      // a leave balance, not a stock quantity. Listed so the gate stays exact.
+      'leave_type.allowed_negative_days',
       'warehouse.allow_negative_stock',
     ]);
   });

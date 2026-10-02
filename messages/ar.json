@@ -3724,6 +3724,7 @@
       "setting_throttle_per_minute": "الرسائل الصادرة في الدقيقة",
       "setting_retention_days": "أيام الاحتفاظ بنص الرسائل",
       "setting_digest_hour": "ساعة ملخص الصباح (00–23)",
+      "setting_digest_locale": "لغة ملخص الصباح (ar أو en)",
       "settings_note": "النماذج هي معرّفات نماذج Anthropic؛ يحتاج الجسر إلى ANTHROPIC_API_KEY على مضيفه لاستخدامها، وإلا فالأنماط النصية وحدها توجّه. تسري التغييرات عند الاستطلاع التالي للجسر.",
       "log": "الرسائل",
       "direction": "الاتجاه",

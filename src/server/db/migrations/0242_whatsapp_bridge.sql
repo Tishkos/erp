@@ -172,7 +172,8 @@ INSERT INTO whatsapp_setting (key, value) VALUES
 	('export_rows_cap', '5000'),
 	('throttle_per_minute', '60'),
 	('retention_days',  '90'),
-	('digest_hour',     '08')
+	('digest_hour',     '08'),
+	('digest_locale',   'ar')
 ON CONFLICT (key) DO NOTHING;--> statement-breakpoint
 
 -- What reaches the CEO's phone from the start: an escalated hold and a

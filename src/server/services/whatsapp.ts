@@ -367,6 +367,35 @@ export async function bridgeStatus(tx: Tx): Promise<BridgeStatus> {
 }
 
 // ---------------------------------------------------------------------------
+// The morning digest (WA-4)
+// ---------------------------------------------------------------------------
+
+const DIGEST_SENT_KEY = 'digest_last_sent_day';
+
+/** The contacts the digest goes to: active, opted in, and allowed to ask (the digest is an answer). */
+export async function digestRecipients(tx: Tx): Promise<ResolvedSender[]> {
+  const rows = await tx.select({ e164: whatsappContact.e164 }).from(whatsappContact).where(and(eq(whatsappContact.active, true), eq(whatsappContact.allowDigest, true))).orderBy(asc(whatsappContact.e164));
+  const out: ResolvedSender[] = [];
+  for (const row of rows) {
+    const sender = await resolveNumber(tx, row.e164);
+    if (sender && mayAsk(sender).ok) out.push(sender);
+  }
+  return out;
+}
+
+export async function digestLastSentDay(tx: Tx): Promise<string | null> {
+  const [row] = await tx.select({ value: whatsappSetting.value }).from(whatsappSetting).where(eq(whatsappSetting.key, DIGEST_SENT_KEY)).limit(1);
+  return row?.value || null;
+}
+
+export async function markDigestSent(tx: Tx, day: string): Promise<void> {
+  await tx
+    .insert(whatsappSetting)
+    .values({ key: DIGEST_SENT_KEY, value: day })
+    .onConflictDoUpdate({ target: whatsappSetting.key, set: { value: day, updatedAt: new Date() } });
+}
+
+// ---------------------------------------------------------------------------
 // The message log (W-R4 made readable; D-WA-8)
 // ---------------------------------------------------------------------------
 

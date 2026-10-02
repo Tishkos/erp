@@ -476,7 +476,9 @@ export async function resetTestData(): Promise<void> {
         when 'throttle_per_minute' then '60'
         when 'retention_days' then '90'
         when 'digest_hour' then '08'
+        when 'digest_locale' then 'ar'
         else value end`);
+    await client.query(`delete from whatsapp_setting where key = 'digest_last_sent_day'`);
     // REQ-HR-001 — people and their dated rows; the seeded masters stay, a
     // test's own masters (created_by set) go.
     await client.query('delete from employee_compensation');

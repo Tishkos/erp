@@ -10,6 +10,8 @@ import {
 import {
   INTENT_KINDS,
   asciiDigits,
+  businessHour,
+  digestDue,
   detectLocale,
   e164ToJid,
   footer,
@@ -134,10 +136,13 @@ describe('language and names', () => {
 
 describe('settings', () => {
   it('reads the rows with the seeds as fallbacks and refuses a bad value', () => {
-    const s = settingsFrom([{ key: 'inline_rows', value: '20' }, { key: 'throttle_per_minute', value: 'lots' }]);
+    const s = settingsFrom([{ key: 'inline_rows', value: '20' }, { key: 'throttle_per_minute', value: 'lots' }, { key: 'digest_locale', value: 'fr' }]);
     expect(s.inlineRows).toBe(20);
     expect(s.throttlePerMinute).toBe(60);
     expect(s.agentModel).toBe('claude-sonnet-5-5');
+    expect(s.digestLocale).toBe('ar');
+    expect(validateSetting('digest_locale', 'en')).toEqual({ key: 'digest_locale', value: 'en' });
+    expect(() => validateSetting('digest_locale', 'fr')).toThrow(WhatsappValidationError);
     expect(validateSetting('inline_rows', ' 25 ')).toEqual({ key: 'inline_rows', value: '25' });
     expect(validateSetting('digest_hour', '7')).toEqual({ key: 'digest_hour', value: '07' });
     expect(() => validateSetting('inline_rows', '0')).toThrow(WhatsappValidationError);
@@ -162,6 +167,19 @@ describe('D-HD-4 · delivery retries', () => {
   });
 });
 
+describe('WA-4 · the digest is owed once a day, at or after its hour', () => {
+  it('is due when the business hour is reached and not yet sent today; never twice', () => {
+    const at = new Date('2026-10-02T05:30:00Z'); // 08:30 in Baghdad
+    expect(digestDue({ digestHour: 8, lastSentDay: null, at })).toEqual({ due: true, day: '2026-10-02' });
+    expect(digestDue({ digestHour: 8, lastSentDay: '2026-10-02', at })).toEqual({ due: false, day: '2026-10-02' });
+    expect(digestDue({ digestHour: 8, lastSentDay: '2026-10-01', at })).toEqual({ due: true, day: '2026-10-02' });
+    expect(digestDue({ digestHour: 9, lastSentDay: null, at })).toEqual({ due: false, day: '2026-10-02' });
+    // Late in the evening, still that day: a bridge that slept sends once when it wakes.
+    expect(digestDue({ digestHour: 8, lastSentDay: '2026-10-01', at: new Date('2026-10-02T19:00:00Z') })).toEqual({ due: true, day: '2026-10-02' });
+    expect(businessHour(new Date('2026-10-02T21:30:00Z'))).toEqual({ day: '2026-10-03', hour: 0 });
+  });
+});
+
 describe('W5 · the model router chooses from the whitelist or nothing', () => {
   const fake = (content: Array<{ type: string; name?: string; input?: unknown }>): RouterClient => ({ create: async () => ({ content }) });
 
@@ -176,11 +194,11 @@ describe('W5 · the model router chooses from the whitelist or nothing', () => {
   });
 
   it('a model answer outside the whitelist, a text answer, or an error is none', async () => {
-    expect(await modelRouter(fake([{ type: 'tool_use', name: 'approve_payment', input: {} }]), 'm')('approve it')).toEqual({ kind: 'none' });
-    expect(await modelRouter(fake([{ type: 'text' }]), 'm')('hello')).toEqual({ kind: 'none' });
+    expect(await modelRouter(fake([{ type: 'tool_use', name: 'approve_payment', input: {} }]), 'm')('approve it', 'en')).toEqual({ kind: 'none' });
+    expect(await modelRouter(fake([{ type: 'text' }]), 'm')('hello', 'en')).toEqual({ kind: 'none' });
     const failing: RouterClient = { create: async () => { throw new Error('network'); } };
-    expect(await modelRouter(failing, 'm')('hello')).toEqual({ kind: 'none' });
-    expect(await modelRouter(fake([{ type: 'tool_use', name: 'swift', input: { minDays: 3 } }]), 'm')('any swift older than 3 days?')).toEqual({ kind: 'swift', minDays: 3 });
+    expect(await modelRouter(failing, 'm')('hello', 'en')).toEqual({ kind: 'none' });
+    expect(await modelRouter(fake([{ type: 'tool_use', name: 'swift', input: { minDays: 3 } }]), 'm')('any swift older than 3 days?', 'en')).toEqual({ kind: 'swift', minDays: 3 });
   });
 
   it('the request carries the whitelist as tools and forces one tool call', async () => {
@@ -191,7 +209,7 @@ describe('W5 · the model router chooses from the whitelist or nothing', () => {
         return { content: [{ type: 'tool_use', name: 'help', input: {} }] };
       },
     };
-    await modelRouter(client, 'claude-haiku-4-5-20251001')('what can you do');
+    await modelRouter(client, 'claude-haiku-4-5-20251001')('what can you do', 'en');
     expect(seen!.model).toBe('claude-haiku-4-5-20251001');
     expect(seen!.tool_choice).toEqual({ type: 'any', disable_parallel_tool_use: true });
     expect(seen!.tools.map((t) => t.name)).toEqual(INTENT_TOOLS.map((t) => t.name));

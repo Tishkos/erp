@@ -59,7 +59,10 @@ channel: pending rows are sent, a transport failure is retried after 1, 10
 and 60 minutes and then stays `failed` on the Background Jobs and WhatsApp
 screens, a recipient with no number or notifications off is `suppressed`.
 Once an hour it blanks message bodies older than the retention
-(`retention_days`, 90) — the rows and their outcomes stay.
+(`retention_days`, 90) — the rows and their outcomes stay. Once a day, at
+`digest_hour` (08, business time) or as soon after it as the bridge is up,
+it sends *today's summary* in `digest_locale` to every contact with *Morning
+digest* ticked who may ask — the same text as asking `summary`.
 
 ## 4. Asking
 
