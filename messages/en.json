@@ -10,7 +10,7 @@
     "purchasing": "Purchasing",
     "inventory": "Inventory & Warehouses",
     "projects": "Projects & Contracting",
-    "logistics": "Logistics",
+    "logistics": "Logistics Jobs",
     "money_transfer": "Money Transfer",
     "investments": "Investments",
     "finance_gl": "Finance — General Ledger",
@@ -25,7 +25,12 @@
     "master_data": "Master Data",
     "administration": "Administration",
     "integrations": "Integrations & Support",
-    "payables": "Payables"
+    "payables": "Purchasing & Invoices",
+    "payables_payments": "Payments",
+    "payables_suppliers": "Suppliers & Balances",
+    "payables_setup": "Setup",
+    "logistics_customs": "Customs (ASYCUDA)",
+    "logistics_shipping": "Shipping"
   },
   "page": {
     "my_dashboard": "My Dashboard",
@@ -270,7 +275,9 @@
     "legacy_import": "Legacy Books Import",
     "hr_settings": "HR Settings",
     "whatsapp": "WhatsApp",
-    "project_settings": "Project Settings"
+    "project_settings": "Project Settings",
+    "asycuda_update": "Update from ASYCUDA",
+    "bank_deposits": "Bank Deposits"
   },
   "auth": {
     "email": "Email",
@@ -4281,6 +4288,40 @@
       "recognition_note": "Recognised revenue to date is the contract value × actual cost ÷ estimate at completion; the period journal posts the difference from what was billed to WIP or deferred revenue and is reversed next period (D-PM-1). Nothing posts until Finance ratifies the method.",
       "ratify": "Ratify the method",
       "ratify_hint": "The decision this rests on — e.g. the Finance committee minute"
+    },
+    "bank_deposits": {
+      "subtitle": "Money put into a bank account by hand — cash taken to the bank, or money from any other source. Each is approved by somebody else and posted.",
+      "new_cash": "Cash deposit",
+      "new_cash_note": "Cash taken from one of the company’s cash accounts to the bank: a bank transfer, Dr the bank, Cr the cash.",
+      "new_other": "Other deposit",
+      "new_other_note": "Money from outside the company’s own accounts — capital, a refund, a sale outside the ledgers: Dr the bank, Cr the account it was for (never a control account).",
+      "into": "Into bank account",
+      "from_cash": "From cash account",
+      "credit_account": "Credit account",
+      "payer": "Paid in by",
+      "amount": "Amount",
+      "date": "Deposit date",
+      "reference": "Bank reference",
+      "note": "Note",
+      "create": "Create deposit",
+      "view": "View",
+      "view_all": "All deposits",
+      "view_open": "Not yet posted",
+      "view_posted": "Posted",
+      "filter": "Filter",
+      "col_no": "Deposit no.",
+      "col_status": "Status",
+      "source": "Source",
+      "from": "From",
+      "source_cash": "Cash",
+      "source_other": "Other source",
+      "none": "No deposits yet.",
+      "approve": "Approve",
+      "post": "Post",
+      "journal": "Journal",
+      "lines": "Deposit",
+      "document_type_cash": "Bank deposit — cash",
+      "document_type_other": "Bank deposit — other source"
     }
   },
   "profile": {

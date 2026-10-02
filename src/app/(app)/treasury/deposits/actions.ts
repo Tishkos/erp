@@ -1,0 +1,62 @@
+'use server';
+
+import { runAdminAndReturn, text } from '@/server/admin-action';
+import { parseDecimal } from '@/server/domain/money';
+import * as deposits from '@/server/services/bank-deposits';
+
+/** Bank deposits — REQ-FIX-001 FIX-1 (D-FX-2). */
+const LIST = '/treasury/deposits';
+const record = (no: string) => `${LIST}/${encodeURIComponent(no)}`;
+
+function amountOf(formData: FormData, name = 'amount'): bigint {
+  const amount = text(formData, name).replace(/[,\s]/g, '');
+  if (!/^\d+(\.\d{1,4})?$/.test(amount)) throw new Error('State the amount deposited.');
+  return parseDecimal(amount, 4n);
+}
+
+export async function depositCash(formData: FormData): Promise<void> {
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      deposits.depositCash(tx, ctx, {
+        intoAccountId: text(formData, 'into_account_id'),
+        fromCashAccountId: text(formData, 'from_cash_account_id'),
+        depositDate: text(formData, 'deposit_date'),
+        amount: amountOf(formData),
+        reference: text(formData, 'reference') || null,
+        note: text(formData, 'note') || null,
+      }),
+    (value) => {
+      const made = value as { no?: string } | null | undefined;
+      return made?.no ? record(made.no) : `${LIST}?deposit=cash`;
+    },
+  );
+}
+
+export async function depositOther(formData: FormData): Promise<void> {
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      deposits.depositOther(tx, ctx, {
+        intoAccountId: text(formData, 'other_into_account_id'),
+        creditAccountId: text(formData, 'credit_account_id'),
+        payer: text(formData, 'payer'),
+        depositDate: text(formData, 'other_deposit_date'),
+        amount: amountOf(formData, 'other_amount'),
+        reference: text(formData, 'other_reference') || null,
+        note: text(formData, 'other_note') || null,
+      }),
+    (value) => {
+      const made = value as { no?: string } | null | undefined;
+      return made?.no ? record(made.no) : `${LIST}?deposit=other`;
+    },
+  );
+}
+
+export async function approveDeposit(formData: FormData): Promise<void> {
+  const no = text(formData, 'deposit_no');
+  await runAdminAndReturn((tx, ctx) => deposits.approve(tx, ctx, no), record(no));
+}
+
+export async function postDeposit(formData: FormData): Promise<void> {
+  const no = text(formData, 'deposit_no');
+  await runAdminAndReturn((tx, ctx) => deposits.post(tx, ctx, no), record(no));
+}

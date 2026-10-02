@@ -8,6 +8,23 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-FIX-001 FIX-1 — the menu the sponsor asked for: Payables in four
+  headings (Purchasing & Invoices, Payments, Suppliers & Balances, Setup)
+  with payables work only; a Logistics module holding the customs
+  declarations, the ASYCUDA list, bills of lading, containers and Invoice
+  Status Tracking; Bank Loans and a new **Bank Deposits** screen (cash taken
+  to the bank, or money from another source — a register over the bank
+  transfer and the other receipt, approved by somebody else and posted) under
+  Treasury & Banking. Routes are unchanged.
+
+### Fixed
+- Bank and Cash Reporting counted every treasury posting (other receipts,
+  loans, commissions, cash advances, reconciliation adjustments) as a
+  transfer between own accounts; only a bank transfer's journal is one now
+  (migration 0252 indexes the link).
+- A page with two dialogs labelled both after the first one's title.
+- Stale e2e expectations: the shell's unbuilt-screen and theme tests, the
+  section-tabs navigation test.
 - REQ-HARDEN-001 HARDEN-4 completed: the payable record reads in one
   transaction under a measured budget (G1–G3, HD14); each page hands the
   browser the nine message namespaces its client components use, not the

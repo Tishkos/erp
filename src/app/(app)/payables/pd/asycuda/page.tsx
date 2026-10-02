@@ -30,7 +30,7 @@ const OUTCOME_CHIP: Readonly<Record<string, string>> = {
 };
 
 export default async function AsycudaPage({ searchParams }: { searchParams: SearchParams }) {
-  if (!visibleRoute('/payables/pd')) notFound();
+  if (!visibleRoute('/payables/pd/asycuda')) notFound();
   const [t, admin, page, locale, context, outcome] = await Promise.all([
     getTranslations('admin.customs_pd'),
     getTranslations('admin'),
@@ -54,7 +54,7 @@ export default async function AsycudaPage({ searchParams }: { searchParams: Sear
   return (
     <AdminPage
       back={{ href: '/payables/pd', label: page('pds') }}
-      tabs={<SectionTabs route="/payables/pd" />}
+      tabs={<SectionTabs route="/payables/pd/asycuda" />}
       subtitle={t('asycuda_subtitle')}
       title={t('asycuda')}
       trail={[{ href: '/', label: admin('dashboard_label') }]}

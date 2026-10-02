@@ -166,3 +166,10 @@ Standing rule (by direction, 2026-10-01; see also docs/notes/newsettings.md: "DO
 * The root layout hands `NextIntlClientProvider` only `CLIENT_NAMESPACES` (`src/i18n/client-messages.ts`). A client component that needs another namespace adds it there; `tests/unit/hd19-client-messages.test.ts` fails on a `useTranslations` outside the list. Server components keep `getTranslations` and see everything.
 * A code shown on a screen (status, kind, lane, outcome) goes through a translation with a `.has` fallback; `tests/unit/hd18-no-raw-enum.test.ts` greps for `{x.status}` and the like. A seeded code table read by a screen gets its keys in both locales (`hd18-seeded-labels`).
 * The A21 load run is `scripts/load/seed-payables-volume.ts` (a database made for it, never `.env`'s) and `k6 run tests/load/payables.js`; `docs/RUNBOOK-host-build.md` › *Load run*. The figures live in REQ-HARDEN-001 §3.I.
+
+## Menu headings and Bank Deposits (REQ-FIX-001 FIX-1)
+
+* A module's dropdown is its sections in `MODULE_DEFINITIONS` (`erp-shell.tsx`), one heading each; a page's section tabs are the screens of its own section. Payables is `payables`, `payables_payments`, `payables_suppliers`, `payables_setup`; Logistics is `logistics_customs`, `logistics_shipping`, `logistics`; sections 21–25 are REQ-FIX-001's, after Appendix A's twenty. An item that leaves the section its route was derived from **names its route** (`href`) — routes never move with the menu (D-FX-1). `tests/unit/fx1-menu.test.ts` holds the layout.
+* Bank Deposits (`/treasury/deposits`, `services/bank-deposits.ts`) is a register over `bank_transfer` (cash → bank) and `other_receipt` (any other source) into a *bank* account; it raises, approves (not by the raiser) and posts through those documents' own services. Bank and Cash Reporting tells a transfer by `bank_transfer.journal_entry_id`, never by `source_module`.
+* Two forms in one page must not share field names (`f-<name>` ids); the dialog's title id is per dialog (`useId`).
+

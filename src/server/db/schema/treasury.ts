@@ -190,6 +190,8 @@ export const bankTransfer = pgTable(
     index('bank_transfer_from_idx').on(t.fromAccountId, t.transferDate),
     index('bank_transfer_to_idx').on(t.toAccountId, t.transferDate),
     index('bank_transfer_status_idx').on(t.status, t.branchCode),
+    // REQ-FIX-001 FIX-1 (0252) — Bank and Cash Reporting finds a transfer's journal by it.
+    index('bank_transfer_journal_entry_idx').on(t.journalEntryId).where(sql`${t.journalEntryId} is not null`),
 
     check('bank_transfer_amounts_positive', sql`${t.amount} > 0 and ${t.receivedAmount} > 0`),
     // Money cannot be moved to where it already is. A transfer to the same

@@ -1240,6 +1240,13 @@
       "when": 1795900000056,
       "tag": "0251_whatsapp_agent_model",
       "breakpoints": true
+    },
+    {
+      "idx": 177,
+      "version": "7",
+      "when": 1795900000057,
+      "tag": "0252_bank_transfer_journal_index",
+      "breakpoints": true
     }
   ]
 }

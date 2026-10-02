@@ -98,9 +98,10 @@ describe('the screen catalogue covers the approved tree', () => {
     // applications, PDs, B/Ls, containers, loans and the module settings —
     // eight new items — less the module-settings placeholder they replace;
     // plus REQ-AP-001 Stage 8's Sheet Migration (§24.3); plus REQ-LEGACY-001's
-    // Legacy Books Import and REQ-HR-001's HR Settings (2026-10-02).
-    expect(allMenuItems()).toHaveLength(235);
-    expect(Object.keys(SCREENS)).toHaveLength(235);
+    // Legacy Books Import and REQ-HR-001's HR Settings (2026-10-02); plus
+    // REQ-FIX-001 FIX-1's Bank Deposits and the ASYCUDA list as its own item.
+    expect(allMenuItems()).toHaveLength(237);
+    expect(Object.keys(SCREENS)).toHaveLength(237);
   });
 
   it('uses only declared archetypes', () => {
@@ -117,7 +118,8 @@ describe('the screen catalogue covers the approved tree', () => {
       (sum, item) => sum + screenCount(archetypeOf(item.key)!),
       0,
     );
-    expect(total).toBe(347);
+    // + Bank Deposits (a document, two) + the ASYCUDA list (a workspace, one).
+    expect(total).toBe(350);
   });
 });
 
@@ -170,7 +172,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(235);
+    expect(screenRoutes().size).toBe(237);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -259,6 +261,7 @@ describe('every screen has one address', () => {
       '/payables/payment-applications',
       // REQ-AP-001 Stage 4 — PD / ASYCUDA.
       '/payables/pd',
+      '/payables/pd/asycuda',
       '/payables/purchase-orders',
       '/payables/service-receipts',
       // REQ-AP-001 Stage 5 — B/Ls.
@@ -294,6 +297,7 @@ describe('every screen has one address', () => {
       // Block 9 — Sales Returns.
       '/sales/sales-returns',
       // §17 — Bank and Cash Reporting, beside the accounts it reports on.
+      '/treasury/deposits',
       '/treasury/reporting',
     ]);
   });

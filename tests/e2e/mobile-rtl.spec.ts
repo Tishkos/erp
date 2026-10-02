@@ -54,6 +54,9 @@ const ROUTES = [
   '/administration/project-settings',
   '/inventory/in-transit',
   '/treasury/reporting',
+  // REQ-FIX-001 FIX-1.
+  '/treasury/deposits',
+  '/payables/pd/asycuda',
 ];
 
 async function signIn(page: Page) {
