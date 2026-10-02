@@ -186,18 +186,56 @@ export default async function PayablePage({
   const railName = (stage: (typeof rail)[number]) =>
     (stage as { name?: string }).name ?? stage.code;
 
-  // The rail as the header reads it: done, here, still to come (§21.3).
-  const railText = activeRail
-    .map((stage) => {
-      const mark =
-        stage.code === row.stageCode
-          ? ` ← ${t('rail_now')}`
-          : stage.sequence < currentSeq && found.reached.includes(stage.code)
-            ? ' ✓'
-            : '';
-      return `${stage.sequence}. ${railName(stage)}${mark}`;
-    })
-    .join('  ·  ');
+  /*
+   * The rail, as chips.
+   *
+   * Where a stage sends you: the lane that answers for it. The sections are
+   * already on this page under these anchors, so "where are we" and "what do
+   * I do about it" are one click apart.
+   */
+  const STAGE_SECTION: Readonly<Record<string, string>> = {
+    import_invoiced_funded: '#payments',
+    fully_paid: '#payments',
+    payment_sent: '#payments',
+    closed_matched: '#payments',
+    import_pd_registered: '#pd',
+    import_shipped: '#shipment',
+    import_partly_received: '#shipment',
+    import_all_received: '#shipment',
+    goods_received: '#shipment',
+    import_cleared: '#landed-cost',
+  };
+
+  const railChips = (
+    <span className={s.inlineRow}>
+      {activeRail.map((stage) => {
+        // `reached` is each stage's own rule read against the facts, and they
+        // do not hold in order — a payment sent before the declaration is
+        // registered is "Payment in progress" with the PD stage never passed.
+        const here = stage.code === row.stageCode;
+        const holds = found.reached.includes(stage.code);
+        const tone = here ? 'submitted' : holds ? 'approved' : 'draft';
+        const label = `${stage.sequence}. ${railName(stage)}`;
+        const section = STAGE_SECTION[stage.ruleName] ?? null;
+        const chip = (
+          <span
+            className={`status status--${tone}`}
+            data-status={tone}
+            title={here ? t('rail_now') : holds ? t('rail_done') : t('rail_todo')}
+          >
+            {label}
+          </span>
+        );
+        return section ? (
+          <Link href={section} key={stage.code}>
+            {chip}
+          </Link>
+        ) : (
+          <span key={stage.code}>{chip}</span>
+        );
+      })}
+    </span>
+  );
 
   const stageChip = row.cancelledAt
     ? 'cancelled'
@@ -235,7 +273,7 @@ export default async function PayablePage({
     { label: t('col_branch'), value: <bdi dir="ltr">{row.branchCode}</bdi> },
     { label: t('quantity'), value: row.quantity ? <bdi dir="ltr">{formatQuantity(row.quantity, locale as Locale)}</bdi> : '—' },
     { label: t('terms'), value: row.paymentTermsText ?? '—', wide: true },
-    { label: t('rail'), value: <bdi dir="auto">{railText}</bdi>, wide: true },
+    { label: t('rail'), value: railChips, wide: true },
     { label: t('description'), value: <bdi dir="auto">{row.description}</bdi>, wide: true },
   ];
 

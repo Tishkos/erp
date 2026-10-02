@@ -2604,7 +2604,9 @@
       "papers_count": "{count} ملف",
       "papers_file": "الملف",
       "papers_source": "محفوظ على",
-      "papers_added": "أُضيف"
+      "papers_added": "أُضيف",
+      "rail_done": "هذا صحيح على الاستيراد الآن",
+      "rail_todo": "لم يحدث بعد"
     },
     "payables_settings": {
       "title": "إعدادات الذمم الدائنة",

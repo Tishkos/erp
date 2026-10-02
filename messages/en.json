@@ -2604,7 +2604,9 @@
       "papers_count": "{count} file(s)",
       "papers_file": "File",
       "papers_source": "Kept on",
-      "papers_added": "Added"
+      "papers_added": "Added",
+      "rail_done": "this is true of the import now",
+      "rail_todo": "not yet"
     },
     "payables_settings": {
       "title": "Payables Settings",
