@@ -13,7 +13,7 @@
  * handlers and background jobs all arrive here. The database enforces row scope
  * again through RLS, so a query that forgets to filter still cannot leak a row.
  */
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import {
   PermissionDeniedError,
   ScopeDeniedError,
@@ -51,6 +51,28 @@ export class UnknownUserError extends Error {
  * error and not to a null. Deny-by-default has to be representable, or the
  * first caller to hit it will invent a fallback.
  */
+/**
+ * REQ-HARDEN-001 HD1 — the version the shell watches. Called by every write
+ * that changes what a person may see or do: a role, a grant, a scope, a
+ * department, activation.
+ */
+export async function bumpPermissions(tx: Tx, userId: string): Promise<void> {
+  await tx
+    .update(appUser)
+    .set({ permissionsVersion: sql`${appUser.permissionsVersion} + 1` })
+    .where(eq(appUser.id, userId));
+}
+
+/** The same for everyone holding a role, when the role's grants change. */
+export async function bumpPermissionsForRole(tx: Tx, roleCode: string): Promise<void> {
+  await tx
+    .update(appUser)
+    .set({ permissionsVersion: sql`${appUser.permissionsVersion} + 1` })
+    .where(
+      sql`${appUser.id} in (select ${userRole.userId} from ${userRole} where ${userRole.roleCode} = ${roleCode})`,
+    );
+}
+
 export async function loadPrincipal(tx: Tx, userId: string): Promise<Principal> {
   const [user] = await tx.select().from(appUser).where(eq(appUser.id, userId)).limit(1);
 

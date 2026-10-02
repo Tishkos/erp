@@ -7,6 +7,7 @@
  * `user_department_scope` row — the flag is what the §5.2 approval routing
  * reads, so setting a manager here is what makes them able to finalise.
  */
+import { bumpPermissions } from './authorization';
 import { and, asc, eq } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { appUser, department, userDepartmentScope } from '../db/schema';
@@ -199,6 +200,7 @@ export async function removeMember(tx: Tx, ctx: ActorContext, code: string, user
     await tx.update(department).set({ managerUserId: null }).where(eq(department.code, code));
   }
 
+  await bumpPermissions(tx, userId);
   await recordChange(tx, ctx, {
     action: 'department.member_removed',
     objectType: 'user_department_scope',
@@ -247,6 +249,7 @@ export async function setManager(
     await tx.update(department).set({ managerUserId: null }).where(eq(department.code, code));
   }
 
+  await bumpPermissions(tx, userId);
   await recordChange(tx, ctx, {
     action: isManager ? 'department.manager_assigned' : 'department.manager_removed',
     objectType: 'user_department_scope',

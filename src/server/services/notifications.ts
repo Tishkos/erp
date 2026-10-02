@@ -34,7 +34,7 @@ import {
   role,
   userRole,
 } from '../db/schema';
-import type { Tx } from '../db/client';
+import { markSystemSweep, type Tx } from '../db/client';
 import type { ActorContext } from './chart-of-accounts';
 import * as jobs from './jobs';
 
@@ -90,6 +90,36 @@ export interface RaiseResult {
  * simply be unstaffed today, and that is an operational fact rather than a
  * failure of the event that occurred.
  */
+/**
+ * HD5 — the one way a notification row is written. The recipient's own
+ * policy hides other people's notifications, which would also hide the row a
+ * module has just raised for them from the RETURNING clause; the definer
+ * function `app_notify` inserts and returns the id without widening the
+ * policy. Null when the dedupe key already exists.
+ */
+export async function insertNotification(
+  tx: Tx,
+  row: {
+    ruleCode: string | null;
+    eventType: string;
+    objectType: string;
+    objectId: string;
+    recipientUserId: string;
+    subject: string;
+    body: string;
+    context: Record<string, unknown> | null;
+    dedupeKey: string;
+    branchCode: string | null;
+  },
+): Promise<bigint | null> {
+  const result = await tx.execute(sql`
+    select app_notify(${row.ruleCode}, ${row.eventType}, ${row.objectType}, ${row.objectId}, ${row.recipientUserId}::uuid,
+                      ${row.subject}, ${row.body}, ${row.context === null ? null : JSON.stringify(row.context)}::jsonb,
+                      ${row.dedupeKey}, ${row.branchCode}) as id`);
+  const id = (result.rows[0] as { id: string | null } | undefined)?.id ?? null;
+  return id === null ? null : BigInt(id);
+}
+
 export async function raise(
   tx: Tx,
   event: QualifyingEvent,
@@ -110,30 +140,25 @@ export async function raise(
     for (const recipientUserId of recipients) {
       const dedupeKey = dedupeKeyFor(rule, event, recipientUserId);
 
-      const inserted = await tx
-        .insert(notification)
-        .values({
-          ruleCode: rule.code,
-          eventType: event.eventType,
-          objectType: event.objectType,
-          objectId: event.objectId,
-          recipientUserId,
-          subject,
-          body,
-          context: context as Record<string, unknown>,
-          dedupeKey,
-          branchCode: options.branchCode ?? null,
-        })
-        .onConflictDoNothing({ target: notification.dedupeKey })
-        .returning({ id: notification.id });
+      const notificationId = await insertNotification(tx, {
+        ruleCode: rule.code,
+        eventType: event.eventType,
+        objectType: event.objectType,
+        objectId: event.objectId,
+        recipientUserId,
+        subject,
+        body,
+        context: context as Record<string, unknown>,
+        dedupeKey,
+        branchCode: options.branchCode ?? null,
+      });
 
-      if (inserted.length === 0) {
+      if (notificationId === null) {
         suppressed += 1;
         continue;
       }
 
       created += 1;
-      const notificationId = inserted[0]!.id;
 
       for (const channel of rule.channels) {
         await tx.insert(notificationDelivery).values({ notificationId, channel });
@@ -294,11 +319,20 @@ export async function inboxFor(tx: Tx, userId: string, options: { unreadOnly?: b
     .orderBy(asc(notification.createdAt));
 }
 
-export async function markRead(tx: Tx, notificationId: bigint): Promise<void> {
-  await tx
+/** HD6 — only the recipient marks a notification read; another id is a no-op. */
+export async function markRead(tx: Tx, notificationId: bigint, recipientUserId: string): Promise<number> {
+  const updated = await tx
     .update(notification)
     .set({ readAt: new Date() })
-    .where(and(eq(notification.id, notificationId), isNull(notification.readAt)));
+    .where(
+      and(
+        eq(notification.id, notificationId),
+        eq(notification.recipientUserId, recipientUserId),
+        isNull(notification.readAt),
+      ),
+    )
+    .returning({ id: notification.id });
+  return updated.length;
 }
 
 /**
@@ -314,19 +348,10 @@ export async function markActed(
   objectType: string,
   objectId: string,
 ): Promise<number> {
-  const updated = await tx
-    .update(notification)
-    .set({ actedAt: new Date() })
-    .where(
-      and(
-        eq(notification.objectType, objectType),
-        eq(notification.objectId, objectId),
-        isNull(notification.actedAt),
-      ),
-    )
-    .returning({ id: notification.id });
-
-  return updated.length;
+  // HD5 — across every recipient, through the definer function; the caller's
+  // own policy would otherwise reach only its own copy.
+  const result = await tx.execute(sql`select app_notification_mark_acted(${objectType}, ${objectId}) as n`);
+  return Number((result.rows[0] as { n: number } | undefined)?.n ?? 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -351,6 +376,9 @@ export async function escalateDue(
   tx: Tx,
   now = new Date(),
 ): Promise<EscalationResult> {
+  // HD5 — this is the system sweep the notification policy makes room for:
+  // it reads everybody's outstanding tasks to escalate them.
+  await markSystemSweep(tx);
   const candidates = await tx
     .select({ notification, rule: notificationRule })
     .from(notification)
@@ -389,41 +417,37 @@ export async function escalateDue(
     for (const recipientUserId of escalateTo) {
       const dedupeKey = `escalation|${row.notification.dedupeKey}|${recipientUserId}`;
 
-      const inserted = await tx
-        .insert(notification)
-        .values({
-          ruleCode: rule.code,
-          eventType: `${row.notification.eventType}.escalated`,
-          objectType: row.notification.objectType,
-          objectId: row.notification.objectId,
-          recipientUserId,
-          subject: `Still outstanding — ${row.notification.subject}`,
-          body:
-            `${row.notification.body}\n\n` +
-            `This has been outstanding since ${row.notification.createdAt.toISOString()} ` +
-            'and has been escalated. The approval itself is still recorded on the document.',
-          context: row.notification.context,
-          dedupeKey,
-          branchCode: row.notification.branchCode,
-          // An escalation does not itself escalate. Without this the notice
-          // raised here would come due on the next sweep and raise another,
-          // and the chain would only stop when someone acted.
-          escalatedAt: now,
-        })
-        .onConflictDoNothing({ target: notification.dedupeKey })
-        .returning({ id: notification.id });
+      const escalationId = await insertNotification(tx, {
+        ruleCode: rule.code,
+        eventType: `${row.notification.eventType}.escalated`,
+        objectType: row.notification.objectType,
+        objectId: row.notification.objectId,
+        recipientUserId,
+        subject: `Still outstanding — ${row.notification.subject}`,
+        body:
+          `${row.notification.body}\n\n` +
+          `This has been outstanding since ${row.notification.createdAt.toISOString()} ` +
+          'and has been escalated. The approval itself is still recorded on the document.',
+        context: row.notification.context as Record<string, unknown> | null,
+        dedupeKey,
+        branchCode: row.notification.branchCode,
+      });
 
-      if (inserted.length === 0) continue;
+      if (escalationId === null) continue;
+      // An escalation does not itself escalate. Without this the notice
+      // raised here would come due on the next sweep and raise another,
+      // and the chain would only stop when someone acted.
+      await tx.update(notification).set({ escalatedAt: now }).where(eq(notification.id, escalationId));
 
       for (const channel of rule.channels) {
         await tx
           .insert(notificationDelivery)
-          .values({ notificationId: inserted[0]!.id, channel });
+          .values({ notificationId: escalationId, channel });
       }
 
       await jobs.enqueue(tx, null, {
         queueName: DELIVERY_QUEUE,
-        payload: { notificationId: inserted[0]!.id.toString() },
+        payload: { notificationId: escalationId.toString() },
         idempotencyKey: dedupeKey,
         branchCode: row.notification.branchCode,
       });

@@ -874,6 +874,7 @@ export async function resetTestData(): Promise<void> {
     // Sessions and credentials cascade from the user, but a revoked session is
     // protected from reinstatement by a trigger that also guards the token — off
     // for the delete, back on after.
+    await client.query('delete from sign_in_attempt');
     await client.query('delete from auth_session');
     await client.query('delete from auth_account');
     await client.query('delete from auth_verification');

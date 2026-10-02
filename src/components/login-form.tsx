@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import admin from '@/components/admin/admin.module.css';
 import styles from '@/app/sign-in/sign-in.module.css';
 import {
+  CodeField,
   EmailField,
   PasswordField,
   RememberMe,
@@ -27,11 +28,15 @@ import {
 export async function LoginForm({
   action,
   failed,
+  mfa,
   className,
   ...props
 }: Omit<React.ComponentProps<'div'>, 'children'> & {
   readonly action: (formData: FormData) => Promise<void>;
-  readonly failed: boolean;
+  /** The refusal to show: credentials, lockout, an expired temporary password — or none. */
+  readonly failed: 'credentials' | 'locked' | 'expired' | 'code' | null;
+  /** HD4 — the account needs its authenticator code: show the field. */
+  readonly mfa: boolean;
 }) {
   const t = await getTranslations('auth');
 
@@ -55,9 +60,13 @@ export async function LoginForm({
               showLabel={t('show_password')}
             />
 
+            {mfa ? <CodeField id="code" label={t('code')} placeholder={t('code_placeholder')} /> : null}
+
             {/*
-              One message for every reason. Saying which half was wrong turns
-              the form into a way of discovering who holds an account.
+              One message for every credential reason. Saying which half was
+              wrong turns the form into a way of discovering who holds an
+              account. The lockout and the expired temporary password say what
+              they are: both apply whether or not the account exists.
             */}
             {failed ? (
               <p
@@ -65,7 +74,15 @@ export async function LoginForm({
                 role="alert"
               >
                 <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-                <span>{t('failed')}</span>
+                <span>
+                  {failed === 'locked'
+                    ? t('locked')
+                    : failed === 'expired'
+                      ? t('temporary_expired')
+                      : failed === 'code'
+                        ? t('code_required')
+                        : t('failed')}
+                </span>
               </p>
             ) : null}
 

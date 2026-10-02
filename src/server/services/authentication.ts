@@ -12,7 +12,7 @@
  * The functions here take the transaction, so a sign-in and the audit record of
  * it commit together.
  */
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import {
   SessionInvalidError,
@@ -30,8 +30,10 @@ import {
   authAccount,
   authSession,
   role,
+  signInAttempt,
   userMfa,
   userRole,
+  type SignInOutcome,
 } from '../db/schema';
 import { hashPassword, verifyPassword } from '../auth';
 import type { Tx } from '../db/client';
@@ -43,6 +45,28 @@ const CREDENTIAL_PROVIDER = 'credential';
 
 /** How long a session lives. Mirrors the better-auth configuration. */
 const SESSION_SECONDS = 8 * 60 * 60;
+
+/** HD2 — a temporary password is good for this long after it was issued. */
+export const TEMPORARY_PASSWORD_HOURS = 72;
+/** HD3 / D-HD-3 — five failures in fifteen minutes lock the account from that address. */
+export const LOCKOUT_FAILURES = 5;
+export const LOCKOUT_MINUTES = 15;
+/**
+ * The same window per address whatever the account — the scrypt cost makes
+ * the form a DoS path. High, because an office behind one NAT address is one
+ * address: this stops a script, not a building.
+ */
+export const LOCKOUT_FAILURES_PER_ADDRESS = 100;
+/** HD4 / D-HD-5 — days a privileged account may sign in before it has enrolled a factor. */
+export const MFA_ENROLMENT_GRACE_DAYS = 7;
+
+export class TemporaryPasswordExpiredError extends Error {
+  readonly code = 'TEMPORARY_PASSWORD_EXPIRED';
+  constructor() {
+    super('The temporary password has expired; ask an administrator for a new one.');
+    this.name = 'TemporaryPasswordExpiredError';
+  }
+}
 
 export class CredentialsInvalidError extends Error {
   readonly code = 'CREDENTIALS_INVALID';
@@ -122,6 +146,7 @@ export async function verifyCredentials(
   tx: Tx,
   email: string,
   password: string,
+  now = new Date(),
 ): Promise<typeof appUser.$inferSelect> {
   const [user] = await tx
     .select()
@@ -145,7 +170,21 @@ export async function verifyCredentials(
   }
 
   assertAccountUsable(user);
+  // HD2 — a temporary password that was never replaced stops working on its
+  // own; an administrator issues another (which replaces this one).
+  if (user.mustChangePassword && temporaryPasswordExpired(user, now)) {
+    throw new TemporaryPasswordExpiredError();
+  }
   return user;
+}
+
+export function temporaryPasswordExpired(
+  user: { mustChangePassword: boolean; passwordChangedAt: Date | null },
+  now = new Date(),
+): boolean {
+  if (!user.mustChangePassword) return false;
+  if (!user.passwordChangedAt) return true;
+  return now.getTime() - user.passwordChangedAt.getTime() > TEMPORARY_PASSWORD_HOURS * 3_600_000;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +209,30 @@ export async function secondFactorRequirement(tx: Tx, userId: string) {
     isSuperUser: user?.isSuperUser ?? false,
     rolesRequiringMfa: roles.map((r) => r.code),
   });
+}
+
+/** What the security screen shows: required?, enrolled?, grace end. */
+export async function mfaStatus(tx: Tx, userId: string, now = new Date()) {
+  const requirement = await secondFactorRequirement(tx, userId);
+  const [enrolment] = await tx.select().from(userMfa).where(eq(userMfa.userId, userId)).limit(1);
+  const [user] = await tx
+    .select({ mfaRequiredSince: appUser.mfaRequiredSince })
+    .from(appUser)
+    .where(eq(appUser.id, userId))
+    .limit(1);
+  const since = user?.mfaRequiredSince ?? null;
+  const due = since ? new Date(since.getTime() + MFA_ENROLMENT_GRACE_DAYS * 86_400_000) : null;
+  return {
+    required: requirement.required,
+    reason: requirement.reason,
+    enrolled: Boolean(enrolment?.enrolledAt),
+    /** A begun, unconfirmed enrolment: the secret the app was given. */
+    pendingSecret: enrolment && !enrolment.enrolledAt ? enrolment.secret : null,
+    enrolledAt: enrolment?.enrolledAt ?? null,
+    lastVerifiedAt: enrolment?.lastVerifiedAt ?? null,
+    enrolmentDue: due,
+    graceExpired: Boolean(due && now > due && !enrolment?.enrolledAt),
+  };
 }
 
 /** Starts enrolment. The secret is returned once, for the authenticator app. */
@@ -266,6 +329,217 @@ export async function assertSecondFactor(
       .set({ lastVerifiedAt: new Date() })
       .where(eq(userMfa.userId, userId));
   }
+}
+
+// ---------------------------------------------------------------------------
+// HD2 / HD3 / HD4 — the sign-in, as one function, so every path asks the same
+// questions in the same order: locked? credentials? temporary password still
+// valid? second factor? Every answer is written to sign_in_attempt and to the
+// audit trail, succeeded or refused.
+// ---------------------------------------------------------------------------
+
+export interface SignInInput {
+  readonly email: string;
+  readonly password: string;
+  /** The authenticator code, when the form offered the field. */
+  readonly code?: string | null;
+  readonly ipAddress?: string | null;
+  readonly userAgent?: string | null;
+  readonly now?: Date | undefined;
+}
+
+/**
+ * What a session may do besides sign out:
+ *   'password' — HD2: only replace the temporary password;
+ *   'mfa'      — HD4: only enrol the second factor (the grace has run out);
+ *   null       — everything its grants allow.
+ */
+export type SessionRestriction = 'password' | 'mfa' | null;
+
+export interface SignInSuccess {
+  readonly ok: true;
+  readonly session: IssuedSession;
+  readonly userId: string;
+  readonly restriction: SessionRestriction;
+  /** HD4 — enrolment is required and the grace is running: nudge, don't block. */
+  readonly enrolmentDue: Date | null;
+}
+
+/**
+ * A refusal is returned, not thrown: the attempt and its audit row are written
+ * in the same transaction and must commit, and a throw would roll them back.
+ */
+export interface SignInRefusal {
+  readonly ok: false;
+  readonly refusal: 'locked' | 'credentials' | 'temporary_expired' | 'second_factor_required' | 'second_factor_wrong';
+}
+
+export type SignInResult = SignInSuccess | SignInRefusal;
+
+async function recordAttempt(
+  tx: Tx,
+  input: SignInInput,
+  outcome: SignInOutcome,
+  userId: string | null,
+  now: Date,
+): Promise<void> {
+  const email = input.email.trim().toLowerCase();
+  await tx.insert(signInAttempt).values({
+    email,
+    userId,
+    ipAddress: input.ipAddress ?? null,
+    userAgent: input.userAgent ?? null,
+    outcome,
+    occurredAt: now,
+  });
+  // HD3 — the audit trail carries it too, so the one screen that reads
+  // "who did what" shows the sign-ins beside everything else.
+  await audit.record(tx, {
+    actorUserId: userId,
+    action: outcome === 'success' ? 'authentication.signed_in' : 'authentication.sign_in_refused',
+    objectType: 'user',
+    objectId: userId ?? email,
+    branchCode: null,
+    after: { email, outcome, ipAddress: input.ipAddress ?? null },
+    outcome: outcome === 'success' ? 'success' : 'denied',
+    requestId: null,
+  });
+}
+
+/** D-HD-3 — the lockout, read from the attempts of the last window. */
+export async function isLockedOut(
+  tx: Tx,
+  email: string,
+  ipAddress: string | null,
+  now = new Date(),
+): Promise<boolean> {
+  const since = new Date(now.getTime() - LOCKOUT_MINUTES * 60_000);
+  const failures = ['failed', 'second_factor_wrong'] as const;
+  const [account] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(signInAttempt)
+    .where(
+      and(
+        eq(signInAttempt.email, email.trim().toLowerCase()),
+        ipAddress ? eq(signInAttempt.ipAddress, ipAddress) : isNull(signInAttempt.ipAddress),
+        inArray(signInAttempt.outcome, [...failures]),
+        gte(signInAttempt.occurredAt, since),
+      ),
+    );
+  if ((account?.n ?? 0) >= LOCKOUT_FAILURES) return true;
+  if (!ipAddress) return false;
+  const [address] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(signInAttempt)
+    .where(
+      and(
+        eq(signInAttempt.ipAddress, ipAddress),
+        inArray(signInAttempt.outcome, [...failures]),
+        gte(signInAttempt.occurredAt, since),
+      ),
+    );
+  return (address?.n ?? 0) >= LOCKOUT_FAILURES_PER_ADDRESS;
+}
+
+export async function signIn(tx: Tx, input: SignInInput): Promise<SignInResult> {
+  const now = input.now ?? new Date();
+  const email = input.email.trim().toLowerCase();
+
+  if (await isLockedOut(tx, email, input.ipAddress ?? null, now)) {
+    await recordAttempt(tx, input, 'locked', null, now);
+    return { ok: false, refusal: 'locked' };
+  }
+
+  let user: typeof appUser.$inferSelect;
+  try {
+    user = await verifyCredentials(tx, email, input.password, now);
+  } catch (error) {
+    const outcome: SignInOutcome =
+      error instanceof TemporaryPasswordExpiredError
+        ? 'temporary_expired'
+        : error instanceof SessionInvalidError
+          ? 'inactive'
+          : 'failed';
+    const [known] = await tx.select({ id: appUser.id }).from(appUser).where(eq(appUser.email, email)).limit(1);
+    await recordAttempt(tx, input, outcome, known?.id ?? null, now);
+    return { ok: false, refusal: outcome === 'temporary_expired' ? 'temporary_expired' : 'credentials' };
+  }
+
+  // HD4 — the second factor. Enrolled: the code must be right. Not enrolled:
+  // the grace runs from the first privileged sign-in; inside it the person
+  // gets in and is told; after it the session can only enrol.
+  let restriction: SessionRestriction = user.mustChangePassword ? 'password' : null;
+  let enrolmentDue: Date | null = null;
+  const requirement = await secondFactorRequirement(tx, user.id);
+  if (requirement.required) {
+    const [enrolment] = await tx.select().from(userMfa).where(eq(userMfa.userId, user.id)).limit(1);
+    if (enrolment?.enrolledAt) {
+      const code = input.code?.trim() ?? '';
+      if (!code) {
+        await recordAttempt(tx, input, 'second_factor_required', user.id, now);
+        return { ok: false, refusal: 'second_factor_required' };
+      }
+      if (!verifyTotp(enrolment.secret, code, Math.floor(now.getTime() / 1000))) {
+        await recordAttempt(tx, input, 'second_factor_wrong', user.id, now);
+        return { ok: false, refusal: 'second_factor_wrong' };
+      }
+      await tx.update(userMfa).set({ lastVerifiedAt: now }).where(eq(userMfa.userId, user.id));
+    } else {
+      const since = user.mfaRequiredSince ?? now;
+      if (!user.mfaRequiredSince) {
+        await tx.update(appUser).set({ mfaRequiredSince: now }).where(eq(appUser.id, user.id));
+      }
+      enrolmentDue = new Date(since.getTime() + MFA_ENROLMENT_GRACE_DAYS * 86_400_000);
+      if (now > enrolmentDue && restriction === null) restriction = 'mfa';
+      else {
+        // Inside the grace: told once a day, in the bell, not blocked.
+        await tx.execute(sql`
+          select app_notify(null, 'authentication.enrol_second_factor', 'user', ${user.id}, ${user.id}::uuid,
+                            'Enrol your authenticator',
+                            ${`This account must sign in with an authenticator code from ${enrolmentDue.toISOString().slice(0, 10)}. Enrol it under My profile → Security.`},
+                            ${JSON.stringify({ due: enrolmentDue.toISOString().slice(0, 10) })}::jsonb,
+                            ${`mfa-enrol:${user.id}:${now.toISOString().slice(0, 10)}`}, null)`);
+      }
+    }
+  }
+
+  const session = await createSession(tx, user.id, {
+    ipAddress: input.ipAddress ?? null,
+    userAgent: input.userAgent ?? null,
+  });
+  await recordAttempt(tx, input, 'success', user.id, now);
+  return { ok: true, session, userId: user.id, restriction, enrolmentDue };
+}
+
+/**
+ * The restriction a live session carries now — computed on the request, not
+ * stored, so replacing the password or enrolling lifts it at once.
+ */
+export async function restrictionFor(
+  tx: Tx,
+  user: { id: string; mustChangePassword: boolean; mfaRequiredSince: Date | null },
+  now = new Date(),
+): Promise<SessionRestriction> {
+  if (user.mustChangePassword) return 'password';
+  if (!user.mfaRequiredSince) return null;
+  if (now.getTime() - user.mfaRequiredSince.getTime() <= MFA_ENROLMENT_GRACE_DAYS * 86_400_000) return null;
+  const [enrolment] = await tx
+    .select({ enrolledAt: userMfa.enrolledAt })
+    .from(userMfa)
+    .where(eq(userMfa.userId, user.id))
+    .limit(1);
+  if (enrolment?.enrolledAt) return null;
+  return (await secondFactorRequirement(tx, user.id)).required ? 'mfa' : null;
+}
+
+/** HD3 — the login history an administrator reads. */
+export async function signInHistory(tx: Tx, options: { userId?: string; limit?: number } = {}) {
+  return tx
+    .select()
+    .from(signInAttempt)
+    .where(options.userId ? eq(signInAttempt.userId, options.userId) : undefined)
+    .orderBy(sql`${signInAttempt.occurredAt} desc`)
+    .limit(options.limit ?? 200);
 }
 
 // ---------------------------------------------------------------------------

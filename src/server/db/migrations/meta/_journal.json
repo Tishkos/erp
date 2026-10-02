@@ -1135,6 +1135,13 @@
       "when": 1795900000041,
       "tag": "0237_payables_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 162,
+      "version": "7",
+      "when": 1795900000042,
+      "tag": "0238_harden_access",
+      "breakpoints": true
     }
   ]
 }

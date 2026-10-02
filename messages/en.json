@@ -290,7 +290,12 @@
     "pillar_one_title": "One connected ERP",
     "pillar_one_body": "Bring finance, operations, people, and business data into one organized workspace.",
     "pillar_two_title": "Built to grow",
-    "pillar_two_body": "Business applications appear as each module is enabled for your organization."
+    "pillar_two_body": "Business applications appear as each module is enabled for your organization.",
+    "code": "Authenticator code",
+    "code_placeholder": "6-digit code from your authenticator app",
+    "code_required": "This account signs in with a second factor. Enter the code your authenticator app shows now.",
+    "locked": "Too many failed attempts. Wait fifteen minutes and try again.",
+    "temporary_expired": "The temporary password has expired. Ask an administrator for a new one."
   },
   "column": {
     "code": "Code",
@@ -3383,7 +3388,33 @@
     "avatar_choose": "Choose an image",
     "avatar_hint": "PNG, JPEG or WebP, up to 400 KB. A square image looks best.",
     "avatar_upload": "Upload picture",
-    "avatar_remove": "Remove picture"
+    "avatar_remove": "Remove picture",
+    "security": "Security",
+    "temporary_hint": "You signed in with a temporary password. Choose your own before continuing; nothing else is available until you do.",
+    "temporary_password": "Temporary password",
+    "mfa_title": "Second factor",
+    "mfa_required": "Required for this account",
+    "mfa_status": "Authenticator",
+    "mfa_on": "Enrolled",
+    "mfa_off": "Not enrolled",
+    "mfa_enrolled_at": "Enrolled on",
+    "mfa_last_used": "Last used",
+    "mfa_required_hint": "This account signs in with an authenticator code. Enrol one below.",
+    "mfa_grace": "This account must enrol an authenticator by {date}. After that date it can do nothing else until it has.",
+    "mfa_grace_over": "The enrolment period has passed. Enrol an authenticator now; nothing else is available until you do.",
+    "mfa_begin_title": "Enrol an authenticator",
+    "mfa_begin_hint": "Install an authenticator app (Google Authenticator, Microsoft Authenticator, Aegis…). Begin shows a key to add to it; the app’s first code confirms it.",
+    "mfa_begin": "Begin enrolment",
+    "mfa_replace_title": "Replace the authenticator",
+    "mfa_replace_hint": "Replacing issues a new key. Until the new app confirms it, sign-in needs the code from the old one.",
+    "mfa_replace": "Issue a new key",
+    "mfa_confirm_title": "Add the key to your app, then confirm",
+    "mfa_confirm_hint": "In the app choose “enter a setup key” and type the key, or paste the otpauth address. Then enter the six-digit code the app shows.",
+    "mfa_secret": "Setup key",
+    "mfa_otpauth": "otpauth address",
+    "mfa_code": "Code from the app",
+    "mfa_confirm": "Confirm enrolment",
+    "mfa_enrolled": "The authenticator is enrolled. Sign-in will ask for its code."
   },
   "audit_action": {
     "company": {

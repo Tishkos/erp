@@ -552,10 +552,9 @@ export async function submitForApproval(
   const account = await loadAccount(tx, accountId);
   await statuses.assertTransitionAllowed(tx, DOCUMENT_TYPE, account.approvalStatus, 'submitted');
 
-  await workflow.submit(tx, {
+  await workflow.submit(tx, ctx, {
     documentTypeCode: DOCUMENT_TYPE,
     documentId: accountId,
-    submittedBy: ctx.principal.userId,
     branchCode: ctx.branchCode,
   });
 

@@ -726,10 +726,9 @@ export async function submit(
 
   await statuses.assertTransitionAllowed(tx, DOCUMENT_TYPE, entry.status, 'submitted');
 
-  await workflow.submit(tx, {
+  await workflow.submit(tx, ctx, {
     documentTypeCode: DOCUMENT_TYPE,
     documentId: journalEntryId,
-    submittedBy: ctx.principal.userId,
     branchCode: entry.branchCode,
   });
 

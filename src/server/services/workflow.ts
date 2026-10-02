@@ -34,6 +34,7 @@ import {
 } from "../domain/controlled-fields";
 import type { DocumentStatus } from "../domain/statuses";
 import type { Tx } from "../db/client";
+import type { ActorContext } from "./chart-of-accounts";
 
 export class NoWorkflowDefinedError extends Error {
   readonly code = "NO_WORKFLOW_DEFINED";
@@ -147,7 +148,6 @@ function toInstance(
 export interface SubmitInput {
   readonly documentTypeCode: string;
   readonly documentId: string;
-  readonly submittedBy: string;
   readonly branchCode?: string | null;
 }
 
@@ -158,8 +158,13 @@ export interface SubmitInput {
  * reopening the old instance, so the earlier decisions stay exactly as they
  * were taken.
  */
+/**
+ * HD6 — the submitter is the caller, read from the context the owning
+ * service already authorised, never from the input.
+ */
 export async function submit(
   tx: Tx,
+  ctx: ActorContext,
   input: SubmitInput,
 ): Promise<{ instanceId: string; revision: number }> {
   const { id: definitionId } = await activeDefinitionFor(
@@ -190,7 +195,7 @@ export async function submit(
       revision,
       currentStep: 1,
       isComplete: false,
-      submittedBy: input.submittedBy,
+      submittedBy: ctx.principal.userId,
       branchCode: input.branchCode ?? null,
     })
     .returning({ id: workflowInstance.id });

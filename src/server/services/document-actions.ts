@@ -18,6 +18,7 @@
 import type { Tx } from '../db/client';
 import { assertCan, type Principal } from '../domain/permissions';
 import { actionsFor, type RecordAction } from '../domain/record-view';
+import * as authz from './authorization';
 import { assertTransition, type DocumentStatus } from '../domain/statuses';
 import * as audit from './audit';
 import { recordSource, transitionsFor } from './record';
@@ -134,6 +135,14 @@ export async function perform(
 
   const action = available.find((a) => a.key === input.action);
   if (!action) throw new UnknownActionError(input.action, input.documentType);
+
+  // HD6 — the verb is authorised through the one door every service uses,
+  // so a refusal is written to the audit trail (§25: authorisation failures
+  // are logged) and the branch is checked, not only the grant.
+  await authz.authorize(principal, action.verb, source.object, {
+    branchCode: input.branchCode ?? header.branchCode ?? principal.defaultBranchCode ?? '',
+    objectId: header.auditObjectId ?? input.documentId,
+  });
 
   if (!action.enabled) {
     // Recorded, not just refused: an attempt to act outside the status machine

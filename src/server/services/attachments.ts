@@ -27,7 +27,7 @@ import {
   type UploadPolicy,
 } from '../domain/attachments';
 import { attachment, attachmentAccess } from '../db/schema';
-import { db, type Tx } from '../db/client';
+import { applyScope, db, type Tx } from '../db/client';
 import type { Principal } from '../domain/permissions';
 import type { ActorContext } from './chart-of-accounts';
 import * as audit from './audit';
@@ -316,8 +316,12 @@ async function recordDenial(
   attachmentId: string,
   userId: string,
   reason: string,
+  branchCode: string,
 ): Promise<void> {
   await db.transaction(async (tx) => {
+    // HD5 / A11 — the access table is behind row-level security now; a
+    // connection with no scope could not write the denial.
+    await applyScope(tx, { userId, branchCode });
     await tx.insert(attachmentAccess).values({
       attachmentId,
       userId,
@@ -362,6 +366,7 @@ export async function download(
       attachmentId,
       ctx.principal.userId,
       error instanceof Error ? error.message : String(error),
+      ctx.branchCode,
     );
     throw error;
   }
@@ -371,6 +376,7 @@ export async function download(
       attachmentId,
       ctx.principal.userId,
       `Quarantined: scan status is ${row.scanStatus}`,
+      ctx.branchCode,
     );
     throw new AttachmentAccessError(
       'This file did not pass its malware scan and cannot be downloaded (§21).',
@@ -378,7 +384,7 @@ export async function download(
   }
 
   if (row.disposedAt) {
-    await recordDenial(attachmentId, ctx.principal.userId, 'Disposed of under the retention policy');
+    await recordDenial(attachmentId, ctx.principal.userId, 'Disposed of under the retention policy', ctx.branchCode);
     throw new AttachmentAccessError('This document has been disposed of under retention (§21).');
   }
 

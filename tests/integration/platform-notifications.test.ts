@@ -238,7 +238,7 @@ describe('§21 · delivery status is recorded and visible', () => {
     );
     expect(inbox).toHaveLength(1);
 
-    await withScope(scope(manager), (tx) => notifications.markRead(tx, inbox[0]!.id));
+    await withScope(scope(manager), (tx) => notifications.markRead(tx, inbox[0]!.id, manager.principal.userId));
 
     const afterReading = await withScope(scope(manager), (tx) =>
       notifications.inboxFor(tx, manager.principal.userId, { unreadOnly: true }),
@@ -285,7 +285,7 @@ describe('§21 · escalation when a task is not acted upon', () => {
     const inbox = await withScope(scope(manager), (tx) =>
       notifications.inboxFor(tx, manager.principal.userId),
     );
-    await withScope(scope(manager), (tx) => notifications.markRead(tx, inbox[0]!.id));
+    await withScope(scope(manager), (tx) => notifications.markRead(tx, inbox[0]!.id, manager.principal.userId));
 
     const tomorrow = new Date(Date.now() + 25 * 60 * 60 * 1000);
     const result = await withScope(scope(manager), (tx) =>

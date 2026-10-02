@@ -77,15 +77,31 @@ beforeAll(async () => {
   deputyId = await seedUser('Deputy Manager');
 });
 
+/** HD6 — submit reads the submitter from the caller's context. */
+function actorOf(userId: string) {
+  return {
+    principal: {
+      userId,
+      isSuperUser: false,
+      isActive: true,
+      roleCodes: [],
+      grants: [],
+      branchCodes: ['HQ'],
+      defaultBranchCode: 'HQ',
+      departments: [],
+    },
+    branchCode: 'HQ',
+  };
+}
+
 describe('01.7 gate · rejection returns the document as a new revision', () => {
   it('starts revision 2 when a rejected document is submitted again', async () => {
     const documentId = newDocument();
 
     const first = await withScope({ userId: officerId, branchCode: 'HQ' }, (tx) =>
-      workflow.submit(tx, {
+      workflow.submit(tx, actorOf(officerId), {
         documentTypeCode: DOC_TYPE,
         documentId,
-        submittedBy: officerId,
         branchCode: 'HQ',
       }),
     );
@@ -102,10 +118,9 @@ describe('01.7 gate · rejection returns the document as a new revision', () => 
     );
 
     const second = await withScope({ userId: officerId, branchCode: 'HQ' }, (tx) =>
-      workflow.submit(tx, {
+      workflow.submit(tx, actorOf(officerId), {
         documentTypeCode: DOC_TYPE,
         documentId,
-        submittedBy: officerId,
         branchCode: 'HQ',
       }),
     );
@@ -118,10 +133,9 @@ describe('01.7 gate · rejection returns the document as a new revision', () => 
     const documentId = newDocument();
 
     await withScope({ userId: officerId, branchCode: 'HQ' }, (tx) =>
-      workflow.submit(tx, {
+      workflow.submit(tx, actorOf(officerId), {
         documentTypeCode: DOC_TYPE,
         documentId,
-        submittedBy: officerId,
         branchCode: 'HQ',
       }),
     );
@@ -135,10 +149,9 @@ describe('01.7 gate · rejection returns the document as a new revision', () => 
       }),
     );
     await withScope({ userId: officerId, branchCode: 'HQ' }, (tx) =>
-      workflow.submit(tx, {
+      workflow.submit(tx, actorOf(officerId), {
         documentTypeCode: DOC_TYPE,
         documentId,
-        submittedBy: officerId,
         branchCode: 'HQ',
       }),
     );
@@ -168,10 +181,9 @@ describe('01.7 gate · delegation records both actors', () => {
     const documentId = newDocument();
 
     await withScope({ userId: officerId, branchCode: 'HQ' }, (tx) =>
-      workflow.submit(tx, {
+      workflow.submit(tx, actorOf(officerId), {
         documentTypeCode: DOC_TYPE,
         documentId,
-        submittedBy: officerId,
         branchCode: 'HQ',
       }),
     );
@@ -207,10 +219,9 @@ describe('01.7 gate · delegation records both actors', () => {
     const documentId = newDocument();
 
     await withScope({ userId: officerId, branchCode: 'HQ' }, (tx) =>
-      workflow.submit(tx, {
+      workflow.submit(tx, actorOf(officerId), {
         documentTypeCode: DOC_TYPE,
         documentId,
-        submittedBy: officerId,
         branchCode: 'HQ',
       }),
     );
@@ -237,10 +248,9 @@ describe('01.7 gate · changing a route does not rewrite history', () => {
     const documentId = newDocument();
 
     const submitted = await withScope({ userId: officerId, branchCode: 'HQ' }, (tx) =>
-      workflow.submit(tx, {
+      workflow.submit(tx, actorOf(officerId), {
         documentTypeCode: DOC_TYPE,
         documentId,
-        submittedBy: officerId,
         branchCode: 'HQ',
       }),
     );
@@ -317,10 +327,9 @@ describe('01.7 gate · changing a route does not rewrite history', () => {
     const documentId = newDocument();
 
     await withScope({ userId: officerId, branchCode: 'HQ' }, (tx) =>
-      workflow.submit(tx, {
+      workflow.submit(tx, actorOf(officerId), {
         documentTypeCode: DOC_TYPE,
         documentId,
-        submittedBy: officerId,
         branchCode: 'HQ',
       }),
     );
@@ -397,10 +406,9 @@ describe('01.7 · the instance and its decisions', () => {
     const documentId = newDocument();
 
     await withScope({ userId: officerId, branchCode: 'HQ' }, (tx) =>
-      workflow.submit(tx, {
+      workflow.submit(tx, actorOf(officerId), {
         documentTypeCode: DOC_TYPE,
         documentId,
-        submittedBy: officerId,
         branchCode: 'HQ',
       }),
     );
@@ -431,10 +439,9 @@ describe('01.7 · the instance and its decisions', () => {
     const documentId = newDocument();
 
     await withScope({ userId: officerId, branchCode: 'HQ' }, (tx) =>
-      workflow.submit(tx, {
+      workflow.submit(tx, actorOf(officerId), {
         documentTypeCode: DOC_TYPE,
         documentId,
-        submittedBy: officerId,
         branchCode: 'HQ',
       }),
     );
@@ -455,10 +462,9 @@ describe('01.7 · the instance and its decisions', () => {
     const documentId = newDocument();
 
     await withScope({ userId: officerId, branchCode: 'HQ' }, (tx) =>
-      workflow.submit(tx, {
+      workflow.submit(tx, actorOf(officerId), {
         documentTypeCode: DOC_TYPE,
         documentId,
-        submittedBy: officerId,
         branchCode: 'HQ',
       }),
     );

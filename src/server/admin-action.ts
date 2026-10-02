@@ -33,10 +33,15 @@ export interface AdminOutcome<T> {
   readonly error?: string;
 }
 
+export interface RunOptions {
+  /** HD2 / HD4 — the two screens a restricted session may use pass this. */
+  readonly allowRestricted?: boolean;
+}
+
 /** Runs the handler in the caller's transaction and reports, never throws. */
-export async function runAdmin<T>(handler: AdminHandler<T>): Promise<AdminOutcome<T>> {
+export async function runAdmin<T>(handler: AdminHandler<T>, options: RunOptions = {}): Promise<AdminOutcome<T>> {
   try {
-    const value = await withCurrentUser((tx, request) => handler(tx, actorFor(request), request));
+    const value = await withCurrentUser((tx, request) => handler(tx, actorFor(request), request), options);
     return { ok: true, value };
   } catch (error) {
     return { ok: false, error: messageOf(error) };
@@ -47,8 +52,9 @@ export async function runAdmin<T>(handler: AdminHandler<T>): Promise<AdminOutcom
 export async function runAdminAndReturn(
   handler: AdminHandler<unknown>,
   back: string | ((value: unknown) => string),
+  options: RunOptions = {},
 ): Promise<never> {
-  const outcome = await runAdmin(handler);
+  const outcome = await runAdmin(handler, options);
   // A one-time secret from an earlier action must not outlive the next one.
   (await cookies()).delete(FLASH_COOKIE);
   // The shell shows the caller's name and picture; a change must reach it now.

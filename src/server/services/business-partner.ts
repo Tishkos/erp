@@ -375,10 +375,9 @@ export async function submitBankAccount(
 
   await statuses.assertTransitionAllowed(tx, BANK_DOCUMENT_TYPE, row.approvalStatus, 'submitted');
 
-  await workflow.submit(tx, {
+  await workflow.submit(tx, ctx, {
     documentTypeCode: BANK_DOCUMENT_TYPE,
     documentId: bankAccountId,
-    submittedBy: ctx.principal.userId,
     branchCode: ctx.branchCode,
   });
 

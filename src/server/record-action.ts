@@ -28,7 +28,11 @@ export async function performRecordAction(formData: FormData): Promise<void> {
   const documentId = String(formData.get('documentId') ?? '');
   const action = String(formData.get('action') ?? '');
   const reason = String(formData.get('reason') ?? '').trim();
-  const returnTo = String(formData.get('returnTo') ?? '/');
+  // HD6 — the return path is a path on this site or it is the home page: an
+  // absolute address, a protocol-relative one or anything with a scheme is
+  // an open redirect.
+  const requested = String(formData.get('returnTo') ?? '/');
+  const returnTo = /^\/(?!\/|\\)[^\s]*$/.test(requested) ? requested : '/';
 
   const outcome = await withCurrentUser(async (tx, context) => {
     try {

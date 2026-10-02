@@ -546,6 +546,12 @@ export async function pick(
 
 export async function complete(tx: Tx, ctx: ActorContext, id: string): Promise<void> {
   const sheet = await load(tx, id);
+  // HD6 — closing the sheet is the delivery's act; it is authorised as one.
+  await authz.authorize(ctx.principal, 'execute', PERMISSION_OBJECT, {
+    branchCode: sheet.branchCode,
+    objectId: id,
+    requestId: ctx.requestId ?? null,
+  });
 
   await statuses.assertTransitionAllowed(tx, DOCUMENT_TYPE, sheet.status, 'closed');
 

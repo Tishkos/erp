@@ -16,7 +16,7 @@ import { redirect } from 'next/navigation';
 import { db, applyScope, type RequestScope, type Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { loadPrincipal } from './services/authorization';
-import { resolveSession } from './services/authentication';
+import { resolveSession, restrictionFor, type SessionRestriction } from './services/authentication';
 
 export const SESSION_COOKIE = 'erp_session';
 /** The branch the person chose to work in — written by the header's picker. */
@@ -34,7 +34,17 @@ export interface RequestContext {
   readonly principal: Principal;
   readonly scope: RequestScope;
   readonly sessionId: string;
+  /** HD2 / HD4 — what this session is limited to, or null. */
+  readonly restriction: SessionRestriction;
+  /** HD1 — moves when the user's roles, grants or scopes change. */
+  readonly permissionsVersion: number;
 }
+
+/** Where a restricted session is sent, and the only screens it may reach. */
+export const RESTRICTION_ROUTE: Record<Exclude<SessionRestriction, null>, string> = {
+  password: '/password',
+  mfa: '/profile/security',
+};
 
 /**
  * Resolve the caller.
@@ -77,6 +87,8 @@ export async function currentContext(): Promise<RequestContext> {
       principal,
       scope: { userId: user.id, branchCode, isSuperUser: user.isSuperUser },
       sessionId: session.id,
+      restriction: await restrictionFor(tx, user),
+      permissionsVersion: user.permissionsVersion,
     };
   });
 }
@@ -99,9 +111,12 @@ export async function optionalContext(): Promise<RequestContext | null> {
  * applies to "every page, API and record", so the refusal is the first thing
  * that happens on the request, not a guard around the parts that look sensitive.
  */
-export async function requireContext(): Promise<RequestContext> {
+export async function requireContext(options: { allowRestricted?: boolean } = {}): Promise<RequestContext> {
   const context = await optionalContext();
   if (!context) redirect('/sign-in');
+  // HD2 / HD4 — a session on a temporary password, or past its enrolment
+  // grace, reaches one screen and sign-out; everything else sends it there.
+  if (context.restriction && !options.allowRestricted) redirect(RESTRICTION_ROUTE[context.restriction]);
   return context;
 }
 
@@ -113,8 +128,9 @@ export async function requireContext(): Promise<RequestContext> {
  */
 export async function withCurrentUser<T>(
   fn: (tx: Tx, context: RequestContext) => Promise<T>,
+  options: { allowRestricted?: boolean } = {},
 ): Promise<T> {
-  const context = await requireContext();
+  const context = await requireContext(options);
   return db.transaction(async (tx) => {
     await applyScope(tx, context.scope);
     return fn(tx, context);

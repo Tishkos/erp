@@ -115,6 +115,15 @@ async function main() {
           ON CONFLICT DO NOTHING
         `);
       }
+      // The CEO also administers the system here, as the sponsor does: role
+      // assignment needs the CEO's hat *and* `administer permission`
+      // (`permitCeo`), and nobody else in the seed holds both.
+      if (role === 'ceo') {
+        await tx.execute(sql`
+          INSERT INTO user_role (user_id, role_code) VALUES (${userId}, 'system_administrator')
+          ON CONFLICT DO NOTHING
+        `);
+      }
 
       // §5.2 — the manager toggle is per department, so it is set on the row.
       await tx.execute(sql`
