@@ -53,6 +53,7 @@ import * as wa from '../../src/server/services/whatsapp';
 import * as actions from '../../src/server/services/whatsapp-actions';
 import { agentClientFor, anthropicClient, modelRouter } from '../../src/server/services/whatsapp-router';
 import { runAgentFor, type AgentClient } from '../../src/server/services/whatsapp-agent';
+import { cliAgentClient, cliReady } from '../../src/server/services/whatsapp-cli-brain';
 
 const POLL_SECONDS = Math.max(5, Number(process.env.WA_POLL_SECONDS ?? '20'));
 const RESET = process.argv.includes('--reset-pairing');
@@ -584,11 +585,42 @@ async function main(): Promise<void> {
   const routerClient = await anthropicClient(process.env.ANTHROPIC_API_KEY);
   const routerModel = process.env.WA_ROUTER_MODEL?.trim() || settings.routerModel;
   const router = routerClient ? modelRouter(routerClient, routerModel) : undefined;
-  // WA-3 — the agent, when there is a key. With it, a question is worked out
-  // rather than matched; without it, the catalogue's phrases still answer.
-  const agent = await agentClientFor(process.env.ANTHROPIC_API_KEY);
+  /*
+   * WA-3 — which brain, and is it there?
+   *
+   * Two transports, the same loop and the same nineteen tools behind both:
+   *
+   *   api  an ANTHROPIC_API_KEY, billed per token, no session limits;
+   *   cli  `claude -p` on this host, spending the company's own Claude
+   *        subscription — by direction, 2026-10-02.
+   *
+   * WA_BRAIN names one; with neither named, a key means the API and no key
+   * means the CLI. A brain that is not ready is reported here, once, with
+   * what to do about it — and the bridge carries on with the phrase patterns
+   * rather than answering every question with an apology.
+   */
+  const wanted = (process.env.WA_BRAIN ?? '').trim().toLowerCase();
+  const useCli = wanted === 'cli' || (wanted !== 'api' && !process.env.ANTHROPIC_API_KEY);
+  let agent: AgentClient | null = null;
+  if (useCli) {
+    const cliOptions = {
+      ...(process.env.WA_CLI_COMMAND ? { command: process.env.WA_CLI_COMMAND } : {}),
+      timeoutSeconds: Math.max(30, Number(process.env.WA_CLI_TIMEOUT_SECONDS ?? '120')),
+    };
+    const ready = await cliReady(cliOptions);
+    if (ready.ok) agent = cliAgentClient(cliOptions);
+    else log(`brain: the claude CLI is not usable — ${ready.reason}`);
+  } else {
+    agent = await agentClientFor(process.env.ANTHROPIC_API_KEY);
+  }
   log(
-    `brain: ${agent ? `agent on ${settings.agentModel}` : router ? `router ${routerModel}` : 'phrase patterns only (no ANTHROPIC_API_KEY)'}; poll every ${POLL_SECONDS}s`,
+    `brain: ${
+      agent
+        ? `agent on ${settings.agentModel} via ${useCli ? 'the claude CLI (subscription)' : 'the API'}`
+        : router
+          ? `router ${routerModel} only`
+          : 'phrase patterns only'
+    }; poll every ${POLL_SECONDS}s`,
   );
 
   let socket: WASocket | null = null;
