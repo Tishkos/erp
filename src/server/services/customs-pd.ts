@@ -49,6 +49,7 @@ import * as audit from './audit';
 import * as authz from './authorization';
 import * as events from './payable-events';
 import * as payables from './payables';
+import { registerPage, searchOf, type RegisterPaging } from './register-page';
 import { businessToday } from '../domain/business-date';
 
 export const PERMISSION_OBJECT = 'customs_pd';
@@ -664,50 +665,115 @@ export interface PdListFilter {
   readonly payableId?: string | null;
 }
 
-export async function list(tx: Tx, filter: PdListFilter = {}) {
-  const asOf = today();
-  const rows = await tx
-    .select({
-      id: customsPd.id,
-      pdNo: customsPd.pdNo,
-      registrationYear: customsPd.registrationYear,
-      registrationDate: sql<string>`${customsPd.registrationDate}::text`,
-      expiryDate: sql<string>`${customsPd.expiryDate}::text`,
-      statusCode: customsPd.statusCode,
-      statusName: pdStatus.name,
-      isTerminal: pdStatus.isTerminal,
-      allowsPayment: pdStatus.allowsPayment,
-      isExpired: pdStatus.isExpired,
-      lastNote: customsPd.lastNote,
-      payableNo: payable.payableNo,
-      reference: payable.supplierReference,
-      supplierName: businessPartner.legalName,
-      bankName: bank.name,
-      branchCode: customsPd.branchCode,
-      superseded: sql<boolean>`exists (select 1 from customs_pd n where n.supersedes_pd_id = ${customsPd.id})`,
-    })
+export interface PdRegisterFilter extends PdListFilter, RegisterPaging {
+  readonly search?: string | null;
+}
+
+const pdSuperseded = sql<boolean>`exists (select 1 from customs_pd n where n.supersedes_pd_id = ${customsPd.id})`;
+
+const pdColumns = {
+  id: customsPd.id,
+  pdNo: customsPd.pdNo,
+  registrationYear: customsPd.registrationYear,
+  registrationDate: sql<string>`${customsPd.registrationDate}::text`,
+  expiryDate: sql<string>`${customsPd.expiryDate}::text`,
+  statusCode: customsPd.statusCode,
+  statusName: pdStatus.name,
+  isTerminal: pdStatus.isTerminal,
+  allowsPayment: pdStatus.allowsPayment,
+  isExpired: pdStatus.isExpired,
+  lastNote: customsPd.lastNote,
+  payableNo: payable.payableNo,
+  reference: payable.supplierReference,
+  supplierName: businessPartner.legalName,
+  bankName: bank.name,
+  branchCode: customsPd.branchCode,
+  superseded: pdSuperseded,
+};
+
+/**
+ * The register's predicate — the view, the import, the search — in SQL, so
+ * the count and the page are over the same rows (HD15). "Expiring" is the
+ * warning window: days left (expiry − today) at most the window.
+ */
+async function pdWhere(tx: Tx, filter: PdRegisterFilter, asOf: string) {
+  const live = sql`(not ${pdStatus.isTerminal} and not ${pdSuperseded})`;
+  const view = filter.view ?? 'live';
+  const viewSql =
+    view === 'live'
+      ? live
+      : view === 'expiring'
+        ? sql`${live} and ${customsPd.expiryDate} <= ${asOf}::date + ${await warningDays(tx)}::int`
+        : view === 'final'
+          ? sql`(${pdStatus.isTerminal} or ${pdSuperseded})`
+          : view === 'holding'
+            ? sql`${payable.payableNo} is null`
+            : undefined;
+  return and(
+    filter.payableId ? eq(customsPd.payableId, filter.payableId) : undefined,
+    viewSql,
+    searchOf(
+      [
+        customsPd.pdNo,
+        payable.payableNo,
+        payable.supplierReference,
+        businessPartner.legalName,
+        bank.name,
+        pdStatus.name,
+        customsPd.statusCode,
+        customsPd.lastNote,
+        customsPd.branchCode,
+        customsPd.registrationDate,
+        customsPd.expiryDate,
+      ],
+      filter.search,
+    ) ?? undefined,
+  );
+}
+
+function pdQuery(tx: Tx, where: ReturnType<typeof and>) {
+  return tx
+    .select(pdColumns)
     .from(customsPd)
     .innerJoin(pdStatus, eq(pdStatus.code, customsPd.statusCode))
     .leftJoin(payable, eq(payable.id, customsPd.payableId))
     .leftJoin(businessPartner, eq(businessPartner.id, payable.supplierId))
     .leftJoin(bank, eq(bank.code, customsPd.bankCode))
-    .where(filter.payableId ? eq(customsPd.payableId, filter.payableId) : undefined)
-    .orderBy(asc(customsPd.expiryDate), desc(customsPd.createdAt));
+    .where(where)
+    .orderBy(asc(customsPd.expiryDate), desc(customsPd.createdAt), asc(customsPd.id))
+    .$dynamic();
+}
 
-  const withDays = rows.map((row) => ({ ...row, daysLeft: daysUntil(row.expiryDate, asOf) }));
-  const warning = await warningDays(tx);
-  switch (filter.view ?? 'live') {
-    case 'live':
-      return withDays.filter((row) => !row.isTerminal && !row.superseded);
-    case 'expiring':
-      return withDays.filter((row) => !row.isTerminal && !row.superseded && row.daysLeft <= warning);
-    case 'final':
-      return withDays.filter((row) => row.isTerminal || row.superseded);
-    case 'holding':
-      return withDays.filter((row) => row.payableNo === null);
-    default:
-      return withDays;
-  }
+/** Every PD the filter selects, the soonest to expire first — for an import's own section. */
+export async function list(tx: Tx, filter: PdListFilter = {}) {
+  const asOf = today();
+  const rows = await pdQuery(tx, await pdWhere(tx, filter, asOf));
+  return rows.map((row) => ({ ...row, daysLeft: daysUntil(row.expiryDate, asOf) }));
+}
+
+/** §21.8 — the PD register: one page of fifty with the true count (HD15). */
+export async function listForScreen(tx: Tx, filter: PdRegisterFilter = {}) {
+  const asOf = today();
+  const where = await pdWhere(tx, filter, asOf);
+  return registerPage({
+    paging: filter,
+    count: async () => {
+      const [row] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(customsPd)
+        .innerJoin(pdStatus, eq(pdStatus.code, customsPd.statusCode))
+        .leftJoin(payable, eq(payable.id, customsPd.payableId))
+        .leftJoin(businessPartner, eq(businessPartner.id, payable.supplierId))
+        .leftJoin(bank, eq(bank.code, customsPd.bankCode))
+        .where(where);
+      return row?.n ?? 0;
+    },
+    rows: async ({ limit, offset }) =>
+      (await pdQuery(tx, where).limit(limit).offset(offset)).map((row) => ({
+        ...row,
+        daysLeft: daysUntil(row.expiryDate, asOf),
+      })),
+  });
 }
 
 /** The warning window in force today (seed 45 days). */

@@ -40,8 +40,10 @@ import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
 import * as inventory from './inventory';
+import * as units from './item-units';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
+import { countOf, registerPage, whereOf, type RegisterPage, type RegisterPaging } from './register-page';
 import * as payableEvents from './payable-events';
 import * as payables from './payables';
 
@@ -516,12 +518,15 @@ export async function post(
   const movementIds: string[] = [];
 
   for (const plan of planned) {
+    // REQ-FIX-001 FIX-4 — received in the order's unit, counted in the base.
+    const baseQuantity = await units.toBaseQuantity(tx, plan.line.itemCode, plan.line.uomCode, plan.quantity);
     const movement = await inventory.receive(tx, ctx, {
       itemCode: plan.line.itemCode,
       warehouseCode: plan.line.warehouseCode,
       branchCode: receipt.branchCode,
-      quantity: plan.quantity,
-      unitCostIqd: plan.unitCostIqd,
+      quantity: baseQuantity,
+      // The order's price is per its unit; a base unit costs that share of it.
+      unitCostIqd: baseQuantity === plan.quantity || baseQuantity === 0n ? plan.unitCostIqd : (plan.unitCostIqd * plan.quantity) / baseQuantity,
       movementDate: receipt.receiptDate,
       kind: 'goods_receipt',
       sourceDocumentType: PERMISSION_OBJECT,
@@ -795,24 +800,41 @@ export interface GoodsReceiptListRow {
   readonly lineCount: number;
 }
 
-export async function listForScreen(tx: Tx): Promise<GoodsReceiptListRow[]> {
-  const result = await tx.execute(sql`
-    select r.id,
-           r.receipt_no as "receiptNo",
-           r.status::text as status,
-           o.order_no as "orderNo",
-           bp.legal_name as "supplierName",
-           r.receipt_date::text as "receiptDate",
-           (select string_agg(distinct l.warehouse_code, ', ')
-              from goods_receipt_line l where l.goods_receipt_id = r.id) as warehouses,
-           (select count(*)::int from goods_receipt_line l where l.goods_receipt_id = r.id)
-             as "lineCount"
+export interface GoodsReceiptListFilter extends RegisterPaging {
+  readonly status?: string | null;
+}
+
+/** HD15 — one page of fifty, newest first, with the true count. */
+export async function listForScreen(
+  tx: Tx,
+  filter: GoodsReceiptListFilter = {},
+): Promise<RegisterPage<GoodsReceiptListRow>> {
+  const from = sql`
       from goods_receipt r
       left join purchase_order o on o.id = r.purchase_order_id
       left join business_partner bp on bp.id = o.supplier_id
-     order by r.created_at desc
-     limit 200`);
-  return result.rows as unknown as GoodsReceiptListRow[];
+     ${whereOf([filter.status ? sql`r.status::text = ${filter.status}` : null])}`;
+  return registerPage({
+    paging: filter,
+    count: () => countOf(tx, from),
+    rows: async ({ limit, offset }) => {
+      const result = await tx.execute(sql`
+        select r.id,
+               r.receipt_no as "receiptNo",
+               r.status::text as status,
+               o.order_no as "orderNo",
+               bp.legal_name as "supplierName",
+               r.receipt_date::text as "receiptDate",
+               (select string_agg(distinct l.warehouse_code, ', ')
+                  from goods_receipt_line l where l.goods_receipt_id = r.id) as warehouses,
+               (select count(*)::int from goods_receipt_line l where l.goods_receipt_id = r.id)
+                 as "lineCount"
+          ${from}
+         order by r.created_at desc, r.id desc
+         limit ${limit} offset ${offset}`);
+      return result.rows as unknown as GoodsReceiptListRow[];
+    },
+  });
 }
 
 /** §21.6 — the record, by its number. */

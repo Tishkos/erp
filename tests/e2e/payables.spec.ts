@@ -138,8 +138,9 @@ test.describe('A22 · payables in a browser', () => {
 
     await page.goto('/payables/invoices');
     await expect(page.getByRole('heading', { level: 1, name: 'Purchase Invoices' })).toBeVisible();
-    // The module's own tabs, as on every other screen.
-    await expect(page.getByRole('link', { name: 'Supplier Statements' }).first()).toBeVisible();
+    // The module's own tabs, as on every other screen — its heading's
+    // (REQ-FIX-001 FIX-1: Purchasing & Invoices).
+    await expect(page.getByRole('link', { name: 'Purchase Orders' }).first()).toBeVisible();
 
     await page.getByRole('button', { name: 'Add expense' }).click();
     const dialog = page.getByRole('dialog');
@@ -566,9 +567,12 @@ test.describe('A22 · payables in a browser', () => {
     await link.getByRole('button', { name: 'Link to an import' }).click();
     await expect(page.getByRole('link', { name: new RegExp(reference) }).first()).toBeVisible({ timeout: 30_000 });
 
-    // Invoice Status Tracking points imports to their containers.
+    // Invoice Status Tracking points imports to their containers — its note,
+    // and since REQ-FIX-001 FIX-1 its Shipping tabs, both name the register.
     await page.goto('/inventory/in-transit');
-    await expect(page.getByRole('link', { name: /Containers$/ })).toHaveAttribute('href', '/payables/containers');
+    const containers = page.getByRole('link', { name: /Containers$/ });
+    await expect(containers.first()).toBeVisible();
+    for (const link of await containers.all()) await expect(link).toHaveAttribute('href', '/payables/containers');
   });
 
   test('holds the line at mobile width, in Arabic, right to left', async ({ page, context }) => {

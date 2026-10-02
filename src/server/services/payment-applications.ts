@@ -88,7 +88,9 @@ import * as loans from './loans';
 import * as payments from './supplier-payment';
 import * as rateService from './exchange-rates';
 import * as treasury from './treasury';
+import * as exchange from './import-exchange';
 import { allocateDocumentNumber } from './numbering';
+import { registerPage, searchOf, type RegisterPaging } from './register-page';
 import { businessDateOf, businessToday } from '../domain/business-date';
 
 export const PERMISSION_OBJECT = 'payment_application';
@@ -954,6 +956,9 @@ export async function confirm(tx: Tx, ctx: ActorContext, id: string, input: Conf
       summary: `Fully paid — ${owner.currency} ${shown(summary.paidTxn)} of ${owner.currency} ${shown(parseDecimal(owner.amountTxn, MONEY_SCALE))}`,
       actorUserId: ctx.principal.userId,
     });
+    // REQ-FIX-001 FX8 — fully paid in its own currency: the dinars its
+    // invoices and payments are kept in close on the exchange difference.
+    if (owner.currency !== 'IQD') await exchange.settleIfFullyPaid(tx, ctx, row.payableId, input.confirmedOn);
   }
 
   await audit.record(tx, {
@@ -1219,6 +1224,23 @@ export const cancel = (tx: Tx, ctx: ActorContext, id: string, reason: string) =>
 // §15.5 — Applied / Paid / Remaining
 // ---------------------------------------------------------------------------
 
+/**
+ * REQ-FIX-001 FX8 — the import page's *Settle exchange difference*: once the
+ * exchange accounts are mapped, the difference a confirmation could not book
+ * is booked now, dated today. Only on an import fully paid in its currency.
+ */
+export async function settleExchangeDifference(tx: Tx, ctx: ActorContext, payableId: string, on: string) {
+  const owner = await payables.load(tx, payableId);
+  await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, { branchCode: owner.branchCode });
+  const summary = await totalsFor(tx, payableId);
+  if (!summary.fullyPaid) {
+    throw new PaymentApplicationError(`${owner.payableNo} is not fully paid in ${owner.currency} yet; its exchange difference is known only once it is.`);
+  }
+  const done = await exchange.settle(tx, ctx, payableId, on);
+  if (!done) throw new PaymentApplicationError(`${owner.payableNo} has no exchange difference to book: its invoices and payments already agree in dinars.`);
+  return done;
+}
+
 export async function totalsFor(tx: Tx, payableId: string) {
   const [owner] = await tx
     .select({ amountTxn: payable.amountTxn })
@@ -1248,43 +1270,57 @@ export interface ListFilter {
   readonly payableId?: string | null;
 }
 
-export async function list(tx: Tx, filter: ListFilter = {}) {
-  const asOf = today();
-  const rows = await tx
-    .select({
-      id: paymentApplication.id,
-      applicationNo: paymentApplication.applicationNo,
-      status: paymentApplication.status,
-      payableNo: payable.payableNo,
-      reference: payable.supplierReference,
-      supplierCode: businessPartner.code,
-      supplierName: businessPartner.legalName,
-      methodName: paymentMethod.name,
-      methodKind: paymentMethod.confirmationKind,
-      accountCode: bankCashAccount.code,
-      accountName: bankCashAccount.name,
-      bankName: bank.name,
-      currency: paymentApplication.currency,
-      amountTxn: paymentApplication.amountTxn,
-      amountIqd: paymentApplication.amountIqd,
-      applicationDate: sql<string | null>`${paymentApplication.applicationDate}::text`,
-      confirmedOn: sql<string | null>`${paymentApplication.confirmedOn}::text`,
-      createdAt: paymentApplication.createdAt,
-      branchCode: paymentApplication.branchCode,
-    })
+export interface RegisterFilter extends RegisterPaging {
+  /** The screen's view: the statuses it shows (none or empty — every status). */
+  readonly statuses?: readonly string[] | null;
+  readonly search?: string | null;
+}
+
+const applicationColumns = {
+  id: paymentApplication.id,
+  applicationNo: paymentApplication.applicationNo,
+  status: paymentApplication.status,
+  payableNo: payable.payableNo,
+  reference: payable.supplierReference,
+  supplierCode: businessPartner.code,
+  supplierName: businessPartner.legalName,
+  methodName: paymentMethod.name,
+  methodKind: paymentMethod.confirmationKind,
+  accountCode: bankCashAccount.code,
+  accountName: bankCashAccount.name,
+  bankName: bank.name,
+  currency: paymentApplication.currency,
+  amountTxn: paymentApplication.amountTxn,
+  amountIqd: paymentApplication.amountIqd,
+  applicationDate: sql<string | null>`${paymentApplication.applicationDate}::text`,
+  confirmedOn: sql<string | null>`${paymentApplication.confirmedOn}::text`,
+  createdAt: paymentApplication.createdAt,
+  branchCode: paymentApplication.branchCode,
+};
+
+function applicationQuery(tx: Tx, where: ReturnType<typeof and>) {
+  return tx
+    .select(applicationColumns)
     .from(paymentApplication)
     .innerJoin(payable, eq(payable.id, paymentApplication.payableId))
     .innerJoin(businessPartner, eq(businessPartner.id, paymentApplication.supplierId))
     .innerJoin(paymentMethod, eq(paymentMethod.code, paymentApplication.paymentMethodCode))
     .innerJoin(bankCashAccount, eq(bankCashAccount.id, paymentApplication.bankCashAccountId))
     .leftJoin(bank, eq(bank.code, bankCashAccount.bankCode))
-    .where(
-      and(
-        filter.status ? eq(paymentApplication.status, filter.status as never) : undefined,
-        filter.payableId ? eq(paymentApplication.payableId, filter.payableId) : undefined,
-      ),
-    )
-    .orderBy(desc(paymentApplication.createdAt));
+    .where(where)
+    .$dynamic();
+}
+
+/** An import's own applications (§21.3), the longest-waiting SWIFT first. */
+export async function list(tx: Tx, filter: ListFilter = {}) {
+  const asOf = today();
+  const rows = await applicationQuery(
+    tx,
+    and(
+      filter.status ? eq(paymentApplication.status, filter.status as never) : undefined,
+      filter.payableId ? eq(paymentApplication.payableId, filter.payableId) : undefined,
+    ),
+  ).orderBy(desc(paymentApplication.createdAt));
 
   const withDays = rows.map((row) => ({
     ...row,
@@ -1292,6 +1328,65 @@ export async function list(tx: Tx, filter: ListFilter = {}) {
   }));
   // §21.7 — sorted by days waiting: the longest-waiting SWIFT first.
   return withDays.sort((a, b) => (b.daysWaiting ?? -1) - (a.daysWaiting ?? -1));
+}
+
+/**
+ * §21.7 — the register: one page of fifty with the true count (HD15), the
+ * view and the search in the query, and the order the old in-memory sort
+ * gave — days waiting descending (a sent application with a date; every
+ * other row counts as −1), then newest first.
+ */
+export async function listForScreen(tx: Tx, filter: RegisterFilter = {}) {
+  const asOf = today();
+  const statuses = filter.statuses?.length ? filter.statuses : null;
+  const where = and(
+    statuses ? inArray(paymentApplication.status, statuses as never[]) : undefined,
+    searchOf(
+      [
+        paymentApplication.applicationNo,
+        paymentApplication.status,
+        payable.payableNo,
+        payable.supplierReference,
+        businessPartner.code,
+        businessPartner.legalName,
+        paymentMethod.name,
+        bankCashAccount.code,
+        bankCashAccount.name,
+        bank.name,
+        paymentApplication.currency,
+        paymentApplication.amountTxn,
+        paymentApplication.branchCode,
+      ],
+      filter.search,
+    ) ?? undefined,
+  );
+  const daysWaiting = sql`case when ${paymentApplication.status} = 'sent' and ${paymentApplication.applicationDate} is not null
+                               then ${asOf}::date - ${paymentApplication.applicationDate} else -1 end`;
+  return registerPage({
+    paging: filter,
+    count: async () => {
+      const [row] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(paymentApplication)
+        .innerJoin(payable, eq(payable.id, paymentApplication.payableId))
+        .innerJoin(businessPartner, eq(businessPartner.id, paymentApplication.supplierId))
+        .innerJoin(paymentMethod, eq(paymentMethod.code, paymentApplication.paymentMethodCode))
+        .innerJoin(bankCashAccount, eq(bankCashAccount.id, paymentApplication.bankCashAccountId))
+        .leftJoin(bank, eq(bank.code, bankCashAccount.bankCode))
+        .where(where);
+      return row?.n ?? 0;
+    },
+    rows: async ({ limit, offset }) => {
+      const rows = await applicationQuery(tx, where)
+        .orderBy(sql`${daysWaiting} desc`, desc(paymentApplication.createdAt), desc(paymentApplication.id))
+        .limit(limit)
+        .offset(offset);
+      return rows.map((row) => ({
+        ...row,
+        daysWaiting: row.status === 'sent' && row.applicationDate ? daysBetween(row.applicationDate, asOf) : null,
+      }));
+    },
+  });
 }
 
 export async function view(tx: Tx, applicationNo: string) {

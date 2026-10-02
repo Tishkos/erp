@@ -105,6 +105,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   supplier_credit_memos: 'document',
   match_exceptions: 'workspace',
   pds: 'document',
+  asycuda_update: 'workspace',
   shipments: 'document',
   containers: 'list',
   loans: 'document',
@@ -114,6 +115,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   legacy_import: 'settings',
   hr_settings: 'settings',
   whatsapp: 'settings',
+  project_settings: 'settings',
 
   // 5 — Inventory
   availability: 'workspace',
@@ -136,6 +138,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   project_master: 'document',
   contracts: 'document',
   wbs: 'workspace',
+  cost_plan: 'workspace',
   project_budgets: 'document',
   change_orders: 'document',
   project_costs: 'list',
@@ -228,6 +231,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   daily_position: 'report',
   cash_forecast: 'report',
   treasury_reports: 'report',
+  bank_deposits: 'document',
 
   // 14 — Fixed Assets
   asset_categories: 'document',
@@ -250,16 +254,19 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   variance_reports: 'report',
 
   // 16 — HR & Payroll
+  // REQ-FIX-001 FIX-5 — the sponsor's thirteen, in his order.
+  hr_dashboard: 'dashboard',
   employees: 'document',
-  organisation: 'workspace',
+  hr_departments: 'document',
+  hr_positions: 'document',
   attendance: 'workspace',
   leave: 'document',
   payroll: 'workspace',
-  payslips: 'report',
   employee_advances: 'document',
-  expense_claims: 'document',
-  travel: 'document',
-  asset_assignment: 'document',
+  recruitment: 'document',
+  performance: 'document',
+  employee_requests: 'document',
+  hr_documents: 'list',
   hr_reports: 'report',
 
   // 17 — Documents & Tasks
@@ -439,6 +446,9 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/finance/posting-mappings',
   // Treasury and Banking reporting — the balance, and what it is made of.
   '/treasury/reporting',
+  // REQ-FIX-001 FIX-1 — the deposits register, and the ASYCUDA list as its own item.
+  '/treasury/deposits',
+  '/payables/pd/asycuda',
   // §15 and §16 — open items and ageing, one screen on each side.
   '/sales/receivables',
   // REQ-AP-001 Stage 1 — the payables workbench, the payable page's list
@@ -473,10 +483,27 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/administration/legacy-import',
   // REQ-HR-001 Stage HR-1 — people and organisation.
   '/hr/employees',
-  '/hr/organisation',
+  '/hr/departments',
+  '/hr/positions',
   '/administration/hr-settings',
   // REQ-WA-001 WA-1/WA-2 — the WhatsApp bridge.
   '/administration/whatsapp',
+  // REQ-PM-001 PM-1 — the Project System's structure.
+  '/projects',
+  '/projects/contracts',
+  '/projects/wbs',
+  '/projects/plan',
+  '/projects/budgets',
+  '/projects/change-orders',
+  '/projects/costs',
+  '/projects/procurement',
+  '/projects/progress',
+  '/projects/material-issues',
+  '/projects/billing',
+  '/projects/forecast',
+  '/projects/close',
+  '/projects/reports',
+  '/administration/project-settings',
 ]);
 
 export function isDelivered(route: string): boolean {

@@ -27,10 +27,13 @@ test.describe('REQ-HR-001 Stage HR-1 · people and organisation', () => {
 
     await page.goto('/hr/employees');
     await expect(page.getByRole('heading', { name: 'Employees', level: 1 })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Organisation' })).toBeVisible();
+    // REQ-FIX-001 FIX-5: the tabs are the sponsor's HR menu.
+    await expect(page.getByRole('link', { name: 'Departments' }).first()).toBeVisible();
 
+    // The Organisation address is kept and lands on Departments.
     await page.goto('/hr/organisation');
-    await expect(page.getByRole('heading', { name: 'Organisation', level: 1 })).toBeVisible();
+    await page.waitForURL(/\/hr\/departments$/);
+    await expect(page.getByRole('heading', { name: 'Departments', level: 1 })).toBeVisible();
 
     await page.goto('/administration/hr-settings');
     await expect(page.getByRole('heading', { name: 'HR Settings', level: 1 })).toBeVisible();
@@ -41,7 +44,7 @@ test.describe('REQ-HR-001 Stage HR-1 · people and organisation', () => {
     // Arabic, at a phone's width, right to left.
     await page.context().addCookies([{ name: 'erp-locale', value: 'ar', domain: 'localhost', path: '/' }]);
     await page.setViewportSize({ width: 390, height: 844 });
-    for (const route of ['/hr/employees', '/hr/organisation', '/administration/hr-settings']) {
+    for (const route of ['/hr/employees', '/hr/departments', '/hr/positions', '/administration/hr-settings']) {
       await page.goto(route);
       await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
       const width = await page.evaluate(() => document.documentElement.scrollWidth);

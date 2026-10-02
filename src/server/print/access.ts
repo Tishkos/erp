@@ -39,6 +39,11 @@ export const EXPORT_ACCESS = {
   cash_flow: { kind: 'report', route: '/finance/cash-flow', object: 'financial_statement' },
   gl_inquiry: { kind: 'report', route: '/finance/gl-inquiry', object: 'gl_inquiry' },
   gl_account: { kind: 'report', route: '/finance/gl-inquiry', object: 'gl_inquiry' },
+  // REQ-PM-001 PM-6 — the Project System's four reports (PM13).
+  project_cost_report: { kind: 'report', route: '/projects/reports', object: 'project' },
+  project_line_items: { kind: 'report', route: '/projects/reports', object: 'project' },
+  project_milestone_trend: { kind: 'report', route: '/projects/reports', object: 'project' },
+  project_earned_value: { kind: 'report', route: '/projects/reports', object: 'project' },
 } as const satisfies Record<
   string,
   { readonly kind: 'document' | 'report'; readonly route: string; readonly object: string }

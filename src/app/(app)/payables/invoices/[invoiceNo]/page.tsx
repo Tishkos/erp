@@ -233,7 +233,7 @@ export default async function ApInvoicePage({
     today,
   );
   const stateTone =
-    paymentState === 'paid' ? 'settled' : paymentState === 'overdue' ? 'rejected' : 'submitted';
+    paymentState === 'paid' ? 'settled' : paymentState === 'overdue' ? 'rejected' : paymentState === 'part_paid' ? 'partially_executed' : 'submitted';
   // "Mark paid" — offered to whoever may post a supplier payment, on a posted
   // invoice with something still owed (D12).
   const mayMarkPaid =
@@ -411,12 +411,14 @@ export default async function ApInvoicePage({
             items={found.stockItems}
             loadAvailability={invoiceLineAvailability}
             mode="purchase"
+            unitColumn
             purchaseSupplierId={invoice.supplierId}
             widthsKey={`erp.lines.ap.${context.principal.userId}`}
             labels={{
               itemCode: column('item_code'),
               itemName: column('item_name'),
               quantity: column('quantity'),
+              unit: column('unit'),
               unitPrice: column('unit_price'),
               discount: column('discount'),
               total: column('total_price'),
@@ -446,6 +448,7 @@ export default async function ApInvoicePage({
                 discount: line.discountIqd,
                 supplierId: '',
                 warehouseCode: line.warehouseCode ?? '',
+                uomCode: line.uomCode,
               })),
               save: saveApInvoiceLine,
               remove: removeApInvoiceLine,

@@ -23,6 +23,8 @@ import * as payables from '@/server/services/payables';
 import * as sweep from '@/server/services/payables-sweep';
 import * as statement from '@/server/services/partner-statement';
 import * as wa from '@/server/services/whatsapp';
+import * as psch from '@/server/services/project-schedule';
+import * as ps from '@/server/services/project-system';
 import { runExport } from '@/server/print/export';
 import { readWorkbook } from '@/server/xlsx-read';
 import { businessToday } from '@/server/domain/business-date';
@@ -190,6 +192,32 @@ describe('W3 · wa02-intents — each ask returns the figures the screen shows',
 
     const ar = await ask(`حالة ${stoppedNo}`);
     expect(ar.text).toContain('موقوف — PENDING_REASON');
+  });
+
+  it("D-PM-10 — project status: the five amounts, % complete, CPI/SPI and the next milestone, as the Progress screen reads them", async () => {
+    const { projectCode } = await withScope(scope(world.clerk), (tx) =>
+      ps.createDefinition(tx, world.clerk, { name: 'Najaf cold store', typeCode: 'INTERNAL', branchCode: BAGHDAD, managerUserId: world.clerk.principal.userId, baselineBudgetIqd: '800000', baselineStartsOn: '2026-06-01', baselineEndsOn: '2026-12-31' }),
+    );
+    await withScope(scope(ceo), (tx) => ps.release(tx, ceo, projectCode));
+    await withScope(scope(world.clerk), (tx) => psch.addActivity(tx, world.clerk, projectCode, { wbsCode: `${projectCode}-1`, name: 'Handover', kind: 'milestone', milestoneUsage: 'date' }));
+
+    const en = await ask(`project status ${projectCode}`);
+    expect(en.intent).toEqual({ kind: 'project', project: projectCode });
+    expect(en.text).toContain(`*${projectCode}* · Najaf cold store · active`);
+    expect(en.text).toContain('Budget: 800,000 IQD · Committed: 0 IQD · Actual: 0 IQD');
+    expect(en.text).toContain('Forecast at completion: 800,000 IQD · Available: 800,000 IQD');
+    expect(en.text).toContain('Complete: 0 % · CPI — · SPI —');
+    expect(en.text).toContain('Next milestone: A0010 Handover — not scheduled');
+    expect(en.attachment).toBeNull();
+
+    const ar = await ask('حالة المشروع Najaf cold store');
+    expect(ar.intent).toEqual({ kind: 'project', project: 'Najaf cold store' });
+    expect(ar.text).toContain('الموازنة: 800,000 IQD');
+    expect(ar.text).toContain('المعلم التالي: A0010 Handover');
+
+    const unknown = await ask('project status Mars base');
+    expect(unknown.text).toMatch(/No project matches/);
+    expect(unknown.text).toContain(projectCode);
   });
 
   it('SWIFT pending more than N days matches the sweep\'s own query', async () => {

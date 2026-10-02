@@ -1189,20 +1189,97 @@
       "idx": 169,
       "version": "7",
       "when": 1795900000049,
-      "tag": "0245_whatsapp_group_and_actions",
+      "tag": "0245_project_system",
       "breakpoints": true
     },
     {
       "idx": 170,
       "version": "7",
       "when": 1795900000050,
-      "tag": "0246_whatsapp_group_only",
+      "tag": "0246_project_budget",
       "breakpoints": true
     },
     {
       "idx": 171,
       "version": "7",
       "when": 1795900000051,
+      "tag": "0247_project_execution",
+      "breakpoints": true
+    },
+    {
+      "idx": 172,
+      "version": "7",
+      "when": 1795900000052,
+      "tag": "0248_project_schedule",
+      "breakpoints": true
+    },
+    {
+      "idx": 173,
+      "version": "7",
+      "when": 1795900000053,
+      "tag": "0245_whatsapp_group_and_actions",
+      "breakpoints": true
+    },
+    {
+      "idx": 174,
+      "version": "7",
+      "when": 1795900000054,
+      "tag": "0249_project_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 175,
+      "version": "7",
+      "when": 1795900000055,
+      "tag": "0250_project_close",
+      "breakpoints": true
+    },
+    {
+      "idx": 176,
+      "version": "7",
+      "when": 1795900000056,
+      "tag": "0251_whatsapp_agent_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 177,
+      "version": "7",
+      "when": 1795900000057,
+      "tag": "0252_bank_transfer_journal_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 178,
+      "version": "7",
+      "when": 1795900000058,
+      "tag": "0253_import_invoice_tracking",
+      "breakpoints": true
+    },
+    {
+      "idx": 179,
+      "version": "7",
+      "when": 1795900000059,
+      "tag": "0254_item_units",
+      "breakpoints": true
+    },
+    {
+      "idx": 180,
+      "version": "7",
+      "when": 1795900000060,
+      "tag": "0255_hr_structure",
+      "breakpoints": true
+    },
+    {
+      "idx": 181,
+      "version": "7",
+      "when": 1795900000061,
+      "tag": "0246_whatsapp_group_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 182,
+      "version": "7",
+      "when": 1795900000062,
       "tag": "0247_whatsapp_noah_opus",
       "breakpoints": true
     }

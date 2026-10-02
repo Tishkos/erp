@@ -56,7 +56,8 @@ function linesFrom(formData: FormData): ap.InvoiceLineInput[] {
       ...(discount ? { discountIqd: parseDecimal(discount, 4n) } : {}),
       // The item's own unit, sent with the line. Falling back to "each" was
       // wrong for anything measured in metres or kilogrammes.
-      uomCode: text(formData, `uom_code_${row}`).trim() || 'EA',
+      // REQ-FIX-001 FIX-4 — the line's unit; the item's purchase default when none is sent.
+      uomCode: text(formData, `uom_code_${row}`).trim() || null,
       isInventory: true,
       warehouseCode,
     });
@@ -103,6 +104,10 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       // §24.3 — ticked Import and naming an open import: the invoice joins it.
       payableId: text(formData, 'is_import') === '1' ? text(formData, 'payable_id').trim() || null : null,
       paymentTermsText: text(formData, 'payment_terms_text').trim() || null,
+      // REQ-PM-001 §8 — the element is "project|element"; the three together or none.
+      projectCode: text(formData, 'project_element').split('|')[0]?.trim() || null,
+      wbsCode: text(formData, 'project_element').split('|')[1]?.trim() || null,
+      costCode: text(formData, 'project_cost_code').trim() || null,
       lines,
     });
   });
@@ -146,6 +151,8 @@ export async function saveApInvoiceLine(formData: FormData): Promise<LineOutcome
       unitPriceIqd: parseDecimal(text(formData, 'unitPrice').trim(), 4n),
       ...(discount ? { discountIqd: parseDecimal(discount, 4n) } : {}),
       warehouseCode: text(formData, 'warehouseCode').trim(),
+      // REQ-FIX-001 FIX-4 — the unit chosen on the line; the item's purchase default when none.
+      uomCode: text(formData, 'uomCode').trim() || null,
     }),
   );
 

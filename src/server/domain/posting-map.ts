@@ -118,6 +118,38 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     event: 'purchasing.supplier_payment',
     lines: [line('supplier_payable', 'debit', true, 'supplier')],
   },
+  // REQ-FIX-001 FIX-3 — the supplier advance posted under these three events
+  // from the start, but they were never listed here, so they could not be
+  // mapped on the screen and a deposit could not post. The bank side is the
+  // account the money left (a property of the payment) unless none is named.
+  {
+    // Money paid to a supplier before the invoice — a deposit on an import.
+    event: 'purchasing.supplier_advance_payment',
+    lines: [line('supplier_advance', 'debit', true), line('bank', 'credit')],
+  },
+  {
+    // The deposit applied to the invoice it was paid ahead of (§8.5, FX6).
+    event: 'purchasing.supplier_advance_settlement',
+    lines: [line('supplier_payable', 'debit', true, 'supplier'), line('supplier_advance', 'credit', true)],
+  },
+  {
+    // The supplier gives the deposit back.
+    event: 'purchasing.supplier_advance_refund',
+    lines: [line('bank', 'debit'), line('supplier_advance', 'credit', true)],
+  },
+  {
+    // REQ-FIX-001 FX8 — an import agreed in a foreign currency, fully paid in
+    // it: what its dinar invoices still owe is a gain, what was paid over them
+    // a loss. The supplier side either way; an unused deposit closes on the
+    // advance account.
+    event: 'payables.exchange_difference',
+    lines: [
+      line('supplier_payable', 'either', true, 'supplier'),
+      line('supplier_advance', 'credit'),
+      line('exchange_gain', 'credit'),
+      line('exchange_loss', 'debit'),
+    ],
+  },
   {
     event: 'purchasing.supplier_credit_memo',
     lines: [
@@ -192,6 +224,48 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     // (the item's own account) — both properties of the item, not asked here.
     event: 'payables.landed_cost',
     lines: [line('landed_cost_clearing', 'credit', true)],
+  },
+  {
+    // REQ-PM-001 PM-5 (D-PM-11) — a project certificate approved: the customer
+    // owes what was billed less what is retained; the retention is a
+    // receivable of its own until it is released; the whole is billed revenue.
+    event: 'projects.certificate',
+    lines: [
+      line('customer_receivable', 'debit', true, 'customer'),
+      line('project_retention_receivable', 'debit', false, 'customer'),
+      line('project_revenue', 'credit', true),
+    ],
+  },
+  {
+    // REQ-PM-001 PM-5 (D-PM-1) — percentage of completion at a period end:
+    // recognised beyond what was billed is unbilled work (WIP); billed beyond
+    // what is recognised is deferred revenue. Reversed next period, so each
+    // role is debited one month and credited the next.
+    event: 'projects.recognition',
+    lines: [
+      line('project_wip', 'either'),
+      line('project_deferred_revenue', 'either'),
+      line('project_revenue', 'either', true),
+    ],
+  },
+  {
+    // REQ-PM-001 PM-6 (D-PM-13) — a Material Issue document: the stock's
+    // FIFO cost leaves the item's inventory account for the element's cost;
+    // a return the other way, at the cost it went out at.
+    event: 'projects.material_issue',
+    lines: [line('project_material_cost', 'either', true), line('inventory', 'either', true)],
+  },
+  {
+    // REQ-PM-001 PM-6 (D-PM-8) — a month's approved hours at the employees'
+    // rates: the project's labour cost against the absorption account.
+    event: 'projects.timesheet',
+    lines: [line('project_labour', 'debit', true), line('labour_absorption', 'credit', true)],
+  },
+  {
+    // REQ-PM-001 PM-6 (D-PM-7) — an investment project settled: its cost
+    // leaves the accounts it was posted to for the asset under construction.
+    event: 'projects.settlement',
+    lines: [line('project_auc', 'debit', true), line('project_cost', 'credit', true)],
   },
 ]);
 

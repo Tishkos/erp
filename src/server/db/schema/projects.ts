@@ -26,6 +26,7 @@
  */
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   check,
   date,
   index,
@@ -40,12 +41,15 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { appUser, branch } from './platform';
-import { project } from './organisation';
+import { project, warehouse } from './organisation';
+import { item } from './item';
+import { inventoryMovement } from './inventory';
 import { purchaseOrder } from './purchase-order';
 import { arInvoice } from './ar-invoice';
 import { documentStatus } from './workflow';
 import { journalEntry } from './journal';
 import { chartOfAccount } from './accounting';
+import { employee } from './hr';
 
 /** §10 — the work breakdown structure. A tree; cycles refused by trigger. */
 export const projectWbs = pgTable(
@@ -65,6 +69,25 @@ export const projectWbs = pgTable(
     plannedEndsOn: date('planned_ends_on'),
     /** §10 — a milestone is a WBS element somebody bills against. */
     isMilestone: text('is_milestone').notNull().default('false'),
+
+    // ---- REQ-PM-001 PM-1: where it sits, and what it may receive (§5) ----
+    /** 1 at the top; the parent's plus one below, held by trigger. */
+    level: smallint('level').notNull().default(1),
+    /** Costs may be planned here. */
+    isPlanning: boolean('is_planning').notNull().default(true),
+    /** Costs, commitments and issues may be posted here. */
+    isAccountAssignment: boolean('is_account_assignment').notNull().default(true),
+    /** Certificates and the billing plan hang here. */
+    isBilling: boolean('is_billing').notNull().default(false),
+    active: boolean('active').notNull().default(true),
+    /** PM-2 §7 — the stop line raised for this element, with its reason (D-PM-5). */
+    stopPercentRaised: numeric('stop_percent_raised', { precision: 9, scale: 4 }),
+    stopRaisedReason: text('stop_raised_reason'),
+    stopRaisedBy: uuid('stop_raised_by').references(() => appUser.id),
+    stopRaisedAt: timestamp('stop_raised_at', { withTimezone: true }),
+    description: text('description'),
+    createdBy: uuid('created_by').references(() => appUser.id),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -137,7 +160,11 @@ export const projectCommitment = pgTable(
       .notNull()
       .references(() => project.code, { onDelete: 'cascade' }),
     costCode: text('cost_code').notNull(),
+    /** PM-2 §8 — the element the commitment stands on; availability is read there. */
+    wbsCode: text('wbs_code'),
     purchaseOrderId: uuid('purchase_order_id').references(() => purchaseOrder.id),
+    /** PM-3 §8 — a service or recurring payable without an order is a commitment of its own. */
+    payableId: uuid('payable_id'),
 
     amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
     /** How much of the commitment has become an actual cost. */
@@ -192,8 +219,17 @@ export const projectCost = pgTable(
 
     /** Where the money is in the ledger — §3.3's drill-down. */
     journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    /** PM-3 §8 — the document behind the row (`ap_invoice`, `project_material_issue`, …) and its id. */
+    sourceType: text('source_type'),
+    sourceId: text('source_id'),
+    /** PM-3 — a reversal is a negative row naming the row it undoes; once. */
+    reversesCostId: uuid('reverses_cost_id'),
+    /** PM-3 — the commitment this cost consumed, given back when the cost is reversed. */
+    consumedCommitmentId: uuid('consumed_commitment_id').references(() => projectCommitment.id),
     /** True once the cost has been included in a certificate. */
     billed: text('billed').notNull().default('false'),
+    /** PM-6 §12 — the settlement that took this row (to the asset, or to the result). */
+    settlementId: uuid('settlement_id'),
 
     createdBy: uuid('created_by')
       .notNull()
@@ -231,6 +267,8 @@ export const projectProgress = pgTable(
     approvedBy: uuid('approved_by').references(() => appUser.id),
     approvedAt: timestamp('approved_at', { withTimezone: true }),
     note: text('note'),
+    /** PM-4 §10 — the progress milestone whose approval set this percent. */
+    activityId: uuid('activity_id'),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -290,6 +328,10 @@ export const projectCertificate = pgTable(
       .references(() => appUser.id),
     approvedBy: uuid('approved_by').references(() => appUser.id),
     approvedAt: timestamp('approved_at', { withTimezone: true }),
+    /** PM-5 (D-PM-11) — the progress-billing journal the approval posted. */
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    /** PM-5 — raised from measured progress or from a billing-plan line. */
+    basis: text('basis').notNull().default('progress'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -392,6 +434,13 @@ export const projectVariation = pgTable(
       .default('0'),
     revisedEndsOn: date('revised_ends_on'),
 
+    /** PM-2 §7 — the scope and schedule effect. */
+    scopeNote: text('scope_note'),
+    scheduleDeltaDays: integer('schedule_delta_days').notNull().default(0),
+    rejectedBy: uuid('rejected_by').references(() => appUser.id),
+    rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+    rejectedReason: text('rejected_reason'),
+
     /** §10 — commercial approval and budget approval, separately. */
     commercialApprovedBy: uuid('commercial_approved_by').references(() => appUser.id),
     commercialApprovedAt: timestamp('commercial_approved_at', { withTimezone: true }),
@@ -426,4 +475,591 @@ export const projectVariation = pgTable(
           or (${t.commercialApprovedBy} is not null and ${t.budgetApprovedBy} is not null)`,
     ),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// REQ-PM-001 PM-1 — configuration as master data (R4)
+// ---------------------------------------------------------------------------
+
+export const PROJECT_KINDS = ['customer', 'internal', 'investment'] as const;
+export type ProjectKind = (typeof PROJECT_KINDS)[number];
+
+/** §4 — what kind of project: decides the screens that apply and where it settles. */
+export const projectType = pgTable(
+  'project_type',
+  {
+    code: text('code').primaryKey(),
+    nameEn: text('name_en').notNull(),
+    nameAr: text('name_ar'),
+    kind: text('kind').notNull(),
+    active: boolean('active').notNull().default(true),
+    createdBy: uuid('created_by').references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check('project_type_kind', sql`${t.kind} in ('customer', 'internal', 'investment')`)],
+);
+
+/** §7 — availability control: warn at one line, stop at the other. */
+export const projectToleranceProfile = pgTable(
+  'project_tolerance_profile',
+  {
+    code: text('code').primaryKey(),
+    nameEn: text('name_en').notNull(),
+    nameAr: text('name_ar'),
+    warnPercent: numeric('warn_percent', { precision: 9, scale: 4 }).notNull().default('90'),
+    stopPercent: numeric('stop_percent', { precision: 9, scale: 4 }).notNull().default('100'),
+    active: boolean('active').notNull().default(true),
+    createdBy: uuid('created_by').references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check('project_tolerance_profile_lines', sql`${t.warnPercent} > 0 and ${t.warnPercent} <= ${t.stopPercent} and ${t.stopPercent} <= 200`)],
+);
+
+/** §7 — the cost codes a budget line may use, each with the account it posts to. */
+export const projectCostCode = pgTable('project_cost_code', {
+  code: text('code').primaryKey(),
+  nameEn: text('name_en').notNull(),
+  nameAr: text('name_ar'),
+  accountId: uuid('account_id').references(() => chartOfAccount.id),
+  active: boolean('active').notNull().default(true),
+  createdBy: uuid('created_by').references(() => appUser.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// REQ-PM-001 PM-2 — planning, budget documents, availability control (§7)
+// ---------------------------------------------------------------------------
+
+export const BUDGET_DOCUMENT_KINDS = ['original', 'supplement', 'return', 'transfer'] as const;
+export type BudgetDocumentKind = (typeof BUDGET_DOCUMENT_KINDS)[number];
+
+/** §7 — the cost plan's versions: 0 the original, 1…n the re-plans; one current. */
+export const projectPlanVersion = pgTable(
+  'project_plan_version',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    version: smallint('version').notNull(),
+    name: text('name').notNull(),
+    note: text('note'),
+    isCurrent: boolean('is_current').notNull().default(true),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('project_plan_version_uniq').on(t.projectCode, t.version),
+    uniqueIndex('project_plan_version_current_uniq').on(t.projectCode).where(sql`${t.isCurrent}`),
+    check('project_plan_version_number', sql`${t.version} >= 0`),
+  ],
+);
+
+/** §7 — element × cost code × month: the spread BCWS reads (§10). */
+export const projectPlanLine = pgTable(
+  'project_plan_line',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    versionId: uuid('version_id')
+      .notNull()
+      .references(() => projectPlanVersion.id, { onDelete: 'cascade' }),
+    wbsCode: text('wbs_code').notNull(),
+    costCode: text('cost_code')
+      .notNull()
+      .references(() => projectCostCode.code),
+    /** The first day of the month. */
+    period: date('period').notNull(),
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    updatedBy: uuid('updated_by').references(() => appUser.id),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('project_plan_line_uniq').on(t.versionId, t.wbsCode, t.costCode, t.period),
+    index('project_plan_line_project_idx').on(t.projectCode, t.wbsCode, t.period),
+    check('project_plan_line_amount_not_negative', sql`${t.amountIqd} >= 0`),
+  ],
+);
+
+/**
+ * §7 — the budget as a document: original, supplement, return, transfer.
+ * Raised by one person, approved by another (the table holds it); the budget
+ * by element is the sum of the approved ones. The original writes
+ * `project_budget_line.baseline_iqd` once; nothing else does.
+ */
+export const projectBudgetDocument = pgTable(
+  'project_budget_document',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    documentNo: text('document_no').notNull(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    status: documentStatus('status').notNull().default('draft'),
+    raisedOn: date('raised_on').notNull(),
+    description: text('description').notNull(),
+    /** The change order this supplement came from, where it did. */
+    variationId: uuid('variation_id').references(() => projectVariation.id),
+    /** The sum of the lines: a supplement adds, a return takes, a transfer nets to zero. */
+    totalIqd: numeric('total_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    submittedBy: uuid('submitted_by').references(() => appUser.id),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    approvedBy: uuid('approved_by').references(() => appUser.id),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    rejectedBy: uuid('rejected_by').references(() => appUser.id),
+    rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+    rejectedReason: text('rejected_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('project_budget_document_no_uniq').on(t.documentNo),
+    index('project_budget_document_project_idx').on(t.projectCode, t.status, t.kind),
+    check('project_budget_document_kind', sql`${t.kind} in ('original', 'supplement', 'return', 'transfer')`),
+    check('project_budget_document_four_eyes', sql`${t.approvedBy} is null or ${t.approvedBy} <> ${t.createdBy}`),
+  ],
+);
+
+export const projectBudgetDocumentLine = pgTable(
+  'project_budget_document_line',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => projectBudgetDocument.id, { onDelete: 'cascade' }),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    lineNo: smallint('line_no').notNull(),
+    wbsCode: text('wbs_code').notNull(),
+    costCode: text('cost_code')
+      .notNull()
+      .references(() => projectCostCode.code),
+    /** Signed: positive adds budget to the element, negative takes it. */
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+    description: text('description'),
+  },
+  (t) => [
+    uniqueIndex('project_budget_document_line_uniq').on(t.documentId, t.lineNo),
+    index('project_budget_document_line_element_idx').on(t.projectCode, t.wbsCode, t.costCode),
+    check('project_budget_document_line_amount_nonzero', sql`${t.amountIqd} <> 0`),
+  ],
+);
+
+/** §7 — what a change order moves, element by element: the supplement it raises. */
+export const projectVariationLine = pgTable(
+  'project_variation_line',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    variationId: uuid('variation_id')
+      .notNull()
+      .references(() => projectVariation.id, { onDelete: 'cascade' }),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    lineNo: smallint('line_no').notNull(),
+    wbsCode: text('wbs_code').notNull(),
+    costCode: text('cost_code')
+      .notNull()
+      .references(() => projectCostCode.code),
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+    description: text('description'),
+  },
+  (t) => [
+    uniqueIndex('project_variation_line_uniq').on(t.variationId, t.lineNo),
+    check('project_variation_line_amount_nonzero', sql`${t.amountIqd} <> 0`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// REQ-PM-001 PM-3 — the Material Issues document (§9)
+// ---------------------------------------------------------------------------
+
+export const MATERIAL_ISSUE_KINDS = ['issue', 'return'] as const;
+export type MaterialIssueKind = (typeof MATERIAL_ISSUE_KINDS)[number];
+
+/**
+ * Stock issued from a warehouse to one element at layer cost, or returned
+ * at the cost it went out at. Posting the document moves the stock and
+ * records the cost line by line, in one transaction (`projects.issueToProject`
+ * / `returnFromProject`); each line names its movement and its cost row.
+ */
+export const projectMaterialIssue = pgTable(
+  'project_material_issue',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    documentNo: text('document_no').notNull(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code),
+    wbsCode: text('wbs_code').notNull(),
+    costCode: text('cost_code')
+      .notNull()
+      .references(() => projectCostCode.code),
+    warehouseCode: text('warehouse_code')
+      .notNull()
+      .references(() => warehouse.code),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    kind: text('kind').notNull().default('issue'),
+    status: documentStatus('status').notNull().default('draft'),
+    movementDate: date('movement_date').notNull(),
+    description: text('description'),
+    totalCostIqd: numeric('total_cost_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    /** PM-6 (D-PM-13) — the journal its posting wrote: the cost against the items' inventory accounts. */
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    postedBy: uuid('posted_by').references(() => appUser.id),
+    postedAt: timestamp('posted_at', { withTimezone: true }),
+    cancelledBy: uuid('cancelled_by').references(() => appUser.id),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('project_material_issue_no_uniq').on(t.documentNo),
+    index('project_material_issue_project_idx').on(t.projectCode, t.status),
+    check('project_material_issue_kind', sql`${t.kind} in ('issue', 'return')`),
+  ],
+);
+
+export const projectMaterialIssueLine = pgTable(
+  'project_material_issue_line',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    issueId: uuid('issue_id')
+      .notNull()
+      .references(() => projectMaterialIssue.id, { onDelete: 'cascade' }),
+    lineNo: smallint('line_no').notNull(),
+    itemCode: text('item_code')
+      .notNull()
+      .references(() => item.code),
+    quantity: numeric('quantity', { precision: 24, scale: 6 }).notNull(),
+    serialNumber: text('serial_number'),
+    batchNumber: text('batch_number'),
+    /** A return goes back at the cost it went out at (§9): typed on the line, read from the last issue by default. */
+    unitCostIqd: numeric('unit_cost_iqd', { precision: 19, scale: 4 }),
+    /** Written at posting: the stock movement and the cost row the line became. */
+    movementId: uuid('movement_id').references(() => inventoryMovement.id),
+    costId: uuid('cost_id').references(() => projectCost.id),
+    costIqd: numeric('cost_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+  },
+  (t) => [
+    uniqueIndex('project_material_issue_line_uniq').on(t.issueId, t.lineNo),
+    index('project_material_issue_line_movement_idx').on(t.movementId),
+    check('project_material_issue_line_quantity_positive', sql`${t.quantity} > 0`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// REQ-PM-001 PM-4 — activities, milestones, the schedule's history (§5)
+// ---------------------------------------------------------------------------
+
+export const PROJECT_ACTIVITY_KINDS = ['activity', 'milestone'] as const;
+export const MILESTONE_USAGES = ['billing', 'progress', 'date'] as const;
+export type MilestoneUsage = (typeof MILESTONE_USAGES)[number];
+
+/**
+ * A dated piece of work under an element, or a milestone (zero duration)
+ * with its usage. The earliest and latest dates, the float and the
+ * critical mark are written by the critical-path pass; the actuals by the
+ * people doing the work; a milestone is reached by one person and approved
+ * by another.
+ */
+export const projectActivity = pgTable(
+  'project_activity',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    wbsCode: text('wbs_code').notNull(),
+    code: text('code').notNull(),
+    name: text('name').notNull(),
+    kind: text('kind').notNull().default('activity'),
+    milestoneUsage: text('milestone_usage'),
+    progressPercent: numeric('progress_percent', { precision: 9, scale: 4 }),
+    durationDays: integer('duration_days').notNull().default(1),
+    notBefore: date('not_before'),
+    responsibleUserId: uuid('responsible_user_id').references(() => appUser.id),
+    earliestStart: date('earliest_start'),
+    earliestFinish: date('earliest_finish'),
+    latestStart: date('latest_start'),
+    latestFinish: date('latest_finish'),
+    totalFloat: integer('total_float'),
+    freeFloat: integer('free_float'),
+    isCritical: boolean('is_critical').notNull().default(false),
+    actualStart: date('actual_start'),
+    actualFinish: date('actual_finish'),
+    percentComplete: numeric('percent_complete', { precision: 9, scale: 4 }).notNull().default('0'),
+    status: text('status').notNull().default('open'),
+    reachedOn: date('reached_on'),
+    reachedBy: uuid('reached_by').references(() => appUser.id),
+    reachedApprovedBy: uuid('reached_approved_by').references(() => appUser.id),
+    reachedApprovedAt: timestamp('reached_approved_at', { withTimezone: true }),
+    cancelledBy: uuid('cancelled_by').references(() => appUser.id),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('project_activity_code_uniq').on(t.projectCode, t.code),
+    index('project_activity_element_idx').on(t.projectCode, t.wbsCode, t.status),
+    check('project_activity_kind', sql`${t.kind} in ('activity', 'milestone')`),
+    check('project_activity_status', sql`${t.status} in ('open', 'done', 'cancelled')`),
+  ],
+);
+
+export const projectActivityDependency = pgTable(
+  'project_activity_dependency',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    predecessorId: uuid('predecessor_id')
+      .notNull()
+      .references(() => projectActivity.id, { onDelete: 'cascade' }),
+    successorId: uuid('successor_id')
+      .notNull()
+      .references(() => projectActivity.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull().default('FS'),
+    lagDays: integer('lag_days').notNull().default(0),
+    active: boolean('active').notNull().default(true),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    deactivatedBy: uuid('deactivated_by').references(() => appUser.id),
+    deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('project_activity_dependency_uniq').on(t.predecessorId, t.successorId).where(sql`${t.active}`),
+    check('project_activity_dependency_kind', sql`${t.kind} in ('FS', 'SS')`),
+  ],
+);
+
+/** Each milestone's date as it stood at every schedule run — the trend analysis. Append-only. */
+export const projectMilestoneHistory = pgTable(
+  'project_milestone_history',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    activityId: uuid('activity_id')
+      .notNull()
+      .references(() => projectActivity.id, { onDelete: 'cascade' }),
+    scheduleRun: integer('schedule_run').notNull(),
+    scheduledOn: date('scheduled_on').notNull(),
+    reason: text('reason'),
+    recordedBy: uuid('recorded_by')
+      .notNull()
+      .references(() => appUser.id),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('project_milestone_history_uniq').on(t.activityId, t.scheduleRun)],
+);
+
+// ---------------------------------------------------------------------------
+// REQ-PM-001 PM-5 — billing plan, recognition, forecast (§11)
+// ---------------------------------------------------------------------------
+
+/** A customer project's billing plan: due on a billing milestone or a date, for a share of the contract or an amount. */
+export const projectBillingPlanLine = pgTable(
+  'project_billing_plan_line',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    wbsCode: text('wbs_code').notNull(),
+    lineNo: smallint('line_no').notNull(),
+    description: text('description').notNull(),
+    dueTrigger: text('due_trigger').notNull(),
+    activityId: uuid('activity_id').references(() => projectActivity.id),
+    dueOn: date('due_on'),
+    basis: text('basis').notNull(),
+    percentOfContract: numeric('percent_of_contract', { precision: 9, scale: 4 }),
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }),
+    status: text('status').notNull().default('planned'),
+    dueSince: date('due_since'),
+    certificateId: uuid('certificate_id').references(() => projectCertificate.id),
+    cancelledBy: uuid('cancelled_by').references(() => appUser.id),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('project_billing_plan_line_no_uniq').on(t.projectCode, t.lineNo)],
+);
+
+/** D-PM-1 — the method Finance ratifies before any recognition posts. */
+export const projectRecognitionPolicy = pgTable('project_recognition_policy', {
+  code: text('code').primaryKey(),
+  method: text('method').notNull(),
+  description: text('description').notNull(),
+  ratifiedBy: uuid('ratified_by').references(() => appUser.id),
+  ratifiedAt: timestamp('ratified_at', { withTimezone: true }),
+  ratifiedNote: text('ratified_note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One project and period end: the figures, the journal, and its reversal next period. */
+export const projectRecognition = pgTable(
+  'project_recognition',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    periodEnd: date('period_end').notNull(),
+    contractValueIqd: numeric('contract_value_iqd', { precision: 19, scale: 4 }).notNull(),
+    actualIqd: numeric('actual_iqd', { precision: 19, scale: 4 }).notNull(),
+    eacIqd: numeric('eac_iqd', { precision: 19, scale: 4 }).notNull(),
+    percentComplete: numeric('percent_complete', { precision: 9, scale: 4 }).notNull(),
+    recognisedIqd: numeric('recognised_iqd', { precision: 19, scale: 4 }).notNull(),
+    billedIqd: numeric('billed_iqd', { precision: 19, scale: 4 }).notNull(),
+    adjustmentIqd: numeric('adjustment_iqd', { precision: 19, scale: 4 }).notNull(),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    reversalJournalEntryId: uuid('reversal_journal_entry_id').references(() => journalEntry.id),
+    reversedOn: date('reversed_on'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('project_recognition_period_uniq').on(t.projectCode, t.periodEnd)],
+);
+
+/** §11 — the manager's estimate to complete for an element, dated and reasoned; the latest one counts. */
+export const projectEtc = pgTable(
+  'project_etc',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    wbsCode: text('wbs_code').notNull(),
+    asOf: date('as_of').notNull(),
+    etcIqd: numeric('etc_iqd', { precision: 19, scale: 4 }).notNull(),
+    reason: text('reason').notNull(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('project_etc_element_idx').on(t.projectCode, t.wbsCode, t.asOf)],
+);
+
+// ---------------------------------------------------------------------------
+// REQ-PM-001 PM-6 — settlement and labour (§8, §12)
+// ---------------------------------------------------------------------------
+
+/** One per project (D-PM-7): to the asset under construction, or to the result. */
+export const projectSettlement = pgTable(
+  'project_settlement',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    settlementNo: text('settlement_no').notNull(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    kind: text('kind').notNull(),
+    settledOn: date('settled_on').notNull(),
+    status: text('status').notNull().default('draft'),
+    costIqd: numeric('cost_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    glCostIqd: numeric('gl_cost_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    billedIqd: numeric('billed_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    recognitionReversalEntryId: uuid('recognition_reversal_entry_id').references(() => journalEntry.id),
+    note: text('note'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    postedBy: uuid('posted_by').references(() => appUser.id),
+    postedAt: timestamp('posted_at', { withTimezone: true }),
+    cancelledBy: uuid('cancelled_by').references(() => appUser.id),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+  },
+  (t) => [uniqueIndex('project_settlement_no_uniq').on(t.settlementNo)],
+);
+
+/** A month's approved hours on one project, posted at the employees' rates (D-PM-8). */
+export const projectTimesheetRun = pgTable('project_timesheet_run', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectCode: text('project_code')
+    .notNull()
+    .references(() => project.code, { onDelete: 'cascade' }),
+  month: date('month').notNull(),
+  postedOn: date('posted_on').notNull(),
+  hours: numeric('hours', { precision: 9, scale: 2 }).notNull(),
+  amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+  journalEntryId: uuid('journal_entry_id')
+    .notNull()
+    .references(() => journalEntry.id),
+  createdBy: uuid('created_by')
+    .notNull()
+    .references(() => appUser.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Hours an employee worked on an element, booked by one person and approved by another. */
+export const projectTimesheet = pgTable(
+  'project_timesheet',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    wbsCode: text('wbs_code').notNull(),
+    costCode: text('cost_code').notNull(),
+    employeeId: uuid('employee_id')
+      .notNull()
+      .references(() => employee.id),
+    workDate: date('work_date').notNull(),
+    hours: numeric('hours', { precision: 5, scale: 2 }).notNull(),
+    note: text('note'),
+    status: text('status').notNull().default('draft'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    approvedBy: uuid('approved_by').references(() => appUser.id),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    runId: uuid('run_id').references(() => projectTimesheetRun.id),
+    rateIqd: numeric('rate_iqd', { precision: 19, scale: 4 }),
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }),
+    cancelledBy: uuid('cancelled_by').references(() => appUser.id),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+  },
+  (t) => [index('project_timesheet_project_idx').on(t.projectCode, t.workDate), index('project_timesheet_employee_idx').on(t.employeeId, t.workDate)],
 );

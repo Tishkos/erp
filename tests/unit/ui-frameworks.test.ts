@@ -54,8 +54,11 @@ describe('Appendix A · the approved menu tree', () => {
     // Appendix A's twenty-one, less one: Purchasing became Payables and
     // absorbed Finance — Payables (REQ-AP-001 D7, §21.1), so the tree has
     // twenty sections and every required function is still reachable, once.
-    expect(MENU).toHaveLength(20);
-    expect(MENU.map((s) => s.ordinal)).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
+    // REQ-FIX-001 FIX-1 split five headings out of two modules — Payables'
+    // payments, suppliers and setup, Logistics' customs and shipping —
+    // numbered 21 to 25 after Appendix A's twenty.
+    expect(MENU).toHaveLength(25);
+    expect([...MENU.map((s) => s.ordinal)].sort((a, b) => a - b)).toEqual(Array.from({ length: 25 }, (_, i) => i + 1));
   });
 
   it('names every required submenu of Finance — General Ledger', () => {
@@ -112,7 +115,7 @@ describe('Appendix A · the approved menu tree', () => {
 
 describe('§25 · navigation reflects permission, and is not the control', () => {
   it('shows a Super User everything', () => {
-    expect(visibleMenu(superUser)).toHaveLength(20);
+    expect(visibleMenu(superUser)).toHaveLength(25);
   });
 
   it('shows a user only the sections they hold a grant in', () => {

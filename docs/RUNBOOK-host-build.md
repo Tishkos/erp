@@ -170,6 +170,26 @@ port 3201 with its own `.env` (`APP_ENV=staging`, `DATABASE_URL`s pointing at
 behind HTTP basic auth, **no crontab** and no `var/LIVE`. Refresh its data
 with `scripts/ops/make-staging-copy.sh` (D-IM-2).
 
+### Load run (A21)
+
+Never against the live books or staging's copy: a database made for it.
+
+```sh
+sudo -u postgres createdb -O erp_owner -T template0 --lc-collate=C --lc-ctype=C erp_load
+psql … -c 'grant connect on database erp_load to erp_app'
+DATABASE_URL_OWNER=…/erp_load npx tsx src/server/db/migrate.ts
+DATABASE_URL=…/erp_load(owner) npx tsx scripts/seed-dev.ts
+LOAD_DATABASE_URL=…/erp_load(owner) npx tsx scripts/load/seed-payables-volume.ts --user manager@example.com
+#   prints LOAD_SESSION=… and LOAD_PAYABLES=…
+# a build of the release, started on a spare port against erp_load (DATABASE_URL = erp_app on erp_load)
+LOAD_BASE_URL=http://127.0.0.1:3299 LOAD_SESSION=… LOAD_PAYABLES=… k6 run tests/load/payables.js
+LOAD_PROFILE=peak … k6 run tests/load/payables.js
+```
+
+The seed refuses while `var/LIVE` exists and refuses a database named like
+the live one; drop `erp_load` afterwards. Write the figures into
+REQ-HARDEN-001 §3.I beside the last run's.
+
 ## 10. Secrets escrow
 
 Held by the owner, off the server and off the deployer's laptop (a password

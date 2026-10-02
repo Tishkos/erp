@@ -92,15 +92,19 @@ describe('the screen catalogue covers the approved tree', () => {
   // one of them is still reachable, once.
   // Plus one more, by direction (2026-09-03): the Statement Mapping, where
   // Finance defines the headers and lines of its own reports.
-  it('classifies all 233 items in the approved tree', () => {
+  it('classifies all 235 items in the approved tree', () => {
     // 221 from the approved tree, plus the Stock Ledger (2026-09-27), plus
     // REQ-AP-001 §21.1: the Payables workbench, recurring contracts, payment
     // applications, PDs, B/Ls, containers, loans and the module settings —
     // eight new items — less the module-settings placeholder they replace;
     // plus REQ-AP-001 Stage 8's Sheet Migration (§24.3); plus REQ-LEGACY-001's
-    // Legacy Books Import and REQ-HR-001's HR Settings (2026-10-02).
-    expect(allMenuItems()).toHaveLength(233);
-    expect(Object.keys(SCREENS)).toHaveLength(233);
+    // Legacy Books Import and REQ-HR-001's HR Settings (2026-10-02); plus
+    // REQ-FIX-001 FIX-1's Bank Deposits and the ASYCUDA list as its own item;
+    // plus FIX-5's HR menu in the sponsor's order — Dashboard, Departments,
+    // Positions, Recruitment, Performance, Employee Requests and Documents in,
+    // Organisation, Payslips, Expense Claims, Travel and Asset Assignment out.
+    expect(allMenuItems()).toHaveLength(239);
+    expect(Object.keys(SCREENS)).toHaveLength(239);
   });
 
   it('uses only declared archetypes', () => {
@@ -117,7 +121,9 @@ describe('the screen catalogue covers the approved tree', () => {
       (sum, item) => sum + screenCount(archetypeOf(item.key)!),
       0,
     );
-    expect(total).toBe(345);
+    // + Bank Deposits (a document, two) + the ASYCUDA list (a workspace, one);
+    // FIX-5: + 1 + 2 + 2 + 2 + 2 + 2 + 1 in, − 1 − 1 − 2 − 2 − 2 out.
+    expect(total).toBe(354);
   });
 });
 
@@ -170,7 +176,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(233);
+    expect(screenRoutes().size).toBe(239);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -189,6 +195,8 @@ describe('every screen has one address', () => {
       '/administration/payables-migration',
       '/administration/payables-settings',
       '/administration/permissions',
+      // REQ-PM-001 — project types, tolerance profiles, cost codes.
+      '/administration/project-settings',
       '/administration/roles',
       '/administration/users',
       // REQ-WA-001 — the WhatsApp bridge.
@@ -208,8 +216,9 @@ describe('every screen has one address', () => {
       '/finance/posting-mappings',
       '/finance/reversals',
       '/finance/trial-balance',
+      '/hr/departments',
       '/hr/employees',
-      '/hr/organisation',
+      '/hr/positions',
       '/inventory/availability',
       // Operations build — block 7's Warehouses Report.
       '/inventory/fifo-valuation',
@@ -257,6 +266,7 @@ describe('every screen has one address', () => {
       '/payables/payment-applications',
       // REQ-AP-001 Stage 4 — PD / ASYCUDA.
       '/payables/pd',
+      '/payables/pd/asycuda',
       '/payables/purchase-orders',
       '/payables/service-receipts',
       // REQ-AP-001 Stage 5 — B/Ls.
@@ -266,6 +276,21 @@ describe('every screen has one address', () => {
       // Blocks 2 and 3 — the Account Statement, one screen on each side.
       '/payables/supplier-statements',
       '/payables/suppliers',
+      // REQ-PM-001 PM-1 — the Project System's structure.
+      '/projects',
+      '/projects/billing',
+      '/projects/budgets',
+      '/projects/change-orders',
+      '/projects/close',
+      '/projects/contracts',
+      '/projects/costs',
+      '/projects/forecast',
+      '/projects/material-issues',
+      '/projects/plan',
+      '/projects/procurement',
+      '/projects/progress',
+      '/projects/reports',
+      '/projects/wbs',
       // Block 5 — the Sales Invoice.
       '/sales/ar-invoices',
       // Block 6 — Receipts.
@@ -277,6 +302,7 @@ describe('every screen has one address', () => {
       // Block 9 — Sales Returns.
       '/sales/sales-returns',
       // §17 — Bank and Cash Reporting, beside the accounts it reports on.
+      '/treasury/deposits',
       '/treasury/reporting',
     ]);
   });

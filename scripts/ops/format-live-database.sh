@@ -126,6 +126,7 @@ payable_instalment
 customs_pd_status_history
 customs_pd
 ap_invoice_note
+payable_exchange_difference
 landed_cost_layer_adjustment
 landed_cost_charge
 landed_cost_lock
@@ -192,9 +193,21 @@ client_import_payment
 client_import_file_reference
 client_import_file
 money_transfer_deposit
+project_billing_plan_line
+project_recognition
 project_balance_movement
 project_certificate
 project_progress
+project_material_issue_line
+project_material_issue
+project_timesheet
+project_timesheet_run
+project_settlement
+project_plan_line
+project_plan_version
+project_budget_document_line
+project_budget_document
+project_variation_line
 project_variation
 project_cost
 project_commitment
@@ -346,7 +359,13 @@ delete from money_transfer_client_account;
 delete from investment_proposal;
 delete from investment;
 delete from project_cost;
+-- REQ-PM-001 PM-5: the manager's estimates to complete name the elements.
+delete from project_etc;
 delete from project_budget_line;
+-- REQ-PM-001 PM-4: the milestone trend is append-only; TRUNCATE skips its row trigger.
+truncate project_milestone_history;
+delete from project_activity_dependency;
+delete from project_activity;
 delete from project;
 delete from ap_match_tolerance;
 delete from partner_bank_account;

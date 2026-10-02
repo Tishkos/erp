@@ -12,6 +12,7 @@
  * trail and by everything it ever approved.
  */
 import { bumpPermissions } from './authorization';
+import * as employees from './employees';
 import { randomBytes } from 'node:crypto';
 import { and, asc, eq } from 'drizzle-orm';
 import type { Tx } from '../db/client';
@@ -51,6 +52,25 @@ export interface UserInput {
   readonly branchCodes?: readonly string[];
   readonly defaultBranchCode?: string | null;
   readonly departmentCodes?: readonly string[];
+  /**
+   * REQ-FIX-001 FIX-5 — *Also an employee*, ticked by default on the form:
+   * the person is put in the HR register with the account, linked. Absent,
+   * the account is only a sign-in (a service account, an auditor's).
+   */
+  readonly employee?: { readonly departmentCode?: string | null; readonly positionCode?: string | null } | null;
+}
+
+/**
+ * REQ-HARDEN-001 G2 — who a form may name as an owner: active users, their id
+ * and name, nothing else. The payable record loaded every user with their
+ * credentials join for two drop-downs.
+ */
+export async function pickable(tx: Tx) {
+  return tx
+    .select({ id: appUser.id, displayName: appUser.displayName })
+    .from(appUser)
+    .where(eq(appUser.isActive, true))
+    .orderBy(asc(appUser.displayName));
 }
 
 export async function listAll(tx: Tx) {
@@ -164,6 +184,16 @@ export async function create(tx: Tx, ctx: ActorContext, input: UserInput) {
     await setDepartmentScope(tx, ctx, id, code, true, { quiet: true });
   }
 
+  // The person behind the account, in the same transaction: both or neither.
+  let employeeNo: string | null = null;
+  if (input.employee) {
+    if (!defaultBranch) throw new AdminValidationError('alsoEmployee', 'an employee works at a branch — give the user a branch, or untick "Also an employee"');
+    const departmentCode = input.employee.departmentCode?.trim() || input.departmentCodes?.[0] || null;
+    if (!departmentCode) throw new AdminValidationError('alsoEmployee', 'an employee belongs to a department — choose the employee\'s department, or untick "Also an employee"');
+    employeeNo = (await employees.createForUser(tx, ctx, { appUserId: id, fullNameEn: displayName, branchCode: defaultBranch, departmentCode, positionCode: input.employee.positionCode ?? null }))
+      .employeeNo;
+  }
+
   await recordChange(tx, ctx, {
     action: 'app_user.created',
     objectType: PERMISSION_OBJECT,
@@ -174,10 +204,11 @@ export async function create(tx: Tx, ctx: ActorContext, input: UserInput) {
       roleCodes: input.roleCodes ?? [],
       branchCodes: branches,
       departmentCodes: input.departmentCodes ?? [],
+      employeeNo,
     },
   });
 
-  return { id, email, displayName, temporaryPassword: password };
+  return { id, email, displayName, temporaryPassword: password, employeeNo };
 }
 
 export async function update(

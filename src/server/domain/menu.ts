@@ -51,7 +51,11 @@ export interface MenuItem {
 
 export interface MenuSection {
   readonly key: string;
-  /** Appendix A's own numbering, kept so the tree can be diffed against it. */
+  /**
+   * Appendix A's own numbering, kept so the tree can be diffed against it;
+   * 21 onwards are the headings REQ-FIX-001 split out of a module (Payables'
+   * four, Logistics' customs and shipping), numbered after Appendix A's twenty.
+   */
   readonly ordinal: number;
   readonly items: readonly MenuItem[];
 }
@@ -137,42 +141,64 @@ export const MENU: readonly MenuSection[] = Object.freeze([
      * everything the company owes, of every type; the import application is
      * one payable type. The former finance_ap section's items live here now —
      * one module, one place — and every old /purchasing/* route redirects.
+     *
+     * REQ-FIX-001 FIX-1 — the module is four headings, as Accounting is, in
+     * the order a payable lives: what is bought and invoiced, how it is
+     * paid, who it is owed to, and the module's setup. The customs
+     * declarations, bills of lading and containers went to Logistics and
+     * the bank loans to Treasury & Banking; their routes did not move
+     * (D-FX-1), so every item that left the section it was derived from
+     * names its route.
      */
     key: 'payables',
     ordinal: 4,
     items: [
       page('payables_workbench', 'payable', '/payables'),
-      page('suppliers', 'business_partner', '/payables/suppliers'),
-      // The supplier's side of the same mirror. See the note under Sales.
-      page('ap_statements', 'business_partner', '/payables/supplier-statements'),
       page('purchase_orders', 'purchase_order'),
       page('goods_receipts', 'goods_receipt'),
       page('service_receipts', 'service_receipt'),
       page('recurring_contracts', 'recurring_contract', '/payables/contracts'),
       page('ap_invoices', 'ap_invoice', '/payables/invoices'),
-      // The supplier's side of the same mirror.
-      page('ap_open_items', 'ap_invoice', '/payables/open-items'),
-      page('payment_applications', 'payment_application'),
-      page('supplier_advances', 'supplier_advance', '/payables/advances'),
-      page('supplier_payments', 'supplier_payment', '/payables/supplier-payments'),
       page('goods_returns', 'goods_return', '/payables/goods-returns'),
-      page('supplier_credit_memos', 'supplier_credit_memo', '/payables/credit-memos'),
       page('match_exceptions', 'match_exception'),
-      page('pds', 'customs_pd', '/payables/pd'),
-      page('shipments', 'bill_of_lading', '/payables/shipments'),
-      page('containers', 'shipment_container', '/payables/containers'),
-      // The Banks master lives under Master Data, where the tree already
-      // names it — one screen, one home (by direction, 2026-08-31).
-      page('loans', 'bank_loan', '/payables/loans'),
+      page('procurement_dashboard', 'procurement_dashboard'),
+    ],
+  },
+  {
+    // REQ-FIX-001 FIX-1 — paying what is owed.
+    key: 'payables_payments',
+    ordinal: 21,
+    items: [
+      page('payment_applications', 'payment_application', '/payables/payment-applications'),
+      page('supplier_payments', 'supplier_payment', '/payables/supplier-payments'),
+      page('supplier_advances', 'supplier_advance', '/payables/advances'),
+      page('supplier_credit_memos', 'supplier_credit_memo', '/payables/credit-memos'),
       // Moved in from the former finance_ap section (§21.1).
-      page('supplier_ledger', 'supplier_ledger'),
-      page('ap_advances', 'supplier_advance'),
       page('ap_payments', 'supplier_payment'),
+      page('ap_advances', 'supplier_advance'),
       page('ap_allocations', 'ap_allocation'),
+    ],
+  },
+  {
+    // REQ-FIX-001 FIX-1 — who it is owed to, and how much is outstanding.
+    key: 'payables_suppliers',
+    ordinal: 22,
+    items: [
+      page('suppliers', 'business_partner', '/payables/suppliers'),
+      // The supplier's side of the same mirror. See the note under Sales.
+      page('ap_statements', 'business_partner', '/payables/supplier-statements'),
+      page('ap_open_items', 'ap_invoice', '/payables/open-items'),
+      page('supplier_ledger', 'supplier_ledger'),
       page('ap_ageing', 'ap_ageing', '/payables/ageing'),
       page('ap_reconciliation', 'ap_reconciliation'),
-      page('procurement_dashboard', 'procurement_dashboard'),
       page('purchasing_reports', 'purchasing_report'),
+    ],
+  },
+  {
+    // REQ-FIX-001 FIX-1 — the module's own configuration.
+    key: 'payables_setup',
+    ordinal: 23,
+    items: [
       page('payables_settings', 'payables_settings', '/administration/payables-settings'),
       // REQ-AP-001 Stage 8 — the one-time sheet import (§24.3).
       page('payables_migration', 'payables_migration', '/administration/payables-migration'),
@@ -187,7 +213,6 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('stock_movements', 'stock_movement', '/inventory/stock-movements'),
       page('stock_ledger', 'stock_movement', '/inventory/stock-ledger'),
       page('transfer_requests', 'warehouse_transfer', '/inventory/transfers'),
-      page('in_transit', 'in_transit'),
       page('quarantine', 'quarantine'),
       page('inventory_returns', 'inventory_return'),
       page('damaged_goods', 'damage_report'),
@@ -204,19 +229,50 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'projects',
     ordinal: 6,
     items: [
-      page('project_master', 'project'),
-      page('contracts', 'contract'),
-      page('wbs', 'wbs'),
-      page('project_budgets', 'project_budget'),
-      page('change_orders', 'change_order'),
-      page('project_costs', 'project_cost'),
-      page('project_procurement', 'project_procurement'),
-      page('material_issues', 'material_issue'),
-      page('progress', 'project_progress'),
-      page('project_billing', 'project_billing'),
-      page('project_forecast', 'project_forecast'),
-      page('project_close', 'project_close'),
-      page('project_reports', 'project_report'),
+      // REQ-PM-001 PM-1 — the Project System's master screens.
+      page('project_master', 'project', '/projects'),
+      page('contracts', 'project', '/projects/contracts'),
+      page('wbs', 'project', '/projects/wbs'),
+      // REQ-PM-001 PM-2 — the plan, the budget documents and the change orders.
+      page('cost_plan', 'project', '/projects/plan'),
+      page('project_budgets', 'project', '/projects/budgets'),
+      page('change_orders', 'project', '/projects/change-orders'),
+      // REQ-PM-001 PM-3 — execution: the line items, the orders and payables, the issues.
+      page('project_costs', 'project', '/projects/costs'),
+      page('project_procurement', 'project', '/projects/procurement'),
+      page('material_issues', 'project', '/projects/material-issues'),
+      // REQ-PM-001 PM-4 — progress, earned value, the milestones and their trend.
+      page('progress', 'project', '/projects/progress'),
+      // REQ-PM-001 PM-5 — the billing plan, certificates, recognition; the forecast at completion.
+      page('project_billing', 'project', '/projects/billing'),
+      page('project_forecast', 'project', '/projects/forecast'),
+      // REQ-PM-001 PM-6 — close and settlement; the four reports.
+      page('project_close', 'project', '/projects/close'),
+      page('project_reports', 'project', '/projects/reports'),
+    ],
+  },
+  {
+    /*
+     * REQ-FIX-001 FIX-1 — Logistics holds everything logistics in the whole
+     * system (by direction, 2026-10-02): the customs declarations and the
+     * ASYCUDA list, the shipping (bills of lading, containers, the goods in
+     * transit on ordinary invoices), and the logistics jobs. The built
+     * screens keep their routes (D-FX-1).
+     */
+    key: 'logistics_customs',
+    ordinal: 24,
+    items: [
+      page('pds', 'customs_pd', '/payables/pd'),
+      { key: 'asycuda_update', object: 'customs_pd', verb: 'import', href: '/payables/pd/asycuda' },
+    ],
+  },
+  {
+    key: 'logistics_shipping',
+    ordinal: 25,
+    items: [
+      page('shipments', 'bill_of_lading', '/payables/shipments'),
+      page('containers', 'shipment_container', '/payables/containers'),
+      page('in_transit', 'in_transit', '/inventory/in-transit'),
     ],
   },
   {
@@ -315,6 +371,13 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     items: [
       page('bank_cash_accounts', 'bank_account', '/master-data/bank-accounts'),
       page('cash_accounts', 'bank_account', '/master-data/cash-accounts'),
+      // REQ-FIX-001 FIX-1 — the bank's side of the company's money: its loans
+      // (route kept, D-FX-1) and the deposits made into it by hand (D-FX-2).
+      page('loans', 'bank_loan', '/payables/loans'),
+      page('bank_deposits', 'bank_cash_account', '/treasury/deposits'),
+      // Bank and Cash Reporting — every account's balance and what it is
+      // made of, beside the accounts themselves (2026-09-29).
+      page('treasury_reports', 'bank_account', '/treasury/reporting'),
       page('treasury_receipts', 'treasury_receipt'),
       page('treasury_payments', 'treasury_payment'),
       page('bank_transfers', 'bank_transfer'),
@@ -322,9 +385,6 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('bank_reconciliation', 'bank_reconciliation'),
       page('daily_position', 'daily_position'),
       page('cash_forecast', 'cash_forecast'),
-      // Bank and Cash Reporting — every account's balance and what it is
-      // made of, beside the accounts themselves (2026-09-29).
-      page('treasury_reports', 'bank_account', '/treasury/reporting'),
     ],
   },
   {
@@ -359,17 +419,21 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'hr_payroll',
     ordinal: 15,
     items: [
-      // REQ-HR-001 Part E — the section's screens live under /hr.
+      // REQ-FIX-001 FIX-5 — the sponsor's order (2026-10-02). The screens
+      // live under /hr; the ones not built yet keep their derived address
+      // until their REQ-HR-001 stage (HR-2 to HR-6).
+      page('hr_dashboard', 'hr_report'),
       page('employees', 'employee', '/hr/employees'),
-      page('organisation', 'org_structure', '/hr/organisation'),
+      page('hr_departments', 'org_structure', '/hr/departments'),
+      page('hr_positions', 'org_structure', '/hr/positions'),
       page('attendance', 'attendance'),
       page('leave', 'leave_request'),
       page('payroll', 'payroll_run'),
-      page('payslips', 'payslip'),
       page('employee_advances', 'employee_advance'),
-      page('expense_claims', 'expense_claim'),
-      page('travel', 'travel_request'),
-      page('asset_assignment', 'asset_assignment'),
+      page('recruitment', 'recruitment'),
+      page('performance', 'performance_review'),
+      page('employee_requests', 'employee_request'),
+      page('hr_documents', 'employee_document'),
       page('hr_reports', 'hr_report'),
     ],
   },
@@ -443,6 +507,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('hr_settings', 'hr_setting', '/administration/hr-settings'),
       // REQ-WA-001 §6 — the bridge, the allow-list, the rules, the log.
       page('whatsapp', 'whatsapp', '/administration/whatsapp'),
+      // REQ-PM-001 R4 — project types, tolerance profiles, cost codes.
+      page('project_settings', 'project_setting', '/administration/project-settings'),
     ],
   },
   {

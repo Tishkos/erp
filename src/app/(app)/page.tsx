@@ -334,7 +334,7 @@ export default async function Home() {
                     <Link href={`/payables/${encodeURIComponent(hold.payableNo)}`}>
                       <bdi dir="ltr">{hold.payableNo}</bdi>
                     </Link>{' '}
-                    · {hold.laneCode}
+                    · {t.has(`payables.lane_${hold.laneCode}`) ? t(`payables.lane_${hold.laneCode}`) : hold.laneCode}
                   </td>
                   <td>
                     <bdi dir="ltr">
@@ -612,7 +612,7 @@ export default async function Home() {
                 <td>
                   <bdi dir="auto">{event.actor}</bdi>
                 </td>
-                <td>{event.outcome}</td>
+                <td>{t.has(`audit.outcome.${event.outcome}`) ? t(`audit.outcome.${event.outcome}`) : event.outcome}</td>
               </tr>
             ))}
           </BandTable>

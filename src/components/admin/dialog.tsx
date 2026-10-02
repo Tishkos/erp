@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { Plus, X } from 'lucide-react';
 import styles from './admin.module.css';
 
@@ -34,6 +34,9 @@ export function NewRecordDialog({
   readonly children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // Its own title id: a page with two dialogs (Bank Deposits has a cash and an
+  // other deposit) named both after the first one's title.
+  const titleId = useId();
 
   useEffect(() => {
     if (openOnLoad && ref.current && !ref.current.open) ref.current.showModal();
@@ -50,7 +53,7 @@ export function NewRecordDialog({
         <span>{buttonLabel}</span>
       </button>
       <dialog
-        aria-labelledby="admin-dialog-title"
+        aria-labelledby={titleId}
         className={wide ? `${styles.dialog} ${styles.dialogWide}` : styles.dialog}
         onClick={(event) => {
           // A click on the backdrop (the dialog element itself, not its content) closes it.
@@ -60,7 +63,7 @@ export function NewRecordDialog({
       >
         <div className={styles.dialogBody}>
           <header className={styles.dialogHeader}>
-            <h2 id="admin-dialog-title">{title}</h2>
+            <h2 id={titleId}>{title}</h2>
             <button
               aria-label={closeLabel}
               className={styles.dialogClose}

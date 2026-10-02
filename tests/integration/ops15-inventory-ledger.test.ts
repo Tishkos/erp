@@ -136,6 +136,21 @@ beforeEach(async () => {
     ['expense', 'X000001', 'Service and Expense Cost', null],
     ['purchase_variance', 'X000001', 'Purchase Price Variance', null],
     ['inventory_adjustment', 'X000001', 'Inventory Adjustments', null],
+    // REQ-PM-001 PM-5 — a project certificate's and a recognition run's roles.
+    ['project_revenue', 'R000001', 'Contract Revenue', null],
+    ['project_retention_receivable', 'A000001', 'Retention Receivable', 'customer'],
+    ['project_wip', 'A000001', 'Unbilled Contract Work', null],
+    ['project_deferred_revenue', 'L000001', 'Billings in Excess of Work', null],
+    // REQ-PM-001 PM-6 — material issues, labour and settlement.
+    ['project_material_cost', 'X000001', 'Project Material Cost', null],
+    ['project_labour', 'X000001', 'Project Labour Cost', null],
+    ['labour_absorption', 'X000001', 'Labour Absorbed', null],
+    ['project_auc', 'A000001', 'Assets Under Construction', null],
+    ['project_cost', 'X000001', 'Project Cost Settled', null],
+    // REQ-FIX-001 FIX-3 — the supplier advance's events and the import's exchange difference.
+    ['supplier_advance', 'A000001', 'Supplier Advances', null],
+    ['exchange_gain', 'R000001', 'Realised Exchange Gain', null],
+    ['exchange_loss', 'X000001', 'Realised Exchange Loss', null],
   ] as const) {
     const { rows: parents } = await ownerPool.query(
       `select id, account_type from chart_of_account where code = $1`,

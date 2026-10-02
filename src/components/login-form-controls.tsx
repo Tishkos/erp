@@ -88,6 +88,9 @@ export function PasswordField({
   showLabel,
   hideLabel,
   capsLockLabel,
+  name = 'password',
+  autoComplete = 'current-password',
+  hint,
 }: {
   readonly id: string;
   readonly label: string;
@@ -95,11 +98,16 @@ export function PasswordField({
   readonly showLabel: string;
   readonly hideLabel: string;
   readonly capsLockLabel: string;
+  /** The password screen's three fields (REQ-FIX-001 FIX-2) post under their own names. */
+  readonly name?: string;
+  readonly autoComplete?: 'current-password' | 'new-password';
+  readonly hint?: string;
 }) {
   const [visible, setVisible] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
   const toggleId = useId();
   const capsId = useId();
+  const hintId = useId();
 
   // Caps Lock is the commonest reason a correct password is refused, and the
   // one the failure message (deliberately) cannot name.
@@ -113,11 +121,11 @@ export function PasswordField({
       </label>
       <div className="relative">
         <input
-          aria-describedby={capsLock ? `${toggleId} ${capsId}` : toggleId}
-          autoComplete="current-password"
+          aria-describedby={[toggleId, capsLock ? capsId : null, hint ? hintId : null].filter(Boolean).join(' ')}
+          autoComplete={autoComplete}
           className={styles.input}
           id={id}
-          name="password"
+          name={name}
           onBlur={() => setCapsLock(false)}
           onKeyDown={watchCapsLock}
           onKeyUp={watchCapsLock}
@@ -139,6 +147,11 @@ export function PasswordField({
           {visible ? <EyeOff className="size-[18px]" /> : <Eye className="size-[18px]" />}
         </button>
       </div>
+      {hint ? (
+        <p className={styles.hint} id={hintId}>
+          {hint}
+        </p>
+      ) : null}
       {capsLock ? (
         <p
           className="m-0 flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400"

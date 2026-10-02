@@ -179,6 +179,8 @@ export type Intent =
    * is reached by the bridge having a key, never by a word in a message.
    */
   | { readonly kind: 'agent' }
+  /** REQ-PM-001 D-PM-10 — one project's five amounts, % complete, CPI/SPI and next milestone. */
+  | { readonly kind: 'project'; readonly project: string }
   | { readonly kind: 'none' };
 
 export type IntentKind = Intent['kind'];
@@ -195,11 +197,13 @@ export const INTENT_KINDS: readonly IntentKind[] = [
   'stopped',
   'supplier',
   'customer',
+  'project',
   'none',
 ];
 
 const PAYABLE_NO = /\b((?:IMP|PUR|SVC|RNT|ADV)-[A-Z0-9]+-\d{4}-\d{6})\b/i;
 const APPLICATION_NO = /\b(PAYAPP-[A-Z0-9]+-\d{4}-\d{6})\b/i;
+const PROJECT_NO = /\b(PRJ-[A-Z0-9]+-\d{4}-\d{6})\b/i;
 
 const clean = (s: string) => s.replace(/[؟?!.،,:;"'«»]+$/g, '').replace(/^[:\-–—]\s*/, '').trim();
 
@@ -218,7 +222,19 @@ export function route(input: string): Intent {
   const payable = PAYABLE_NO.exec(text);
   if (payable) return { kind: 'payable', no: payable[1]!.toUpperCase() };
 
+  const projectNo = PROJECT_NO.exec(text);
+  if (projectNo) return { kind: 'project', project: projectNo[1]!.toUpperCase() };
+
   if (/^(help|\?|menu|commands|مساعده|مساعدة|الاوامر|الأوامر|قائمه|قائمة)$/i.test(lower)) return { kind: 'help' };
+
+  // REQ-PM-001 D-PM-10 — "project status P", "status of project P", "حالة المشروع P".
+  const projectAsk =
+    /^(?:project\s+(?:status|position|summary)\s+(?:of\s+|for\s+)?|(?:status|position)\s+(?:of\s+)?(?:the\s+)?project\s+|how is (?:the\s+)?project\s+|project\s+)(.+?)(?:\s+(?:doing|going))?$/i.exec(text) ??
+    /^(?:(?:حاله|حالة|وضع|موقف|ملخص)\s+(?:ال)?مشروع|(?:ال)?مشروع)\s+(.+)$/.exec(text);
+  if (projectAsk) {
+    const project = clean(projectAsk[1]!);
+    if (project) return { kind: 'project', project };
+  }
 
   if (/\bswift\b|سويفت|حواله|حوالة|حوالات/i.test(lower)) {
     const days = /(\d+)\s*(?:days?|d\b|يوم|ايام|أيام|اليوم)/i.exec(lower) ?? /(?:more than|over|above|اكثر من|أكثر من|فوق)\s*(\d+)/i.exec(lower);
@@ -285,6 +301,7 @@ const WORDS = {
       '• stopped payables / needing a reason',
       '• supplier balance <name or code>',
       '• customer balance <name or code>',
+      '• project status <code or name>',
       '• today\'s summary',
       'Arabic works too. Figures come with a PDF or XLSX when there are many rows.',
     ],
@@ -309,6 +326,7 @@ const WORDS = {
       '• المستحقات الموقوفة / بدون سبب',
       '• رصيد المورد <الاسم أو الرمز>',
       '• رصيد الزبون <الاسم أو الرمز>',
+      '• حالة المشروع <الرمز أو الاسم>',
       '• ملخص اليوم',
       'الإنجليزية تعمل أيضاً. الأرقام تأتي مع PDF أو XLSX عندما تكثر السطور.',
     ],

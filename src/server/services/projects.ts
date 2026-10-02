@@ -50,6 +50,8 @@ import * as authz from './authorization';
 import * as audit from './audit';
 import * as statuses from './statuses';
 import * as inventory from './inventory';
+import * as budget from './project-budget';
+import { businessToday } from '../domain/business-date';
 import { allocateDocumentNumber } from './numbering';
 
 export const DOCUMENT_TYPE = 'project';
@@ -361,6 +363,10 @@ export async function budgetFor(
     );
   }
 
+  // REQ-PM-001 §7 — once the budget is kept as documents, the revisions of a
+  // cost code are its approved supplements, returns and transfers; before
+  // that, Phase 11's approved variation deltas.
+  const documented = await budget.revisionsForCostCode(tx, projectCode, costCode);
   const totals = (await tx.execute(sql`
     select
       coalesce((select sum(v.budget_delta_iqd) from project_variation v
@@ -376,7 +382,7 @@ export async function budgetFor(
 
   return budgetPosition({
     budgetIqd: parseDecimal(line.baselineIqd, 4n),
-    revisionsIqd: parseDecimal(row.revisions, 4n),
+    revisionsIqd: documented ?? parseDecimal(row.revisions, 4n),
     committedIqd: parseDecimal(row.committed, 4n),
     actualIqd: parseDecimal(row.actual, 4n),
     forecastIqd: parseDecimal(line.forecastIqd, 4n),
@@ -399,16 +405,23 @@ export async function commit(
     amountIqd: bigint;
     committedOn: string;
     purchaseOrderId?: string | null;
+    /** REQ-PM-001 §8 — the element the commitment stands on. */
+    wbsCode?: string | null;
+    /** REQ-PM-001 §8 — a payable without an order is a commitment of its own. */
+    payableId?: string | null;
   },
 ): Promise<{ id: string; availableAfterIqd: bigint }> {
-  const row = await assertSpendable(tx, ctx, projectCode, input.costCode, input.amountIqd);
+  const row = await assertSpendable(tx, ctx, projectCode, input.costCode, input.amountIqd, input.wbsCode ?? null);
+  if (input.wbsCode) await assertAccountAssignmentElement(tx, projectCode, input.wbsCode);
 
   const [created] = await tx
     .insert(projectCommitment)
     .values({
       projectCode,
       costCode: input.costCode,
+      wbsCode: input.wbsCode ?? null,
       purchaseOrderId: input.purchaseOrderId ?? null,
+      payableId: input.payableId ?? null,
       amountIqd: toDecimalString(input.amountIqd, 4n),
       committedOn: input.committedOn,
       createdBy: ctx.principal.userId,
@@ -499,17 +512,28 @@ export async function recordCost(
     wbsCode?: string | null;
     journalEntryId?: string | null;
     consumesCommitmentId?: string | null;
+    /** REQ-PM-001 §8 — the document behind the row, for the line items' drill-down. */
+    sourceType?: string | null;
+    sourceId?: string | null;
   },
 ): Promise<{ id: string; availableAfterIqd: bigint }> {
-  const row = await assertSpendable(
-    tx,
-    ctx,
-    projectCode,
-    input.costCode,
-    // A cost that consumes a commitment was already counted against
-    // availability when the commitment was made.
-    input.consumesCommitmentId ? 0n : input.amountIqd,
-  );
+  // A cost that consumes a commitment was already counted against
+  // availability when the commitment was made — up to what is still open on
+  // it; anything above that is new spending and is checked (PM-3).
+  let uncommitted = input.amountIqd;
+  if (input.consumesCommitmentId) {
+    const [promise] = await tx
+      .select({ amountIqd: projectCommitment.amountIqd, consumedIqd: projectCommitment.consumedIqd, releasedOn: projectCommitment.releasedOn })
+      .from(projectCommitment)
+      .where(eq(projectCommitment.id, input.consumesCommitmentId))
+      .limit(1);
+    if (!promise) throw new Error(`No commitment with id '${input.consumesCommitmentId}'.`);
+    const open = promise.releasedOn ? 0n : parseDecimal(promise.amountIqd, 4n) - parseDecimal(promise.consumedIqd, 4n);
+    uncommitted = input.amountIqd > open ? input.amountIqd - open : 0n;
+  }
+  const row = await assertSpendable(tx, ctx, projectCode, input.costCode, uncommitted, input.wbsCode ?? null, true);
+  // REQ-PM-001 §5 — an element named on a cost must be one that may receive it.
+  if (input.wbsCode) await assertAccountAssignmentElement(tx, projectCode, input.wbsCode);
 
   if (input.consumesCommitmentId) {
     await tx
@@ -532,6 +556,9 @@ export async function recordCost(
       incurredOn: input.incurredOn,
       amountIqd: toDecimalString(input.amountIqd, 4n),
       journalEntryId: input.journalEntryId ?? null,
+      sourceType: input.sourceType ?? null,
+      sourceId: input.sourceId ?? null,
+      consumedCommitmentId: input.consumesCommitmentId ?? null,
       createdBy: ctx.principal.userId,
     })
     .returning({ id: projectCost.id });
@@ -557,6 +584,64 @@ export async function recordCost(
 }
 
 /**
+ * REQ-PM-001 §8 — the mirror of a cost: a negative row naming the row it
+ * undoes (once), and the commitment the cost consumed given back, so the
+ * promise stands open again. The journal's own reversal is the caller's;
+ * this keeps the project's analysis in step with it.
+ */
+export async function reverseCost(
+  tx: Tx,
+  ctx: ActorContext,
+  costId: string,
+  input: { reason: string; journalEntryId?: string | null; incurredOn?: string | null },
+): Promise<{ id: string }> {
+  const [cost] = await tx.select().from(projectCost).where(eq(projectCost.id, costId)).limit(1);
+  if (!cost) throw new Error(`No project cost with id '${costId}'.`);
+  const row = await load(tx, cost.projectCode);
+  await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, { branchCode: row.branchCode ?? ctx.branchCode });
+  if (!input.reason.trim()) throw new Error('Reversing a project cost needs a reason (§8).');
+  const [already] = await tx.select({ id: projectCost.id }).from(projectCost).where(eq(projectCost.reversesCostId, costId)).limit(1);
+  if (already) throw new Error(`Project cost ${costId} was already reversed.`);
+  const amount = parseDecimal(cost.amountIqd, 4n);
+  const [created] = await tx
+    .insert(projectCost)
+    .values({
+      projectCode: cost.projectCode,
+      costCode: cost.costCode,
+      wbsCode: cost.wbsCode,
+      kind: `${cost.kind}_reversal`,
+      description: `Reversal — ${cost.description}`,
+      incurredOn: input.incurredOn ?? businessToday(),
+      amountIqd: toDecimalString(-amount, 4n),
+      journalEntryId: input.journalEntryId ?? null,
+      sourceType: cost.sourceType,
+      sourceId: cost.sourceId,
+      reversesCostId: cost.id,
+      createdBy: ctx.principal.userId,
+    })
+    .returning({ id: projectCost.id });
+  // The promise the cost had consumed is open again, up to what it consumed.
+  if (cost.consumedCommitmentId) {
+    await tx
+      .update(projectCommitment)
+      .set({ consumedIqd: sql`greatest(0, ${projectCommitment.consumedIqd} - ${toDecimalString(amount, 4n)})` })
+      .where(eq(projectCommitment.id, cost.consumedCommitmentId));
+  }
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'project.cost_reversed',
+    objectType: DOCUMENT_TYPE,
+    objectId: cost.projectCode,
+    branchCode: row.branchCode ?? ctx.branchCode,
+    before: { costId: cost.id, amountIqd: cost.amountIqd, costCode: cost.costCode, wbsCode: cost.wbsCode },
+    after: { reversalId: created!.id },
+    reason: input.reason.trim(),
+    outcome: 'success',
+  });
+  return { id: created!.id };
+}
+
+/**
  * §10 — *"no project spending without an active project and valid budget/cost
  * code where required."*
  *
@@ -564,12 +649,45 @@ export async function recordCost(
  * question and a caller that remembered two of them would be a caller whose
  * spending is *nearly* controlled.
  */
+/**
+ * REQ-PM-001 §5 — the operative indicator: only an active account-assignment
+ * element receives a cost, a commitment or an issue. Kept here, beside the
+ * three refusals above, so a caller cannot reach the spending without it.
+ */
+export class WbsNotAssignableError extends Error {
+  readonly code = 'WBS_NOT_ASSIGNABLE';
+  constructor(projectCode: string, wbsCode: string, detail: string) {
+    super(`${projectCode} / ${wbsCode}: ${detail}`);
+    this.name = 'WbsNotAssignableError';
+  }
+}
+
+export async function assertAccountAssignmentElement(tx: Tx, projectCode: string, wbsCode: string): Promise<void> {
+  const [element] = await tx
+    .select({ isAccountAssignment: projectWbs.isAccountAssignment, active: projectWbs.active })
+    .from(projectWbs)
+    .where(and(eq(projectWbs.projectCode, projectCode), eq(projectWbs.code, wbsCode)))
+    .limit(1);
+  if (!element) throw new WbsNotAssignableError(projectCode, wbsCode, 'there is no such element');
+  if (!element.active) throw new WbsNotAssignableError(projectCode, wbsCode, 'the element is deactivated');
+  if (!element.isAccountAssignment) {
+    throw new WbsNotAssignableError(projectCode, wbsCode, 'the element is not an account-assignment element — nothing posts to it (REQ-PM-001 §5)');
+  }
+}
+
 async function assertSpendable(
   tx: Tx,
   ctx: ActorContext,
   projectCode: string,
   costCode: string,
   amountIqd: bigint,
+  wbsCode: string | null = null,
+  /**
+   * REQ-PM-001 §6 — technical completion refuses new commitments and issues,
+   * not the cost of work already done: an invoice for an order still open, a
+   * month's hours. Only `recordCost` passes it.
+   */
+  allowClosing = false,
 ) {
   const row = await load(tx, projectCode);
 
@@ -577,7 +695,13 @@ async function assertSpendable(
     branchCode: row.branchCode ?? ctx.branchCode,
   });
 
-  if (row.status !== 'active') {
+  // PM-6 §12 — once settled, the project's cost is where the settlement put it.
+  const settled = ((await tx.execute(sql`select settlement_no from project_settlement where project_code = ${projectCode} and status = 'posted' limit 1`)) as unknown as { rows: { settlement_no: string }[] }).rows[0];
+  if (settled) {
+    throw new ProjectStateError(row.code, row.status, `it is settled (${settled.settlement_no}); no further cost is taken.`);
+  }
+
+  if (row.status !== 'active' && !(allowClosing && row.status === 'closing')) {
     throw new ProjectStateError(
       row.code,
       row.status,
@@ -585,9 +709,14 @@ async function assertSpendable(
     );
   }
 
+  // REQ-PM-001 §7 — availability control on the element: refused above the
+  // stop line, the responsible people told at the warning line. The element's
+  // line (the profile's, or the one raised for it) is the line the cost code
+  // is held to as well, so a raised line is not undone by the code's check.
+  const decision = wbsCode ? await budget.assertAvailable(tx, ctx, projectCode, wbsCode, amountIqd) : null;
   if (row.requiresCostCode || amountIqd > 0n) {
     const position = await budgetFor(tx, projectCode, costCode);
-    if (amountIqd > 0n) assertWithinBudget(costCode, position, amountIqd);
+    if (amountIqd > 0n) assertWithinBudget(costCode, position, amountIqd, decision?.stopPercent ?? 100);
   }
 
   return row;
@@ -634,6 +763,8 @@ export async function issueToProject(
       'nothing can be issued to a project that is not active (§10).',
     );
   }
+  // REQ-PM-001 §5 — refused before the stock moves, not after.
+  if (input.wbsCode) await assertAccountAssignmentElement(tx, projectCode, input.wbsCode);
 
   const movement = await inventory.issue(tx, ctx, {
     itemCode: input.itemCode,
@@ -876,7 +1007,17 @@ export async function certify(
   tx: Tx,
   ctx: ActorContext,
   projectCode: string,
-  input: { certifiedOn: string; percentComplete: bigint; grossIqd: bigint },
+  input: {
+    certifiedOn: string;
+    percentComplete: bigint;
+    grossIqd: bigint;
+    /**
+     * REQ-PM-001 PM-5 — `billing_plan`: raised from a due billing-plan line,
+     * whose evidence is the reached milestone or the contract date, not a
+     * measurement; the measured-progress cap does not apply to it.
+     */
+    basis?: 'progress' | 'billing_plan';
+  },
 ): Promise<{ id: string; certificateNo: string; retentionIqd: bigint; netIqd: bigint }> {
   const row = await load(tx, projectCode);
 
@@ -893,8 +1034,10 @@ export async function certify(
   }
 
   // §10 — never beyond what somebody measured and somebody else approved.
-  const measured = await approvedProgressPercent(tx, projectCode, input.certifiedOn);
-  assertWithinMeasuredProgress(measured, input.percentComplete);
+  if ((input.basis ?? 'progress') === 'progress') {
+    const measured = await approvedProgressPercent(tx, projectCode, input.certifiedOn);
+    assertWithinMeasuredProgress(measured, input.percentComplete);
+  }
 
   const advanceOutstanding = await balanceOf(tx, projectCode, 'advance');
 
@@ -926,6 +1069,7 @@ export async function certify(
       retentionIqd: toDecimalString(bill.retentionIqd, 4n),
       advanceRecoveredIqd: toDecimalString(bill.advanceRecoveredIqd, 4n),
       netIqd: toDecimalString(bill.netIqd, 4n),
+      basis: input.basis ?? 'progress',
       createdBy: ctx.principal.userId,
     })
     .returning({ id: projectCertificate.id });
@@ -1223,9 +1367,11 @@ export async function closeoutState(tx: Tx, projectCode: string): Promise<Closeo
           and c.consumed_iqd < c.amount_iqd)                              as "openPurchaseOrders",
       (select count(*)::int from project_cost k
         where k.project_code = ${projectCode} and k.kind = 'material_issue'
-          and k.billed = 'false')                                        as "unreturnedStockItems",
+          and k.billed = 'false' and k.settlement_id is null)            as "unreturnedStockItems",
+      -- REQ-PM-001 PM-6 §12 — a cost settled (to the asset or the result) is accounted for.
       (select coalesce(sum(k.amount_iqd), 0)::text from project_cost k
-        where k.project_code = ${projectCode} and k.billed = 'false')         as "unbilledCostIqd",
+        where k.project_code = ${projectCode} and k.billed = 'false'
+          and k.settlement_id is null)                                   as "unbilledCostIqd",
       (select count(*)::int from project_variation v
         where v.project_code = ${projectCode} and v.status <> 'approved'
           and v.status <> 'cancelled')                                   as "unapprovedVariations"

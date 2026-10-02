@@ -254,6 +254,10 @@ export const payable = pgTable(
     expenseCategoryCode: text('expense_category_code').references(() => expenseCategory.code),
     /** A service payable whose cost belongs to an import (§20.2). */
     chargedToPayableId: uuid('charged_to_payable_id'),
+    /** REQ-PM-001 §8 — the project, the element and the cost code the purchase is assigned to; the three together, or none. */
+    projectCode: text('project_code'),
+    wbsCode: text('wbs_code'),
+    costCode: text('cost_code'),
 
     /** Stage 2 — recurring periods and due dates; nullable for other types. */
     dueDate: date('due_date'),
@@ -497,3 +501,36 @@ export const payablesMigrationRun = pgTable('payables_migration_run', {
   signedOffAt: timestamp('signed_off_at', { withTimezone: true }),
   signOffNote: text('sign_off_note'),
 });
+
+/**
+ * REQ-FIX-001 FX8 (0253) — the dinars an import agreed in a foreign currency
+ * closes on once it is fully paid in that currency: what an invoice still
+ * owed (a gain) or what a payment or deposit was over them (a loss). One row
+ * per document closed, append-only.
+ */
+export const payableExchangeDifference = pgTable(
+  'payable_exchange_difference',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    payableId: uuid('payable_id')
+      .notNull()
+      .references(() => payable.id),
+    kind: text('kind', { enum: ['gain', 'loss'] }).notNull(),
+    sourceType: text('source_type', { enum: ['ap_invoice', 'supplier_payment', 'supplier_advance'] }).notNull(),
+    sourceId: uuid('source_id').notNull(),
+    sourceNo: text('source_no').notNull(),
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+    journalEntryId: uuid('journal_entry_id').notNull(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('payable_exchange_difference_payable_idx').on(t.payableId),
+    index('payable_exchange_difference_journal_idx').on(t.journalEntryId),
+    check('payable_exchange_difference_kind', sql`${t.kind} in ('gain', 'loss')`),
+    check('payable_exchange_difference_source', sql`${t.sourceType} in ('ap_invoice', 'supplier_payment', 'supplier_advance')`),
+    check('payable_exchange_difference_positive', sql`${t.amountIqd} > 0`),
+  ],
+);

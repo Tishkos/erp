@@ -42,6 +42,7 @@ import {
   type ActorContext,
 } from './administration';
 import { allocateDocumentNumber } from './numbering';
+import * as itemUnits from './item-units';
 
 export const PERMISSION_OBJECT = 'item';
 
@@ -214,10 +215,17 @@ export async function invoiceChoices(tx: Tx, mode: 'purchase' | 'sale') {
     else byItem.set(link.itemId, [link]);
   }
 
+  // REQ-FIX-001 FIX-4 — the units each is kept in, for the grids' Unit column.
+  const unitsByItem = await itemUnits.pickerUnits(
+    tx,
+    rows.map((row) => row.id),
+  );
+
   return rows.map((row) => ({
     code: row.code,
     name: row.name,
     uomCode: row.baseUomCode,
+    units: unitsByItem.get(row.id) ?? [],
     defaultUnitPriceIqd: mode === 'sale' ? row.sellingPriceIqd : null,
     suppliers: (byItem.get(row.id) ?? []).map((link) => ({
       id: link.supplierId,

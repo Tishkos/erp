@@ -66,6 +66,8 @@ describe('ap01 · every service that touches a payable writes its story', () => 
       'landed_cost_layer_adjustment',
       'landed_cost_lock',
       'payable_event',
+      // REQ-FIX-001 FX8 (0253): booking it writes EXCHANGE_DIFFERENCE — fx3-import-invoice.
+      'payable_exchange_difference',
       'payable_hold',
       'payable_hold_update',
       // Stage 3 (0232): planning writes INSTALMENT_PLANNED; every application
@@ -73,6 +75,10 @@ describe('ap01 · every service that touches a payable writes its story', () => 
       'payable_instalment',
       'payable_order_line',
       'payment_application',
+      // REQ-PM-001 PM-3 (0247): the commitment an order-less payable makes on
+      // its project element is written by payables.create (PAYABLE_OPENED)
+      // and released by payables.cancel (CANCELLED) — no event of its own.
+      'project_commitment',
       // Stage 2 (0230): the confirmation writes SERVICE_RECEIPT_CREATED /
       // SERVICE_CONFIRMED — ap02-service-flow.
       'service_receipt',

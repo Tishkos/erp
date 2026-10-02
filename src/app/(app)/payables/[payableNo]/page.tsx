@@ -29,6 +29,7 @@ import { can } from '@domain/permissions';
 import { PENDING_REASON } from '@domain/payables';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
+import { loadPayableRecord } from './load';
 import * as events from '@/server/services/payable-events';
 import * as payables from '@/server/services/payables';
 import * as paymentApplications from '@/server/services/payment-applications';
@@ -56,7 +57,7 @@ import { createApplication, planInstalmentsAction } from '../payment-application
 import { registerPd } from '../pd/actions';
 import { pdChip } from '../pd/status';
 import { createBlAction } from '../shipments/actions';
-import { addLandedCharge, lockLandedCost, withdrawLandedCharge } from '../actions';
+import { addLandedCharge, lockLandedCost, settleExchangeDifference, withdrawLandedCharge } from '../actions';
 import { containerChip } from '../containers/status';
 import { STATUS_CHIP, statusKey } from '../payment-applications/status';
 import { businessDateOf, businessToday } from '@/server/domain/business-date';
@@ -121,81 +122,15 @@ export default async function PayablePage({
 
   const laneFilter = typeof query.lane === 'string' && query.lane ? query.lane : null;
 
-  const found = await withCurrentUser(async (tx) => {
-    try {
-      const view = await payables.view(tx, payableNo);
-      const log = await events.logFor(tx, view.payable.id, {
-        laneCode: laneFilter,
-        search: typeof query.logq === 'string' ? query.logq : null,
-        page: outcome.page,
-      });
-      const config = await settingsService.overview(tx);
-      const people = await users.listAll(tx);
-      // §21.3 — the service lane: the confirmations this payable owns, and
-      // the contract it answers to when it is a generated period.
-      const receipts = await serviceReceipts.listForPayable(tx, view.payable.id);
-      const contract = view.payable.recurringContractId
-        ? await contracts.load(tx, view.payable.recurringContractId)
-        : null;
-      // §15 — the Payments section: the plan, the applications, the totals.
-      const isImport = view.payable.payableTypeCode === 'import';
-      const instalments = isImport ? await paymentApplications.instalmentsFor(tx, view.payable.id) : [];
-      const applied = isImport ? await paymentApplications.list(tx, { payableId: view.payable.id }) : [];
-      const paymentTotals = isImport ? await paymentApplications.totalsFor(tx, view.payable.id) : null;
-      // §15.7 — the loans that fund it, with the commission each draw carries.
-      const funding = isImport && mayViewLoans ? await loansService.forPayable(tx, view.payable.id) : [];
-      const pickers =
-        isImport && mayPay && !view.payable.cancelledAt && !view.payable.closedAt
-          ? await paymentApplications.pickersFor(tx, view.payable.id)
-          : null;
-      // §16 — the PD / ASYCUDA section.
-      const pds = isImport && mayViewPd ? await customs.list(tx, { payableId: view.payable.id, view: 'all' }) : [];
-      const pdPickers =
-        isImport && mayRegisterPd && !view.payable.cancelledAt && !view.payable.closedAt
-          ? { banks: await banksService.listActive(tx), statuses: await customs.statuses(tx) }
-          : null;
-      // §17 — the Shipment & containers section.
-      const shipment = isImport && mayViewShipment ? await shipmentsService.forPayable(tx, view.payable.id) : null;
-      const blPorts =
-        isImport && mayCreateBl && !view.payable.cancelledAt && !view.payable.closedAt
-          ? await shipmentsService.ports(tx)
-          : null;
-      // §20.2 — the landed cost: its charges, the locks, what a lock would do.
-      const landed =
-        isImport && mayViewLanded && !view.payable.cancelledAt
-          ? {
-              charges: await landedService.chargesFor(tx, view.payable.id),
-              locks: await landedService.locksFor(tx, view.payable.id),
-              state: await landedService.lockable(tx, view.payable.id),
-              preview: await landedService.preview(tx, { payableId: view.payable.id }),
-              bases: (await landedService.bases(tx)).filter((basis) => basis.active),
-              types: (await landedService.chargeTypes(tx)).filter((type) => type.code !== 'purchase'),
-            }
-          : null;
-      return {
-        ...view,
-        landed,
-        shipment,
-        blPorts,
-        log,
-        config,
-        people,
-        receipts,
-        contract,
-        instalments,
-        applied,
-        paymentTotals,
-        funding,
-        pickers,
-        pds,
-        pdPickers,
-      };
-    } catch (error) {
-      // E1 — a missing record is a 404; anything else reaches the error boundary.
-      if (isNotFoundError(error)) return null;
-      throw error;
-    }
-  });
+  const found = await withCurrentUser((tx) =>
+    loadPayableRecord(tx, {
+      payableNo,
+      laneFilter,
+      logSearch: typeof query.logq === 'string' ? query.logq : null,
+      logPage: outcome.page,
+      may: { edit: mayEdit, pay: mayPay, viewPd: mayViewPd, registerPd: mayRegisterPd, viewShipment: mayViewShipment, createBl: mayCreateBl, viewLoans: mayViewLoans, viewLanded: mayViewLanded, addCharge: mayAddCharge, lock: mayLock },
+    }),
+  );
   if (!found) notFound();
 
   const {
@@ -208,13 +143,14 @@ export default async function PayablePage({
     holds,
     supplier,
     log,
-    config,
+    reasons,
     people,
     receipts,
     contract,
     instalments,
     applied,
     paymentTotals,
+    exchangeOpen,
     funding,
     pickers,
     pds,
@@ -237,12 +173,10 @@ export default async function PayablePage({
   const oldestHold = holds[0] ?? null;
 
   const base = `/payables/${encodeURIComponent(row.payableNo)}`;
-  const reasonOptions = config.reasons
-    .filter((reason) => reason.active && reason.code !== PENDING_REASON)
+  const reasonOptions = reasons
+    .filter((reason) => reason.code !== PENDING_REASON)
     .map((reason) => ({ value: reason.code, label: `${reason.code} — ${reason.name}` }));
-  const ownerOptions = people
-    .filter((person) => person.isActive)
-    .map((person) => ({ value: person.id, label: person.displayName }));
+  const ownerOptions = people.map((person) => ({ value: person.id, label: person.displayName }));
   const laneOptions = lanes.map((lane) => ({ value: lane.code, label: t(`lane_${lane.code}`) }));
   const railName = (stage: (typeof rail)[number]) =>
     (stage as { name?: string }).name ?? stage.code;
@@ -661,6 +595,24 @@ export default async function PayablePage({
                 </bdi>
               </span>
             </h2>
+
+            {exchangeOpen ? (
+              // REQ-FIX-001 FX8 — fully paid in its currency, the dinars still to close.
+              <div className={s.sapNote}>
+                <bdi dir="auto">
+                  {pa('exchange_open', {
+                    owed: money(toDecimalString(exchangeOpen.owedIqd, 4n), 'IQD'),
+                    over: money(toDecimalString(exchangeOpen.overpaidIqd + exchangeOpen.unusedDepositIqd, 4n), 'IQD'),
+                  })}
+                </bdi>
+                {can(principal, 'post', paymentApplications.PERMISSION_OBJECT) ? (
+                  <form action={settleExchangeDifference}>
+                    <Hidden name="payable_no" value={row.payableNo} />
+                    <Submit label={pa('exchange_settle')} small />
+                  </form>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className={s.sapTableWrap}>
               <table aria-label={pa('instalments')} className={s.sapTable}>
@@ -1768,6 +1720,7 @@ export default async function PayablePage({
       <section aria-label={t('tab_attachments')} className={s.sapDoc}>
         <div className={s.sapWindow}>
           <Attachments
+            preloaded={found.attachments}
             action={attachToPayable}
             hidden={{ payable_no: row.payableNo }}
             mayAttach={mayEdit}
@@ -1776,7 +1729,7 @@ export default async function PayablePage({
           />
         </div>
       </section>
-      <RecordHistory objectId={row.id} objectType={payables.PERMISSION_OBJECT} />
+      <RecordHistory objectId={row.id} objectType={payables.PERMISSION_OBJECT} preloaded={found.history} />
     </AdminPage>
   );
 }

@@ -9,7 +9,6 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { PAY_CALCULATIONS, PAY_COMPONENT_KINDS } from '@/server/domain/hr';
 import { requireContext, withCurrentUser } from '@/server/session';
-import * as departments from '@/server/services/departments';
 import * as settings from '@/server/services/hr-settings';
 import {
   addCalendarHoliday,
@@ -17,17 +16,15 @@ import {
   saveCalendar,
   saveLeaveType,
   savePayComponent,
-  savePosition,
   setLeaveTypeActive,
   setPayComponentActive,
-  setPositionActive,
 } from './actions';
 
 /**
  * HR settings — REQ-HR-001 §5–§7 (R4). Copies the Payables Settings screen:
- * four stacked windows — positions, pay components, leave types, working
- * calendars — each a register with a new-row form under it. Nothing
- * deletes; a row is deactivated.
+ * three stacked windows — pay components, leave types, working calendars —
+ * each a register with a new-row form under it. Nothing deletes; a row is
+ * deactivated. Positions moved to HR → Positions (REQ-FIX-001 FIX-5).
  */
 export const dynamic = 'force-dynamic';
 
@@ -47,12 +44,10 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
   }
   const mayConfigure = can(principal, 'configure', settings.PERMISSION_OBJECT);
 
-  const { positions, components, leaveTypes, calendars, departmentRows } = await withCurrentUser(async (tx) => ({
-    positions: await settings.positions(tx),
+  const { components, leaveTypes, calendars } = await withCurrentUser(async (tx) => ({
     components: await settings.payComponents(tx),
     leaveTypes: await settings.leaveTypes(tx),
     calendars: await settings.calendars(tx),
-    departmentRows: await departments.listAll(tx),
   }));
   const iqd = (value: string) => formatMoney(value, 'IQD', locale as Locale);
 
@@ -79,72 +74,6 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
       variant="sap"
     >
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
-
-      <section aria-labelledby="hrs-positions-title" className={s.sapDoc}>
-        <div className={s.sapWindow}>
-          <h2 className={s.sapTitle} id="hrs-positions-title">
-            <span>{t('positions')}</span>
-          </h2>
-          <div className={s.sapTableWrap}>
-            <table className={s.sapTable}>
-              <thead>
-                <tr>
-                  <th scope="col">{t('code')}</th>
-                  <th scope="col">{t('title_en')}</th>
-                  <th scope="col">{t('title_ar')}</th>
-                  <th scope="col">{t('department')}</th>
-                  <th scope="col">{t('reports_to')}</th>
-                  <th scope="col">{t('active')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {positions.length === 0 ? (
-                  <tr>
-                    <td className={s.sapEmptyRow} colSpan={6}>
-                      {t('none')}
-                    </td>
-                  </tr>
-                ) : null}
-                {positions.map((row) => (
-                  <tr key={row.code}>
-                    <td>
-                      <bdi dir="ltr">{row.code}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="auto">{row.titleEn}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="auto">{row.titleAr ?? '—'}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="auto">{row.departmentName}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="ltr">{row.reportsToCode ?? '—'}</bdi>
-                    </td>
-                    <td>{activeForm(setPositionActive, row.code, row.active)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {mayConfigure ? (
-            <Form action={savePosition}>
-              <p className={s.sapGridCaption}>{t('new_position')}</p>
-              <Grid>
-                <Field hint={admin('code_hint')} label={t('code')} name="code" required />
-                <Field label={t('title_en')} name="title_en" required />
-                <Field label={t('title_ar')} name="title_ar" />
-                <Select label={t('department')} name="department_code" options={departmentRows.filter((d) => d.active).map((d) => ({ value: d.code, label: `${d.code} · ${d.name}` }))} required />
-                <Select emptyLabel={t('reports_to_none')} label={t('reports_to')} name="reports_to_code" options={positions.filter((p) => p.active).map((p) => ({ value: p.code, label: `${p.code} · ${p.titleEn}` }))} />
-              </Grid>
-              <SubmitRow>
-                <Submit label={t('save')} />
-              </SubmitRow>
-            </Form>
-          ) : null}
-        </div>
-      </section>
 
       <section aria-labelledby="hrs-components-title" className={s.sapDoc}>
         <div className={s.sapWindow}>

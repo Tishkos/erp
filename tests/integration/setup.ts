@@ -299,14 +299,46 @@ export async function resetTestData(): Promise<void> {
 
   // Phase 11 — projects. Before the journals its costs point at, and before the
   // project dimension row every one of them hangs off. Children first.
+  // REQ-PM-001 PM-5 — the plan lines name their certificates; recognition
+  // names its journals; the ETC rows their elements; the policy is put back
+  // to unratified (D-PM-1) and lets go of the user who ratified it.
+  await client.query('delete from project_billing_plan_line');
+  await client.query('delete from project_recognition');
+  await client.query('delete from project_etc');
+  await client.query(`update project_recognition_policy set ratified_by = null, ratified_at = null, ratified_note = null`);
   await client.query('delete from project_balance_movement');
   await client.query('delete from project_certificate');
   await client.query('delete from project_progress');
+  // REQ-PM-001 PM-4 — the trend rows are append-only (TRUNCATE skips the
+  // row trigger); the activities and their links go with them.
+  await client.query('truncate project_milestone_history');
+  await client.query('delete from project_activity_dependency');
+  await client.query('delete from project_activity');
+  // REQ-PM-001 PM-3 — the material issues name their movements and cost rows.
+  await client.query('delete from project_material_issue_line');
+  await client.query('delete from project_material_issue');
+  // REQ-PM-001 PM-6 — the hours name their runs; the cost rows name their settlement.
+  await client.query('delete from project_timesheet');
+  await client.query('delete from project_timesheet_run');
   await client.query('delete from project_cost');
+  await client.query('delete from project_settlement');
   await client.query('delete from project_commitment');
+  // REQ-PM-001 PM-2 — the plan, the budget documents and the change orders' lines.
+  await client.query('delete from project_plan_line');
+  await client.query('delete from project_plan_version');
+  await client.query('delete from project_budget_document_line');
+  await client.query('delete from project_budget_document');
+  await client.query('delete from project_variation_line');
   await client.query('delete from project_variation');
   await client.query('delete from project_budget_line');
   await client.query('delete from project_wbs');
+  // REQ-PM-001 — the configuration a test added goes; the seeded rows stay active.
+  await client.query('delete from project_type where created_by is not null');
+  await client.query('delete from project_tolerance_profile where created_by is not null');
+  await client.query('delete from project_cost_code where created_by is not null');
+  await client.query('update project_type set active = true where created_by is null');
+  await client.query('update project_tolerance_profile set active = true where created_by is null');
+  await client.query('update project_cost_code set active = true where created_by is null');
 
   // Phase 08 — CRM. Before the sales orders an opportunity converted into and
   // before the partners everything here points at. Nothing in this block posts,
@@ -483,9 +515,12 @@ export async function resetTestData(): Promise<void> {
      * A key added to `whatsapp_setting` by a migration from here on belongs in
      * this list, and `else value end` is the trap: it reads like a safe
      * default and is how the leak got in.
+     *
+     * And nobody's name on them: a test's administrator is deleted below, and a
+     * dangling `updated_by` fails the IM1 restore on its foreign key.
      */
     await client.query(`
-      update whatsapp_setting set value = case key
+      update whatsapp_setting set updated_by = null, value = case key
         when 'router_model' then 'claude-haiku-4-5-20251001'
         when 'agent_model' then 'claude-opus-5-5'
         when 'inline_rows' then '15'
@@ -508,6 +543,8 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from employee_history');
     await client.query('delete from employee');
     await client.query('delete from position');
+    // REQ-PM-001 PM-4 — a project may count in a test's calendar.
+    await client.query('update project set calendar_code = null where calendar_code is not null');
     await client.query('delete from working_calendar_holiday where calendar_code in (select code from working_calendar where created_by is not null)');
     await client.query('delete from working_calendar where created_by is not null');
     await client.query('delete from leave_type where created_by is not null');
@@ -552,6 +589,8 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from landed_cost_basis where created_by is not null');
     await client.query('update landed_cost_basis set active = (code not in (\'by_weight\', \'by_volume\')) where created_by is null');
     await client.query('delete from landed_cost_type where created_by is not null');
+    // REQ-FIX-001 FX8 (0253) — the exchange differences an import closed on.
+    await client.query('delete from payable_exchange_difference');
     await client.query('truncate payable_hold_update');
     await client.query('delete from payable_hold');
     await client.query('delete from payable_order_line');
@@ -844,7 +883,7 @@ export async function resetTestData(): Promise<void> {
                          -- REQ-AP-001 Stage 6, migration 0235.
                          'LOAN',
                          -- REQ-HR-001 Stage HR-1, migration 0241.
-                         'EMPLOYEE',
+                         'EMPLOYEE', 'POSITION_CODE', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

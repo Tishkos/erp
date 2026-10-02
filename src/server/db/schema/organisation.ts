@@ -456,6 +456,31 @@ export const project = pgTable(
     /** §10 — whether project spending must name a valid cost code. */
     requiresCostCode: boolean('requires_cost_code').notNull().default(true),
 
+    // ---- REQ-PM-001 PM-1: the definition's type and status profile --------
+    /** customer / internal / investment, by its master row (§4). */
+    typeCode: text('type_code').notNull().default('CUSTOMER'),
+    /** Availability control's warn and stop lines (§7). */
+    toleranceProfileCode: text('tolerance_profile_code').notNull().default('STANDARD'),
+    description: text('description'),
+    /** Where scheduling says the project now stands; the baseline is above. */
+    forecastStartsOn: date('forecast_starts_on'),
+    forecastEndsOn: date('forecast_ends_on'),
+    heldAt: timestamp('held_at', { withTimezone: true }),
+    heldBy: uuid('held_by').references(() => appUser.id),
+    heldReason: text('held_reason'),
+    technicallyCompleteAt: timestamp('technically_complete_at', { withTimezone: true }),
+    technicallyCompleteBy: uuid('technically_complete_by').references(() => appUser.id),
+    /** One reopen after technical completion, with its reason (§6). */
+    reopenedAt: timestamp('reopened_at', { withTimezone: true }),
+    reopenedBy: uuid('reopened_by').references(() => appUser.id),
+    reopenedReason: text('reopened_reason'),
+    /** PM-4 — the working calendar the schedule counts in (HR-1's); none is Sunday–Thursday. */
+    calendarCode: text('calendar_code'),
+    /** PM-4 — the last critical-path pass: when, the finish it gave, and its run number (the trend's x axis). */
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+    scheduledFinishOn: date('scheduled_finish_on'),
+    scheduleRun: integer('schedule_run').notNull().default(0),
+
     approvedBy: uuid('approved_by').references(() => appUser.id),
     approvedAt: timestamp('approved_at', { withTimezone: true }),
     closedBy: uuid('closed_by').references(() => appUser.id),

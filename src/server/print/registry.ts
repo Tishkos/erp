@@ -2,6 +2,7 @@ import { EXPORT_ACCESS, type ExportKey } from './access';
 import * as documents from './documents';
 import type { BuildContext, Built } from './documents';
 import * as reports from './reports';
+import * as projectReports from './project-reports';
 
 export type { ExportKey } from './access';
 
@@ -60,6 +61,10 @@ const BUILDERS = {
   cash_flow: (ctx, input) => reports.cashFlow(ctx, input.query),
   gl_inquiry: (ctx, input) => reports.glInquiry(ctx, input.query),
   gl_account: (ctx, input) => (input.id ? reports.glAccount(ctx, input.id, input.query) : Promise.resolve(null)),
+  project_cost_report: (ctx, input) => projectReports.costReport(ctx, input.query),
+  project_line_items: (ctx, input) => projectReports.lineItems(ctx, input.query),
+  project_milestone_trend: (ctx, input) => projectReports.milestoneTrend(ctx, input.query),
+  project_earned_value: (ctx, input) => projectReports.earnedValue(ctx, input.query),
 } satisfies Record<ExportKey, Builder>;
 
 export function exportable(key: ExportKey): Exportable {

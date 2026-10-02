@@ -25,6 +25,7 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { formatQuantity, parseQuantity } from '@domain/uom';
 import * as items from '@/server/services/items';
+import * as uomService from '@/server/services/units-of-measure';
 import * as coa from '@/server/services/chart-of-accounts';
 import { createItem } from './actions';
 
@@ -54,9 +55,11 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
   }
   const mayCreate = can(principal, 'create', items.PERMISSION_OBJECT);
 
-  const { rows, accounts } = await withCurrentUser(async (tx) => ({
+  const { rows, accounts, uoms } = await withCurrentUser(async (tx) => ({
     rows: await items.listAll(tx),
     accounts: mayCreate ? await coa.postableAccounts(tx) : [],
+    // REQ-FIX-001 FIX-4 — the unit its stock is counted in is chosen, not assumed.
+    uoms: mayCreate ? await uomService.listActive(tx) : [],
   }));
   const accountOptions = (type: string) =>
     accounts
@@ -86,7 +89,6 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
                     stock item counted in each, identified by the invoice that
                     brought it in (its batch), so those are set, not asked. */}
                 <Hidden name="isStock" value="stock" />
-                <Hidden name="baseUomCode" value="EA" />
                 <Hidden name="tracking" value="batch" />
                 <Field
                   label={t('items.full_name')}
@@ -94,6 +96,14 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
                   required
                   requiredLabel={t('required_hint')}
                   wide
+                />
+                <Select
+                  defaultValue={uoms.some((uom) => uom.code === 'EA') ? 'EA' : (uoms[0]?.code ?? '')}
+                  hint={t('items.base_unit_hint')}
+                  label={t('items.base_unit')}
+                  name="baseUomCode"
+                  options={uoms.map((uom) => ({ value: uom.code, label: `${uom.code} · ${uom.name}` }))}
+                  required
                 />
                 <Select
                   emptyLabel=""

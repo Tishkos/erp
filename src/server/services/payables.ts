@@ -58,6 +58,8 @@ import * as events from './payable-events';
 import * as purchaseOrders from './purchase-order';
 import * as rateService from './exchange-rates';
 import { allocateDocumentNumber } from './numbering';
+import * as execution from './project-execution';
+import * as units from './item-units';
 
 export const PERMISSION_OBJECT = 'payable';
 export const SETTINGS_OBJECT = 'payables_settings';
@@ -472,6 +474,10 @@ export interface CreatePayableInput {
   readonly lines?: readonly PayableLineInput[];
   /** Link an existing approved order instead of creating one from the lines. */
   readonly purchaseOrderId?: string | null;
+  /** REQ-PM-001 §8 — the project, the element and the cost code the payable is assigned to; the three together, or none. */
+  readonly projectCode?: string | null;
+  readonly wbsCode?: string | null;
+  readonly costCode?: string | null;
   /** Where goods-type order lines are ordered to; defaults to the branch's first main warehouse. */
   readonly defaultWarehouseCode?: string | null;
 }
@@ -556,7 +562,9 @@ export async function create(
   let hasQuantity = false;
   for (const line of lines) {
     if (line.quantity) {
-      quantity += parseQuantity(line.quantity);
+      // REQ-FIX-001 FIX-4 — the quantity the Cleared rule compares the
+      // received containers against is counted in the items' base units.
+      quantity += line.itemCode && line.uomCode ? await units.toBaseQuantity(tx, line.itemCode, line.uomCode, parseQuantity(line.quantity)) : parseQuantity(line.quantity);
       hasQuantity = true;
       if (line.unitPrice) {
         // quantity × price at MONEY_SCALE — the same arithmetic the PI shows.
@@ -611,7 +619,9 @@ export async function create(
           itemCode: line.itemCode ?? null,
           description: line.description,
           quantity: line.quantity ? parseQuantity(line.quantity) : 1_000_000n,
-          uomCode: line.uomCode ?? 'EA',
+          // REQ-FIX-001 FIX-4 — one of the item's units (its purchase default
+          // when none is named); a service line keeps what it was given.
+          uomCode: line.itemCode ? await units.assertLineUnit(tx, line.itemCode, line.uomCode ?? (await units.purchaseDefaultOf(tx, line.itemCode))) : (line.uomCode ?? 'EA'),
           unitPriceIqd,
           branchCode: input.branchCode,
           warehouseCode: line.itemCode ? warehouseCode : null,
@@ -624,6 +634,10 @@ export async function create(
         currency: input.currency,
         reference: input.supplierReference,
         note: `Raised from payable (${type.name}) — the PI is the company's order (REQ-AP-001 §14).`,
+        // REQ-PM-001 §8 — the order carries the assignment; its approval commits.
+        projectCode: input.projectCode ?? null,
+        wbsCode: input.wbsCode ?? null,
+        costCode: input.costCode ?? null,
         lines: orderLines,
       });
       // §5.2 — submitted here; approved by a second person in the approvals
@@ -633,6 +647,9 @@ export async function create(
       orderNo = created.orderNo;
     }
   }
+
+  // REQ-PM-001 §8 — checked before the number is spent.
+  const assignment = await execution.checkAssignment(tx, input);
 
   const year = Number(input.documentDate.slice(0, 4));
   const allocated = await allocateDocumentNumber(
@@ -665,6 +682,9 @@ export async function create(
       purchaseOrderId,
       expenseCategoryCode: input.expenseCategoryCode ?? null,
       dueDate: input.dueDate ?? null,
+      projectCode: assignment?.projectCode ?? null,
+      wbsCode: assignment?.wbsCode ?? null,
+      costCode: assignment?.costCode ?? null,
       stageCode,
       createdBy: ctx.principal.userId,
     })
@@ -680,7 +700,7 @@ export async function create(
       expenseCategoryCode: line.expenseCategoryCode ?? null,
       description: line.description,
       quantity: line.quantity ? formatQuantity(parseQuantity(line.quantity)) : null,
-      uomCode: line.uomCode ?? null,
+      uomCode: line.itemCode && line.uomCode ? await units.assertLineUnit(tx, line.itemCode, line.uomCode) : (line.uomCode ?? null),
       unitPrice: line.unitPrice ? toDecimalString(parseDecimal(line.unitPrice, MONEY_SCALE)) : null,
       amountTxn:
         line.quantity && line.unitPrice
@@ -742,6 +762,9 @@ export async function create(
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });
+
+  // REQ-PM-001 §8 — a payable without an order is the promise itself.
+  if (!purchaseOrderId && assignment) await execution.commitForPayable(tx, ctx, payableId);
 
   return { id: payableId, payableNo: allocated.documentNo };
 }
@@ -964,7 +987,19 @@ export async function onChargedToImport(
   });
 }
 
-/** §5.1 — once invoices post, the payable's amount is their sum. */
+/**
+ * §5.1 — once invoices post, the payable's amount is their sum.
+ *
+ * REQ-FIX-001 FX7: the agreed amount in the payable's own currency too, when
+ * that currency is the dinar the invoices are kept in. *Paid*, *Remaining*,
+ * *Fully paid* and the cap on new payment applications all read
+ * `amount_txn`; it used to stay at the first invoice's lines as they stood
+ * when the import was born — no discount, no later correction, no second
+ * invoice — so a second invoice could not be paid through the import and
+ * the import read *Fully paid* while it was open. A payable agreed in
+ * another currency keeps its agreed amount: its invoices are in dinars and
+ * the difference between the two is the exchange difference (FX8).
+ */
 async function refreshFromInvoices(tx: Tx, payableId: string): Promise<void> {
   const [sums] = await tx
     .select({
@@ -977,7 +1012,11 @@ async function refreshFromInvoices(tx: Tx, payableId: string): Promise<void> {
   if ((sums?.posted ?? 0) > 0) {
     await tx
       .update(payable)
-      .set({ amountIqd: sums!.totalIqd, updatedAt: new Date() })
+      .set({
+        amountIqd: sums!.totalIqd,
+        amountTxn: sql`case when ${payable.currency} = 'IQD' then ${sums!.totalIqd}::numeric else ${payable.amountTxn} end`,
+        updatedAt: new Date(),
+      })
       .where(eq(payable.id, payableId));
   }
 }
@@ -1094,7 +1133,7 @@ export async function updateOrderLines(
     const qty = line.quantity ? parseQuantity(line.quantity) : null;
     const price = line.unitPrice ? parseDecimal(line.unitPrice, MONEY_SCALE) : null;
     if (qty) {
-      quantity += qty;
+      quantity += line.itemCode && line.uomCode ? await units.toBaseQuantity(tx, line.itemCode, line.uomCode, qty) : qty;
       hasQuantity = true;
       if (price) amountTxn += (qty * price) / 10n ** 6n;
     }
@@ -1105,7 +1144,7 @@ export async function updateOrderLines(
       expenseCategoryCode: line.expenseCategoryCode ?? null,
       description: line.description,
       quantity: qty ? formatQuantity(qty) : null,
-      uomCode: line.uomCode ?? null,
+      uomCode: line.itemCode && line.uomCode ? await units.assertLineUnit(tx, line.itemCode, line.uomCode) : (line.uomCode ?? null),
       unitPrice: price ? toDecimalString(price) : null,
       amountTxn: qty && price ? toDecimalString((qty * price) / 10n ** 6n) : null,
     });
@@ -1244,6 +1283,8 @@ export async function cancel(
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });
+  // REQ-PM-001 §8 — what the payable still promised is given back.
+  await execution.releaseFor(tx, ctx, { payableId: row.id }, `Payable ${row.payableNo} cancelled: ${reason}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -1465,6 +1506,8 @@ export async function view(tx: Tx, payableNo: string) {
     type,
     rail,
     reached,
+    /** The stage facts the rail was read from — for a reader that needs them again (HARDEN G3). */
+    facts,
     lanes: lanes.rows as { code: string; name: string; sort_order: number }[],
     lines,
     invoices,

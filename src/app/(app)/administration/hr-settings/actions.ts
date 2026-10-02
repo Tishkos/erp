@@ -10,33 +10,6 @@ import * as settings from '@/server/services/hr-settings';
 
 const BACK = '/administration/hr-settings';
 
-export async function savePosition(form: FormData): Promise<void> {
-  const code = text(form, 'code');
-  const existing = text(form, 'existing') === '1';
-  await runAdminAndReturn(
-    (tx, ctx) =>
-      existing
-        ? settings.updatePosition(tx, ctx, code, {
-            titleEn: text(form, 'title_en'),
-            titleAr: text(form, 'title_ar') || null,
-            departmentCode: text(form, 'department_code'),
-            reportsToCode: text(form, 'reports_to_code') || null,
-          })
-        : settings.createPosition(tx, ctx, {
-            code,
-            titleEn: text(form, 'title_en'),
-            titleAr: text(form, 'title_ar') || null,
-            departmentCode: text(form, 'department_code'),
-            reportsToCode: text(form, 'reports_to_code') || null,
-          }),
-    BACK,
-  );
-}
-
-export async function setPositionActive(form: FormData): Promise<void> {
-  await runAdminAndReturn((tx, ctx) => settings.setPositionActive(tx, ctx, text(form, 'code'), text(form, 'active') === '1', text(form, 'reason') || null), BACK);
-}
-
 export async function savePayComponent(form: FormData): Promise<void> {
   const code = text(form, 'code');
   const existing = text(form, 'existing') === '1';

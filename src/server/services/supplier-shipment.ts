@@ -197,10 +197,18 @@ export async function advance(
   // An invoice reversed after it opened tracking took its goods with it —
   // the receipt was undone, so there is nothing on this shipment to move.
   const [behind] = await tx
-    .select({ status: apInvoice.status, invoiceNo: apInvoice.invoiceNo })
+    .select({ status: apInvoice.status, invoiceNo: apInvoice.invoiceNo, isImport: apInvoice.isImport })
     .from(apInvoice)
     .where(eq(apInvoice.id, shipment.apInvoiceId))
     .limit(1);
+  // REQ-FIX-001 FX9 — an import is followed container by container on its
+  // bills of lading (§17.4, D38); a tracker left from before the migration
+  // moved here would put its goods somewhere its containers are not.
+  if (behind?.isImport) {
+    throw new ShipmentError(
+      `Purchase invoice ${behind.invoiceNo} is an import, followed on its bills of lading and containers. Move its containers on the import instead.`,
+    );
+  }
   if (behind?.status === 'reversed') {
     throw new ShipmentError(
       `Purchase invoice ${behind.invoiceNo} was reversed, so this shipment carries nothing. There is no stage to move it to.`,
@@ -510,6 +518,9 @@ export async function list(tx: Tx, filter: { status?: ShipmentStatus } = {}) {
       and(
         // A reversed invoice's shipment is history, not a container to follow.
         sql`${apInvoice.status} <> 'reversed'`,
+        // REQ-FIX-001 FX9 — imports are followed on their containers (D38);
+        // the migration left their old trackers behind.
+        eq(apInvoice.isImport, false),
         filter.status ? eq(supplierShipment.status, filter.status) : sql`true`,
       ),
     )

@@ -44,6 +44,7 @@ import { parseDecimal, toDecimalString } from '../domain/money';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
+import * as units from './item-units';
 import * as inventory from './inventory';
 import * as posting from './posting';
 import * as statuses from './statuses';
@@ -714,7 +715,8 @@ export async function post(
       warehouseCode: line.warehouseCode,
       branchCode: document.branchCode,
       costLayerId: layerId,
-      quantity: parseQuantity(line.quantity),
+      // REQ-FIX-001 FIX-4 — returned in the unit it was bought in; the layer is in the base.
+      quantity: await units.toBaseQuantity(tx, line.itemCode, line.uomCode, parseQuantity(line.quantity)),
       movementDate: document.returnDate,
       kind: 'goods_return',
       sourceDocumentType: PERMISSION_OBJECT,
@@ -907,7 +909,8 @@ async function returnInvoicedGoods(
       layer.layerDate === origin!.layerDate,
   );
 
-  let outstanding = parseQuantity(line.quantity);
+  // REQ-FIX-001 FIX-4 — in the item's base unit, as the layers are.
+  let outstanding = await units.toBaseQuantity(tx, line.itemCode, line.uomCode, parseQuantity(line.quantity));
   const held = pool.reduce((sum, layer) => sum + layer.remainingQuantity, 0n);
   if (held < outstanding) {
     throw new Error(

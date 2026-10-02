@@ -70,6 +70,9 @@ import * as terms from './payment-terms';
 import * as coa from './chart-of-accounts';
 import { assertResultAccount, assertStatementAccount } from '../domain/posting-map';
 import { allocateDocumentNumber } from './numbering';
+import * as execution from './project-execution';
+import * as advances from './supplier-advance';
+import * as units from './item-units';
 
 export const DOCUMENT_TYPE = 'ap_invoice';
 export const PERMISSION_OBJECT = 'ap_invoice';
@@ -236,6 +239,10 @@ export interface CreateApInvoiceInput {
   readonly recurringContractId?: string | null;
   readonly periodStart?: string | null;
   readonly periodEnd?: string | null;
+  /** REQ-PM-001 §8 — the project, the element and the cost code; the three together, or none. Inherited from the order when it carries one. */
+  readonly projectCode?: string | null;
+  readonly wbsCode?: string | null;
+  readonly costCode?: string | null;
 }
 
 /**
@@ -488,6 +495,13 @@ export async function create(
       .limit(1);
     if (!order) throw new Error(`No purchase order with id '${input.purchaseOrderId}'.`);
   }
+  // REQ-PM-001 §8 — the invoice stands where its order stands; typed when
+  // there is no order, or none on it.
+  const assignment = await execution.checkAssignment(tx, {
+    projectCode: input.projectCode ?? order?.projectCode ?? null,
+    wbsCode: input.wbsCode ?? order?.wbsCode ?? null,
+    costCode: input.costCode ?? order?.costCode ?? null,
+  });
 
   /*
    * §16 — the due date the supplier's terms give, when the document does not
@@ -586,6 +600,9 @@ export async function create(
       recurringContractId: input.recurringContractId ?? null,
       periodStart: input.periodStart ?? null,
       periodEnd: input.periodEnd ?? null,
+      projectCode: assignment?.projectCode ?? null,
+      wbsCode: assignment?.wbsCode ?? null,
+      costCode: assignment?.costCode ?? null,
       duplicateApprovedBy: input.duplicateApprovedBy ?? null,
       duplicateApprovedAt: input.duplicateApprovedBy ? new Date() : null,
       duplicateApprovalReason: input.duplicateApprovalReason?.trim() ?? null,
@@ -637,7 +654,7 @@ export async function create(
       itemCode: lineItemCode,
       description: line.description ?? ordered?.description ?? named?.name ?? 'Charge',
       quantity: formatQuantity(line.quantity),
-      uomCode: line.uomCode ?? ordered?.uomCode ?? 'EA',
+      uomCode: await lineUnit(tx, lineItemCode, line.uomCode, ordered?.uomCode ?? null, index + 1),
       unitPrice: toDecimalString(line.unitPriceIqd, 4n),
       isInventory,
       costCentreCode: line.costCentreCode ?? ordered?.costCentreCode ?? null,
@@ -687,6 +704,9 @@ export async function create(
         paymentTermsText: input.paymentTermsText ?? null,
         dueDate,
         purchaseOrderId: input.purchaseOrderId ?? null,
+        projectCode: assignment?.projectCode ?? null,
+        wbsCode: assignment?.wbsCode ?? null,
+        costCode: assignment?.costCode ?? null,
         lines: input.lines.map((line) => ({
           itemCode: line.itemCode ?? null,
           description: line.description ?? (line.itemCode ? names.get(line.itemCode) : undefined) ?? line.itemCode ?? 'Charge',
@@ -751,6 +771,8 @@ export interface DraftLineInput {
   readonly unitPriceIqd: bigint;
   readonly discountIqd?: bigint;
   readonly warehouseCode: string;
+  /** REQ-FIX-001 FIX-4 — one of the item's units; its purchase default when absent. */
+  readonly uomCode?: string | null;
 }
 
 /** The draft, and the reasons it may be typed into. */
@@ -930,7 +952,7 @@ export async function saveLine(
     // invoice cannot name an item one thing and the chart another.
     description: stockItem.name,
     quantity: formatQuantity(input.quantity),
-    uomCode: stockItem.uomCode,
+    uomCode: await lineUnit(tx, stockItem.code, input.uomCode ?? existing?.uomCode ?? null, null, lineNo),
     unitPrice: toDecimalString(input.unitPriceIqd, 4n),
     isInventory: true,
     warehouseCode: house.code,
@@ -1336,7 +1358,8 @@ export async function post(
 
   const amount = (value: bigint) => toDecimalString(value < 0n ? -value : value, 4n);
   const criteria = { branchCode: invoice.branchCode };
-  const base = { branch: invoice.branchCode, business_partner: supplier?.code ?? null };
+  // REQ-PM-001 §8 — an assigned invoice's lines carry the project dimension.
+  const base = { branch: invoice.branchCode, business_partner: supplier?.code ?? null, project: invoice.projectCode ?? null };
 
   // Posted line by line rather than rolled up.
   //
@@ -1391,16 +1414,19 @@ export async function post(
     // what happened before this branch existed.
     if (line.warehouseCode) {
       const account = await inventoryAccountFor(tx, line);
+      // REQ-FIX-001 FIX-4 — the line is in the unit it was bought in; the
+      // stock is counted in the item's base unit, at the base unit's cost.
+      const baseQuantity = await units.toBaseQuantity(tx, line.itemCode!, line.uomCode, parseQuantity(line.quantity));
       await inventory.receive(tx, ctx, {
         itemCode: line.itemCode!,
         warehouseCode: line.warehouseCode,
         branchCode: invoice.branchCode,
-        quantity: parseQuantity(line.quantity),
+        quantity: baseQuantity,
         // A *unit* cost, and the discount is part of it: stock is worth what
         // was paid for it, not what was asked. The posted debit below is the
         // same money, so the warehouse and the ledger agree by construction
-        // rather than by coincidence — see the rounding note in `unitCostOf`.
-        unitCostIqd: unitCostOf(line, invoicedValue),
+        // rather than by coincidence — see the rounding note in `costPerBase`.
+        unitCostIqd: costPerBase(invoicedValue, baseQuantity),
         // Whose stock this is. A sale that names this supplier will consume
         // these layers and no others — Operations block 5.
         supplierId: invoice.supplierId,
@@ -1527,6 +1553,22 @@ export async function post(
       .where(eq(purchaseOrderLine.id, line.purchaseOrderLineId));
   }
 
+  // REQ-PM-001 §8 — the posting converts the promise to an actual: the cost
+  // row names this journal and this invoice, consumes the order's (or the
+  // payable's) open commitment, and only what exceeds it is checked anew.
+  // Services are the project's cost here; goods are stock until a material
+  // issue takes them to the element (§9), so their value only settles the
+  // promise the order made.
+  await execution.recordInvoiceCost(tx, ctx, {
+    invoiceId: id,
+    invoiceNo: invoice.invoiceNo,
+    supplierCode: supplier?.code ?? null,
+    journalEntryId: result.journalEntryId,
+    costIqd: expenseIqd + varianceIqd,
+    stockIqd: grniIqd + lines.filter((line) => line.warehouseCode).reduce((sum, line) => sum + lineValue(line), 0n),
+    incurredOn: invoice.invoiceDate,
+  });
+
   // REQ-AP-001 §7.2 — a payable-linked invoice writes the order lane's event
   // and re-derives the stage, in this same transaction.
   if (invoice.payableId) {
@@ -1539,6 +1581,11 @@ export async function post(
       actorUserId: ctx.principal.userId,
     });
   }
+
+  // REQ-FIX-001 FX6 — a deposit paid ahead of this invoice (on its import or
+  // its purchase order) is applied to it now, so the invoice, the import and
+  // the supplier's account agree on what is still owed.
+  await advances.applyToPostedInvoice(tx, ctx, id);
 
   // §9.2 / A10 — each charged line becomes a landed-cost charge of its
   // import, in this same transaction, typed by this invoice's own category.
@@ -1762,6 +1809,14 @@ export async function reverse(
     relatedObjectId: reversal.id,
   });
 
+  // REQ-PM-001 §8 — the project's analysis follows the journal's reversal.
+  await execution.reverseInvoiceCost(tx, ctx, {
+    invoiceId: id,
+    reason,
+    journalEntryId: reversal.id,
+    stockIqd: lines.filter((line) => line.isInventory || line.warehouseCode).reduce((sum, line) => sum + lineValue(line), 0n),
+  });
+
   // A10's mirror — the reversal withdraws the charges this invoice placed.
   if (lines.length > 0) {
     await tx
@@ -1902,7 +1957,25 @@ async function batchFor(
 }
 
 /**
- * What one unit of this line costs, net of its discount.
+ * REQ-FIX-001 FIX-4 — the unit a line is written in. A line against an order
+ * line is in the order's unit (the received and invoiced quantities are
+ * compared in it); an item's line is in one of the item's active units, its
+ * purchase default when none is named; a charge with no item keeps what it
+ * was given.
+ */
+async function lineUnit(tx: Tx, itemCode: string | null, given: string | null | undefined, ordered: string | null, lineNo: number): Promise<string> {
+  if (ordered) {
+    if (given && given !== ordered) throw new ApInvoiceLineError(lineNo, `is in ${given}, but its order line is in ${ordered}; invoice it in ${ordered}.`);
+    return ordered;
+  }
+  if (!itemCode) return given?.trim() || 'EA';
+  if (!given?.trim()) return units.purchaseDefaultOf(tx, itemCode);
+  return units.assertLineUnit(tx, itemCode, given);
+}
+
+/**
+ * What one base unit of this line costs, net of its discount — from the
+ * line's value and its quantity converted to the item's base (FIX-4).
  *
  * Rounding is the thing to be careful of. Three units at a line value of ten
  * is 3.3333 each, and three layers of 3.3333 are worth 9.9999 — a dinar less
@@ -1913,11 +1986,10 @@ async function batchFor(
  * not divide evenly, which is what would catch it if that ever stopped being
  * true.
  */
-function unitCostOf(line: typeof apInvoiceLine.$inferSelect, value: bigint): bigint {
-  const quantity = parseQuantity(line.quantity);
-  if (quantity === 0n) return 0n;
+function costPerBase(value: bigint, baseQuantity: bigint): bigint {
+  if (baseQuantity === 0n) return 0n;
   // Quantities carry six decimal places, money four.
-  return (value * 1_000_000n) / quantity;
+  return (value * 1_000_000n) / baseQuantity;
 }
 
 function lineValue(line: typeof apInvoiceLine.$inferSelect): bigint {

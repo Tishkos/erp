@@ -102,7 +102,7 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
           : viewParam === 'overdue'
             ? row.state === 'overdue'
             : viewParam === 'unpaid'
-              ? row.state === 'unpaid' || row.state === 'overdue'
+              ? row.state === 'unpaid' || row.state === 'part_paid' || row.state === 'overdue'
               : true,
     );
 
@@ -280,8 +280,8 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
                         '—'
                       ) : (
                         <span
-                          className={`status status--${row.state === 'paid' ? 'settled' : row.state === 'overdue' ? 'rejected' : 'submitted'} ${s.sapRegisterStatus}`}
-                          data-status={row.state === 'paid' ? 'settled' : row.state === 'overdue' ? 'rejected' : 'submitted'}
+                          className={`status status--${row.state === 'paid' ? 'settled' : row.state === 'overdue' ? 'rejected' : row.state === 'part_paid' ? 'partially_executed' : 'submitted'} ${s.sapRegisterStatus}`}
+                          data-status={row.state === 'paid' ? 'settled' : row.state === 'overdue' ? 'rejected' : row.state === 'part_paid' ? 'partially_executed' : 'submitted'}
                         >
                           {row.state === 'overdue'
                             ? x('state_overdue_days', { days: expenses.daysBetween(row.dueDate, today) })
