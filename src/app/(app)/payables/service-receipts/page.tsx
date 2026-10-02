@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
+import { Pagination } from '@/components/ui';
 import { AdminPage, Flash, Form, Hidden, Submit, admin as s } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -29,8 +30,9 @@ export default async function ServiceReceiptsPage({
 }) {
   if (!visibleRoute('/payables/service-receipts')) notFound();
 
-  const [t, page, locale, context, outcome] = await Promise.all([
+  const [t, admin, page, locale, context, outcome] = await Promise.all([
     getTranslations('admin.payables_receipts'),
+    getTranslations('admin'),
     getTranslations('page'),
     getLocale(),
     requireContext(),
@@ -44,13 +46,27 @@ export default async function ServiceReceiptsPage({
   const mayApprove = can(principal, 'approve', receipts.PERMISSION_OBJECT);
   const maySubmit = can(principal, 'submit', receipts.PERMISSION_OBJECT);
 
-  const rows = await withCurrentUser((tx) => receipts.listForScreen(tx));
-  const waiting = rows.filter((row) => row.status === 'submitted');
+  // HD15 — the inbox and the full list page separately, each at fifty with
+  // its own true count; each pager keeps the other's page in its links.
+  const params = await searchParams;
+  const awaitingParam = Math.max(1, Number(params.awaiting_page) || 1);
+  const { waiting, all } = await withCurrentUser(async (tx) => ({
+    waiting: await receipts.listForScreen(tx, { status: 'submitted', page: awaitingParam }),
+    all: await receipts.listForScreen(tx, { page: outcome.page }),
+  }));
+  const query = (awaitingPage: number, allPage: number) =>
+    [awaitingPage > 1 ? `awaiting_page=${awaitingPage}` : '', `page=${allPage}`].filter(Boolean).join('&');
+  const labels = {
+    label: admin('pagination'),
+    previous: admin('previous'),
+    next: admin('next'),
+    page: (p: number) => admin('page_n', { page: p }),
+  };
 
   const day = (value: string | null) =>
     value ? formatBusinessDate(value, locale as Locale) : '—';
 
-  const table = (list: typeof rows, labelId: string, empty: string, withActions: boolean) => (
+  const table = (list: receipts.ServiceReceiptListRow[], labelId: string, empty: string, withActions: boolean) => (
     <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
       <table aria-labelledby={labelId} className={`${s.sapTable} ${s.sapRegisterTable}`}>
         <thead>
@@ -150,9 +166,12 @@ export default async function ServiceReceiptsPage({
         <div className={s.sapWindow}>
           <h2 className={s.sapTitle} id="awaiting-title">
             <span>{t('awaiting')}</span>
-            <span className={s.sapTitleMeta}>{t('rows', { count: waiting.length })}</span>
+            <span className={s.sapTitleMeta}>{t('rows', { count: waiting.total })}</span>
           </h2>
-          {table(waiting, 'awaiting-title', t('none_awaiting'), true)}
+          {table(waiting.rows, 'awaiting-title', t('none_awaiting'), true)}
+          {waiting.pages > 1 ? (
+            <Pagination count={waiting.pages} current={waiting.page} hrefFor={(p) => `/payables/service-receipts?${query(p, all.page)}`} labels={labels} locale={locale} />
+          ) : null}
         </div>
       </section>
 
@@ -160,9 +179,12 @@ export default async function ServiceReceiptsPage({
         <div className={s.sapWindow}>
           <h2 className={s.sapTitle} id="receipts-title">
             <span>{t('all')}</span>
-            <span className={s.sapTitleMeta}>{t('rows', { count: rows.length })}</span>
+            <span className={s.sapTitleMeta}>{t('rows', { count: all.total })}</span>
           </h2>
-          {table(rows, 'receipts-title', t('none'), false)}
+          {table(all.rows, 'receipts-title', t('none'), false)}
+          {all.pages > 1 ? (
+            <Pagination count={all.pages} current={all.page} hrefFor={(p) => `/payables/service-receipts?${query(waiting.page, p)}`} labels={labels} locale={locale} />
+          ) : null}
         </div>
       </section>
     </AdminPage>

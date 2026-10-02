@@ -14,8 +14,8 @@ import {
   Submit,
   SubmitRow,
   admin as s,
-  matches,
 } from '@/components/admin';
+import { Pagination } from '@/components/ui';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -63,11 +63,13 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
     ? (params.view as (typeof VIEWS)[number])
     : 'open';
 
-  const { rows, pickers } = await withCurrentUser(async (tx) => ({
-    rows: await loans.list(tx, { view }),
+  const { result, pickers } = await withCurrentUser(async (tx) => ({
+    result: await loans.listForScreen(tx, { view, search: outcome.q, page: outcome.page }),
     pickers: mayCreate ? await loans.pickers(tx) : null,
   }));
-  const shown = rows.filter((row) => matches(row, outcome.q));
+  const shown = result.rows;
+  const query = (p: number) =>
+    [outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '', `view=${view}`, `page=${p}`].filter(Boolean).join('&');
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
   const money = (value: string, currency: string) => formatMoney(value, currency, locale as Locale);
   const today = businessToday();
@@ -165,12 +167,12 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
         <div className={s.sapWindow}>
           <h2 className={s.sapTitle} id="loan-list-title">
             <span>{page('loans')}</span>
-            <span className={s.sapTitleMeta}>{admin('rows_shown', { count: shown.length })}</span>
+            <span className={s.sapTitleMeta}>{admin('rows_shown', { count: result.total })}</span>
           </h2>
           <ListToolbar
             clearHref="/payables/loans"
             clearLabel={admin('clear_search')}
-            countLabel={admin('rows_shown', { count: shown.length })}
+            countLabel={admin('rows_shown', { count: result.total })}
             placeholder={admin('search_placeholder')}
             q={outcome.q}
             searchLabel={admin('search')}
@@ -260,6 +262,9 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
               </tbody>
             </table>
           </div>
+          {result.pages > 1 ? (
+            <Pagination count={result.pages} current={result.page} hrefFor={(p) => `/payables/loans?${query(p)}`} labels={{ label: admin('pagination'), previous: admin('previous'), next: admin('next'), page: (p) => admin('page_n', { page: p }) }} locale={locale} />
+          ) : null}
         </div>
       </section>
     </AdminPage>

@@ -13,8 +13,8 @@ import {
   Submit,
   SubmitRow,
   admin as s,
-  matches,
 } from '@/components/admin';
+import { Pagination } from '@/components/ui';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -54,12 +54,13 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Se
   const mayCreate = can(principal, 'create', shipments.BL_OBJECT);
   const today = businessToday();
 
-  const { rows, imports, ports } = await withCurrentUser(async (tx) => ({
-    rows: await shipments.listBls(tx),
+  const { result, imports, ports } = await withCurrentUser(async (tx) => ({
+    result: await shipments.listBlsForScreen(tx, { search: outcome.q, page: outcome.page }),
     imports: mayCreate ? await customs.importChoices(tx) : [],
     ports: mayCreate ? await shipments.ports(tx) : [],
   }));
-  const shown = rows.filter((row) => matches(row, outcome.q));
+  const shown = result.rows;
+  const query = (p: number) => [outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '', `page=${p}`].filter(Boolean).join('&');
   const cs = (code: string, name: string) => (locale !== 'en' && t.has(`cs.${code}`) ? t(`cs.${code}`) : name);
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
 
@@ -122,12 +123,12 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Se
         <div className={s.sapWindow}>
           <h2 className={s.sapTitle} id="bl-list-title">
             <span>{page('shipments')}</span>
-            <span className={s.sapTitleMeta}>{admin('rows_shown', { count: shown.length })}</span>
+            <span className={s.sapTitleMeta}>{admin('rows_shown', { count: result.total })}</span>
           </h2>
           <ListToolbar
             clearHref="/payables/shipments"
             clearLabel={admin('clear_search')}
-            countLabel={admin('rows_shown', { count: shown.length })}
+            countLabel={admin('rows_shown', { count: result.total })}
             placeholder={admin('search_placeholder')}
             q={outcome.q}
             searchLabel={admin('search')}
@@ -199,6 +200,9 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Se
               </tbody>
             </table>
           </div>
+          {result.pages > 1 ? (
+            <Pagination count={result.pages} current={result.page} hrefFor={(p) => `/payables/shipments?${query(p)}`} labels={{ label: admin('pagination'), previous: admin('previous'), next: admin('next'), page: (p) => admin('page_n', { page: p }) }} locale={locale} />
+          ) : null}
         </div>
       </section>
     </AdminPage>

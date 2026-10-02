@@ -37,6 +37,7 @@ import * as authz from './authorization';
 import * as audit from './audit';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
+import { countOf, registerPage, whereOf, type RegisterPage, type RegisterPaging } from './register-page';
 import * as payableEvents from './payable-events';
 import * as payables from './payables';
 
@@ -741,25 +742,42 @@ export interface ServiceReceiptListRow {
   readonly description: string | null;
 }
 
-export async function listForScreen(tx: Tx): Promise<ServiceReceiptListRow[]> {
-  const result = await tx.execute(sql`
-    select r.id,
-           r.receipt_no as "receiptNo",
-           r.status::text as status,
-           r.department_code as "departmentCode",
-           r.service_date::text as "serviceDate",
-           coalesce(bpo.legal_name, bpp.legal_name) as "supplierName",
-           o.order_no as "orderNo",
-           p.payable_no as "payableNo",
-           r.note as description
-      from service_receipt r
-      left join purchase_order o on o.id = r.purchase_order_id
-      left join business_partner bpo on bpo.id = o.supplier_id
-      left join payable p on p.id = r.payable_id
-      left join business_partner bpp on bpp.id = p.supplier_id
-     order by r.created_at desc
-     limit 200`);
-  return result.rows as unknown as ServiceReceiptListRow[];
+export interface ServiceReceiptListFilter extends RegisterPaging {
+  /** The inbox reads `submitted`; the full list reads every status. */
+  readonly status?: string | null;
+}
+
+/** HD15 — one page of fifty, newest first, with the true count. */
+export async function listForScreen(
+  tx: Tx,
+  filter: ServiceReceiptListFilter = {},
+): Promise<RegisterPage<ServiceReceiptListRow>> {
+  const where = whereOf([filter.status ? sql`r.status::text = ${filter.status}` : null]);
+  return registerPage({
+    paging: filter,
+    count: () => countOf(tx, sql`from service_receipt r ${where}`),
+    rows: async ({ limit, offset }) => {
+      const result = await tx.execute(sql`
+        select r.id,
+               r.receipt_no as "receiptNo",
+               r.status::text as status,
+               r.department_code as "departmentCode",
+               r.service_date::text as "serviceDate",
+               coalesce(bpo.legal_name, bpp.legal_name) as "supplierName",
+               o.order_no as "orderNo",
+               p.payable_no as "payableNo",
+               r.note as description
+          from service_receipt r
+          left join purchase_order o on o.id = r.purchase_order_id
+          left join business_partner bpo on bpo.id = o.supplier_id
+          left join payable p on p.id = r.payable_id
+          left join business_partner bpp on bpp.id = p.supplier_id
+         ${where}
+         order by r.created_at desc, r.id desc
+         limit ${limit} offset ${offset}`);
+      return result.rows as unknown as ServiceReceiptListRow[];
+    },
+  });
 }
 
 /** §21.3 — the payable page's Service lane: this payable's confirmations. */

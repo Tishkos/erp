@@ -29,6 +29,7 @@ import * as events from './payable-events';
 import * as payables from './payables';
 import * as ap from './ap-invoice';
 import { allocateDocumentNumber } from './numbering';
+import { countOf, registerPage, whereOf, type RegisterPage, type RegisterPaging } from './register-page';
 import { businessToday } from '../domain/business-date';
 
 export const PERMISSION_OBJECT = 'recurring_contract';
@@ -559,28 +560,46 @@ export interface ContractListRow {
   readonly overduePeriods: number;
 }
 
-export async function listForScreen(tx: Tx): Promise<ContractListRow[]> {
-  const result = await tx.execute(sql`
-    select c.id,
-           c.contract_no as "contractNo",
-           bp.legal_name as "supplierName",
-           c.department_code as "departmentCode",
-           c.expense_category_code as "expenseCategoryCode",
-           ec.name as "categoryName",
-           c.amount_per_period_txn::text as "amountPerPeriodTxn",
-           c.currency,
-           c.frequency,
-           c.status,
-           (select min(i.due_date)::text from ap_invoice i
-             where i.recurring_contract_id = c.id
-               and i.status not in ('settled', 'reversed', 'cancelled')) as "nextDue",
-           (select count(*)::int from ap_invoice i
-             where i.recurring_contract_id = c.id
-               and i.due_date < ${businessToday()}::date
-               and i.status not in ('settled', 'reversed', 'cancelled')) as "overduePeriods"
-      from recurring_contract c
-      join business_partner bp on bp.id = c.supplier_id
-      left join expense_category ec on ec.code = c.expense_category_code
-     order by c.contract_no`);
-  return result.rows as unknown as ContractListRow[];
+export interface ContractListFilter extends RegisterPaging {
+  readonly status?: string | null;
+}
+
+/** HD15 — one page of fifty, by contract number, with the true count. */
+export async function listForScreen(
+  tx: Tx,
+  filter: ContractListFilter = {},
+): Promise<RegisterPage<ContractListRow>> {
+  const where = whereOf([filter.status ? sql`c.status::text = ${filter.status}` : null]);
+  const today = businessToday();
+  return registerPage({
+    paging: filter,
+    count: () => countOf(tx, sql`from recurring_contract c ${where}`),
+    rows: async ({ limit, offset }) => {
+      const result = await tx.execute(sql`
+        select c.id,
+               c.contract_no as "contractNo",
+               bp.legal_name as "supplierName",
+               c.department_code as "departmentCode",
+               c.expense_category_code as "expenseCategoryCode",
+               ec.name as "categoryName",
+               c.amount_per_period_txn::text as "amountPerPeriodTxn",
+               c.currency,
+               c.frequency,
+               c.status,
+               (select min(i.due_date)::text from ap_invoice i
+                 where i.recurring_contract_id = c.id
+                   and i.status not in ('settled', 'reversed', 'cancelled')) as "nextDue",
+               (select count(*)::int from ap_invoice i
+                 where i.recurring_contract_id = c.id
+                   and i.due_date < ${today}::date
+                   and i.status not in ('settled', 'reversed', 'cancelled')) as "overduePeriods"
+          from recurring_contract c
+          join business_partner bp on bp.id = c.supplier_id
+          left join expense_category ec on ec.code = c.expense_category_code
+         ${where}
+         order by c.contract_no, c.id
+         limit ${limit} offset ${offset}`);
+      return result.rows as unknown as ContractListRow[];
+    },
+  });
 }

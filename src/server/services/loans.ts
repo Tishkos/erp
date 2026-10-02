@@ -71,6 +71,7 @@ import * as events from './payable-events';
 import * as posting from './posting';
 import * as rateService from './exchange-rates';
 import { allocateDocumentNumber } from './numbering';
+import { registerPage, searchOf, type RegisterPaging } from './register-page';
 import { businessToday } from '../domain/business-date';
 
 export const PERMISSION_OBJECT = 'bank_loan';
@@ -1070,61 +1071,92 @@ export async function instalmentSweep(tx: Tx, asOf: string): Promise<{ due: numb
 // Reads
 // ---------------------------------------------------------------------------
 
-export interface LoanListFilter {
+export interface LoanListFilter extends RegisterPaging {
   readonly view?: 'open' | 'overdue' | 'closed' | 'all';
+  readonly search?: string | null;
 }
 
-/** §21.10 — loan no · bank · principal · outstanding · next due · overdue flag · status. */
-export async function list(tx: Tx, filter: LoanListFilter = {}) {
-  const rows = await tx
-    .select({
-      id: bankLoan.id,
-      loanNo: bankLoan.loanNo,
-      bankName: bank.name,
-      accountCode: bankCashAccount.code,
-      currency: bankLoan.currency,
-      principalTxn: bankLoan.principalTxn,
-      commissionTxn: bankLoan.commissionTxn,
-      status: bankLoan.status,
-      disbursementDate: bankLoan.disbursementDate,
-      maturityDate: bankLoan.maturityDate,
-      createdAt: bankLoan.createdAt,
-      repaidTxn: sql<string>`coalesce((select sum(i.principal_txn) from bank_loan_instalment i
-                               where i.loan_id = ${bankLoan.id} and i.superseded_at is null and i.status = 'paid'), 0)::text`,
-      nextDue: sql<string | null>`(select min(i.due_date)::text from bank_loan_instalment i
-                               where i.loan_id = ${bankLoan.id} and i.superseded_at is null and i.status <> 'paid')`,
-      nextTotal: sql<string | null>`(select i.total_txn::text from bank_loan_instalment i
+/**
+ * §21.10 — loan no · bank · principal · outstanding · next due · overdue flag
+ * · status. One page of fifty with the true count (HD15): the view and the
+ * search are in the query. Overdue is an active loan with an unpaid
+ * instalment due before today.
+ */
+export async function listForScreen(tx: Tx, filter: LoanListFilter = {}) {
+  const asOf = today();
+  const unpaidPastDue = sql`exists (select 1 from bank_loan_instalment i
                                where i.loan_id = ${bankLoan.id} and i.superseded_at is null and i.status <> 'paid'
-                               order by i.sequence limit 1)`,
-      overdueCount: sql<number>`(select count(*)::int from bank_loan_instalment i
-                               where i.loan_id = ${bankLoan.id} and i.superseded_at is null and i.status <> 'paid'
-                                 and i.due_date < ${businessToday()}::date)`,
-      allocatedTxn: sql<string>`bank_loan_allocated_txn(${bankLoan.id})::text`,
-    })
-    .from(bankLoan)
-    .innerJoin(bank, eq(bank.code, bankLoan.bankCode))
-    .innerJoin(bankCashAccount, eq(bankCashAccount.id, bankLoan.bankCashAccountId))
-    .orderBy(desc(bankLoan.createdAt));
-  const shaped = rows.map((row) => {
-    const principal = amountOf(row.principalTxn);
-    const live = row.status === 'active';
-    return {
-      ...row,
-      outstandingTxn: money(row.status === 'cancelled' ? 0n : principal - amountOf(row.repaidTxn)),
-      overdue: live && row.overdueCount > 0,
-      nextDue: live || row.status === 'approved' ? row.nextDue : null,
-    };
+                                 and i.due_date < ${asOf}::date)`;
+  const view = filter.view ?? 'open';
+  const where = and(
+    view === 'open'
+      ? inArray(bankLoan.status, ['draft', 'approved', 'active'])
+      : view === 'overdue'
+        ? and(eq(bankLoan.status, 'active'), unpaidPastDue)
+        : view === 'closed'
+          ? inArray(bankLoan.status, ['fully_repaid', 'cancelled'])
+          : undefined,
+    searchOf(
+      [bankLoan.loanNo, bank.name, bankCashAccount.code, bankLoan.currency, bankLoan.status, bankLoan.principalTxn],
+      filter.search,
+    ) ?? undefined,
+  );
+  return registerPage({
+    paging: filter,
+    count: async () => {
+      const [row] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(bankLoan)
+        .innerJoin(bank, eq(bank.code, bankLoan.bankCode))
+        .innerJoin(bankCashAccount, eq(bankCashAccount.id, bankLoan.bankCashAccountId))
+        .where(where);
+      return row?.n ?? 0;
+    },
+    rows: async ({ limit, offset }) => {
+      const rows = await tx
+        .select({
+          id: bankLoan.id,
+          loanNo: bankLoan.loanNo,
+          bankName: bank.name,
+          accountCode: bankCashAccount.code,
+          currency: bankLoan.currency,
+          principalTxn: bankLoan.principalTxn,
+          commissionTxn: bankLoan.commissionTxn,
+          status: bankLoan.status,
+          disbursementDate: bankLoan.disbursementDate,
+          maturityDate: bankLoan.maturityDate,
+          createdAt: bankLoan.createdAt,
+          repaidTxn: sql<string>`coalesce((select sum(i.principal_txn) from bank_loan_instalment i
+                                   where i.loan_id = ${bankLoan.id} and i.superseded_at is null and i.status = 'paid'), 0)::text`,
+          nextDue: sql<string | null>`(select min(i.due_date)::text from bank_loan_instalment i
+                                   where i.loan_id = ${bankLoan.id} and i.superseded_at is null and i.status <> 'paid')`,
+          nextTotal: sql<string | null>`(select i.total_txn::text from bank_loan_instalment i
+                                   where i.loan_id = ${bankLoan.id} and i.superseded_at is null and i.status <> 'paid'
+                                   order by i.sequence limit 1)`,
+          overdueCount: sql<number>`(select count(*)::int from bank_loan_instalment i
+                                   where i.loan_id = ${bankLoan.id} and i.superseded_at is null and i.status <> 'paid'
+                                     and i.due_date < ${asOf}::date)`,
+          allocatedTxn: sql<string>`bank_loan_allocated_txn(${bankLoan.id})::text`,
+        })
+        .from(bankLoan)
+        .innerJoin(bank, eq(bank.code, bankLoan.bankCode))
+        .innerJoin(bankCashAccount, eq(bankCashAccount.id, bankLoan.bankCashAccountId))
+        .where(where)
+        .orderBy(desc(bankLoan.createdAt), desc(bankLoan.id))
+        .limit(limit)
+        .offset(offset);
+      return rows.map((row) => {
+        const principal = amountOf(row.principalTxn);
+        const live = row.status === 'active';
+        return {
+          ...row,
+          outstandingTxn: money(row.status === 'cancelled' ? 0n : principal - amountOf(row.repaidTxn)),
+          overdue: live && row.overdueCount > 0,
+          nextDue: live || row.status === 'approved' ? row.nextDue : null,
+        };
+      });
+    },
   });
-  switch (filter.view ?? 'open') {
-    case 'open':
-      return shaped.filter((row) => ['draft', 'approved', 'active'].includes(row.status));
-    case 'overdue':
-      return shaped.filter((row) => row.overdue);
-    case 'closed':
-      return shaped.filter((row) => ['fully_repaid', 'cancelled'].includes(row.status));
-    default:
-      return shaped;
-  }
 }
 
 export async function view(tx: Tx, loanNo: string) {

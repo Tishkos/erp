@@ -13,8 +13,8 @@ import {
   Submit,
   SubmitRow,
   admin as s,
-  matches,
 } from '@/components/admin';
+import { Pagination } from '@/components/ui';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -64,14 +64,16 @@ export default async function PdListPage({ searchParams }: { searchParams: Searc
   const applied = typeof params.applied === 'string' ? params.applied : null;
   const today = businessToday();
 
-  const { rows, warning, imports, bankRows, statuses } = await withCurrentUser(async (tx) => ({
-    rows: await customs.list(tx, { view }),
+  const { result, warning, imports, bankRows, statuses } = await withCurrentUser(async (tx) => ({
+    result: await customs.listForScreen(tx, { view, search: outcome.q, page: outcome.page }),
     warning: await customs.warningDays(tx),
     imports: mayCreate ? await customs.importChoices(tx) : [],
     bankRows: mayCreate ? await banks.listActive(tx) : [],
     statuses: mayCreate ? await customs.statuses(tx) : [],
   }));
-  const shown = rows.filter((row) => matches(row, outcome.q));
+  const shown = result.rows;
+  const query = (p: number) =>
+    [outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '', `view=${view}`, `page=${p}`].filter(Boolean).join('&');
   const ps = (code: string, name: string) => (locale !== 'en' && t.has(`ps.${code}`) ? t(`ps.${code}`) : name);
 
 
@@ -152,13 +154,13 @@ export default async function PdListPage({ searchParams }: { searchParams: Searc
         <div className={s.sapWindow}>
           <h2 className={s.sapTitle} id="pd-list-title">
             <span>{page('pds')}</span>
-            <span className={s.sapTitleMeta}>{admin('rows_shown', { count: shown.length })}</span>
+            <span className={s.sapTitleMeta}>{admin('rows_shown', { count: result.total })}</span>
           </h2>
 
           <ListToolbar
             clearHref="/payables/pd"
             clearLabel={admin('clear_search')}
-            countLabel={admin('rows_shown', { count: shown.length })}
+            countLabel={admin('rows_shown', { count: result.total })}
             placeholder={admin('search_placeholder')}
             q={outcome.q}
             searchLabel={admin('search')}
@@ -269,6 +271,9 @@ export default async function PdListPage({ searchParams }: { searchParams: Searc
               </tbody>
             </table>
           </div>
+          {result.pages > 1 ? (
+            <Pagination count={result.pages} current={result.page} hrefFor={(p) => `/payables/pd?${query(p)}`} labels={{ label: admin('pagination'), previous: admin('previous'), next: admin('next'), page: (p) => admin('page_n', { page: p }) }} locale={locale} />
+          ) : null}
         </div>
       </section>
     </AdminPage>
