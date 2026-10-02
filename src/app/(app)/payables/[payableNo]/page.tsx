@@ -258,39 +258,13 @@ export default async function PayablePage({
 
       <DocumentWindow
         actions={
-          mayEdit && !row.cancelledAt && !row.closedAt ? (
-            <>
-              <Form action={setTerms}>
-                <Hidden name="payable_no" value={row.payableNo} />
-                <Field
-                  defaultValue={row.paymentTermsText ?? ''}
-                  id="terms-edit"
-                  label={t('terms')}
-                  name="payment_terms"
-                  required
-                />
-                <Submit label={t('terms_save')} tone="secondary" variant="document" />
-              </Form>
-              <Form action={linkInvoice}>
-                <Hidden name="payable_no" value={row.payableNo} />
-                <Field
-                  hint={t('link_invoice_hint')}
-                  id="link-invoice"
-                  label={t('link_invoice')}
-                  name="ap_invoice_id"
-                  required
-                />
-                <Submit label={t('link_save')} tone="secondary" variant="document" />
-              </Form>
-              {mayCancel ? (
-                <ReasonForm
-                  action={cancelPayable}
-                  hidden={{ payable_no: row.payableNo }}
-                  label={t('cancel')}
-                  reasonLabel={t('cancel_reason')}
-                />
-              ) : null}
-            </>
+          mayEdit && !row.cancelledAt && !row.closedAt && mayCancel ? (
+            <ReasonForm
+              action={cancelPayable}
+              hidden={{ payable_no: row.payableNo }}
+              label={t('cancel')}
+              reasonLabel={t('cancel_reason')}
+            />
           ) : null
         }
         documentType={type.name}
