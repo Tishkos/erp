@@ -46,12 +46,13 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import qrcode from 'qrcode-terminal';
 import { pool, withScope, type RequestScope } from '../../src/server/db/client';
-import { detectLocale, digestDue, e164ToJid, isGroupJid, jidToE164, parseCommand, words } from '../../src/server/domain/whatsapp';
+import { detectLocale, digestDue, e164ToJid, helpText, isGroupJid, jidToE164, parseCommand, words } from '../../src/server/domain/whatsapp';
 import * as audit from '../../src/server/services/audit';
 import * as runner from '../../src/server/services/notification-runner';
 import * as wa from '../../src/server/services/whatsapp';
 import * as actions from '../../src/server/services/whatsapp-actions';
-import { anthropicClient, modelRouter } from '../../src/server/services/whatsapp-router';
+import { agentClientFor, anthropicClient, modelRouter } from '../../src/server/services/whatsapp-router';
+import { runAgentFor, type AgentClient } from '../../src/server/services/whatsapp-agent';
 
 const POLL_SECONDS = Math.max(5, Number(process.env.WA_POLL_SECONDS ?? '20'));
 const RESET = process.argv.includes('--reset-pairing');
@@ -203,6 +204,7 @@ async function handleInbound(
   send: wa.Transport,
   router: ((text: string, locale: 'ar' | 'en') => Promise<import('../../src/server/domain/whatsapp').Intent>) | undefined,
   message: WAMessage,
+  agentClient?: AgentClient,
 ): Promise<void> {
   const { e164, groupJid } = senderOf(message);
   const text = textOf(message)?.trim();
@@ -252,10 +254,26 @@ async function handleInbound(
     return;
   }
 
-  // 3. The answer, as the asker, read-only.
+  // 3. The answer, as the asker, read-only. With a key the agent answers: it
+  // reads the question itself and reaches for whichever tools it needs, with
+  // the last few turns of this chat for context. The catalogue's phrases are
+  // the fallback when there is no key.
+  const history = await withScope(scope, (tx) => wa.recentTurns(tx, { groupJid, e164 }));
   let reply: wa.Reply;
   try {
-    reply = await wa.answer({ userId: sender.userId, text, settings, locale, ...(router ? { router } : {}) });
+    reply = await wa.answer({
+      userId: sender.userId,
+      text,
+      settings,
+      locale,
+      ...(router ? { router } : {}),
+      ...(agentClient
+        ? {
+            agent: (ctx, question, userName) =>
+              runAgentFor({ client: agentClient, model: settings.agentModel, ctx, question, history, userName }),
+          }
+        : {}),
+    });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     log(`inbound from ${e164}: failed — ${detail}`);
@@ -461,6 +479,54 @@ async function sendDigest(scope: RequestScope, send: wa.Transport, settings: Awa
   log(`digest for ${day}: ${recipients.length} recipient(s)`);
 }
 
+// ---------------------------------------------------------------------------
+// The greeting on connect
+// ---------------------------------------------------------------------------
+
+/**
+ * A reconnect is not news. Baileys drops and resumes a socket routinely — a
+ * 515 on first pair, a network blink, a server restart — and a greeting on
+ * every one of those would be the bot talking over the people in the group.
+ * One greeting, then quiet for this long however many times it reconnects.
+ */
+const GREETING_QUIET_MS = 30 * 60_000;
+let lastGreetingAt = 0;
+
+/**
+ * Says hello in the group when the bridge comes up, so the room can see the
+ * bot is listening — and says what it can be asked, which is the only
+ * onboarding anybody reads.
+ */
+async function greet(scope: RequestScope, send: wa.Transport, botE164: string | null): Promise<void> {
+  const settings = await withScope(scope, (tx) => wa.settings(tx));
+  if (!settings.groupJid) return;
+  // The log's `e164` is a phone number by CHECK constraint, and a greeting is
+  // the bot speaking: its own number is the honest answer. Without one (an
+  // odd pairing) the words still go out and only the log row is skipped.
+  if (Date.now() - lastGreetingAt < GREETING_QUIET_MS) return;
+  lastGreetingAt = Date.now();
+
+  const locale = settings.digestLocale;
+  const hello =
+    locale === 'ar'
+      ? '👋 أهلاً، أنا بوت نظام قيمة السفينة. كيف أساعدك؟'
+      : '👋 Hello — the QS ERP bot is connected. How can I help?';
+  const text = `${hello}\n\n${helpText(locale)}`;
+
+  try {
+    const outId = botE164
+      ? await withScope(scope, (tx) =>
+          wa.recordOutbound(tx, { e164: botE164, groupJid: settings.groupJid, body: text, intent: 'greeting' }),
+        )
+      : null;
+    const { waMessageId } = await send({ e164: botE164 ?? '', groupJid: settings.groupJid }, { text });
+    if (outId !== null) await withScope(scope, (tx) => wa.markOutbound(tx, outId, { status: 'sent', waMessageId }));
+    log('greeting posted to the group');
+  } catch (error) {
+    log(`greeting failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 /**
  * `--list-groups` — every group the bot has been added to, with its id.
  *
@@ -504,7 +570,12 @@ async function main(): Promise<void> {
   const routerClient = await anthropicClient(process.env.ANTHROPIC_API_KEY);
   const routerModel = process.env.WA_ROUTER_MODEL?.trim() || settings.routerModel;
   const router = routerClient ? modelRouter(routerClient, routerModel) : undefined;
-  log(`router: patterns${router ? ` + ${routerModel}` : ' only (no ANTHROPIC_API_KEY)'}; poll every ${POLL_SECONDS}s`);
+  // WA-3 — the agent, when there is a key. With it, a question is worked out
+  // rather than matched; without it, the catalogue's phrases still answer.
+  const agent = await agentClientFor(process.env.ANTHROPIC_API_KEY);
+  log(
+    `brain: ${agent ? `agent on ${settings.agentModel}` : router ? `router ${routerModel}` : 'phrase patterns only (no ANTHROPIC_API_KEY)'}; poll every ${POLL_SECONDS}s`,
+  );
 
   let socket: WASocket | null = null;
   let stopping = false;
@@ -547,14 +618,23 @@ async function main(): Promise<void> {
       if (connection === 'open') {
         log(`connected as ${socket?.user?.id ?? '?'}`);
         void heartbeat('connected');
+        if (!LIST_GROUPS) void greet(scope, send, jidToE164(jidNormalizedUser(socket?.user?.id ?? '')));
         // `--list-groups` is a question, not a service: it answers and leaves.
         if (LIST_GROUPS && socket) {
           const live = socket;
           void listGroups(live)
             .catch((error) => log(`listing groups failed: ${error instanceof Error ? error.message : String(error)}`))
             .finally(() => {
+              // The socket first, then a breath for its last credentials
+              // write, then the pool. Closing the pool while Baileys was
+              // still saving produced "Cannot use a pool after calling end".
               stopping = true;
-              void pool.end().finally(() => process.exit(0));
+              try {
+                live.end(undefined);
+              } catch {
+                /* already gone */
+              }
+              setTimeout(() => void pool.end().finally(() => process.exit(0)), 1500);
             });
         }
       }
@@ -572,7 +652,7 @@ async function main(): Promise<void> {
       if (type !== 'notify') return;
       for (const message of messages) {
         if (message.key.fromMe) continue;
-        handleInbound(scope, send, router, message).catch((e) => log(`inbound handling failed: ${e}`));
+        handleInbound(scope, send, router, message, agent ?? undefined).catch((e) => log(`inbound handling failed: ${e}`));
       }
     });
   };

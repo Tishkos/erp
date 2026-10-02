@@ -539,6 +539,46 @@ export async function markOutbound(
     .where(eq(whatsappMessage.id, id));
 }
 
+/**
+ * WA-3 — the conversation so far, so a follow-up means something.
+ *
+ * "All" after a list of warehouses, "and Erbil?" after one of them: a person
+ * speaks in a thread and a bot that forgets the previous line is a search box
+ * with manners. The last few messages of *this* chat (the group, or that one
+ * number), newest excluded — the question being answered is passed
+ * separately — oldest first, and only within the hour so yesterday's
+ * conversation does not colour today's answer.
+ */
+export async function recentTurns(
+  tx: Tx,
+  input: { readonly groupJid: string | null; readonly e164: string; readonly limit?: number; readonly withinMinutes?: number },
+): Promise<{ readonly role: 'user' | 'assistant'; readonly text: string }[]> {
+  const since = new Date(Date.now() - (input.withinMinutes ?? 60) * 60_000);
+  const rows = await tx
+    .select({ direction: whatsappMessage.direction, body: whatsappMessage.body, createdAt: whatsappMessage.createdAt })
+    .from(whatsappMessage)
+    .where(
+      and(
+        input.groupJid ? eq(whatsappMessage.groupJid, input.groupJid) : eq(whatsappMessage.e164, input.e164),
+        sql`${whatsappMessage.createdAt} >= ${since.toISOString()}`,
+        sql`${whatsappMessage.body} is not null`,
+        sql`${whatsappMessage.redactedAt} is null`,
+      ),
+    )
+    .orderBy(desc(whatsappMessage.createdAt))
+    .limit(input.limit ?? 10);
+
+  return rows
+    .reverse()
+    .map((row) => ({
+      role: row.direction === 'in' ? ('user' as const) : ('assistant' as const),
+      // A long answer is summarised by its first lines: the thread needs the
+      // gist, not every row of an attachment that was already sent.
+      text: (row.body ?? '').split('\n').slice(0, 12).join('\n').slice(0, 1500),
+    }))
+    .filter((turn) => turn.text.trim().length > 0);
+}
+
 export interface LogRow {
   readonly id: bigint;
   readonly direction: string;
@@ -715,7 +755,18 @@ export class NotAllowedToAsk extends Error {
   }
 }
 
-interface ReadContext {
+/** What `runAgent` gives back — declared here so `answer` does not import it. */
+export interface AgentOutcome {
+  readonly text: string;
+  /** Opaque in the loop; a `PrintModel` by the time it reaches the renderer. */
+  readonly model: unknown | null;
+  readonly format?: 'pdf' | 'xlsx';
+  readonly exportObject?: string;
+  readonly exportKey?: string;
+  readonly used: readonly string[];
+}
+
+export interface ReadContext {
   readonly tx: Tx;
   readonly principal: Principal;
   readonly branchCode: string;
@@ -724,7 +775,7 @@ interface ReadContext {
   readonly today: string;
 }
 
-interface Drafted {
+export interface Drafted {
   readonly text: string;
   /** A model to attach when there are more rows than fit inline, or always. */
   readonly model?: PrintModel | null;
@@ -764,6 +815,17 @@ export async function answer(input: {
   readonly locale?: BotLocale;
   readonly now?: Date;
   readonly router?: (text: string, locale: BotLocale) => Promise<Intent>;
+  /**
+   * WA-3 — the agent, when the bridge has a key for it.
+   *
+   * Given one, it answers instead of the catalogue: it holds the same tools
+   * the catalogue is made of and several more, so a question the eleven
+   * phrases never covered is worked out rather than refused. The catalogue
+   * remains the answer when there is no key.
+   */
+  readonly agent?: (ctx: ReadContext, question: string, userName: string) => Promise<AgentOutcome>;
+  /** The last few turns of this chat, so "all" and "and Erbil?" mean something. */
+  readonly history?: readonly { readonly role: 'user' | 'assistant'; readonly text: string }[];
 }): Promise<Reply> {
   const at = input.now ?? new Date();
   const locale = input.locale ?? detectLocale(input.text);
@@ -774,16 +836,33 @@ export async function answer(input: {
   const branchCode = principal.defaultBranchCode ?? '';
   if (!branchCode) throw new NotAllowedToAsk('user has no branch');
 
-  let intent = route(input.text);
-  if (intent.kind === 'none' && input.router) intent = await input.router(input.text, locale);
+  // With an agent there is nothing to route to: it reads the question itself.
+  let intent: Intent = input.agent ? { kind: 'agent' } : route(input.text);
+  if (!input.agent && intent.kind === 'none' && input.router) intent = await input.router(input.text, locale);
 
   const scope = scopeFor(principal, branchCode);
-  const { drafted, head, userName } = await withReadOnlyScope(scope, async (tx) => {
+  const { drafted, head, userName, usedTools } = await withReadOnlyScope(scope, async (tx) => {
     const ctx: ReadContext = { tx, principal, branchCode, locale, settings, today: businessToday(at) };
-    const drafted = await draft(ctx, intent);
+    const [me0] = await tx.select({ name: appUser.displayName }).from(appUser).where(eq(appUser.id, principal.userId)).limit(1);
+    const askerName = me0?.name ?? principal.userId;
+    let usedTools: readonly string[] = [];
+    let drafted: Drafted;
+    if (input.agent) {
+      const outcome = await input.agent(ctx, input.text, askerName);
+      usedTools = outcome.used;
+      drafted = {
+        text: outcome.text,
+        model: (outcome.model ?? null) as PrintModel | null,
+        ...(outcome.format ? { format: outcome.format } : {}),
+        ...(outcome.exportObject ? { exportObject: outcome.exportObject } : {}),
+        ...(outcome.exportKey ? { exportKey: outcome.exportKey } : {}),
+        detail: { tools: outcome.used },
+      };
+    } else {
+      drafted = await draft(ctx, intent);
+    }
     const head = drafted.model ? await letterheadFor(tx, { locale, userId: principal.userId, branchCode, at: at.toISOString() }) : null;
-    const [me] = await tx.select({ name: appUser.displayName }).from(appUser).where(eq(appUser.id, principal.userId)).limit(1);
-    return { drafted, head, userName: me?.name ?? principal.userId };
+    return { drafted, head, userName: askerName, usedTools };
   });
 
   const w = words(locale);
@@ -810,7 +889,13 @@ export async function answer(input: {
     locale,
     text,
     attachment,
-    detail: { ...(drafted.detail ?? {}), intent, rows: drafted.model ? rowsIn(drafted.model) : null, attachment: attachment ? { fileName: attachment.fileName, bytes: attachment.body.length } : null },
+    detail: {
+      ...(drafted.detail ?? {}),
+      intent,
+      ...(usedTools.length > 0 ? { tools: usedTools } : {}),
+      rows: drafted.model ? rowsIn(drafted.model) : null,
+      attachment: attachment ? { fileName: attachment.fileName, bytes: attachment.body.length } : null,
+    },
     exported,
     readAs: { userId: principal.userId, userName, branchCode, at },
   };
@@ -851,8 +936,12 @@ export async function auditAnswer(tx: Tx, reply: Reply, input: { readonly inboun
 
 // --- the intents ------------------------------------------------------------
 
-async function draft(ctx: ReadContext, intent: Intent): Promise<Drafted> {
+export async function draft(ctx: ReadContext, intent: Intent): Promise<Drafted> {
   switch (intent.kind) {
+    case 'agent':
+      // The agent writes its own answer; this arm exists so the switch is
+      // exhaustive and so a stray 'agent' intent cannot fall through silently.
+      return { text: words(ctx.locale).unknown };
     case 'help':
       return { text: helpText(ctx.locale) };
     case 'none':
@@ -942,7 +1031,7 @@ async function summary(ctx: ReadContext): Promise<Drafted> {
   return { text: lines.join('\n'), detail: { bands: Object.entries(d).filter(([, v]) => v !== null).map(([k]) => k) } };
 }
 
-async function warehousesFor(ctx: ReadContext, asked: string) {
+export async function warehousesFor(ctx: ReadContext, asked: string) {
   const all = await ctx.tx.select({ code: warehouse.code, name: warehouse.name, branchCode: warehouse.branchCode }).from(warehouse).orderBy(asc(warehouse.code));
   const askedCode = asked.trim().toUpperCase();
   const byCode = all.filter((w) => w.code.toUpperCase() === askedCode);

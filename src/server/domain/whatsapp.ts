@@ -173,6 +173,12 @@ export type Intent =
   | { readonly kind: 'stopped'; readonly needsReason: boolean }
   | { readonly kind: 'supplier'; readonly party: string }
   | { readonly kind: 'customer'; readonly party: string }
+  /**
+   * WA-3 — the agent answered, rather than one of the catalogue's phrases.
+   * It is a label for the log, not a thing the router may choose: the agent
+   * is reached by the bridge having a key, never by a word in a message.
+   */
+  | { readonly kind: 'agent' }
   | { readonly kind: 'none' };
 
 export type IntentKind = Intent['kind'];

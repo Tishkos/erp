@@ -41,6 +41,10 @@ const LIVE_USE: Readonly<Record<string, string>> = {
   'scripts/ops/statement-coverage.ts': 'reads',
   'scripts/ops/stock-movement-trace.ts': 'reads',
   'scripts/ops/run-job.sh': 'runs another script; the guard is theirs',
+  'scripts/ops/prepare-legacy-import.ts':
+    'the configuration the legacy import asks for, on the install that is being loaded — idempotent, and every row it writes is editable on its own screen',
+  'scripts/ops/legacy-books-import.ts':
+    'loads the old books onto the live install at the cut-over; dry run by default, --apply to write, and the same service the screen calls',
   'scripts/ops/create-first-user.ts':
     'the first sign-in on an install that has nobody — which is a live install by the time it is needed; it refuses the moment any user exists, so it cannot add a second way in',
 };

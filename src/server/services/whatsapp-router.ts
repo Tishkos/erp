@@ -119,3 +119,31 @@ export async function anthropicClient(apiKey: string | undefined): Promise<Route
       }) as Promise<{ content: ReadonlyArray<{ type: string; name?: string; input?: unknown }> }>,
   };
 }
+
+/**
+ * The agent's client — WA-3.
+ *
+ * The router's client forces a tool choice on every call, which is right for
+ * classification and wrong for a conversation: the agent has to be able to
+ * *answer*, not only to pick. So its own thin wrapper, with the tool loop's
+ * message shapes passed through unchanged.
+ */
+export async function agentClientFor(apiKey: string | undefined): Promise<import('./whatsapp-agent').AgentClient | null> {
+  if (!apiKey) return null;
+  const { default: Anthropic } = await import('@anthropic-ai/sdk');
+  const anthropic = new Anthropic({ apiKey });
+  return {
+    create: (input) =>
+      anthropic.messages.create({
+        model: input.model,
+        max_tokens: input.max_tokens,
+        system: input.system,
+        tools: input.tools.map((t) => ({
+          name: t.name,
+          description: t.description,
+          input_schema: t.input_schema as { type: 'object'; [k: string]: unknown },
+        })),
+        messages: input.messages as never,
+      }) as never,
+  };
+}
