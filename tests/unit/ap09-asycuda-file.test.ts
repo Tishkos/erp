@@ -21,9 +21,9 @@ import type { CellValue } from '@/server/xlsx-read';
 
 /** The statuses as the PD table holds them, with ASYCUDA's own wording. */
 const STATUSES = [
-  { code: 'validated', name: 'Validated', asycudaLabel: 'Validated', isTerminal: false },
-  { code: 'submitted', name: 'Submitted', asycudaLabel: 'Submitted', isTerminal: false },
-  { code: 'written_off', name: 'Written off', asycudaLabel: 'Written Off', isTerminal: true },
+  { code: 'validated', name: 'Validated', asycudaLabel: 'Validated', isTerminal: false, allowsPayment: true, isExpired: false },
+  { code: 'submitted', name: 'Submitted', asycudaLabel: 'Submitted', isTerminal: false, allowsPayment: false, isExpired: false },
+  { code: 'written_off', name: 'Written off', asycudaLabel: 'Written Off', isTerminal: true, allowsPayment: false, isExpired: false },
 ];
 
 describe('AP-9 · which files the screen will take', () => {
