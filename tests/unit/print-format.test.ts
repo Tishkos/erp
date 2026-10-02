@@ -44,8 +44,8 @@ describe('bidi · a line is cut into runs the shaper can lay out on its own', ()
 
   it('lays out an English line with an Arabic name inside it', () => {
     expect(directionOf('Supplier Name')).toBe('ltr');
-    expect(directionOf('قيمة السفينة')).toBe('rtl');
-    expect(visualRuns('Customer: قيمة السفينة', 'ltr').map((run) => run.direction)).toEqual(['ltr', 'rtl']);
+    expect(directionOf('قمة السفینە')).toBe('rtl');
+    expect(visualRuns('Customer: قمة السفینە', 'ltr').map((run) => run.direction)).toEqual(['ltr', 'rtl']);
   });
 });
 

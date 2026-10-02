@@ -520,7 +520,7 @@ async function greet(scope: RequestScope, send: wa.Transport, botE164: string | 
   const locale = settings.digestLocale;
   const hello =
     locale === 'ar'
-      ? '👋 أهلاً، أنا بوت نظام قيمة السفينة. كيف أساعدك؟'
+      ? '👋 أهلاً، أنا بوت نظام قمة السفینە. كيف أساعدك؟'
       : '👋 Hello — the QS ERP bot is connected. How can I help?';
   const text = `${hello}\n\n${helpText(locale)}`;
 
