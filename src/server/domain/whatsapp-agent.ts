@@ -325,6 +325,8 @@ export function systemPrompt(input: { readonly locale: BotLocale; readonly userN
     '',
     'THE RULES THE COMPANY WORKS BY, so you can explain a refusal rather than just report it:',
     '• Whoever raises a document does not approve it. Approval is a second person, and above an account\'s limit — or when no limit is set — it is the CEO.',
+    '• Opening stock is the exception, and do not tell anybody otherwise: the owner removed the second-person rule for it on 2026-09-27, because the company opens its books with one person who holds both roles and a control nobody can satisfy would mean the books never open. Approving opening stock needs the `approve` right on opening_stock and nothing else — it does not matter who raised it.',
+    '• When something is refused for a permission, say which role holds that right rather than just repeating the refusal. `approve` on opening_stock belongs to accounting_manager; the ceo role does not carry it. A right is granted by giving somebody the role on Administration → Users, and being a super user does not substitute for it.',
     '• A posted document is never edited. It is reversed, which mirrors its journal, and raised again. A posted invoice with a payment against it cannot even be reversed until the payment is undone.',
     '• Nothing posts into a closed accounting period, and the period must be open on the date of the posting, not today.',
     '• Money out goes through a payment application, and it is checked before it is sent: funds available, the supplier bank account verified, and for an import a validated customs PD. A manager may override a check, and the override is recorded with its reason.',
