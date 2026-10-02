@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { rowCount, runAdmin, runAdminAndReturn, text, withQuery } from '@/server/admin-action';
 import { parseDecimal } from '@domain/money';
 import { parseQuantity } from '@domain/uom';
+import * as attachments from '@/server/services/attachments';
 import * as ap from '@/server/services/ap-invoice';
 import * as inventory from '@/server/services/inventory';
 import * as expenses from '@/server/services/expenses';
@@ -271,3 +272,37 @@ export async function addInvoiceNoteAction(formData: FormData): Promise<void> {
     record(invoiceNo),
   );
 }
+
+/**
+ * The supplier's own paperwork, kept against the invoice it proves — the
+ * PDF from the factory, the packing list, the letter about a price.
+ *
+ * As many as anybody wants, and they stay: an attachment is never removed by
+ * posting, reversing or linking the invoice to an import.
+ */
+export async function attachToInvoice(formData: FormData): Promise<void> {
+  const invoiceNo = text(formData, 'invoice_no');
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(`/payables/invoices/${encodeURIComponent(invoiceNo)}?error=attachment_missing`);
+  }
+  const upload = file as File;
+  const content = Buffer.from(await upload.arrayBuffer());
+  await runAdminAndReturn(
+    async (tx, ctx) => {
+      const found = await ap.viewByNo(tx, invoiceNo);
+      // `viewByNo` answers null for a number nobody holds; the redirect above
+      // only guards the file, not the invoice.
+      if (!found) redirect(`/payables/invoices/${encodeURIComponent(invoiceNo)}?error=not_found`);
+      await attachments.upload(tx, ctx, {
+        objectType: ap.PERMISSION_OBJECT,
+        objectId: found.invoice.id,
+        fileName: upload.name,
+        content,
+      });
+      return found;
+    },
+    () => `/payables/invoices/${encodeURIComponent(invoiceNo)}?saved=1`,
+  );
+}
+

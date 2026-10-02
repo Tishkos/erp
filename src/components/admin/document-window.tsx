@@ -54,6 +54,7 @@ export function DocumentWindow({
   children,
   actions,
   totals = [],
+  attachments,
   auditHref,
   auditLabel,
   id = 'document',
@@ -76,6 +77,12 @@ export function DocumentWindow({
   readonly actions?: ReactNode;
   readonly totals?: readonly DocumentTotal[];
   readonly auditHref?: string | undefined;
+  /**
+   * The paperwork, as a door in the title bar beside the history — the shape
+   * journals have had since they were written. A document that cannot hold
+   * the paper it stands for leaves the paper somewhere else.
+   */
+  readonly attachments?: ReactNode;
   readonly auditLabel?: string | undefined;
   readonly id?: string;
 }) {
@@ -91,12 +98,15 @@ export function DocumentWindow({
               <bdi dir="ltr">{number}</bdi>
             </span>
           </span>
-          {auditHref && auditLabel ? (
+          {attachments || (auditHref && auditLabel) ? (
             <span className={admin.sapTitleActions}>
-              <Link className={admin.sapIconButton} href={auditHref} title={auditLabel}>
-                <History aria-hidden="true" />
-                <span>{auditLabel}</span>
-              </Link>
+              {attachments}
+              {auditHref && auditLabel ? (
+                <Link className={admin.sapIconButton} href={auditHref} title={auditLabel}>
+                  <History aria-hidden="true" />
+                  <span>{auditLabel}</span>
+                </Link>
+              ) : null}
             </span>
           ) : null}
         </div>

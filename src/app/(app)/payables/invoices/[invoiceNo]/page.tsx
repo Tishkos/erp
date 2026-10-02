@@ -8,6 +8,9 @@ import { RecordHistory } from '@/components/admin/history';
 import { InvoiceSettlement } from '@/components/admin/invoice-settlement';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { Attachments } from '@/components/admin/attachments';
+import * as attachmentsService from '@/server/services/attachments';
+import { AttachmentsButton } from '@/components/admin/icon-dialog';
 import { Denied } from '@/components/denied';
 import { ExportMenu } from '@/components/print/export-menu';
 import { PrintSheet } from '@/components/print/print-sheet';
@@ -24,17 +27,7 @@ import * as warehouses from '@/server/services/warehouses';
 import * as expenses from '@/server/services/expenses';
 import * as bankCash from '@/server/services/bank-cash-accounts';
 import * as payables from '@/server/services/payables';
-import {
-  invoiceLineAvailability,
-  postApInvoice,
-  reverseApInvoice,
-  saveApInvoiceAccounts,
-  removeApInvoiceLine,
-  saveApInvoiceLine,
-  submitApInvoice,
-  addInvoiceNoteAction,
-  markPaidAction,
-} from '../actions';
+import { addInvoiceNoteAction, attachToInvoice, invoiceLineAvailability, markPaidAction, postApInvoice, removeApInvoiceLine, reverseApInvoice, saveApInvoiceAccounts, saveApInvoiceLine, submitApInvoice } from '../actions';
 import { businessToday } from '@/server/domain/business-date';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '@/server/domain/money';
 import { QUANTITY_FACTOR, parseQuantity } from '@/server/domain/uom';
@@ -242,6 +235,12 @@ export default async function ApInvoicePage({
     can(principal, 'post', 'supplier_payment');
   const importApplication = found.importApplication;
 
+  // The paperwork: how many there are, and whether this person may add one.
+  const attached = await withCurrentUser((tx) =>
+    attachmentsService.currentFor(tx, ap.PERMISSION_OBJECT, invoice.id),
+  );
+  const mayAttach = can(context.principal, 'create', 'attachment');
+
   const fields: DocumentField[] = [
     { label: column('invoice_no'), value: <bdi dir="ltr">{invoice.invoiceNo}</bdi> },
     ...(importApplication
@@ -393,6 +392,22 @@ export default async function ApInvoicePage({
               </form>
             ) : null}
           </>
+        }
+        attachments={
+          <AttachmentsButton
+            closeLabel={t('close')}
+            count={attached.length}
+            label={t('attachments.title')}
+            title={t('attachments.title')}
+          >
+            <Attachments
+              action={attachToInvoice}
+              hidden={{ invoice_no: invoice.invoiceNo }}
+              mayAttach={mayAttach}
+              objectId={invoice.id}
+              objectType={ap.PERMISSION_OBJECT}
+            />
+          </AttachmentsButton>
         }
         auditHref="#audit-log"
         auditLabel={t('history')}

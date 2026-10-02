@@ -168,7 +168,7 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
   { key: 'sales', icon: ShoppingCart, sectionKeys: ['sales'] },
   // Purchasing became Payables — one module for everything owed (REQ-AP-001 D7).
   // REQ-FIX-001 FIX-1 — four headings, like Accounting's.
-  { key: 'payables', icon: ShoppingBag, sectionKeys: ['payables', 'payables_payments', 'payables_suppliers', 'payables_setup'] },
+  { key: 'payables', icon: ShoppingBag, sectionKeys: ['payables', 'payables_suppliers', 'payables_setup'] },
   // Everything logistics in the system (by direction, 2026-10-02).
   { key: 'logistics', icon: Truck, sectionKeys: ['logistics_customs', 'logistics_shipping', 'logistics'] },
   { key: 'money_transfer', icon: ArrowLeftRight, sectionKeys: ['money_transfer'] },

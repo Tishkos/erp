@@ -18,15 +18,30 @@ const section = (key: string) => {
 const keysOf = (key: string) => section(key).items.map((item) => item.key);
 
 describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
-  it('Payables is four headings, in the order a payable lives', () => {
-    expect(keysOf('payables').slice(0, 7)).toEqual(['payables_workbench', 'purchase_orders', 'goods_receipts', 'service_receipts', 'recurring_contracts', 'ap_invoices', 'goods_returns']);
-    expect(keysOf('payables_payments').slice(0, 4)).toEqual(['payment_applications', 'supplier_payments', 'supplier_advances', 'supplier_credit_memos']);
+  it('Payables is three headings, in the order a payable lives', () => {
+    // FIX-1 made it four; the owner asked for three on 2026-10-03, with the
+    // payment screens beside the invoices they pay — a payment is the end of
+    // the same job, not a different kind of work. Who is owed, and the setup,
+    // stay apart.
+    expect(keysOf('payables').slice(0, 10)).toEqual([
+      'payables_workbench',
+      'ap_invoices',
+      'purchase_orders',
+      'goods_receipts',
+      'service_receipts',
+      'recurring_contracts',
+      'payment_applications',
+      'supplier_payments',
+      'supplier_advances',
+      'supplier_credit_memos',
+    ]);
+    expect(MENU.some((s) => s.key === 'payables_payments')).toBe(false);
     expect(keysOf('payables_suppliers').slice(0, 3)).toEqual(['suppliers', 'ap_statements', 'ap_open_items']);
     expect(keysOf('payables_setup')).toEqual(['payables_settings', 'payables_migration']);
   });
 
   it('nothing logistics or banking is left under Payables', () => {
-    const payables = ['payables', 'payables_payments', 'payables_suppliers', 'payables_setup'].flatMap(keysOf);
+    const payables = ['payables', 'payables_suppliers', 'payables_setup'].flatMap(keysOf);
     for (const gone of ['pds', 'asycuda_update', 'shipments', 'containers', 'in_transit', 'loans', 'bank_deposits']) {
       expect(payables, gone).not.toContain(gone);
     }
@@ -53,7 +68,7 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(route('logistics_shipping', 'containers')).toBe('/payables/containers');
     expect(route('logistics_shipping', 'in_transit')).toBe('/inventory/in-transit');
     expect(route('treasury', 'loans')).toBe('/payables/loans');
-    expect(route('payables_payments', 'payment_applications')).toBe('/payables/payment-applications');
+    expect(route('payables', 'payment_applications')).toBe('/payables/payment-applications');
     expect(route('payables', 'purchase_orders')).toBe('/payables/purchase-orders');
   });
 });
