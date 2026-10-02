@@ -191,6 +191,31 @@ export const AGENT_TOOLS = [
     input_schema: noArgs,
   },
   {
+    name: 'invoice',
+    description:
+      "One invoice by its number, either side: a purchase invoice (API-…) with what was bought and what is still unpaid, or a sales invoice (ARI-…) with what the customer owes. Side is 'purchase' or 'sales'.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        side: { ...string, enum: ['purchase', 'sales'] },
+        no: { ...string, description: 'The invoice number.' },
+      },
+      required: ['side', 'no'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'bank_and_cash',
+    description:
+      'The bank and cash accounts with their currency and balance. Use it for "how much is in the bank", "which account", "cash in hand", and before talking about whether a payment can be afforded.',
+    input_schema: { type: 'object', properties: { code: { ...string, description: 'Optional: one account code for its full detail.' } }, additionalProperties: false },
+  },
+  {
+    name: 'employees',
+    description: "The people on the payroll: employee number, name, branch, department, position and status. Use it for \"who works in\", \"find <name>\", headcount.",
+    input_schema: { type: 'object', properties: { search: { ...string, description: 'Optional: part of a name, number, department or position.' } }, additionalProperties: false },
+  },
+  {
     name: 'what_the_bot_can_do',
     description: 'The short list of set phrases the bot also understands. Use it only when asked what it can do.',
     input_schema: noArgs,

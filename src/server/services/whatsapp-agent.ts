@@ -9,6 +9,10 @@
  */
 import { helpText, money, quantity } from '../domain/whatsapp';
 import { runAgent, type AgentClient, type AgentResult, type PriorTurn, type ToolOutcome } from '../domain/whatsapp-agent';
+import * as apInvoices from './ap-invoice';
+import * as arInvoices from './ar-invoice';
+import * as bankAccounts from './bank-cash-accounts';
+import * as employeesService from './employees';
 import * as inventoryReports from './inventory-reports';
 import * as openItemsService from './open-items';
 import * as partnersService from './partners';
@@ -32,6 +36,8 @@ const fromDrafted = (drafted: Drafted): ToolOutcome => ({
 });
 
 /** The tool runner for one asker, in one read-only transaction. */
+const chr10 = () => String.fromCharCode(10);
+
 export function toolRunnerFor(ctx: ReadContext) {
   return async function runTool(name: string, args: Record<string, unknown>): Promise<ToolOutcome> {
     switch (name) {
@@ -122,6 +128,67 @@ export function toolRunnerFor(ctx: ReadContext) {
             `${waiting.length} document(s) waiting:`,
             ...waiting.map((row) => `${row.documentNumber} · ${row.documentType} · raised by ${row.submittedByName ?? '—'}`),
           ].join('\n'),
+        };
+      }
+      case 'invoice': {
+        const no = String(args.no ?? '').trim();
+        if (!no) return { text: 'Which invoice number?' };
+        const found =
+          args.side === 'sales' ? await arInvoices.viewByNo(ctx.tx, no) : await apInvoices.viewByNo(ctx.tx, no);
+        if (!found) return { text: `There is no invoice ${no} on the system.` };
+        const header = (found as unknown as { invoice?: Record<string, unknown> }).invoice ?? (found as unknown as Record<string, unknown>);
+        const lines = (found as unknown as { lines?: Record<string, unknown>[] }).lines ?? [];
+        const field = (key: string) => (header[key] === null || header[key] === undefined ? null : String(header[key]));
+        return {
+          text: [
+            `${field('invoiceNo') ?? no} · ${field('status') ?? ''}`,
+            `date ${field('invoiceDate') ?? '—'} · due ${field('dueDate') ?? '—'}`,
+            `total ${money(field('totalIqd'))} · settled ${money(field('settledAmountIqd'))}`,
+            `${lines.length} line(s)`,
+          ].join(chr10()),
+        };
+      }
+      case 'bank_and_cash': {
+        const code = String(args.code ?? '').trim();
+        if (code) {
+          const one = await bankAccounts.detail(ctx.tx, code.toUpperCase());
+          const row = one as unknown as Record<string, unknown>;
+          return {
+            text: [
+              `${String(row.code)} · ${String(row.name)} (${String(row.currency)})`,
+              `bank ${String(row.bankMasterName ?? row.bankName ?? '—')} · account ${String(row.accountNumber ?? '—')}`,
+              `ledger account ${String(row.glAccountCode ?? '—')} · ${String(row.glAccountName ?? '')}`,
+              `custodian ${String(row.custodianName ?? '—')}`,
+            ].join(chr10()),
+          };
+        }
+        const banksList = await bankAccounts.listOfKind(ctx.tx, 'bank');
+        const cashList = await bankAccounts.listOfKind(ctx.tx, 'cash');
+        const all = [...banksList, ...cashList] as unknown as Record<string, unknown>[];
+        if (all.length === 0) return { text: 'No bank or cash account has been set up yet.' };
+        return {
+          text: all
+            .map((row) => `${String(row.code)} · ${String(row.name)} · ${String(row.currency)} · ${String(row.accountType)}`)
+            .join(chr10()),
+        };
+      }
+      case 'employees': {
+        const rows = (await employeesService.list(ctx.tx)) as unknown as Record<string, unknown>[];
+        const asked = String(args.search ?? '').trim().toLowerCase();
+        const shown = asked
+          ? rows.filter((row) => JSON.stringify(Object.values(row)).toLowerCase().includes(asked))
+          : rows;
+        if (shown.length === 0) return { text: asked ? `Nobody matches "${asked}".` : 'There are no employees on the system yet.' };
+        return {
+          text: [
+            `${shown.length} employee(s)${asked ? ` matching "${asked}"` : ''}:`,
+            ...shown
+              .slice(0, 40)
+              .map(
+                (row) =>
+                  `${String(row.employeeNo ?? '')} · ${String(row.fullName ?? row.name ?? '')} · ${String(row.departmentCode ?? '—')} · ${String(row.status ?? '')}`,
+              ),
+          ].join(chr10()),
         };
       }
       case 'what_the_bot_can_do':
