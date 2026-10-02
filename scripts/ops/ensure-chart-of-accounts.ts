@@ -272,6 +272,24 @@ async function rootByCode(tx: Tx, code: string) {
   return row;
 }
 
+/**
+ * Creates an account and carries it to approved, which is what makes it
+ * usable: `createAccount` leaves it in draft and inactive, and an inactive
+ * group cannot hold the accounts beneath it. This is the screen's own path —
+ * create, submit, approve — done by one person because a setup script has
+ * only the one.
+ */
+async function createApproved(
+  tx: Tx,
+  ctx: ActorContext,
+  input: Parameters<typeof coa.createAccount>[2],
+): Promise<{ id: string; code: string; name: string }> {
+  const made = await coa.createAccount(tx, ctx, input);
+  await coa.submitForApproval(tx, ctx, made.id);
+  await coa.approve(tx, ctx, made.id);
+  return { id: made.id, code: made.code, name: made.name };
+}
+
 async function main(): Promise<void> {
   const branchCode = argument('branch') ?? 'HQ';
   const dryRun = process.argv.includes('--dry-run');
@@ -308,7 +326,7 @@ async function main(): Promise<void> {
       const root = await rootByCode(tx, group.root);
       let folder = await accountByName(tx, group.name, root.id);
       if (!folder && !dryRun) {
-        const made = await coa.createAccount(tx, ctx, { name: group.name, parentId: root.id, isGroup: true });
+        const made = await createApproved(tx, ctx, { name: group.name, parentId: root.id, isGroup: true });
         folder = { id: made.id, code: made.code, name: made.name };
         madeGroups += 1;
         console.log(`created group   ${made.code}  ${made.name}`);
@@ -333,7 +351,7 @@ async function main(): Promise<void> {
             console.log(`  would create  ${leaf.name}`);
             continue;
           }
-          const made = await coa.createAccount(tx, ctx, {
+          const made = await createApproved(tx, ctx, {
             name: leaf.name,
             parentId: folder.id,
             isGroup: false,
