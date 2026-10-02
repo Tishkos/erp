@@ -20,6 +20,7 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { Attachments } from '@/components/admin/attachments';
 import { RecordHistory } from '@/components/admin/history';
+import * as papers from '@/server/services/payable-papers';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { StopDialog } from '@/components/admin/stop-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
@@ -167,6 +168,10 @@ export default async function PayablePage({
     value ? formatBusinessDate(businessDateOf(new Date(value)), locale as Locale) : '—';
   const daysSince = (since: Date | string) =>
     Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 86_400_000));
+
+  // Every attachment the import has, wherever it was put: on the invoice,
+  // the declaration, a payment application, a bill of lading or a container.
+  const allPapers = await withCurrentUser((tx) => papers.papersFor(tx, row.id));
 
   const activeRail = rail.filter((stage) => stage.active);
   const currentSeq = activeRail.find((stage) => stage.code === row.stageCode)?.sequence ?? 0;
@@ -1714,6 +1719,58 @@ export default async function PayablePage({
           />
         </div>
       </section>
+      {/*
+        The import's whole paper trail.
+
+        Each file stays on the document somebody put it on — that is where it
+        belongs and where it is removed from. This is the one list that says
+        the import has it at all, which nobody could see before.
+      */}
+      {allPapers.length > 0 ? (
+        <section aria-labelledby="payable-papers-title" className={`${s.sapDoc} ${s.sapRegister}`}>
+          <div className={s.sapWindow}>
+            <h2 className={s.sapTitle} id="payable-papers-title">
+              <span>{t('papers_title')}</span>
+              <span className={s.sapTitleMeta}>{t('papers_count', { count: allPapers.length })}</span>
+            </h2>
+            <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
+              <table aria-labelledby="payable-papers-title" className={`${s.sapTable} ${s.sapRegisterTable}`}>
+                <thead>
+                  <tr>
+                    <th scope="col">{t('papers_file')}</th>
+                    <th scope="col">{t('papers_source')}</th>
+                    <th scope="col">{t('papers_added')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allPapers.map((paper) => (
+                    <tr key={paper.id}>
+                      <td>
+                        <Link className={s.sapLink} href={`/attachments/${encodeURIComponent(paper.id)}`}>
+                          <bdi dir="auto">{paper.fileName}</bdi>
+                        </Link>
+                      </td>
+                      <td>
+                        {paper.href ? (
+                          <Link className={s.sapLink} href={paper.href}>
+                            <bdi dir="auto">{`${paper.source} ${paper.sourceNo}`}</bdi>
+                          </Link>
+                        ) : (
+                          <bdi dir="auto">{`${paper.source} ${paper.sourceNo}`}</bdi>
+                        )}
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{formatBusinessDate(paper.createdAt.toISOString().slice(0, 10), locale as Locale)}</bdi>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <RecordHistory objectId={row.id} objectType={payables.PERMISSION_OBJECT} preloaded={found.history} />
     </AdminPage>
   );

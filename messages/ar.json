@@ -2599,7 +2599,12 @@
       "read_document_title": "اقرأ مستند المورّد",
       "read_document_hint": "الفاتورة التي أرسلها المصنع — PDF أو Excel أو Word أو CSV، بأي لغة. تُقرأ إلى مسودة فاتورة شراء فيها البضاعة والأسعار والمورّد، ويُحفظ الملف معها. وكل ما تعذّرت قراءته يُترك فارغاً ويُكتب في ملاحظة المسودة.",
       "read_document_choose": "اختر المستند",
-      "read_document_submit": "اقرأها"
+      "read_document_submit": "اقرأها",
+      "papers_title": "المستندات",
+      "papers_count": "{count} ملف",
+      "papers_file": "الملف",
+      "papers_source": "محفوظ على",
+      "papers_added": "أُضيف"
     },
     "payables_settings": {
       "title": "إعدادات الذمم الدائنة",
