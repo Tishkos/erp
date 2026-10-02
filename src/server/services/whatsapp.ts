@@ -72,6 +72,11 @@ export interface ContactInput {
   readonly allowNotifications: boolean;
   readonly allowQueries: boolean;
   readonly allowDigest: boolean;
+  /**
+   * WA-6 — may decide a document from chat; off unless deliberately granted.
+   * Optional so every form and fixture written before WA-6 still means "no".
+   */
+  readonly allowActions?: boolean;
 }
 
 async function holdsRole(tx: Tx, userId: string, roleCode: string): Promise<boolean> {
@@ -96,7 +101,10 @@ export async function saveContact(tx: Tx, ctx: ActorContext, input: ContactInput
   const [taken] = await tx.select({ id: whatsappContact.id, userId: whatsappContact.userId }).from(whatsappContact).where(eq(whatsappContact.e164, e164)).limit(1);
   if (taken && taken.userId !== input.userId) throw new WhatsappValidationError('e164', 'is already another user\'s number');
 
-  const values = { e164, allowNotifications: input.allowNotifications, allowQueries: input.allowQueries, allowDigest: input.allowDigest };
+  // WA-6 — deciding a document is the asking right plus one more: a contact
+  // that may not ask may not decide either, whatever the form sent.
+  const allowActions = (input.allowActions ?? false) && input.allowQueries;
+  const values = { e164, allowNotifications: input.allowNotifications, allowQueries: input.allowQueries, allowDigest: input.allowDigest, allowActions };
   const [existing] = await tx.select().from(whatsappContact).where(eq(whatsappContact.userId, input.userId)).limit(1);
   if (existing) {
     await tx.update(whatsappContact).set({ ...values, updatedAt: new Date() }).where(eq(whatsappContact.id, existing.id));
@@ -104,7 +112,7 @@ export async function saveContact(tx: Tx, ctx: ActorContext, input: ContactInput
       action: 'whatsapp_contact.updated',
       objectType: 'whatsapp_contact',
       objectId: existing.id,
-      before: { e164: existing.e164, allowNotifications: existing.allowNotifications, allowQueries: existing.allowQueries, allowDigest: existing.allowDigest },
+      before: { e164: existing.e164, allowNotifications: existing.allowNotifications, allowQueries: existing.allowQueries, allowDigest: existing.allowDigest, allowActions: existing.allowActions },
       after: values,
     });
     return { id: existing.id, created: false };
@@ -147,6 +155,7 @@ export interface ContactRow {
   readonly allowNotifications: boolean;
   readonly allowQueries: boolean;
   readonly allowDigest: boolean;
+  readonly allowActions: boolean;
   readonly active: boolean;
   readonly deactivatedReason: string | null;
   readonly isCeo: boolean;
@@ -164,6 +173,7 @@ export async function contacts(tx: Tx): Promise<ContactRow[]> {
       allowNotifications: whatsappContact.allowNotifications,
       allowQueries: whatsappContact.allowQueries,
       allowDigest: whatsappContact.allowDigest,
+      allowActions: whatsappContact.allowActions,
       active: whatsappContact.active,
       deactivatedReason: whatsappContact.deactivatedReason,
       isCeo: sql<boolean>`exists (select 1 from user_role r where r.user_id = ${whatsappContact.userId} and r.role_code = ${QUERY_ROLE})`,
@@ -191,6 +201,8 @@ export interface ResolvedSender {
   readonly allowNotifications: boolean;
   readonly allowQueries: boolean;
   readonly allowDigest: boolean;
+  /** WA-6 — may decide a document from chat. */
+  readonly allowActions: boolean;
   readonly active: boolean;
   readonly userActive: boolean;
   readonly isCeo: boolean;
@@ -207,6 +219,7 @@ export async function resolveNumber(tx: Tx, e164: string): Promise<ResolvedSende
       allowNotifications: whatsappContact.allowNotifications,
       allowQueries: whatsappContact.allowQueries,
       allowDigest: whatsappContact.allowDigest,
+      allowActions: whatsappContact.allowActions,
       active: whatsappContact.active,
       userActive: appUser.isActive,
       isCeo: sql<boolean>`exists (select 1 from user_role r where r.user_id = ${whatsappContact.userId} and r.role_code = ${QUERY_ROLE})`,
@@ -231,6 +244,37 @@ export function mayAsk(sender: ResolvedSender | null): { ok: true } | { ok: fals
 export async function contactForUser(tx: Tx, userId: string): Promise<ResolvedSender | null> {
   const [row] = await tx.select({ e164: whatsappContact.e164 }).from(whatsappContact).where(eq(whatsappContact.userId, userId)).limit(1);
   return row ? resolveNumber(tx, row.e164) : null;
+}
+
+// ---------------------------------------------------------------------------
+// WA-5 — the one group
+// ---------------------------------------------------------------------------
+
+/**
+ * Is this the group the bot works in?
+ *
+ * One group, by its id, and no other: the bot is in whatever groups somebody
+ * added it to, and all but the registered one are silence — the same answer
+ * an unlisted number gets (W-R3). An unregistered bot (`group_jid` empty)
+ * reads no group at all.
+ */
+export function groupAllowed(settings: BotSettings, groupJid: string | null | undefined): boolean {
+  if (!groupJid) return true; // a direct message is not a group's business
+  return settings.groupJid !== '' && settings.groupJid === groupJid;
+}
+
+/**
+ * WA-6 — may this person decide a document from chat?
+ *
+ * The contact's own flag, on top of everything `mayAsk` demands. It says
+ * nothing about *this* document: whether they may approve this one is the
+ * approval engine's answer, under their own principal, a moment later.
+ */
+export function mayAct(sender: ResolvedSender | null): { ok: true } | { ok: false; reason: string } {
+  const asking = mayAsk(sender);
+  if (!asking.ok) return asking;
+  if (!sender!.allowActions) return { ok: false, reason: 'deciding documents is not allowed for this contact' };
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -401,13 +445,21 @@ export async function markDigestSent(tx: Tx, day: string): Promise<void> {
 
 export async function recordInbound(
   tx: Tx,
-  input: { readonly e164: string; readonly body: string; readonly waMessageId?: string | null; readonly sender: ResolvedSender | null },
+  input: {
+    readonly e164: string;
+    readonly body: string;
+    readonly waMessageId?: string | null;
+    readonly sender: ResolvedSender | null;
+    /** WA-5 — the group it was said in, null for a direct message. */
+    readonly groupJid?: string | null;
+  },
 ): Promise<bigint> {
   const [row] = await tx
     .insert(whatsappMessage)
     .values({
       direction: 'in',
       e164: input.e164,
+      groupJid: input.groupJid ?? null,
       contactId: input.sender?.contactId ?? null,
       userId: input.sender?.userId ?? null,
       waMessageId: input.waMessageId ?? null,
@@ -445,6 +497,8 @@ export async function recordOutbound(
     readonly deliveryId?: bigint | null;
     readonly intent?: string | null;
     readonly detail?: Record<string, unknown> | null;
+    /** WA-5 — the group it is being said in, null for a direct message. */
+    readonly groupJid?: string | null;
   },
 ): Promise<bigint> {
   const [row] = await tx
@@ -452,6 +506,7 @@ export async function recordOutbound(
     .values({
       direction: 'out',
       e164: input.e164,
+      groupJid: input.groupJid ?? null,
       contactId: input.sender?.contactId ?? null,
       userId: input.sender?.userId ?? null,
       body: input.body,
@@ -544,7 +599,18 @@ export async function sentInLastMinute(tx: Tx, now = new Date()): Promise<number
 // The outbound sender — the `whatsapp` notification channel (W1)
 // ---------------------------------------------------------------------------
 
-export type Transport = (to: { readonly e164: string }, message: { readonly text: string; readonly attachment?: Attachment | null }) => Promise<{ waMessageId: string | null }>;
+/**
+ * Where a message goes.
+ *
+ * `e164` is a person. `groupJid`, when given, wins: WA-5 sends the answer
+ * back to the group it was asked in, and posts notifications and the digest
+ * there. The number is still carried, because the log records who it was
+ * about even when the words went to a group.
+ */
+export type Transport = (
+  to: { readonly e164: string; readonly groupJid?: string | null },
+  message: { readonly text: string; readonly attachment?: Attachment | null },
+) => Promise<{ waMessageId: string | null }>;
 
 /**
  * Registers the bridge's socket as the channel's sender. A recipient without
@@ -567,7 +633,55 @@ export function registerWhatsappSender(transport: Transport): void {
       await markOutbound(tx, outId, { status: 'failed', errorMessage: error instanceof Error ? error.message : String(error) });
       throw error;
     }
+
+    // WA-5 — and into the group, once per notification rather than once per
+    // recipient, so ten managers do not make ten copies. It carries the
+    // subject and body the rule already wrote: a notification says what
+    // happened and names its document, never a figure nobody asked for.
+    const settings = await settingsOf(tx);
+    if (settings.groupJid && settings.groupNotifications && (await firstGroupDelivery(tx, message.deliveryId))) {
+      const groupOut = await recordOutbound(tx, {
+        e164: contact.e164,
+        groupJid: settings.groupJid,
+        body: text,
+        sender: contact,
+        // Carried so the "already posted" check above can see this copy.
+        deliveryId: message.deliveryId,
+        intent: 'notification.group',
+        detail: { eventType: message.eventType, objectType: message.objectType, objectId: message.objectId },
+      });
+      try {
+        const { waMessageId } = await transport({ e164: contact.e164, groupJid: settings.groupJid }, { text });
+        await markOutbound(tx, groupOut, { status: 'sent', waMessageId });
+      } catch (error) {
+        // The person already has it; the group copy failing is not a reason
+        // to retry the whole delivery.
+        await markOutbound(tx, groupOut, { status: 'failed', errorMessage: error instanceof Error ? error.message : String(error) });
+      }
+    }
   });
+}
+
+/** The settings, for the sender — a plain read, no permission in its way. */
+async function settingsOf(tx: Tx): Promise<BotSettings> {
+  return settings(tx);
+}
+
+/**
+ * Has this notification already been posted to the group?
+ *
+ * A rule with five recipients delivers five times; the group wants one copy.
+ * The log is the answer: the first delivery of a notification posts it, the
+ * rest see it is already there.
+ */
+async function firstGroupDelivery(tx: Tx, deliveryId: bigint | null | undefined): Promise<boolean> {
+  if (deliveryId === null || deliveryId === undefined) return true;
+  const [seen] = await tx
+    .select({ id: whatsappMessage.id })
+    .from(whatsappMessage)
+    .where(and(eq(whatsappMessage.intent, 'notification.group'), eq(whatsappMessage.deliveryId, deliveryId)))
+    .limit(1);
+  return !seen;
 }
 
 // ---------------------------------------------------------------------------

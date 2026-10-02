@@ -139,7 +139,9 @@ describe('settings', () => {
     const s = settingsFrom([{ key: 'inline_rows', value: '20' }, { key: 'throttle_per_minute', value: 'lots' }, { key: 'digest_locale', value: 'fr' }]);
     expect(s.inlineRows).toBe(20);
     expect(s.throttlePerMinute).toBe(60);
-    expect(s.agentModel).toBe('claude-sonnet-5-5');
+    // The seed used to name `claude-sonnet-5-5`, which is not a model: the
+    // first free-form question would have failed against the API.
+    expect(s.agentModel).toBe('claude-sonnet-5');
     expect(s.digestLocale).toBe('ar');
     expect(validateSetting('digest_locale', 'en')).toEqual({ key: 'digest_locale', value: 'en' });
     expect(() => validateSetting('digest_locale', 'fr')).toThrow(WhatsappValidationError);
