@@ -149,7 +149,15 @@ BUILD_DIR="\$APP-build"
 rm -rf "\$BUILD_DIR"
 mkdir -p "\$BUILD_DIR"
 tar -C "\$APP" --exclude=node_modules --exclude='.next*' --exclude=var -cf - . | tar -C "\$BUILD_DIR" -xf -
-ln -s "\$APP/node_modules" "\$BUILD_DIR/node_modules"
+# node_modules is hardlinked in, not symlinked to.
+#
+# It was a symlink until 2026-10-02, when the first deploy on Next 16.3.8
+# died with "Symlink [project]/node_modules is invalid, it points out of the
+# filesystem root": Turbopack resolves the project root itself and refuses a
+# node_modules that leaves it. `cp -al` gives it a real directory, and
+# because the link targets are the same inodes on the same filesystem it
+# costs neither a copy nor the disk for one.
+cp -al "\$APP/node_modules" "\$BUILD_DIR/node_modules"
 ( cd "\$BUILD_DIR" && npm run build )
 # The standalone bundle ships server.js and its node_modules, but not these.
 rm -rf "\$BUILD_DIR/.next/standalone/.next/static"
