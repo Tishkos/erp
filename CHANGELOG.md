@@ -8,6 +8,12 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-FIX-001 FIX-2 — Availability is a register like every other: the
+  Inventory tabs, search, a warehouse filter and "only items with stock",
+  item names, fifty rows a page with the true count; issuing stock is a
+  dialog and its refusal comes back in the service's words. The temporary
+  password screen is a centred card like sign-in, outside the shell, with
+  sign out on it.
 - REQ-FIX-001 FIX-1 — the menu the sponsor asked for: Payables in four
   headings (Purchasing & Invoices, Payments, Suppliers & Balances, Setup)
   with payables work only; a Logistics module holding the customs

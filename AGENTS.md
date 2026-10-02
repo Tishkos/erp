@@ -173,3 +173,8 @@ Standing rule (by direction, 2026-10-01; see also docs/notes/newsettings.md: "DO
 * Bank Deposits (`/treasury/deposits`, `services/bank-deposits.ts`) is a register over `bank_transfer` (cash → bank) and `other_receipt` (any other source) into a *bank* account; it raises, approves (not by the raiser) and posts through those documents' own services. Bank and Cash Reporting tells a transfer by `bank_transfer.journal_entry_id`, never by `source_module`.
 * Two forms in one page must not share field names (`f-<name>` ids); the dialog's title id is per dialog (`useId`).
 
+## Availability and the password screen (REQ-FIX-001 FIX-2)
+
+* `/inventory/availability` reads `services/availability.ts` (the `stock_position` view, which has no row-level security of its own, so the branch rule is applied in the query — keep it there). Issuing is `execute` on `inventory_movement`, from a dialog, with the warehouse's branch.
+* `/password` is `src/app/password/` — outside `(app)`, drawn with `sign-in.module.css` like sign-in. `RESTRICTION_ROUTE.password` still names it; `PasswordField` takes `name`, `autoComplete` and `hint`.
+

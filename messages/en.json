@@ -4322,6 +4322,16 @@
       "lines": "Deposit",
       "document_type_cash": "Bank deposit — cash",
       "document_type_other": "Bank deposit — other source"
+    },
+    "availability": {
+      "subtitle": "What each warehouse holds, item by item: on hand, available to issue, and what is reserved, in transit, in quarantine, damaged or returned — every figure summed from the stock ledger.",
+      "issue_stock": "Issue stock",
+      "issue": "Issue",
+      "issue_note": "Takes stock out of the warehouse at FIFO cost. An issue larger than what is available is refused, with the figures.",
+      "all_warehouses": "All warehouses",
+      "in_stock": "Only items with stock available",
+      "filter": "Filter",
+      "none": "No stock to show."
     }
   },
   "profile": {
