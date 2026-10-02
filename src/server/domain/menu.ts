@@ -216,7 +216,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('project_costs', 'project', '/projects/costs'),
       page('project_procurement', 'project', '/projects/procurement'),
       page('material_issues', 'project', '/projects/material-issues'),
-      page('progress', 'project_progress'),
+      // REQ-PM-001 PM-4 — progress, earned value, the milestones and their trend.
+      page('progress', 'project', '/projects/progress'),
       page('project_billing', 'project_billing'),
       page('project_forecast', 'project_forecast'),
       page('project_close', 'project_close'),

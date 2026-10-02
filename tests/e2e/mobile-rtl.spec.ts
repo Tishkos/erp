@@ -46,6 +46,7 @@ const ROUTES = [
   '/projects/costs',
   '/projects/procurement',
   '/projects/material-issues',
+  '/projects/progress',
   '/administration/project-settings',
   '/inventory/in-transit',
   '/treasury/reporting',

@@ -8,6 +8,18 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-PM-001 PM-4 — schedule, progress and earned value: activities and
+  milestones (usage billing, progress or date) under the elements,
+  finish-to-start and start-to-start links with lags, the critical-path
+  pass in the project's working calendar (earliest and latest dates,
+  float, the critical path) on the WBS workspace; each run's milestone
+  dates kept append-only for the trend; a progress milestone reached by
+  one person and approved by another sets the element's percent;
+  technical completion waits for every activity done and every milestone
+  reached or cancelled. The **Progress** workspace: BCWS, BCWP, ACWP,
+  CPI, SPI, EAC and VAC to a chosen day, element by element and summed up
+  the tree, with the measurements, the milestones and their trend.
+  Migration 0248.
 - REQ-PM-001 PM-3 — execution: a purchase order, a payable and a purchase
   invoice may be assigned to a project element and cost code; the order's
   approval (or an order-less payable's opening) commits against the

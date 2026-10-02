@@ -1205,6 +1205,13 @@
       "when": 1795900000051,
       "tag": "0247_project_execution",
       "breakpoints": true
+    },
+    {
+      "idx": 172,
+      "version": "7",
+      "when": 1795900000052,
+      "tag": "0248_project_schedule",
+      "breakpoints": true
     }
   ]
 }

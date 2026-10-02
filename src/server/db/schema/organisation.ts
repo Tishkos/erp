@@ -474,6 +474,12 @@ export const project = pgTable(
     reopenedAt: timestamp('reopened_at', { withTimezone: true }),
     reopenedBy: uuid('reopened_by').references(() => appUser.id),
     reopenedReason: text('reopened_reason'),
+    /** PM-4 — the working calendar the schedule counts in (HR-1's); none is Sunday–Thursday. */
+    calendarCode: text('calendar_code'),
+    /** PM-4 — the last critical-path pass: when, the finish it gave, and its run number (the trend's x axis). */
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+    scheduledFinishOn: date('scheduled_finish_on'),
+    scheduleRun: integer('schedule_run').notNull().default(0),
 
     approvedBy: uuid('approved_by').references(() => appUser.id),
     approvedAt: timestamp('approved_at', { withTimezone: true }),

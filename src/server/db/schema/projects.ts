@@ -264,6 +264,8 @@ export const projectProgress = pgTable(
     approvedBy: uuid('approved_by').references(() => appUser.id),
     approvedAt: timestamp('approved_at', { withTimezone: true }),
     note: text('note'),
+    /** PM-4 §10 — the progress milestone whose approval set this percent. */
+    activityId: uuid('activity_id'),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -753,4 +755,118 @@ export const projectMaterialIssueLine = pgTable(
     index('project_material_issue_line_movement_idx').on(t.movementId),
     check('project_material_issue_line_quantity_positive', sql`${t.quantity} > 0`),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// REQ-PM-001 PM-4 — activities, milestones, the schedule's history (§5)
+// ---------------------------------------------------------------------------
+
+export const PROJECT_ACTIVITY_KINDS = ['activity', 'milestone'] as const;
+export const MILESTONE_USAGES = ['billing', 'progress', 'date'] as const;
+export type MilestoneUsage = (typeof MILESTONE_USAGES)[number];
+
+/**
+ * A dated piece of work under an element, or a milestone (zero duration)
+ * with its usage. The earliest and latest dates, the float and the
+ * critical mark are written by the critical-path pass; the actuals by the
+ * people doing the work; a milestone is reached by one person and approved
+ * by another.
+ */
+export const projectActivity = pgTable(
+  'project_activity',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    wbsCode: text('wbs_code').notNull(),
+    code: text('code').notNull(),
+    name: text('name').notNull(),
+    kind: text('kind').notNull().default('activity'),
+    milestoneUsage: text('milestone_usage'),
+    progressPercent: numeric('progress_percent', { precision: 9, scale: 4 }),
+    durationDays: integer('duration_days').notNull().default(1),
+    notBefore: date('not_before'),
+    responsibleUserId: uuid('responsible_user_id').references(() => appUser.id),
+    earliestStart: date('earliest_start'),
+    earliestFinish: date('earliest_finish'),
+    latestStart: date('latest_start'),
+    latestFinish: date('latest_finish'),
+    totalFloat: integer('total_float'),
+    freeFloat: integer('free_float'),
+    isCritical: boolean('is_critical').notNull().default(false),
+    actualStart: date('actual_start'),
+    actualFinish: date('actual_finish'),
+    percentComplete: numeric('percent_complete', { precision: 9, scale: 4 }).notNull().default('0'),
+    status: text('status').notNull().default('open'),
+    reachedOn: date('reached_on'),
+    reachedBy: uuid('reached_by').references(() => appUser.id),
+    reachedApprovedBy: uuid('reached_approved_by').references(() => appUser.id),
+    reachedApprovedAt: timestamp('reached_approved_at', { withTimezone: true }),
+    cancelledBy: uuid('cancelled_by').references(() => appUser.id),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('project_activity_code_uniq').on(t.projectCode, t.code),
+    index('project_activity_element_idx').on(t.projectCode, t.wbsCode, t.status),
+    check('project_activity_kind', sql`${t.kind} in ('activity', 'milestone')`),
+    check('project_activity_status', sql`${t.status} in ('open', 'done', 'cancelled')`),
+  ],
+);
+
+export const projectActivityDependency = pgTable(
+  'project_activity_dependency',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    predecessorId: uuid('predecessor_id')
+      .notNull()
+      .references(() => projectActivity.id, { onDelete: 'cascade' }),
+    successorId: uuid('successor_id')
+      .notNull()
+      .references(() => projectActivity.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull().default('FS'),
+    lagDays: integer('lag_days').notNull().default(0),
+    active: boolean('active').notNull().default(true),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    deactivatedBy: uuid('deactivated_by').references(() => appUser.id),
+    deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('project_activity_dependency_uniq').on(t.predecessorId, t.successorId).where(sql`${t.active}`),
+    check('project_activity_dependency_kind', sql`${t.kind} in ('FS', 'SS')`),
+  ],
+);
+
+/** Each milestone's date as it stood at every schedule run — the trend analysis. Append-only. */
+export const projectMilestoneHistory = pgTable(
+  'project_milestone_history',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code, { onDelete: 'cascade' }),
+    activityId: uuid('activity_id')
+      .notNull()
+      .references(() => projectActivity.id, { onDelete: 'cascade' }),
+    scheduleRun: integer('schedule_run').notNull(),
+    scheduledOn: date('scheduled_on').notNull(),
+    reason: text('reason'),
+    recordedBy: uuid('recorded_by')
+      .notNull()
+      .references(() => appUser.id),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('project_milestone_history_uniq').on(t.activityId, t.scheduleRun)],
 );
