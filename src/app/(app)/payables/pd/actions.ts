@@ -81,6 +81,16 @@ export async function reRegisterPd(formData: FormData): Promise<void> {
   );
 }
 
+/** §24.3 — a PD from the sheet's holding list, named to its import. */
+export async function linkPd(formData: FormData): Promise<void> {
+  const pdNo = text(formData, 'pd_no');
+  const year = text(formData, 'year');
+  await runAdminAndReturn(
+    async (tx, ctx) => customs.linkToImport(tx, ctx, await pdIdOf(tx, formData), text(formData, 'payable_id')),
+    record(pdNo, year),
+  );
+}
+
 /** The ASYCUDA list, applied — the difference was shown first on its own page. */
 export async function applyAsycudaList(formData: FormData): Promise<void> {
   await runAdminAndReturn(

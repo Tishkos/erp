@@ -738,6 +738,31 @@ export async function create(
 // ---------------------------------------------------------------------------
 
 /** Links an existing invoice of the same supplier (§14 "Purchase invoice"). */
+/**
+ * The open imports a new purchase invoice ticked *Import* may belong to
+ * instead of opening one of its own — chiefly the imports migrated from the
+ * sheet (§24.3), whose supplier invoice is entered after the cut-over. Those
+ * with no live invoice yet come first.
+ */
+export async function openImportsForInvoice(tx: Tx) {
+  const result = await tx.execute(sql`
+    select p.id, p.payable_no as "payableNo", p.supplier_reference as "reference",
+           bp.legal_name as "supplierName", p.supplier_id as "supplierId",
+           exists (select 1 from ap_invoice i where i.payable_id = p.id and i.reversed_at is null) as "invoiced"
+      from payable p
+      join business_partner bp on bp.id = p.supplier_id
+     where p.payable_type_code = 'import' and p.cancelled_at is null and p.closed_at is null
+     order by "invoiced", p.payable_no desc`);
+  return result.rows as unknown as {
+    id: string;
+    payableNo: string;
+    reference: string;
+    supplierName: string;
+    supplierId: string;
+    invoiced: boolean;
+  }[];
+}
+
 export async function linkInvoice(
   tx: Tx,
   ctx: ActorContext,

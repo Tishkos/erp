@@ -174,6 +174,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('procurement_dashboard', 'procurement_dashboard'),
       page('purchasing_reports', 'purchasing_report'),
       page('payables_settings', 'payables_settings', '/administration/payables-settings'),
+      // REQ-AP-001 Stage 8 — the one-time sheet import (§24.3).
+      page('payables_migration', 'payables_migration', '/administration/payables-migration'),
     ],
   },
   {

@@ -110,6 +110,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   loans: 'document',
   purchasing_reports: 'report',
   payables_settings: 'settings',
+  payables_migration: 'settings',
 
   // 5 — Inventory
   availability: 'workspace',
@@ -460,6 +461,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/payables/containers',
   // REQ-AP-001 Stage 6 — bank loans (§15.7, §21.10).
   '/payables/loans',
+  // REQ-AP-001 Stage 8 — the sheet import and its sign-off (§24.3).
+  '/administration/payables-migration',
 ]);
 
 export function isDelivered(route: string): boolean {

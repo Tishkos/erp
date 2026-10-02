@@ -275,6 +275,8 @@ export const payable = pgTable(
     /** `erp` · `sheet_import` · `shipment_migration` · `contract` (R5). */
     source: text('source').notNull().default('erp'),
     sourceRow: text('source_row'),
+    /** REQ-AP-001 §24.3 (0237) — the sheet's "Clear?", for the §20.1 comparison. */
+    legacyCleared: boolean('legacy_cleared'),
 
     createdBy: uuid('created_by')
       .notNull()
@@ -476,3 +478,22 @@ export const payableHoldUpdate = pgTable(
   },
   (t) => [index('payable_hold_update_hold_idx').on(t.holdId, t.changedAt)],
 );
+
+/**
+ * REQ-AP-001 §24.3 (0237) — every dry run and apply of the sheet import, with
+ * its report and the accountant's sign-off of the cleared comparison.
+ */
+export const payablesMigrationRun = pgTable('payables_migration_run', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  mode: text('mode').notNull(),
+  fileName: text('file_name').notNull(),
+  fileSha256: text('file_sha256').notNull(),
+  report: jsonb('report').notNull(),
+  runBy: uuid('run_by')
+    .notNull()
+    .references(() => appUser.id),
+  runAt: timestamp('run_at', { withTimezone: true }).notNull().defaultNow(),
+  signedOffBy: uuid('signed_off_by').references(() => appUser.id),
+  signedOffAt: timestamp('signed_off_at', { withTimezone: true }),
+  signOffNote: text('sign_off_note'),
+});

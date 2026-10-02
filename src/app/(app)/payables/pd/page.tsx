@@ -38,7 +38,7 @@ import { pdChip } from './status';
  */
 export const dynamic = 'force-dynamic';
 
-const VIEWS = ['live', 'expiring', 'final', 'all'] as const;
+const VIEWS = ['live', 'expiring', 'final', 'holding', 'all'] as const;
 
 export default async function PdListPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/payables/pd')) notFound();

@@ -100,6 +100,8 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       expenseAccountId: text(formData, 'expense_account_id').trim() || null,
       // D13 — the accountant ticked Import: the application is born with it.
       isImport: text(formData, 'is_import') === '1',
+      // §24.3 — ticked Import and naming an open import: the invoice joins it.
+      payableId: text(formData, 'is_import') === '1' ? text(formData, 'payable_id').trim() || null : null,
       paymentTermsText: text(formData, 'payment_terms_text').trim() || null,
       lines,
     });

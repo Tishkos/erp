@@ -31,6 +31,7 @@ import {
   attachToApplication,
   cancelApplication,
   confirmApplication,
+  confirmBeforeCutOver,
   debitApplication,
   rejectApplication,
   sendApplication,
@@ -104,6 +105,8 @@ export default async function PaymentApplicationPage({
   const maySend = row.status === 'approved' && can(principal, 'execute', applications.PERMISSION_OBJECT);
   const mayOverride = can(principal, 'approve', applications.PERMISSION_OBJECT);
   const mayConfirm = row.status === 'sent' && can(principal, 'post', applications.PERMISSION_OBJECT);
+  // D37 — a sheet row the sheet left "sent" although the money had gone.
+  const mayConfirmMigrated = mayConfirm && row.source === 'sheet_import';
   const mayDebit = row.status === 'confirmed' && can(principal, 'post', applications.PERMISSION_OBJECT);
   const mayReject =
     (row.status === 'approved' || row.status === 'sent') &&
@@ -352,6 +355,26 @@ export default async function PaymentApplicationPage({
                   <p className="muted">{t('attach_copy_hint')}</p>
                   <SubmitRow>
                     <Submit label={t(`confirm_${kind}`)} />
+                  </SubmitRow>
+                </Form>
+              </NewRecordDialog>
+            ) : null}
+            {mayConfirmMigrated ? (
+              <NewRecordDialog
+                buttonLabel={t('confirm_before_cut_over')}
+                closeLabel={admin('close')}
+                title={t('confirm_before_cut_over')}
+              >
+                <p className="muted">{t('confirm_before_cut_over_note')}</p>
+                <Form action={confirmBeforeCutOver}>
+                  <Hidden name="application_no" value={row.applicationNo} />
+                  <Grid>
+                    <Field label={t(`confirmed_on_${kind}`)} name="confirmed_on" required type="date" />
+                    <Field label={t(`reference_${kind}`)} name="confirmation_reference" required />
+                  </Grid>
+                  <p className="muted">{t('attach_copy_hint')}</p>
+                  <SubmitRow>
+                    <Submit label={t('confirm_before_cut_over')} />
                   </SubmitRow>
                 </Form>
               </NewRecordDialog>

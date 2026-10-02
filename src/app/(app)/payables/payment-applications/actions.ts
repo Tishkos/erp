@@ -120,6 +120,19 @@ export async function confirmApplication(formData: FormData): Promise<void> {
   );
 }
 
+/** §24.3 / D37 — a migrated application paid before the cut-over: recorded, not posted. */
+export async function confirmBeforeCutOver(formData: FormData): Promise<void> {
+  const applicationNo = text(formData, 'application_no');
+  await runAdminAndReturn(
+    async (tx, ctx) =>
+      applications.confirmBeforeCutOver(tx, ctx, (await applications.loadByNo(tx, applicationNo)).id, {
+        confirmedOn: text(formData, 'confirmed_on'),
+        reference: text(formData, 'confirmation_reference'),
+      }),
+    record(applicationNo),
+  );
+}
+
 export async function debitApplication(formData: FormData): Promise<void> {
   const applicationNo = text(formData, 'application_no');
   await runAdminAndReturn(
