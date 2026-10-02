@@ -168,6 +168,13 @@ if ! npm run db:migrate; then
   exit 1
 fi
 
+# REQ-FIX-001 FIX-5 — every active user is an employee (FX14). Idempotent:
+# a user already linked is passed over. A failure here leaves the release in
+# place and says so; the script can be run by hand.
+if ! npx tsx scripts/ops/ensure-user-employees.ts --apply; then
+  echo "ensure-user-employees failed — run 'npx tsx scripts/ops/ensure-user-employees.ts' by hand." >&2
+fi
+
 # The swap: the previous build is kept as .next-prev for a rollback by hand.
 rm -rf "\$APP/.next-prev"
 [ -d "\$APP/.next" ] && mv "\$APP/.next" "\$APP/.next-prev"

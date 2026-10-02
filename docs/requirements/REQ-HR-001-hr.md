@@ -192,6 +192,26 @@ Every screen copies its model per the AGENTS.md design rule. In brief:
 | **HR-3 — Payroll** | §6 components live, §9 whole: run lifecycle, posting mappings, the payroll payable (§27 hook), payslips, reversal | HR-1, HR-2, payables Stage 3 (payment applications) |
 | **HR-4 — Advances, claims, travel, assets** | §10, the four screens, settlement into payroll deductions | HR-3 |
 
+## 11a. What is left (re-cut to the sponsor's menu, REQ-FIX-001 FIX-5, 2026-10-02)
+
+Built: HR-1 (people, history, compensation, HR settings) and FIX-5 — the
+menu in the sponsor's order, every new user also an employee (backfill
+for the existing ones), **Departments** and **Positions** as screens.
+Set aside by the sponsor until the REQ-FIX-001 list is done. Left, in
+order, each its own branch:
+
+| Stage | Menu items | Delivers |
+|---|---|---|
+| **HR-2 — Time** | Attendance, Leave Management | Working calendars live; leave types, requests (employee → manager → HR manager), balances and accrual, negative-balance rule (D-HR-6); the attendance day sheet per branch/department and the month view per employee (D-HR-8: day status only); contract-expiry and low-balance notices in the sweep. |
+| **HR-3 — Payroll** | Payroll (payslips inside it) | Pay components live (D-HR-3 rates confirmed by the accountant first, with the worked example H5); the run: draft → submitted → approved → posted, absences from HR-2, the journal through posting mappings, the payroll payable to pay through payment applications; payslips (print, own payslip for the linked user); reversal. |
+| **HR-4 — Advances & Loans** | Advances & Loans | Employee advances and loans: request, approval (manager + accounting manager), payment, repayment schedule deducted in payroll; asset assignment on the employee record (out/returned, clearance). |
+| **HR-5 — Recruitment & Performance** | Recruitment, Performance | Vacancies against vacant positions, applicants and stages, hire → employee (through `employees.create`); review cycles, goals, ratings, sign-off. |
+| **HR-6 — Requests, Documents, Dashboard, Reports** | Employee Requests, Documents, Dashboard, Reports | Requests (expense claims, travel, letters, other) with approval; employee documents (contracts, IDs, certificates) with expiry notices, kept in the Document Center; the HR dashboard (headcount, joiners/leavers, leave, payroll cost); reports: headcount, leave balances, payroll register, unsettled advances. |
+
+Open decisions before HR-2 and HR-3: D-HR-1 (who approves), D-HR-3 (the
+statutory rates and the worked example), D-HR-4 (the payroll payable's
+supplier), D-HR-5 (expense-claim reimbursement road), D-HR-6, D-HR-8.
+
 ## 12. Acceptance criteria (every stage's tests named before it is built)
 
 | # | Criterion | Test |

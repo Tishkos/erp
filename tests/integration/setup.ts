@@ -865,7 +865,7 @@ export async function resetTestData(): Promise<void> {
                          -- REQ-AP-001 Stage 6, migration 0235.
                          'LOAN',
                          -- REQ-HR-001 Stage HR-1, migration 0241.
-                         'EMPLOYEE', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
+                         'EMPLOYEE', 'POSITION_CODE', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

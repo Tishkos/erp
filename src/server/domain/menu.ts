@@ -419,17 +419,21 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'hr_payroll',
     ordinal: 15,
     items: [
-      // REQ-HR-001 Part E — the section's screens live under /hr.
+      // REQ-FIX-001 FIX-5 — the sponsor's order (2026-10-02). The screens
+      // live under /hr; the ones not built yet keep their derived address
+      // until their REQ-HR-001 stage (HR-2 to HR-6).
+      page('hr_dashboard', 'hr_report'),
       page('employees', 'employee', '/hr/employees'),
-      page('organisation', 'org_structure', '/hr/organisation'),
+      page('hr_departments', 'org_structure', '/hr/departments'),
+      page('hr_positions', 'org_structure', '/hr/positions'),
       page('attendance', 'attendance'),
       page('leave', 'leave_request'),
       page('payroll', 'payroll_run'),
-      page('payslips', 'payslip'),
       page('employee_advances', 'employee_advance'),
-      page('expense_claims', 'expense_claim'),
-      page('travel', 'travel_request'),
-      page('asset_assignment', 'asset_assignment'),
+      page('recruitment', 'recruitment'),
+      page('performance', 'performance_review'),
+      page('employee_requests', 'employee_request'),
+      page('hr_documents', 'employee_document'),
       page('hr_reports', 'hr_report'),
     ],
   },

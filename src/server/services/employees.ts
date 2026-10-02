@@ -31,11 +31,14 @@ import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 import { AdminNotFoundError, normaliseCode, optionalText, recordChange, requireText } from './administration';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
+import { can } from '../domain/permissions';
 import { allocateDocumentNumber } from './numbering';
 
 export const PERMISSION_OBJECT = 'employee';
 export const COMPENSATION_OBJECT = 'employee_compensation';
 export const ORGANISATION_OBJECT = 'org_structure';
+/** Users — whoever may create one may create the employee behind it (D-FX-9). */
+const USER_OBJECT = 'app_user';
 const SEQUENCE_KEY = 'EMPLOYEE';
 
 export interface EmployeeInput {
@@ -142,6 +145,122 @@ function kindOf(value: string): EmploymentKind {
 
 export async function create(tx: Tx, ctx: ActorContext, input: EmployeeInput): Promise<{ id: string; employeeNo: string }> {
   await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, { branchCode: ctx.branchCode });
+  return insertEmployee(tx, ctx, ctx.branchCode, input, { appUserId: null, reason: null });
+}
+
+export interface UserEmployeeInput {
+  readonly appUserId: string;
+  readonly fullNameEn: string;
+  readonly branchCode: string;
+  readonly departmentCode: string;
+  readonly positionCode?: string | null;
+  readonly hireDate?: string | null;
+}
+
+/**
+ * The employee a new user is (REQ-FIX-001 FIX-5, D-FX-9): made with the
+ * user, in the same transaction, linked one to one. It is a user-management
+ * act — whoever may create a user may create the person behind it — and the
+ * HR record it opens is the minimum (name, branch, department, the day the
+ * account was made): HR completes the rest on the employee's page.
+ */
+export async function createForUser(tx: Tx, ctx: ActorContext, input: UserEmployeeInput, reason: string | null = null): Promise<{ id: string; employeeNo: string }> {
+  const viaUsers = can(ctx.principal, 'create', USER_OBJECT);
+  if (!viaUsers) await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, { branchCode: input.branchCode });
+  const [taken] = await tx.select({ employeeNo: employee.employeeNo }).from(employee).where(eq(employee.appUserId, input.appUserId)).limit(1);
+  if (taken) throw new HrValidationError('user', `is already ${taken.employeeNo}`);
+  // The employee is kept in the user's branch; the row's policy asks that the
+  // one making it works there too. Said here, in words, rather than as a
+  // row-security refusal.
+  const allowed = await tx.execute(sql`select (app_is_super_user() or app_branch_allowed(${input.branchCode})) as ok`);
+  if (!(allowed.rows[0] as { ok: boolean }).ok) {
+    throw new HrValidationError('branch', `the employee is kept in branch ${input.branchCode}, which you do not work in — untick "Also an employee" and HR will add the person`);
+  }
+  return insertEmployee(
+    tx,
+    ctx,
+    input.branchCode,
+    {
+      fullNameEn: input.fullNameEn,
+      departmentCode: input.departmentCode,
+      positionCode: input.positionCode ?? null,
+      hireDate: input.hireDate ?? businessToday(),
+      employmentKind: 'permanent',
+    },
+    { appUserId: input.appUserId, reason },
+  );
+}
+
+export interface BackfillOutcome {
+  readonly made: readonly { readonly email: string; readonly employeeNo: string; readonly departmentCode: string; readonly departmentAssumed: boolean }[];
+  readonly skipped: readonly { readonly email: string; readonly why: string }[];
+}
+
+/**
+ * Every active user without an employee gets one (FX14) — never two: a user
+ * already linked is passed over, and the unique index on the link holds it
+ * if two runs race. The branch is the user's default, else the first they
+ * work in; the department the first they are scoped to, else the company's
+ * first active department — said in the history's reason, for HR to move.
+ * Hired the day the account was made.
+ */
+export async function ensureForUsers(tx: Tx, ctx: ActorContext): Promise<BackfillOutcome> {
+  const { rows } = await tx.execute(sql`
+    select u.id, u.email, u.display_name as "displayName",
+           to_char(u.created_at at time zone 'Asia/Baghdad', 'YYYY-MM-DD') as "hireDate",
+           (select s.branch_code from user_branch_scope s join branch b on b.code = s.branch_code
+             where s.user_id = u.id and b.active order by s.is_default desc, s.branch_code limit 1) as "branchCode",
+           (select s.department_code from user_department_scope s join department d on d.code = s.department_code
+             where s.user_id = u.id and d.active order by s.department_code limit 1) as "departmentCode"
+      from app_user u
+     where u.is_active
+       and not exists (select 1 from employee e where e.app_user_id = u.id)
+     order by u.created_at, u.email`);
+  const [fallback] = await tx.select({ code: department.code }).from(department).where(eq(department.active, true)).orderBy(asc(department.code)).limit(1);
+  const made: BackfillOutcome['made'][number][] = [];
+  const skipped: BackfillOutcome['skipped'][number][] = [];
+  for (const raw of rows as { id: string; email: string; displayName: string; hireDate: string; branchCode: string | null; departmentCode: string | null }[]) {
+    if (!raw.branchCode) {
+      skipped.push({ email: raw.email, why: 'works in no active branch' });
+      continue;
+    }
+    const departmentCode = raw.departmentCode ?? fallback?.code ?? null;
+    if (!departmentCode) {
+      skipped.push({ email: raw.email, why: 'there is no active department' });
+      continue;
+    }
+    const assumed = raw.departmentCode === null;
+    const reason = assumed
+      ? `Backfilled from the user account (REQ-FIX-001 FX14); the account had no department, so ${departmentCode} until HR moves the person`
+      : 'Backfilled from the user account (REQ-FIX-001 FX14)';
+    const done = await createForUser(tx, ctx, { appUserId: raw.id, fullNameEn: raw.displayName, branchCode: raw.branchCode, departmentCode, hireDate: raw.hireDate }, reason);
+    made.push({ email: raw.email, employeeNo: done.employeeNo, departmentCode, departmentAssumed: assumed });
+  }
+  return { made, skipped };
+}
+
+/** The person behind a user account, for the user's page. */
+export async function ofUser(tx: Tx, appUserId: string) {
+  const [row] = await tx
+    .select({ employeeNo: employee.employeeNo, fullNameEn: employee.fullNameEn, status: employee.status })
+    .from(employee)
+    .where(eq(employee.appUserId, appUserId))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * The one insert behind every way a person enters the register: HR's New
+ * dialog, a new user with *Also an employee* ticked, and the backfill of the
+ * users who signed in before the two were linked (REQ-FIX-001 FIX-5).
+ */
+async function insertEmployee(
+  tx: Tx,
+  ctx: ActorContext,
+  branchCode: string,
+  input: EmployeeInput,
+  link: { readonly appUserId: string | null; readonly reason: string | null },
+): Promise<{ id: string; employeeNo: string }> {
   const fullNameEn = requireText(input.fullNameEn, 'full_name_en');
   const hireDate = assertDay(input.hireDate, 'hire_date');
   const departmentCode = await assertDepartment(tx, input.departmentCode);
@@ -151,7 +270,7 @@ export async function create(tx: Tx, ctx: ActorContext, input: EmployeeInput): P
   const dateOfBirth = input.dateOfBirth ? assertDay(input.dateOfBirth, 'date_of_birth') : null;
 
   // EMP-{BRANCH}-{SERIAL}: minted, never typed (§4).
-  const allocated = await allocateDocumentNumber(tx, SEQUENCE_KEY, { branchCode: ctx.branchCode }, ctx.principal.userId);
+  const allocated = await allocateDocumentNumber(tx, SEQUENCE_KEY, { branchCode }, ctx.principal.userId);
   const [created] = await tx
     .insert(employee)
     .values({
@@ -163,21 +282,22 @@ export async function create(tx: Tx, ctx: ActorContext, input: EmployeeInput): P
       phone: optionalText(input.phone, 64),
       address: optionalText(input.address),
       emergencyContact: optionalText(input.emergencyContact),
-      branchCode: ctx.branchCode,
+      branchCode,
       departmentCode,
       positionCode,
       managerEmployeeId,
       hireDate,
       employmentKind,
       status: 'active',
+      appUserId: link.appUserId,
       createdBy: ctx.principal.userId,
     })
     .returning({ id: employee.id });
 
   // The first history row: hired, with where they start (H1).
   await history(tx, ctx, created!.id, [
-    { field: 'hired', before: null, after: hireDate, effectiveFrom: hireDate },
-    { field: 'branch_code', before: null, after: ctx.branchCode, effectiveFrom: hireDate },
+    { field: 'hired', before: null, after: hireDate, effectiveFrom: hireDate, reason: link.reason },
+    { field: 'branch_code', before: null, after: branchCode, effectiveFrom: hireDate },
     { field: 'department_code', before: null, after: departmentCode, effectiveFrom: hireDate },
     ...(positionCode ? [{ field: 'position_code', before: null, after: positionCode, effectiveFrom: hireDate }] : []),
     ...(managerEmployeeId ? [{ field: 'manager_employee_id', before: null, after: managerEmployeeId, effectiveFrom: hireDate }] : []),
@@ -188,8 +308,9 @@ export async function create(tx: Tx, ctx: ActorContext, input: EmployeeInput): P
     action: 'employee.created',
     objectType: PERMISSION_OBJECT,
     objectId: allocated.documentNo,
-    branchCode: ctx.branchCode,
-    after: { employeeNo: allocated.documentNo, fullNameEn, departmentCode, positionCode, hireDate, employmentKind },
+    branchCode,
+    after: { employeeNo: allocated.documentNo, fullNameEn, departmentCode, positionCode, hireDate, employmentKind, ...(link.appUserId ? { appUserId: link.appUserId } : {}) },
+    ...(link.reason ? { reason: link.reason } : {}),
   });
   return { id: created!.id, employeeNo: allocated.documentNo };
 }

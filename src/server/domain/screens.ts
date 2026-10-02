@@ -254,16 +254,19 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   variance_reports: 'report',
 
   // 16 — HR & Payroll
+  // REQ-FIX-001 FIX-5 — the sponsor's thirteen, in his order.
+  hr_dashboard: 'dashboard',
   employees: 'document',
-  organisation: 'workspace',
+  hr_departments: 'document',
+  hr_positions: 'document',
   attendance: 'workspace',
   leave: 'document',
   payroll: 'workspace',
-  payslips: 'report',
   employee_advances: 'document',
-  expense_claims: 'document',
-  travel: 'document',
-  asset_assignment: 'document',
+  recruitment: 'document',
+  performance: 'document',
+  employee_requests: 'document',
+  hr_documents: 'list',
   hr_reports: 'report',
 
   // 17 — Documents & Tasks
@@ -480,7 +483,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/administration/legacy-import',
   // REQ-HR-001 Stage HR-1 — people and organisation.
   '/hr/employees',
-  '/hr/organisation',
+  '/hr/departments',
+  '/hr/positions',
   '/administration/hr-settings',
   // REQ-WA-001 WA-1/WA-2 — the WhatsApp bridge.
   '/administration/whatsapp',
