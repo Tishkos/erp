@@ -16,6 +16,7 @@ import * as shipments from '@/server/services/shipments';
 import { addContainersAction, blStatusAction } from '../actions';
 import { containerChip } from '../../containers/status';
 import { businessToday } from '@/server/domain/business-date';
+import { isNotFoundError } from '@/server/not-found';
 
 /**
  * One B/L — REQ-AP-001 §17.1, §21.9. The Purchase Invoice's window: the B/L
@@ -55,8 +56,10 @@ export default async function BlPage({
   const found = await withCurrentUser(async (tx) => {
     try {
       return { ...(await shipments.viewBl(tx, blNo)), statuses: await shipments.statuses(tx) };
-    } catch {
-      return null;
+    } catch (error) {
+      // E1 — a missing record is a 404; anything else reaches the error boundary.
+      if (isNotFoundError(error)) return null;
+      throw error;
     }
   });
   if (!found) notFound();

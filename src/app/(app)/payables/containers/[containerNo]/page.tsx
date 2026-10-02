@@ -27,6 +27,7 @@ import {
 import { containerChip } from '../status';
 import { windowTone } from '../../window-tone';
 import { businessToday } from '@/server/domain/business-date';
+import { isNotFoundError } from '@/server/not-found';
 
 /**
  * One container — REQ-AP-001 §17.2, §18. The Purchase Invoice's window: the
@@ -68,8 +69,10 @@ export default async function ContainerPage({
   const found = await withCurrentUser(async (tx) => {
     try {
       return { ...(await shipments.viewContainer(tx, containerNo, id)), statuses: await shipments.statuses(tx) };
-    } catch {
-      return null;
+    } catch (error) {
+      // E1 — a missing record is a 404; anything else reaches the error boundary.
+      if (isNotFoundError(error)) return null;
+      throw error;
     }
   });
   if (!found) notFound();

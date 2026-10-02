@@ -85,7 +85,7 @@ describe('IM3 · the daily check (OP-7, OP-8)', () => {
   it('reports a missing, a stale, an unfinished and an unencrypted backup', async () => {
     const none = await db.transaction((tx) => check(tx, { backupRoot: join(dir, 'none'), jobStateDir: join(dir, 'nojobs') }));
     expect(none.findings.map((f) => f.code)).toContain('backup_missing');
-    expect(none.checked).toEqual(['backup', 'partitions', 'fiscal', 'jobs', 'disk', 'deliveries']);
+    expect(none.checked).toEqual(['backup', 'partitions', 'fiscal', 'jobs', 'disk', 'deliveries', 'bank_accounts']);
 
     set('20260101-010000', { ageHours: 48, manifest: false });
     const stale = await db.transaction((tx) => check(tx, { backupRoot: dir, jobStateDir: join(dir, 'nojobs') }));
@@ -146,5 +146,28 @@ describe('IM3 · the daily check (OP-7, OP-8)', () => {
     );
     expect(partitions.rows[0].n).toBeGreaterThan(0);
     expect(after.findings.find((f) => f.code === 'partition_horizon' && f.severity === 'stop')).toBeUndefined();
+  });
+});
+
+describe('F5 · a bank or cash account whose ledger account is gone is a stop', () => {
+  it('names the account and says where to re-link it', async () => {
+    const { rows: accounts } = await ownerPool.query(
+      `insert into chart_of_account (code, name, account_type, parent_id, is_group, is_active, approval_status, level, currency_restriction)
+       select 'A9DRILL', 'Drill cash', 'asset', id, false, true, 'approved', 1, 'IQD' from chart_of_account where code = 'A000001' returning id`,
+    );
+    await ownerPool.query(
+      `insert into bank_cash_account (code, name, account_type, bank_name, account_number, currency, gl_account_id, active)
+       values ('BANK-DRILL', 'Drill account', 'bank', 'Drill Bank', 'DR-1', 'IQD', $1, true)`,
+      [accounts[0].id],
+    );
+    const linked = await db.transaction((tx) => check(tx, { backupRoot: join(dir, 'none'), jobStateDir: join(dir, 'nojobs') }));
+    expect(linked.findings.map((f) => f.code)).not.toContain('bank_account_unlinked');
+
+    await ownerPool.query(`update chart_of_account set is_active = false where id = $1`, [accounts[0].id]);
+    const broken = await db.transaction((tx) => check(tx, { backupRoot: join(dir, 'none'), jobStateDir: join(dir, 'nojobs') }));
+    const finding = broken.findings.find((f) => f.code === 'bank_account_unlinked');
+    expect(finding?.severity).toBe('stop');
+    expect(finding?.message).toContain('BANK-DRILL');
+    await ownerPool.query(`update chart_of_account set is_active = true where id = $1`, [accounts[0].id]);
   });
 });

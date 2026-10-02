@@ -31,6 +31,7 @@ import { pdChip } from '../status';
 import { windowTone } from '../../window-tone';
 import { STATUS_CHIP, statusKey } from '../../payment-applications/status';
 import { businessToday } from '@/server/domain/business-date';
+import { isNotFoundError } from '@/server/not-found';
 
 /**
  * One PD — REQ-AP-001 §21.8. The Purchase Invoice's window: the registration
@@ -78,8 +79,10 @@ export default async function PdPage({
         bankRows: await banks.listActive(tx),
         imports: !view.owner && mayEdit ? await customs.importChoices(tx) : [],
       };
-    } catch {
-      return null;
+    } catch (error) {
+      // E1 — a missing record is a 404; anything else reaches the error boundary.
+      if (isNotFoundError(error)) return null;
+      throw error;
     }
   });
   if (!found) notFound();

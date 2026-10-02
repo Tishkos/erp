@@ -31,6 +31,7 @@
  */
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
+  NoPostingRuleError,
   assertRequestWellFormed,
   resolveLineAccount,
   resolveRule,
@@ -815,8 +816,11 @@ export async function mappedAccountFor(
   const rules = await rulesForEvent(tx, eventType);
   try {
     return resolveRule(rules, eventType, lineRole, { branchCode }).accountId;
-  } catch {
-    return null;
+  } catch (error) {
+    // E3 — "nothing mapped" is null; an ambiguous mapping is a configuration
+    // fault the form must not hide behind an empty choice.
+    if (error instanceof NoPostingRuleError) return null;
+    throw error;
   }
 }
 

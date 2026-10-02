@@ -172,9 +172,12 @@ export async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting>
 
   // §21.13 — "Service receipts awaiting my confirmation": submitted, in one
   // of this person's departments (a manager sees every department's).
+  // The department filter is in the query, before the limit (HARDEN G6): a
+  // manager's own rows must not be cut off by fifty of other departments'.
   const myDepartments = principal.departments.map((d) => d.code);
-  const receiptRows = can(principal, 'view', 'service_receipt')
-    ? await tx.execute(sql`
+  const receiptRows =
+    can(principal, 'view', 'service_receipt') && (isManager || myDepartments.length > 0)
+      ? await tx.execute(sql`
         select r.receipt_no        as "receiptNo",
                r.department_code   as "departmentCode",
                r.service_date::text as "serviceDate",
@@ -183,13 +186,12 @@ export async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting>
           left join payable p on p.id = r.payable_id
           left join purchase_order o on o.id = r.purchase_order_id
          where r.status = 'submitted'
+           and ${isManager ? sql`true` : sql`r.department_code in (${sql.join(myDepartments.map((code) => sql`${code}`), sql`, `)})`}
          order by r.service_date
          limit 50
       `)
-    : { rows: [] as Record<string, unknown>[] };
-  const receiptsAwaiting = (receiptRows.rows as unknown as (WaitingReceipt & {
-    departmentCode: string;
-  })[]).filter((row) => isManager || myDepartments.includes(row.departmentCode));
+      : { rows: [] as Record<string, unknown>[] };
+  const receiptsAwaiting = receiptRows.rows as unknown as (WaitingReceipt & { departmentCode: string })[];
 
   // §21.13 — "Payables due this week": the next seven days, oldest first.
   const dueRows = maySeePayables

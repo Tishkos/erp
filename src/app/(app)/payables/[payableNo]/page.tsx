@@ -61,6 +61,7 @@ import { containerChip } from '../containers/status';
 import { STATUS_CHIP, statusKey } from '../payment-applications/status';
 import { businessDateOf, businessToday } from '@/server/domain/business-date';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '@domain/money';
+import { isNotFoundError } from '@/server/not-found';
 
 /**
  * The payable page — REQ-AP-001 §21.3, the one record everybody opens.
@@ -189,8 +190,10 @@ export default async function PayablePage({
         pds,
         pdPickers,
       };
-    } catch {
-      return null;
+    } catch (error) {
+      // E1 — a missing record is a 404; anything else reaches the error boundary.
+      if (isNotFoundError(error)) return null;
+      throw error;
     }
   });
   if (!found) notFound();
@@ -1664,7 +1667,7 @@ export default async function PayablePage({
                                 : receipt.status
                           }
                         >
-                          {receipt.status}
+                          {statusT.has(receipt.status) ? statusT(receipt.status) : receipt.status}
                         </span>
                       </td>
                       <td>{receipt.note ?? '—'}</td>

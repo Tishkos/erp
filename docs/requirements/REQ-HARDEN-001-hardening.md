@@ -6,7 +6,7 @@
 | **Release** | 1 (before go-live of REQ-AP-001 Stage 8 cut-over) |
 | **Source** | Full-system audit of 2026-10-02 on `main` (stages 1–8 merged): three read-only sweeps (security · correctness · operations), the complete test battery, and hand-verification of the two defects the sponsor reported. |
 | **Test case(s)** | Named per finding below; each fix lands with its test (the A2 discipline). |
-| **Status** | HARDEN-1 BUILT (`harden/stage-1-access`), HARDEN-2 BUILT (`harden/stage-2-money-time`), both 2026-10-02; HARDEN-3 and -4 proposed. |
+| **Status** | HARDEN-1 BUILT (`harden/stage-1-access`), HARDEN-2 BUILT (`harden/stage-2-money-time`), both 2026-10-02; HARDEN-3 BUILT with REQ-WA-001 (F1–F3, F5 guard) and on `harden/stage-3-delivery` (E1–E3, HD12); HARDEN-4 partly built on the same branch (G4/HD13, G6, H1, I1/I2/HD16, J1, J3); G1–G3, G5, H2–H3, I3 remain. |
 | **Approved by** | *Not yet approved.* |
 
 **How to read this document.** §1 is what the audit proved healthy. §2 is the
@@ -160,9 +160,9 @@ D-HD-2 below fixes the zone authoritatively.
 
 | # | Sev | Finding | Evidence |
 |---|---|---|---|
-| E1 | H | **Bare `catch { return null } → notFound()`** wraps the whole data load of every newer payables detail page (payable, payment-application, loan, PD, B/L, container, contract, advance) — any DB error renders as "record does not exist". The master-data pages show the correct pattern (narrow on `AdminNotFoundError`, rethrow the rest). | `payables/[payableNo]/page.tsx:191-194` + 7 siblings |
-| E2 | M | Journal entry page swallows its whole load the same way. | `finance/journals/[entryNo]/page.tsx:88-92` |
-| E3 | M | `posting.mappedAccountFor` returns `null` on engine failure — indistinguishable from "no mapping configured". | `posting.ts:816-818` |
+| E1 | H | ~~**Bare `catch { return null } → notFound()`**~~ **Fixed (`harden/stage-3-delivery`):** every detail page narrows on `isNotFoundError` (`src/server/not-found.ts`) and rethrows the rest; HD12 → `tests/unit/hd12-errors-not-404.test.ts` greps the pages. Was: bare catch wraps the whole data load of every newer payables detail page (payable, payment-application, loan, PD, B/L, container, contract, advance) — any DB error renders as "record does not exist". The master-data pages show the correct pattern (narrow on `AdminNotFoundError`, rethrow the rest). | `payables/[payableNo]/page.tsx:191-194` + 7 siblings |
+| E2 | M | ~~Journal entry page swallows its whole load the same way.~~ **Fixed** with E1. | `finance/journals/[entryNo]/page.tsx:88-92` |
+| E3 | M | ~~`posting.mappedAccountFor` returns `null` on engine failure~~ **Fixed:** null only for `NoPostingRuleError`; an ambiguous mapping throws. Was: returns null on engine failure — indistinguishable from "no mapping configured". | `posting.ts:816-818` |
 | E4 | L | Landed-cost preview hides allocation failures (`safeAllocate → null`). | `landed-cost.ts:346-349` |
 
 ## 3.F Jobs and delivery (the unplugged layer)
@@ -173,7 +173,7 @@ D-HD-2 below fixes the zone authoritatively.
 | F2 | H | ~~**The delivery job handler is never installed** and **no job runner process exists**~~ **Built with REQ-WA-001 WA-1:** `notification-runner.runOnce` dispatches the outbox, runs `notification.deliver`, sweeps the owned channel; `scripts/ops/deliver-notifications.ts` every five minutes (crontab), the bridge every poll. HD10 → `tests/integration/wa01-bridge.test.ts`. | `notification-runner.ts`, `crontab.erp` |
 | F3 | M | ~~A failed delivery can never be retried~~ **Built with REQ-WA-001 WA-1:** a `failed` row is re-attempted in place (`failed → sent` is allowed by the trigger; only `sent` is terminal) per D-HD-4 — 1 / 10 / 60 minutes, three attempts (`domain/notifications.isDeliveryDue`); `suppressed` for an unreachable recipient. No new column was needed. | `notifications.ts` › `attempt`, `deliverChannel` |
 | F4 | M | All recurring jobs exist only as hand-installed crontab lines — a fresh VPS silently runs none (sweep, due-notices, integrity, statement checks, restore drill). | `scripts/ops/*`, runbook |
-| F5 | M | The Sunday restore drill is known-broken on `CASH-ACCOUNTANT_ERBIL` (deleted chart account) — tracked only in prose, no guard. | runbook §cron |
+| F5 | M | ~~tracked only in prose, no guard~~ **Guarded:** the daily health check (`bank_account_unlinked`, a stop) names every bank/cash account whose ledger account is missing or inactive and where to re-link it (`tests/integration/im03-healthz.test.ts`). The live data itself is still to be re-linked on the screen. | runbook §cron |
 | F6 | L | No exchange-rate fetch job (manual entry only); `nodemailer` installed, never imported. | `package.json:40,48` |
 
 ## 3.G Performance
@@ -183,15 +183,15 @@ D-HD-2 below fixes the zone authoritatively.
 | G1 | H | **The payable page issues ~25 service calls strictly sequentially** in one transaction — latency is the sum of every round trip. | `payables/[payableNo]/page.tsx:122-194` |
 | G2 | H | `users.listAll` — unbounded, no active filter — loaded on **every** payable view just to fill owner dropdowns inside collapsed `<details>`. | same page `:131`, `users.ts:55-72` |
 | G3 | M | `settings.overview` fires 8 full-table reads for the 1 list the page uses; the landed-cost block adds 6 more unbounded sequential calls; Attachments + RecordHistory each open their own extra transaction (3 DB sessions per view). | same page `:130,162-172,1754,1765` |
-| G4 | H | **Missing FK indexes** (Postgres does not auto-index FKs): `payment_application.supplier_id` (0232), `container_receipt_line.container_line_id`, `container_receipt.payable_id/warehouse/branch`, `shipment_container_line.container_id` (only a partial unique), `landed_cost_layer_adjustment.payable_id/item/warehouse/via_layer`, `bank_loan_allocation.landed_cost_charge_id`, `bank_loan.bank_code`, `customs_pd.bank_code/branch_code`. 0231/0237 are clean. | per-migration lines in the audit log |
+| G4 | H | ~~**Missing FK indexes**~~ **Fixed:** migration `0244_fk_indexes.sql` (HD13, additive, IF NOT EXISTS) over the document ↔ journal, document ↔ account, payables and layer links. Was: missing FK indexes (Postgres does not auto-index FKs): `payment_application.supplier_id` (0232), `container_receipt_line.container_line_id`, `container_receipt.payable_id/warehouse/branch`, `shipment_container_line.container_id` (only a partial unique), `landed_cost_layer_adjustment.payable_id/item/warehouse/via_layer`, `bank_loan_allocation.landed_cost_charge_id`, `bank_loan.bank_code`, `customs_pd.bank_code/branch_code`. 0231/0237 are clean. | per-migration lines in the audit log |
 | G5 | M | Registers truncate silently at `limit 200` with no count/paging (goods-receipts, purchase-orders, service-receipts) — while the newer registers (PD, loans, payment applications, shipments, contracts) have **no limit at all** and filter/sort in JS. The proper list engine (`list.ts`, LIMIT/OFFSET + count) exists and is bypassed by both. | `goods-receipt.ts:814` etc. vs `customs-pd.ts:659-700` etc. |
-| G6 | M | Dashboard "receipts awaiting" applies `limit 50` **before** the department filter — a manager's own rows can be cut off by other departments'. | `dashboard.ts:185-189` |
+| G6 | M | ~~applies `limit 50` **before** the department filter~~ **Fixed:** the department predicate is in the query. Was: dashboard "receipts awaiting" applied limit 50 before the department filter — a manager's own rows can be cut off by other departments'. | `dashboard.ts:185-189` |
 
 ## 3.H UI / i18n
 
 | # | Sev | Finding | Evidence |
 |---|---|---|---|
-| H1 | M | Raw enum rendered on the payable page's service chip (`{receipt.status}`) while sibling pages translate it; invoice-status fallback prints the English code in Arabic. | `payables/[payableNo]/page.tsx:1664,560` |
+| H1 | M | ~~Raw enum rendered on the payable page's service chip~~ **Fixed:** the chip reads the `status` namespace. Was: raw enum on the service chip (`{receipt.status}`) while sibling pages translate it; invoice-status fallback prints the English code in Arabic. | `payables/[payableNo]/page.tsx:1664,560` |
 | H2 | L | PD/container/charge/basis names fall back to the stored English name in non-English locales without failing any gate. | same page `:1071,1216,1324,1451` |
 | H3 | L | The same 11 status labels are maintained in ≥3 namespaces (drift risk per locale) instead of reusing the global `status` namespace. | `messages/en.json:2575+` |
 
@@ -199,17 +199,17 @@ D-HD-2 below fixes the zone authoritatively.
 
 | # | Sev | Finding | Evidence |
 |---|---|---|---|
-| I1 | H | **Playwright has exactly one project: Desktop Chrome** — no mobile viewport exists anywhere, so no screen has mobile e2e coverage; the RTL spec only visits sign-in and chart-of-accounts. | `playwright.config.ts:27`, `tests/e2e/rtl.spec.ts` |
-| I2 | M | Screens with no e2e at any viewport: service-receipts, contracts, open-items, purchase-orders, goods-receipts, banks master; shipments/advances are smoke-only. | `tests/e2e/payables.spec.ts` route list |
+| I1 | H | ~~**Playwright has exactly one project**~~ **Fixed:** a `mobile` project (Pixel 5) runs `tests/e2e/mobile-rtl.spec.ts` — every delivered list and settings screen of stages 3–8 and after, in Arabic at 390px, no horizontal scroll (HD16). Was: Desktop Chrome only — no mobile viewport exists anywhere, so no screen has mobile e2e coverage; the RTL spec only visits sign-in and chart-of-accounts. | `playwright.config.ts:27`, `tests/e2e/rtl.spec.ts` |
+| I2 | M | ~~no e2e at any viewport~~ **Covered at the mobile viewport** by HD16 (service-receipts, contracts, open-items, purchase-orders, goods-receipts, banks); desktop flows for them remain to write. Was: screens with no e2e at any viewport: service-receipts, contracts, open-items, purchase-orders, goods-receipts, banks master; shipments/advances are smoke-only. | `tests/e2e/payables.spec.ts` route list |
 | I3 | M | A21 (10k payables < 1 s) has a load script but has never been run; the 90-combination theme e2e has not been run over the stage-3-8 screens. | `tests/load/payables.js` |
 
 ## 3.J Hygiene
 
 | # | Sev | Finding | Evidence |
 |---|---|---|---|
-| J1 | M | `.claude-prt.mjs` — a committed one-off scratch script with the seeded password hardcoded — should be deleted. | repo root |
+| J1 | M | ~~`.claude-prt.mjs`~~ **Deleted** (`harden/stage-3-delivery`). | repo root |
 | J2 | L | REQ-HR-001 / REQ-WA-001 lacked the 00.6 traceability header (**fixed in this commit** — the only change shipped with this document). | `tests/unit/requirement-traceability.test.ts` |
-| J3 | L | Root-level working notes (`NAVBAR_NAVIGATION.md`, `improvements.md`, `newsettings.md`) belong under `docs/` or out of the tree. | repo root |
+| J3 | L | ~~Root-level working notes~~ **Moved** to `docs/notes/`. | repo root |
 
 ---
 

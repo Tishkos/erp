@@ -34,6 +34,7 @@ import {
   submitJournal,
   updateJournalHeader,
 } from '../actions';
+import { isNotFoundError } from '@/server/not-found';
 
 /**
  * One Journal Entry — Phase 1 requirements 2 and 3.
@@ -85,8 +86,10 @@ export default async function JournalPage({
         attached: (await attachments.currentFor(tx, journal.PERMISSION_OBJECT, detail.header.id)).length,
         depts: (await departments.listAll(tx)).filter((d) => d.active),
       };
-    } catch {
-      return null;
+    } catch (error) {
+      // E1 — a missing record is a 404; anything else reaches the error boundary.
+      if (isNotFoundError(error)) return null;
+      throw error;
     }
   });
   if (!data) notFound();

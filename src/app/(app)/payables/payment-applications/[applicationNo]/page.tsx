@@ -39,6 +39,7 @@ import {
 import { STATUS_CHIP, statusKey } from '../status';
 import { windowTone } from '../../window-tone';
 import { businessToday } from '@/server/domain/business-date';
+import { isNotFoundError } from '@/server/not-found';
 
 /**
  * One payment application — REQ-AP-001 §21.7.
@@ -87,8 +88,10 @@ export default async function PaymentApplicationPage({
   const found = await withCurrentUser(async (tx) => {
     try {
       return await applications.view(tx, applicationNo);
-    } catch {
-      return null;
+    } catch (error) {
+      // E1 — a missing record is a 404; anything else reaches the error boundary.
+      if (isNotFoundError(error)) return null;
+      throw error;
     }
   });
   if (!found) notFound();

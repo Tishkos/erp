@@ -70,7 +70,7 @@ Run `npx playwright test tests/e2e/theme-readability.spec.ts --workers=1` agains
 
 ## Screens copy existing models — the design must not change
 
-Standing rule (by direction, 2026-10-01; see also newsettings.md: "DO NOT CHANGE THE CURRENT DESIGN"). A new or changed screen must be indistinguishable in style from the existing ones:
+Standing rule (by direction, 2026-10-01; see also docs/notes/newsettings.md: "DO NOT CHANGE THE CURRENT DESIGN"). A new or changed screen must be indistinguishable in style from the existing ones:
 
 * A **list screen** copies `src/app/(app)/payables/invoices/page.tsx`: AdminPage → `tabs={<SectionTabs route=…/>}` → title/subtitle → ListToolbar (search; filters and saved views as filter controls — a `filterBar`/`FilterRow` form with `Select`/`Field`, never links in the header) → the standard register table (`s.sapRegisterTableWrap` / `s.sapRegisterTable`, `s.sapNum` for numbers) → paging. Nothing else.
 * A **record/document screen** copies `src/app/(app)/payables/invoices/[invoiceNo]/page.tsx`: AdminPage → SectionTabs → DocumentWindow (standard header fields, status chip, actions row, lines) → further registers stacked underneath in the supplier-statement manner (own `s.sapDoc`/`s.sapWindow`/`s.sapTitle` sections, not tabs) → RecordHistory, Attachments.
@@ -108,3 +108,9 @@ Standing rule (by direction, 2026-10-01; see also newsettings.md: "DO NOT CHANGE
 * Attachments are the ERP's own print models through the ERP's own renderers (`print/reports.ts` builders, `renderPdf`/`renderXlsx`): a PDF from WhatsApp is byte-identical to the export route's. The bridge writes the audit rows the screen would have (`auditAnswer`) after sending.
 * `notifications.deliver` leaves a channel with no registered sender **pending** for the process that owns it; `DeliverySuppressed` marks a row `suppressed` (no address, notifications off, mail unconfigured); failed rows retry per `domain/notifications.isDeliveryDue` (1 / 10 / 60 min, three attempts). `scripts/ops/deliver-notifications.ts` (cron, every five minutes) owns e-mail; `scripts/ops/whatsapp-bridge.ts` (a service, `deploy/whatsapp-bridge.service`) owns WhatsApp. Both run `services/notification-runner.runOnce` as the system operator.
 * `whatsapp_message` and `whatsapp_contact` are never deleted (triggers); retention blanks message bodies (`redactExpired`), rows stay. `resetTestData` truncates them and restores the seeded `whatsapp_setting` rows. The pairing could not be exercised in the build sandbox (no route to WhatsApp's servers): the first run on a host that has one is the test — `docs/RUNBOOK-whatsapp.md`.
+
+## Closing controls (REQ-IMPROVE-001 IMPROVE-2a)
+
+* A **closed** period is closed at the database (0243): a journal cannot enter `posted` with a posting date in it, a stock movement cannot be dated in it, and periods close in sequence. Soft close stays the application's override path (`periods.authorisePosting`). A fixture or test that needs a closed month closes every earlier month first (`accounting-periods-rates.test.ts` › `closeThrough`).
+* `periods.setPeriodStatus(…, 'closed')` runs `services/closing-checks.report` and refuses on a blocking failure; the checklist is on `/finance/periods` and in the nightly `closing-checks` job. Add a check by adding it to `CHECK_CODES`, `report`, both locales (`admin.periods.check_<code>`), `docs/CONTROLS.md` and `im10-period-close.test.ts`.
+* `docs/CONTROLS.md` is the register of enforced controls; `tests/unit/im15-controls-register.test.ts` holds every row to a test file and, for a database control, a migration. A new trigger or constraint that enforces a rule gets a row.
