@@ -53,6 +53,19 @@ export interface UserInput {
   readonly departmentCodes?: readonly string[];
 }
 
+/**
+ * REQ-HARDEN-001 G2 — who a form may name as an owner: active users, their id
+ * and name, nothing else. The payable record loaded every user with their
+ * credentials join for two drop-downs.
+ */
+export async function pickable(tx: Tx) {
+  return tx
+    .select({ id: appUser.id, displayName: appUser.displayName })
+    .from(appUser)
+    .where(eq(appUser.isActive, true))
+    .orderBy(asc(appUser.displayName));
+}
+
 export async function listAll(tx: Tx) {
   return tx
     .select({

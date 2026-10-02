@@ -3,6 +3,7 @@ import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { inArray } from 'drizzle-orm';
 import { appUser } from '@/server/db/schema';
 import { withCurrentUser } from '@/server/session';
+import type { Tx } from '@/server/db/client';
 import * as audit from '@/server/services/audit';
 import Link from 'next/link';
 import { History } from 'lucide-react';
@@ -36,15 +37,48 @@ export function AuditLogButton({ label }: { readonly label: string }) {
  * → 2026-08-29* — rather than dumped as a document. Ids are never shown; the
  * things they point at are named instead.
  */
+/** A folded-in event about a person names that person — the event's user, or the user half of a `<user>:<code>` membership id. */
+function subjectOf(row: Record<string, unknown>, objectType: string, objectId: string): string | null {
+  const type = String(row.object_type);
+  const id = String(row.object_id);
+  if (type === objectType && id === objectId) return null;
+  if (type === 'app_user' || type === 'user') return id;
+  if (type === 'user_department_scope') return id.split(':')[0] ?? null;
+  return null;
+}
+
+export type HistoryRead = Awaited<ReturnType<typeof readHistory>>;
+
+/**
+ * The log's rows and the names they mention, read in the caller's
+ * transaction — so a record page that already holds one does not open a
+ * second session for its history (REQ-HARDEN-001 G3).
+ */
+export async function readHistory(tx: Tx, objectType: string, objectId: string, related: readonly audit.RelatedObjects[] = []) {
+  const rows = await audit.timelineWithAttachments(tx, objectType, objectId, 200, related);
+  const actorIds = rows.map((r) => r.actor_user_id).filter(Boolean) as string[];
+  const subjectIds = rows.map((r) => subjectOf(r, objectType, objectId)).filter(Boolean) as string[];
+  const ids = [...new Set([...actorIds, ...subjectIds])].filter((id) => id !== objectId);
+  const names = new Map<string, string>();
+  if (ids.length > 0) {
+    const people = await tx.select({ id: appUser.id, displayName: appUser.displayName }).from(appUser).where(inArray(appUser.id, ids));
+    for (const person of people) names.set(person.id, person.displayName);
+  }
+  return { rows, names };
+}
+
 export async function RecordHistory({
   objectType,
   objectId,
   related = [],
+  preloaded,
 }: {
   readonly objectType: string;
   readonly objectId: string;
   /** Other audit objects whose events belong on this log — see `timelineWithAttachments`. */
   readonly related?: readonly audit.RelatedObjects[];
+  /** The log already read in the page's own transaction (`readHistory`). */
+  readonly preloaded?: HistoryRead;
 }) {
   const [t, action, locale] = await Promise.all([
     getTranslations('admin'),
@@ -64,47 +98,20 @@ export async function RecordHistory({
       ? t(`audit.fields.${key}`)
       : key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase();
 
-  const entries = await withCurrentUser(async (tx) => {
-    const rows = await audit.timelineWithAttachments(tx, objectType, objectId, 200, related);
-    // A folded-in event about a person — "department access granted" on the
-    // department's own log — names that person, or the reader takes the actor
-    // for the subject. The subject is the event's user, or the user half of a
-    // `<user>:<code>` membership id.
-    const subjectOf = (row: Record<string, unknown>): string | null => {
-      const type = String(row.object_type);
-      const id = String(row.object_id);
-      if (type === objectType && id === objectId) return null;
-      if (type === 'app_user' || type === 'user') return id;
-      if (type === 'user_department_scope') return id.split(':')[0] ?? null;
-      return null;
+  const { rows, names } = preloaded ?? (await withCurrentUser((tx) => readHistory(tx, objectType, objectId, related)));
+  const entries = rows.map((row): TimelineEntry => {
+    const subject = subjectOf(row, objectType, objectId);
+    const change = describeChange(row.before_value, row.after_value, field, locale as Locale);
+    const who = subject && subject !== objectId ? `${t('audit.person')}: ${names.get(subject) ?? t('audit.former_user')}` : null;
+    return {
+      id: String(row.id),
+      when: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(String(row.occurred_at))),
+      action: label(String(row.action)),
+      actor: row.actor_user_id ? (names.get(String(row.actor_user_id)) ?? t('audit.former_user')) : null,
+      outcome: String(row.outcome),
+      reason: row.reason ? String(row.reason) : null,
+      detail: [who, change].filter(Boolean).join(' · ') || null,
     };
-    const actorIds = rows.map((r) => r.actor_user_id).filter(Boolean) as string[];
-    const subjectIds = rows.map(subjectOf).filter(Boolean) as string[];
-    const ids = [...new Set([...actorIds, ...subjectIds])].filter((id) => id !== objectId);
-    const names = new Map<string, string>();
-    if (ids.length > 0) {
-      const people = await tx
-        .select({ id: appUser.id, displayName: appUser.displayName })
-        .from(appUser)
-        .where(inArray(appUser.id, ids));
-      for (const person of people) names.set(person.id, person.displayName);
-    }
-    return rows.map((row): TimelineEntry => {
-      const subject = subjectOf(row);
-      const change = describeChange(row.before_value, row.after_value, field, locale as Locale);
-      const who = subject && subject !== objectId ? `${t('audit.person')}: ${names.get(subject) ?? t('audit.former_user')}` : null;
-      return {
-        id: String(row.id),
-        when: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'medium' }).format(
-          new Date(String(row.occurred_at)),
-        ),
-        action: label(String(row.action)),
-        actor: row.actor_user_id ? (names.get(String(row.actor_user_id)) ?? t('audit.former_user')) : null,
-        outcome: String(row.outcome),
-        reason: row.reason ? String(row.reason) : null,
-        detail: [who, change].filter(Boolean).join(' · ') || null,
-      };
-    });
   });
 
   return (

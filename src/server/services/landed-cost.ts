@@ -396,11 +396,20 @@ export async function lockable(tx: Tx, payableId: string) {
     .where(eq(landedCostLock.payableId, payableId))
     .orderBy(desc(landedCostLock.sequence))
     .limit(1);
+  return lockableState({ allPdsWrittenOff: facts.allPdsWrittenOff, unlocked: charges.length, lastSequence: last?.sequence ?? null });
+}
+
+/**
+ * The lock's state from what a reader already holds — REQ-HARDEN-001 G3:
+ * the payable record has the stage facts, the charges and the locks in hand,
+ * and `lockable` would read all three again. One rule for both.
+ */
+export function lockableState(input: { allPdsWrittenOff: boolean; unlocked: number; lastSequence: number | null }) {
   return {
-    pdsWrittenOff: facts.allPdsWrittenOff,
-    unlocked: charges.length,
-    locked: Boolean(last),
-    nextSequence: (last?.sequence ?? 0) + 1,
+    pdsWrittenOff: input.allPdsWrittenOff,
+    unlocked: input.unlocked,
+    locked: input.lastSequence !== null,
+    nextSequence: (input.lastSequence ?? 0) + 1,
   };
 }
 

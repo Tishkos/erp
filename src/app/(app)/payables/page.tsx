@@ -107,10 +107,10 @@ export default async function PayablesWorkbench({
         page: pageNo,
         pageSize: 50,
       });
-      const config = await settings.overview(tx);
+      const types = await settings.activeTypes(tx);
       return {
         ...list,
-        types: config.types.filter((type) => type.active),
+        types,
         savedViews: stored,
       };
     },

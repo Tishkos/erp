@@ -1485,6 +1485,8 @@ export async function view(tx: Tx, payableNo: string) {
     type,
     rail,
     reached,
+    /** The stage facts the rail was read from — for a reader that needs them again (HARDEN G3). */
+    facts,
     lanes: lanes.rows as { code: string; name: string; sort_order: number }[],
     lines,
     invoices,

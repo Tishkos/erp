@@ -575,6 +575,19 @@
     "reversed": "معكوس",
     "closed": "مغلق"
   },
+  "status_order": {
+    "draft": "مسودة",
+    "submitted": "مُقدّم",
+    "approved": "معتمد",
+    "partially_executed": "منفّذ جزئياً",
+    "executed": "منفّذ",
+    "posted": "مرحّل",
+    "settled": "مسوّى",
+    "rejected": "مرفوض",
+    "cancelled": "ملغى",
+    "reversed": "معكوس",
+    "closed": "مغلق"
+  },
   "screen": {
     "preview_badge": "معاينة",
     "preview_note": "تعرض هذه الشاشة التصميم المعتمد على بيانات نموذجية.",
@@ -1251,7 +1264,11 @@
       "abandoned": "مُهمَل",
       "oldest_pending": "أقدم منتظر",
       "count": "العدد",
-      "no_crontab": "ملف الجدولة (scripts/ops/crontab.erp) غير موجود بجانب هذا البناء؛ لا توجد مهام مجدولة."
+      "no_crontab": "ملف الجدولة (scripts/ops/crontab.erp) غير موجود بجانب هذا البناء؛ لا توجد مهام مجدولة.",
+      "delivery_pending": "قيد الانتظار",
+      "delivery_sent": "مُرسَل",
+      "delivery_failed": "فشل",
+      "delivery_suppressed": "محجوب"
     },
     "backup_health": {
       "title": "النسخ الاحتياطي والصحة",
@@ -2674,18 +2691,7 @@
       "awaiting": "بانتظار التأكيد",
       "none_awaiting": "لا شيء بانتظار التأكيد.",
       "all": "كل الاستلامات",
-      "none": "لا استلامات بعد.",
-      "status_draft": "مسودة",
-      "status_submitted": "مُقدّم",
-      "status_approved": "معتمد",
-      "status_partially_executed": "منفّذ جزئياً",
-      "status_executed": "منفّذ",
-      "status_posted": "مُرحّل",
-      "status_settled": "مُسوّى",
-      "status_rejected": "مرفوض",
-      "status_cancelled": "ملغى",
-      "status_reversed": "معكوس",
-      "status_closed": "مغلق"
+      "none": "لا استلامات بعد."
     },
     "payables_orders": {
       "title": "أوامر الشراء",
@@ -2715,18 +2721,7 @@
       "line_quantity": "المطلوب",
       "line_received": "المستلم",
       "line_invoiced": "المفوتر",
-      "line_price": "سعر الوحدة (د.ع)",
-      "status_draft": "مسودة",
-      "status_submitted": "مُقدّم",
-      "status_approved": "معتمد",
-      "status_partially_executed": "منفّذ جزئياً",
-      "status_executed": "منفّذ",
-      "status_posted": "مُرحّل",
-      "status_settled": "مُسوّى",
-      "status_rejected": "مرفوض",
-      "status_cancelled": "ملغى",
-      "status_reversed": "معكوس",
-      "status_closed": "مغلق"
+      "line_price": "سعر الوحدة (د.ع)"
     },
     "payables_goods": {
       "title": "استلامات البضائع",
@@ -2755,18 +2750,7 @@
       "line_quantity": "الكمية",
       "line_uom": "الوحدة",
       "line_batch": "الدفعة",
-      "line_serial": "التسلسلي",
-      "status_draft": "مسودة",
-      "status_submitted": "مُقدّم",
-      "status_approved": "معتمد",
-      "status_partially_executed": "منفّذ جزئياً",
-      "status_executed": "منفّذ",
-      "status_posted": "مُرحّل",
-      "status_settled": "مُسوّى",
-      "status_rejected": "مرفوض",
-      "status_cancelled": "ملغى",
-      "status_reversed": "معكوس",
-      "status_closed": "مغلق"
+      "line_serial": "التسلسلي"
     },
     "expenses": {
       "add": "إضافة مصروف",

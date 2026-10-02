@@ -35,6 +35,8 @@ export default async function PurchaseOrderPage({
     outcomeOf(searchParams),
     requireContext(),
   ]);
+  // REQ-HARDEN-001 H3 — the document statuses read one shared namespace, not a copy per screen.
+  const statusOf = await getTranslations('status_order');
 
   if (!can(context.principal, 'view', orders.PERMISSION_OBJECT)) {
     return <Denied object={page('purchase_orders')} />;
@@ -73,7 +75,7 @@ export default async function PurchaseOrderPage({
                       : order.status
                 }
               >
-                {t(`status_${order.status}`)}
+                {statusOf(order.status)}
               </span>
             </span>
           </h2>

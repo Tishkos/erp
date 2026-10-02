@@ -575,6 +575,19 @@
     "reversed": "Reversed",
     "closed": "Closed"
   },
+  "status_order": {
+    "draft": "Draft",
+    "submitted": "Submitted",
+    "approved": "Approved",
+    "partially_executed": "Partially executed",
+    "executed": "Executed",
+    "posted": "Posted",
+    "settled": "Settled",
+    "rejected": "Rejected",
+    "cancelled": "Cancelled",
+    "reversed": "Reversed",
+    "closed": "Closed"
+  },
   "screen": {
     "preview_badge": "Preview",
     "preview_note": "This screen shows the approved design over sample data.",
@@ -1251,7 +1264,11 @@
       "abandoned": "Abandoned",
       "oldest_pending": "Oldest pending",
       "count": "Count",
-      "no_crontab": "The crontab (scripts/ops/crontab.erp) is not beside this build; nothing is scheduled."
+      "no_crontab": "The crontab (scripts/ops/crontab.erp) is not beside this build; nothing is scheduled.",
+      "delivery_pending": "Pending",
+      "delivery_sent": "Sent",
+      "delivery_failed": "Failed",
+      "delivery_suppressed": "Suppressed"
     },
     "backup_health": {
       "title": "Backup and Health",
@@ -2674,18 +2691,7 @@
       "awaiting": "Awaiting confirmation",
       "none_awaiting": "Nothing awaits confirmation.",
       "all": "All receipts",
-      "none": "No receipts yet.",
-      "status_draft": "Draft",
-      "status_submitted": "Submitted",
-      "status_approved": "Approved",
-      "status_partially_executed": "Partially executed",
-      "status_executed": "Executed",
-      "status_posted": "Posted",
-      "status_settled": "Settled",
-      "status_rejected": "Rejected",
-      "status_cancelled": "Cancelled",
-      "status_reversed": "Reversed",
-      "status_closed": "Closed"
+      "none": "No receipts yet."
     },
     "payables_orders": {
       "title": "Purchase Orders",
@@ -2715,18 +2721,7 @@
       "line_quantity": "Ordered",
       "line_received": "Received",
       "line_invoiced": "Invoiced",
-      "line_price": "Unit price (IQD)",
-      "status_draft": "Draft",
-      "status_submitted": "Submitted",
-      "status_approved": "Approved",
-      "status_partially_executed": "Partially executed",
-      "status_executed": "Executed",
-      "status_posted": "Posted",
-      "status_settled": "Settled",
-      "status_rejected": "Rejected",
-      "status_cancelled": "Cancelled",
-      "status_reversed": "Reversed",
-      "status_closed": "Closed"
+      "line_price": "Unit price (IQD)"
     },
     "payables_goods": {
       "title": "Goods Receipts",
@@ -2755,18 +2750,7 @@
       "line_quantity": "Quantity",
       "line_uom": "UoM",
       "line_batch": "Batch",
-      "line_serial": "Serial",
-      "status_draft": "Draft",
-      "status_submitted": "Submitted",
-      "status_approved": "Approved",
-      "status_partially_executed": "Partially executed",
-      "status_executed": "Executed",
-      "status_posted": "Posted",
-      "status_settled": "Settled",
-      "status_rejected": "Rejected",
-      "status_cancelled": "Cancelled",
-      "status_reversed": "Reversed",
-      "status_closed": "Closed"
+      "line_serial": "Serial"
     },
     "expenses": {
       "add": "Add expense",

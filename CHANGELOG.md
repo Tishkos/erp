@@ -8,6 +8,14 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-HARDEN-001 HARDEN-4 completed: the payable record reads in one
+  transaction under a measured budget (G1–G3, HD14); each page hands the
+  browser the nine message namespaces its client components use, not the
+  catalogue — a workbench page from 408 KB to 224 KB (G7, HD19); no raw
+  status, kind, lane or outcome code reaches a screen, and one
+  `status_order` namespace for the order documents (H2–H3, HD18); the A21
+  load run with its figures (I3, HD17: `tests/load/payables.js`,
+  `scripts/load/seed-payables-volume.ts`).
 - REQ-PM-001 PM-6 — close, settlement, labour and the reports: hours booked
   on an element by one person, approved by another and posted by Finance
   once the month has ended at the base salary ÷ the calendar's working days
