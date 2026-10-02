@@ -504,9 +504,13 @@ const GREETING_QUIET_MS = 30 * 60_000;
 let lastGreetingAt = 0;
 
 /**
- * Says hello in the group when the bridge comes up, so the room can see the
- * bot is listening — and says what it can be asked, which is the only
- * onboarding anybody reads.
+ * Says hello in the group when the bridge comes up, so the room can see it is
+ * listening.
+ *
+ * One line, as a colleague arriving would. It used to recite the catalogue of
+ * phrases it understood, which was honest when phrases were all it had and
+ * became wrong the moment it could hold a conversation: a list of commands
+ * teaches people to type commands.
  */
 async function greet(scope: RequestScope, send: wa.Transport, botE164: string | null): Promise<void> {
   const settings = await withScope(scope, (tx) => wa.settings(tx));
@@ -518,11 +522,10 @@ async function greet(scope: RequestScope, send: wa.Transport, botE164: string | 
   lastGreetingAt = Date.now();
 
   const locale = settings.digestLocale;
-  const hello =
+  const text =
     locale === 'ar'
-      ? '👋 أهلاً، أنا بوت نظام قمة السفینە. كيف أساعدك؟'
-      : '👋 Hello — the QS ERP bot is connected. How can I help?';
-  const text = `${hello}\n\n${helpText(locale)}`;
+      ? '👋 أهلاً، أنا معكم. اسألوني عن أي شيء في الشركة — المخازن، الزبائن، المورّدين، الذمم، الحسابات.'
+      : '👋 Hello — I am here. Ask me anything about the company: stock, customers, suppliers, payables, the books.';
 
   try {
     const outId = botE164
