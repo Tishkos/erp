@@ -32,6 +32,7 @@ import type { Principal } from '../domain/permissions';
 import type { ActorContext } from './chart-of-accounts';
 import * as audit from './audit';
 import * as authz from './authorization';
+import { businessToday } from '../domain/business-date';
 
 export const PERMISSION_OBJECT = 'attachment';
 
@@ -522,7 +523,7 @@ export async function dispose(
   ctx: ActorContext,
   attachmentId: string,
   reason: string,
-  on = new Date().toISOString().slice(0, 10),
+  on = businessToday(),
 ): Promise<void> {
   await authz.authorize(ctx.principal, 'configure', PERMISSION_OBJECT, {
     branchCode: ctx.branchCode,

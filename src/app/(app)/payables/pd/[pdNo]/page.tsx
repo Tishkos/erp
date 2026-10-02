@@ -30,6 +30,7 @@ import { addPdNote, attachToPd, changePdStatus, linkPd, reRegisterPd } from '../
 import { pdChip } from '../status';
 import { windowTone } from '../../window-tone';
 import { STATUS_CHIP, statusKey } from '../../payment-applications/status';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * One PD — REQ-AP-001 §21.8. The Purchase Invoice's window: the registration
@@ -86,7 +87,7 @@ export default async function PdPage({
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
   const ps = (code: string, name: string) => (locale !== 'en' && t.has(`ps.${code}`) ? t(`ps.${code}`) : name);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const hidden = { pd_no: pd.pdNo, year: String(pd.registrationYear ?? '') };
   const chip = pdChip({ ...status, statusCode: pd.statusCode });
   const recordHref = (no: string, y: number | null) =>

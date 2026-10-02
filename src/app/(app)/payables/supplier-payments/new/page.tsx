@@ -13,6 +13,7 @@ import * as partners from '@/server/services/partners';
 import * as payments from '@/server/services/supplier-payment';
 import { gapsFor } from '@domain/setup-gaps';
 import { createPayment } from '../actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Making a Payment — Operations build, block 6.
@@ -64,7 +65,7 @@ export default async function NewPaymentPage({ searchParams }: { searchParams: S
   // offering it here would only produce a document that fails on posting;
   // the count above still sees it, so the setup hint says one is unusable.
   const open = accounts.filter((account) => account.active && account.glAccountCode);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
 
   const missing = gapsFor([
     { kind: 'suppliers', total: allSuppliers.length, usable: suppliers.length },

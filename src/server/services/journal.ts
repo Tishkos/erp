@@ -50,6 +50,7 @@ import * as statuses from './statuses';
 import * as subledgerService from './subledger';
 import * as workflow from './workflow';
 import * as attachmentService from './attachments';
+import { businessToday } from '../domain/business-date';
 
 export const DOCUMENT_TYPE = 'journal_entry';
 export const PERMISSION_OBJECT = 'journal_entry';
@@ -1000,7 +1001,7 @@ export async function reverse(
   // §14.3 — the reversal is never dated before what it undoes. Today, unless
   // the original posted later than today, in which case the original's own
   // date is the earliest honest answer.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const requested = input.postingDate?.trim() || today;
   const postingDate = requested < original.postingDate ? original.postingDate : requested;
 

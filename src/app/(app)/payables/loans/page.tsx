@@ -27,6 +27,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as loans from '@/server/services/loans';
 import { createLoan } from './actions';
 import { LOAN_CHIP } from './status';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Bank loans — REQ-AP-001 §15.7, §21.10.
@@ -69,7 +70,7 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
   const shown = rows.filter((row) => matches(row, outcome.q));
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
   const money = (value: string, currency: string) => formatMoney(value, currency, locale as Locale);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
 
   return (
     <AdminPage

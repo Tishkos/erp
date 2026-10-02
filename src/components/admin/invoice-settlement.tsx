@@ -4,6 +4,7 @@ import { admin as s } from '@/components/admin';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { withCurrentUser } from '@/server/session';
 import * as openItems from '@/server/services/open-items';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * How an invoice stands against its payment terms.
@@ -37,7 +38,7 @@ export async function InvoiceSettlement({
     getLocale(),
   ]);
 
-  const asOf = new Date().toISOString().slice(0, 10);
+  const asOf = businessToday();
   const items = await withCurrentUser((tx, request) =>
     openItems.openItems(tx, request.principal, side, asOf, {
       branchCode: request.scope.branchCode,

@@ -51,6 +51,7 @@ import * as authz from './authorization';
 import * as audit from './audit';
 import * as notifications from './notifications';
 import * as inventory from './inventory';
+import { businessToday } from '../domain/business-date';
 
 export const PERMISSION_OBJECT = 'supplier_shipment';
 
@@ -312,7 +313,7 @@ async function move(
     .from(apInvoice)
     .where(eq(apInvoice.id, apInvoiceId))
     .limit(1);
-  const movementDate = invoice?.invoiceDate ?? new Date().toISOString().slice(0, 10);
+  const movementDate = invoice?.invoiceDate ?? businessToday();
 
   for (const line of lines) {
     if (!line.itemCode) continue;

@@ -27,6 +27,7 @@ import * as ap from '@/server/services/ap-invoice';
 import * as expenses from '@/server/services/expenses';
 import * as partners from '@/server/services/partners';
 import { addExpenseAction } from './actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Purchase Invoices — Operations build, block 4.
@@ -69,7 +70,7 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
 
   const params = await searchParams;
   const viewParam = typeof params.view === 'string' ? params.view : '';
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
 
   const { rows, notes, suppliers, categories, imports } = await withCurrentUser(async (tx) => ({
     rows: await ap.list(tx),

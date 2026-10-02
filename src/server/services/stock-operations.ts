@@ -31,8 +31,8 @@ import {
 } from '../db/schema';
 import { availableQuantity } from '../domain/inventory';
 import { costOf } from '../domain/fifo';
-import { formatQuantity, parseQuantity } from '../domain/uom';
-import { toDecimalString } from '../domain/money';
+import { QUANTITY_SCALE, formatQuantity, parseQuantity } from '../domain/uom';
+import { MONEY_SCALE, divideHalfUp, parseDecimal, toDecimalString } from '../domain/money';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
@@ -324,9 +324,14 @@ async function unitCostForFound(tx: Tx, itemCode: string, warehouseCode: string)
       })
       .from(costLayer)
       .where(where);
-    const quantity = Number(row?.quantity ?? 0);
-    if (!quantity) return null;
-    return BigInt(Math.round((Number(row!.value) / quantity) * 10_000));
+    // HD8 — value ÷ quantity in integers: the layer's own scales, rounded
+    // half up, never a double. The quantity carries 6 decimals and the value
+    // (quantity × unit cost) 10, so the unit cost is value / quantity scaled
+    // back to money's 4.
+    const quantity = parseQuantity(row?.quantity ?? '0');
+    if (quantity === 0n) return null;
+    const value = parseDecimal(row!.value, QUANTITY_SCALE + MONEY_SCALE);
+    return divideHalfUp(value, quantity);
   };
 
   const here = await averageOf(

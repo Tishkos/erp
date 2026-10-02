@@ -26,6 +26,7 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as advances from '@/server/services/supplier-advance';
 import { requestAdvance } from './actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Supplier advances — §8.5 and REQ-AP-001 §21.1.
@@ -64,7 +65,7 @@ export default async function AdvancesPage({ searchParams }: { searchParams: Sea
 
   const params = await searchParams;
   const viewParam = typeof params.view === 'string' ? params.view : '';
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
 
   const { rows, orders } = await withCurrentUser(async (tx) => ({
     rows: await advances.listForScreen(tx),

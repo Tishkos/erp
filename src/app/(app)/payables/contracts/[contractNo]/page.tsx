@@ -22,6 +22,7 @@ import * as contracts from '@/server/services/recurring-contracts';
 import * as partners from '@/server/services/partners';
 import { paymentState } from '@/server/services/expenses';
 import { amendContract, approveContract, endContract, generatePeriodsNow } from '../actions';
+import { businessDateOf, businessToday } from '@/server/domain/business-date';
 
 /**
  * The contract record — REQ-AP-001 §10.3 / §21.4.
@@ -72,11 +73,11 @@ export default async function ContractPage({
   if (!found) notFound();
   const { contract, periods, amendments, supplier } = found;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const money = (amount: string, currency = contract.currency) =>
     formatMoney(amount, currency, locale as Locale);
   const day = (value: string | Date | null) =>
-    value ? formatBusinessDate(new Date(value).toISOString().slice(0, 10), locale as Locale) : '—';
+    value ? formatBusinessDate(businessDateOf(new Date(value)), locale as Locale) : '—';
 
   return (
     <AdminPage

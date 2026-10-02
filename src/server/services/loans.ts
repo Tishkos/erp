@@ -71,12 +71,13 @@ import * as events from './payable-events';
 import * as posting from './posting';
 import * as rateService from './exchange-rates';
 import { allocateDocumentNumber } from './numbering';
+import { businessToday } from '../domain/business-date';
 
 export const PERMISSION_OBJECT = 'bank_loan';
 const SEQUENCE_KEY = 'LOAN';
 const ALLOCATION_SOURCE = 'bank_loan_allocation';
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => businessToday();
 const money = (value: bigint) => toDecimalString(value, MONEY_SCALE);
 const amountOf = (value: string | null | undefined) => parseDecimal(value ?? '0', MONEY_SCALE);
 
@@ -96,6 +97,13 @@ export class LoanNotFoundError extends Error {
 
 async function load(tx: Tx, id: string) {
   const [row] = await tx.select().from(bankLoan).where(eq(bankLoan.id, id)).limit(1);
+  if (!row) throw new LoanNotFoundError(id);
+  return row;
+}
+
+/** HD9 — the loan row locked for a transition, so a double submit posts once. */
+async function lock(tx: Tx, id: string) {
+  const [row] = await tx.select().from(bankLoan).where(eq(bankLoan.id, id)).for('update');
   if (!row) throw new LoanNotFoundError(id);
   return row;
 }
@@ -341,7 +349,7 @@ export interface ScheduleRowInput {
 }
 
 export async function setSchedule(tx: Tx, ctx: ActorContext, loanId: string, rows: readonly ScheduleRowInput[]) {
-  const loan = await load(tx, loanId);
+  const loan = await lock(tx, loanId);
   await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, { branchCode: loan.branchCode });
   if (!scheduleEditable(loan.status)) {
     throw new LoanError(`${loan.loanNo} is ${loan.status}; its schedule was fixed when it was approved.`);
@@ -385,7 +393,7 @@ export async function setSchedule(tx: Tx, ctx: ActorContext, loanId: string, row
 // ---------------------------------------------------------------------------
 
 export async function approve(tx: Tx, ctx: ActorContext, loanId: string) {
-  const loan = await load(tx, loanId);
+  const loan = await lock(tx, loanId);
   await authz.authorize(ctx.principal, 'approve', PERMISSION_OBJECT, { branchCode: loan.branchCode });
   assertMove(loan.loanNo, loan.status, 'approved');
   if (loan.createdBy === ctx.principal.userId) {
@@ -433,7 +441,7 @@ export async function disburse(
   loanId: string,
   input: { readonly disbursementDate: string; readonly reference: string },
 ) {
-  const loan = await load(tx, loanId);
+  const loan = await lock(tx, loanId);
   await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, { branchCode: loan.branchCode });
   assertMove(loan.loanNo, loan.status, 'active');
   if (!input.disbursementDate) throw new LoanError('Give the date the money arrived.');
@@ -524,13 +532,14 @@ export async function payInstalment(
   instalmentId: string,
   input: { readonly paidDate: string; readonly reference: string },
 ) {
+  // HD9 — the instalment and its loan, locked: a double submit pays once.
   const [instalment] = await tx
     .select()
     .from(bankLoanInstalment)
     .where(eq(bankLoanInstalment.id, instalmentId))
-    .limit(1);
+    .for('update');
   if (!instalment || instalment.supersededAt) throw new LoanError('That instalment is not part of the loan’s schedule.');
-  const loan = await load(tx, instalment.loanId);
+  const loan = await lock(tx, instalment.loanId);
   await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, { branchCode: loan.branchCode });
   if (loan.status !== 'active') {
     throw new LoanError(`${loan.loanNo} is ${loan.status.replace('_', ' ')}; only a disbursed loan is repaid.`);
@@ -649,7 +658,7 @@ export async function payCommission(
   loanId: string,
   input: { readonly paidOn: string; readonly reference: string },
 ) {
-  const loan = await load(tx, loanId);
+  const loan = await lock(tx, loanId);
   await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, { branchCode: loan.branchCode });
   const treatment = await treatmentOf(tx, loan.commissionTreatmentCode);
   if (treatment.deducted || treatment.spread) {
@@ -716,7 +725,7 @@ export async function payCommission(
 // ---------------------------------------------------------------------------
 
 export async function cancel(tx: Tx, ctx: ActorContext, loanId: string, reason: string) {
-  const loan = await load(tx, loanId);
+  const loan = await lock(tx, loanId);
   await authz.authorize(ctx.principal, loan.status === 'draft' ? 'edit_draft' : 'reverse_cancel', PERMISSION_OBJECT, {
     branchCode: loan.branchCode,
   });
@@ -937,7 +946,7 @@ export async function release(
     .where(and(eq(bankLoanAllocation.paymentApplicationId, application.id), isNull(bankLoanAllocation.releasedAt)))
     .limit(1);
   if (!row) return;
-  const loan = await load(tx, row.loanId);
+  const loan = await lock(tx, row.loanId);
   // "PAYAPP-… rejected: the bank refused the file"
   const why = `${application.applicationNo} ${reason}`;
   await tx
@@ -973,7 +982,7 @@ export async function setManualShares(
   loanId: string,
   shares: readonly { readonly allocationId: string; readonly shareTxn: bigint }[],
 ) {
-  const loan = await load(tx, loanId);
+  const loan = await lock(tx, loanId);
   await authz.authorize(ctx.principal, 'approve', PERMISSION_OBJECT, { branchCode: loan.branchCode });
   if (loan.allocationMethod !== 'manual') {
     throw new LoanError(`${loan.loanNo} shares its commission ${loan.allocationMethod.replace(/_/g, ' ')}; shares are typed only for a manual loan.`);
@@ -1089,7 +1098,7 @@ export async function list(tx: Tx, filter: LoanListFilter = {}) {
                                order by i.sequence limit 1)`,
       overdueCount: sql<number>`(select count(*)::int from bank_loan_instalment i
                                where i.loan_id = ${bankLoan.id} and i.superseded_at is null and i.status <> 'paid'
-                                 and i.due_date < current_date)`,
+                                 and i.due_date < ${businessToday()}::date)`,
       allocatedTxn: sql<string>`bank_loan_allocated_txn(${bankLoan.id})::text`,
     })
     .from(bankLoan)
@@ -1258,7 +1267,7 @@ export async function forPayable(tx: Tx, payableId: string) {
                                     where i.loan_id = ${bankLoan.id} and i.superseded_at is null and i.status <> 'paid')`,
       overdue: sql<boolean>`exists (select 1 from bank_loan_instalment i
                                     where i.loan_id = ${bankLoan.id} and i.superseded_at is null and i.status <> 'paid'
-                                      and i.due_date < current_date)`,
+                                      and i.due_date < ${businessToday()}::date)`,
     })
     .from(bankLoanAllocation)
     .innerJoin(bankLoan, eq(bankLoan.id, bankLoanAllocation.loanId))

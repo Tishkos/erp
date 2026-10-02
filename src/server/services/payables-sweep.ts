@@ -30,6 +30,7 @@ import * as customs from './customs-pd';
 import * as shipments from './shipments';
 import * as loans from './loans';
 import * as notifications from './notifications';
+import { businessDateOf } from '../domain/business-date';
 
 export interface SweepResult {
   readonly asOf: string;
@@ -474,7 +475,7 @@ export async function runSweep(tx: Tx, asOf: string): Promise<SweepResult> {
     // From when the hold was OPENED, not from the backdated breach: the
     // escalation is about nobody answering, and nobody could answer before
     // the question existed.
-    const waited = daysBetween(hold.createdAt.toISOString().slice(0, 10), asOf);
+    const waited = daysBetween(businessDateOf(hold.createdAt), asOf);
     if (waited <= rule.escalateAfterDays) continue;
 
     const toRole = rule.escalateToRole ?? 'accounting_manager';

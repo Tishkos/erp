@@ -128,6 +128,17 @@ export async function load(tx: Tx, id: string) {
   return row;
 }
 
+/**
+ * HD9 — the payable locked for a write that depends on what it holds (the
+ * landed-cost lock, a stage recompute, a transition of one of its children).
+ * Two such writes then run one after the other.
+ */
+export async function lock(tx: Tx, id: string) {
+  const [row] = await tx.select().from(payable).where(eq(payable.id, id)).for('update');
+  if (!row) throw new PayableNotFoundError(id);
+  return row;
+}
+
 export async function loadByNo(tx: Tx, payableNo: string) {
   const [row] = await tx
     .select()
@@ -287,7 +298,9 @@ export async function recomputeStage(
   payableId: string,
   actorUserId: string | null,
 ): Promise<{ stageCode: string; changed: boolean }> {
-  const row = await load(tx, payableId);
+  // HD9 — recomputed under the row lock: two children finishing at once
+  // derive the stage one after the other, from facts that include each other.
+  const row = await lock(tx, payableId);
   const rail = await railFor(tx, row.payableTypeCode);
   const facts = await gatherFacts(tx, payableId);
   const next = deriveStage(rail, facts);

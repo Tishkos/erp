@@ -18,6 +18,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as banks from '@/server/services/bank-cash-accounts';
 import * as gr from '@/server/services/goods-return';
 import { createGoodsReturn } from '../actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Raising a Purchase Return — Operations build, block 10.
@@ -95,7 +96,7 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
   const partners = [
     ...new Map(invoices.map((row) => [row.supplierCode, row])).values(),
   ];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const open = lines
     .filter((line) => line.returnable > 0n)
     .map((line) => ({ ...line, maxQuantity: formatScaledQuantity(line.returnable) }));

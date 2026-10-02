@@ -14,6 +14,7 @@ import * as openItems from '@/server/services/open-items';
 import { daysBetween } from '@domain/ageing';
 import * as partners from '@/server/services/partners';
 import * as statement from '@/server/services/partner-statement';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * The Account Statement — Operations build, blocks 2 and 3.
@@ -123,7 +124,7 @@ export async function AccountStatement({
    * otherwise declare an invoice due three days ago "95 days overdue", which
    * is a fact about a future that has not happened.
    */
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const agedAt = to > today ? today : to;
 
   // The whole role, not only the active part of it: a partner stops trading

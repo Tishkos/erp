@@ -6,6 +6,7 @@ import { runAdmin, runAdminAndReturn, text, withQuery } from '@/server/admin-act
 import { registerAllRecords } from '@/server/records';
 import * as attachments from '@/server/services/attachments';
 import * as journal from '@/server/services/journal';
+import { businessToday } from '@/server/domain/business-date';
 
 const LIST = '/finance/journals';
 const record = (entryNo: string) => `${LIST}/${encodeURIComponent(entryNo)}`;
@@ -34,7 +35,7 @@ export interface LineOutcome {
  */
 export async function startJournal(): Promise<void> {
   ready();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const outcome = await runAdmin((tx, ctx) =>
     journal.createDraft(tx, ctx, {
       branchCode: ctx.branchCode,

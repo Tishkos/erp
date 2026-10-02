@@ -25,6 +25,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { sql } from 'drizzle-orm';
 import * as schema from '../../src/server/db/schema';
 import * as integrity from '../../src/server/services/inventory-integrity';
+import { businessToday } from '../../src/server/domain/business-date';
 
 const quiet = process.argv.includes('--quiet');
 const url = process.env.DATABASE_URL_OWNER ?? process.env.DATABASE_URL;
@@ -33,7 +34,7 @@ if (!url) throw new Error('Set DATABASE_URL_OWNER (or DATABASE_URL) before runni
 const pool = new Pool({ connectionString: url, max: 2 });
 
 async function main(): Promise<number> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const db = drizzle(pool, { schema });
 
   const { report, notified } = await db.transaction(async (tx) => {

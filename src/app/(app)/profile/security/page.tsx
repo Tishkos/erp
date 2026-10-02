@@ -8,6 +8,7 @@ import * as authentication from '@/server/services/authentication';
 import * as company from '@/server/services/company';
 import * as users from '@/server/services/users';
 import { beginEnrolment, confirmEnrolment } from './actions';
+import { businessDateOf } from '@/server/domain/business-date';
 
 /**
  * REQ-HARDEN-001 HD4 — the second factor, enrolled by the account holder.
@@ -55,7 +56,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Sea
           {status.graceExpired
             ? t('mfa_grace_over')
             : status.enrolmentDue
-              ? t('mfa_grace', { date: formatBusinessDate(status.enrolmentDue.toISOString().slice(0, 10), locale as Locale) })
+              ? t('mfa_grace', { date: formatBusinessDate(businessDateOf(status.enrolmentDue), locale as Locale) })
               : t('mfa_required_hint')}
         </p>
       ) : null}

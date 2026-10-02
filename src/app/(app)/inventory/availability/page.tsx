@@ -13,6 +13,7 @@ import { registerAllLists, stockPositionList } from '@/server/lists';
 import { rows } from '@/server/services/list';
 import * as inventory from '@/server/services/inventory';
 import { withCurrentUser } from '@/server/session';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Availability — Appendix A menu 5, on Phase 04's §9.5 buckets.
@@ -44,7 +45,7 @@ async function issueStock(formData: FormData) {
         warehouseCode,
         branchCode: context.scope.branchCode,
         quantity: parseQuantity(quantity),
-        movementDate: new Date().toISOString().slice(0, 10),
+        movementDate: businessToday(),
         ...(batchNumber ? { batchNumber } : {}),
       }),
     );

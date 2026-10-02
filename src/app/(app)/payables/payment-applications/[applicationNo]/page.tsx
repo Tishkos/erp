@@ -38,6 +38,7 @@ import {
 } from '../actions';
 import { STATUS_CHIP, statusKey } from '../status';
 import { windowTone } from '../../window-tone';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * One payment application — REQ-AP-001 §21.7.
@@ -96,7 +97,7 @@ export default async function PaymentApplicationPage({
   const kind = method.kind;
   const money = (amount: string, currency: string = row.currency) => formatMoney(amount, currency, locale as Locale);
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
 
   const mayApprove =
     row.status === 'draft' &&

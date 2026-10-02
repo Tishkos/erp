@@ -28,6 +28,7 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as terms from '@/server/services/payment-terms';
 import { setPaymentTermActive, updatePaymentTerm } from '../actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * One payment term — Phase 2 requirement 7.
@@ -68,7 +69,7 @@ export default async function PaymentTermPage({
 
   // The example runs from a date the reader can change, defaulting to today.
   const query = await searchParams;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const exampleDate = typeof query.on === 'string' ? query.on : today;
 
   const row = await withCurrentUser(async (tx) => {

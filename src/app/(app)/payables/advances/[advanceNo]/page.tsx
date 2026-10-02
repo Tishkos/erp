@@ -16,6 +16,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as advances from '@/server/services/supplier-advance';
 import * as bankCash from '@/server/services/bank-cash-accounts';
 import { approveAdvance, payAdvance } from '../actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * One supplier advance — §8.5. The Purchase Invoice's window: the header, the
@@ -64,7 +65,7 @@ export default async function AdvancePage({
   const { advance } = found;
   const money = (amount: string, currency = 'IQD') => formatMoney(amount, currency, locale as Locale);
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
 
   const mayApprove =
     advance.status === 'draft' &&

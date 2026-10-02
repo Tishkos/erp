@@ -10,6 +10,7 @@
  */
 import { runAdminAndReturn, text } from '@/server/admin-action';
 import * as contracts from '@/server/services/recurring-contracts';
+import { businessToday } from '@/server/domain/business-date';
 
 const back = (contractNo: string) => `/payables/contracts/${encodeURIComponent(contractNo)}`;
 
@@ -80,7 +81,7 @@ export async function generatePeriodsNow(form: FormData): Promise<void> {
   const contractNo = text(form, 'contract_no');
   await runAdminAndReturn(
     async (tx, ctx) =>
-      contracts.generateDue(tx, new Date().toISOString().slice(0, 10), {
+      contracts.generateDue(tx, businessToday(), {
         userId: ctx.principal.userId,
       }),
     () => back(contractNo),

@@ -13,6 +13,7 @@ import {
 import styles from './admin.module.css';
 import { ColumnGrip, useColumnWidths } from './column-widths';
 import { PAIRED_CHOICE } from './paired-picker';
+import { MONEY_PLACES, lineTotal, toNumber } from '@/lib/decimal';
 
 /**
  * The lines of an invoice, typed straight into the grid.
@@ -221,14 +222,8 @@ const complete = (row: Row) =>
   row.unitPrice.trim() !== '' &&
   row.warehouseCode !== '';
 
-/** Quantity × price less the discount — the sponsor's Total Price, per row. */
-const totalOf = (row: Row) => {
-  const quantity = Number(row.quantity);
-  const price = Number(row.unitPrice);
-  const discount = Number(row.discount || 0);
-  if (!Number.isFinite(quantity) || !Number.isFinite(price) || !Number.isFinite(discount)) return 0;
-  return quantity * price - discount;
-};
+/** Quantity × price less the discount — the sponsor's Total Price, per row, in integers (HD8). */
+const totalOf = (row: Row): bigint => lineTotal(row.quantity, row.unitPrice, row.discount) ?? 0n;
 
 export function InvoiceLinesGrid({
   items,
@@ -600,7 +595,7 @@ export function InvoiceLinesGrid({
   };
 
   const filled = rows.filter(written);
-  const total = filled.reduce((sum, row) => sum + totalOf(row), 0);
+  const total = filled.reduce((sum, row) => sum + totalOf(row), 0n);
   const columns = showSupplier ? 10 : 9;
 
   /** Only a form posts its rows; a live grid has already sent them. */
@@ -830,7 +825,7 @@ export function InvoiceLinesGrid({
                 {/* Not a field: the line's total is its own three numbers, and a
                     fourth box holding the answer is a box that can disagree. */}
                 <td className={styles.sapNum}>
-                  <bdi dir="ltr">{live_ ? money.format(totalOf(row)) : ''}</bdi>
+                  <bdi dir="ltr">{live_ ? money.format(toNumber(totalOf(row), MONEY_PLACES)) : ''}</bdi>
                 </td>
                 {showSupplier ? (
                   <td>
@@ -902,7 +897,7 @@ export function InvoiceLinesGrid({
               {pending ? <span className={styles.sapNote}> · {labels.saving}</span> : null}
             </td>
             <td aria-live="polite" className={styles.sapNum}>
-              <bdi dir="ltr">{money.format(total)}</bdi>
+              <bdi dir="ltr">{money.format(toNumber(total, MONEY_PLACES))}</bdi>
             </td>
             <td colSpan={showSupplier ? 3 : 2} />
           </tr>

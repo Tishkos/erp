@@ -15,9 +15,10 @@ import 'dotenv/config';
 import { sql } from 'drizzle-orm';
 import { applyScope, db, pool } from '../../src/server/db/client';
 import * as sweep from '../../src/server/services/payables-sweep';
+import { businessToday } from '../../src/server/domain/business-date';
 
 async function main(): Promise<void> {
-  const asOf = process.argv[2] ?? new Date().toISOString().slice(0, 10);
+  const asOf = process.argv[2] ?? businessToday();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
     throw new Error(`"${asOf}" is not a date. Use YYYY-MM-DD, or pass nothing for today.`);
   }

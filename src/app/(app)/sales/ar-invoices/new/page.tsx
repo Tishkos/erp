@@ -19,6 +19,7 @@ import * as posting from '@/server/services/posting';
 import * as warehouses from '@/server/services/warehouses';
 import { gapsFor } from '@domain/setup-gaps';
 import { createArInvoice, invoiceLineAvailability } from '../actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Raising a Sales Invoice — Operations build, block 5.
@@ -93,7 +94,7 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
     },
   }));
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
 
   // Each customer beside the terms they are on, which is all the due date
   // needs: the partner chosen in the header decides which schedule applies.

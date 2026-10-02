@@ -31,6 +31,7 @@ import {
   reverseArInvoice,
   saveArInvoiceLine,
 } from '../actions';
+import { MONEY_SCALE, parseDecimal } from '@domain/money';
 
 /**
  * One Sales Invoice — Operations build, block 5.
@@ -181,7 +182,7 @@ export default async function ArInvoicePage({
   // been received against it; the service refuses the rest and says why.
   const mayReverse =
     invoice.status === 'posted' &&
-    Number(invoice.allocatedIqd) === 0 &&
+    parseDecimal(invoice.allocatedIqd, MONEY_SCALE) === 0n &&
     can(principal, 'reverse_cancel', ar.PERMISSION_OBJECT);
 
   const fields: DocumentField[] = [

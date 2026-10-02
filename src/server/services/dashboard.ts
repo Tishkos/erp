@@ -13,6 +13,7 @@ import { rows as listRows } from './list';
 import * as notifications from './notifications';
 import * as openItems from './open-items';
 import * as statement from './partner-statement';
+import { businessToday } from '../domain/business-date';
 
 /**
  * What the dashboard shows — REQ-DASH-001.
@@ -50,7 +51,7 @@ export type Band<T> = T | null;
 
 const OPEN_INVOICE_STATUSES = ['posted', 'partially_executed', 'settled'] as const;
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => businessToday();
 
 /**
  * Runs one band's read, and swallows nothing.
@@ -199,7 +200,7 @@ async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting> {
                p.currency
           from payable p
           join business_partner bp on bp.id = p.supplier_id
-         where p.due_date between current_date and current_date + 7
+         where p.due_date between ${businessToday()}::date and ${businessToday()}::date + 7
            and p.cancelled_at is null and p.closed_at is null
            and p.stage_code not in ('paid', 'closed')
          order by p.due_date

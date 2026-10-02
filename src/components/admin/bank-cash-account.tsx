@@ -42,6 +42,7 @@ import {
   setAccountActive,
   updateAccount,
 } from '@/app/(app)/master-data/bank-accounts/actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Bank accounts and cash accounts — Phase 2 requirements 5 and 6.
@@ -286,7 +287,7 @@ export async function AccountRecord({
    * badly.
    */
   const year = new Date().getFullYear();
-  const window = { from: `${year}-01-01`, to: new Date().toISOString().slice(0, 10) };
+  const window = { from: `${year}-01-01`, to: businessToday() };
 
   const data = await withCurrentUser(async (tx, request) => {
     try {

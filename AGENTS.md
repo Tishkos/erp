@@ -12,6 +12,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 `scripts/seed-dev.ts` uses `DATABASE_URL`, not `DATABASE_URL_OWNER`. Setting only the owner URL does not redirect the seed. For isolated verification, explicitly point `DATABASE_URL` and `DATABASE_URL_TEST` at the intended isolated database, and verify the running development server uses that same database before browser tests. Never rely on `.env` defaults for a seed or test run.
 
+## Business dates and money (REQ-HARDEN-001 HARDEN-2)
+
+* "Today" is `businessToday()` from `src/server/domain/business-date.ts` (Asia/Baghdad, `ERP_TIMEZONE`); a timestamp becomes a date with `businessDateOf(instant)`. Never `new Date().toISOString().slice(0, 10)` — it is UTC and reads yesterday for the first three hours of every Baghdad day. `tests/integration/hd07-business-today.test.ts` greps for it and fails the build. SQL that needs today binds `${businessToday()}::date`, never `current_date`.
+* Money and quantities are compared and summed as scaled bigints (`parseDecimal` / `parseQuantity` / `divideHalfUp` / `toDecimalString`), never as `Number()`; in the browser the same through `src/lib/decimal.ts`. A `Number()` is only ever the last step before `Intl.NumberFormat`.
+* A transition reads its row with `FOR UPDATE` (`lock(tx, id)` in payment-applications, loans, customs-pd, payables; `importOf(…, { lock: true })` in landed-cost) before it checks the status, so a double submit posts once. `tests/integration/hd09-double-submit.test.ts` holds it.
+
 ## Audit timestamp payloads
 
 Pass timestamps to `audit.record` as ISO strings, not JavaScript `Date` objects: a Date in an audit before-value was serialized as `{}` by the current audit pipeline. Existing audit rows remain immutable; any correction must be an append-only supplement with verified source evidence.

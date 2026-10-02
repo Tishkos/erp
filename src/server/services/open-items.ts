@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { AGEING_BUCKETS, bucketFor, daysBetween, type AgeingBucket } from '../domain/ageing';
 import { assertCan, type Principal } from '../domain/permissions';
+import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 
 /**
  * Open items — invoice balances, kept separate from the partner's other balances.
@@ -502,45 +503,50 @@ export function reconcile(
   items: readonly OpenItem[],
   balances: readonly LedgerBalance[],
 ): Reconciliation[] {
-  const documents = new Map<string, number>();
+  // HD8 — every figure here is money, summed as scaled integers; a double
+  // subtraction re-stringified as money is how a statement grows a fils.
+  const dec = (value: string) => parseDecimal(value, MONEY_SCALE);
+  const str = (value: bigint) => toDecimalString(value, MONEY_SCALE);
+  const positive = (value: bigint) => (value > 0n ? value : 0n);
+  const documents = new Map<string, bigint>();
   const names = new Map<string, string>();
   for (const item of items) {
     names.set(item.partyCode, item.partyName);
-    documents.set(
-      item.partyCode,
-      (documents.get(item.partyCode) ?? 0) + Math.max(0, Number(item.outstandingIqd)),
-    );
+    documents.set(item.partyCode, (documents.get(item.partyCode) ?? 0n) + positive(dec(item.outstandingIqd)));
   }
 
-  const parties = new Map<string, { name: string; ledger: number; oldest: string | null }>();
+  const parties = new Map<string, { name: string; ledger: bigint; oldest: string | null }>();
   for (const balance of balances) {
     parties.set(balance.partyCode, {
       name: balance.partyName,
-      ledger: Number(balance.balanceIqd),
+      ledger: dec(balance.balanceIqd),
       oldest: balance.oldestDate,
     });
   }
   for (const [partyCode, name] of names) {
-    if (!parties.has(partyCode)) parties.set(partyCode, { name, ledger: 0, oldest: null });
+    if (!parties.has(partyCode)) parties.set(partyCode, { name, ledger: 0n, oldest: null });
   }
 
   return [...parties]
     .map(([partyCode, held]) => {
-      const documentsIqd = documents.get(partyCode) ?? 0;
+      const documentsIqd = documents.get(partyCode) ?? 0n;
       const unexplained = held.ledger - documentsIqd;
       return {
         partyCode,
         partyName: held.name,
-        ledgerIqd: String(held.ledger),
-        documentsIqd: String(documentsIqd),
-        unexplainedIqd: String(unexplained),
-        unappliedCreditsIqd: String(Math.max(0, -unexplained)),
-        otherNonInvoiceDebitIqd: String(Math.max(0, unexplained)),
+        ledgerIqd: str(held.ledger),
+        documentsIqd: str(documentsIqd),
+        unexplainedIqd: str(unexplained),
+        unappliedCreditsIqd: str(positive(-unexplained)),
+        otherNonInvoiceDebitIqd: str(positive(unexplained)),
         oldestDate: held.oldest,
+        _ledger: held.ledger,
+        _documents: documentsIqd,
       };
     })
-    .filter((row) => Number(row.ledgerIqd) !== 0 || Number(row.documentsIqd) !== 0)
-    .sort((a, b) => Number(b.ledgerIqd) - Number(a.ledgerIqd));
+    .filter((row) => row._ledger !== 0n || row._documents !== 0n)
+    .sort((a, b) => (b._ledger > a._ledger ? 1 : b._ledger < a._ledger ? -1 : 0))
+    .map(({ _ledger: _l, _documents: _d, ...row }) => row);
 }
 
 export interface ReconciliationTotals {
@@ -553,19 +559,21 @@ export interface ReconciliationTotals {
 }
 
 export function reconciliationTotals(rows: readonly Reconciliation[]): ReconciliationTotals {
+  // HD8 / B4 — integers tie exactly or they do not; no epsilon.
   const sum = (pick: (row: Reconciliation) => string) =>
-    rows.reduce((total, row) => total + Number(pick(row)), 0);
+    rows.reduce((total, row) => total + parseDecimal(pick(row), MONEY_SCALE), 0n);
   const unexplained = sum((row) => row.unexplainedIqd);
   const ledger = sum((row) => row.ledgerIqd);
   const documents = sum((row) => row.documentsIqd);
   const debits = sum((row) => row.otherNonInvoiceDebitIqd);
   const credits = sum((row) => row.unappliedCreditsIqd);
+  const str = (value: bigint) => toDecimalString(value, MONEY_SCALE);
   return {
-    ledgerIqd: String(ledger),
-    documentsIqd: String(documents),
-    unexplainedIqd: String(unexplained),
-    unappliedCreditsIqd: String(credits),
-    otherNonInvoiceDebitsIqd: String(debits),
-    ties: Math.abs(documents + debits - credits - ledger) < 0.00005,
+    ledgerIqd: str(ledger),
+    documentsIqd: str(documents),
+    unexplainedIqd: str(unexplained),
+    unappliedCreditsIqd: str(credits),
+    otherNonInvoiceDebitsIqd: str(debits),
+    ties: documents + debits - credits - ledger === 0n,
   };
 }

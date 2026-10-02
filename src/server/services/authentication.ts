@@ -39,6 +39,7 @@ import { hashPassword, verifyPassword } from '../auth';
 import type { Tx } from '../db/client';
 import type { ActorContext } from './chart-of-accounts';
 import * as audit from './audit';
+import { businessDateOf } from '../domain/business-date';
 
 /** better-auth's name for a password credential. */
 const CREDENTIAL_PROVIDER = 'credential';
@@ -496,9 +497,9 @@ export async function signIn(tx: Tx, input: SignInInput): Promise<SignInResult> 
         await tx.execute(sql`
           select app_notify(null, 'authentication.enrol_second_factor', 'user', ${user.id}, ${user.id}::uuid,
                             'Enrol your authenticator',
-                            ${`This account must sign in with an authenticator code from ${enrolmentDue.toISOString().slice(0, 10)}. Enrol it under My profile → Security.`},
-                            ${JSON.stringify({ due: enrolmentDue.toISOString().slice(0, 10) })}::jsonb,
-                            ${`mfa-enrol:${user.id}:${now.toISOString().slice(0, 10)}`}, null)`);
+                            ${`This account must sign in with an authenticator code from ${businessDateOf(enrolmentDue)}. Enrol it under My profile → Security.`},
+                            ${JSON.stringify({ due: businessDateOf(enrolmentDue) })}::jsonb,
+                            ${`mfa-enrol:${user.id}:${businessDateOf(now)}`}, null)`);
       }
     }
   }

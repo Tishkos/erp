@@ -54,6 +54,7 @@ import * as authz from './authorization';
 import * as events from './payable-events';
 import * as payables from './payables';
 import * as posting from './posting';
+import { businessToday } from '../domain/business-date';
 
 export const PERMISSION_OBJECT = 'landed_cost';
 const DOCUMENT_TYPE = 'landed_cost_lock';
@@ -62,12 +63,14 @@ const MAX_HOPS = 6;
 
 const money = (value: bigint) => toDecimalString(value, MONEY_SCALE);
 const amountOf = (value: string | null | undefined) => parseDecimal(value ?? '0', MONEY_SCALE);
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => businessToday();
 
 export { LandedCostError };
 
-async function importOf(tx: Tx, payableId: string) {
-  const row = await payables.load(tx, payableId);
+async function importOf(tx: Tx, payableId: string, options: { lock?: boolean } = {}) {
+  // HD9 — a lock (and a late adjustment) locks the import first, so two
+  // simultaneous locks cannot allocate the same charges twice.
+  const row = options.lock ? await payables.lock(tx, payableId) : await payables.load(tx, payableId);
   if (row.payableTypeCode !== 'import') {
     throw new LandedCostError(`${row.payableNo} is not an import; only an import carries a landed cost.`);
   }
@@ -406,7 +409,7 @@ export async function lockable(tx: Tx, payableId: string) {
 // ---------------------------------------------------------------------------
 
 export async function lock(tx: Tx, ctx: ActorContext, input: LockInput) {
-  const row = await importOf(tx, input.payableId);
+  const row = await importOf(tx, input.payableId, { lock: true });
   await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, { branchCode: row.branchCode });
   const state = await lockable(tx, row.id);
   if (!state.pdsWrittenOff) {

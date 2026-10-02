@@ -27,6 +27,7 @@ import * as banks from '@/server/services/banks';
 import * as customs from '@/server/services/customs-pd';
 import { registerPd } from './actions';
 import { pdChip } from './status';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * PDs — REQ-AP-001 §21.8 (REQ-APP-001 S4).
@@ -61,7 +62,7 @@ export default async function PdListPage({ searchParams }: { searchParams: Searc
   const params = await searchParams;
   const view = (VIEWS as readonly string[]).includes(String(params.view)) ? (params.view as (typeof VIEWS)[number]) : 'live';
   const applied = typeof params.applied === 'string' ? params.applied : null;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
 
   const { rows, warning, imports, bankRows, statuses } = await withCurrentUser(async (tx) => ({
     rows: await customs.list(tx, { view }),

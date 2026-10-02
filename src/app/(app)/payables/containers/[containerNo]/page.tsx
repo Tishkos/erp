@@ -26,6 +26,7 @@ import {
 } from '../../shipments/actions';
 import { containerChip } from '../status';
 import { windowTone } from '../../window-tone';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * One container — REQ-AP-001 §17.2, §18. The Purchase Invoice's window: the
@@ -75,7 +76,7 @@ export default async function ContainerPage({
   const { container, bl, owner, status, lines } = found;
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
   const amount = (value: string | null) => (value === null ? '—' : formatQuantity(value, locale as Locale));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const hidden = { container_no: container.containerNo, container_id: container.id };
   const open = !container.receivedOn && !container.cancelledAt;
   const chip = containerChip(container);

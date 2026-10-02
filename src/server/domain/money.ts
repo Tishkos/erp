@@ -151,7 +151,8 @@ export function toUsd(amountIqd: bigint, iqdPerUsd: bigint): bigint {
 /** The rate of one, scaled — what IQD converts to IQD at. */
 export const UNIT_RATE = RATE_FACTOR;
 
-function divideHalfUp(numerator: bigint, denominator: bigint): bigint {
+/** Integer division, half away from zero — the one rounding the books use. */
+export function divideHalfUp(numerator: bigint, denominator: bigint): bigint {
   const negative = numerator < 0n !== denominator < 0n;
   const n = numerator < 0n ? -numerator : numerator;
   const d = denominator < 0n ? -denominator : denominator;

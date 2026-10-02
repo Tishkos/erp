@@ -49,6 +49,7 @@ import * as audit from './audit';
 import * as authz from './authorization';
 import * as events from './payable-events';
 import * as payables from './payables';
+import { businessToday } from '../domain/business-date';
 
 export const PERMISSION_OBJECT = 'customs_pd';
 
@@ -60,7 +61,7 @@ export class PdNotFoundError extends Error {
   }
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => businessToday();
 
 export async function statuses(tx: Tx): Promise<PdStatusRow[]> {
   return tx.select().from(pdStatus).orderBy(asc(pdStatus.sequence));
@@ -72,6 +73,13 @@ async function statusMap(tx: Tx) {
 
 async function load(tx: Tx, id: string) {
   const [row] = await tx.select().from(customsPd).where(eq(customsPd.id, id)).limit(1);
+  if (!row) throw new PdNotFoundError(id);
+  return row;
+}
+
+/** HD9 — the PD locked for a status change, so two changes serialise. */
+async function lock(tx: Tx, id: string) {
+  const [row] = await tx.select().from(customsPd).where(eq(customsPd.id, id)).for('update');
   if (!row) throw new PdNotFoundError(id);
   return row;
 }
@@ -236,7 +244,7 @@ export interface StatusChangeInput {
 
 /** One status change, one history row, the matching events. `ctx` null = the sweep. */
 export async function changeStatus(tx: Tx, ctx: ActorContext | null, pdId: string, input: StatusChangeInput) {
-  const pd = await load(tx, pdId);
+  const pd = await lock(tx, pdId);
   if (ctx) await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, { branchCode: pd.branchCode });
 
   const map = await statusMap(tx);
@@ -361,7 +369,7 @@ export async function addNote(tx: Tx, ctx: ActorContext, pdId: string, note: str
  * carries it (`PD_LINKED`, and the PD's status as it stands).
  */
 export async function linkToImport(tx: Tx, ctx: ActorContext, pdId: string, payableId: string) {
-  const pd = await load(tx, pdId);
+  const pd = await lock(tx, pdId);
   await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, { branchCode: pd.branchCode });
   if (pd.payableId) throw new PdValidationError(`PD ${pd.pdNo} is already linked to an import.`);
   const owner = await payables.load(tx, payableId);

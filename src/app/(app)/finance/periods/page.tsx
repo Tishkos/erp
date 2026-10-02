@@ -24,6 +24,7 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as periods from '@/server/services/periods';
 import { createFiscalYear, setPeriodStatus } from './actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * The accounting calendar.
@@ -57,7 +58,7 @@ export default async function PeriodsPage({ searchParams }: { searchParams: Sear
 
   const calendar = await withCurrentUser((tx) => periods.calendar(tx));
   const year = new Date().getFullYear();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const current = calendar.find((p) => p.startsOn <= today && today <= p.endsOn);
 
   const state = (status: string) => ({

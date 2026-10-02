@@ -12,6 +12,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as migration from '@/server/services/payables-migration';
 import type { MigrationReport } from '@/server/services/payables-migration';
 import { runMigration, signOffMigration } from './actions';
+import { businessDateOf } from '@/server/domain/business-date';
 
 /**
  * The sheet import — REQ-AP-001 §24.3, §24.4.
@@ -49,7 +50,7 @@ export default async function PayablesMigrationPage({ searchParams }: { searchPa
   const report = (latest?.report ?? null) as MigrationReport | null;
   const usd = (value: string) => formatMoney(value, 'USD', locale as Locale);
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
-  const when = (value: Date | string) => formatBusinessDate(new Date(value).toISOString().slice(0, 10), locale as Locale);
+  const when = (value: Date | string) => formatBusinessDate(businessDateOf(new Date(value)), locale as Locale);
   const mode = (value: string) => (value === 'apply' ? t('mode_apply') : t('mode_dry_run'));
   const yes = (value: boolean) => (value ? t('yes') : t('no'));
 

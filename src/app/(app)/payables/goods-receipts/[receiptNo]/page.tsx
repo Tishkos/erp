@@ -9,6 +9,7 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as receipts from '@/server/services/goods-receipt';
+import { businessDateOf } from '@/server/domain/business-date';
 
 /**
  * The goods receipt record — REQ-AP-001 §21.6: the lines as they landed,
@@ -45,7 +46,7 @@ export default async function GoodsReceiptPage({
 
   const quantity = (value: string) => formatQuantity(value, locale as Locale);
   const day = (value: string | Date | null) =>
-    value ? formatBusinessDate(new Date(value).toISOString().slice(0, 10), locale as Locale) : '—';
+    value ? formatBusinessDate(businessDateOf(new Date(value)), locale as Locale) : '—';
 
   return (
     <AdminPage

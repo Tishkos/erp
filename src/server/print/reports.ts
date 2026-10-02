@@ -28,6 +28,7 @@ import { decimalString, isZero, scaled, sumMoney, sumQuantity } from './decimal'
 import type { BuildContext, Built } from './documents';
 import type { Messages } from './i18n';
 import type { Column, Fact, PrintModel, Row, Table } from './model';
+import { businessToday } from '../domain/business-date';
 
 /**
  * The reports, printed with exactly the filters their screens were run with.
@@ -51,7 +52,7 @@ const day = (value: string, locale: Locale) => (value ? formatBusinessDate(value
 
 const thisYear = () => new Date().getFullYear();
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => businessToday();
 
 const report = (
   input: Pick<PrintModel, 'title' | 'filters' | 'tables' | 'currency'> &
@@ -290,7 +291,7 @@ export async function partnerStatement(
    * the same rule the screen applies, so the copy in the file and the screen
    * it was printed from cannot disagree about how late an invoice is.
    */
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const agedAt = to > today ? today : to;
 
   const roll = await partners.listByRole(tx, side);

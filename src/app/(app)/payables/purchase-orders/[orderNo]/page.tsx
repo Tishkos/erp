@@ -9,6 +9,7 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as orders from '@/server/services/purchase-order';
+import { businessDateOf } from '@/server/domain/business-date';
 
 /**
  * The purchase order record — REQ-AP-001 §21.6: the lines with their
@@ -46,7 +47,7 @@ export default async function PurchaseOrderPage({
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   const quantity = (value: string) => formatQuantity(value, locale as Locale);
   const day = (value: string | Date | null) =>
-    value ? formatBusinessDate(new Date(value).toISOString().slice(0, 10), locale as Locale) : '—';
+    value ? formatBusinessDate(businessDateOf(new Date(value)), locale as Locale) : '—';
 
   return (
     <AdminPage
