@@ -28,6 +28,9 @@ export function unbuiltScreensShown(): boolean {
 export function visibleRoute(route: string): boolean {
   if (unbuiltScreensShown()) return true;
   if (isDelivered(route)) return true;
+  // A screen of the catalogue in its own right never inherits: an unbuilt
+  // /projects/budgets is not a record under the delivered /projects list.
+  if (screenRoutes().has(route)) return false;
   // A record under a delivered document list ( /master-data/branches/HQ ) is
   // served too. Only a document's children inherit: a workspace at /documents
   // being live says nothing about /documents/templates, which is its own

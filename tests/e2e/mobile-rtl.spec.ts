@@ -35,6 +35,10 @@ const ROUTES = [
   '/hr/employees',
   '/hr/organisation',
   '/finance/periods',
+  '/projects',
+  '/projects/contracts',
+  '/projects/wbs',
+  '/administration/project-settings',
   '/inventory/in-transit',
   '/treasury/reporting',
 ];

@@ -204,9 +204,10 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'projects',
     ordinal: 6,
     items: [
-      page('project_master', 'project'),
-      page('contracts', 'contract'),
-      page('wbs', 'wbs'),
+      // REQ-PM-001 PM-1 — the Project System's master screens.
+      page('project_master', 'project', '/projects'),
+      page('contracts', 'project', '/projects/contracts'),
+      page('wbs', 'project', '/projects/wbs'),
       page('project_budgets', 'project_budget'),
       page('change_orders', 'change_order'),
       page('project_costs', 'project_cost'),
@@ -443,6 +444,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('hr_settings', 'hr_setting', '/administration/hr-settings'),
       // REQ-WA-001 §6 — the bridge, the allow-list, the rules, the log.
       page('whatsapp', 'whatsapp', '/administration/whatsapp'),
+      // REQ-PM-001 R4 — project types, tolerance profiles, cost codes.
+      page('project_settings', 'project_setting', '/administration/project-settings'),
     ],
   },
   {

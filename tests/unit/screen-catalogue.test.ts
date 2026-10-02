@@ -92,15 +92,15 @@ describe('the screen catalogue covers the approved tree', () => {
   // one of them is still reachable, once.
   // Plus one more, by direction (2026-09-03): the Statement Mapping, where
   // Finance defines the headers and lines of its own reports.
-  it('classifies all 233 items in the approved tree', () => {
+  it('classifies all 234 items in the approved tree', () => {
     // 221 from the approved tree, plus the Stock Ledger (2026-09-27), plus
     // REQ-AP-001 §21.1: the Payables workbench, recurring contracts, payment
     // applications, PDs, B/Ls, containers, loans and the module settings —
     // eight new items — less the module-settings placeholder they replace;
     // plus REQ-AP-001 Stage 8's Sheet Migration (§24.3); plus REQ-LEGACY-001's
     // Legacy Books Import and REQ-HR-001's HR Settings (2026-10-02).
-    expect(allMenuItems()).toHaveLength(233);
-    expect(Object.keys(SCREENS)).toHaveLength(233);
+    expect(allMenuItems()).toHaveLength(234);
+    expect(Object.keys(SCREENS)).toHaveLength(234);
   });
 
   it('uses only declared archetypes', () => {
@@ -117,7 +117,7 @@ describe('the screen catalogue covers the approved tree', () => {
       (sum, item) => sum + screenCount(archetypeOf(item.key)!),
       0,
     );
-    expect(total).toBe(345);
+    expect(total).toBe(346);
   });
 });
 
@@ -170,7 +170,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(233);
+    expect(screenRoutes().size).toBe(234);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -189,6 +189,8 @@ describe('every screen has one address', () => {
       '/administration/payables-migration',
       '/administration/payables-settings',
       '/administration/permissions',
+      // REQ-PM-001 — project types, tolerance profiles, cost codes.
+      '/administration/project-settings',
       '/administration/roles',
       '/administration/users',
       // REQ-WA-001 — the WhatsApp bridge.
@@ -266,6 +268,10 @@ describe('every screen has one address', () => {
       // Blocks 2 and 3 — the Account Statement, one screen on each side.
       '/payables/supplier-statements',
       '/payables/suppliers',
+      // REQ-PM-001 PM-1 — the Project System's structure.
+      '/projects',
+      '/projects/contracts',
+      '/projects/wbs',
       // Block 5 — the Sales Invoice.
       '/sales/ar-invoices',
       // Block 6 — Receipts.
