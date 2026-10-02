@@ -18,6 +18,9 @@ export async function saveContact(form: FormData): Promise<void> {
         allowNotifications: flag(form, 'allow_notifications'),
         allowQueries: flag(form, 'allow_queries'),
         allowDigest: flag(form, 'allow_digest'),
+        // WA-6 — the switch that lets this one person decide a document from
+        // chat. Off unless it is ticked here, deliberately, per person.
+        allowActions: flag(form, 'allow_actions'),
       }),
     BACK,
   );

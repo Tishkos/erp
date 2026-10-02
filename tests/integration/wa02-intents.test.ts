@@ -116,7 +116,27 @@ const ask = (text: string, settings?: Partial<Parameters<typeof wa.answer>[0]['s
   wa.answer({
     userId: ceo.principal.userId,
     text,
-    ...(settings ? { settings: { routerModel: 'x', agentModel: 'y', inlineRows: 15, exportRowsCap: 5000, throttlePerMinute: 60, retentionDays: 90, digestHour: 8, digestLocale: 'ar' as const, ...settings } } : {}),
+    ...(settings
+      ? {
+          settings: {
+            routerModel: 'x',
+            agentModel: 'y',
+            inlineRows: 15,
+            exportRowsCap: 5000,
+            throttlePerMinute: 60,
+            retentionDays: 90,
+            digestHour: 8,
+            digestLocale: 'ar' as const,
+            // WA-5 — an unregistered group: these answers are direct messages.
+            groupJid: '',
+            groupSubject: '',
+            groupQueries: true,
+            groupNotifications: true,
+            groupDigest: true,
+            ...settings,
+          },
+        }
+      : {}),
     ...(at ? { now: at } : {}),
   });
 
