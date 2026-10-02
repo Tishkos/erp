@@ -310,6 +310,23 @@ export interface BotSettings {
   readonly digestHour: number;
   /** The language the digest is written in. */
   readonly digestLocale: BotLocale;
+  /**
+   * WA-5 — the one group the bot works in, by its WhatsApp id.
+   *
+   * Empty means the bot is a direct-message bot only, as WA-1 to WA-4 built
+   * it. Registered, it is *one* group and no other: a message from any other
+   * group is silence, exactly as an unlisted number is (W-R3). Run
+   * `npm run whatsapp-bridge -- --list-groups` to print the id to put here.
+   */
+  readonly groupJid: string;
+  /** The group's name as WhatsApp reported it, for the screen to show. */
+  readonly groupSubject: string;
+  /** Questions asked in the group are answered there — W-R1 still decides who may ask. */
+  readonly groupQueries: boolean;
+  /** Notifications go to the group as well as to each allowed contact. */
+  readonly groupNotifications: boolean;
+  /** The morning digest is posted to the group. */
+  readonly groupDigest: boolean;
 }
 
 export const SETTING_KEYS = [
@@ -321,18 +338,28 @@ export const SETTING_KEYS = [
   'retention_days',
   'digest_hour',
   'digest_locale',
+  'group_jid',
+  'group_subject',
+  'group_queries',
+  'group_notifications',
+  'group_digest',
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 export const DEFAULT_SETTINGS: BotSettings = {
   routerModel: 'claude-haiku-4-5-20251001',
-  agentModel: 'claude-sonnet-5-5',
+  agentModel: 'claude-sonnet-5',
   inlineRows: 15,
   exportRowsCap: 5000,
   throttlePerMinute: 60,
   retentionDays: 90,
   digestHour: 8,
   digestLocale: 'ar',
+  groupJid: '',
+  groupSubject: '',
+  groupQueries: true,
+  groupNotifications: true,
+  groupDigest: true,
 };
 
 export class WhatsappValidationError extends Error {
@@ -353,6 +380,11 @@ const bounded = (key: string, raw: string, min: number, max: number): number => 
 export function settingsFrom(rows: ReadonlyArray<{ readonly key: string; readonly value: string }>): BotSettings {
   const map = new Map(rows.map((r) => [r.key, r.value]));
   const str = (key: SettingKey, fallback: string) => (map.get(key) ?? fallback).trim() || fallback;
+  const flag = (key: SettingKey, fallback: boolean) => {
+    const raw = map.get(key)?.trim().toLowerCase();
+    if (raw === undefined || raw === '') return fallback;
+    return raw === 'on' || raw === 'true' || raw === '1' || raw === 'yes';
+  };
   const num = (key: SettingKey, fallback: number, min: number, max: number) => {
     const raw = map.get(key);
     if (raw === undefined) return fallback;
@@ -371,6 +403,11 @@ export function settingsFrom(rows: ReadonlyArray<{ readonly key: string; readonl
     retentionDays: num('retention_days', DEFAULT_SETTINGS.retentionDays, 7, 3650),
     digestHour: num('digest_hour', DEFAULT_SETTINGS.digestHour, 0, 23),
     digestLocale: str('digest_locale', DEFAULT_SETTINGS.digestLocale) === 'en' ? 'en' : 'ar',
+    groupJid: (map.get('group_jid') ?? '').trim(),
+    groupSubject: (map.get('group_subject') ?? '').trim(),
+    groupQueries: flag('group_queries', DEFAULT_SETTINGS.groupQueries),
+    groupNotifications: flag('group_notifications', DEFAULT_SETTINGS.groupNotifications),
+    groupDigest: flag('group_digest', DEFAULT_SETTINGS.groupDigest),
   };
 }
 
@@ -397,6 +434,17 @@ export function validateSetting(key: string, value: string): { readonly key: Set
     case 'digest_locale':
       if (raw !== 'ar' && raw !== 'en') throw new WhatsappValidationError(k, 'must be ar or en');
       return { key: k, value: raw };
+    case 'group_jid':
+      // Cleared, or one group id exactly as WhatsApp spells it.
+      if (raw === '') return { key: k, value: '' };
+      if (!isGroupJid(raw)) throw new WhatsappValidationError(k, 'must be a group id ending in @g.us');
+      return { key: k, value: raw };
+    case 'group_subject':
+      return { key: k, value: raw.slice(0, 120) };
+    case 'group_queries':
+    case 'group_notifications':
+    case 'group_digest':
+      return { key: k, value: raw === 'on' || raw === 'true' || raw === '1' || raw === 'yes' ? 'on' : 'off' };
   }
 }
 
