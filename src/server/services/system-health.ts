@@ -242,6 +242,17 @@ export async function check(tx: Tx, options: CheckOptions = {}): Promise<HealthR
     findings.push({ code: 'deliveries_stuck', severity: 'warn', message: `${stuck[0]!.n} notification deliveries have waited more than a day: the delivery job is not running (REQ-HARDEN-001 F2).` });
   }
 
+  // 7. Bank/cash accounts whose ledger account is gone — the restore drill
+  // fails on exactly this foreign key (REQ-HARDEN-001 F5, CASH-ACCOUNTANT_ERBIL).
+  checked.push('bank_accounts');
+  const dangling = (await tx.execute(sql`
+    select b.code from bank_cash_account b
+     where b.active and not exists (select 1 from chart_of_account a where a.id = b.gl_account_id and a.is_active)
+     order by b.code`)).rows as { code: string }[];
+  if (dangling.length > 0) {
+    findings.push({ code: 'bank_account_unlinked', severity: 'stop', message: `${dangling.map((d) => d.code).join(', ')}: the ledger account behind this bank/cash account is missing or inactive. Re-link it on Master Data → Bank/Cash Accounts; until then the restore drill and the statements fail on it.` });
+  }
+
   return { today, findings, checked };
 }
 

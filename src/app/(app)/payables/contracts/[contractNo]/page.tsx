@@ -23,6 +23,7 @@ import * as partners from '@/server/services/partners';
 import { paymentState } from '@/server/services/expenses';
 import { amendContract, approveContract, endContract, generatePeriodsNow } from '../actions';
 import { businessDateOf, businessToday } from '@/server/domain/business-date';
+import { isNotFoundError } from '@/server/not-found';
 
 /**
  * The contract record — REQ-AP-001 §10.3 / §21.4.
@@ -66,8 +67,10 @@ export default async function ContractPage({
       const view = await contracts.view(tx, contractNo);
       const supplier = await partners.loadPartner(tx, view.contract.supplierId);
       return { ...view, supplier };
-    } catch {
-      return null;
+    } catch (error) {
+      // E1 — a missing record is a 404; anything else reaches the error boundary.
+      if (isNotFoundError(error)) return null;
+      throw error;
     }
   });
   if (!found) notFound();

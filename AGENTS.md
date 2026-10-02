@@ -70,7 +70,7 @@ Run `npx playwright test tests/e2e/theme-readability.spec.ts --workers=1` agains
 
 ## Screens copy existing models — the design must not change
 
-Standing rule (by direction, 2026-10-01; see also newsettings.md: "DO NOT CHANGE THE CURRENT DESIGN"). A new or changed screen must be indistinguishable in style from the existing ones:
+Standing rule (by direction, 2026-10-01; see also docs/notes/newsettings.md: "DO NOT CHANGE THE CURRENT DESIGN"). A new or changed screen must be indistinguishable in style from the existing ones:
 
 * A **list screen** copies `src/app/(app)/payables/invoices/page.tsx`: AdminPage → `tabs={<SectionTabs route=…/>}` → title/subtitle → ListToolbar (search; filters and saved views as filter controls — a `filterBar`/`FilterRow` form with `Select`/`Field`, never links in the header) → the standard register table (`s.sapRegisterTableWrap` / `s.sapRegisterTable`, `s.sapNum` for numbers) → paging. Nothing else.
 * A **record/document screen** copies `src/app/(app)/payables/invoices/[invoiceNo]/page.tsx`: AdminPage → SectionTabs → DocumentWindow (standard header fields, status chip, actions row, lines) → further registers stacked underneath in the supplier-statement manner (own `s.sapDoc`/`s.sapWindow`/`s.sapTitle` sections, not tabs) → RecordHistory, Attachments.

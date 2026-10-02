@@ -40,6 +40,7 @@ import { INSTALMENT_CHIP, LOAN_CHIP } from '../status';
 import { STATUS_CHIP } from '../../payment-applications/status';
 import { windowTone } from '../../window-tone';
 import { businessToday } from '@/server/domain/business-date';
+import { isNotFoundError } from '@/server/not-found';
 
 /**
  * One bank loan — REQ-AP-001 §15.7, §21.10.
@@ -80,8 +81,10 @@ export default async function LoanPage({
   const found = await withCurrentUser(async (tx) => {
     try {
       return await loans.view(tx, loanNo);
-    } catch {
-      return null;
+    } catch (error) {
+      // E1 — a missing record is a 404; anything else reaches the error boundary.
+      if (isNotFoundError(error)) return null;
+      throw error;
     }
   });
   if (!found) notFound();

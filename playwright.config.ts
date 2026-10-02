@@ -23,7 +23,12 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /mobile-rtl\.spec\.ts/ },
+    // REQ-HARDEN-001 I1 — a phone, right to left: the one spec written for it
+    // runs here and nowhere else, so the desktop run stays what it was.
+    { name: 'mobile', use: { ...devices['Pixel 5'] }, testMatch: /mobile-rtl\.spec\.ts/ },
+  ],
 
   webServer: {
     command: 'npm run dev',

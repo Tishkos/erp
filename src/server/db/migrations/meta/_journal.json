@@ -1177,6 +1177,13 @@
       "when": 1795900000047,
       "tag": "0243_closed_period_lock",
       "breakpoints": true
+    },
+    {
+      "idx": 168,
+      "version": "7",
+      "when": 1795900000048,
+      "tag": "0244_fk_indexes",
+      "breakpoints": true
     }
   ]
 }

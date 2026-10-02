@@ -8,6 +8,14 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-HARDEN-001 HARDEN-3/4 (part) — detail pages tell a missing record
+  from a failed read (E1–E3, HD12 gate), the foreign-key indexes the hot
+  paths join on (migration 0244, HD13), the dashboard's receipts filtered
+  before the limit (G6), the service receipt chip translated (H1), a mobile
+  Playwright project with the Arabic 390px pass over every delivered list
+  and settings screen (I1/I2, HD16), the daily health check naming a
+  bank/cash account whose ledger account is gone (F5), root notes moved to
+  `docs/notes/` and the scratch script removed (J1, J3).
 - REQ-IMPROVE-001 IMPROVE-2a — closing controls: the closed-period lock at
   the database (journals, stock movements, close in sequence; migration
   0243), the period-close checklist on the Accounting Periods screen with
@@ -31,7 +39,7 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
   Migration 0240.
 
 ### Migration notes
-- 0240–0243 are additive. 0243 adds triggers: after it, a period that is `closed` refuses postings and stock movements at the table, and a period cannot be closed before the earlier ones of its year. 0242 adds an enum value (`whatsapp`) and must run
+- 0240–0244 are additive (0244 adds indexes only). 0243 adds triggers: after it, a period that is `closed` refuses postings and stock movements at the table, and a period cannot be closed before the earlier ones of its year. 0242 adds an enum value (`whatsapp`) and must run
   on its own before the bridge starts (the migrator runs it as one
   transaction; nothing in the same file uses the value).
 - After deploying: install the crontab (`install-cron.sh`, done by

@@ -17,6 +17,7 @@ import * as advances from '@/server/services/supplier-advance';
 import * as bankCash from '@/server/services/bank-cash-accounts';
 import { approveAdvance, payAdvance } from '../actions';
 import { businessToday } from '@/server/domain/business-date';
+import { isNotFoundError } from '@/server/not-found';
 
 /**
  * One supplier advance — §8.5. The Purchase Invoice's window: the header, the
@@ -57,8 +58,10 @@ export default async function AdvancePage({
         ...(await bankCash.listOfKind(tx, 'cash')),
       ].filter((account) => account.active && account.currency === view.advance.currency);
       return { ...view, payFrom };
-    } catch {
-      return null;
+    } catch (error) {
+      // E1 — a missing record is a 404; anything else reaches the error boundary.
+      if (isNotFoundError(error)) return null;
+      throw error;
     }
   });
   if (!found) notFound();
