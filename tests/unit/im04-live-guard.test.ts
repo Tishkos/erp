@@ -42,6 +42,12 @@ const LIVE_USE: Readonly<Record<string, string>> = {
   'scripts/ops/statement-coverage.ts': 'reads',
   'scripts/ops/stock-movement-trace.ts': 'reads',
   'scripts/ops/run-job.sh': 'runs another script; the guard is theirs',
+  'scripts/ops/prepare-legacy-import.ts':
+    'the configuration the legacy import asks for, on the install that is being loaded — idempotent, and every row it writes is editable on its own screen',
+  'scripts/ops/legacy-books-import.ts':
+    'loads the old books onto the live install at the cut-over; dry run by default, --apply to write, and the same service the screen calls',
+  'scripts/ops/create-first-user.ts':
+    'the first sign-in on an install that has nobody — which is a live install by the time it is needed; it refuses the moment any user exists, so it cannot add a second way in',
 };
 
 const WRITE = /\b(insert into|update\s+[a-z_"]+\s+set|delete from|truncate|drop database|create database|pg_restore)\b|\.(insert|update|delete)\(/i;
@@ -51,7 +57,11 @@ function scripts(): string[] {
   const out: string[] = [];
   const walk = (dir: string) => {
     for (const entry of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
-      const rel = join(dir, entry.name);
+      // Forward slashes, whatever the platform: the list below is written the
+      // way the repository spells its paths, and on Windows `join` produces
+      // backslashes — so every lookup missed and the test failed on the
+      // developer's machine while passing in CI.
+      const rel = `${dir}/${entry.name}`;
       if (entry.isDirectory()) walk(rel);
       else if (/\.(ts|sh)$/.test(entry.name) && !rel.startsWith('scripts/lib/') && !rel.startsWith('scripts/sql/')) out.push(rel);
     }

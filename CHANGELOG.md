@@ -8,6 +8,14 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- The sponsor's WhatsApp configuration (`whatsapp-configuration`) on top of
+  main: Noah on Opus 5.5 working the question out (WA-3), answering in the
+  group only, reading what is sent to him, the claude-CLI brain, the
+  maker-checker wording. Its two migrations run after main's head
+  (`0246_whatsapp_group_only`, `0247_whatsapp_noah_opus`, journal times
+  …061–062), and the migration runner repairs a database from the WhatsApp
+  line, which had passed over the Project System's first three stages
+  (`LINEAGE_REPAIRS` in `src/server/db/migrate.ts`).
 - REQ-FIX-001 FIX-5 — HR in the sponsor's order: Dashboard, Employees,
   Departments, Positions, Attendance, Leave Management, Payroll, Advances &
   Loans, Recruitment, Performance, Employee Requests, Documents, Reports.
@@ -209,7 +217,8 @@ stage 1.
 
 ### Changed
 - WhatsApp bot: the agent model is `claude-sonnet-5-5` again (migration 0251),
-  by direction; 0245 had replaced it with `claude-sonnet-5`.
+  by direction; 0245 had replaced it with `claude-sonnet-5`. Superseded by
+  the sponsor's WhatsApp configuration: Noah on `claude-opus-5-5` (0247).
 - `next` 16.3.8 (security), `nodemailer` 10; `package.json` version is real.
 - Deploys build beside the running application and swap; the previous build
   is kept as `.next-prev`; a deploy ships only what is on `origin/main`.

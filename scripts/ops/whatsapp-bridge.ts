@@ -27,13 +27,16 @@
  * Configuration (environment, TECHSTACK A13): DATABASE_URL (the application
  * role), WA_POLL_SECONDS (20), ANTHROPIC_API_KEY (optional — without it the
  * phrase patterns alone route; with it the small router model fills the gaps),
- * WA_ROUTER_MODEL overrides the model in the settings table.
+ * WA_ROUTER_MODEL and WA_AGENT_MODEL override the two models in the settings
+ * table, and WA_BRAIN (cli | api) which transport thinks; WA_CLI_EFFORT is how
+ * hard it thinks (low … max, high by direction).
  */
 import 'dotenv/config';
 import makeWASocket, {
   Browsers,
   BufferJSON,
   DisconnectReason,
+  downloadMediaMessage,
   fetchLatestBaileysVersion,
   initAuthCreds,
   jidNormalizedUser,
@@ -46,14 +49,60 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import qrcode from 'qrcode-terminal';
 import { pool, withScope, type RequestScope } from '../../src/server/db/client';
-import { detectLocale, digestDue, e164ToJid, isGroupJid, jidToE164, parseCommand, words } from '../../src/server/domain/whatsapp';
+import {
+  checkingLine,
+  detectLocale,
+  greetingLine,
+  digestDue,
+  e164ToJid,
+  helpText,
+  isGroupJid,
+  jidToE164,
+  parseCommand,
+  words,
+} from '../../src/server/domain/whatsapp';
 import * as audit from '../../src/server/services/audit';
 import * as runner from '../../src/server/services/notification-runner';
 import * as wa from '../../src/server/services/whatsapp';
 import * as actions from '../../src/server/services/whatsapp-actions';
-import { anthropicClient, modelRouter } from '../../src/server/services/whatsapp-router';
+import { agentClientFor, anthropicClient, modelRouter } from '../../src/server/services/whatsapp-router';
+import { runAgentFor, type AgentClient } from '../../src/server/services/whatsapp-agent';
+import { cliAgentClient, cliReady } from '../../src/server/services/whatsapp-cli-brain';
+import { questionForFiles, type SentFile } from '../../src/server/domain/whatsapp-files';
+import { expired, isConfirmation, isRefusal, type PendingAction } from '../../src/server/domain/whatsapp-do';
+import { extractSentFile } from '../../src/server/services/whatsapp-files';
+import * as doService from '../../src/server/services/whatsapp-do';
 
 const POLL_SECONDS = Math.max(5, Number(process.env.WA_POLL_SECONDS ?? '20'));
+/**
+ * How hard the brain thinks. High by direction (2026-10-02): the questions
+ * are the company's own books, where a wrong figure costs more than a slow
+ * answer. The CLI takes low, medium, high, xhigh and max.
+ */
+const effort = process.env.WA_CLI_EFFORT?.trim() || 'high';
+/*
+ * Which model answers.
+ *
+ * The settings table is the ordinary place for this — the WhatsApp screen
+ * writes it — and the environment wins, the way it already does for the
+ * router. It is how the brain can be moved on a running server before the
+ * migration that changes the stored default has been deployed there.
+ */
+const AGENT_MODEL_OVERRIDE = process.env.WA_AGENT_MODEL?.trim() || null;
+/*
+ * Whether to answer messages typed on the bot's own phone.
+ *
+ * The bot's number is Tishko's handset: he pairs it, and he is the one who
+ * wants to try Noah out. Everything from that handset arrives marked
+ * `fromMe`, which the bridge skips — otherwise it would answer its own
+ * answers forever — so testing from it was impossible.
+ *
+ * With this on, a `fromMe` message is answered unless the bridge itself sent
+ * it, which it knows by the id it recorded when it did. Asked for as a
+ * temporary thing for testing (2026-10-02), so it is a switch and not a
+ * change: WA_ANSWER_SELF=off, or simply removed, puts it back.
+ */
+const ANSWER_SELF = (process.env.WA_ANSWER_SELF ?? '').trim().toLowerCase() === 'on';
 const RESET = process.argv.includes('--reset-pairing');
 /** WA-5 — print the groups the bot is in, with their ids, and exit. */
 const LIST_GROUPS = process.argv.includes('--list-groups');
@@ -129,6 +178,31 @@ async function databaseAuthState(scope: RequestScope) {
 
 const sentAt: number[] = [];
 
+/*
+ * The ids of messages this process has just sent.
+ *
+ * `sentByBridge` answers the same question from the log, which is the durable
+ * answer and survives a restart — but the echo of a message can reach the
+ * socket before the row recording its id has committed, and in that window
+ * the bot would answer itself. This set is written the instant WhatsApp hands
+ * the id back, so the window does not exist. It only matters while
+ * WA_ANSWER_SELF is on; it costs nothing when it is off.
+ */
+const ownSends = new Set<string>();
+
+function remember(id: string | null | undefined): void {
+  if (!id) return;
+  ownSends.add(id);
+  // A few hundred is more than any echo arrives late by; past that, forget
+  // the oldest half rather than grow for the life of the process.
+  if (ownSends.size > 500) {
+    for (const old of ownSends) {
+      ownSends.delete(old);
+      if (ownSends.size <= 250) break;
+    }
+  }
+}
+
 async function paced(perMinute: number): Promise<void> {
   const now = Date.now();
   while (sentAt.length && sentAt[0]! < now - 60_000) sentAt.shift();
@@ -160,6 +234,7 @@ function transportFor(sock: () => WASocket | null, perMinute: () => number): wa.
     } else {
       sent = await socket.sendMessage(jid, { text: message.text });
     }
+    remember(sent?.key?.id);
     return { waMessageId: sent?.key?.id ?? null };
   };
 }
@@ -174,6 +249,76 @@ function textOf(message: WAMessage): string | null {
   return m.conversation ?? m.extendedTextMessage?.text ?? m.ephemeralMessage?.message?.extendedTextMessage?.text ?? m.ephemeralMessage?.message?.conversation ?? null;
 }
 
+/** The biggest file worth pulling down: past this, say so rather than stall. */
+const FILE_BYTES_CAP = 25 * 1024 * 1024;
+
+/**
+ * The files sent to each chat lately, newest first.
+ *
+ * In memory, and only the few most recent: a workbook somebody sent to a
+ * group is their file, not the company's record. The message log keeps its
+ * name, its type and its size — what was sent and by whom — without keeping
+ * a copy of the contents, which is the same line the rest of the bridge
+ * draws. A restart forgets them, as a person's desk does.
+ */
+const recentFiles = new Map<string, SentFile[]>();
+
+/*
+ * WA-8 — the proposal each person has outstanding, if any.
+ *
+ * One at a time, by design: with two live proposals a bare "yes" is
+ * ambiguous, and an ambiguous yes must never pick one. A new proposal
+ * replaces the old, which is what a conversation does anyway.
+ *
+ * In memory. Nothing has happened yet, so a restart that forgets a proposal
+ * is behaving correctly — the right outcome for a forgotten intention is that
+ * it does not happen. What does happen is audited when it does, and the
+ * sentence and the yes are both in the message log regardless.
+ */
+const proposals = new Map<string, PendingAction>();
+
+/**
+ * Asks WhatsApp to put a file back on its servers.
+ *
+ * Media expires there, and the only way to fetch an old one is for the
+ * connected socket to request it again. Held here because the handler that
+ * downloads a file is not the one that owns the socket; null until connected,
+ * and then a download of expired media simply fails with its own note.
+ */
+let reupload: ((message: WAMessage) => Promise<WAMessage>) | null = null;
+const FILES_KEPT = 4;
+
+function rememberFile(chat: string, file: SentFile): void {
+  const kept = [file, ...(recentFiles.get(chat) ?? [])].slice(0, FILES_KEPT);
+  recentFiles.set(chat, kept);
+}
+
+/**
+ * The file on a message, if it carries one.
+ *
+ * WhatsApp wraps a document three or four ways depending on whether it had a
+ * caption and whether the chat is ephemeral, so all of them are unwrapped
+ * here. An image is reported as well, even though it cannot be read: the
+ * honest "that is a photograph, send me the file" belongs to the answer, not
+ * to silence.
+ */
+function fileOf(message: WAMessage): { readonly fileName: string; readonly mimetype: string; readonly caption: string } | null {
+  const m = message.message;
+  if (!m) return null;
+  const inner = m.ephemeralMessage?.message ?? m.viewOnceMessage?.message ?? m;
+  const document = inner.documentMessage ?? inner.documentWithCaptionMessage?.message?.documentMessage ?? null;
+  if (document) {
+    return {
+      fileName: document.fileName ?? 'file',
+      mimetype: document.mimetype ?? '',
+      caption: document.caption ?? inner.documentWithCaptionMessage?.message?.documentMessage?.caption ?? '',
+    };
+  }
+  const image = inner.imageMessage ?? null;
+  if (image) return { fileName: 'photo.jpg', mimetype: image.mimetype ?? 'image/jpeg', caption: image.caption ?? '' };
+  return null;
+}
+
 /**
  * Who spoke, and where.
  *
@@ -182,16 +327,32 @@ function textOf(message: WAMessage): string | null {
  * WA-5's safety: a question still runs as a named human being, never as "the
  * group", so their own permissions and scope decide what comes back.
  */
-function senderOf(message: WAMessage): { readonly e164: string | null; readonly groupJid: string | null } {
+function senderOf(message: WAMessage, ownE164: string | null): { readonly e164: string | null; readonly groupJid: string | null } {
   const key = message.key;
   const jid = key.remoteJid ?? '';
   if (jid === 'status@broadcast') return { e164: null, groupJid: null };
-  if (isGroupJid(jid)) {
+  const groupJid = isGroupJid(jid) ? jid : null;
+
+  /*
+   * Whose words these are.
+   *
+   * `fromMe` means they were typed on the handset the bridge is paired to,
+   * and that handset's number is the author — nothing else about the message
+   * says so. In a direct chat `remoteJid` is the OTHER party, so reading the
+   * author off it credits a question to the person it was sent to, and the
+   * answer would then be worked out under their permissions and their branch
+   * scope rather than the asker's. Seen in the log on the day
+   * WA_ANSWER_SELF was added: a message typed on the bot's phone was logged
+   * as coming from the number it was sent to.
+   */
+  if (key.fromMe) return { e164: ownE164, groupJid };
+
+  if (groupJid) {
     const participant = key.participant ?? key.participantAlt ?? message.participant ?? null;
     const e164 =
       jidToE164(participant ? jidNormalizedUser(participant) : undefined) ??
       jidToE164(key.participantAlt ? jidNormalizedUser(key.participantAlt) : undefined);
-    return { e164, groupJid: jid };
+    return { e164, groupJid };
   }
   const e164 =
     jidToE164(jidNormalizedUser(jid)) ?? jidToE164(key.remoteJidAlt ? jidNormalizedUser(key.remoteJidAlt) : undefined);
@@ -203,10 +364,27 @@ async function handleInbound(
   send: wa.Transport,
   router: ((text: string, locale: 'ar' | 'en') => Promise<import('../../src/server/domain/whatsapp').Intent>) | undefined,
   message: WAMessage,
+  agentClient: AgentClient | undefined,
+  ownE164: string | null,
 ): Promise<void> {
-  const { e164, groupJid } = senderOf(message);
-  const text = textOf(message)?.trim();
-  if (!e164 || !text) return;
+  const { e164, groupJid } = senderOf(message, ownE164);
+  const sentFile = fileOf(message);
+  const text = (textOf(message) ?? sentFile?.caption ?? '').trim();
+  // A file with nothing typed is still a question; silence with neither is not.
+  if (!e164 || (!text && !sentFile)) return;
+  // What the log records as the message. A file sent without a word would
+  // otherwise be an empty row, which reads as though nothing was said.
+  const body = text || `[${sentFile?.fileName ?? 'file'}]`;
+
+  // Its own voice, heard back. Every answer the bridge sends is recorded with
+  // the id WhatsApp gave it, so an id already in the log as outbound is the
+  // bot listening to itself — the one thing that must never start a round.
+  if (message.key.fromMe) {
+    if (message.key.id && ownSends.has(message.key.id)) return;
+    const mine = await withScope(scope, (tx) => wa.sentByBridge(tx, message.key.id ?? null));
+    if (mine) return;
+    log(`inbound from ${e164}: typed on the bot's own phone, answering it`);
+  }
 
   // WA-5 — one group, and no other. An unregistered group, or any group but
   // the registered one, is silence: the same answer an unlisted number gets.
@@ -217,11 +395,22 @@ async function handleInbound(
     log(`inbound from ${e164} in ${groupJid}: ignored (not the registered group)`);
     return;
   }
+  // Questions belong in the group: an answer in a private chat is an answer
+  // nobody else saw. Read, logged, and left — the group is the record.
+  if (!groupJid && settings.groupJid && settings.groupOnly) {
+    await withScope(scope, async (tx) => {
+      const sender = await wa.resolveNumber(tx, e164);
+      const id = await wa.recordInbound(tx, { e164, body, waMessageId: message.key.id ?? null, sender, groupJid: null });
+      await wa.finishInbound(tx, id, { status: 'refused', intent: 'none', detail: { reason: 'direct messages are not answered; ask in the group' } });
+    });
+    log(`inbound from ${e164}: direct message ignored (questions belong in the group)`);
+    return;
+  }
 
   // 1. Who is this, and may they ask? Logged either way; silence otherwise.
   const { inboundId, sender, allowed } = await withScope(scope, async (tx) => {
     const sender = await wa.resolveNumber(tx, e164);
-    const inboundId = await wa.recordInbound(tx, { e164, body: text, waMessageId: message.key.id ?? null, sender, groupJid });
+    const inboundId = await wa.recordInbound(tx, { e164, body, waMessageId: message.key.id ?? null, sender, groupJid });
     const allowed = wa.mayAsk(sender);
     if (!allowed.ok) {
       await wa.finishInbound(tx, inboundId, { status: 'refused', intent: 'none', detail: { reason: allowed.reason } });
@@ -244,7 +433,58 @@ async function handleInbound(
 
   const locale = detectLocale(text);
 
-  // 2. WA-6 — a decision command, read by shape. The agent never sees these
+  /*
+   * 2. WA-8 — a yes, to something he asked about.
+   *
+   * Read before anything else, and only a plain yes counts: a sentence that
+   * merely contains the word is a new question. Anything that is not a yes
+   * drops the proposal, because a person who answers something else has
+   * moved on, and a stale intention must not sit there waiting for a later
+   * "ok" that belonged to a different question entirely.
+   */
+  const waitingAction = proposals.get(sender.userId);
+  if (waitingAction) {
+    if (expired(waitingAction)) {
+      proposals.delete(sender.userId);
+      log(`inbound from ${e164}: a proposal for ${waitingAction.target.documentNo} had gone stale`);
+    } else if (isConfirmation(text)) {
+      proposals.delete(sender.userId);
+      log(`inbound from ${e164}: confirmed ${waitingAction.action} on ${waitingAction.target.documentNo}`);
+      const outcome = await doService.run({ userId: sender.userId, pending: waitingAction, e164 });
+      const said = outcome.ok
+        ? outcome.said
+        : locale === 'ar'
+          ? `ما تمت العملية. النظام رفضها: ${outcome.reason}`
+          : `It did not go through — the system refused it: ${outcome.reason}`;
+      await answerWith(scope, send, {
+        sender,
+        e164,
+        groupJid,
+        inboundId,
+        text: said,
+        intent: `action.${waitingAction.action}`,
+        ...(outcome.ok ? {} : { status: 'refused' as const }),
+      });
+      return;
+    } else if (isRefusal(text)) {
+      proposals.delete(sender.userId);
+      log(`inbound from ${e164}: declined ${waitingAction.action} on ${waitingAction.target.documentNo}`);
+      await answerWith(scope, send, {
+        sender,
+        e164,
+        groupJid,
+        inboundId,
+        text: locale === 'ar' ? 'تمام، ما سويت شي.' : 'Alright — I have left it alone.',
+        intent: 'action.declined',
+      });
+      return;
+    } else {
+      proposals.delete(sender.userId);
+      log(`inbound from ${e164}: a proposal for ${waitingAction.target.documentNo} was dropped (they said something else)`);
+    }
+  }
+
+  // 3. WA-6 — a decision command, read by shape. The agent never sees these
   // and never decides anything: an approval is four locks, not a sentence.
   const command = parseCommand(text);
   if (command.kind !== 'none') {
@@ -252,11 +492,133 @@ async function handleInbound(
     return;
   }
 
-  // 3. The answer, as the asker, read-only.
+  // 4. The answer, as the asker, read-only. With a key the agent answers: it
+  // reads the question itself and reaches for whichever tools it needs, with
+  // the last few turns of this chat for context. The catalogue's phrases are
+  // the fallback when there is no key.
+  /*
+   * WA-7 — a file sent to the group, read before the question is answered.
+   *
+   * Downloaded here and read into text, so that by the time Noah is asked
+   * about it he already has it. Reading it is allowed to fail: the file comes
+   * back with a note saying why, which is a perfectly good thing for a
+   * colleague to say, and far better than an exception in the middle of a
+   * conversation.
+   */
+  const chat = groupJid ?? e164;
+  if (sentFile) {
+    try {
+      const buffer = (await downloadMediaMessage(
+        message,
+        'buffer',
+        {},
+        { logger: silent as never, reuploadRequest: reupload ?? (async (m: WAMessage) => m) },
+      )) as Buffer;
+      if (buffer.length > FILE_BYTES_CAP) {
+        rememberFile(chat, {
+          fileName: sentFile.fileName,
+          kind: 'other',
+          mimetype: sentFile.mimetype,
+          bytes: buffer.length,
+          caption: sentFile.caption,
+          text: '',
+          note: `this file is ${Math.round(buffer.length / 1_000_000)} MB, too large for me to read here`,
+          sheets: [],
+          at: new Date().toISOString(),
+        });
+      } else {
+        const read = await extractSentFile({
+          buffer,
+          fileName: sentFile.fileName,
+          mimetype: sentFile.mimetype,
+          caption: sentFile.caption,
+        });
+        rememberFile(chat, read);
+        log(
+          `inbound from ${e164}: file ${read.fileName} (${read.kind}, ${read.bytes} bytes)${read.note ? ` — ${read.note}` : `, ${read.text.length} chars read`}`,
+        );
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      log(`inbound from ${e164}: file ${sentFile.fileName} could not be downloaded — ${detail}`);
+      rememberFile(chat, {
+        fileName: sentFile.fileName,
+        kind: 'other',
+        mimetype: sentFile.mimetype,
+        bytes: 0,
+        caption: sentFile.caption,
+        text: '',
+        note: `it could not be downloaded from WhatsApp (${detail.slice(0, 120)})`,
+        sheets: [],
+        at: new Date().toISOString(),
+      });
+    }
+  }
+  const files = recentFiles.get(chat) ?? [];
+  // The question as a person would have put it: what they typed, with the
+  // file named in it — or, for a file sent with no words, one written for
+  // them, because somebody putting a workbook in the group means "look".
+  const asked = sentFile ? questionForFiles(text, files.slice(0, 1)) : text;
+
+  const history = await withScope(scope, (tx) => wa.recentTurns(tx, { groupJid, e164 }));
+
+  /*
+   * While he reads: a word, not silence.
+   *
+   * By direction (2026-10-02). Only if the answer is actually slow — a
+   * greeting or a one-line explanation comes straight back and saying "let
+   * me check" about it would be theatre. Six seconds is the line between
+   * answering and going to look.
+   *
+   * Not recorded as an answer: it carries no figure and no data from the
+   * books, which is what W-R4 exists to keep a record of.
+   */
+  let checked = false;
+  const checking = setTimeout(() => {
+    checked = true;
+    void send({ e164, ...(groupJid ? { groupJid } : {}) }, { text: checkingLine(locale) }).catch(() => {
+      /* a courtesy that fails is not the answer failing */
+    });
+  }, 6_000);
+
   let reply: wa.Reply;
   try {
-    reply = await wa.answer({ userId: sender.userId, text, settings, locale, ...(router ? { router } : {}) });
+    reply = await wa.answer({
+      userId: sender.userId,
+      text: asked,
+      settings,
+      locale,
+      ...(router ? { router } : {}),
+      ...(agentClient
+        ? {
+            agent: (ctx, question, userName) =>
+              runAgentFor({
+                client: agentClient,
+                model: AGENT_MODEL_OVERRIDE ?? settings.agentModel,
+                ctx,
+                question,
+                history,
+                userName,
+                files,
+                // WA-8 — the capability IS the hook: a contact who may not
+                // act is given nowhere to put a proposal, and the tool says
+                // so rather than appearing to work.
+                ...(sender.allowActions
+                  ? {
+                      actions: {
+                        chat,
+                        propose: (pending: PendingAction) => {
+                          proposals.set(sender.userId, pending);
+                        },
+                      },
+                    }
+                  : {}),
+              }),
+          }
+        : {}),
+    });
   } catch (error) {
+    clearTimeout(checking);
     const detail = error instanceof Error ? error.message : String(error);
     log(`inbound from ${e164}: failed — ${detail}`);
     await withScope(scope, (tx) => wa.finishInbound(tx, inboundId, { status: 'failed', intent: null, errorMessage: detail }));
@@ -267,6 +629,8 @@ async function handleInbound(
     }
     return;
   }
+
+  clearTimeout(checking);
 
   // 4. Send, then record what was sent (W-R4). Asked in the group, answered
   // in the group — the attachment with it, so the PDF lands where the
@@ -290,7 +654,9 @@ async function handleInbound(
       await wa.finishInbound(tx, inboundId, { status: 'answered', intent: reply.intent.kind, detail: reply.detail });
       await wa.auditAnswer(tx, reply, { inboundId, question: text });
     });
-    log(`inbound from ${e164}: ${reply.intent.kind} answered${reply.attachment ? ` + ${reply.attachment.fileName}` : ''}`);
+    log(
+      `inbound from ${e164}: ${reply.intent.kind} answered${reply.attachment ? ` + ${reply.attachment.fileName}` : ''}${checked ? ' (said he was checking first)' : ''}`,
+    );
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     await withScope(scope, async (tx) => {
@@ -314,6 +680,48 @@ async function handleInbound(
  * is a sentence the person can act on, not silence: they are allow-listed, so
  * telling them *why* costs nothing and saves a phone call.
  */
+/**
+ * Says something back, and keeps the record of having said it (W-R4).
+ *
+ * The record-send-mark dance is the same for every kind of answer, and the
+ * failure half of it is the part worth having once: a message that failed to
+ * send must leave the outbound row marked failed and the question marked
+ * failed, or the log quietly claims an answer nobody received.
+ */
+async function answerWith(
+  scope: RequestScope,
+  send: wa.Transport,
+  input: {
+    readonly sender: wa.ResolvedSender;
+    readonly e164: string;
+    readonly groupJid: string | null;
+    readonly inboundId: bigint;
+    readonly text: string;
+    readonly intent: string;
+    readonly status?: 'answered' | 'refused';
+  },
+): Promise<void> {
+  const { sender, e164, groupJid, inboundId, text, intent } = input;
+  const outId = await withScope(scope, (tx) =>
+    wa.recordOutbound(tx, { e164, groupJid, body: text, sender, inReplyTo: inboundId, intent }),
+  );
+  try {
+    const { waMessageId } = await send({ e164, groupJid }, { text });
+    await withScope(scope, async (tx) => {
+      await wa.markOutbound(tx, outId, { status: 'sent', waMessageId });
+      await wa.finishInbound(tx, inboundId, { status: input.status ?? 'answered', intent });
+    });
+    log(`inbound from ${e164}: ${intent} ${input.status ?? 'answered'}`);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    await withScope(scope, async (tx) => {
+      await wa.markOutbound(tx, outId, { status: 'failed', errorMessage: detail });
+      await wa.finishInbound(tx, inboundId, { status: 'failed', intent, errorMessage: detail });
+    });
+    log(`inbound from ${e164}: ${intent} — send failed: ${detail}`);
+  }
+}
+
 async function handleCommand(
   scope: RequestScope,
   send: wa.Transport,
@@ -461,6 +869,51 @@ async function sendDigest(scope: RequestScope, send: wa.Transport, settings: Awa
   log(`digest for ${day}: ${recipients.length} recipient(s)`);
 }
 
+// ---------------------------------------------------------------------------
+// The greeting on connect
+// ---------------------------------------------------------------------------
+
+/**
+ * A reconnect is not news. Baileys drops and resumes a socket routinely — a
+ * 515 on first pair, a network blink, a server restart — and a greeting on
+ * every one of those would be the bot talking over the people in the group.
+ * One greeting, then quiet for this long however many times it reconnects.
+ */
+const GREETING_QUIET_MS = 30 * 60_000;
+let lastGreetingAt = 0;
+
+/**
+ * Says hello in the group when the bridge comes up, so the room can see it is
+ * listening.
+ *
+ * One line, as a colleague arriving would, and a different one each time —
+ * the words are in `domain/whatsapp`, with the reasoning for them.
+ */
+async function greet(scope: RequestScope, send: wa.Transport, botE164: string | null): Promise<void> {
+  const settings = await withScope(scope, (tx) => wa.settings(tx));
+  if (!settings.groupJid) return;
+  // The log's `e164` is a phone number by CHECK constraint, and a greeting is
+  // the bot speaking: its own number is the honest answer. Without one (an
+  // odd pairing) the words still go out and only the log row is skipped.
+  if (Date.now() - lastGreetingAt < GREETING_QUIET_MS) return;
+  lastGreetingAt = Date.now();
+
+  const text = greetingLine(settings.digestLocale);
+
+  try {
+    const outId = botE164
+      ? await withScope(scope, (tx) =>
+          wa.recordOutbound(tx, { e164: botE164, groupJid: settings.groupJid, body: text, intent: 'greeting' }),
+        )
+      : null;
+    const { waMessageId } = await send({ e164: botE164 ?? '', groupJid: settings.groupJid }, { text });
+    if (outId !== null) await withScope(scope, (tx) => wa.markOutbound(tx, outId, { status: 'sent', waMessageId }));
+    log('greeting posted to the group');
+  } catch (error) {
+    log(`greeting failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 /**
  * `--list-groups` — every group the bot has been added to, with its id.
  *
@@ -503,8 +956,47 @@ async function main(): Promise<void> {
   let settings = await withScope(scope, (tx) => wa.settings(tx));
   const routerClient = await anthropicClient(process.env.ANTHROPIC_API_KEY);
   const routerModel = process.env.WA_ROUTER_MODEL?.trim() || settings.routerModel;
+  const agentModel = AGENT_MODEL_OVERRIDE ?? settings.agentModel;
   const router = routerClient ? modelRouter(routerClient, routerModel) : undefined;
-  log(`router: patterns${router ? ` + ${routerModel}` : ' only (no ANTHROPIC_API_KEY)'}; poll every ${POLL_SECONDS}s`);
+  /*
+   * WA-3 — which brain, and is it there?
+   *
+   * Two transports, the same loop and the same nineteen tools behind both:
+   *
+   *   api  an ANTHROPIC_API_KEY, billed per token, no session limits;
+   *   cli  `claude -p` on this host, spending the company's own Claude
+   *        subscription — by direction, 2026-10-02.
+   *
+   * WA_BRAIN names one; with neither named, a key means the API and no key
+   * means the CLI. A brain that is not ready is reported here, once, with
+   * what to do about it — and the bridge carries on with the phrase patterns
+   * rather than answering every question with an apology.
+   */
+  const wanted = (process.env.WA_BRAIN ?? '').trim().toLowerCase();
+  const useCli = wanted === 'cli' || (wanted !== 'api' && !process.env.ANTHROPIC_API_KEY);
+  let agent: AgentClient | null = null;
+  if (useCli) {
+    const cliOptions = {
+      ...(process.env.WA_CLI_COMMAND ? { command: process.env.WA_CLI_COMMAND } : {}),
+      // Opus thinking hard about three reports is not a ten-second errand.
+      timeoutSeconds: Math.max(30, Number(process.env.WA_CLI_TIMEOUT_SECONDS ?? '240')),
+      effort,
+    };
+    const ready = await cliReady(cliOptions);
+    if (ready.ok) agent = cliAgentClient(cliOptions);
+    else log(`brain: the claude CLI is not usable — ${ready.reason}`);
+  } else {
+    agent = await agentClientFor(process.env.ANTHROPIC_API_KEY);
+  }
+  log(
+    `brain: ${
+      agent
+        ? `agent on ${agentModel} via ${useCli ? `the claude CLI (subscription, effort ${effort})` : 'the API'}`
+        : router
+          ? `router ${routerModel} only`
+          : 'phrase patterns only'
+    }; poll every ${POLL_SECONDS}s`,
+  );
 
   let socket: WASocket | null = null;
   let stopping = false;
@@ -531,6 +1023,10 @@ async function main(): Promise<void> {
       syncFullHistory: false,
       generateHighQualityLinkPreview: false,
     });
+    // WA-7 — only the connected socket can ask WhatsApp to put an expired
+    // file back on its servers, and the handler that downloads one does not
+    // own the socket.
+    reupload = socket.updateMediaMessage.bind(socket);
 
     socket.ev.on('creds.update', () => {
       saveCreds().catch((e) => log(`saving credentials failed: ${e}`));
@@ -547,14 +1043,23 @@ async function main(): Promise<void> {
       if (connection === 'open') {
         log(`connected as ${socket?.user?.id ?? '?'}`);
         void heartbeat('connected');
+        if (!LIST_GROUPS) void greet(scope, send, jidToE164(jidNormalizedUser(socket?.user?.id ?? '')));
         // `--list-groups` is a question, not a service: it answers and leaves.
         if (LIST_GROUPS && socket) {
           const live = socket;
           void listGroups(live)
             .catch((error) => log(`listing groups failed: ${error instanceof Error ? error.message : String(error)}`))
             .finally(() => {
+              // The socket first, then a breath for its last credentials
+              // write, then the pool. Closing the pool while Baileys was
+              // still saving produced "Cannot use a pool after calling end".
               stopping = true;
-              void pool.end().finally(() => process.exit(0));
+              try {
+                live.end(undefined);
+              } catch {
+                /* already gone */
+              }
+              setTimeout(() => void pool.end().finally(() => process.exit(0)), 1500);
             });
         }
       }
@@ -571,8 +1076,9 @@ async function main(): Promise<void> {
     socket.ev.on('messages.upsert', ({ messages, type }) => {
       if (type !== 'notify') return;
       for (const message of messages) {
-        if (message.key.fromMe) continue;
-        handleInbound(scope, send, router, message).catch((e) => log(`inbound handling failed: ${e}`));
+        if (message.key.fromMe && !ANSWER_SELF) continue;
+        const ownE164 = socket?.user?.id ? jidToE164(jidNormalizedUser(socket.user.id)) : null;
+        handleInbound(scope, send, router, message, agent ?? undefined, ownE164).catch((e) => log(`inbound handling failed: ${e}`));
       }
     });
   };

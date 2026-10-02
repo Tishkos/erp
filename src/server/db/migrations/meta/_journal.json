@@ -1268,6 +1268,20 @@
       "when": 1795900000060,
       "tag": "0255_hr_structure",
       "breakpoints": true
+    },
+    {
+      "idx": 181,
+      "version": "7",
+      "when": 1795900000061,
+      "tag": "0246_whatsapp_group_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 182,
+      "version": "7",
+      "when": 1795900000062,
+      "tag": "0247_whatsapp_noah_opus",
+      "breakpoints": true
     }
   ]
 }

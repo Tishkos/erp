@@ -70,7 +70,7 @@ WhatsApp ⇄ bridge (Baileys, CLI) ⇄ brain (router → agent) ⇄ ERP services
   language detection: **Claude Haiku 4.5** (`claude-haiku-4-5-20251001`) —
   classification at chat latency and negligible cost.
 * **Brain, tier 2 — the agent.** Free-form questions go to **Claude
-  Sonnet 5.5** (`claude-sonnet-5-5`) through the **Claude Agent SDK**, headless,
+  Opus 5.5** (`claude-opus-5-5`, Noah — the sponsor's WhatsApp configuration, migration 0247_whatsapp_noah_opus) through the **Claude Agent SDK**, headless,
   with the read-only tool whitelist of §5 and a system prompt that carries
   the ERP's vocabulary (payable stages, lanes, hold reasons, warehouse
   codes). Sonnet 5 is the recommendation (D-WA-2) because the job is tool
@@ -160,7 +160,7 @@ bridge layer only).
 | # | Question | Proposed default (to ratify or change) |
 |---|---|---|
 | D-WA-1 | The number | A dedicated SIM owned by the company, used by nothing else (W-R6). |
-| D-WA-2 | Models | Router: Haiku 4.5. Agent: **Sonnet 5.5** (`claude-sonnet-5-5`, by direction 2026-10-02; migration 0251 restores it where 0245 had changed it), overridable by `WA_AGENT_MODEL`. Both via the Claude Agent SDK; `ANTHROPIC_API_KEY` lives on the bridge host only. |
+| D-WA-2 | Models | Router: Haiku 4.5. Agent: **Opus 5.5** (`claude-opus-5-5`, "Noah", thinking at high effort — the sponsor's WhatsApp configuration, migration `0247_whatsapp_noah_opus`, run after 0251 so it has the last word; a model an administrator has chosen on the WhatsApp screen is left alone by both), overridable by `WA_AGENT_MODEL`. `ANTHROPIC_API_KEY` lives on the bridge host only. |
 | D-WA-3 | Who is allowed | **Ratified 2026-10-02 ("only ceo role"):** questions are answered only for a user who holds the `ceo` role *and* whose contact row allows queries — both checked on every message, and `allow_queries` cannot be set for anyone else. Notifications go to any user with an active contact. |
 | D-WA-4 | Size limits | Text answers ≤ 15 rows inline; above that always an attachment; an export caps at 5,000 rows with the cap named in the caption. |
 | D-WA-5 | If the number is banned | Re-pair a replacement SIM (accepted pilot risk); if it recurs, budget the official Cloud API and swap the bridge layer. |

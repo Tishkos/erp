@@ -135,6 +135,7 @@ const ask = (text: string, settings?: Partial<Parameters<typeof wa.answer>[0]['s
             groupQueries: true,
             groupNotifications: true,
             groupDigest: true,
+            groupOnly: true,
             ...settings,
           },
         }
@@ -288,7 +289,13 @@ describe('W3 · wa02-intents — each ask returns the figures the screen shows',
     expect((await ask('مساعدة')).text).toContain('مخزون مخزن');
     const none = await ask('what is the weather in Baghdad');
     expect(none.intent).toEqual({ kind: 'none' });
-    expect(none.text).toContain("I can't answer that yet.");
+    // The words changed by direction (2026-10-02): "I can't answer that yet"
+    // reads like a machine listing its limits, and the sponsor's objection to
+    // exactly that is why the agent exists. What matters is still asserted —
+    // that it says it did not understand, and says what WOULD work, rather
+    // than answering a question it has not understood.
+    expect(none.text).toMatch(/did not follow that one/i);
+    expect(none.text).toMatch(/warehouse/i);
   });
 });
 

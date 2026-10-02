@@ -212,13 +212,31 @@ const RAISED_BY: Readonly<Record<PartySide, readonly DocumentSource[]>> = {
   bank: [CUSTOMER_RECEIPT, SUPPLIER_PAYMENT],
 };
 
+/**
+ * A document id is a uuid. A source reference is not always a document.
+ *
+ * The cut-over's opening balances post with a source of their own making —
+ * `opening-IQD-…`, one per currency — because there is no invoice behind
+ * them: they are the old system's closing position, carried in as a journal.
+ * Every lookup below compares against a `uuid` column, so handing it one of
+ * those makes PostgreSQL refuse the whole query ("invalid input syntax for
+ * type uuid") and the statement fails rather than the one line being
+ * unnamed. Found 2026-10-02: every partner carried in from the old books had
+ * no statement at all, on the screen as well as in chat.
+ *
+ * So anything that is not a uuid is left out of the lookup. It has no
+ * document to name, which is the truth about it, and the line still shows
+ * with its journal's own reference.
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function documentsFor(
   tx: Tx,
   side: PartySide,
   ids: readonly string[],
 ): Promise<ReadonlyMap<string, StatementDocument>> {
   const found = new Map<string, StatementDocument>();
-  const wanted = [...new Set(ids)];
+  const wanted = [...new Set(ids)].filter((id) => UUID.test(id));
   if (wanted.length === 0) return found;
 
   for (const source of RAISED_BY[side]) {

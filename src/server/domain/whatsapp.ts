@@ -173,6 +173,12 @@ export type Intent =
   | { readonly kind: 'stopped'; readonly needsReason: boolean }
   | { readonly kind: 'supplier'; readonly party: string }
   | { readonly kind: 'customer'; readonly party: string }
+  /**
+   * WA-3 — the agent answered, rather than one of the catalogue's phrases.
+   * It is a label for the log, not a thing the router may choose: the agent
+   * is reached by the bridge having a key, never by a word in a message.
+   */
+  | { readonly kind: 'agent' }
   /** REQ-PM-001 D-PM-10 — one project's five amounts, % complete, CPI/SPI and next milestone. */
   | { readonly kind: 'project'; readonly project: string }
   | { readonly kind: 'none' };
@@ -299,7 +305,7 @@ const WORDS = {
       '• today\'s summary',
       'Arabic works too. Figures come with a PDF or XLSX when there are many rows.',
     ],
-    unknown: 'I can\'t answer that yet. Send "help" for what I can do.',
+    unknown: 'I did not follow that one. Try asking it another way — a warehouse, a customer, a supplier, a document number, or what you want to know about the books.',
     footer: (at: string, branch: string, user: string) => `— QS ERP · as of ${at} · branch ${branch} · read as ${user}`,
     notAllowed: '',
     tooMany: (rows: number, cap: number) => `${rows} rows — more than the ${cap} this channel sends. Narrow the question or open the screen.`,
@@ -324,7 +330,7 @@ const WORDS = {
       '• ملخص اليوم',
       'الإنجليزية تعمل أيضاً. الأرقام تأتي مع PDF أو XLSX عندما تكثر السطور.',
     ],
-    unknown: 'لا أستطيع الإجابة على هذا بعد. أرسل "مساعدة" لمعرفة ما أستطيع.',
+    unknown: 'لم أفهم هذا تماماً. اسأل بطريقة أخرى — مخزن، زبون، مورّد، رقم مستند، أو ما تريد معرفته عن الحسابات.',
     footer: (at: string, branch: string, user: string) => `— QS ERP · كما في ${at} · الفرع ${branch} · قُرئ باسم ${user}`,
     notAllowed: '',
     tooMany: (rows: number, cap: number) => `${rows} سطر — أكثر من ${cap} التي ترسلها هذه القناة. ضيّق السؤال أو افتح الشاشة.`,
@@ -343,6 +349,83 @@ export function words(locale: BotLocale) {
 
 export function helpText(locale: BotLocale): string {
   return WORDS[locale].help.join('\n');
+}
+
+/*
+ * What a person says while they go and look.
+ *
+ * By direction (2026-10-02): a question that takes real work should not be
+ * met with silence. Opus reading three reports takes the better part of a
+ * minute, and a minute of nothing is how a bot behaves. So the group is told
+ * — the way a colleague would say it, and not in the same words every time,
+ * which is the whole complaint about bots.
+ */
+const CHECKING = {
+  en: [
+    "Give me a moment — I'll check it properly before I answer.",
+    "Let me look it up, I'd rather give you the right figure than a quick one.",
+    'One second, reading it now.',
+    "I'll check the system first — I don't want to guess at it.",
+    'Looking now. Bear with me.',
+    'Let me go through it and come back to you with something solid.',
+  ],
+  ar: [
+    'لحظة، أتأكد من النظام قبل ما أجاوبك.',
+    'خلي أشوفه بالنظام حتى أعطيك الرقم الصحيح.',
+    'ثانية واحدة، أقرأه هسه.',
+    'أراجع النظام أول، ما أريد أخمّن.',
+    'أتحقق هسه، لحظة وياي.',
+    'خلي أراجعه زين وأرجعلك بجواب مضبوط.',
+  ],
+} as const;
+
+/**
+ * One of those lines, a different one each time.
+ *
+ * The counter walks the list rather than picking at random, so nobody in the
+ * group hears the same sentence twice running — which is what made the old
+ * bot sound like a bot.
+ */
+let checkingAt = 0;
+export function checkingLine(locale: BotLocale): string {
+  const list = CHECKING[locale];
+  const line = list[checkingAt % list.length]!;
+  checkingAt += 1;
+  return line;
+}
+
+/*
+ * What he says when he comes back on.
+ *
+ * The first version of this recited the phrases the bot understood, and the
+ * sponsor's objection to it is the reason the agent exists at all: a list of
+ * commands teaches people to type commands. It is one line now, in his own
+ * voice, and a different line each time — a bridge that reconnects twice in
+ * an evening should not post the same sentence twice.
+ *
+ * He names himself, because a room needs to know who has just arrived.
+ */
+const GREETINGS = {
+  en: [
+    "Noah here — I'm back on. Ask me anything about the system.",
+    "Noah, back online. What do you need?",
+    "I'm here. Anything you want to know about the books or the stock, just ask.",
+    "Back up and listening — Noah.",
+  ],
+  ar: [
+    'نوح هنا، رجعت أشتغل. اسألوني عن أي شيء بالنظام.',
+    'نوح، رجعت. شتحتاجون؟',
+    'آني موجود. أي شيء عن الحسابات أو المخازن، اسألوني.',
+    'رجعت أشتغل وأسمعكم — نوح.',
+  ],
+} as const;
+
+let greetingAt = 0;
+export function greetingLine(locale: BotLocale): string {
+  const list = GREETINGS[locale];
+  const line = list[greetingAt % list.length]!;
+  greetingAt += 1;
+  return line;
 }
 
 /** W-R7 — every reply names when it was read, under which branch, as whom. */
@@ -411,6 +494,15 @@ export interface BotSettings {
   readonly groupNotifications: boolean;
   /** The morning digest is posted to the group. */
   readonly groupDigest: boolean;
+  /**
+   * Questions are answered in the group and nowhere else.
+   *
+   * On, because an answer in a private chat is an answer nobody else in the
+   * company saw: the group is the record of what was asked and what the
+   * system said. A direct message is read, logged and left unanswered, with
+   * the same silence an unlisted number gets.
+   */
+  readonly groupOnly: boolean;
 }
 
 export const SETTING_KEYS = [
@@ -427,12 +519,13 @@ export const SETTING_KEYS = [
   'group_queries',
   'group_notifications',
   'group_digest',
+  'group_only',
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 export const DEFAULT_SETTINGS: BotSettings = {
   routerModel: 'claude-haiku-4-5-20251001',
-  agentModel: 'claude-sonnet-5-5',
+  agentModel: 'claude-opus-5-5',
   inlineRows: 15,
   exportRowsCap: 5000,
   throttlePerMinute: 60,
@@ -444,6 +537,7 @@ export const DEFAULT_SETTINGS: BotSettings = {
   groupQueries: true,
   groupNotifications: true,
   groupDigest: true,
+  groupOnly: true,
 };
 
 export class WhatsappValidationError extends Error {
@@ -492,6 +586,7 @@ export function settingsFrom(rows: ReadonlyArray<{ readonly key: string; readonl
     groupQueries: flag('group_queries', DEFAULT_SETTINGS.groupQueries),
     groupNotifications: flag('group_notifications', DEFAULT_SETTINGS.groupNotifications),
     groupDigest: flag('group_digest', DEFAULT_SETTINGS.groupDigest),
+    groupOnly: flag('group_only', DEFAULT_SETTINGS.groupOnly),
   };
 }
 
@@ -503,7 +598,7 @@ export function validateSetting(key: string, value: string): { readonly key: Set
   switch (k) {
     case 'router_model':
     case 'agent_model':
-      if (!/^[a-z0-9][a-z0-9.-]{2,80}$/i.test(raw)) throw new WhatsappValidationError(k, 'must be a model id such as claude-sonnet-5-5');
+      if (!/^[a-z0-9][a-z0-9.-]{2,80}$/i.test(raw)) throw new WhatsappValidationError(k, 'must be a model id such as claude-opus-5-5');
       return { key: k, value: raw };
     case 'inline_rows':
       return { key: k, value: String(bounded(k, raw, 1, 100)) };
@@ -528,6 +623,7 @@ export function validateSetting(key: string, value: string): { readonly key: Set
     case 'group_queries':
     case 'group_notifications':
     case 'group_digest':
+    case 'group_only':
       return { key: k, value: raw === 'on' || raw === 'true' || raw === '1' || raw === 'yes' ? 'on' : 'off' };
   }
 }

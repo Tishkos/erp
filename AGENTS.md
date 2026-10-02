@@ -12,6 +12,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 `scripts/seed-dev.ts` uses `DATABASE_URL`, not `DATABASE_URL_OWNER`. Setting only the owner URL does not redirect the seed. For isolated verification, explicitly point `DATABASE_URL` and `DATABASE_URL_TEST` at the intended isolated database, and verify the running development server uses that same database before browser tests. Never rely on `.env` defaults for a seed or test run.
 
+## Two migration lines at 0245 (2026-10-02)
+
+The WhatsApp branch ran `0245_whatsapp_group_and_actions`, `0246_whatsapp_group_only` and `0247_whatsapp_noah_opus` at journal times …049–051; main ran PM-1 to PM-3 at the same times. In the merged journal the WhatsApp two sit at …061–062 (after `0255_hr_structure`), and `src/server/db/migrate.ts` (`LINEAGE_REPAIRS`) runs PM-1 to PM-3 on a database whose last recorded time had passed them and whose tables are missing — decided by the table, never the hash (files edited after they ran carry other hashes everywhere). A new migration takes a `when` after the journal's last entry, as always.
+
 ## Business dates and money (REQ-HARDEN-001 HARDEN-2)
 
 * "Today" is `businessToday()` from `src/server/domain/business-date.ts` (Asia/Baghdad, `ERP_TIMEZONE`); a timestamp becomes a date with `businessDateOf(instant)`. Never `new Date().toISOString().slice(0, 10)` — it is UTC and reads yesterday for the first three hours of every Baghdad day. `tests/integration/hd07-business-today.test.ts` greps for it and fails the build. SQL that needs today binds `${businessToday()}::date`, never `current_date`.
