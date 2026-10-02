@@ -16,6 +16,7 @@ import * as coa from '@/server/services/chart-of-accounts';
 import * as partners from '@/server/services/partners';
 import * as payables from '@/server/services/payables';
 import * as posting from '@/server/services/posting';
+import * as execution from '@/server/services/project-execution';
 import * as paymentTerms from '@/server/services/payment-terms';
 import * as warehouses from '@/server/services/warehouses';
 import { gapsFor } from '@domain/setup-gaps';
@@ -60,8 +61,10 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
     return <Denied object={page('ap_invoices')} />;
   }
 
-  const { suppliers, allSuppliers, stockItems, allItems, houses, schedules, accounts, mapped, imports } =
+  const { suppliers, allSuppliers, stockItems, allItems, houses, schedules, accounts, mapped, imports, assignment } =
     await withCurrentUser(async (tx) => ({
+      // REQ-PM-001 §8 — the project elements a purchase may be assigned to.
+      assignment: await execution.assignmentPickers(tx),
       suppliers: await partners.listActiveInRole(tx, 'supplier'),
       // The whole list too, so an empty picker can say which of the two things is
       // wrong: nobody has been added, or nobody added is active.
@@ -219,6 +222,43 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
         />
       ),
     },
+    /*
+     * REQ-PM-001 §8 — a purchase for a project names its element and cost
+     * code here; the order (or the payable) then promises it there, and the
+     * posting spends it there. Left blank, nothing is assigned.
+     */
+    ...(assignment.elements.length > 0
+      ? [
+          {
+            label: x('project_element'),
+            control: true,
+            value: (
+              <select aria-label={x('project_element')} defaultValue="" name="project_element">
+                <option value="">{x('project_element_none')}</option>
+                {assignment.elements.map((e) => (
+                  <option key={`${e.projectCode}|${e.wbsCode}`} value={`${e.projectCode}|${e.wbsCode}`}>
+                    {`${e.wbsCode} · ${e.name} (${e.projectName})`}
+                  </option>
+                ))}
+              </select>
+            ),
+          },
+          {
+            label: x('project_cost_code'),
+            control: true,
+            value: (
+              <select aria-label={x('project_cost_code')} defaultValue="" name="project_cost_code">
+                <option value="" />
+                {assignment.codes.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {`${c.code} · ${locale === 'ar' && c.nameAr ? c.nameAr : c.nameEn}`}
+                  </option>
+                ))}
+              </select>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (

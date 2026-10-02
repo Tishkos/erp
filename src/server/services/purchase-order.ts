@@ -22,6 +22,7 @@ import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
 import { allocateDocumentNumber } from './numbering';
+import * as execution from './project-execution';
 
 export const PERMISSION_OBJECT = 'purchase_order';
 const SEQUENCE_KEY = 'PURCHASE_ORDER';
@@ -87,6 +88,10 @@ export interface CreatePurchaseOrderInput {
   readonly paymentTermsCode?: string | null;
   readonly reference?: string | null;
   readonly note?: string | null;
+  /** REQ-PM-001 §8 — the project, the element and the cost code the order is assigned to; the three together, or none. */
+  readonly projectCode?: string | null;
+  readonly wbsCode?: string | null;
+  readonly costCode?: string | null;
   readonly lines: readonly PurchaseLineInput[];
 }
 
@@ -137,6 +142,8 @@ export async function create(
   }
 
   await assertSupplierUsable(tx, input.supplierId);
+  // REQ-PM-001 §8 — checked before the number is spent.
+  const assignment = await execution.checkAssignment(tx, input);
 
   const allocated = await allocateDocumentNumber(
     tx,
@@ -157,6 +164,9 @@ export async function create(
       paymentTermsCode: input.paymentTermsCode ?? null,
       reference: input.reference ?? null,
       note: input.note ?? null,
+      projectCode: assignment?.projectCode ?? null,
+      wbsCode: assignment?.wbsCode ?? null,
+      costCode: assignment?.costCode ?? null,
       createdBy: ctx.principal.userId,
     })
     .returning({ id: purchaseOrder.id });
@@ -294,6 +304,11 @@ export async function approve(tx: Tx, ctx: ActorContext, id: string): Promise<vo
     after: { status: 'approved' },
     outcome: 'success',
   });
+
+  // REQ-PM-001 §8 — approval is the act that creates the commitment: an
+  // order assigned to an element promises its total there, against the
+  // element's availability, in this same transaction.
+  await execution.commitForOrder(tx, ctx, id);
 }
 
 /**
@@ -374,6 +389,9 @@ export async function cancel(
     reason,
     outcome: 'success',
   });
+
+  // REQ-PM-001 §8 — what the order still promised is given back, with the reason.
+  await execution.releaseFor(tx, ctx, { purchaseOrderId: id }, `Order ${order.orderNo} ${status}: ${reason.trim()}`);
 
   return { status, closedQuantity };
 }

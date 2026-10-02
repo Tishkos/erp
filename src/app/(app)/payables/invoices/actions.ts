@@ -103,6 +103,10 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       // §24.3 — ticked Import and naming an open import: the invoice joins it.
       payableId: text(formData, 'is_import') === '1' ? text(formData, 'payable_id').trim() || null : null,
       paymentTermsText: text(formData, 'payment_terms_text').trim() || null,
+      // REQ-PM-001 §8 — the element is "project|element"; the three together or none.
+      projectCode: text(formData, 'project_element').split('|')[0]?.trim() || null,
+      wbsCode: text(formData, 'project_element').split('|')[1]?.trim() || null,
+      costCode: text(formData, 'project_cost_code').trim() || null,
       lines,
     });
   });

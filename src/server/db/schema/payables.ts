@@ -254,6 +254,10 @@ export const payable = pgTable(
     expenseCategoryCode: text('expense_category_code').references(() => expenseCategory.code),
     /** A service payable whose cost belongs to an import (§20.2). */
     chargedToPayableId: uuid('charged_to_payable_id'),
+    /** REQ-PM-001 §8 — the project, the element and the cost code the purchase is assigned to; the three together, or none. */
+    projectCode: text('project_code'),
+    wbsCode: text('wbs_code'),
+    costCode: text('cost_code'),
 
     /** Stage 2 — recurring periods and due dates; nullable for other types. */
     dueDate: date('due_date'),

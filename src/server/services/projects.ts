@@ -51,6 +51,7 @@ import * as audit from './audit';
 import * as statuses from './statuses';
 import * as inventory from './inventory';
 import * as budget from './project-budget';
+import { businessToday } from '../domain/business-date';
 import { allocateDocumentNumber } from './numbering';
 
 export const DOCUMENT_TYPE = 'project';
@@ -406,6 +407,8 @@ export async function commit(
     purchaseOrderId?: string | null;
     /** REQ-PM-001 §8 — the element the commitment stands on. */
     wbsCode?: string | null;
+    /** REQ-PM-001 §8 — a payable without an order is a commitment of its own. */
+    payableId?: string | null;
   },
 ): Promise<{ id: string; availableAfterIqd: bigint }> {
   const row = await assertSpendable(tx, ctx, projectCode, input.costCode, input.amountIqd, input.wbsCode ?? null);
@@ -418,6 +421,7 @@ export async function commit(
       costCode: input.costCode,
       wbsCode: input.wbsCode ?? null,
       purchaseOrderId: input.purchaseOrderId ?? null,
+      payableId: input.payableId ?? null,
       amountIqd: toDecimalString(input.amountIqd, 4n),
       committedOn: input.committedOn,
       createdBy: ctx.principal.userId,
@@ -508,18 +512,26 @@ export async function recordCost(
     wbsCode?: string | null;
     journalEntryId?: string | null;
     consumesCommitmentId?: string | null;
+    /** REQ-PM-001 §8 — the document behind the row, for the line items' drill-down. */
+    sourceType?: string | null;
+    sourceId?: string | null;
   },
 ): Promise<{ id: string; availableAfterIqd: bigint }> {
-  const row = await assertSpendable(
-    tx,
-    ctx,
-    projectCode,
-    input.costCode,
-    // A cost that consumes a commitment was already counted against
-    // availability when the commitment was made.
-    input.consumesCommitmentId ? 0n : input.amountIqd,
-    input.wbsCode ?? null,
-  );
+  // A cost that consumes a commitment was already counted against
+  // availability when the commitment was made — up to what is still open on
+  // it; anything above that is new spending and is checked (PM-3).
+  let uncommitted = input.amountIqd;
+  if (input.consumesCommitmentId) {
+    const [promise] = await tx
+      .select({ amountIqd: projectCommitment.amountIqd, consumedIqd: projectCommitment.consumedIqd, releasedOn: projectCommitment.releasedOn })
+      .from(projectCommitment)
+      .where(eq(projectCommitment.id, input.consumesCommitmentId))
+      .limit(1);
+    if (!promise) throw new Error(`No commitment with id '${input.consumesCommitmentId}'.`);
+    const open = promise.releasedOn ? 0n : parseDecimal(promise.amountIqd, 4n) - parseDecimal(promise.consumedIqd, 4n);
+    uncommitted = input.amountIqd > open ? input.amountIqd - open : 0n;
+  }
+  const row = await assertSpendable(tx, ctx, projectCode, input.costCode, uncommitted, input.wbsCode ?? null);
   // REQ-PM-001 §5 — an element named on a cost must be one that may receive it.
   if (input.wbsCode) await assertAccountAssignmentElement(tx, projectCode, input.wbsCode);
 
@@ -544,6 +556,9 @@ export async function recordCost(
       incurredOn: input.incurredOn,
       amountIqd: toDecimalString(input.amountIqd, 4n),
       journalEntryId: input.journalEntryId ?? null,
+      sourceType: input.sourceType ?? null,
+      sourceId: input.sourceId ?? null,
+      consumedCommitmentId: input.consumesCommitmentId ?? null,
       createdBy: ctx.principal.userId,
     })
     .returning({ id: projectCost.id });
@@ -566,6 +581,64 @@ export async function recordCost(
   });
 
   return { id: created!.id, availableAfterIqd: after.availableIqd };
+}
+
+/**
+ * REQ-PM-001 §8 — the mirror of a cost: a negative row naming the row it
+ * undoes (once), and the commitment the cost consumed given back, so the
+ * promise stands open again. The journal's own reversal is the caller's;
+ * this keeps the project's analysis in step with it.
+ */
+export async function reverseCost(
+  tx: Tx,
+  ctx: ActorContext,
+  costId: string,
+  input: { reason: string; journalEntryId?: string | null; incurredOn?: string | null },
+): Promise<{ id: string }> {
+  const [cost] = await tx.select().from(projectCost).where(eq(projectCost.id, costId)).limit(1);
+  if (!cost) throw new Error(`No project cost with id '${costId}'.`);
+  const row = await load(tx, cost.projectCode);
+  await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, { branchCode: row.branchCode ?? ctx.branchCode });
+  if (!input.reason.trim()) throw new Error('Reversing a project cost needs a reason (§8).');
+  const [already] = await tx.select({ id: projectCost.id }).from(projectCost).where(eq(projectCost.reversesCostId, costId)).limit(1);
+  if (already) throw new Error(`Project cost ${costId} was already reversed.`);
+  const amount = parseDecimal(cost.amountIqd, 4n);
+  const [created] = await tx
+    .insert(projectCost)
+    .values({
+      projectCode: cost.projectCode,
+      costCode: cost.costCode,
+      wbsCode: cost.wbsCode,
+      kind: `${cost.kind}_reversal`,
+      description: `Reversal — ${cost.description}`,
+      incurredOn: input.incurredOn ?? businessToday(),
+      amountIqd: toDecimalString(-amount, 4n),
+      journalEntryId: input.journalEntryId ?? null,
+      sourceType: cost.sourceType,
+      sourceId: cost.sourceId,
+      reversesCostId: cost.id,
+      createdBy: ctx.principal.userId,
+    })
+    .returning({ id: projectCost.id });
+  // The promise the cost had consumed is open again, up to what it consumed.
+  if (cost.consumedCommitmentId) {
+    await tx
+      .update(projectCommitment)
+      .set({ consumedIqd: sql`greatest(0, ${projectCommitment.consumedIqd} - ${toDecimalString(amount, 4n)})` })
+      .where(eq(projectCommitment.id, cost.consumedCommitmentId));
+  }
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'project.cost_reversed',
+    objectType: DOCUMENT_TYPE,
+    objectId: cost.projectCode,
+    branchCode: row.branchCode ?? ctx.branchCode,
+    before: { costId: cost.id, amountIqd: cost.amountIqd, costCode: cost.costCode, wbsCode: cost.wbsCode },
+    after: { reversalId: created!.id },
+    reason: input.reason.trim(),
+    outcome: 'success',
+  });
+  return { id: created!.id };
 }
 
 /**

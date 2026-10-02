@@ -161,6 +161,10 @@ export const apInvoice = pgTable(
     recurringContractId: uuid('recurring_contract_id').references(() => recurringContract.id),
     periodStart: date('period_start'),
     periodEnd: date('period_end'),
+    /** REQ-PM-001 §8 — the project, the element and the cost code the purchase is assigned to; the three together, or none. */
+    projectCode: text('project_code'),
+    wbsCode: text('wbs_code'),
+    costCode: text('cost_code'),
 
     branchCode: text('branch_code')
       .notNull()

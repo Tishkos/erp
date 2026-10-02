@@ -102,7 +102,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Sear
                   <th scope="col">{column('date')}</th>
                   <th scope="col">{column('description')}</th>
                   <th className={s.sapNum} scope="col">
-                    {column('lines')}
+                    {x('lines')}
                   </th>
                   <th className={s.sapNum} scope="col">
                     {column('amount')}

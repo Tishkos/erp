@@ -486,6 +486,9 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/projects/plan',
   '/projects/budgets',
   '/projects/change-orders',
+  '/projects/costs',
+  '/projects/procurement',
+  '/projects/material-issues',
   '/administration/project-settings',
 ]);
 

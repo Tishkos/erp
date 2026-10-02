@@ -195,6 +195,13 @@ money_transfer_deposit
 project_balance_movement
 project_certificate
 project_progress
+project_material_issue_line
+project_material_issue
+project_plan_line
+project_plan_version
+project_budget_document_line
+project_budget_document
+project_variation_line
 project_variation
 project_cost
 project_commitment

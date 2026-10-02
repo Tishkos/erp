@@ -8,6 +8,17 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-PM-001 PM-3 — execution: a purchase order, a payable and a purchase
+  invoice may be assigned to a project element and cost code; the order's
+  approval (or an order-less payable's opening) commits against the
+  element's availability, the invoice's posting carries the project
+  dimension and converts the promise — services as the cost, goods as
+  stock until issued — and its reversal gives the promise back;
+  cancellation releases it with the reason. The **Material Issues**
+  document (issue at FIFO, return at the cost it went out at, the one-time
+  form id), **Project Costs** (the line items beside the journal's
+  figure) and **Procurement** (each promise, converted, released, open).
+  Migration 0247.
 - REQ-PM-001 PM-2 — planning and budget: the cost plan in versions with
   its spread by month (**Cost Plan**), the budget as documents — original,
   supplement, return, transfer — raised by one person and approved by

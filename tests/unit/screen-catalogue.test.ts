@@ -273,7 +273,10 @@ describe('every screen has one address', () => {
       '/projects/budgets',
       '/projects/change-orders',
       '/projects/contracts',
+      '/projects/costs',
+      '/projects/material-issues',
       '/projects/plan',
+      '/projects/procurement',
       '/projects/wbs',
       // Block 5 — the Sales Invoice.
       '/sales/ar-invoices',
