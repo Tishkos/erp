@@ -8,6 +8,12 @@
  * asker's own user and grants (W-R1).
  */
 import { helpText, money, quantity } from '../domain/whatsapp';
+import { describeSentFile, type SentFile } from '../domain/whatsapp-files';
+import type { PendingAction } from '../domain/whatsapp-do';
+import * as itemsService from './items';
+import * as openingStockService from './opening-stock';
+import * as doService from './whatsapp-do';
+import * as sqlService from './whatsapp-sql';
 import { runAgent, type AgentClient, type AgentResult, type PriorTurn, type ToolOutcome } from '../domain/whatsapp-agent';
 import * as apInvoices from './ap-invoice';
 import * as arInvoices from './ar-invoice';
@@ -38,7 +44,32 @@ const fromDrafted = (drafted: Drafted): ToolOutcome => ({
 /** The tool runner for one asker, in one read-only transaction. */
 const chr10 = () => String.fromCharCode(10);
 
-export function toolRunnerFor(ctx: ReadContext) {
+/**
+ * The files sent to this chat lately, newest first.
+ *
+ * They are held by the bridge, which downloaded them, rather than by the
+ * database: a workbook somebody sent to a group is their file and not the
+ * company's record, and the message log keeps its name and size without
+ * keeping a copy of it.
+ */
+export type SentFiles = readonly SentFile[];
+
+/**
+ * How an action reaches the world — WA-8.
+ *
+ * Present only when the contact may act, which is how the capability is
+ * granted: without it `propose_action` has nowhere to put a proposal and says
+ * so. `propose` hands the pending action to whoever is holding the
+ * conversation (the bridge), because the tools run inside a read-only
+ * transaction and a proposal is not a write to the books anyway — it is an
+ * intention for the next few minutes.
+ */
+export interface ActionHooks {
+  readonly chat: string;
+  readonly propose: (pending: PendingAction) => void;
+}
+
+export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?: ActionHooks) {
   return async function runTool(name: string, args: Record<string, unknown>): Promise<ToolOutcome> {
     switch (name) {
       case 'company_summary':
@@ -191,6 +222,114 @@ export function toolRunnerFor(ctx: ReadContext) {
           ].join(chr10()),
         };
       }
+      case 'schema':
+        return { text: await sqlService.describeSchema(ctx.tx, typeof args.table === 'string' ? args.table : undefined) };
+      case 'query': {
+        const asked = String(args.sql ?? '').trim();
+        if (!asked) return { text: 'No query given.' };
+        const result = await sqlService.runQuery(ctx.tx, asked, typeof args.limit === 'number' ? args.limit : undefined);
+        // A refusal is the useful answer here: "that column does not exist"
+        // is what makes the next query right.
+        if (!result.ok) return { text: `The query did not run: ${result.reason}` };
+        return { text: result.text };
+      }
+      case 'items': {
+        const rows = (await itemsService.listAll(ctx.tx)) as unknown as Record<string, unknown>[];
+        const asked = String(args.search ?? '').trim().toLowerCase();
+        const shown = asked ? rows.filter((row) => JSON.stringify(Object.values(row)).toLowerCase().includes(asked)) : rows;
+        if (shown.length === 0) {
+          return { text: asked ? `No item matches "${asked}".` : 'There are no items on the system yet.' };
+        }
+        return {
+          text: [
+            `${shown.length} item(s)${asked ? ` matching "${asked}"` : ''}${shown.length > 60 ? ', the first 60:' : ':'}`,
+            ...shown
+              .slice(0, 60)
+              .map(
+                (row) =>
+                  `${String(row.code ?? '')} · ${String(row.name ?? '')} · ${String(row.baseUomCode ?? row.uomCode ?? '—')}${row.active === false ? ' · inactive' : ''}`,
+              ),
+          ].join(chr10()),
+        };
+      }
+      case 'opening_stock': {
+        const no = String(args.no ?? '').trim().toUpperCase();
+        if (no) {
+          const found = await openingStockService.viewByNo(ctx.tx, no);
+          if (!found) return { text: `There is no opening stock document ${no}.` };
+          const header = found.document as unknown as Record<string, unknown>;
+          const lines = found.lines as unknown as Record<string, unknown>[];
+          return {
+            text: [
+              `${no} · ${String(header.warehouseName ?? header.warehouseCode ?? '')} · ${String(header.status ?? '')}`,
+              ...lines
+                .slice(0, 60)
+                .map(
+                  (line) =>
+                    `${String(line.itemCode ?? '')} · ${String(line.itemName ?? '')} · ${quantity(String(line.quantity ?? '0'))} · ${money(String(line.totalIqd ?? '0'))} IQD`,
+                ),
+              lines.length > 60 ? `… and ${lines.length - 60} more line(s)` : '',
+            ]
+              .filter((part) => part !== '')
+              .join(chr10()),
+          };
+        }
+        const rows = (await openingStockService.list(ctx.tx)) as unknown as Record<string, unknown>[];
+        if (rows.length === 0) return { text: 'No opening stock has been raised.' };
+        return {
+          text: [
+            `${rows.length} opening stock document(s):`,
+            ...rows.map(
+              (row) =>
+                `${String(row.documentNo ?? '')} · ${String(row.warehouseName ?? '')} · ${String(row.status ?? '')} · ${String(row.lines ?? 0)} line(s) · ${money(String(row.totalIqd ?? '0'))} IQD`,
+            ),
+            'A document that is still "submitted" has NOT posted to the inventory ledger: its quantities read zero everywhere until it is approved.',
+          ].join(chr10()),
+        };
+      }
+      case 'propose_action': {
+        if (!actions) {
+          return {
+            text: 'You cannot act in this chat. The contact is not allowed to take actions — an administrator turns that on per person on the WhatsApp screen. Explain that, and that reading is unaffected.',
+          };
+        }
+        const prepared = await doService.prepare({
+          ctx,
+          userId: ctx.principal.userId,
+          chat: actions.chat,
+          action: String(args.action ?? ''),
+          args,
+        });
+        if (!prepared.ok) return { text: `Not proposed. ${prepared.reason}` };
+        actions.propose(prepared.pending);
+        return {
+          text: [
+            'Nothing has happened yet. Put these facts to them in your own words and ask whether they are sure:',
+            '',
+            prepared.pending.sentence,
+            '',
+            'They have ten minutes to answer. A plain yes runs it; anything else drops it.',
+          ].join(chr10()),
+        };
+      }
+      case 'sent_file': {
+        if (files.length === 0) return { text: 'No file has been sent to this chat.' };
+        const asked = String(args.name ?? '').trim().toLowerCase();
+        const file = asked ? files.find((f) => f.fileName.toLowerCase().includes(asked)) : files[0];
+        if (!file) {
+          return { text: `No file matching "${asked}". What has been sent: ${files.map((f) => f.fileName).join(', ')}.` };
+        }
+        return {
+          text: [
+            describeSentFile(file),
+            file.caption ? `sent with: ${file.caption}` : '',
+            '',
+            file.text || '(nothing could be read out of it)',
+          ]
+            .filter((part) => part !== '')
+            .join(chr10()),
+        };
+      }
       case 'what_the_bot_can_do':
         return { text: helpText(ctx.locale) };
       default:
@@ -208,6 +347,10 @@ export async function runAgentFor(input: {
   readonly question: string;
   readonly history?: readonly PriorTurn[];
   readonly userName: string;
+  /** WA-7 — the files sent to this chat lately, newest first. */
+  readonly files?: SentFiles;
+  /** WA-8 — present only when this contact may act. */
+  readonly actions?: ActionHooks;
 }): Promise<AgentResult> {
   return runAgent({
     client: input.client,
@@ -218,6 +361,6 @@ export async function runAgentFor(input: {
     locale: input.ctx.locale,
     branchCode: input.ctx.branchCode,
     today: input.ctx.today,
-    runTool: toolRunnerFor(input.ctx),
+    runTool: toolRunnerFor(input.ctx, input.files ?? [], input.actions),
   });
 }

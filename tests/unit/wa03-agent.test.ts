@@ -67,11 +67,33 @@ describe('WA-3 · the tool list', () => {
       'reverse',
     ]);
     for (const tool of AGENT_TOOLS) {
+      // WA-8 — `propose_action` is the one door out, and it does not open
+      // itself: it records an intention and hands back the facts to put to a
+      // person. The lock is that it writes nothing, which is the next test.
+      if (tool.name === 'propose_action') continue;
       for (const word of tool.name.split('_')) {
         expect(verbs.has(word), `${tool.name} contains the action verb "${word}"`).toBe(false);
       }
-      // No tool takes SQL, a table, or somebody to act as.
-      expect(JSON.stringify(tool.input_schema), tool.name).not.toMatch(/sql|query|table|user_?id|principal/i);
+    }
+  });
+
+  it('lets only propose_action reach an action, and says it changes nothing', () => {
+    const propose = AGENT_TOOLS.find((tool) => tool.name === 'propose_action');
+    expect(propose).toBeDefined();
+    // The description is the instruction the model follows at the moment it
+    // matters, so these words are load-bearing: it must not believe it has
+    // done anything.
+    expect(propose!.description).toMatch(/nothing happens/i);
+    expect(propose!.description).toMatch(/answer yes before anything runs/i);
+    expect(propose!.description).toMatch(/never say you have done something/i);
+  });
+
+  it('takes nobody to act as — a question always runs as the person asking', () => {
+    // WA-9 gave him SQL, so `sql` and `table` are now expected. What must
+    // never appear is a way to name a different principal: the read runs as
+    // the asker, under their own row-level security, or it does not run.
+    for (const tool of AGENT_TOOLS) {
+      expect(JSON.stringify(tool.input_schema), tool.name).not.toMatch(/user_?id|principal|as_user|scope/i);
     }
   });
 
@@ -107,11 +129,28 @@ describe('WA-3 · the instructions', () => {
     }
   });
 
-  it('forbids inventing a figure, and forbids acting', () => {
+  it('forbids inventing a figure', () => {
     expect(prompt).toMatch(/must come from a tool call/i);
     expect(prompt).toMatch(/never estimate/i);
-    expect(prompt).toMatch(/may not change anything/i);
-    expect(prompt).toMatch(/cannot approve, post, pay or cancel/i);
+  });
+
+  it('allows acting only as propose, then ask, then it runs', () => {
+    // He may change things now (2026-10-02, by direction). The rule that
+    // replaced "you may not" is the one that has to be in front of him every
+    // time, because the failure it prevents is telling somebody a thing is
+    // done when nobody agreed to it.
+    expect(prompt).toMatch(/PROPOSE, THEN ASK, THEN IT RUNS/);
+    expect(prompt).toMatch(/changes nothing/i);
+    expect(prompt).toMatch(/never say a thing is done when you have only proposed it/i);
+    // And the limits of it: their own inbox, their own permissions.
+    expect(prompt).toMatch(/waiting in that person's own approval inbox/i);
+    expect(prompt).toMatch(/maker-checker/i);
+  });
+
+  it('tells him to write a query rather than claim he cannot see something', () => {
+    expect(prompt).toMatch(/read the whole database with the query tool/i);
+    expect(prompt).toMatch(/never say "my tools cannot see that"/i);
+    expect(prompt).toMatch(/Look at the schema before you write/i);
   });
 
   it('answers in Arabic when asked in Arabic', () => {

@@ -36,6 +36,7 @@ import makeWASocket, {
   Browsers,
   BufferJSON,
   DisconnectReason,
+  downloadMediaMessage,
   fetchLatestBaileysVersion,
   initAuthCreds,
   jidNormalizedUser,
@@ -67,6 +68,10 @@ import * as actions from '../../src/server/services/whatsapp-actions';
 import { agentClientFor, anthropicClient, modelRouter } from '../../src/server/services/whatsapp-router';
 import { runAgentFor, type AgentClient } from '../../src/server/services/whatsapp-agent';
 import { cliAgentClient, cliReady } from '../../src/server/services/whatsapp-cli-brain';
+import { questionForFiles, type SentFile } from '../../src/server/domain/whatsapp-files';
+import { expired, isConfirmation, isRefusal, type PendingAction } from '../../src/server/domain/whatsapp-do';
+import { extractSentFile } from '../../src/server/services/whatsapp-files';
+import * as doService from '../../src/server/services/whatsapp-do';
 
 const POLL_SECONDS = Math.max(5, Number(process.env.WA_POLL_SECONDS ?? '20'));
 /**
@@ -244,6 +249,76 @@ function textOf(message: WAMessage): string | null {
   return m.conversation ?? m.extendedTextMessage?.text ?? m.ephemeralMessage?.message?.extendedTextMessage?.text ?? m.ephemeralMessage?.message?.conversation ?? null;
 }
 
+/** The biggest file worth pulling down: past this, say so rather than stall. */
+const FILE_BYTES_CAP = 25 * 1024 * 1024;
+
+/**
+ * The files sent to each chat lately, newest first.
+ *
+ * In memory, and only the few most recent: a workbook somebody sent to a
+ * group is their file, not the company's record. The message log keeps its
+ * name, its type and its size — what was sent and by whom — without keeping
+ * a copy of the contents, which is the same line the rest of the bridge
+ * draws. A restart forgets them, as a person's desk does.
+ */
+const recentFiles = new Map<string, SentFile[]>();
+
+/*
+ * WA-8 — the proposal each person has outstanding, if any.
+ *
+ * One at a time, by design: with two live proposals a bare "yes" is
+ * ambiguous, and an ambiguous yes must never pick one. A new proposal
+ * replaces the old, which is what a conversation does anyway.
+ *
+ * In memory. Nothing has happened yet, so a restart that forgets a proposal
+ * is behaving correctly — the right outcome for a forgotten intention is that
+ * it does not happen. What does happen is audited when it does, and the
+ * sentence and the yes are both in the message log regardless.
+ */
+const proposals = new Map<string, PendingAction>();
+
+/**
+ * Asks WhatsApp to put a file back on its servers.
+ *
+ * Media expires there, and the only way to fetch an old one is for the
+ * connected socket to request it again. Held here because the handler that
+ * downloads a file is not the one that owns the socket; null until connected,
+ * and then a download of expired media simply fails with its own note.
+ */
+let reupload: ((message: WAMessage) => Promise<WAMessage>) | null = null;
+const FILES_KEPT = 4;
+
+function rememberFile(chat: string, file: SentFile): void {
+  const kept = [file, ...(recentFiles.get(chat) ?? [])].slice(0, FILES_KEPT);
+  recentFiles.set(chat, kept);
+}
+
+/**
+ * The file on a message, if it carries one.
+ *
+ * WhatsApp wraps a document three or four ways depending on whether it had a
+ * caption and whether the chat is ephemeral, so all of them are unwrapped
+ * here. An image is reported as well, even though it cannot be read: the
+ * honest "that is a photograph, send me the file" belongs to the answer, not
+ * to silence.
+ */
+function fileOf(message: WAMessage): { readonly fileName: string; readonly mimetype: string; readonly caption: string } | null {
+  const m = message.message;
+  if (!m) return null;
+  const inner = m.ephemeralMessage?.message ?? m.viewOnceMessage?.message ?? m;
+  const document = inner.documentMessage ?? inner.documentWithCaptionMessage?.message?.documentMessage ?? null;
+  if (document) {
+    return {
+      fileName: document.fileName ?? 'file',
+      mimetype: document.mimetype ?? '',
+      caption: document.caption ?? inner.documentWithCaptionMessage?.message?.documentMessage?.caption ?? '',
+    };
+  }
+  const image = inner.imageMessage ?? null;
+  if (image) return { fileName: 'photo.jpg', mimetype: image.mimetype ?? 'image/jpeg', caption: image.caption ?? '' };
+  return null;
+}
+
 /**
  * Who spoke, and where.
  *
@@ -293,8 +368,13 @@ async function handleInbound(
   ownE164: string | null,
 ): Promise<void> {
   const { e164, groupJid } = senderOf(message, ownE164);
-  const text = textOf(message)?.trim();
-  if (!e164 || !text) return;
+  const sentFile = fileOf(message);
+  const text = (textOf(message) ?? sentFile?.caption ?? '').trim();
+  // A file with nothing typed is still a question; silence with neither is not.
+  if (!e164 || (!text && !sentFile)) return;
+  // What the log records as the message. A file sent without a word would
+  // otherwise be an empty row, which reads as though nothing was said.
+  const body = text || `[${sentFile?.fileName ?? 'file'}]`;
 
   // Its own voice, heard back. Every answer the bridge sends is recorded with
   // the id WhatsApp gave it, so an id already in the log as outbound is the
@@ -320,7 +400,7 @@ async function handleInbound(
   if (!groupJid && settings.groupJid && settings.groupOnly) {
     await withScope(scope, async (tx) => {
       const sender = await wa.resolveNumber(tx, e164);
-      const id = await wa.recordInbound(tx, { e164, body: text, waMessageId: message.key.id ?? null, sender, groupJid: null });
+      const id = await wa.recordInbound(tx, { e164, body, waMessageId: message.key.id ?? null, sender, groupJid: null });
       await wa.finishInbound(tx, id, { status: 'refused', intent: 'none', detail: { reason: 'direct messages are not answered; ask in the group' } });
     });
     log(`inbound from ${e164}: direct message ignored (questions belong in the group)`);
@@ -330,7 +410,7 @@ async function handleInbound(
   // 1. Who is this, and may they ask? Logged either way; silence otherwise.
   const { inboundId, sender, allowed } = await withScope(scope, async (tx) => {
     const sender = await wa.resolveNumber(tx, e164);
-    const inboundId = await wa.recordInbound(tx, { e164, body: text, waMessageId: message.key.id ?? null, sender, groupJid });
+    const inboundId = await wa.recordInbound(tx, { e164, body, waMessageId: message.key.id ?? null, sender, groupJid });
     const allowed = wa.mayAsk(sender);
     if (!allowed.ok) {
       await wa.finishInbound(tx, inboundId, { status: 'refused', intent: 'none', detail: { reason: allowed.reason } });
@@ -353,7 +433,58 @@ async function handleInbound(
 
   const locale = detectLocale(text);
 
-  // 2. WA-6 — a decision command, read by shape. The agent never sees these
+  /*
+   * 2. WA-8 — a yes, to something he asked about.
+   *
+   * Read before anything else, and only a plain yes counts: a sentence that
+   * merely contains the word is a new question. Anything that is not a yes
+   * drops the proposal, because a person who answers something else has
+   * moved on, and a stale intention must not sit there waiting for a later
+   * "ok" that belonged to a different question entirely.
+   */
+  const waitingAction = proposals.get(sender.userId);
+  if (waitingAction) {
+    if (expired(waitingAction)) {
+      proposals.delete(sender.userId);
+      log(`inbound from ${e164}: a proposal for ${waitingAction.target.documentNo} had gone stale`);
+    } else if (isConfirmation(text)) {
+      proposals.delete(sender.userId);
+      log(`inbound from ${e164}: confirmed ${waitingAction.action} on ${waitingAction.target.documentNo}`);
+      const outcome = await doService.run({ userId: sender.userId, pending: waitingAction, e164 });
+      const said = outcome.ok
+        ? outcome.said
+        : locale === 'ar'
+          ? `ما تمت العملية. النظام رفضها: ${outcome.reason}`
+          : `It did not go through — the system refused it: ${outcome.reason}`;
+      await answerWith(scope, send, {
+        sender,
+        e164,
+        groupJid,
+        inboundId,
+        text: said,
+        intent: `action.${waitingAction.action}`,
+        ...(outcome.ok ? {} : { status: 'refused' as const }),
+      });
+      return;
+    } else if (isRefusal(text)) {
+      proposals.delete(sender.userId);
+      log(`inbound from ${e164}: declined ${waitingAction.action} on ${waitingAction.target.documentNo}`);
+      await answerWith(scope, send, {
+        sender,
+        e164,
+        groupJid,
+        inboundId,
+        text: locale === 'ar' ? 'تمام، ما سويت شي.' : 'Alright — I have left it alone.',
+        intent: 'action.declined',
+      });
+      return;
+    } else {
+      proposals.delete(sender.userId);
+      log(`inbound from ${e164}: a proposal for ${waitingAction.target.documentNo} was dropped (they said something else)`);
+    }
+  }
+
+  // 3. WA-6 — a decision command, read by shape. The agent never sees these
   // and never decides anything: an approval is four locks, not a sentence.
   const command = parseCommand(text);
   if (command.kind !== 'none') {
@@ -361,10 +492,74 @@ async function handleInbound(
     return;
   }
 
-  // 3. The answer, as the asker, read-only. With a key the agent answers: it
+  // 4. The answer, as the asker, read-only. With a key the agent answers: it
   // reads the question itself and reaches for whichever tools it needs, with
   // the last few turns of this chat for context. The catalogue's phrases are
   // the fallback when there is no key.
+  /*
+   * WA-7 — a file sent to the group, read before the question is answered.
+   *
+   * Downloaded here and read into text, so that by the time Noah is asked
+   * about it he already has it. Reading it is allowed to fail: the file comes
+   * back with a note saying why, which is a perfectly good thing for a
+   * colleague to say, and far better than an exception in the middle of a
+   * conversation.
+   */
+  const chat = groupJid ?? e164;
+  if (sentFile) {
+    try {
+      const buffer = (await downloadMediaMessage(
+        message,
+        'buffer',
+        {},
+        { logger: silent as never, reuploadRequest: reupload ?? (async (m: WAMessage) => m) },
+      )) as Buffer;
+      if (buffer.length > FILE_BYTES_CAP) {
+        rememberFile(chat, {
+          fileName: sentFile.fileName,
+          kind: 'other',
+          mimetype: sentFile.mimetype,
+          bytes: buffer.length,
+          caption: sentFile.caption,
+          text: '',
+          note: `this file is ${Math.round(buffer.length / 1_000_000)} MB, too large for me to read here`,
+          sheets: [],
+          at: new Date().toISOString(),
+        });
+      } else {
+        const read = await extractSentFile({
+          buffer,
+          fileName: sentFile.fileName,
+          mimetype: sentFile.mimetype,
+          caption: sentFile.caption,
+        });
+        rememberFile(chat, read);
+        log(
+          `inbound from ${e164}: file ${read.fileName} (${read.kind}, ${read.bytes} bytes)${read.note ? ` — ${read.note}` : `, ${read.text.length} chars read`}`,
+        );
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      log(`inbound from ${e164}: file ${sentFile.fileName} could not be downloaded — ${detail}`);
+      rememberFile(chat, {
+        fileName: sentFile.fileName,
+        kind: 'other',
+        mimetype: sentFile.mimetype,
+        bytes: 0,
+        caption: sentFile.caption,
+        text: '',
+        note: `it could not be downloaded from WhatsApp (${detail.slice(0, 120)})`,
+        sheets: [],
+        at: new Date().toISOString(),
+      });
+    }
+  }
+  const files = recentFiles.get(chat) ?? [];
+  // The question as a person would have put it: what they typed, with the
+  // file named in it — or, for a file sent with no words, one written for
+  // them, because somebody putting a workbook in the group means "look".
+  const asked = sentFile ? questionForFiles(text, files.slice(0, 1)) : text;
+
   const history = await withScope(scope, (tx) => wa.recentTurns(tx, { groupJid, e164 }));
 
   /*
@@ -390,7 +585,7 @@ async function handleInbound(
   try {
     reply = await wa.answer({
       userId: sender.userId,
-      text,
+      text: asked,
       settings,
       locale,
       ...(router ? { router } : {}),
@@ -404,6 +599,20 @@ async function handleInbound(
                 question,
                 history,
                 userName,
+                files,
+                // WA-8 — the capability IS the hook: a contact who may not
+                // act is given nowhere to put a proposal, and the tool says
+                // so rather than appearing to work.
+                ...(sender.allowActions
+                  ? {
+                      actions: {
+                        chat,
+                        propose: (pending: PendingAction) => {
+                          proposals.set(sender.userId, pending);
+                        },
+                      },
+                    }
+                  : {}),
               }),
           }
         : {}),
@@ -471,6 +680,48 @@ async function handleInbound(
  * is a sentence the person can act on, not silence: they are allow-listed, so
  * telling them *why* costs nothing and saves a phone call.
  */
+/**
+ * Says something back, and keeps the record of having said it (W-R4).
+ *
+ * The record-send-mark dance is the same for every kind of answer, and the
+ * failure half of it is the part worth having once: a message that failed to
+ * send must leave the outbound row marked failed and the question marked
+ * failed, or the log quietly claims an answer nobody received.
+ */
+async function answerWith(
+  scope: RequestScope,
+  send: wa.Transport,
+  input: {
+    readonly sender: wa.ResolvedSender;
+    readonly e164: string;
+    readonly groupJid: string | null;
+    readonly inboundId: bigint;
+    readonly text: string;
+    readonly intent: string;
+    readonly status?: 'answered' | 'refused';
+  },
+): Promise<void> {
+  const { sender, e164, groupJid, inboundId, text, intent } = input;
+  const outId = await withScope(scope, (tx) =>
+    wa.recordOutbound(tx, { e164, groupJid, body: text, sender, inReplyTo: inboundId, intent }),
+  );
+  try {
+    const { waMessageId } = await send({ e164, groupJid }, { text });
+    await withScope(scope, async (tx) => {
+      await wa.markOutbound(tx, outId, { status: 'sent', waMessageId });
+      await wa.finishInbound(tx, inboundId, { status: input.status ?? 'answered', intent });
+    });
+    log(`inbound from ${e164}: ${intent} ${input.status ?? 'answered'}`);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    await withScope(scope, async (tx) => {
+      await wa.markOutbound(tx, outId, { status: 'failed', errorMessage: detail });
+      await wa.finishInbound(tx, inboundId, { status: 'failed', intent, errorMessage: detail });
+    });
+    log(`inbound from ${e164}: ${intent} — send failed: ${detail}`);
+  }
+}
+
 async function handleCommand(
   scope: RequestScope,
   send: wa.Transport,
@@ -772,6 +1023,10 @@ async function main(): Promise<void> {
       syncFullHistory: false,
       generateHighQualityLinkPreview: false,
     });
+    // WA-7 — only the connected socket can ask WhatsApp to put an expired
+    // file back on its servers, and the handler that downloads one does not
+    // own the socket.
+    reupload = socket.updateMediaMessage.bind(socket);
 
     socket.ev.on('creds.update', () => {
       saveCreds().catch((e) => log(`saving credentials failed: ${e}`));

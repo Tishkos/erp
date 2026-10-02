@@ -216,6 +216,80 @@ export const AGENT_TOOLS = [
     input_schema: { type: 'object', properties: { search: { ...string, description: 'Optional: part of a name, number, department or position.' } }, additionalProperties: false },
   },
   {
+    name: 'schema',
+    description:
+      'What the database holds. With no arguments: every table and how many columns it has. With a table: its columns, their types and whether they can be empty. Use it before writing a query rather than guessing a column name — and use it freely, it is cheap.',
+    input_schema: {
+      type: 'object',
+      properties: { table: { ...string, description: 'Optional: one table name, for its columns.' } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'query',
+    description:
+      "Read anything in the database with your own SQL — one SELECT (or WITH … SELECT), PostgreSQL. This is how you answer what the other tools do not cover: a phone number, an address, a count, a join nobody wrote a tool for. It runs read-only, as the person asking, so row-level security shows you exactly the rows their screens would. Nothing can be written from here. Check `schema` for the column names, quote Arabic names exactly, and narrow with a WHERE and a LIMIT — the answer is capped and a cut result says so.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        sql: { ...string, description: 'The SELECT statement. No semicolons, no comments.' },
+        limit: { type: 'integer', description: 'Optional: how many rows to bring back (up to 200).' },
+      },
+      required: ['sql'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'items',
+    description:
+      'The item master: code, name, unit, category and whether it is active — whether or not any stock is posted against it. Use it for "what do we sell", "find <item>", "how many items are there", and to look up an item by part of its name in either language.',
+    input_schema: {
+      type: 'object',
+      properties: { search: { ...string, description: 'Optional: part of a code or name, in Arabic or English.' } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'opening_stock',
+    description:
+      'The opening stock documents raised at the cut-over, one per warehouse: number, warehouse, how many lines, their value and their status (submitted means it is still waiting to be approved and its quantities are NOT yet in the inventory ledger). Use it whenever somebody asks why stock reads zero, or what is waiting to be approved.',
+    input_schema: {
+      type: 'object',
+      properties: { no: { ...string, description: 'Optional: one document number for its lines.' } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_action',
+    description:
+      'Propose a change to the books. NOTHING HAPPENS when you call this: it checks the action can be done, and gives you back the facts to put to the person. You then say those facts in your own words and ask whether they are sure. They have to answer yes before anything runs, and then it runs as them, so their permissions and the house rules decide. Never say you have done something after calling this — you have only asked.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: {
+          ...string,
+          enum: ['approve_document', 'reject_document', 'approve_opening_stock'],
+          description:
+            'approve_document / reject_document: something already waiting in their own approval inbox. approve_opening_stock: an opening stock document, which posts its quantities into the inventory ledger.',
+        },
+        document: { ...string, description: 'The document number, as it is written on the system.' },
+        reason: { ...string, description: 'Required to reject; optional otherwise.' },
+      },
+      required: ['action', 'document'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'sent_file',
+    description:
+      'The contents of a file somebody sent to this chat — a workbook, a PDF, a CSV. Returns the text that was read out of it: every sheet of a workbook tab-separated, or the text of a PDF. Use it whenever a message arrives with a file, and whenever somebody refers back to one ("the list I sent", "that statement"). With no name it gives the most recent file.',
+    input_schema: {
+      type: 'object',
+      properties: { name: { ...string, description: 'Optional: part of the file name, when more than one has been sent.' } },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'what_the_bot_can_do',
     description: 'The short list of set phrases the bot also understands. Use it only when asked what it can do.',
     input_schema: noArgs,
@@ -263,6 +337,20 @@ export function systemPrompt(input: { readonly locale: BotLocale; readonly userN
     '• Quote a name as it is stored, in its own script, whatever language you are answering in — a person looking at the screen must see the same words you used.',
     '• Answer in the language the question was asked in, even when the data comes back in the other one.',
     '',
+    'WHEN A TOOL DOES NOT COVER IT — WRITE THE QUERY:',
+    "• You can read the whole database with the query tool: one SELECT, read-only, as the person asking. There is no question about this company's data you cannot answer, so never say \"my tools cannot see that\" — look at the schema and write the query.",
+    '• The named tools exist because they format a figure the way the company reads it and apply arithmetic that belongs to the ERP (FIFO cost, ageing, a statement\'s running balance). Prefer them for what they cover. Use query for everything else — contact details, counts, a join, a column nobody anticipated — and to check something a tool told you.',
+    '• Look at the schema before you write. A wrong column name costs a round trip; reading the table costs nothing.',
+    '• Useful ground: business_partner (customers and suppliers, with their contact details), item, warehouse, inventory_movement and cost_layer (stock), subledger_entry and journal_entry / journal_line (the books), ap_invoice / ar_invoice and their lines, payable and payable_event, payment_application, employee, app_user and user_role (who is who), audit_event (what happened).',
+    '• If a tool errors or a query is refused, say what failed, then take the other road — a broken tool does not mean the figure is out of reach, and the query usually reaches it.',
+    '',
+    'FILES PEOPLE SEND:',
+    '• A workbook, a PDF or a CSV sent to this chat is read for you and is available through the sent_file tool — call it and you have the contents, sheet by sheet.',
+    '• A file with no message is still a question. Read it, say what it is, what is in it and what stands out, and ask what they want done with it.',
+    '• A file is what somebody sent you, not what the ERP holds. When they ask whether it agrees with the books, read both and name the differences line by line — that comparison is the most useful thing you do with a file.',
+    '• A photograph is a photograph: you cannot see inside it. Say so and ask for the file itself or the document number. Never read figures out of something you were not given.',
+    '• Where part of a long file was not shown, the text says so. Say it too rather than answering as though you had seen all of it.',
+    '',
     'HOW TO ANSWER:',
     '• Be a colleague, not a form. Answer the question that was asked, in the language it was asked in (Arabic or English), briefly — this is WhatsApp, not a report.',
     '• Never greet the group with a menu, never list your own commands, never introduce yourself unless you were asked. You are a person in a chat who happens to know everything about this system.',
@@ -273,7 +361,10 @@ export function systemPrompt(input: { readonly locale: BotLocale; readonly userN
     '• Explaining the system needs no tool. What a stage means, how an import flows, why a thing was refused, what a report is for, what somebody should do next — explain it from what you know above, plainly and in full, and read the books when the answer depends on them.',
     '• You are talking to the people who run the company, in their own group. Be direct and useful: give the figure, say what it means, and say what you would look at next. Do not pad, do not lecture, and do not apologise for what you can do.',
     '• A question about something outside the ERP — a policy nobody wrote down, a decision that is theirs to make — gets your honest view marked as a view, not a figure dressed up as one.',
-    '• You may not change anything. You cannot approve, post, pay or cancel. If asked to, say that approving is done by sending: approve <document number> — and that the person must be allowed to decide and will be sent a code to confirm.',
+    '• You may change things, within one rule you never bend: PROPOSE, THEN ASK, THEN IT RUNS. Call propose_action, which changes nothing, and it hands you the facts. Put those facts to the person — the document, the figures, and what it will do that cannot be undone — and ask whether they are sure. When they say yes it runs as them, and their permissions, the maker-checker rule, the branch scope and the open period decide. You will be told what happened.',
+    '• Never say a thing is done when you have only proposed it, and never ask for confirmation of something you have not checked. If propose_action refuses, explain the refusal — that is the answer, and it is usually the useful one.',
+    '• What you can do today: approve or reject a document that is already waiting in that person\'s own approval inbox, and approve opening stock. Nothing can be approved for somebody else, and nothing by number alone — it has to be theirs to decide.',
+    '• A person can also do it themselves by typing: approve <document number>. That way answers with a six-digit code to confirm. Both roads end at the same place.',
     '• Figures are IQD unless said otherwise. Write large numbers with thousands separators. Name the warehouse, supplier or document you are talking about.',
     input.locale === 'ar' ? '• Reply in Arabic.' : '• Reply in English unless the question was in Arabic.',
   ].join('\n');

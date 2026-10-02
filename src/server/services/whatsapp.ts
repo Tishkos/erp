@@ -905,7 +905,22 @@ export async function answer(input: {
       text = `${text}\n${w.attached(fileName)}`;
     }
   }
-  text = `${text}\n\n${footer(locale, { at, branchCode, userName })}`;
+  /*
+   * W-R7 — the as-of line, where it earns its place.
+   *
+   * It exists so a figure can never be mistaken for a figure read at another
+   * time, under another branch, or as somebody else: that is what makes a
+   * number in a chat answerable afterwards. On an answer with no figure in it
+   * — an explanation, a greeting, "I have left it alone" — it says nothing
+   * true that the message did not already say, and a stamp under every
+   * sentence is the single most bot-like thing left in the conversation
+   * (2026-10-02, by direction).
+   *
+   * So: whenever the books were read, and not otherwise. An attachment always
+   * carries it, because a file outlives the chat it was sent in.
+   */
+  const readTheBooks = usedTools.length > 0 || attachment !== null;
+  if (readTheBooks) text = `${text}\n\n${footer(locale, { at, branchCode, userName })}`;
 
   return {
     intent,
