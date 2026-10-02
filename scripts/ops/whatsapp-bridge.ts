@@ -46,14 +46,17 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import qrcode from 'qrcode-terminal';
 import { pool, withScope, type RequestScope } from '../../src/server/db/client';
-import { detectLocale, digestDue, e164ToJid, jidToE164, words } from '../../src/server/domain/whatsapp';
+import { detectLocale, digestDue, e164ToJid, isGroupJid, jidToE164, parseCommand, words } from '../../src/server/domain/whatsapp';
 import * as audit from '../../src/server/services/audit';
 import * as runner from '../../src/server/services/notification-runner';
 import * as wa from '../../src/server/services/whatsapp';
+import * as actions from '../../src/server/services/whatsapp-actions';
 import { anthropicClient, modelRouter } from '../../src/server/services/whatsapp-router';
 
 const POLL_SECONDS = Math.max(5, Number(process.env.WA_POLL_SECONDS ?? '20'));
 const RESET = process.argv.includes('--reset-pairing');
+/** WA-5 — print the groups the bot is in, with their ids, and exit. */
+const LIST_GROUPS = process.argv.includes('--list-groups');
 
 const log = (line: string) => console.log(`[whatsapp-bridge] ${new Date().toISOString()} ${line}`);
 
@@ -144,7 +147,8 @@ function transportFor(sock: () => WASocket | null, perMinute: () => number): wa.
     const socket = sock();
     if (!socket) throw new Error('the bridge is not connected to WhatsApp');
     await paced(perMinute());
-    const jid = e164ToJid(to.e164);
+    // WA-5 — a group id addresses the group; otherwise the person's number.
+    const jid = to.groupJid && isGroupJid(to.groupJid) ? to.groupJid : e164ToJid(to.e164);
     let sent: WAMessage | undefined;
     if (message.attachment) {
       sent = await socket.sendMessage(jid, {
@@ -170,11 +174,28 @@ function textOf(message: WAMessage): string | null {
   return m.conversation ?? m.extendedTextMessage?.text ?? m.ephemeralMessage?.message?.extendedTextMessage?.text ?? m.ephemeralMessage?.message?.conversation ?? null;
 }
 
-function senderOf(message: WAMessage): string | null {
+/**
+ * Who spoke, and where.
+ *
+ * In a direct chat the address *is* the person. In a group the address is the
+ * group and the person is the participant beside it — which is the whole of
+ * WA-5's safety: a question still runs as a named human being, never as "the
+ * group", so their own permissions and scope decide what comes back.
+ */
+function senderOf(message: WAMessage): { readonly e164: string | null; readonly groupJid: string | null } {
   const key = message.key;
   const jid = key.remoteJid ?? '';
-  if (jid.endsWith('@g.us') || jid === 'status@broadcast') return null;
-  return jidToE164(jidNormalizedUser(jid)) ?? jidToE164(key.remoteJidAlt ? jidNormalizedUser(key.remoteJidAlt) : undefined);
+  if (jid === 'status@broadcast') return { e164: null, groupJid: null };
+  if (isGroupJid(jid)) {
+    const participant = key.participant ?? key.participantAlt ?? message.participant ?? null;
+    const e164 =
+      jidToE164(participant ? jidNormalizedUser(participant) : undefined) ??
+      jidToE164(key.participantAlt ? jidNormalizedUser(key.participantAlt) : undefined);
+    return { e164, groupJid: jid };
+  }
+  const e164 =
+    jidToE164(jidNormalizedUser(jid)) ?? jidToE164(key.remoteJidAlt ? jidNormalizedUser(key.remoteJidAlt) : undefined);
+  return { e164, groupJid: null };
 }
 
 async function handleInbound(
@@ -183,14 +204,24 @@ async function handleInbound(
   router: ((text: string, locale: 'ar' | 'en') => Promise<import('../../src/server/domain/whatsapp').Intent>) | undefined,
   message: WAMessage,
 ): Promise<void> {
-  const e164 = senderOf(message);
+  const { e164, groupJid } = senderOf(message);
   const text = textOf(message)?.trim();
   if (!e164 || !text) return;
+
+  // WA-5 — one group, and no other. An unregistered group, or any group but
+  // the registered one, is silence: the same answer an unlisted number gets.
+  // Read before anything is logged, so a stranger's group leaves no trail of
+  // its own in the company's log.
+  const settings = await withScope(scope, (tx) => wa.settings(tx));
+  if (groupJid && !(wa.groupAllowed(settings, groupJid) && settings.groupQueries)) {
+    log(`inbound from ${e164} in ${groupJid}: ignored (not the registered group)`);
+    return;
+  }
 
   // 1. Who is this, and may they ask? Logged either way; silence otherwise.
   const { inboundId, sender, allowed } = await withScope(scope, async (tx) => {
     const sender = await wa.resolveNumber(tx, e164);
-    const inboundId = await wa.recordInbound(tx, { e164, body: text, waMessageId: message.key.id ?? null, sender });
+    const inboundId = await wa.recordInbound(tx, { e164, body: text, waMessageId: message.key.id ?? null, sender, groupJid });
     const allowed = wa.mayAsk(sender);
     if (!allowed.ok) {
       await wa.finishInbound(tx, inboundId, { status: 'refused', intent: 'none', detail: { reason: allowed.reason } });
@@ -211,9 +242,17 @@ async function handleInbound(
     return;
   }
 
-  // 2. The answer, as the asker, read-only.
-  const settings = await withScope(scope, (tx) => wa.settings(tx));
   const locale = detectLocale(text);
+
+  // 2. WA-6 — a decision command, read by shape. The agent never sees these
+  // and never decides anything: an approval is four locks, not a sentence.
+  const command = parseCommand(text);
+  if (command.kind !== 'none') {
+    await handleCommand(scope, send, { sender, e164, groupJid, inboundId, locale, command });
+    return;
+  }
+
+  // 3. The answer, as the asker, read-only.
   let reply: wa.Reply;
   try {
     reply = await wa.answer({ userId: sender.userId, text, settings, locale, ...(router ? { router } : {}) });
@@ -229,10 +268,13 @@ async function handleInbound(
     return;
   }
 
-  // 3. Send, then record what was sent (W-R4).
+  // 4. Send, then record what was sent (W-R4). Asked in the group, answered
+  // in the group — the attachment with it, so the PDF lands where the
+  // question was asked.
   const outId = await withScope(scope, (tx) =>
     wa.recordOutbound(tx, {
       e164,
+      groupJid,
       body: reply.text,
       sender,
       attachment: reply.attachment ? { name: reply.attachment.fileName, type: reply.attachment.contentType, bytes: reply.attachment.body.length } : null,
@@ -242,7 +284,7 @@ async function handleInbound(
     }),
   );
   try {
-    const { waMessageId } = await send({ e164 }, { text: reply.text, attachment: reply.attachment });
+    const { waMessageId } = await send({ e164, groupJid }, { text: reply.text, attachment: reply.attachment });
     await withScope(scope, async (tx) => {
       await wa.markOutbound(tx, outId, { status: 'sent', waMessageId });
       await wa.finishInbound(tx, inboundId, { status: 'answered', intent: reply.intent.kind, detail: reply.detail });
@@ -256,6 +298,113 @@ async function handleInbound(
       await wa.finishInbound(tx, inboundId, { status: 'failed', intent: reply.intent.kind, errorMessage: detail });
     });
     log(`inbound from ${e164}: ${reply.intent.kind} — send failed: ${detail}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// WA-6 — the decision commands
+// ---------------------------------------------------------------------------
+
+/**
+ * `pending`, `approve`, `reject`, `confirm`.
+ *
+ * Everything here is deliberate and narrow. The reply goes back where the
+ * command was given, the outcome is logged against the inbound message, and
+ * nothing is decided until a code comes back from the same contact. A refusal
+ * is a sentence the person can act on, not silence: they are allow-listed, so
+ * telling them *why* costs nothing and saves a phone call.
+ */
+async function handleCommand(
+  scope: RequestScope,
+  send: wa.Transport,
+  input: {
+    sender: wa.ResolvedSender;
+    e164: string;
+    groupJid: string | null;
+    inboundId: bigint;
+    locale: 'ar' | 'en';
+    command: Exclude<ReturnType<typeof parseCommand>, { kind: 'none' }>;
+  },
+): Promise<void> {
+  const { sender, e164, groupJid, inboundId, locale, command } = input;
+  const ar = locale === 'ar';
+  const L = (en: string, arabic: string) => (ar ? arabic : en);
+
+  let text: string;
+  let status: 'answered' | 'refused' = 'answered';
+  try {
+    if (command.kind === 'pending') {
+      const waiting = await actions.waitingFor(sender.userId);
+      text =
+        waiting.length === 0
+          ? L('Nothing is waiting for your approval.', 'لا يوجد شيء بانتظار موافقتك.')
+          : [
+              L(`Waiting for you (${waiting.length}):`, `بانتظار موافقتك (${waiting.length}):`),
+              ...waiting.slice(0, 15).map((row) => `• *${row.documentNumber}* — ${row.documentType} · ${row.submittedByName ?? ''}`),
+              '',
+              L('Reply: approve <number>  ·  reject <number> <reason>', 'أرسل: موافقة <الرقم>  ·  رفض <الرقم> <السبب>'),
+            ].join('\n');
+    } else if (command.kind === 'confirm') {
+      const done = await withScope(scope, (tx) => actions.confirm(tx, { sender, code: command.code }));
+      if (!done.ok) {
+        status = 'refused';
+        text = L(`Refused: ${done.reason}`, `مرفوض: ${done.reason}`);
+      } else {
+        text =
+          done.decision === 'approve'
+            ? L(`Approved ${done.documentNo}.`, `تمت الموافقة على ${done.documentNo}.`)
+            : L(`Rejected ${done.documentNo}.`, `تم رفض ${done.documentNo}.`);
+      }
+    } else {
+      const asked = await withScope(scope, (tx) =>
+        actions.request(tx, {
+          sender,
+          groupJid,
+          decision: command.kind,
+          documentNo: command.documentNo,
+          reason: command.kind === 'reject' ? command.reason : null,
+        }),
+      );
+      if (!asked.ok) {
+        status = 'refused';
+        text = L(`Refused: ${asked.reason}`, `مرفوض: ${asked.reason}`);
+      } else {
+        const what =
+          command.kind === 'approve'
+            ? L(`Approve *${asked.waiting.documentNumber}*?`, `الموافقة على *${asked.waiting.documentNumber}*؟`)
+            : L(`Reject *${asked.waiting.documentNumber}*?`, `رفض *${asked.waiting.documentNumber}*؟`);
+        text = [
+          what,
+          `${asked.waiting.documentType} · ${asked.waiting.submittedByName ?? ''}`,
+          '',
+          L(`Reply:  confirm ${asked.code}`, `أرسل:  تأكيد ${asked.code}`),
+          L(`The code is good for ${actions.CODE_MINUTES} minutes.`, `الرمز صالح لمدة ${actions.CODE_MINUTES} دقيقة.`),
+        ].join('\n');
+      }
+    }
+  } catch (error) {
+    status = 'refused';
+    const why = error instanceof Error ? error.message : String(error);
+    text = L(`Refused: ${why}`, `مرفوض: ${why}`);
+  }
+
+  const outId = await withScope(scope, (tx) =>
+    wa.recordOutbound(tx, { e164, groupJid, body: text, sender, inReplyTo: inboundId, intent: `command.${command.kind}` }),
+  );
+  try {
+    const { waMessageId } = await send({ e164, groupJid }, { text });
+    await withScope(scope, async (tx) => {
+      await wa.markOutbound(tx, outId, { status: 'sent', waMessageId });
+      await wa.finishInbound(tx, inboundId, { status, intent: `command.${command.kind}` });
+    });
+    log(`inbound from ${e164}: command.${command.kind} ${status}`);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    await withScope(scope, async (tx) => {
+      await wa.markOutbound(tx, outId, { status: 'failed', errorMessage: detail });
+      await wa.finishInbound(tx, inboundId, { status: 'failed', intent: `command.${command.kind}`, errorMessage: detail });
+    });
+    log(`inbound from ${e164}: command.${command.kind} — send failed: ${detail}`);
   }
 }
 
@@ -285,7 +434,53 @@ async function sendDigest(scope: RequestScope, send: wa.Transport, settings: Awa
       log(`digest for ${recipient.e164} failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
+
+  // WA-5 — and once to the group, written for whoever opens it there. The
+  // figures are read as the first opted-in contact, so the digest is somebody's
+  // own view of the books and not a wider one: a group reply must never show
+  // more than the person it was computed for may see.
+  if (settings.groupJid && settings.groupDigest && recipients.length > 0) {
+    const author = recipients[0]!;
+    try {
+      const reply = await wa.answer({ userId: author.userId, text: 'summary', settings, locale: settings.digestLocale });
+      const outId = await withScope(scope, (tx) =>
+        wa.recordOutbound(tx, { e164: author.e164, groupJid: settings.groupJid, body: reply.text, sender: author, intent: 'digest.group', detail: reply.detail }),
+      );
+      try {
+        const { waMessageId } = await send({ e164: author.e164, groupJid: settings.groupJid }, { text: reply.text });
+        await withScope(scope, (tx) => wa.markOutbound(tx, outId, { status: 'sent', waMessageId }));
+        log(`digest for ${day}: posted to the group`);
+      } catch (error) {
+        await withScope(scope, (tx) => wa.markOutbound(tx, outId, { status: 'failed', errorMessage: error instanceof Error ? error.message : String(error) }));
+      }
+    } catch (error) {
+      log(`group digest failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   log(`digest for ${day}: ${recipients.length} recipient(s)`);
+}
+
+/**
+ * `--list-groups` — every group the bot has been added to, with its id.
+ *
+ * The one step that cannot be done from the screen: WhatsApp does not tell
+ * the ERP what groups exist until the bot is in them. Run this once after
+ * adding the bot to the group, copy the id, and register it in
+ * Administration → WhatsApp. Nothing is written by this.
+ */
+async function listGroups(socket: WASocket): Promise<void> {
+  const all = await socket.groupFetchAllParticipating();
+  const rows = Object.values(all);
+  if (rows.length === 0) {
+    log('the bot is in no groups yet — add it to the group, then run this again');
+    return;
+  }
+  log(`${rows.length} group(s):`);
+  for (const group of rows) {
+    console.log(`  ${group.id}   ${group.subject}   (${group.participants?.length ?? 0} members)`);
+  }
+  console.log('\nRegister the one you want in Administration → WhatsApp → the group id field.');
 }
 
 // ---------------------------------------------------------------------------
@@ -352,6 +547,16 @@ async function main(): Promise<void> {
       if (connection === 'open') {
         log(`connected as ${socket?.user?.id ?? '?'}`);
         void heartbeat('connected');
+        // `--list-groups` is a question, not a service: it answers and leaves.
+        if (LIST_GROUPS && socket) {
+          const live = socket;
+          void listGroups(live)
+            .catch((error) => log(`listing groups failed: ${error instanceof Error ? error.message : String(error)}`))
+            .finally(() => {
+              stopping = true;
+              void pool.end().finally(() => process.exit(0));
+            });
+        }
       }
       if (connection === 'close') {
         const code = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;

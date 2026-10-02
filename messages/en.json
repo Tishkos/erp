@@ -3767,6 +3767,15 @@
       "message_status_failed": "failed",
       "message_status_pending": "sending",
       "message_status_sent": "sent",
+      "redacted": "(body removed after retention)",
+      "allow_actions": "May decide documents",
+      "actions_note": "Deciding a document from chat needs this switch, an approval already waiting for that person, the written command (approve / reject) and the six-digit code sent back. The decision then runs under their own permissions, where the maker-checker rule and the open period refuse exactly as they do on the screen.",
+      "setting_group_jid": "Group id",
+      "setting_group_subject": "Group name",
+      "setting_group_queries": "Answer questions in the group (on / off)",
+      "setting_group_notifications": "Post notifications to the group (on / off)",
+      "setting_group_digest": "Post the morning digest to the group (on / off)",
+      "group_hint": "One group, by its id. Add the bot to the group, run \"npm run whatsapp-bridge -- --list-groups\", and paste the id here. Any other group is ignored."
       "redacted": "(body removed after retention)"
     },
     "projects": {

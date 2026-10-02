@@ -128,6 +128,7 @@ export default async function WhatsappPage({ searchParams }: { searchParams: Sea
                   <th scope="col">{t('allow_notifications')}</th>
                   <th scope="col">{t('allow_queries')}</th>
                   <th scope="col">{t('allow_digest')}</th>
+                  <th scope="col">{t('allow_actions')}</th>
                   <th scope="col">{t('ceo_role')}</th>
                   <th scope="col">{t('active')}</th>
                 </tr>
@@ -135,7 +136,7 @@ export default async function WhatsappPage({ searchParams }: { searchParams: Sea
               <tbody>
                 {contacts.length === 0 ? (
                   <tr>
-                    <td className={s.sapEmptyRow} colSpan={7}>
+                    <td className={s.sapEmptyRow} colSpan={8}>
                       {t('no_contacts')}
                     </td>
                   </tr>
@@ -151,6 +152,7 @@ export default async function WhatsappPage({ searchParams }: { searchParams: Sea
                     <td>{yes(row.allowNotifications)}</td>
                     <td>{yes(row.allowQueries)}</td>
                     <td>{yes(row.allowDigest)}</td>
+                    <td>{yes(row.allowActions)}</td>
                     <td>{yes(row.isCeo)}</td>
                     <td>
                       {mayConfigure ? (
@@ -181,7 +183,9 @@ export default async function WhatsappPage({ searchParams }: { searchParams: Sea
               <Checkbox defaultChecked label={t('allow_notifications')} name="allow_notifications" />
               <Checkbox label={t('allow_queries')} name="allow_queries" />
               <Checkbox label={t('allow_digest')} name="allow_digest" />
+              <Checkbox label={t('allow_actions')} name="allow_actions" />
               <p className={s.sapNote}>{t('queries_note')}</p>
+              <p className={s.sapNote}>{t('actions_note')}</p>
               <SubmitRow>
                 <Submit label={t('save')} />
               </SubmitRow>
@@ -265,7 +269,17 @@ export default async function WhatsappPage({ searchParams }: { searchParams: Sea
                       {mayConfigure ? (
                         <Form action={saveSetting}>
                           <Hidden name="key" value={row.key} />
-                          <input aria-label={settingLabel(row.key)} defaultValue={row.value} dir="ltr" name="value" required type="text" />
+                          {/* The group id and its name may be cleared — that
+                              is how the bot goes back to direct messages
+                              only; every other knob must hold a value. */}
+                          <input
+                            aria-label={settingLabel(row.key)}
+                            defaultValue={row.value}
+                            dir="ltr"
+                            name="value"
+                            required={row.key !== 'group_jid' && row.key !== 'group_subject'}
+                            type="text"
+                          />
                           <Submit label={t('save')} small tone="secondary" />
                         </Form>
                       ) : (

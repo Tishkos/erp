@@ -40,6 +40,13 @@ export const whatsappContact = pgTable(
     allowQueries: boolean('allow_queries').notNull().default(false),
     /** Receives the morning digest (WA-4). */
     allowDigest: boolean('allow_digest').notNull().default(false),
+    /**
+     * WA-6 — may decide a document from chat: `approve` / `reject`, by the
+     * explicit command and the one-time code, and only ever through this
+     * person's own permissions. Off until an administrator turns it on for
+     * that one person, so the doorway is never open to a whole group.
+     */
+    allowActions: boolean('allow_actions').notNull().default(false),
     active: boolean('active').notNull().default(true),
     deactivatedReason: text('deactivated_reason'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -76,8 +83,14 @@ export const whatsappMessage = pgTable(
   {
     id: bigint('id', { mode: 'bigint' }).generatedAlwaysAsIdentity().primaryKey(),
     direction: text('direction').notNull(),
-    /** The other party's number, E.164. */
+    /** The other party's number, E.164 — in a group, the person who spoke. */
     e164: text('e164').notNull(),
+    /**
+     * WA-5 — the group this happened in, null for a direct message. The
+     * sender is still the person above: a question runs as whoever asked it,
+     * never as "the group" (W-R1).
+     */
+    groupJid: text('group_jid'),
     /** The contact the number resolved to, null for an unlisted sender. */
     contactId: uuid('contact_id').references(() => whatsappContact.id),
     userId: uuid('user_id').references(() => appUser.id),
@@ -107,12 +120,69 @@ export const whatsappMessage = pgTable(
   (t) => [
     index('whatsapp_message_status_idx').on(t.direction, t.status, t.createdAt),
     index('whatsapp_message_created_idx').on(t.createdAt),
+    index('whatsapp_message_group_idx').on(t.groupJid, t.createdAt),
     check('whatsapp_message_direction', sql`${t.direction} in ('in', 'out')`),
     check(
       'whatsapp_message_status',
       sql`${t.status} in ('received', 'answered', 'refused', 'failed', 'pending', 'sent')`,
     ),
     check('whatsapp_message_error_matches', sql`(${t.status} = 'failed') = (${t.errorMessage} is not null)`),
+  ],
+);
+
+/**
+ * WA-6 — a decision asked for in chat, waiting for its one-time code.
+ *
+ * The row is the proof that the person who typed `approve PAYAPP-…` is the
+ * person who typed the code back: an inbound line on its own decides
+ * nothing. One `awaiting` row per contact (a partial unique), so a new
+ * request replaces a stale one rather than leaving two live codes about.
+ */
+export const whatsappAction = pgTable(
+  'whatsapp_action',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    contactId: uuid('contact_id')
+      .notNull()
+      .references(() => whatsappContact.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => appUser.id),
+    /** Where it was asked, so the answer goes back to the same place. */
+    groupJid: text('group_jid'),
+    documentType: text('document_type').notNull(),
+    documentId: uuid('document_id').notNull(),
+    /** The number the person typed, kept for the log and the reply. */
+    documentNo: text('document_no').notNull(),
+    decision: text('decision').notNull(),
+    reason: text('reason'),
+    code: text('code').notNull(),
+    status: text('status').notNull().default('awaiting'),
+    /** Why the service refused, when it did. */
+    refusal: text('refusal'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    settledAt: timestamp('settled_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('whatsapp_action_awaiting_uniq')
+      .on(t.contactId)
+      .where(sql`${t.status} = 'awaiting'`),
+    index('whatsapp_action_document_idx').on(t.documentType, t.documentId),
+    check('whatsapp_action_decision', sql`${t.decision} in ('approve', 'reject')`),
+    check(
+      'whatsapp_action_status',
+      sql`${t.status} in ('awaiting', 'done', 'refused', 'expired', 'cancelled')`,
+    ),
+    check('whatsapp_action_code_shape', sql`${t.code} ~ '^[0-9]{6}$'`),
+    check(
+      'whatsapp_action_reject_has_reason',
+      sql`${t.decision} <> 'reject' OR coalesce(btrim(${t.reason}), '') <> ''`,
+    ),
+    check(
+      'whatsapp_action_settled_has_status',
+      sql`(${t.status} = 'awaiting') = (${t.settledAt} is null)`,
+    ),
   ],
 );
 
