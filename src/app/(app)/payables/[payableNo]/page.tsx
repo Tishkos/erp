@@ -554,6 +554,16 @@ export default async function PayablePage({
         </div>
       </section>
 
+      {/*
+        The four lanes of an import, side by side.
+
+        They are independent by design (§21.3) — paid while the goods are
+        at sea, arrived while customs is open — so they are read against
+        each other, and stacking them meant scrolling past three to reach
+        the fourth. `chartGrid` is the dashboard's own grid: as many
+        columns as fit, stacking itself when the screen is narrow.
+      */}
+      <div className={s.chartGrid}>
       {/* ── Payments (§15): the plan, the applications, Applied / Paid /
           Remaining. Imports only; drawn as the invoices register above. ── */}
       {paymentTotals ? (
@@ -1531,6 +1541,7 @@ export default async function PayablePage({
           </div>
         </section>
       ) : null}
+      </div>
 
       {/* ── The service lane: confirmations and the contract (§21.3) ──── */}
       {receipts.length > 0 || contract || type.code === 'service' || type.code === 'recurring' ? (
