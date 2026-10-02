@@ -167,6 +167,6 @@ describe('H4 · the rules of a run', () => {
   });
 
   it('reads the base salary and the absence from the facts', () => {
-    expect(PAY_CALCULATIONS).toEqual(['base_salary', 'fixed', 'percent_of_base', 'manual', 'absence']);
+    expect(PAY_CALCULATIONS).toEqual(['base_salary', 'fixed', 'percent_of_base', 'manual', 'absence', 'advance_recovery']);
   });
 });

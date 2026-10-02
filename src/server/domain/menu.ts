@@ -429,7 +429,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('attendance', 'attendance', '/hr/attendance'),
       page('leave', 'leave_request', '/hr/leave'),
       page('payroll', 'payroll_run', '/hr/payroll'),
-      page('employee_advances', 'employee_advance'),
+      page('employee_advances', 'employee_advance', '/hr/advances'),
       page('recruitment', 'recruitment'),
       page('performance', 'performance_review'),
       page('employee_requests', 'employee_request'),

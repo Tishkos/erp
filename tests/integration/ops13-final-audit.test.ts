@@ -148,6 +148,8 @@ beforeEach(async () => {
     ['payroll_employer_cost', 'X000001', 'Employer Social Security', null],
     ['payroll_withholding', 'L000001', 'Payroll Deductions Payable', null],
     ['net_pay', 'L000001', 'Salaries Payable', null],
+    // REQ-HR-001 HR-4 — what people owe on advances and loans.
+    ['employee_advance', 'A000001', 'Employee Advances and Loans', null],
   ] as const) {
     const { rows: parents } = await ownerPool.query(
       `select id, account_type from chart_of_account where code = $1`,

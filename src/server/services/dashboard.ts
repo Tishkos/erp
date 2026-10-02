@@ -13,6 +13,7 @@ import * as inventoryReports from './inventory-reports';
 import { rows as listRows } from './list';
 import * as leave from './leave';
 import * as payroll from './payroll';
+import * as advances from './employee-advances';
 import * as notifications from './notifications';
 import * as openItems from './open-items';
 import * as statement from './partner-statement';
@@ -119,6 +120,8 @@ export interface Waiting {
   readonly leaveAwaiting: readonly { readonly requestNo: string; readonly fullNameEn: string; readonly fromDate: string; readonly toDate: string; readonly days: string }[];
   /** REQ-HR-001 HR-3 — payroll runs waiting on this reader: to approve, to post, to pay. */
   readonly payrollAwaiting: readonly payroll.PayrollWaiting[];
+  /** REQ-HR-001 HR-4 — advances and loans waiting on this reader: to endorse, to approve, to pay. */
+  readonly advancesAwaiting: readonly advances.AdvanceWaiting[];
   readonly unreadNotifications: number;
 }
 
@@ -241,6 +244,7 @@ export async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting>
     dueThisWeek: dueRows.rows as unknown as DuePayable[],
     leaveAwaiting: await leave.waitingFor(tx, { principal, branchCode: '' }),
     payrollAwaiting: await payroll.waitingFor(tx, { principal }),
+    advancesAwaiting: await advances.waitingFor(tx, { principal }),
     unreadNotifications: unread.length,
   };
 }

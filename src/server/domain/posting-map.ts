@@ -278,6 +278,8 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
       line('salary_expense', 'debit', true),
       line('payroll_employer_cost', 'debit'),
       line('payroll_withholding', 'credit'),
+      // HR-4 — an advance or loan recovered from the pay.
+      line('employee_advance', 'credit'),
       line('net_pay', 'credit', true),
     ],
   },
@@ -286,6 +288,17 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     // account is the payment's own, as a supplier payment's is).
     event: 'hr.payroll_payment',
     lines: [line('net_pay', 'debit', true)],
+  },
+  {
+    // REQ-HR-001 HR-4 (§10) — an advance or loan paid to a person: what they
+    // owe the company, against the bank or cash account it left.
+    event: 'hr.employee_advance',
+    lines: [line('employee_advance', 'debit', true)],
+  },
+  {
+    // REQ-HR-001 HR-4 — cash a person hands back against their advance.
+    event: 'hr.employee_advance_repayment',
+    lines: [line('employee_advance', 'credit', true)],
   },
 ]);
 

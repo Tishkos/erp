@@ -109,6 +109,10 @@ const NOT_DOCUMENTS = new Set([
   'sales_order_line',
   // A project is a master record and a dimension; its costs are the documents.
   'project',
+  // REQ-HR-001 HR-4 — a person is a master record: `employee_advance` names
+  // its journal and starts with the person's table name, so the header rule
+  // reads `employee` as its header. The advances are the documents.
+  'employee',
 ]);
 
 describe('ops 16 · the document-table lists are complete', () => {

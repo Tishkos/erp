@@ -69,6 +69,7 @@ import type { PostingLineRequest } from '../domain/posting';
 import { can, type PermissionVerb } from '../domain/permissions';
 import { AdminNotFoundError, optionalText, recordChange, requireText } from './administration';
 import * as attendance from './attendance';
+import * as advances from './employee-advances';
 import * as authz from './authorization';
 import type { ActorContext } from './chart-of-accounts';
 import * as journals from './journal';
@@ -206,7 +207,7 @@ async function computeRun(tx: Tx, run: RunRow, typed: Map<string, TypedEntry[]>)
   const { first, last } = { first: run.periodMonth, last: run.periodEnd };
   const [{ rules }, people, workingDays] = await Promise.all([componentRules(tx), peopleOf(tx, run.branchCode, first, last), workingDaysOf(tx, first, last)]);
   const ids = people.map((p) => p.id);
-  const [pay, figures] = await Promise.all([compensationAt(tx, ids, last), figuresAt(tx, ids, last)]);
+  const [pay, figures, owed] = await Promise.all([compensationAt(tx, ids, last), figuresAt(tx, ids, last), advances.dueForMonth(tx, ids, first)]);
 
   const existing = await tx.select({ id: payrollLine.id }).from(payrollLine).where(eq(payrollLine.runId, run.id));
   if (existing.length > 0) {
@@ -238,6 +239,8 @@ async function computeRun(tx: Tx, run: RunRow, typed: Map<string, TypedEntry[]>)
         employedDays: month.workingDays,
         absentDays: month.absent,
         unpaidLeave: month.unpaidLeave,
+        // HR-4 — what the person's advances and loans have due by the month.
+        advanceRecovery: owed.get(person.id) ?? 0n,
       },
       rules,
       figures.get(person.id) ?? [],
@@ -660,6 +663,17 @@ export async function post(tx: Tx, ctx: ActorContext, runNo: string): Promise<{ 
     await tx.update(payrollLine).set({ payslipNo: allocated.documentNo, issuedAt }).where(eq(payrollLine.id, line.id));
     issued.push({ employeeId: line.employeeId, payslipNo: allocated.documentNo });
   }
+  // HR-4 — the ADVANCE deductions become recovery rows on the people's advances, the oldest first.
+  await advances.recordPayrollRecovery(
+    tx,
+    ctx,
+    run,
+    lines.map(({ line, components }) => ({
+      lineId: line.id,
+      employeeId: line.employeeId,
+      amount: components.filter((c) => c.calculation === 'advance_recovery').reduce((sum, c) => sum + scaled(c.amountIqd), 0n),
+    })),
+  );
   await tx
     .update(payrollRun)
     .set({ status: 'posted', postedBy: ctx.principal.userId, postedAt: issuedAt, journalEntryId: result.journalEntryId, updatedAt: issuedAt })
@@ -810,6 +824,8 @@ export async function reverse(tx: Tx, ctx: ActorContext, runNo: string, reason: 
   const [payment] = await tx.select({ id: payrollPayment.id }).from(payrollPayment).where(eq(payrollPayment.runId, run.id)).limit(1);
   if (payment) throw new PayrollError(`${run.runNo} has been paid from; a paid run is not reversed.`);
   const reversal = await journals.reverse(tx, ctx, run.journalEntryId!, { reason: `${run.runNo}: ${text}`, postingDate: businessToday() });
+  // HR-4 — what the run recovered on advances is owed again.
+  await advances.reversePayrollRecovery(tx, ctx, run);
   const now = new Date();
   await tx
     .update(payrollRun)

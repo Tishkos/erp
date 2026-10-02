@@ -54,7 +54,7 @@ test.describe('FIX-5 · HR structure and the user link', () => {
     const tabs = page.getByRole('navigation', { name: 'Positions' });
     // The tabs are the section's built screens, in the menu's order; the
     // whole thirteen are held by tests/unit/fx5-hr-menu.test.ts.
-    await expect(tabs.getByRole('link')).toHaveText(['Employees', 'Departments', 'Positions', 'Attendance', 'Leave Management', 'Payroll']);
+    await expect(tabs.getByRole('link')).toHaveText(['Employees', 'Departments', 'Positions', 'Attendance', 'Leave Management', 'Payroll', 'Advances & Loans']);
 
     await page.getByRole('button', { name: 'New position' }).click();
     const dialog = page.getByRole('dialog');

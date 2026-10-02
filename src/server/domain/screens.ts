@@ -488,6 +488,7 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/hr/attendance',
   '/hr/leave',
   '/hr/payroll',
+  '/hr/advances',
   '/administration/hr-settings',
   // REQ-WA-001 WA-1/WA-2 — the WhatsApp bridge.
   '/administration/whatsapp',

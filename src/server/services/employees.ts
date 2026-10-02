@@ -527,8 +527,9 @@ export async function setPayFigure(tx: Tx, ctx: ActorContext, id: string, input:
   if (!component) throw new HrValidationError('component', `names no pay component '${code}'`);
   if (!component.active) throw new HrValidationError('component', `${component.nameEn} is deactivated`);
   const stopped = Boolean(input.stopped);
-  if (component.calculation === 'base_salary' || component.calculation === 'absence') {
-    throw new HrValidationError('component', `${component.nameEn} is read from the ${component.calculation === 'base_salary' ? 'salary' : 'day sheet'}, not set per person`);
+  if (component.calculation === 'base_salary' || component.calculation === 'absence' || component.calculation === 'advance_recovery') {
+    const source = component.calculation === 'base_salary' ? 'salary' : component.calculation === 'absence' ? 'day sheet' : 'advances and loans';
+    throw new HrValidationError('component', `${component.nameEn} is read from the ${source}, not set per person`);
   }
   if (component.calculation === 'manual' && !stopped) throw new HrValidationError('component', `${component.nameEn} is typed on each month's run; a person can only be taken off it`);
   let amount: string | null = null;
