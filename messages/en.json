@@ -2594,7 +2594,12 @@
       "col_paid": "Paid",
       "remaining_short": "Remaining",
       "col_containers": "Containers",
-      "x_of_y": "{received} of {total}"
+      "x_of_y": "{received} of {total}",
+      "read_document": "Read a document",
+      "read_document_title": "Read the supplier’s document",
+      "read_document_hint": "The invoice the factory sent — PDF, Excel, Word or CSV, in any language. It is read into a draft purchase invoice with the goods, the prices and the supplier filled in, and the file is kept against it. Anything that could not be read is left empty and written into the draft’s note.",
+      "read_document_choose": "Choose the document",
+      "read_document_submit": "Read it"
     },
     "payables_settings": {
       "title": "Payables Settings",

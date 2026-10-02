@@ -5,6 +5,13 @@ import { revalidatePath } from 'next/cache';
 import { rowCount, runAdmin, runAdminAndReturn, text, withQuery } from '@/server/admin-action';
 import { parseDecimal } from '@domain/money';
 import { parseQuantity } from '@domain/uom';
+import { businessToday } from '@/server/domain/business-date';
+import { matchSupplier } from '@/server/domain/invoice-draft';
+import { draftFromDocument } from '@/server/services/invoice-draft';
+import { readerFor, readerModel } from '@/server/services/reader';
+import * as items from '@/server/services/items';
+import * as partners from '@/server/services/partners';
+import * as wa from '@/server/services/whatsapp';
 import * as attachments from '@/server/services/attachments';
 import * as ap from '@/server/services/ap-invoice';
 import * as inventory from '@/server/services/inventory';
@@ -303,6 +310,117 @@ export async function attachToInvoice(formData: FormData): Promise<void> {
       return found;
     },
     () => `/payables/invoices/${encodeURIComponent(invoiceNo)}?saved=1`,
+  );
+}
+
+/**
+ * A supplier's document, read into a draft purchase invoice — the intake.
+ *
+ * The file is attached to the invoice it became, so the paperwork and the
+ * figures never part company; every flag the reader raised goes into the
+ * note, because a draft that hides what it was unsure of is worse than no
+ * draft at all.
+ */
+export async function draftFromDocumentAction(formData: FormData): Promise<void> {
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) {
+    redirect('/payables?error=attachment_missing');
+  }
+  const upload = file as File;
+  const content = Buffer.from(await upload.arrayBuffer());
+
+  await runAdminAndReturn(
+    async (tx, ctx) => {
+      const [catalogue, suppliers, settings] = await Promise.all([
+        items.listAll(tx),
+        partners.listActiveInRole(tx, 'supplier'),
+        wa.settings(tx),
+      ]);
+
+      const client = await readerFor();
+      if (!client) throw new Error('No reader is configured on this host, so a document cannot be read into a draft.');
+
+      const outcome = await draftFromDocument({
+        fileName: upload.name,
+        content,
+        client,
+        model: readerModel(settings.agentModel),
+        catalogue: (catalogue as unknown as Record<string, unknown>[])
+          .filter((row) => row.active !== false)
+          .map((row) => ({ code: String(row.code ?? ''), name: String(row.name ?? '') })),
+      });
+
+      const draft = outcome.draft;
+      if (draft.lines.length === 0) {
+        throw new Error(draft.note ?? 'Nothing that looks like an invoice could be read out of that file.');
+      }
+
+      const supplier = draft.supplierName
+        ? matchSupplier(
+            draft.supplierName,
+            (suppliers as unknown as Record<string, unknown>[]).map((row) => ({
+              id: String(row.id ?? ''),
+              code: String(row.code ?? ''),
+              name: String(row.name ?? ''),
+            })),
+          )
+        : null;
+      if (!supplier) {
+        throw new Error(
+          draft.supplierName
+            ? `The document says "${draft.supplierName}", which is not plainly one of our suppliers. Add them first, or raise the invoice by hand.`
+            : 'No supplier could be read out of that document, so the invoice would be owed to nobody.',
+        );
+      }
+
+      // Everything the reader was unsure of, carried where the accountant
+      // will see it. A draft that hides its doubts is worse than none.
+      const warnings = outcome.flags.map((flag) => `${flag.field}: ${flag.why}`);
+      const note = [
+        `Read from ${upload.name}.`,
+        supplier.confidence === 'sure' ? null : `Supplier matched by name — check it is ${supplier.code}.`,
+        draft.note,
+        ...warnings,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+        .slice(0, 2000);
+
+      const created = await ap.create(tx, ctx, {
+        supplierId: supplier.id,
+        supplierInvoiceNo: draft.invoiceNo ?? upload.name,
+        branchCode: ctx.branchCode,
+        invoiceDate: draft.invoiceDate ?? businessToday(),
+        ...(draft.currency ? { currency: draft.currency } : {}),
+        note,
+        // By direction: this door is for imports, and the goods are in
+        // process — no warehouse is named, and the containers choose it.
+        isImport: true,
+        nonPoJustification: `Raised from the supplier's own document (${upload.name}).`,
+        lines: draft.lines.map((line) => ({
+          description: line.description,
+          quantity: parseQuantity(line.quantity ?? '0'),
+          unitPriceIqd: parseDecimal(line.unitPrice ?? '0', 4n),
+          ...(line.itemCode ? { itemCode: line.itemCode, isInventory: true } : {}),
+          ...(line.uom ? { uomCode: line.uom } : {}),
+        })),
+      });
+
+      // The paperwork stays with the figures it produced.
+      await attachments.upload(tx, ctx, {
+        objectType: ap.PERMISSION_OBJECT,
+        objectId: created.id,
+        fileName: upload.name,
+        content,
+      });
+      return created;
+    },
+    (value) => {
+      const created = value as { invoiceNo?: string } | null | undefined;
+      return created?.invoiceNo
+        ? `/payables/invoices/${encodeURIComponent(created.invoiceNo)}?saved=1`
+        : '/payables?saved=1';
+    },
   );
 }
 

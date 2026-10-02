@@ -2594,7 +2594,12 @@
       "col_paid": "المدفوع",
       "remaining_short": "المتبقي",
       "col_containers": "الحاويات",
-      "x_of_y": "{received} من {total}"
+      "x_of_y": "{received} من {total}",
+      "read_document": "اقرأ مستنداً",
+      "read_document_title": "اقرأ مستند المورّد",
+      "read_document_hint": "الفاتورة التي أرسلها المصنع — PDF أو Excel أو Word أو CSV، بأي لغة. تُقرأ إلى مسودة فاتورة شراء فيها البضاعة والأسعار والمورّد، ويُحفظ الملف معها. وكل ما تعذّرت قراءته يُترك فارغاً ويُكتب في ملاحظة المسودة.",
+      "read_document_choose": "اختر المستند",
+      "read_document_submit": "اقرأها"
     },
     "payables_settings": {
       "title": "إعدادات الذمم الدائنة",

@@ -272,6 +272,52 @@ export function matchLines(
   return { ...draft, lines };
 }
 
+/** The words a company name carries that say nothing about which company. */
+const COMPANY_WORDS = new Set([
+  'co', 'ltd', 'limited', 'inc', 'incorporated', 'llc', 'plc', 'corp',
+  'corporation', 'company', 'gmbh', 'sa', 'srl', 'bv', 'nv', 'ag', 'pte',
+  'trading', 'group', 'international', 'industries', 'industry', 'technology',
+  'technologies', 'imp', 'exp',
+]);
+
+/** A company name reduced to the words that identify it. */
+export function supplierKey(name: string): string {
+  return matchKey(name)
+    .split(' ')
+    .filter((word) => word !== '' && !COMPANY_WORDS.has(word))
+    .join(' ');
+}
+
+/**
+ * The company's supplier for a name on an invoice, when there plainly is one.
+ *
+ * As timid as the item matcher, and for a worse failure: an invoice raised
+ * against the wrong supplier records a debt to somebody who is not owed it,
+ * and the draft gives no sign it was guessed. A factory writes itself
+ * differently on every document, so the company-form words are dropped before
+ * comparing — "Jinko Solar Co., Ltd" and "JINKO SOLAR" are one supplier, and
+ * "Jinko" alone, which could be either of two, is nobody until a person says.
+ */
+export function matchSupplier(
+  name: string,
+  partners: readonly { readonly id: string; readonly code: string; readonly name: string }[],
+): { readonly id: string; readonly code: string; readonly name: string; readonly confidence: Confidence } | null {
+  const asked = supplierKey(name);
+  if (asked === '') return null;
+
+  const exact = partners.filter((partner) => supplierKey(partner.name) === asked);
+  if (exact.length === 1) return { ...exact[0]!, confidence: 'sure' };
+  if (exact.length > 1) return null;
+
+  const contained = partners.filter((partner) => {
+    const key = supplierKey(partner.name);
+    return key !== '' && (asked.includes(key) || key.includes(asked));
+  });
+  if (contained.length === 1) return { ...contained[0]!, confidence: 'unsure' };
+
+  return null;
+}
+
 /** Everything a person has to look at, in one list for the screen. */
 export function allFlags(draft: InvoiceDraft): readonly DraftFlag[] {
   return [...draft.flags, ...draft.lines.flatMap((line) => line.flags)];

@@ -15,6 +15,8 @@ import {
   EXTRACTION_RULES,
   matchItem,
   matchLines,
+  matchSupplier,
+  supplierKey,
   readDraft,
 } from '@/server/domain/invoice-draft';
 
@@ -153,5 +155,37 @@ describe('AP-11 · matching an item, timidly', () => {
     expect(draft.lines[1]!.flags[0]!.why).toMatch(/check it is the right item/);
     expect(draft.lines[2]!.itemCode).toBeNull();
     expect(draft.lines[2]!.flags[0]!.why).toMatch(/no item in the catalogue plainly matches/);
+  });
+});
+
+describe('AP-11 · matching a supplier, more timidly still', () => {
+  const PARTNERS = [
+    { id: 'p1', code: 'SUP-1', name: 'Jinko Solar Co., Ltd' },
+    { id: 'p2', code: 'SUP-2', name: 'Jinko Power Technology' },
+    { id: 'p3', code: 'SUP-3', name: 'Longi Green Energy' },
+  ];
+
+  it('sees through punctuation, case and the company words', () => {
+    // A factory writes itself differently on every document it sends.
+    expect(matchSupplier('JINKO SOLAR CO LTD', PARTNERS)).toMatchObject({ code: 'SUP-1', confidence: 'sure' });
+    expect(matchSupplier('Jinko Solar', PARTNERS)).toMatchObject({ code: 'SUP-1' });
+  });
+
+  it('refuses a name that could be either of two suppliers', () => {
+    // "Jinko" alone is Jinko Solar and Jinko Power. An invoice raised against
+    // the wrong one records a debt to somebody who is not owed it, and the
+    // draft gives no sign it was guessed.
+    expect(matchSupplier('Jinko', PARTNERS)).toBeNull();
+  });
+
+  it('refuses a name nobody has', () => {
+    expect(matchSupplier('Trina Solar', PARTNERS)).toBeNull();
+    expect(matchSupplier('', PARTNERS)).toBeNull();
+    expect(matchSupplier('Co., Ltd', PARTNERS)).toBeNull();
+  });
+
+  it('reduces a name to the words that identify it', () => {
+    expect(supplierKey('Jinko Solar Co., Ltd')).toBe('jinko solar');
+    expect(supplierKey('LONGI GREEN ENERGY TECHNOLOGY CO LTD')).toBe('longi green energy');
   });
 });
