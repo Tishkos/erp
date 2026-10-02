@@ -84,6 +84,20 @@ const effort = process.env.WA_CLI_EFFORT?.trim() || 'high';
  * migration that changes the stored default has been deployed there.
  */
 const AGENT_MODEL_OVERRIDE = process.env.WA_AGENT_MODEL?.trim() || null;
+/*
+ * Whether to answer messages typed on the bot's own phone.
+ *
+ * The bot's number is Tishko's handset: he pairs it, and he is the one who
+ * wants to try Noah out. Everything from that handset arrives marked
+ * `fromMe`, which the bridge skips — otherwise it would answer its own
+ * answers forever — so testing from it was impossible.
+ *
+ * With this on, a `fromMe` message is answered unless the bridge itself sent
+ * it, which it knows by the id it recorded when it did. Asked for as a
+ * temporary thing for testing (2026-10-02), so it is a switch and not a
+ * change: WA_ANSWER_SELF=off, or simply removed, puts it back.
+ */
+const ANSWER_SELF = (process.env.WA_ANSWER_SELF ?? '').trim().toLowerCase() === 'on';
 const RESET = process.argv.includes('--reset-pairing');
 /** WA-5 — print the groups the bot is in, with their ids, and exit. */
 const LIST_GROUPS = process.argv.includes('--list-groups');
@@ -159,6 +173,31 @@ async function databaseAuthState(scope: RequestScope) {
 
 const sentAt: number[] = [];
 
+/*
+ * The ids of messages this process has just sent.
+ *
+ * `sentByBridge` answers the same question from the log, which is the durable
+ * answer and survives a restart — but the echo of a message can reach the
+ * socket before the row recording its id has committed, and in that window
+ * the bot would answer itself. This set is written the instant WhatsApp hands
+ * the id back, so the window does not exist. It only matters while
+ * WA_ANSWER_SELF is on; it costs nothing when it is off.
+ */
+const ownSends = new Set<string>();
+
+function remember(id: string | null | undefined): void {
+  if (!id) return;
+  ownSends.add(id);
+  // A few hundred is more than any echo arrives late by; past that, forget
+  // the oldest half rather than grow for the life of the process.
+  if (ownSends.size > 500) {
+    for (const old of ownSends) {
+      ownSends.delete(old);
+      if (ownSends.size <= 250) break;
+    }
+  }
+}
+
 async function paced(perMinute: number): Promise<void> {
   const now = Date.now();
   while (sentAt.length && sentAt[0]! < now - 60_000) sentAt.shift();
@@ -190,6 +229,7 @@ function transportFor(sock: () => WASocket | null, perMinute: () => number): wa.
     } else {
       sent = await socket.sendMessage(jid, { text: message.text });
     }
+    remember(sent?.key?.id);
     return { waMessageId: sent?.key?.id ?? null };
   };
 }
@@ -238,6 +278,16 @@ async function handleInbound(
   const { e164, groupJid } = senderOf(message);
   const text = textOf(message)?.trim();
   if (!e164 || !text) return;
+
+  // Its own voice, heard back. Every answer the bridge sends is recorded with
+  // the id WhatsApp gave it, so an id already in the log as outbound is the
+  // bot listening to itself — the one thing that must never start a round.
+  if (message.key.fromMe) {
+    if (message.key.id && ownSends.has(message.key.id)) return;
+    const mine = await withScope(scope, (tx) => wa.sentByBridge(tx, message.key.id ?? null));
+    if (mine) return;
+    log(`inbound from ${e164}: typed on the bot's own phone, answering it`);
+  }
 
   // WA-5 — one group, and no other. An unregistered group, or any group but
   // the registered one, is silence: the same answer an unlisted number gets.
@@ -754,7 +804,7 @@ async function main(): Promise<void> {
     socket.ev.on('messages.upsert', ({ messages, type }) => {
       if (type !== 'notify') return;
       for (const message of messages) {
-        if (message.key.fromMe) continue;
+        if (message.key.fromMe && !ANSWER_SELF) continue;
         handleInbound(scope, send, router, message, agent ?? undefined).catch((e) => log(`inbound handling failed: ${e}`));
       }
     });

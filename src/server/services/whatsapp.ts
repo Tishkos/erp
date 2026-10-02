@@ -523,6 +523,29 @@ export async function recordOutbound(
   return row!.id;
 }
 
+/**
+ * Did the bridge send this message itself?
+ *
+ * The bot's own number is also a person's phone — Tishko's, who pairs it and
+ * tests from it. WhatsApp marks everything from that handset `fromMe`,
+ * whether the bridge sent it or the man typed it, so the only honest way to
+ * tell them apart is the id: every message the bridge sends is recorded with
+ * the id WhatsApp gave it. An id that is in the log as an outbound message is
+ * the bot hearing itself; anything else from that number is somebody typing.
+ *
+ * Without this, answering one's own messages is an infinite conversation
+ * between a bot and itself, at a minute of Opus per turn.
+ */
+export async function sentByBridge(tx: Tx, waMessageId: string | null): Promise<boolean> {
+  if (!waMessageId) return false;
+  const [row] = await tx
+    .select({ id: whatsappMessage.id })
+    .from(whatsappMessage)
+    .where(and(eq(whatsappMessage.direction, 'out'), eq(whatsappMessage.waMessageId, waMessageId)))
+    .limit(1);
+  return row !== undefined;
+}
+
 export async function markOutbound(
   tx: Tx,
   id: bigint,
