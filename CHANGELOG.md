@@ -8,6 +8,16 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-FIX-001 FIX-4 — units of measure on purchase: an item keeps its units
+  on its record (*1 BOX = 24 EA*, a purchase and a sales default, a unit
+  deactivated with a reason, the base unit always kept — 0254 holds it); the
+  new-item dialog chooses the base unit; every purchase invoice line has a
+  Unit, starting in the purchase default, its price following the unit until
+  typed over. Stock is received, returned and costed in the base unit,
+  exactly or refused, so a box of 24 at 24,000 is 24 pieces at 1,000 on the
+  FIFO layer and in the journal. Lines that named a unit their item does not
+  keep were repaired to the item's base unit by the migration. A sale is
+  written in the base unit and refuses another.
 - REQ-FIX-001 FIX-3 — the import and its invoices agree: a deposit is applied
   to the import's invoice when it posts; an import agreed in dinars takes its
   amount from its invoices (discounts and a second invoice included); an

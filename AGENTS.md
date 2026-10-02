@@ -185,3 +185,10 @@ Standing rule (by direction, 2026-10-01; see also docs/notes/newsettings.md: "DO
 * The supplier advance's three events are on `POSTING_MAP`; a new role there needs an account in the `ops13/14/15` fixtures.
 * Invoice Status Tracking (`supplier-shipment`) excludes `is_import` invoices and refuses to advance one.
 
+
+## Units of measure (REQ-FIX-001 FIX-4)
+
+* `services/item-units.ts` is the only writer of `item_uom` (add, defaults, deactivate with a reason — never deleted). The base unit is kept active by the service and by the `item_uom_base_stays_active` trigger (0254); one active purchase default and one sales default per item (partial unique indexes); with none flagged, the base unit is the default.
+* A purchase line carries the unit it was bought in; stock, cost layers and the payable's quantity are in the base unit — convert with `item-units.toBaseQuantity` / `domain/uom.toBaseExact` (refused when it does not divide), cost per base unit with `costPerBase`. A line from an order keeps the order's unit. Goods receipts and goods returns convert the same way.
+* A sale is written in the base unit (D-FX-8); `ar.createDirect` refuses another. Selling in other units is a later stage across sales orders, delivery notes, pick lists and returns.
+* Tests: `tests/integration/fx4-units.test.ts`, `tests/e2e/fx4-units.spec.ts` (adds BOX = 24 to ITM-SEED on the dev database).

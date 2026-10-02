@@ -72,6 +72,7 @@ import { assertResultAccount, assertStatementAccount } from '../domain/posting-m
 import { allocateDocumentNumber } from './numbering';
 import * as execution from './project-execution';
 import * as advances from './supplier-advance';
+import * as units from './item-units';
 
 export const DOCUMENT_TYPE = 'ap_invoice';
 export const PERMISSION_OBJECT = 'ap_invoice';
@@ -653,7 +654,7 @@ export async function create(
       itemCode: lineItemCode,
       description: line.description ?? ordered?.description ?? named?.name ?? 'Charge',
       quantity: formatQuantity(line.quantity),
-      uomCode: line.uomCode ?? ordered?.uomCode ?? 'EA',
+      uomCode: await lineUnit(tx, lineItemCode, line.uomCode, ordered?.uomCode ?? null, index + 1),
       unitPrice: toDecimalString(line.unitPriceIqd, 4n),
       isInventory,
       costCentreCode: line.costCentreCode ?? ordered?.costCentreCode ?? null,
@@ -770,6 +771,8 @@ export interface DraftLineInput {
   readonly unitPriceIqd: bigint;
   readonly discountIqd?: bigint;
   readonly warehouseCode: string;
+  /** REQ-FIX-001 FIX-4 — one of the item's units; its purchase default when absent. */
+  readonly uomCode?: string | null;
 }
 
 /** The draft, and the reasons it may be typed into. */
@@ -949,7 +952,7 @@ export async function saveLine(
     // invoice cannot name an item one thing and the chart another.
     description: stockItem.name,
     quantity: formatQuantity(input.quantity),
-    uomCode: stockItem.uomCode,
+    uomCode: await lineUnit(tx, stockItem.code, input.uomCode ?? existing?.uomCode ?? null, null, lineNo),
     unitPrice: toDecimalString(input.unitPriceIqd, 4n),
     isInventory: true,
     warehouseCode: house.code,
@@ -1411,16 +1414,19 @@ export async function post(
     // what happened before this branch existed.
     if (line.warehouseCode) {
       const account = await inventoryAccountFor(tx, line);
+      // REQ-FIX-001 FIX-4 — the line is in the unit it was bought in; the
+      // stock is counted in the item's base unit, at the base unit's cost.
+      const baseQuantity = await units.toBaseQuantity(tx, line.itemCode!, line.uomCode, parseQuantity(line.quantity));
       await inventory.receive(tx, ctx, {
         itemCode: line.itemCode!,
         warehouseCode: line.warehouseCode,
         branchCode: invoice.branchCode,
-        quantity: parseQuantity(line.quantity),
+        quantity: baseQuantity,
         // A *unit* cost, and the discount is part of it: stock is worth what
         // was paid for it, not what was asked. The posted debit below is the
         // same money, so the warehouse and the ledger agree by construction
-        // rather than by coincidence — see the rounding note in `unitCostOf`.
-        unitCostIqd: unitCostOf(line, invoicedValue),
+        // rather than by coincidence — see the rounding note in `costPerBase`.
+        unitCostIqd: costPerBase(invoicedValue, baseQuantity),
         // Whose stock this is. A sale that names this supplier will consume
         // these layers and no others — Operations block 5.
         supplierId: invoice.supplierId,
@@ -1951,7 +1957,25 @@ async function batchFor(
 }
 
 /**
- * What one unit of this line costs, net of its discount.
+ * REQ-FIX-001 FIX-4 — the unit a line is written in. A line against an order
+ * line is in the order's unit (the received and invoiced quantities are
+ * compared in it); an item's line is in one of the item's active units, its
+ * purchase default when none is named; a charge with no item keeps what it
+ * was given.
+ */
+async function lineUnit(tx: Tx, itemCode: string | null, given: string | null | undefined, ordered: string | null, lineNo: number): Promise<string> {
+  if (ordered) {
+    if (given && given !== ordered) throw new ApInvoiceLineError(lineNo, `is in ${given}, but its order line is in ${ordered}; invoice it in ${ordered}.`);
+    return ordered;
+  }
+  if (!itemCode) return given?.trim() || 'EA';
+  if (!given?.trim()) return units.purchaseDefaultOf(tx, itemCode);
+  return units.assertLineUnit(tx, itemCode, given);
+}
+
+/**
+ * What one base unit of this line costs, net of its discount — from the
+ * line's value and its quantity converted to the item's base (FIX-4).
  *
  * Rounding is the thing to be careful of. Three units at a line value of ten
  * is 3.3333 each, and three layers of 3.3333 are worth 9.9999 — a dinar less
@@ -1962,11 +1986,10 @@ async function batchFor(
  * not divide evenly, which is what would catch it if that ever stopped being
  * true.
  */
-function unitCostOf(line: typeof apInvoiceLine.$inferSelect, value: bigint): bigint {
-  const quantity = parseQuantity(line.quantity);
-  if (quantity === 0n) return 0n;
+function costPerBase(value: bigint, baseQuantity: bigint): bigint {
+  if (baseQuantity === 0n) return 0n;
   // Quantities carry six decimal places, money four.
-  return (value * 1_000_000n) / quantity;
+  return (value * 1_000_000n) / baseQuantity;
 }
 
 function lineValue(line: typeof apInvoiceLine.$inferSelect): bigint {

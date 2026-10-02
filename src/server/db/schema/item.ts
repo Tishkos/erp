@@ -161,6 +161,12 @@ export const itemUom = pgTable(
 
     isPurchaseDefault: boolean('is_purchase_default').notNull().default(false),
     isSalesDefault: boolean('is_sales_default').notNull().default(false),
+
+    /** REQ-FIX-001 FIX-4 (0254) — a unit is deactivated with its reason, never deleted; the base stays active. */
+    active: boolean('active').notNull().default(true),
+    deactivatedReason: text('deactivated_reason'),
+    deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
+    deactivatedBy: uuid('deactivated_by').references(() => appUser.id),
   },
   (t) => [
     primaryKey({ columns: [t.itemId, t.uomCode] }),
@@ -168,6 +174,9 @@ export const itemUom = pgTable(
     // resolve to a piece.
     uniqueIndex('item_uom_barcode_uniq').on(t.barcode).where(sql`${t.barcode} is not null`),
     check('item_uom_conversion_positive', sql`${t.conversionNumerator} > 0 and ${t.conversionDenominator} > 0`),
+    check('item_uom_deactivated_has_reason', sql`${t.active} or coalesce(btrim(${t.deactivatedReason}), '') <> ''`),
+    uniqueIndex('item_uom_one_purchase_default').on(t.itemId).where(sql`${t.isPurchaseDefault} and ${t.active}`),
+    uniqueIndex('item_uom_one_sales_default').on(t.itemId).where(sql`${t.isSalesDefault} and ${t.active}`),
   ],
 );
 

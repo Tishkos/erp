@@ -6,6 +6,7 @@ import { Panel } from '@/components/ui';
 import {
   ActionButton,
   AdminPage,
+  Checkbox,
   Field,
   Flash,
   Form,
@@ -29,9 +30,14 @@ import { formatQuantity, parseQuantity } from '@domain/uom';
 import { formatMoney, type Locale } from '@/i18n/config';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as items from '@/server/services/items';
+import * as itemUnits from '@/server/services/item-units';
+import * as uomService from '@/server/services/units-of-measure';
 import {
+  addItemUnit,
+  deactivateItemUnit,
   linkItemSupplier,
   makeDefaultSupplier,
+  setItemUnitDefault,
   setItemActive,
   setItemSellingPrice,
   setItemSupplierPrice,
@@ -83,6 +89,9 @@ export default async function ItemPage({
         row,
         accounts: mayEdit ? await coa.postableAccounts(tx) : [],
         suppliers: mayEdit ? await items.selectableSuppliers(tx) : [],
+        // REQ-FIX-001 FIX-4 — the units it is bought and sold in.
+        units: await itemUnits.unitsOf(tx, code),
+        uoms: mayEdit ? await uomService.listActive(tx) : [],
       };
     } catch (error) {
       if (error instanceof AdminNotFoundError) return null;
@@ -90,7 +99,9 @@ export default async function ItemPage({
     }
   });
   if (!data) notFound();
-  const { row, accounts, suppliers } = data;
+  const { row, accounts, suppliers, units, uoms } = data;
+  const kept = new Set(units.filter((unit) => unit.active).map((unit) => unit.uomCode));
+  const addable = uoms.filter((uom) => !kept.has(uom.code));
 
   const revenue = accounts.filter((a) => a.accountType === 'revenue');
   const expense = accounts.filter((a) => a.accountType === 'expense');
@@ -106,7 +117,12 @@ export default async function ItemPage({
       trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"
     >
-      <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
+      <Flash
+        error={outcome.error}
+        errorTitle={t('error_title')}
+        saved={outcome.saved}
+        savedLabel={t('saved')}
+      />
 
       <div className={s.profileGrid}>
         <div className={s.profileStack}>
@@ -183,11 +199,16 @@ export default async function ItemPage({
                         {line.warehouseName ? ` · ${line.warehouseName}` : ''}
                       </span>
                       <span>
-                        <bdi dir="ltr">{formatQuantity(parseQuantity(line.onHand))}</bdi> {row.baseUomCode}
+                        <bdi dir="ltr">{formatQuantity(parseQuantity(line.onHand))}</bdi>{' '}
+                        {row.baseUomCode}
                         {parseQuantity(line.reserved) > 0n ? (
                           <span className="muted">
                             {' '}
-                            ({t('items.reserved', { quantity: formatQuantity(parseQuantity(line.reserved)) })})
+                            (
+                            {t('items.reserved', {
+                              quantity: formatQuantity(parseQuantity(line.reserved)),
+                            })}
+                            )
                           </span>
                         ) : null}
                       </span>
@@ -335,6 +356,123 @@ export default async function ItemPage({
             ) : null}
           </Panel>
 
+          {/* REQ-FIX-001 FIX-4 — the units it is bought and sold in, each a
+              share of the base unit its stock is counted in. */}
+          <Panel
+            title={t('items.units_title', { count: units.filter((unit) => unit.active).length })}
+          >
+            <div className="table-wrap">
+              <table className="list">
+                <thead>
+                  <tr>
+                    <th scope="col">{t('items.unit')}</th>
+                    <th scope="col">{t('items.unit_holds')}</th>
+                    <th scope="col">{t('items.unit_purchase_default')}</th>
+                    <th scope="col">{t('items.unit_sales_default')}</th>
+                    {mayEdit ? <th scope="col">{t('actions')}</th> : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {units.map((unit) => (
+                    <tr key={unit.uomCode}>
+                      <td>
+                        <bdi dir="ltr">{unit.uomCode}</bdi> · {unit.uomName}
+                        {unit.isBase ? <Pill label={t('items.base_unit')} on /> : null}
+                        {unit.active ? null : <Pill label={t('inactive')} on={false} />}
+                      </td>
+                      <td>
+                        <bdi dir="ltr">
+                          1 {unit.uomCode} ={' '}
+                          {itemUnits.formatFraction(unit.numerator, unit.denominator)}{' '}
+                          {row.baseUomCode}
+                        </bdi>
+                      </td>
+                      <td>
+                        {unit.isPurchaseDefault ||
+                        (unit.isBase &&
+                          !units.some((other) => other.active && other.isPurchaseDefault)) ? (
+                          <Pill label={t('items.default')} on />
+                        ) : mayEdit && unit.active ? (
+                          <ActionButton
+                            action={setItemUnitDefault}
+                            hidden={{ code: row.code, uomCode: unit.uomCode, kind: 'purchase' }}
+                            label={t('items.make_default')}
+                          />
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>
+                        {unit.isSalesDefault ||
+                        (unit.isBase &&
+                          !units.some((other) => other.active && other.isSalesDefault)) ? (
+                          <Pill label={t('items.default')} on />
+                        ) : mayEdit && unit.active ? (
+                          <ActionButton
+                            action={setItemUnitDefault}
+                            hidden={{ code: row.code, uomCode: unit.uomCode, kind: 'sales' }}
+                            label={t('items.make_default')}
+                          />
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      {mayEdit ? (
+                        <td>
+                          {unit.isBase || !unit.active ? (
+                            unit.deactivatedReason ? (
+                              <bdi dir="auto">{unit.deactivatedReason}</bdi>
+                            ) : (
+                              '—'
+                            )
+                          ) : (
+                            <ReasonForm
+                              action={deactivateItemUnit}
+                              hidden={{ code: row.code, uomCode: unit.uomCode }}
+                              label={t('deactivate')}
+                              reasonLabel={t('reason')}
+                              reasonPlaceholder={t('reason_placeholder')}
+                            />
+                          )}
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className={s.sectionHint}>{t('items.units_hint', { base: row.baseUomCode })}</p>
+
+            {mayEdit && addable.length > 0 ? (
+              <Form action={addItemUnit}>
+                <Hidden name="code" value={row.code} />
+                <Grid>
+                  <Select
+                    label={t('items.add_unit')}
+                    name="uomCode"
+                    options={addable.map((uom) => ({
+                      value: uom.code,
+                      label: `${uom.code} · ${uom.name}`,
+                    }))}
+                    required
+                  />
+                  <Field
+                    hint={t('items.unit_holds_hint', { base: row.baseUomCode })}
+                    label={t('items.unit_holds')}
+                    name="baseQuantity"
+                    required
+                  />
+                  <Field label={t('items.unit_barcode')} name="barcode" />
+                </Grid>
+                <Checkbox label={t('items.unit_purchase_default')} name="purchaseDefault" />
+                <Checkbox label={t('items.unit_sales_default')} name="salesDefault" />
+                <SubmitRow>
+                  <Submit label={t('items.add_unit')} />
+                </SubmitRow>
+              </Form>
+            ) : null}
+          </Panel>
+
           {mayEdit ? (
             <Panel title={t('update')}>
               <Form action={updateItem}>
@@ -353,7 +491,11 @@ export default async function ItemPage({
                   <input name="isStock" type="hidden" value={row.isStock ? 'stock' : 'service'} />
                   <input name="baseUomCode" type="hidden" value={row.baseUomCode} />
                   <input name="tracking" type="hidden" value={row.tracking ?? ''} />
-                  <input name="purchaseAccountId" type="hidden" value={row.purchaseAccountId ?? ''} />
+                  <input
+                    name="purchaseAccountId"
+                    type="hidden"
+                    value={row.purchaseAccountId ?? ''}
+                  />
                   <input
                     name="warrantyMonths"
                     type="hidden"

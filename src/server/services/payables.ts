@@ -59,6 +59,7 @@ import * as purchaseOrders from './purchase-order';
 import * as rateService from './exchange-rates';
 import { allocateDocumentNumber } from './numbering';
 import * as execution from './project-execution';
+import * as units from './item-units';
 
 export const PERMISSION_OBJECT = 'payable';
 export const SETTINGS_OBJECT = 'payables_settings';
@@ -561,7 +562,9 @@ export async function create(
   let hasQuantity = false;
   for (const line of lines) {
     if (line.quantity) {
-      quantity += parseQuantity(line.quantity);
+      // REQ-FIX-001 FIX-4 — the quantity the Cleared rule compares the
+      // received containers against is counted in the items' base units.
+      quantity += line.itemCode && line.uomCode ? await units.toBaseQuantity(tx, line.itemCode, line.uomCode, parseQuantity(line.quantity)) : parseQuantity(line.quantity);
       hasQuantity = true;
       if (line.unitPrice) {
         // quantity × price at MONEY_SCALE — the same arithmetic the PI shows.
@@ -616,7 +619,9 @@ export async function create(
           itemCode: line.itemCode ?? null,
           description: line.description,
           quantity: line.quantity ? parseQuantity(line.quantity) : 1_000_000n,
-          uomCode: line.uomCode ?? 'EA',
+          // REQ-FIX-001 FIX-4 — one of the item's units (its purchase default
+          // when none is named); a service line keeps what it was given.
+          uomCode: line.itemCode ? await units.assertLineUnit(tx, line.itemCode, line.uomCode ?? (await units.purchaseDefaultOf(tx, line.itemCode))) : (line.uomCode ?? 'EA'),
           unitPriceIqd,
           branchCode: input.branchCode,
           warehouseCode: line.itemCode ? warehouseCode : null,
@@ -695,7 +700,7 @@ export async function create(
       expenseCategoryCode: line.expenseCategoryCode ?? null,
       description: line.description,
       quantity: line.quantity ? formatQuantity(parseQuantity(line.quantity)) : null,
-      uomCode: line.uomCode ?? null,
+      uomCode: line.itemCode && line.uomCode ? await units.assertLineUnit(tx, line.itemCode, line.uomCode) : (line.uomCode ?? null),
       unitPrice: line.unitPrice ? toDecimalString(parseDecimal(line.unitPrice, MONEY_SCALE)) : null,
       amountTxn:
         line.quantity && line.unitPrice
@@ -1128,7 +1133,7 @@ export async function updateOrderLines(
     const qty = line.quantity ? parseQuantity(line.quantity) : null;
     const price = line.unitPrice ? parseDecimal(line.unitPrice, MONEY_SCALE) : null;
     if (qty) {
-      quantity += qty;
+      quantity += line.itemCode && line.uomCode ? await units.toBaseQuantity(tx, line.itemCode, line.uomCode, qty) : qty;
       hasQuantity = true;
       if (price) amountTxn += (qty * price) / 10n ** 6n;
     }
@@ -1139,7 +1144,7 @@ export async function updateOrderLines(
       expenseCategoryCode: line.expenseCategoryCode ?? null,
       description: line.description,
       quantity: qty ? formatQuantity(qty) : null,
-      uomCode: line.uomCode ?? null,
+      uomCode: line.itemCode && line.uomCode ? await units.assertLineUnit(tx, line.itemCode, line.uomCode) : (line.uomCode ?? null),
       unitPrice: price ? toDecimalString(price) : null,
       amountTxn: qty && price ? toDecimalString((qty * price) / 10n ** 6n) : null,
     });

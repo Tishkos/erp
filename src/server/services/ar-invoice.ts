@@ -804,11 +804,20 @@ export async function createDirect(
     netTotal += net;
 
     const [stockItem] = await tx
-      .select({ name: item.name })
+      .select({ name: item.name, baseUomCode: item.baseUomCode })
       .from(item)
       .where(eq(item.code, line.itemCode))
       .limit(1);
     if (!stockItem) throw new DirectSalesLineError(index + 1, `names no item '${line.itemCode}'.`);
+    // REQ-FIX-001 FIX-4 (D-FX-8): a sale is counted in the item's base unit —
+    // the quantity leaves the warehouse as it is written — so a line may not
+    // name another unit and be issued as if it were the base.
+    if (line.uomCode && line.uomCode !== stockItem.baseUomCode) {
+      throw new DirectSalesLineError(
+        index + 1,
+        `sells ${line.itemCode} in ${line.uomCode}; a sale is written in the item's base unit, ${stockItem.baseUomCode}.`,
+      );
+    }
 
     await tx.insert(arInvoiceLine).values({
       arInvoiceId: created!.id,
@@ -820,7 +829,7 @@ export async function createDirect(
       // from the master rather than taken from the caller, so an invoice
       // cannot name an item one thing and the chart another.
       description: line.description ?? stockItem.name,
-      uomCode: line.uomCode ?? 'EA',
+      uomCode: stockItem.baseUomCode,
       quantity: formatQuantity(line.quantity),
       unitPrice: toDecimalString(line.unitPriceIqd, 4n),
       discountAmountIqd: discount === 0n ? null : toDecimalString(discount, 4n),
