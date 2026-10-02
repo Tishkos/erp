@@ -3780,7 +3780,6 @@
       "setting_group_notifications": "Post notifications to the group (on / off)",
       "setting_group_digest": "Post the morning digest to the group (on / off)",
       "group_hint": "One group, by its id. Add the bot to the group, run \"npm run whatsapp-bridge -- --list-groups\", and paste the id here. Any other group is ignored."
-      "redacted": "(body removed after retention)"
     },
     "projects": {
       "title": "Project Master",

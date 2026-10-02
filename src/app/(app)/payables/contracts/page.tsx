@@ -13,6 +13,7 @@ import {
   admin as s,
 } from '@/components/admin';
 import { NewRecordDialog } from '@/components/admin/dialog';
+import { Pagination } from '@/components/ui';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
@@ -42,8 +43,9 @@ export default async function RecurringContractsPage({
 }) {
   if (!visibleRoute('/payables/contracts')) notFound();
 
-  const [t, page, locale, context, outcome] = await Promise.all([
+  const [t, admin, page, locale, context, outcome] = await Promise.all([
     getTranslations('admin.payables_contracts'),
+    getTranslations('admin'),
     getTranslations('page'),
     getLocale(),
     requireContext(),
@@ -56,13 +58,15 @@ export default async function RecurringContractsPage({
   }
   const mayCreate = can(principal, 'create', contracts.PERMISSION_OBJECT);
 
-  const { rows, suppliers, departments, categories } = await withCurrentUser(async (tx) => ({
-    rows: await contracts.listForScreen(tx),
+  const { result, suppliers, departments, categories } = await withCurrentUser(async (tx) => ({
+    result: await contracts.listForScreen(tx, { page: outcome.page }),
     suppliers: await partners.listActiveInRole(tx, 'supplier'),
     departments: await departmentsService.listAll(tx),
     categories: (await settingsService.overview(tx)).categories.filter((c) => c.active),
   }));
 
+  const rows = result.rows;
+  const query = (p: number) => `page=${p}`;
   const money = (amount: string, currency: string) =>
     formatMoney(amount, currency, locale as Locale);
   const day = (value: string | null) =>
@@ -151,7 +155,7 @@ export default async function RecurringContractsPage({
         <div className={s.sapWindow}>
           <h2 className={s.sapTitle} id="contracts-title">
             <span>{t('title')}</span>
-            <span className={s.sapTitleMeta}>{t('rows', { count: rows.length })}</span>
+            <span className={s.sapTitleMeta}>{t('rows', { count: result.total })}</span>
           </h2>
 
           <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
@@ -222,6 +226,9 @@ export default async function RecurringContractsPage({
               </tbody>
             </table>
           </div>
+          {result.pages > 1 ? (
+            <Pagination count={result.pages} current={result.page} hrefFor={(p) => `/payables/contracts?${query(p)}`} labels={{ label: admin('pagination'), previous: admin('previous'), next: admin('next'), page: (p) => admin('page_n', { page: p }) }} locale={locale} />
+          ) : null}
         </div>
       </section>
     </AdminPage>
