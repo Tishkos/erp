@@ -106,10 +106,18 @@ describe('an invoice is aged from the date it falls due', () => {
 
 describe('what has been paid, and what that leaves', () => {
   it('reports the invoice’s own paid figure rather than re-adding the receipts', async () => {
+    // 400 applied to the invoice with no receipt behind it (written straight in):
+    // since 39a6c90 "paid" is the receipts allocated, credits and other
+    // applications sit in their own columns, and the three always come back
+    // to the invoice's own allocated figure — which is what the outstanding
+    // is taken from, never a re-added sum of receipts.
     await invoice('OI-PART', '2026-03-01', '2026-03-31', '1000', '400', 'partially_executed');
     const item = (await read('2026-04-10')).find((row) => row.invoiceNo === 'OI-PART')!;
     expect(Number(item.totalIqd)).toBe(1000);
-    expect(Number(item.paidIqd)).toBe(400);
+    expect(Number(item.paidIqd)).toBe(0);
+    expect(Number(item.creditsAppliedIqd)).toBe(0);
+    expect(Number(item.otherAppliedIqd)).toBe(400);
+    expect(Number(item.paidIqd) + Number(item.creditsAppliedIqd) + Number(item.otherAppliedIqd)).toBe(400);
     expect(Number(item.outstandingIqd)).toBe(600);
     expect(item.daysOverdue).toBe(10);
   });
