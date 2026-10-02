@@ -88,6 +88,7 @@ import * as loans from './loans';
 import * as payments from './supplier-payment';
 import * as rateService from './exchange-rates';
 import * as treasury from './treasury';
+import * as exchange from './import-exchange';
 import { allocateDocumentNumber } from './numbering';
 import { registerPage, searchOf, type RegisterPaging } from './register-page';
 import { businessDateOf, businessToday } from '../domain/business-date';
@@ -955,6 +956,9 @@ export async function confirm(tx: Tx, ctx: ActorContext, id: string, input: Conf
       summary: `Fully paid — ${owner.currency} ${shown(summary.paidTxn)} of ${owner.currency} ${shown(parseDecimal(owner.amountTxn, MONEY_SCALE))}`,
       actorUserId: ctx.principal.userId,
     });
+    // REQ-FIX-001 FX8 — fully paid in its own currency: the dinars its
+    // invoices and payments are kept in close on the exchange difference.
+    if (owner.currency !== 'IQD') await exchange.settleIfFullyPaid(tx, ctx, row.payableId, input.confirmedOn);
   }
 
   await audit.record(tx, {
@@ -1219,6 +1223,23 @@ export const cancel = (tx: Tx, ctx: ActorContext, id: string, reason: string) =>
 // ---------------------------------------------------------------------------
 // §15.5 — Applied / Paid / Remaining
 // ---------------------------------------------------------------------------
+
+/**
+ * REQ-FIX-001 FX8 — the import page's *Settle exchange difference*: once the
+ * exchange accounts are mapped, the difference a confirmation could not book
+ * is booked now, dated today. Only on an import fully paid in its currency.
+ */
+export async function settleExchangeDifference(tx: Tx, ctx: ActorContext, payableId: string, on: string) {
+  const owner = await payables.load(tx, payableId);
+  await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, { branchCode: owner.branchCode });
+  const summary = await totalsFor(tx, payableId);
+  if (!summary.fullyPaid) {
+    throw new PaymentApplicationError(`${owner.payableNo} is not fully paid in ${owner.currency} yet; its exchange difference is known only once it is.`);
+  }
+  const done = await exchange.settle(tx, ctx, payableId, on);
+  if (!done) throw new PaymentApplicationError(`${owner.payableNo} has no exchange difference to book: its invoices and payments already agree in dinars.`);
+  return done;
+}
 
 export async function totalsFor(tx: Tx, payableId: string) {
   const [owner] = await tx

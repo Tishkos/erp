@@ -174,7 +174,7 @@ export default async function BackgroundJobsPage({ searchParams }: { searchParam
                       <bdi dir="ltr">{row.channel}</bdi>
                     </td>
                     <td>
-                      <bdi dir="ltr">{row.status}</bdi>
+                      {t.has(`jobs.delivery_${row.status}`) ? t(`jobs.delivery_${row.status}`) : <bdi dir="ltr">{row.status}</bdi>}
                     </td>
                     <td className={s.sapNum}>{row.count}</td>
                   </tr>

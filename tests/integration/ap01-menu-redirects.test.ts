@@ -24,8 +24,10 @@ describe('ap01 · one module, one place, nothing bookmarked breaks', () => {
   });
 
   it('the former finance_ap items live inside Payables', () => {
-    const payables = MENU.find((section) => section.key === 'payables')!;
-    const keys = payables.items.map((item) => item.key);
+    // REQ-FIX-001 FIX-1 — the module is four headings now; the items are in one of them.
+    const keys = MENU.filter((section) => ['payables', 'payables_payments', 'payables_suppliers', 'payables_setup'].includes(section.key)).flatMap((section) =>
+      section.items.map((item) => item.key),
+    );
     for (const moved of [
       'supplier_ledger',
       'ap_advances',

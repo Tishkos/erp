@@ -432,7 +432,7 @@ export type SettingKey = (typeof SETTING_KEYS)[number];
 
 export const DEFAULT_SETTINGS: BotSettings = {
   routerModel: 'claude-haiku-4-5-20251001',
-  agentModel: 'claude-sonnet-5',
+  agentModel: 'claude-sonnet-5-5',
   inlineRows: 15,
   exportRowsCap: 5000,
   throttlePerMinute: 60,

@@ -8,6 +8,45 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-FIX-001 FIX-3 — the import and its invoices agree: a deposit is applied
+  to the import's invoice when it posts; an import agreed in dinars takes its
+  amount from its invoices (discounts and a second invoice included); an
+  import agreed in another currency closes on its exchange difference (gain
+  or loss) once fully paid, or says it waits for the exchange accounts;
+  *Part paid* on the invoice screens; Invoice Status Tracking keeps imports
+  out. The supplier advance's events and the exchange difference are on
+  Posting Mappings (0253).
+- REQ-FIX-001 FIX-2 — Availability is a register like every other: the
+  Inventory tabs, search, a warehouse filter and "only items with stock",
+  item names, fifty rows a page with the true count; issuing stock is a
+  dialog and its refusal comes back in the service's words. The temporary
+  password screen is a centred card like sign-in, outside the shell, with
+  sign out on it.
+- REQ-FIX-001 FIX-1 — the menu the sponsor asked for: Payables in four
+  headings (Purchasing & Invoices, Payments, Suppliers & Balances, Setup)
+  with payables work only; a Logistics module holding the customs
+  declarations, the ASYCUDA list, bills of lading, containers and Invoice
+  Status Tracking; Bank Loans and a new **Bank Deposits** screen (cash taken
+  to the bank, or money from another source — a register over the bank
+  transfer and the other receipt, approved by somebody else and posted) under
+  Treasury & Banking. Routes are unchanged.
+
+### Fixed
+- Bank and Cash Reporting counted every treasury posting (other receipts,
+  loans, commissions, cash advances, reconciliation adjustments) as a
+  transfer between own accounts; only a bank transfer's journal is one now
+  (migration 0252 indexes the link).
+- A page with two dialogs labelled both after the first one's title.
+- Stale e2e expectations: the shell's unbuilt-screen and theme tests, the
+  section-tabs navigation test.
+- REQ-HARDEN-001 HARDEN-4 completed: the payable record reads in one
+  transaction under a measured budget (G1–G3, HD14); each page hands the
+  browser the nine message namespaces its client components use, not the
+  catalogue — a workbench page from 408 KB to 224 KB (G7, HD19); no raw
+  status, kind, lane or outcome code reaches a screen, and one
+  `status_order` namespace for the order documents (H2–H3, HD18); the A21
+  load run with its figures (I3, HD17: `tests/load/payables.js`,
+  `scripts/load/seed-payables-volume.ts`).
 - REQ-PM-001 PM-6 — close, settlement, labour and the reports: hours booked
   on an element by one person, approved by another and posted by Finance
   once the month has ended at the base salary ÷ the calendar's working days
@@ -146,6 +185,8 @@ stage 1.
   remaining table, business dates in Asia/Baghdad, integer money everywhere.
 
 ### Changed
+- WhatsApp bot: the agent model is `claude-sonnet-5-5` again (migration 0251),
+  by direction; 0245 had replaced it with `claude-sonnet-5`.
 - `next` 16.3.8 (security), `nodemailer` 10; `package.json` version is real.
 - Deploys build beside the running application and swap; the previous build
   is kept as `.next-prev`; a deploy ships only what is on `origin/main`.

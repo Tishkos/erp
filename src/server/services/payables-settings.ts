@@ -55,27 +55,38 @@ async function recordChange(
 
 /** Everything the settings screen shows, one read. */
 export async function overview(tx: Tx) {
-  const [types, lanes, stages, limits, checks, reasons, categories, eventCodes] =
-    await Promise.all([
-      tx.select().from(payableType).orderBy(asc(payableType.sortOrder)),
-      tx.select().from(payableLane).orderBy(asc(payableLane.sortOrder)),
-      tx
-        .select()
-        .from(payableStage)
-        .orderBy(asc(payableStage.payableTypeCode), asc(payableStage.sequence)),
-      tx
-        .select()
-        .from(stageTimeLimit)
-        .orderBy(asc(stageTimeLimit.checkCode), asc(stageTimeLimit.validFrom)),
-      tx.select().from(sweepCheck).orderBy(asc(sweepCheck.code)),
-      tx.select().from(holdReasonCode).orderBy(asc(holdReasonCode.code)),
-      tx.select().from(expenseCategory).orderBy(asc(expenseCategory.code)),
-      tx
-        .select()
-        .from(payableEventCode)
-        .orderBy(asc(payableEventCode.laneCode), asc(payableEventCode.code)),
-    ]);
+  // Sequential, not `Promise.all`: a transaction is one connection, and
+  // concurrent queries on it are deprecated in `pg` and an error from pg@9.
+  const types = await tx.select().from(payableType).orderBy(asc(payableType.sortOrder));
+  const lanes = await tx.select().from(payableLane).orderBy(asc(payableLane.sortOrder));
+  const stages = await tx.select().from(payableStage).orderBy(asc(payableStage.payableTypeCode), asc(payableStage.sequence));
+  const limits = await tx.select().from(stageTimeLimit).orderBy(asc(stageTimeLimit.checkCode), asc(stageTimeLimit.validFrom));
+  const checks = await tx.select().from(sweepCheck).orderBy(asc(sweepCheck.code));
+  const reasons = await tx.select().from(holdReasonCode).orderBy(asc(holdReasonCode.code));
+  const categories = await tx.select().from(expenseCategory).orderBy(asc(expenseCategory.code));
+  const eventCodes = await tx.select().from(payableEventCode).orderBy(asc(payableEventCode.laneCode), asc(payableEventCode.code));
   return { types, lanes, stages, limits, checks, reasons, categories, eventCodes };
+}
+
+/**
+ * REQ-HARDEN-001 G3 — the one list the payable record uses: the stop reasons
+ * still offered. The record read all eight settings tables for it.
+ */
+export async function activeHoldReasons(tx: Tx) {
+  return tx
+    .select({ code: holdReasonCode.code, name: holdReasonCode.name })
+    .from(holdReasonCode)
+    .where(eq(holdReasonCode.active, true))
+    .orderBy(asc(holdReasonCode.code));
+}
+
+/** G3 — the workbench's Type filter: the active types in their order, not the eight settings tables. */
+export async function activeTypes(tx: Tx) {
+  return tx
+    .select({ code: payableType.code, name: payableType.name })
+    .from(payableType)
+    .where(eq(payableType.active, true))
+    .orderBy(asc(payableType.sortOrder));
 }
 
 /** Stage names and order are the manager's; what makes one true is not (§6). */

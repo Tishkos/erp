@@ -644,7 +644,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
                       <bdi dir="ltr">{day(k.incurredOn)}</bdi>
                     </td>
                     <td>
-                      <bdi dir="ltr">{k.kind}</bdi>
+                      {x.has(`cost_kind_${k.kind}`) ? x(`cost_kind_${k.kind}`) : <bdi dir="ltr">{k.kind}</bdi>}
                     </td>
                     <td>
                       <bdi dir="ltr">{k.costCode}</bdi>

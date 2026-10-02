@@ -15,6 +15,8 @@ import * as holds from '@/server/services/payable-holds';
 import * as landed from '@/server/services/landed-cost';
 import { parseDecimal } from '@/server/domain/money';
 import * as payables from '@/server/services/payables';
+import * as paymentApplications from '@/server/services/payment-applications';
+import { businessToday } from '@/server/domain/business-date';
 
 const back = (payableNo: string, tab?: string) =>
   `/payables/${encodeURIComponent(payableNo)}${tab ? `?tab=${tab}` : ''}`;
@@ -311,3 +313,13 @@ export async function lockLandedCost(form: FormData): Promise<void> {
     });
   }, back(payableNo));
 }
+
+/** REQ-FIX-001 FX8 — book the exchange difference a confirmation left waiting. */
+export async function settleExchangeDifference(form: FormData): Promise<void> {
+  const payableNo = text(form, 'payable_no');
+  await runAdminAndReturn(async (tx, ctx) => {
+    const row = await payables.loadByNo(tx, payableNo);
+    return paymentApplications.settleExchangeDifference(tx, ctx, row.id, businessToday());
+  }, back(payableNo));
+}
+

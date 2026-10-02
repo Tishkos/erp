@@ -982,7 +982,19 @@ export async function onChargedToImport(
   });
 }
 
-/** §5.1 — once invoices post, the payable's amount is their sum. */
+/**
+ * §5.1 — once invoices post, the payable's amount is their sum.
+ *
+ * REQ-FIX-001 FX7: the agreed amount in the payable's own currency too, when
+ * that currency is the dinar the invoices are kept in. *Paid*, *Remaining*,
+ * *Fully paid* and the cap on new payment applications all read
+ * `amount_txn`; it used to stay at the first invoice's lines as they stood
+ * when the import was born — no discount, no later correction, no second
+ * invoice — so a second invoice could not be paid through the import and
+ * the import read *Fully paid* while it was open. A payable agreed in
+ * another currency keeps its agreed amount: its invoices are in dinars and
+ * the difference between the two is the exchange difference (FX8).
+ */
 async function refreshFromInvoices(tx: Tx, payableId: string): Promise<void> {
   const [sums] = await tx
     .select({
@@ -995,7 +1007,11 @@ async function refreshFromInvoices(tx: Tx, payableId: string): Promise<void> {
   if ((sums?.posted ?? 0) > 0) {
     await tx
       .update(payable)
-      .set({ amountIqd: sums!.totalIqd, updatedAt: new Date() })
+      .set({
+        amountIqd: sums!.totalIqd,
+        amountTxn: sql`case when ${payable.currency} = 'IQD' then ${sums!.totalIqd}::numeric else ${payable.amountTxn} end`,
+        updatedAt: new Date(),
+      })
       .where(eq(payable.id, payableId));
   }
 }
@@ -1485,6 +1501,8 @@ export async function view(tx: Tx, payableNo: string) {
     type,
     rail,
     reached,
+    /** The stage facts the rail was read from — for a reader that needs them again (HARDEN G3). */
+    facts,
     lanes: lanes.rows as { code: string; name: string; sort_order: number }[],
     lines,
     invoices,

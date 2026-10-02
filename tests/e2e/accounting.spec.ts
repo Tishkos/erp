@@ -211,7 +211,8 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     // The balance is summed on screen as it is typed: both sides agree, so
     // it can be posted.
     await expect(page.getByText('Balanced', { exact: true })).toBeVisible();
-    await expect(page.locator('tfoot')).toContainText('2,400');
+    // The lines' own footer — the page draws a second register's below it.
+    await expect(page.getByRole('table', { name: 'Lines' }).locator('tfoot')).toContainText('2,400');
     await expect(page.getByRole('combobox', { name: 'Account' })).toHaveCount(3);
     // The button cannot be pressed until it can act, so no press is dropped.
     await expect(page.getByRole('button', { name: 'Submit', exact: true })).toBeEnabled({ timeout: 15_000 });

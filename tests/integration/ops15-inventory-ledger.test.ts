@@ -147,6 +147,10 @@ beforeEach(async () => {
     ['labour_absorption', 'X000001', 'Labour Absorbed', null],
     ['project_auc', 'A000001', 'Assets Under Construction', null],
     ['project_cost', 'X000001', 'Project Cost Settled', null],
+    // REQ-FIX-001 FIX-3 — the supplier advance's events and the import's exchange difference.
+    ['supplier_advance', 'A000001', 'Supplier Advances', null],
+    ['exchange_gain', 'R000001', 'Realised Exchange Gain', null],
+    ['exchange_loss', 'X000001', 'Realised Exchange Loss', null],
   ] as const) {
     const { rows: parents } = await ownerPool.query(
       `select id, account_type from chart_of_account where code = $1`,

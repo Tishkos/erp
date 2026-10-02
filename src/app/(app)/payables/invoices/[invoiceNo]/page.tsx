@@ -233,7 +233,7 @@ export default async function ApInvoicePage({
     today,
   );
   const stateTone =
-    paymentState === 'paid' ? 'settled' : paymentState === 'overdue' ? 'rejected' : 'submitted';
+    paymentState === 'paid' ? 'settled' : paymentState === 'overdue' ? 'rejected' : paymentState === 'part_paid' ? 'partially_executed' : 'submitted';
   // "Mark paid" — offered to whoever may post a supplier payment, on a posted
   // invoice with something still owed (D12).
   const mayMarkPaid =

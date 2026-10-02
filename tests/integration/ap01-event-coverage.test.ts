@@ -66,6 +66,8 @@ describe('ap01 · every service that touches a payable writes its story', () => 
       'landed_cost_layer_adjustment',
       'landed_cost_lock',
       'payable_event',
+      // REQ-FIX-001 FX8 (0253): booking it writes EXCHANGE_DIFFERENCE — fx3-import-invoice.
+      'payable_exchange_difference',
       'payable_hold',
       'payable_hold_update',
       // Stage 3 (0232): planning writes INSTALMENT_PLANNED; every application

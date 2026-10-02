@@ -38,6 +38,8 @@ export default async function ServiceReceiptsPage({
     requireContext(),
     outcomeOf(searchParams),
   ]);
+  // REQ-HARDEN-001 H3 — the document statuses read one shared namespace, not a copy per screen.
+  const statusOf = await getTranslations('status_order');
 
   const { principal } = context;
   if (!can(principal, 'view', receipts.PERMISSION_OBJECT)) {
@@ -127,7 +129,7 @@ export default async function ServiceReceiptsPage({
                         : row.status
                   }
                 >
-                  {t(`status_${row.status}`)}
+                  {statusOf(row.status)}
                 </span>
               </td>
               {withActions ? (

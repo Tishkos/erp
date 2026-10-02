@@ -499,13 +499,13 @@ export async function resetTestData(): Promise<void> {
     await client.query('truncate whatsapp_message, whatsapp_contact restart identity cascade');
     await client.query('delete from whatsapp_session');
     await client.query(`delete from whatsapp_setting where key like 'bridge_%'`);
-    // The values the migrations leave (0242, and 0245's group and model),
+    // The values the migrations leave (0242 and 0251's model, 0245's group),
     // and nobody's name on them: a test's administrator is deleted below,
     // and a dangling `updated_by` fails the IM1 restore on its foreign key.
     await client.query(`
       update whatsapp_setting set updated_by = null, value = case key
         when 'router_model' then 'claude-haiku-4-5-20251001'
-        when 'agent_model' then 'claude-sonnet-5'
+        when 'agent_model' then 'claude-sonnet-5-5'
         when 'group_jid' then ''
         when 'group_subject' then ''
         when 'group_queries' then 'on'
@@ -571,6 +571,8 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from landed_cost_basis where created_by is not null');
     await client.query('update landed_cost_basis set active = (code not in (\'by_weight\', \'by_volume\')) where created_by is null');
     await client.query('delete from landed_cost_type where created_by is not null');
+    // REQ-FIX-001 FX8 (0253) — the exchange differences an import closed on.
+    await client.query('delete from payable_exchange_difference');
     await client.query('truncate payable_hold_update');
     await client.query('delete from payable_hold');
     await client.query('delete from payable_order_line');

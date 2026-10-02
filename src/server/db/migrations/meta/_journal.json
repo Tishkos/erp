@@ -1233,6 +1233,27 @@
       "when": 1795900000055,
       "tag": "0250_project_close",
       "breakpoints": true
+    },
+    {
+      "idx": 176,
+      "version": "7",
+      "when": 1795900000056,
+      "tag": "0251_whatsapp_agent_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 177,
+      "version": "7",
+      "when": 1795900000057,
+      "tag": "0252_bank_transfer_journal_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 178,
+      "version": "7",
+      "when": 1795900000058,
+      "tag": "0253_import_invoice_tracking",
+      "breakpoints": true
     }
   ]
 }

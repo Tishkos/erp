@@ -363,7 +363,7 @@ export default async function PayablesSettingsPage({
                 <tbody>
                   {config.eventCodes.map((code) => (
                     <tr key={code.code}>
-                      <td>{code.laneCode}</td>
+                      <td>{admin.has(`payables.lane_${code.laneCode}`) ? admin(`payables.lane_${code.laneCode}`) : code.laneCode}</td>
                       <td>
                         <bdi dir="ltr">{code.code}</bdi>
                       </td>

@@ -105,6 +105,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   supplier_credit_memos: 'document',
   match_exceptions: 'workspace',
   pds: 'document',
+  asycuda_update: 'workspace',
   shipments: 'document',
   containers: 'list',
   loans: 'document',
@@ -230,6 +231,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   daily_position: 'report',
   cash_forecast: 'report',
   treasury_reports: 'report',
+  bank_deposits: 'document',
 
   // 14 — Fixed Assets
   asset_categories: 'document',
@@ -441,6 +443,9 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/finance/posting-mappings',
   // Treasury and Banking reporting — the balance, and what it is made of.
   '/treasury/reporting',
+  // REQ-FIX-001 FIX-1 — the deposits register, and the ASYCUDA list as its own item.
+  '/treasury/deposits',
+  '/payables/pd/asycuda',
   // §15 and §16 — open items and ageing, one screen on each side.
   '/sales/receivables',
   // REQ-AP-001 Stage 1 — the payables workbench, the payable page's list

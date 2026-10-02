@@ -32,11 +32,18 @@ import type { ActorContext } from './chart-of-accounts';
  * would appear to earn a million a day.
  *
  * They are told apart by the journal, not by a guess about the description:
- * `treasury.postTransfer` posts its entry with `source_module = 'treasury'`,
- * so a line on a bank account carrying that module is one half of a transfer
- * and every other line is real money entering or leaving the company. That is
- * a fact recorded at posting time by the code that made the movement, which is
- * the only kind of classification worth trusting.
+ * a transfer is the journal a `bank_transfer` document posted
+ * (`bank_transfer.journal_entry_id`), so a line on a bank account in that
+ * journal is one half of a transfer and every other line is real money
+ * entering or leaving the company. That is a fact recorded at posting time by
+ * the code that made the movement, which is the only kind of classification
+ * worth trusting.
+ *
+ * REQ-FIX-001 FIX-1: it used to be `source_module = 'treasury'`, which every
+ * treasury document posts with — so an other receipt, a loan drawn or repaid,
+ * its commission, a cash advance and a reconciliation adjustment all read as
+ * transfers between the company's own accounts, and none of them as money in
+ * or out. Found by the bank-deposit test.
  */
 
 export const PERMISSION_OBJECT = 'bank_account';
@@ -104,7 +111,7 @@ export async function positions(
     with movement as (
       select b.id                          as account_id,
              e.posting_date                as posting_date,
-             e.source_module               as source_module,
+             exists (select 1 from bank_transfer t where t.journal_entry_id = e.id) as is_transfer,
              l.debit_iqd                   as debit,
              l.credit_iqd                  as credit
         from bank_cash_account b
@@ -124,17 +131,17 @@ export async function positions(
            -- Money the company actually received: a debit that is not a transfer.
            coalesce(sum(m.debit) filter (
              where m.posting_date between ${window.from}::date and ${window.to}::date
-               and m.source_module is distinct from 'treasury'), 0)::text as "moneyInIqd",
+               and not m.is_transfer), 0)::text as "moneyInIqd",
            coalesce(sum(m.credit) filter (
              where m.posting_date between ${window.from}::date and ${window.to}::date
-               and m.source_module is distinct from 'treasury'), 0)::text as "moneyOutIqd",
+               and not m.is_transfer), 0)::text as "moneyOutIqd",
            -- The same money arriving from, or leaving to, another own account.
            coalesce(sum(m.debit) filter (
              where m.posting_date between ${window.from}::date and ${window.to}::date
-               and m.source_module = 'treasury'), 0)::text         as "transfersInIqd",
+               and m.is_transfer), 0)::text         as "transfersInIqd",
            coalesce(sum(m.credit) filter (
              where m.posting_date between ${window.from}::date and ${window.to}::date
-               and m.source_module = 'treasury'), 0)::text         as "transfersOutIqd",
+               and m.is_transfer), 0)::text         as "transfersOutIqd",
            coalesce(sum(m.debit - m.credit) filter (
              where m.posting_date <= ${window.to}::date), 0)::text as "closingIqd",
            max(m.posting_date)::text                               as "lastMovementDate",
@@ -167,6 +174,8 @@ export interface LedgerLine {
   readonly partyCode: string | null;
   readonly partyName: string | null;
   readonly sourceModule: string | null;
+  /** The journal a bank transfer posted — one half of money moved between own accounts. */
+  readonly isTransfer: boolean;
   readonly sourceDocId: string | null;
   /**
    * Who raised the entry, and who approved it.
@@ -285,6 +294,7 @@ export async function ledger(
              e.id::text                  as "journalEntryId",
              e.description               as "description",
              e.source_module             as "sourceModule",
+             exists (select 1 from bank_transfer t where t.journal_entry_id = e.id) as "isTransfer",
              e.source_doc_id::text       as "sourceDocId",
              l.business_partner_code      as "partyCode",
              p.legal_name                as "partyName",
@@ -317,7 +327,7 @@ export async function ledger(
     totalOut += credit;
 
     // A transfer is known by the module that posted it, never by its wording.
-    const transfer = row.sourceModule === 'treasury';
+    const transfer = row.isTransfer;
     const kind: MovementKind = transfer
       ? debit > 0n
         ? 'transfer_in'

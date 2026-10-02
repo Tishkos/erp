@@ -161,3 +161,27 @@ Standing rule (by direction, 2026-10-01; see also docs/notes/newsettings.md: "DO
 * The four reports are `print/project-reports.ts` (`BUILD`, export keys `project_cost_report`, `project_line_items`, `project_milestone_trend`, `project_earned_value`); the Reports screen draws the builder's own model, so screen and copy are one set of figures. A new role in `POSTING_MAP` needs an account in the `ops13`/`ops14`/`ops15` fixtures, which map every role.
 * Screens: `/projects/close`, `/projects/reports`, the Hours section on `/projects/progress`. Tests: `tests/integration/pm06-close.test.ts`, `tests/unit/pm06-project-close.test.ts`, `tests/e2e/projects-close.spec.ts`.
 
+## Client messages and the load run (REQ-HARDEN-001 HARDEN-4)
+
+* The root layout hands `NextIntlClientProvider` only `CLIENT_NAMESPACES` (`src/i18n/client-messages.ts`). A client component that needs another namespace adds it there; `tests/unit/hd19-client-messages.test.ts` fails on a `useTranslations` outside the list. Server components keep `getTranslations` and see everything.
+* A code shown on a screen (status, kind, lane, outcome) goes through a translation with a `.has` fallback; `tests/unit/hd18-no-raw-enum.test.ts` greps for `{x.status}` and the like. A seeded code table read by a screen gets its keys in both locales (`hd18-seeded-labels`).
+* The A21 load run is `scripts/load/seed-payables-volume.ts` (a database made for it, never `.env`'s) and `k6 run tests/load/payables.js`; `docs/RUNBOOK-host-build.md` › *Load run*. The figures live in REQ-HARDEN-001 §3.I.
+
+## Menu headings and Bank Deposits (REQ-FIX-001 FIX-1)
+
+* A module's dropdown is its sections in `MODULE_DEFINITIONS` (`erp-shell.tsx`), one heading each; a page's section tabs are the screens of its own section. Payables is `payables`, `payables_payments`, `payables_suppliers`, `payables_setup`; Logistics is `logistics_customs`, `logistics_shipping`, `logistics`; sections 21–25 are REQ-FIX-001's, after Appendix A's twenty. An item that leaves the section its route was derived from **names its route** (`href`) — routes never move with the menu (D-FX-1). `tests/unit/fx1-menu.test.ts` holds the layout.
+* Bank Deposits (`/treasury/deposits`, `services/bank-deposits.ts`) is a register over `bank_transfer` (cash → bank) and `other_receipt` (any other source) into a *bank* account; it raises, approves (not by the raiser) and posts through those documents' own services. Bank and Cash Reporting tells a transfer by `bank_transfer.journal_entry_id`, never by `source_module`.
+* Two forms in one page must not share field names (`f-<name>` ids); the dialog's title id is per dialog (`useId`).
+
+## Availability and the password screen (REQ-FIX-001 FIX-2)
+
+* `/inventory/availability` reads `services/availability.ts` (the `stock_position` view, which has no row-level security of its own, so the branch rule is applied in the query — keep it there). Issuing is `execute` on `inventory_movement`, from a dialog, with the warehouse's branch.
+* `/password` is `src/app/password/` — outside `(app)`, drawn with `sign-in.module.css` like sign-in. `RESTRICTION_ROUTE.password` still names it; `PasswordField` takes `name`, `autoComplete` and `hint`.
+
+## The import and its invoices (REQ-FIX-001 FIX-3)
+
+* `ap-invoice.post` applies the deposits of the invoice's own import (`supplier-advance.applyToPostedInvoice`, authorised by the posting). An advance raised by hand against an order is the accountant's (D-FX-6).
+* `payables.refreshFromInvoices` sets `amount_txn` from the posted invoices when the payable is in IQD; a foreign-currency import keeps its agreed amount and closes on `services/import-exchange.ts` (`payables.exchange_difference`: supplier payable, supplier advance, exchange gain/loss) when `payment-applications.confirm` makes it fully paid — in a savepoint, so an unmapped role leaves the payment confirmed and an `EXCHANGE_DIFFERENCE` "waits" event; `settleExchangeDifference` books it later. One `payable_exchange_difference` row per document closed.
+* The supplier advance's three events are on `POSTING_MAP`; a new role there needs an account in the `ops13/14/15` fixtures.
+* Invoice Status Tracking (`supplier-shipment`) excludes `is_import` invoices and refuses to advance one.
+

@@ -118,6 +118,38 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     event: 'purchasing.supplier_payment',
     lines: [line('supplier_payable', 'debit', true, 'supplier')],
   },
+  // REQ-FIX-001 FIX-3 — the supplier advance posted under these three events
+  // from the start, but they were never listed here, so they could not be
+  // mapped on the screen and a deposit could not post. The bank side is the
+  // account the money left (a property of the payment) unless none is named.
+  {
+    // Money paid to a supplier before the invoice — a deposit on an import.
+    event: 'purchasing.supplier_advance_payment',
+    lines: [line('supplier_advance', 'debit', true), line('bank', 'credit')],
+  },
+  {
+    // The deposit applied to the invoice it was paid ahead of (§8.5, FX6).
+    event: 'purchasing.supplier_advance_settlement',
+    lines: [line('supplier_payable', 'debit', true, 'supplier'), line('supplier_advance', 'credit', true)],
+  },
+  {
+    // The supplier gives the deposit back.
+    event: 'purchasing.supplier_advance_refund',
+    lines: [line('bank', 'debit'), line('supplier_advance', 'credit', true)],
+  },
+  {
+    // REQ-FIX-001 FX8 — an import agreed in a foreign currency, fully paid in
+    // it: what its dinar invoices still owe is a gain, what was paid over them
+    // a loss. The supplier side either way; an unused deposit closes on the
+    // advance account.
+    event: 'payables.exchange_difference',
+    lines: [
+      line('supplier_payable', 'either', true, 'supplier'),
+      line('supplier_advance', 'credit'),
+      line('exchange_gain', 'credit'),
+      line('exchange_loss', 'debit'),
+    ],
+  },
   {
     event: 'purchasing.supplier_credit_memo',
     lines: [

@@ -501,3 +501,36 @@ export const payablesMigrationRun = pgTable('payables_migration_run', {
   signedOffAt: timestamp('signed_off_at', { withTimezone: true }),
   signOffNote: text('sign_off_note'),
 });
+
+/**
+ * REQ-FIX-001 FX8 (0253) — the dinars an import agreed in a foreign currency
+ * closes on once it is fully paid in that currency: what an invoice still
+ * owed (a gain) or what a payment or deposit was over them (a loss). One row
+ * per document closed, append-only.
+ */
+export const payableExchangeDifference = pgTable(
+  'payable_exchange_difference',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    payableId: uuid('payable_id')
+      .notNull()
+      .references(() => payable.id),
+    kind: text('kind', { enum: ['gain', 'loss'] }).notNull(),
+    sourceType: text('source_type', { enum: ['ap_invoice', 'supplier_payment', 'supplier_advance'] }).notNull(),
+    sourceId: uuid('source_id').notNull(),
+    sourceNo: text('source_no').notNull(),
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+    journalEntryId: uuid('journal_entry_id').notNull(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('payable_exchange_difference_payable_idx').on(t.payableId),
+    index('payable_exchange_difference_journal_idx').on(t.journalEntryId),
+    check('payable_exchange_difference_kind', sql`${t.kind} in ('gain', 'loss')`),
+    check('payable_exchange_difference_source', sql`${t.sourceType} in ('ap_invoice', 'supplier_payment', 'supplier_advance')`),
+    check('payable_exchange_difference_positive', sql`${t.amountIqd} > 0`),
+  ],
+);

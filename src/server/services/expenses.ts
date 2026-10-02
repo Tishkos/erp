@@ -31,9 +31,14 @@ import * as audit from './audit';
 import * as authz from './authorization';
 import * as payments from './supplier-payment';
 
-export type PaymentState = 'draft' | 'unpaid' | 'paid' | 'overdue' | 'reversed';
+export type PaymentState = 'draft' | 'unpaid' | 'part_paid' | 'paid' | 'overdue' | 'reversed';
 
-/** Unpaid / Paid / Overdue from what the invoice already holds. */
+/**
+ * Unpaid / Part paid / Paid / Overdue from what the invoice already holds.
+ * REQ-FIX-001 FIX-3: *Part paid* is its own state — a deposit applied or an
+ * instalment paid read as *Unpaid* before. Overdue still wins: part paid
+ * past its date is overdue.
+ */
 export function paymentState(
   invoice: { status: string; dueDate: string | null; totalIqd: string; settledAmountIqd: string },
   today: string,
@@ -46,7 +51,8 @@ export function paymentState(
   const settled = parseDecimal(invoice.settledAmountIqd, 4n);
   if (total > 0n && settled >= total) return 'paid';
   if (invoice.status === 'settled') return 'paid';
-  return invoice.dueDate && invoice.dueDate < today ? 'overdue' : 'unpaid';
+  if (invoice.dueDate && invoice.dueDate < today) return 'overdue';
+  return settled > 0n ? 'part_paid' : 'unpaid';
 }
 
 /** Whole days between two ISO dates (b − a). */
