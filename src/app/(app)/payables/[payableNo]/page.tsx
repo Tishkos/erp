@@ -20,6 +20,7 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { Attachments } from '@/components/admin/attachments';
 import { RecordHistory } from '@/components/admin/history';
+import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
 import * as papers from '@/server/services/payable-papers';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { StopDialog } from '@/components/admin/stop-dialog';
@@ -54,7 +55,7 @@ import {
   updateHold,
   updatePiLines,
 } from '../actions';
-import { createApplication, planInstalmentsAction } from '../payment-applications/actions';
+import { createApplication } from '../payment-applications/actions';
 import { registerPd } from '../pd/actions';
 import { pdChip } from '../pd/status';
 import { createBlAction } from '../shipments/actions';
@@ -300,6 +301,28 @@ export default async function PayablePage({
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
 
       <DocumentWindow
+        titleActions={
+          <>
+            <AttachmentsButton
+              closeLabel={admin('close')}
+              count={found.attachments.rows.length}
+              label={t('tab_attachments')}
+              title={t('tab_attachments')}
+            >
+              <Attachments
+                preloaded={found.attachments}
+                action={attachToPayable}
+                hidden={{ payable_no: row.payableNo }}
+                mayAttach={mayEdit}
+                objectId={row.id}
+                objectType={payables.PERMISSION_OBJECT}
+              />
+            </AttachmentsButton>
+            <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
+              <RecordHistory objectId={row.id} objectType={payables.PERMISSION_OBJECT} preloaded={found.history} />
+            </HistoryButton>
+          </>
+        }
         actions={
           mayEdit && !row.cancelledAt && !row.closedAt && mayCancel ? (
             <ReasonForm
@@ -641,65 +664,6 @@ export default async function PayablePage({
               </div>
             ) : null}
 
-            <div className={s.sapTableWrap}>
-              <table aria-label={pa('instalments')} className={s.sapTable}>
-                <thead>
-                  <tr>
-                    <th scope="col">#</th>
-                    <th scope="col">{pa('instalment')}</th>
-                    <th scope="col">{pa('trigger')}</th>
-                    <th scope="col">{pa('expected_date')}</th>
-                    <th className={s.sapNum} scope="col">
-                      {pa('share')}
-                    </th>
-                    <th className={s.sapNum} scope="col">
-                      {pa('col_amount')}
-                    </th>
-                    <th scope="col">{pa('col_status')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {instalments.length === 0 ? (
-                    <tr>
-                      <td className={s.sapEmptyRow} colSpan={7}>
-                        {pa('no_instalments')}
-                      </td>
-                    </tr>
-                  ) : null}
-                  {instalments.map((instalment) => (
-                    <tr key={instalment.id}>
-                      <td>{instalment.sequence}</td>
-                      <td>
-                        <bdi dir="auto">{instalment.label}</bdi>
-                      </td>
-                      <td>
-                        <bdi dir="auto">
-                          {instalment.triggerName}
-                          {instalment.triggerDays !== null ? ` · ${instalment.triggerDays}` : ''}
-                        </bdi>
-                      </td>
-                      <td>
-                        <bdi dir="ltr">{day(instalment.expectedDate)}</bdi>
-                      </td>
-                      <td className={s.sapNum}>
-                        <bdi dir="ltr">{instalment.percent ? `${Number(instalment.percent)}%` : '—'}</bdi>
-                      </td>
-                      <td className={s.sapNum}>
-                        <bdi dir="ltr">{money(instalment.amountTxn)}</bdi>
-                      </td>
-                      <td>
-                        <span
-                          className={`status status--${instalment.status === 'paid' ? 'settled' : instalment.status === 'applied' ? 'submitted' : 'draft'}`}
-                          data-status={instalment.status === 'paid' ? 'settled' : instalment.status === 'applied' ? 'submitted' : 'draft'}
-                        >
-                          {pa(`instalment_${instalment.status}`)}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
 
             <div className={s.sapTableWrap}>
               <table aria-label={pa('section_applications')} className={s.sapTable}>
@@ -827,98 +791,6 @@ export default async function PayablePage({
                     wide
                   >
                     <p className="muted">{pa('plan_note', { amount: money(row.amountTxn) })}</p>
-                    <Form action={planInstalmentsAction}>
-                      <Hidden name="payable_no" value={row.payableNo} />
-                      <input name="row_count" type="hidden" value="6" />
-                      <div className={s.sapTableWrap}>
-                        <table className={s.sapTable}>
-                          <thead>
-                            <tr>
-                              <th scope="col">{pa('instalment')}</th>
-                              <th scope="col">{pa('basis')}</th>
-                              <th scope="col">{pa('value')}</th>
-                              <th scope="col">{pa('trigger')}</th>
-                              <th scope="col">{pa('trigger_days')}</th>
-                              <th scope="col">{pa('expected_date')}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {[0, 1, 2, 3, 4, 5].map((index) => {
-                              const current = instalments.filter((i) => i.status === 'planned')[index];
-                              return (
-                                <tr key={index}>
-                                  <td>
-                                    <input
-                                      aria-label={`${pa('instalment')} ${index + 1}`}
-                                      className={s.input}
-                                      defaultValue={current?.label ?? (index === 0 ? pa('deposit') : index === 1 ? pa('balance') : '')}
-                                      name={`label_${index}`}
-                                    />
-                                  </td>
-                                  <td>
-                                    <select
-                                      aria-label={`${pa('basis')} ${index + 1}`}
-                                      className={s.select}
-                                      defaultValue={current?.basis ?? 'percent'}
-                                      name={`basis_${index}`}
-                                    >
-                                      <option value="percent">{pa('basis_percent')}</option>
-                                      <option value="amount">{pa('basis_amount')}</option>
-                                    </select>
-                                  </td>
-                                  <td>
-                                    <input
-                                      aria-label={`${pa('value')} ${index + 1}`}
-                                      className={s.input}
-                                      defaultValue={
-                                        current ? (current.basis === 'percent' ? Number(current.percent).toString() : current.amountTxn) : ''
-                                      }
-                                      inputMode="decimal"
-                                      name={`value_${index}`}
-                                    />
-                                  </td>
-                                  <td>
-                                    <select
-                                      aria-label={`${pa('trigger')} ${index + 1}`}
-                                      className={s.select}
-                                      defaultValue={current?.triggerCode ?? (index === 0 ? 'on_order' : 'against_bl_copy')}
-                                      name={`trigger_${index}`}
-                                    >
-                                      {pickers.triggers.map((trigger) => (
-                                        <option key={trigger.code} value={trigger.code}>
-                                          {trigger.name}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </td>
-                                  <td>
-                                    <input
-                                      aria-label={`${pa('trigger_days')} ${index + 1}`}
-                                      className={s.input}
-                                      defaultValue={current?.triggerDays ?? ''}
-                                      inputMode="numeric"
-                                      name={`days_${index}`}
-                                    />
-                                  </td>
-                                  <td>
-                                    <input
-                                      aria-label={`${pa('expected_date')} ${index + 1}`}
-                                      className={`${s.input} ${s.dateInput}`}
-                                      defaultValue={current?.expectedDate ?? ''}
-                                      name={`expected_${index}`}
-                                      type="date"
-                                    />
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                      <SubmitRow>
-                        <Submit label={pa('plan_save')} />
-                      </SubmitRow>
-                    </Form>
                   </NewRecordDialog>
 
                   <NewRecordDialog
@@ -1744,72 +1616,6 @@ export default async function PayablePage({
         </div>
       </section>
 
-      {/* ── Attachments & history ────────────────────────────────────── */}
-      <section aria-label={t('tab_attachments')} className={s.sapDoc}>
-        <div className={s.sapWindow}>
-          <Attachments
-            preloaded={found.attachments}
-            action={attachToPayable}
-            hidden={{ payable_no: row.payableNo }}
-            mayAttach={mayEdit}
-            objectId={row.id}
-            objectType={payables.PERMISSION_OBJECT}
-          />
-        </div>
-      </section>
-      {/*
-        The import's whole paper trail.
-
-        Each file stays on the document somebody put it on — that is where it
-        belongs and where it is removed from. This is the one list that says
-        the import has it at all, which nobody could see before.
-      */}
-      {allPapers.length > 0 ? (
-        <section aria-labelledby="payable-papers-title" className={`${s.sapDoc} ${s.sapRegister}`}>
-          <div className={s.sapWindow}>
-            <h2 className={s.sapTitle} id="payable-papers-title">
-              <span>{t('papers_title')}</span>
-              <span className={s.sapTitleMeta}>{t('papers_count', { count: allPapers.length })}</span>
-            </h2>
-            <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
-              <table aria-labelledby="payable-papers-title" className={`${s.sapTable} ${s.sapRegisterTable}`}>
-                <thead>
-                  <tr>
-                    <th scope="col">{t('papers_file')}</th>
-                    <th scope="col">{t('papers_source')}</th>
-                    <th scope="col">{t('papers_added')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allPapers.map((paper) => (
-                    <tr key={paper.id}>
-                      <td>
-                        <Link className={s.sapLink} href={`/attachments/${encodeURIComponent(paper.id)}`}>
-                          <bdi dir="auto">{paper.fileName}</bdi>
-                        </Link>
-                      </td>
-                      <td>
-                        {paper.href ? (
-                          <Link className={s.sapLink} href={paper.href}>
-                            <bdi dir="auto">{`${paper.source} ${paper.sourceNo}`}</bdi>
-                          </Link>
-                        ) : (
-                          <bdi dir="auto">{`${paper.source} ${paper.sourceNo}`}</bdi>
-                        )}
-                      </td>
-                      <td>
-                        <bdi dir="ltr">{formatBusinessDate(paper.createdAt.toISOString().slice(0, 10), locale as Locale)}</bdi>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      <RecordHistory objectId={row.id} objectType={payables.PERMISSION_OBJECT} preloaded={found.history} />
     </AdminPage>
   );
 }

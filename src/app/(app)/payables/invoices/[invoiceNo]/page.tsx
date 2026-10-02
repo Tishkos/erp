@@ -393,7 +393,7 @@ export default async function ApInvoicePage({
             ) : null}
           </>
         }
-        attachments={
+        titleActions={
           <AttachmentsButton
             closeLabel={t('close')}
             count={attached.length}

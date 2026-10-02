@@ -54,7 +54,7 @@ export function DocumentWindow({
   children,
   actions,
   totals = [],
-  attachments,
+  titleActions,
   auditHref,
   auditLabel,
   id = 'document',
@@ -78,11 +78,12 @@ export function DocumentWindow({
   readonly totals?: readonly DocumentTotal[];
   readonly auditHref?: string | undefined;
   /**
-   * The paperwork, as a door in the title bar beside the history — the shape
-   * journals have had since they were written. A document that cannot hold
-   * the paper it stands for leaves the paper somewhere else.
+   * The small doors in the title bar — the paperclip, the clock, whatever a
+   * document has but is not. The shape journals have had since they were
+   * written: the document is the document, and everything about it opens over
+   * it rather than running on underneath it.
    */
-  readonly attachments?: ReactNode;
+  readonly titleActions?: ReactNode;
   readonly auditLabel?: string | undefined;
   readonly id?: string;
 }) {
@@ -98,9 +99,9 @@ export function DocumentWindow({
               <bdi dir="ltr">{number}</bdi>
             </span>
           </span>
-          {attachments || (auditHref && auditLabel) ? (
+          {titleActions || (auditHref && auditLabel) ? (
             <span className={admin.sapTitleActions}>
-              {attachments}
+              {titleActions}
               {auditHref && auditLabel ? (
                 <Link className={admin.sapIconButton} href={auditHref} title={auditLabel}>
                   <History aria-hidden="true" />

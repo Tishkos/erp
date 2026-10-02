@@ -5643,6 +5643,24 @@
   margin: 0;
 }
 
+/*
+ * A document window standing in that grid fills its cell.
+ *
+ * The import's four lanes sit side by side (2026-10-03). A grid cell already
+ * stretches to the tallest in its row, but the window inside it keeps its own
+ * height, so four lanes of different lengths drew four boxes with white space
+ * under the short ones. Scoped to a window inside the grid: nothing else that
+ * uses `.chartGrid` holds one.
+ */
+.chartGrid > .sapDoc {
+  display: flex;
+}
+
+.chartGrid > .sapDoc > .sapWindow {
+  flex: 1;
+  margin-block-end: 0;
+}
+
 .chartFigure {
   /* Each card is as tall as its own content. Stretching them to the tallest in
      the row leaves a short chart floating in a half-empty box. */
