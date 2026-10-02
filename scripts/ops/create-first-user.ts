@@ -64,10 +64,28 @@ async function main(): Promise<void> {
     // below are not refused by the policies they are creating the first row of.
     await applyScope(tx, { userId: id, branchCode: '', isSuperUser: true });
 
+    // The branch, its warehouse, and the branch pointed at it — all three in
+    // this transaction, because `branch_has_defaults` is deferred and judged
+    // at COMMIT: "create the branch and its warehouse together". A warehouse
+    // belongs to a branch, so the branch genuinely cannot name one at the
+    // instant it is inserted.
+    //
+    // `branch` carries no "default" of its own — which branch a person works
+    // in is a property of their scope row below, not of the branch.
     await tx.execute(sql`
-      insert into branch (code, name, is_default, active)
-      values (${branchCode}, ${branchName}, true, true)
+      insert into branch (code, name, active)
+      values (${branchCode}, ${branchName}, true)
       on conflict (code) do nothing`);
+
+    const warehouseCode = `WH-${branchCode}`;
+    await tx.execute(sql`
+      insert into warehouse (code, name, branch_code, warehouse_type, active)
+      values (${warehouseCode}, ${`${branchName} store`}, ${branchCode}, 'main', true)
+      on conflict (code) do nothing`);
+
+    await tx.execute(sql`
+      update branch set default_warehouse_code = ${warehouseCode}
+       where code = ${branchCode} and default_warehouse_code is null`);
 
     await tx.execute(sql`
       insert into app_user (id, email, display_name, is_super_user, is_active)
@@ -88,7 +106,7 @@ async function main(): Promise<void> {
 
   console.log('');
   console.log(`  created ${displayName} <${email}>`);
-  console.log(`  branch  ${branchCode} — ${branchName} (default)`);
+  console.log(`  branch  ${branchCode} — ${branchName}, with warehouse WH-${branchCode}`);
   console.log(`  roles   super user, ${ROLES.join(', ')}`);
   console.log('');
   console.log(`  temporary password:  ${password}`);
