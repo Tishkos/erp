@@ -174,6 +174,18 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     lines: [line('landed_cost_clearing', 'debit'), line('bank_commission', 'debit')],
   },
   {
+    // REQ-LEGACY-001 — the partners' balances from the old books, posted
+    // once at the cut-over: what each customer owed and each supplier was
+    // owed, against the same equity line the opening stock opens against.
+    // Debit or credit per partner, as the old books had it.
+    event: 'legacy.opening_balance',
+    lines: [
+      line('customer_receivable', 'either', true, 'customer'),
+      line('supplier_payable', 'either', true, 'supplier'),
+      line('opening_balance', 'either', true),
+    ],
+  },
+  {
     // REQ-AP-001 §20.2 — the import's landed cost locked: the clearing account
     // the charges were parked on is emptied into the stock they bought (the
     // item's inventory account) and, for what is already sold, cost of sales

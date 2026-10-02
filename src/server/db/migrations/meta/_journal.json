@@ -1149,6 +1149,13 @@
       "when": 1795900000043,
       "tag": "0239_improve_operations",
       "breakpoints": true
+    },
+    {
+      "idx": 164,
+      "version": "7",
+      "when": 1795900000044,
+      "tag": "0240_legacy_books_import",
+      "breakpoints": true
     }
   ]
 }

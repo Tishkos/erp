@@ -90,3 +90,9 @@ Standing rule (by direction, 2026-10-01; see also newsettings.md: "DO NOT CHANGE
 * The host, the environment keys, nginx, pm2, the crontab and the escrow are `docs/RUNBOOK-host-build.md`; backups, drill and recovery are `docs/RUNBOOK-database-recovery.md`. A release is `docs/RELEASE.md` (version, CHANGELOG, tag, deploy from `main`).
 * `vitest` is pinned at 4.1.10 (B-IM-6): npm 10 cannot resolve 4.1.11's peer set, and the server's npm 10 rejects a lock from npm 11. Do not "fix" the audit by bumping it without checking `npm ci --dry-run`.
 
+## Legacy books import (REQ-LEGACY-001)
+
+* `src/server/domain/legacy-books.ts` reads the old system's export as data (header recognition, Arabic amounts/units/dates); `src/server/xls-read.ts` reads BIFF8 `.xls` with nothing but Node; `services/legacy-import.ts` dry-runs and applies. The partner code is the old account number; dollar balances post in dinars at the old books' implied rate (B-LG-3); opening stock is raised and submitted, never approved by the import (B-LG-2); the in-transit warehouse and negative quantities are never stock.
+* The posting event `legacy.opening_balance` reuses the `customer_receivable`, `supplier_payable` and `opening_balance` roles; 0240 copies their rules.
+* `legacy_document` and `legacy_import_run` are in `resetTestData`. Do not re-post the old registers as documents: the balances already carry the position.
+

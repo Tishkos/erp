@@ -436,6 +436,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('system_parameters', 'system_parameter', '/administration/parameters'),
       page('background_jobs', 'job', '/administration/jobs'),
       page('backup_health', 'system_health'),
+      // REQ-LEGACY-001 — the old system's books, once.
+      page('legacy_import', 'legacy_import', '/administration/legacy-import'),
     ],
   },
   {

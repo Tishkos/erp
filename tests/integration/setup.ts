@@ -459,6 +459,9 @@ export async function resetTestData(): Promise<void> {
     await client.query('truncate payable_event');
     // Stage 8 (0237) — the sheet import's runs and their sign-off.
     await client.query('delete from payables_migration_run');
+    // REQ-LEGACY-001 — the old books' history and the runs that wrote it.
+    await client.query('delete from legacy_document');
+    await client.query('delete from legacy_import_run');
     // Stage 6 (0235) — what the loans funded, their schedules, the loans.
     await client.query('delete from bank_loan_allocation');
     await client.query('delete from bank_loan_instalment');

@@ -80,3 +80,4 @@ export * from './customs';
 export * from './shipments';
 export * from './loans';
 export * from './landed-cost';
+export * from './legacy';
