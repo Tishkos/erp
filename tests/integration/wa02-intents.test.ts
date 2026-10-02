@@ -133,6 +133,7 @@ const ask = (text: string, settings?: Partial<Parameters<typeof wa.answer>[0]['s
             groupQueries: true,
             groupNotifications: true,
             groupDigest: true,
+            groupOnly: true,
             ...settings,
           },
         }

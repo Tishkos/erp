@@ -219,6 +219,17 @@ async function handleInbound(
     log(`inbound from ${e164} in ${groupJid}: ignored (not the registered group)`);
     return;
   }
+  // Questions belong in the group: an answer in a private chat is an answer
+  // nobody else saw. Read, logged, and left — the group is the record.
+  if (!groupJid && settings.groupJid && settings.groupOnly) {
+    await withScope(scope, async (tx) => {
+      const sender = await wa.resolveNumber(tx, e164);
+      const id = await wa.recordInbound(tx, { e164, body: text, waMessageId: message.key.id ?? null, sender, groupJid: null });
+      await wa.finishInbound(tx, id, { status: 'refused', intent: 'none', detail: { reason: 'direct messages are not answered; ask in the group' } });
+    });
+    log(`inbound from ${e164}: direct message ignored (questions belong in the group)`);
+    return;
+  }
 
   // 1. Who is this, and may they ask? Logged either way; silence otherwise.
   const { inboundId, sender, allowed } = await withScope(scope, async (tx) => {

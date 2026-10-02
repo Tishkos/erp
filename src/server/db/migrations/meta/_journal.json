@@ -1191,6 +1191,13 @@
       "when": 1795900000049,
       "tag": "0245_whatsapp_group_and_actions",
       "breakpoints": true
+    },
+    {
+      "idx": 170,
+      "version": "7",
+      "when": 1795900000050,
+      "tag": "0246_whatsapp_group_only",
+      "breakpoints": true
     }
   ]
 }

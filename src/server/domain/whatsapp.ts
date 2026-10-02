@@ -399,6 +399,15 @@ export interface BotSettings {
   readonly groupNotifications: boolean;
   /** The morning digest is posted to the group. */
   readonly groupDigest: boolean;
+  /**
+   * Questions are answered in the group and nowhere else.
+   *
+   * On, because an answer in a private chat is an answer nobody else in the
+   * company saw: the group is the record of what was asked and what the
+   * system said. A direct message is read, logged and left unanswered, with
+   * the same silence an unlisted number gets.
+   */
+  readonly groupOnly: boolean;
 }
 
 export const SETTING_KEYS = [
@@ -415,6 +424,7 @@ export const SETTING_KEYS = [
   'group_queries',
   'group_notifications',
   'group_digest',
+  'group_only',
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
@@ -432,6 +442,7 @@ export const DEFAULT_SETTINGS: BotSettings = {
   groupQueries: true,
   groupNotifications: true,
   groupDigest: true,
+  groupOnly: true,
 };
 
 export class WhatsappValidationError extends Error {
@@ -480,6 +491,7 @@ export function settingsFrom(rows: ReadonlyArray<{ readonly key: string; readonl
     groupQueries: flag('group_queries', DEFAULT_SETTINGS.groupQueries),
     groupNotifications: flag('group_notifications', DEFAULT_SETTINGS.groupNotifications),
     groupDigest: flag('group_digest', DEFAULT_SETTINGS.groupDigest),
+    groupOnly: flag('group_only', DEFAULT_SETTINGS.groupOnly),
   };
 }
 
@@ -516,6 +528,7 @@ export function validateSetting(key: string, value: string): { readonly key: Set
     case 'group_queries':
     case 'group_notifications':
     case 'group_digest':
+    case 'group_only':
       return { key: k, value: raw === 'on' || raw === 'true' || raw === '1' || raw === 'yes' ? 'on' : 'off' };
   }
 }
