@@ -76,6 +76,10 @@ export async function createUser(formData: FormData): Promise<void> {
       branchCodes: list(formData, 'branchCodes'),
       defaultBranchCode: text(formData, 'defaultBranchCode') || null,
       departmentCodes: list(formData, 'departmentCodes'),
+      // REQ-FIX-001 FIX-5 — ticked by default; unticked, the account is only a sign-in.
+      employee: flag(formData, 'alsoEmployee')
+        ? { departmentCode: text(formData, 'employeeDepartmentCode') || null, positionCode: text(formData, 'employeePositionCode') || null }
+        : null,
     }),
   );
   if (!outcome.ok) redirect(withQuery(LIST, 'error', outcome.error!));

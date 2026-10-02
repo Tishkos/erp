@@ -129,8 +129,10 @@ test.describe('Phase 0 · the administration screens read and write the database
     await page.waitForTimeout(800);
     await page.getByRole('textbox', { name: 'Email', exact: true }).fill(email);
     await page.getByRole('textbox', { name: 'Display name', exact: true }).fill(`User ${RUN}`);
-    await page.getByLabel(/Accounting Officer/).check();
+    // Roles are the CEO's to give (by direction); the administrator scopes the account.
     await page.getByLabel(/HQ ·/).check();
+    // REQ-FIX-001 FIX-5: the user is also an employee (ticked by default) and needs a department.
+    await page.locator('select[name="employeeDepartmentCode"]').selectOption({ index: 1 });
     await page.getByRole('button', { name: 'Create' }).click();
     await page.waitForURL(new RegExp('\\/administration\\/users\\/[a-f0-9-]+\\?saved=1'), { timeout: 60_000 });
     await page.waitForLoadState('networkidle');
@@ -138,7 +140,6 @@ test.describe('Phase 0 · the administration screens read and write the database
     // Shown once, and long enough for the policy.
     const secret = await page.locator('code').first().innerText();
     expect(secret.length).toBeGreaterThanOrEqual(12);
-    await expect(page.getByText('accounting_officer', { exact: true })).toBeVisible();
     await expect(page.getByText('HQ · Head Office', { exact: true })).toBeVisible();
 
     // The form posts through a server action; give hydration a moment after the navigation.
@@ -151,6 +152,9 @@ test.describe('Phase 0 · the administration screens read and write the database
 
   test('5 · Roles and Permissions — a role is created and given grants by section and action', async ({ page }) => {
     const code = `role_${RUN.toLowerCase()}`;
+    // Roles are the CEO's to create and grant (by direction); the administrator sees them.
+    await page.context().clearCookies();
+    await signIn(page, { email: 'ceo@example.com', password: 'Ledger-Trial-Balance-7' });
     await page.goto('/administration/roles');
     await page.getByRole('button', { name: 'New role' }).click();
     await page.waitForTimeout(800);
@@ -190,8 +194,9 @@ test.describe('Phase 0 · the administration screens read and write the database
 
   test('10 · Record History — the audit trail shows what this run did, by whom', async ({ page }) => {
     await page.goto(`/administration/audit?q=BR${RUN}`);
-    await expect(page.getByText('branch.created', { exact: true })).toBeVisible();
-    await expect(page.getByText('branch.deactivated', { exact: true })).toBeVisible();
+    // The trail names the action in words (REQ-HARDEN-001 HD18), not its code.
+    await expect(page.getByRole('cell', { name: 'Branch created', exact: true })).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Branch closed', exact: true })).toBeVisible();
     await expect(page.getByRole('cell', { name: 'System Administrator' }).first()).toBeVisible();
   });
 });

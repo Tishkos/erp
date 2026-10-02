@@ -24,6 +24,7 @@ import { can, isCeo } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as branches from '@/server/services/branches';
 import * as departments from '@/server/services/departments';
+import * as hrSettings from '@/server/services/hr-settings';
 import * as roles from '@/server/services/roles';
 import * as users from '@/server/services/users';
 import { createUser } from './actions';
@@ -50,6 +51,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Search
     roles: isCeo(principal) ? await roles.listAll(tx) : [],
     branches: mayCreate ? await branches.listAll(tx) : [],
     departments: mayCreate ? await departments.listAll(tx) : [],
+    positions: mayCreate ? await hrSettings.positions(tx) : [],
   }));
 
   const shown = data.rows.filter((row) => matches(row, outcome.q));
@@ -120,6 +122,23 @@ export default async function UsersPage({ searchParams }: { searchParams: Search
                     label={t('users.default_branch')}
                     name="defaultBranchCode"
                     options={data.branches.filter((b) => b.active).map((b) => ({ value: b.code, label: b.code }))}
+                  />
+                </Grid>
+                {/* REQ-FIX-001 FIX-5 — the person behind the account, in HR with it. */}
+                <Checkbox defaultChecked label={t('users.also_employee')} name="alsoEmployee" />
+                <Grid>
+                  <Select
+                    emptyLabel={t('users.employee_department_first')}
+                    hint={t('users.also_employee_hint')}
+                    label={t('users.employee_department')}
+                    name="employeeDepartmentCode"
+                    options={data.departments.filter((d) => d.active).map((d) => ({ value: d.code, label: `${d.code} · ${d.name}` }))}
+                  />
+                  <Select
+                    emptyLabel={t('none')}
+                    label={t('users.employee_position')}
+                    name="employeePositionCode"
+                    options={data.positions.filter((p) => p.active).map((p) => ({ value: p.code, label: `${p.code} · ${p.titleEn}` }))}
                   />
                 </Grid>
                 <SubmitRow>

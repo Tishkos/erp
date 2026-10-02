@@ -192,3 +192,9 @@ Standing rule (by direction, 2026-10-01; see also docs/notes/newsettings.md: "DO
 * A purchase line carries the unit it was bought in; stock, cost layers and the payable's quantity are in the base unit — convert with `item-units.toBaseQuantity` / `domain/uom.toBaseExact` (refused when it does not divide), cost per base unit with `costPerBase`. A line from an order keeps the order's unit. Goods receipts and goods returns convert the same way.
 * A sale is written in the base unit (D-FX-8); `ar.createDirect` refuses another. Selling in other units is a later stage across sales orders, delivery notes, pick lists and returns.
 * Tests: `tests/integration/fx4-units.test.ts`, `tests/e2e/fx4-units.spec.ts` (adds BOX = 24 to ITM-SEED on the dev database).
+
+## HR structure and the user link (REQ-FIX-001 FIX-5)
+
+* A new user is also an employee unless the form's *Also an employee* is unticked: `users.create` → `employees.createForUser` in the same transaction (the user grant suffices — D-FX-9), the user's default branch, the chosen or first ticked department, hired today. `employees.ensureForUsers` / `scripts/ops/ensure-user-employees.ts [--apply]` backfills existing active users once; `deploy.sh` runs it after the migrations.
+* HR menu order is the sponsor's (`tests/unit/fx5-hr-menu.test.ts`); unbuilt items keep derived routes until their stage (REQ-HR-001 §11a lists what is left — set aside by the sponsor for now). `/hr/departments` and `/hr/positions` read `services/hr-structure.ts`; positions are written by `hr-settings.ts`, code minted from `POSITION_CODE` (0255). `/hr/organisation` redirects to Departments.
+* Tests: `tests/integration/fx5-hr-structure.test.ts`, `tests/e2e/fx5-hr.spec.ts`.

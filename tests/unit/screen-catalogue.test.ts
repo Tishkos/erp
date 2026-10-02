@@ -99,9 +99,12 @@ describe('the screen catalogue covers the approved tree', () => {
     // eight new items — less the module-settings placeholder they replace;
     // plus REQ-AP-001 Stage 8's Sheet Migration (§24.3); plus REQ-LEGACY-001's
     // Legacy Books Import and REQ-HR-001's HR Settings (2026-10-02); plus
-    // REQ-FIX-001 FIX-1's Bank Deposits and the ASYCUDA list as its own item.
-    expect(allMenuItems()).toHaveLength(237);
-    expect(Object.keys(SCREENS)).toHaveLength(237);
+    // REQ-FIX-001 FIX-1's Bank Deposits and the ASYCUDA list as its own item;
+    // plus FIX-5's HR menu in the sponsor's order — Dashboard, Departments,
+    // Positions, Recruitment, Performance, Employee Requests and Documents in,
+    // Organisation, Payslips, Expense Claims, Travel and Asset Assignment out.
+    expect(allMenuItems()).toHaveLength(239);
+    expect(Object.keys(SCREENS)).toHaveLength(239);
   });
 
   it('uses only declared archetypes', () => {
@@ -118,8 +121,9 @@ describe('the screen catalogue covers the approved tree', () => {
       (sum, item) => sum + screenCount(archetypeOf(item.key)!),
       0,
     );
-    // + Bank Deposits (a document, two) + the ASYCUDA list (a workspace, one).
-    expect(total).toBe(350);
+    // + Bank Deposits (a document, two) + the ASYCUDA list (a workspace, one);
+    // FIX-5: + 1 + 2 + 2 + 2 + 2 + 2 + 1 in, − 1 − 1 − 2 − 2 − 2 out.
+    expect(total).toBe(354);
   });
 });
 
@@ -172,7 +176,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(237);
+    expect(screenRoutes().size).toBe(239);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -212,8 +216,9 @@ describe('every screen has one address', () => {
       '/finance/posting-mappings',
       '/finance/reversals',
       '/finance/trial-balance',
+      '/hr/departments',
       '/hr/employees',
-      '/hr/organisation',
+      '/hr/positions',
       '/inventory/availability',
       // Operations build — block 7's Warehouses Report.
       '/inventory/fifo-valuation',

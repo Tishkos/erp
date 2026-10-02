@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
@@ -27,6 +28,7 @@ import { AdminNotFoundError } from '@/server/services/administration';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as branches from '@/server/services/branches';
 import * as departments from '@/server/services/departments';
+import * as employees from '@/server/services/employees';
 import * as roles from '@/server/services/roles';
 import * as users from '@/server/services/users';
 import {
@@ -86,6 +88,7 @@ export default async function UserPage({
         allRoles: mayAssignRoles ? await roles.listAll(tx) : [],
         allBranches: mayEdit ? await branches.listAll(tx) : [],
         allDepartments: mayEdit ? await departments.listAll(tx) : [],
+        employee: await employees.ofUser(tx, id),
       };
     } catch (error) {
       if (error instanceof AdminNotFoundError) return null;
@@ -159,6 +162,19 @@ export default async function UserPage({
               <li>
                 <span>{t('updated_at')}</span>
                 <span>{fmt(user.updatedAt)}</span>
+              </li>
+              {/* REQ-FIX-001 FIX-5 — the person behind the account. */}
+              <li>
+                <span>{t('users.employee')}</span>
+                <span>
+                  {data.employee ? (
+                    <Link className={s.sapLink} href={`/hr/employees/${encodeURIComponent(data.employee.employeeNo)}`}>
+                      <bdi dir="ltr">{data.employee.employeeNo}</bdi>
+                    </Link>
+                  ) : (
+                    t('users.no_employee')
+                  )}
+                </span>
               </li>
               <li>
                 <span>{column('key')}</span>

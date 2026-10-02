@@ -8,6 +8,17 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-FIX-001 FIX-5 — HR in the sponsor's order: Dashboard, Employees,
+  Departments, Positions, Attendance, Leave Management, Payroll, Advances &
+  Loans, Recruitment, Performance, Employee Requests, Documents, Reports.
+  **Departments** (register and record: seats in reporting order, the
+  people, headcount, vacancies) and **Positions** (register and record,
+  code minted — 0255) are built; Organisation now opens Departments; the
+  Positions window left HR Settings. A new user is also an employee unless
+  *Also an employee* is unticked — the account and the employee made
+  together and linked, the account page naming the employee;
+  `scripts/ops/ensure-user-employees.ts` (run by the deploy) makes the
+  employee behind each existing active user, once.
 - REQ-FIX-001 FIX-4 — units of measure on purchase: an item keeps its units
   on its record (*1 BOX = 24 EA*, a purchase and a sales default, a unit
   deactivated with a reason, the base unit always kept — 0254 holds it); the
@@ -42,6 +53,8 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
   Treasury & Banking. Routes are unchanged.
 
 ### Fixed
+- Stale e2e expectations in the Phase 0 foundation suite: roles are given
+  and created by the CEO, and the audit trail names actions in words.
 - Bank and Cash Reporting counted every treasury posting (other receipts,
   loans, commissions, cash advances, reconciliation adjustments) as a
   transfer between own accounts; only a bank transfer's journal is one now

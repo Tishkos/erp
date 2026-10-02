@@ -13,6 +13,7 @@ import { HrValidationError, assertDay, assertWorkingDays, isPayCalculation, isPa
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 import { AdminNotFoundError, normaliseCode, optionalText, permit, recordChange, requireText } from './administration';
 import type { ActorContext } from './chart-of-accounts';
+import { allocateFreeCode } from './numbering';
 
 export const PERMISSION_OBJECT = 'hr_setting';
 
@@ -21,7 +22,8 @@ export const PERMISSION_OBJECT = 'hr_setting';
 // ---------------------------------------------------------------------------
 
 export interface PositionInput {
-  readonly code: string;
+  /** Minted from POSITION_CODE when absent (REQ-FIX-001 FIX-5, Critical Rule 1); a fixture may still name one. */
+  readonly code?: string | null;
   readonly titleEn: string;
   readonly titleAr?: string | null;
   readonly departmentCode: string;
@@ -30,8 +32,9 @@ export interface PositionInput {
 
 export async function createPosition(tx: Tx, ctx: ActorContext, input: PositionInput): Promise<{ code: string }> {
   await permit(ctx, 'configure', PERMISSION_OBJECT);
-  const code = normaliseCode(input.code, 'code');
   const titleEn = requireText(input.titleEn, 'title_en');
+  const taken = async (candidate: string) => Boolean((await tx.select({ code: position.code }).from(position).where(eq(position.code, candidate)).limit(1))[0]);
+  const code = input.code?.trim() ? normaliseCode(input.code, 'code') : await allocateFreeCode(tx, 'POSITION_CODE', taken, ctx.principal.userId);
   const departmentCode = normaliseCode(input.departmentCode, 'department');
   const [dept] = await tx.select({ code: department.code }).from(department).where(eq(department.code, departmentCode)).limit(1);
   if (!dept) throw new HrValidationError('department', `names no department '${departmentCode}'`);

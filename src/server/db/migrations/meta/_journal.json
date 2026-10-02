@@ -1261,6 +1261,13 @@
       "when": 1795900000059,
       "tag": "0254_item_units",
       "breakpoints": true
+    },
+    {
+      "idx": 180,
+      "version": "7",
+      "when": 1795900000060,
+      "tag": "0255_hr_structure",
+      "breakpoints": true
     }
   ]
 }
