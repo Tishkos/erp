@@ -8,6 +8,16 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-PM-001 PM-2 — planning and budget: the cost plan in versions with
+  its spread by month (**Cost Plan**), the budget as documents — original,
+  supplement, return, transfer — raised by one person and approved by
+  another, the original writing the baseline once (**Budgets**, the
+  new-document grid of elements × cost codes); availability control per
+  element against the tolerance profile (warning notifications to the
+  responsible person and the project manager, the stop line refusing the
+  commitment, a raised line with a reason from the WBS element dialog);
+  change orders with lines, two approvals and the supplement they raise
+  (**Change Orders**). Migration 0246.
 - REQ-PM-001 PM-1 — the Project System's structure: project types,
   tolerance profiles and cost codes as master data on the **Project
   Settings** screen; the `PRJ-{BRANCH}-{YYYY}-{SERIAL}` series; the WBS

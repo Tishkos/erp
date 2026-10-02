@@ -166,8 +166,9 @@ export function availabilityState(
   profile: { readonly warnPercent: number; readonly stopPercent: number },
 ): 'ok' | 'warn' | 'stop' {
   if (budgetIqd <= 0n) return assignedIqd > 0n ? 'stop' : 'ok';
-  const percent = Number((assignedIqd * 10000n) / budgetIqd) / 100;
-  if (percent > profile.stopPercent) return 'stop';
-  if (percent >= profile.warnPercent) return 'warn';
+  // Exact: a dinar over the line is over it, whatever two decimals would say.
+  const scaled = assignedIqd * 1_000_000n;
+  if (scaled > budgetIqd * BigInt(Math.round(profile.stopPercent * 10000))) return 'stop';
+  if (scaled >= budgetIqd * BigInt(Math.round(profile.warnPercent * 10000))) return 'warn';
   return 'ok';
 }

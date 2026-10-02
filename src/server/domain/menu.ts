@@ -208,8 +208,10 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('project_master', 'project', '/projects'),
       page('contracts', 'project', '/projects/contracts'),
       page('wbs', 'project', '/projects/wbs'),
-      page('project_budgets', 'project_budget'),
-      page('change_orders', 'change_order'),
+      // REQ-PM-001 PM-2 — the plan, the budget documents and the change orders.
+      page('cost_plan', 'project', '/projects/plan'),
+      page('project_budgets', 'project', '/projects/budgets'),
+      page('change_orders', 'project', '/projects/change-orders'),
       page('project_costs', 'project_cost'),
       page('project_procurement', 'project_procurement'),
       page('material_issues', 'material_issue'),

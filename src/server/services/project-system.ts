@@ -41,6 +41,7 @@ import { assertNoWbsCycle } from '../domain/projects';
 import { AdminNotFoundError, normaliseCode, optionalText, permit, recordChange, requireText } from './administration';
 import type { ActorContext } from './chart-of-accounts';
 import { allocateDocumentNumber } from './numbering';
+import * as budget from './project-budget';
 import * as projects from './projects';
 
 export const PERMISSION_OBJECT = projects.PERMISSION_OBJECT;
@@ -510,6 +511,8 @@ export interface TreeRow {
   readonly actualIqd: string;
   readonly availableIqd: string;
   readonly availability: 'ok' | 'warn' | 'stop';
+  /** PM-2 — the stop line raised for this element, if one was (D-PM-5). */
+  readonly stopPercentRaised: number | null;
 }
 
 /**
@@ -525,38 +528,34 @@ export async function tree(tx: Tx, projectCode: string): Promise<TreeRow[]> {
     .from(projectWbs)
     .leftJoin(appUser, eq(appUser.id, projectWbs.responsibleUserId))
     .where(eq(projectWbs.projectCode, projectCode));
-  const budget = await tx
-    .select({ wbsCode: projectBudgetLine.wbsCode, costCode: projectBudgetLine.costCode, baselineIqd: projectBudgetLine.baselineIqd })
+  const budgetLines = await tx
+    .select({ wbsCode: projectBudgetLine.wbsCode, costCode: projectBudgetLine.costCode })
     .from(projectBudgetLine)
     .where(eq(projectBudgetLine.projectCode, projectCode));
   const commitments = await tx
-    .select({ costCode: projectCommitment.costCode, amountIqd: projectCommitment.amountIqd, consumedIqd: projectCommitment.consumedIqd, releasedOn: projectCommitment.releasedOn })
+    .select({ costCode: projectCommitment.costCode, wbsCode: projectCommitment.wbsCode, amountIqd: projectCommitment.amountIqd, consumedIqd: projectCommitment.consumedIqd, releasedOn: projectCommitment.releasedOn })
     .from(projectCommitment)
     .where(eq(projectCommitment.projectCode, projectCode));
   const costs = await tx.select({ wbsCode: projectCost.wbsCode, amountIqd: projectCost.amountIqd }).from(projectCost).where(eq(projectCost.projectCode, projectCode));
 
   const root = elements.find((e) => e.wbs.level === 1)?.wbs.code ?? null;
   const own = new Map<string, WbsAmounts>();
-  // Until the budget documents (PM-2) write lines, the project's revised
-  // budget stands on the level-1 element, so a fresh project is not "0".
-  if (budget.length === 0 && root) {
-    own.set(root, { budgetIqd: (await projects.position(tx, projectCode)).budgetIqd, committedIqd: 0n, actualIqd: 0n });
-  }
   const at = (code: string | null) => {
     const key = code ?? root ?? '';
     const current = own.get(key) ?? { budgetIqd: 0n, committedIqd: 0n, actualIqd: 0n };
     own.set(key, current);
     return current;
   };
+  // PM-2 §7 — the budget by element has one source (documents, lines or the
+  // definition); a commitment stands on its element, or failing that on the
+  // element its cost code's line names.
+  for (const [code, budgetIqd] of (await budget.ownBudgetByElement(tx, projectCode)).own) at(code).budgetIqd += budgetIqd;
   const costCodeElement = new Map<string, string | null>();
-  for (const line of budget) {
-    at(line.wbsCode).budgetIqd += parseDecimal(line.baselineIqd, MONEY);
-    costCodeElement.set(line.costCode, line.wbsCode);
-  }
+  for (const line of budgetLines) costCodeElement.set(line.costCode, line.wbsCode);
   for (const c of commitments) {
     if (c.releasedOn) continue;
     const open = parseDecimal(c.amountIqd, MONEY) - parseDecimal(c.consumedIqd, MONEY);
-    if (open > 0n) at(costCodeElement.get(c.costCode) ?? null).committedIqd += open;
+    if (open > 0n) at(c.wbsCode ?? costCodeElement.get(c.costCode) ?? null).committedIqd += open;
   }
   for (const k of costs) at(k.wbsCode).actualIqd += parseDecimal(k.amountIqd, MONEY);
 
@@ -567,6 +566,7 @@ export async function tree(tx: Tx, projectCode: string): Promise<TreeRow[]> {
   const rows = elements.map((e): TreeRow => {
     const sum = totals.get(e.wbs.code) ?? { budgetIqd: 0n, committedIqd: 0n, actualIqd: 0n };
     const available = sum.budgetIqd - sum.committedIqd - sum.actualIqd;
+    const stopHere = e.wbs.stopPercentRaised === null ? stop : Number(e.wbs.stopPercentRaised);
     return {
       id: e.wbs.id,
       code: e.wbs.code,
@@ -587,7 +587,8 @@ export async function tree(tx: Tx, projectCode: string): Promise<TreeRow[]> {
       committedIqd: toDecimalString(sum.committedIqd, MONEY),
       actualIqd: toDecimalString(sum.actualIqd, MONEY),
       availableIqd: toDecimalString(available, MONEY),
-      availability: availabilityState(sum.budgetIqd, sum.committedIqd + sum.actualIqd, { warnPercent: warn, stopPercent: stop }),
+      availability: availabilityState(sum.budgetIqd, sum.committedIqd + sum.actualIqd, { warnPercent: warn, stopPercent: stopHere }),
+      stopPercentRaised: e.wbs.stopPercentRaised === null ? null : Number(e.wbs.stopPercentRaised),
     };
   });
   return treeOrder(rows);
@@ -630,8 +631,16 @@ export async function list(tx: Tx, filter: ListFilter = {}) {
       baselineStartsOn: project.baselineStartsOn,
       baselineEndsOn: project.baselineEndsOn,
       contractValueIqd: project.contractValueIqd,
-      budgetIqd: sql<string>`coalesce((select sum(b.baseline_iqd) from project_budget_line b where b.project_code = ${project.code}),
-        ${project.baselineBudgetIqd} + coalesce((select sum(v.budget_delta_iqd) from project_variation v where v.project_code = ${project.code} and v.status = 'approved'), 0))::text`,
+      // PM-2 §7 — the approved budget documents once the original is approved
+      // (it wrote the baseline lines); before that the lines plus the other
+      // documents; before any of those the definition with its variations.
+      budgetIqd: sql<string>`(case
+        when exists (select 1 from project_budget_document o where o.project_code = ${project.code} and o.kind = 'original' and o.status = 'approved')
+          then (select coalesce(sum(l.amount_iqd), 0) from project_budget_document_line l join project_budget_document d on d.id = l.document_id where l.project_code = ${project.code} and d.status = 'approved')
+        else coalesce((select sum(b.baseline_iqd) from project_budget_line b where b.project_code = ${project.code}),
+                      ${project.baselineBudgetIqd} + coalesce((select sum(v.budget_delta_iqd) from project_variation v where v.project_code = ${project.code} and v.status = 'approved'), 0))
+             + (select coalesce(sum(l.amount_iqd), 0) from project_budget_document_line l join project_budget_document d on d.id = l.document_id where l.project_code = ${project.code} and d.status = 'approved')
+        end)::text`,
       committedIqd: sql<string>`coalesce((select sum(c.amount_iqd - c.consumed_iqd) from project_commitment c where c.project_code = ${project.code} and c.released_on is null), 0)::text`,
       actualIqd: sql<string>`coalesce((select sum(k.amount_iqd) from project_cost k where k.project_code = ${project.code}), 0)::text`,
     })

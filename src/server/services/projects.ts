@@ -50,6 +50,7 @@ import * as authz from './authorization';
 import * as audit from './audit';
 import * as statuses from './statuses';
 import * as inventory from './inventory';
+import * as budget from './project-budget';
 import { allocateDocumentNumber } from './numbering';
 
 export const DOCUMENT_TYPE = 'project';
@@ -361,6 +362,10 @@ export async function budgetFor(
     );
   }
 
+  // REQ-PM-001 §7 — once the budget is kept as documents, the revisions of a
+  // cost code are its approved supplements, returns and transfers; before
+  // that, Phase 11's approved variation deltas.
+  const documented = await budget.revisionsForCostCode(tx, projectCode, costCode);
   const totals = (await tx.execute(sql`
     select
       coalesce((select sum(v.budget_delta_iqd) from project_variation v
@@ -376,7 +381,7 @@ export async function budgetFor(
 
   return budgetPosition({
     budgetIqd: parseDecimal(line.baselineIqd, 4n),
-    revisionsIqd: parseDecimal(row.revisions, 4n),
+    revisionsIqd: documented ?? parseDecimal(row.revisions, 4n),
     committedIqd: parseDecimal(row.committed, 4n),
     actualIqd: parseDecimal(row.actual, 4n),
     forecastIqd: parseDecimal(line.forecastIqd, 4n),
@@ -399,15 +404,19 @@ export async function commit(
     amountIqd: bigint;
     committedOn: string;
     purchaseOrderId?: string | null;
+    /** REQ-PM-001 §8 — the element the commitment stands on. */
+    wbsCode?: string | null;
   },
 ): Promise<{ id: string; availableAfterIqd: bigint }> {
-  const row = await assertSpendable(tx, ctx, projectCode, input.costCode, input.amountIqd);
+  const row = await assertSpendable(tx, ctx, projectCode, input.costCode, input.amountIqd, input.wbsCode ?? null);
+  if (input.wbsCode) await assertAccountAssignmentElement(tx, projectCode, input.wbsCode);
 
   const [created] = await tx
     .insert(projectCommitment)
     .values({
       projectCode,
       costCode: input.costCode,
+      wbsCode: input.wbsCode ?? null,
       purchaseOrderId: input.purchaseOrderId ?? null,
       amountIqd: toDecimalString(input.amountIqd, 4n),
       committedOn: input.committedOn,
@@ -509,6 +518,7 @@ export async function recordCost(
     // A cost that consumes a commitment was already counted against
     // availability when the commitment was made.
     input.consumesCommitmentId ? 0n : input.amountIqd,
+    input.wbsCode ?? null,
   );
   // REQ-PM-001 §5 — an element named on a cost must be one that may receive it.
   if (input.wbsCode) await assertAccountAssignmentElement(tx, projectCode, input.wbsCode);
@@ -598,6 +608,7 @@ async function assertSpendable(
   projectCode: string,
   costCode: string,
   amountIqd: bigint,
+  wbsCode: string | null = null,
 ) {
   const row = await load(tx, projectCode);
 
@@ -613,9 +624,14 @@ async function assertSpendable(
     );
   }
 
+  // REQ-PM-001 §7 — availability control on the element: refused above the
+  // stop line, the responsible people told at the warning line. The element's
+  // line (the profile's, or the one raised for it) is the line the cost code
+  // is held to as well, so a raised line is not undone by the code's check.
+  const decision = wbsCode ? await budget.assertAvailable(tx, ctx, projectCode, wbsCode, amountIqd) : null;
   if (row.requiresCostCode || amountIqd > 0n) {
     const position = await budgetFor(tx, projectCode, costCode);
-    if (amountIqd > 0n) assertWithinBudget(costCode, position, amountIqd);
+    if (amountIqd > 0n) assertWithinBudget(costCode, position, amountIqd, decision?.stopPercent ?? 100);
   }
 
   return row;

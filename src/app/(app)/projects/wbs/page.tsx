@@ -12,7 +12,7 @@ import { visibleRoute } from '@/server/delivered';
 import { isNotFoundError } from '@/server/not-found';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as ps from '@/server/services/project-system';
-import { addWbsElement, setWbsElementActive, updateWbsElement } from '../actions';
+import { addWbsElement, raiseStopLine, setWbsElementActive, updateWbsElement } from '../actions';
 import { chipOf } from '../chip';
 
 /**
@@ -181,6 +181,7 @@ export default async function WbsPage({ searchParams }: { searchParams: SearchPa
                         <td className={s.sapNum}>{money(element.availableIqd)}</td>
                         <td>
                           <Pill label={x(`availability_${element.availability}`)} on={element.availability === 'ok' ? true : element.availability === 'stop' ? false : null} />
+                          {element.stopPercentRaised !== null ? <span className="muted"> · {x('raised_to', { percent: element.stopPercentRaised })}</span> : null}
                         </td>
                         <td>
                           <Pill label={element.active ? t('active') : x('inactive')} on={element.active} />
@@ -189,6 +190,21 @@ export default async function WbsPage({ searchParams }: { searchParams: SearchPa
                           <td>
                             <NewRecordDialog buttonLabel={x('edit')} closeLabel={t('close')} title={x('edit_element', { code: element.code })}>
                               {elementForm(updateWbsElement, element, [])}
+                              {can(principal, 'submit', ps.PERMISSION_OBJECT) ? (
+                                <Form action={raiseStopLine}>
+                                  <Hidden name="project_code" value={view.project.code} />
+                                  <Hidden name="back" value="wbs" />
+                                  <Hidden name="wbs_code" value={element.code} />
+                                  <p className={s.sapNote}>{x('stop_line_note', { percent: view.profile ? Number(view.profile.stopPercent) : 100 })}</p>
+                                  <Grid>
+                                    <Field defaultValue={element.stopPercentRaised === null ? '' : String(element.stopPercentRaised)} hint={x('stop_line_hint')} label={x('stop_line')} name="stop_percent" />
+                                    <Field label={t('reason')} name="reason" required />
+                                  </Grid>
+                                  <SubmitRow>
+                                    <Submit label={x('raise_stop_line')} tone="secondary" />
+                                  </SubmitRow>
+                                </Form>
+                              ) : null}
                               {element.level > 1 ? (
                                 <Form action={setWbsElementActive}>
                                   <Hidden name="project_code" value={view.project.code} />

@@ -52,7 +52,7 @@ test.describe('REQ-PM-001 Stage PM-1 · structure and the master screens', () =>
     await add.locator('input[name="planned_ends_on"]').fill('2026-11-15');
     await add.locator('button[type="submit"]').click();
     await page.waitForURL(/saved=1/);
-    await expect(page.getByRole('cell', { name: `${code}-1.1` })).toBeVisible();
+    await expect(page.getByRole('cell', { name: `${code}-1.1` }).first()).toBeVisible();
 
     // The creator cannot release; the administrator can, and the chip moves.
     await expect(page.getByRole('button', { name: 'Release' })).toHaveCount(0);
@@ -68,8 +68,8 @@ test.describe('REQ-PM-001 Stage PM-1 · structure and the master screens', () =>
     // The WBS workspace shows the same tree, rolled up.
     await page.goto(`/projects/wbs?project=${encodeURIComponent(code)}`);
     await expect(page.getByRole('heading', { name: 'WBS', level: 1 })).toBeVisible();
-    await expect(page.getByRole('cell', { name: `${code}-1.1` })).toBeVisible();
-    await expect(page.getByRole('cell', { name: 'Civil works' })).toBeVisible();
+    await expect(page.getByRole('cell', { name: `${code}-1.1` }).first()).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Civil works' }).first()).toBeVisible();
 
     // Contracts lists customer projects only — the internal one is not there.
     await page.goto('/projects/contracts');
