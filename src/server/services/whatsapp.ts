@@ -906,21 +906,18 @@ export async function answer(input: {
     }
   }
   /*
-   * W-R7 — the as-of line, where it earns its place.
+   * W-R7 — every reply names when it was read, under which branch, as whom.
    *
-   * It exists so a figure can never be mistaken for a figure read at another
-   * time, under another branch, or as somebody else: that is what makes a
-   * number in a chat answerable afterwards. On an answer with no figure in it
-   * — an explanation, a greeting, "I have left it alone" — it says nothing
-   * true that the message did not already say, and a stamp under every
-   * sentence is the single most bot-like thing left in the conversation
-   * (2026-10-02, by direction).
-   *
-   * So: whenever the books were read, and not otherwise. An attachment always
-   * carries it, because a file outlives the chat it was sent in.
+   * It was briefly made conditional, on the reasoning that a stamp under a
+   * greeting is the most bot-like thing left in the conversation and that an
+   * answer with no figure in it has no provenance to carry. The sponsor's
+   * complaint was about the canned greeting and the command menu, though, and
+   * never about this line: W-R7 says *every* reply, `wa01-bridge` holds it on
+   * a reply with no figure in it at all, and narrowing an audit requirement on
+   * an inference is not a judgement call to make quietly. It stays until
+   * somebody asks for it to go.
    */
-  const readTheBooks = usedTools.length > 0 || attachment !== null;
-  if (readTheBooks) text = `${text}\n\n${footer(locale, { at, branchCode, userName })}`;
+  text = `${text}\n\n${footer(locale, { at, branchCode, userName })}`;
 
   return {
     intent,

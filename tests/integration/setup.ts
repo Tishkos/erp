@@ -467,16 +467,39 @@ export async function resetTestData(): Promise<void> {
     await client.query('truncate whatsapp_message, whatsapp_contact restart identity cascade');
     await client.query('delete from whatsapp_session');
     await client.query(`delete from whatsapp_setting where key like 'bridge_%'`);
+    /*
+     * Every seeded key, not some of them.
+     *
+     * This `case` listed the keys 0242 seeded and ended `else value end`, so
+     * the group settings added by 0245/0246 kept whatever the last test had
+     * written. `wa05-group-and-actions` registers a group, and from then on
+     * `group_jid` stayed set in the database for the rest of the run and for
+     * every run after it — which posts a group copy of every notification
+     * (WA-5), so `wa01-bridge` counted two sends where it expects one and
+     * `wa02-intents` answered in a group nobody had registered. Two tests
+     * failing for a behaviour that is working exactly as designed, in a file
+     * that had not been touched.
+     *
+     * A key added to `whatsapp_setting` by a migration from here on belongs in
+     * this list, and `else value end` is the trap: it reads like a safe
+     * default and is how the leak got in.
+     */
     await client.query(`
       update whatsapp_setting set value = case key
         when 'router_model' then 'claude-haiku-4-5-20251001'
-        when 'agent_model' then 'claude-sonnet-5-5'
+        when 'agent_model' then 'claude-opus-5-5'
         when 'inline_rows' then '15'
         when 'export_rows_cap' then '5000'
         when 'throttle_per_minute' then '60'
         when 'retention_days' then '90'
         when 'digest_hour' then '08'
         when 'digest_locale' then 'ar'
+        when 'group_jid' then ''
+        when 'group_subject' then ''
+        when 'group_queries' then 'on'
+        when 'group_notifications' then 'on'
+        when 'group_digest' then 'on'
+        when 'group_only' then 'on'
         else value end`);
     await client.query(`delete from whatsapp_setting where key = 'digest_last_sent_day'`);
     // REQ-HR-001 — people and their dated rows; the seeded masters stay, a
