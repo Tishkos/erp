@@ -13,6 +13,8 @@ import * as salesReturns from '../services/sales-return';
 import * as stock from '../services/stock-operations';
 import * as payments from '../services/supplier-payment';
 import * as journals from '../services/journal';
+import * as payroll from '../services/payroll';
+import { daysFrom, showDays } from '../domain/hr-time';
 import { average, lineTotal, sumMoney, sumQuantity } from './decimal';
 import type { Messages } from './i18n';
 import type { Column, Fact, PrintModel, Row } from './model';
@@ -702,5 +704,146 @@ export async function itemReconciliation(ctx: BuildContext, adjustmentNo: string
     }),
     branchCode: row.branchCode,
     objectId: row.id,
+  };
+}
+
+// ------------------------------------------------------ REQ-HR-001 HR-3
+
+/**
+ * Payroll run — the register a bank's salary file is made from: one row per
+ * person, the figures the screen shows, read through the payroll's own grant.
+ */
+export async function payrollRun(ctx: BuildContext, runNo: string): Promise<Built | null> {
+  const { tx, m, locale } = ctx;
+  const detail = await payroll.byNo(tx, runNo);
+  if (!detail) return null;
+  const run = detail.run;
+  const t = (key: string, values?: Record<string, string | number>) => m.admin(`payroll.${key}`, values);
+  const columns: Column[] = [
+    { key: 'employee_no', label: m.column('reference'), kind: 'code' },
+    { key: 'name', label: t('employee'), kind: 'text', weight: 1.6 },
+    { key: 'department', label: t('department'), kind: 'code' },
+    { key: 'days', label: t('days'), kind: 'code', weight: 0.6 },
+    { key: 'gross', label: t('gross'), kind: 'money' },
+    { key: 'deductions', label: t('deductions'), kind: 'money' },
+    { key: 'net', label: t('net'), kind: 'money' },
+    { key: 'method', label: t('pay_method'), kind: 'text', weight: 0.7 },
+    { key: 'account', label: t('bank_account'), kind: 'code' },
+    { key: 'payslip', label: t('payslip'), kind: 'code' },
+  ];
+  const rows: Row[] = detail.lines.map(({ line }) => ({
+    cells: {
+      employee_no: line.employeeNo,
+      name: locale === 'ar' && line.fullNameAr ? line.fullNameAr : line.fullNameEn,
+      department: line.departmentCode,
+      days: `${line.employedDays}/${line.workingDays}`,
+      gross: line.grossIqd,
+      deductions: line.deductionsIqd,
+      net: line.netIqd,
+      method: t(`method_${line.payMethod}`),
+      account: [line.bankCode, line.accountNumber ?? line.iban].filter(Boolean).join(' ') || '—',
+      payslip: line.payslipNo ?? '—',
+    },
+  }));
+  const fields: Fact[] = [
+    { label: m.column('reference'), value: run.runNo, ltr: true },
+    { label: m.column('status'), value: run.status === 'paid' ? t('status_paid') : m.status(run.status) },
+    { label: m.column('branch_code'), value: run.branchCode, ltr: true },
+    { label: t('month'), value: run.periodMonth.slice(0, 7), ltr: true },
+    { label: t('pay_date'), value: date(run.payDate, locale), ltr: true },
+    { label: t('working_days'), value: String(run.workingDays), ltr: true },
+    { label: t('employees'), value: String(run.employees), ltr: true },
+    { label: t('employer_cost'), value: money(run.employerCostIqd, locale), ltr: true },
+    { label: t('journal'), value: detail.entryNo ?? '—', ltr: true },
+  ];
+  return {
+    model: base({
+      title: m.print('titles.payroll_run'),
+      number: run.runNo,
+      status: run.status === 'paid' ? t('status_paid') : m.status(run.status),
+      posted: run.journalEntryId !== null,
+      orientation: 'landscape',
+      fields,
+      tables: [
+        {
+          columns,
+          rows,
+          empty: t('no_lines'),
+          totals: { label: m.admin('reports.totals'), cells: { gross: sumMoney(rows.map((r) => r.cells.gross)), deductions: sumMoney(rows.map((r) => r.cells.deductions)), net: sumMoney(rows.map((r) => r.cells.net)) } },
+        },
+      ],
+      summary: [
+        { label: t('gross'), value: money(run.grossIqd, locale), ltr: true },
+        { label: t('deductions'), value: money(run.deductionsIqd, locale), ltr: true },
+        { label: t('net'), value: money(run.netIqd, locale), ltr: true },
+      ],
+      signatures: true,
+      fileName: run.runNo,
+    }),
+    branchCode: run.branchCode,
+    objectId: run.id,
+  };
+}
+
+/**
+ * Payslip — one person's month: the header the screen shows, the components,
+ * gross, deductions and net. Built for the payroll's readers and for the
+ * person it pays (row security reads it for either, and nobody else).
+ */
+export async function payslip(ctx: BuildContext, payslipNo: string): Promise<Built | null> {
+  const { tx, m, locale } = ctx;
+  const found = await payroll.payslip(tx, payslipNo);
+  if (!found) return null;
+  const { line, run, components } = found;
+  const t = (key: string, values?: Record<string, string | number>) => m.admin(`payroll.${key}`, values);
+  const status = run.status === 'reversed' ? 'reversed' : line.paymentId ? 'paid' : 'posted';
+  const days = (hundredths: string | null) => (hundredths === null ? '' : showDays(daysFrom(hundredths)));
+  const columns: Column[] = [
+    { key: 'component', label: t('component'), kind: 'text', weight: 1.8 },
+    { key: 'kind', label: t('kind'), kind: 'text' },
+    { key: 'basis', label: t('basis'), kind: 'code' },
+    { key: 'amount', label: t('amount'), kind: 'money' },
+  ];
+  const rows: Row[] = components.map((c) => ({
+    cells: {
+      component: locale === 'ar' && c.nameAr ? c.nameAr : c.nameEn,
+      kind: t(`kind_${c.kind}`),
+      basis: c.rate !== null ? `${c.rate.replace(/\.?0+$/, '')} %` : c.quantity !== null ? t('basis_days', { days: days(c.quantity) }) : '—',
+      amount: c.amountIqd,
+    },
+  }));
+  const fields: Fact[] = [
+    { label: m.column('reference'), value: payslipNo, ltr: true },
+    { label: m.column('status'), value: t(`payslip_status_${status}`) },
+    { label: t('employee'), value: `${line.employeeNo} · ${locale === 'ar' && line.fullNameAr ? line.fullNameAr : line.fullNameEn}` },
+    { label: t('department'), value: line.departmentCode, ltr: true },
+    { label: t('position'), value: line.positionTitle ?? '—' },
+    { label: t('month'), value: run.periodMonth.slice(0, 7), ltr: true },
+    { label: t('run'), value: run.runNo, ltr: true },
+    { label: t('pay_date'), value: date(run.payDate, locale), ltr: true },
+    { label: t('paid_on'), value: run.paidOn ? date(run.paidOn, locale) : '—', ltr: true },
+    { label: t('pay_method'), value: t(`method_${line.payMethod}`) },
+    { label: t('days'), value: `${line.employedDays} / ${line.workingDays}`, ltr: true },
+    { label: t('absent'), value: String(line.absentDays), ltr: true },
+    { label: t('unpaid_leave'), value: days(line.unpaidLeaveDays), ltr: true },
+    { label: t('base_salary'), value: money(line.baseSalaryIqd, locale), ltr: true },
+  ];
+  return {
+    model: base({
+      title: m.print('titles.payslip'),
+      number: payslipNo,
+      status: t(`payslip_status_${status}`),
+      posted: true,
+      fields,
+      tables: [{ columns, rows, empty: t('no_lines') }],
+      summary: [
+        { label: t('gross'), value: money(line.grossIqd, locale), ltr: true },
+        { label: t('deductions'), value: money(line.deductionsIqd, locale), ltr: true },
+        { label: t('net'), value: money(line.netIqd, locale), ltr: true },
+      ],
+      fileName: payslipNo,
+    }),
+    branchCode: run.branchCode,
+    objectId: line.id,
   };
 }

@@ -65,6 +65,8 @@ const BUILDERS = {
   project_line_items: (ctx, input) => projectReports.lineItems(ctx, input.query),
   project_milestone_trend: (ctx, input) => projectReports.milestoneTrend(ctx, input.query),
   project_earned_value: (ctx, input) => projectReports.earnedValue(ctx, input.query),
+  payroll_run: byId(documents.payrollRun),
+  payslip: byId(documents.payslip),
 } satisfies Record<ExportKey, Builder>;
 
 export function exportable(key: ExportKey): Exportable {

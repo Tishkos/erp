@@ -220,6 +220,22 @@ export async function report(tx: Tx, period: FiscalPeriod): Promise<CloseReport>
     ),
   );
 
+  // 13. REQ-HR-001 HR-3 — every branch that employed anybody in the month has its payroll posted.
+  // Read through `app_payroll_month_gaps`, so the answer is the same whoever runs the checklist.
+  const payroll = (
+    await tx.execute(sql`select branch_code as "branchCode", run_no as "runNo", status from app_payroll_month_gaps(date_trunc('month', ${period.startsOn}::date)::date)`)
+  ).rows as { branchCode: string; runNo: string | null; status: string }[];
+  checks.push(
+    outcome(
+      'payroll_posted',
+      'warning',
+      payroll.length > 0,
+      String(payroll.length),
+      payroll.map((g) => (g.runNo ? `${g.branchCode}: ${g.runNo} (${g.status})` : `${g.branchCode}: no payroll run`)).slice(0, 50),
+      '/hr/payroll',
+    ),
+  );
+
   const blockingFailures = checks.filter((c) => c.state === 'fail').map((c) => c.code);
   const warnings = checks.filter((c) => c.state === 'warn').map((c) => c.code);
   return { period, asOf, checks, mayClose: blockingFailures.length === 0, blockingFailures, warnings };
@@ -239,6 +255,7 @@ export const CHECK_CODES = [
   'fx_rate_current',
   'clearing_balances',
   'project_recognition',
+  'payroll_posted',
 ] as const;
 export type CheckCode = (typeof CHECK_CODES)[number];
 

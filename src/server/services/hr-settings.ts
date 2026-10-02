@@ -6,12 +6,14 @@
  * deactivated: a position somebody held, a component a payslip carried, a
  * leave type a request named — each stays, so history keeps its meaning.
  */
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { department, hrParameter, leaveType, payComponent, position, workingCalendar, workingCalendarHoliday } from '../db/schema';
 import { HrValidationError, assertDay, assertWorkingDays, isPayCalculation, isPayComponentKind } from '../domain/hr';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
+import { assertResultAccount } from '../domain/posting-map';
 import { AdminNotFoundError, normaliseCode, optionalText, permit, recordChange, requireText } from './administration';
+import * as coa from './chart-of-accounts';
 import type { ActorContext } from './chart-of-accounts';
 import { allocateFreeCode } from './numbering';
 
@@ -104,11 +106,39 @@ export interface PayComponentInput {
   readonly calculation: string;
   readonly defaultValue?: string | null;
   readonly taxable: boolean;
+  /** HR-3 — where an earning or an employer cost is expensed; empty leaves it to the posting mapping. */
+  readonly expenseAccountId?: string | null;
+  /** HR-3 — where a deduction or an employer cost is owed; empty leaves it to the posting mapping. */
+  readonly liabilityAccountId?: string | null;
+}
+
+/**
+ * A component's own accounts (HR-3): an expense account for what it costs, a
+ * liability for what is owed (social security, tax). Neither may be somebody's
+ * balance — a control account keeps a partner's statement.
+ */
+async function componentAccounts(tx: Tx, kind: string, input: Pick<PayComponentInput, 'expenseAccountId' | 'liabilityAccountId'>) {
+  const expenseAccountId = (input.expenseAccountId ?? '').trim() || null;
+  const liabilityAccountId = (input.liabilityAccountId ?? '').trim() || null;
+  if (expenseAccountId) {
+    if (kind === 'deduction') throw new HrValidationError('expense_account', 'a deduction costs the company nothing; it is owed to somebody — choose its liability account');
+    assertResultAccount('expense', await coa.loadAccount(tx, expenseAccountId));
+  }
+  if (liabilityAccountId) {
+    if (kind === 'earning') throw new HrValidationError('liability_account', 'an earning is owed to the person as net pay; it has no account of its own to be owed on');
+    const account = await coa.loadAccount(tx, liabilityAccountId);
+    if (account.isGroup || account.accountType !== 'liability' || account.controlAccount !== null) {
+      throw new HrValidationError('liability_account', `${account.code} is not a liability account a deduction can be owed on (not a group, not a control account)`);
+    }
+  }
+  return { expenseAccountId, liabilityAccountId };
 }
 
 function componentValues(input: Omit<PayComponentInput, 'code'>) {
   if (!isPayComponentKind(input.kind)) throw new HrValidationError('kind', 'must be earning, deduction or employer_cost');
-  if (!isPayCalculation(input.calculation)) throw new HrValidationError('calculation', 'must be fixed, percent_of_base or manual');
+  if (!isPayCalculation(input.calculation)) throw new HrValidationError('calculation', 'must be base_salary, fixed, percent_of_base, manual or absence');
+  if (input.calculation === 'base_salary' && input.kind !== 'earning') throw new HrValidationError('calculation', 'the base salary is an earning');
+  if (input.calculation === 'absence' && input.kind !== 'deduction') throw new HrValidationError('calculation', 'an absence deduction is a deduction');
   const value = parseDecimal((input.defaultValue ?? '').trim() || '0', MONEY_SCALE);
   if (value < 0n) throw new HrValidationError('default_value', 'cannot be negative');
   if (input.calculation === 'percent_of_base' && value > 100n * 10n ** MONEY_SCALE) throw new HrValidationError('default_value', 'a percentage of the base cannot exceed 100');
@@ -122,12 +152,24 @@ function componentValues(input: Omit<PayComponentInput, 'code'>) {
   };
 }
 
+/** One active base salary and one active absence deduction: two would pay or take twice. */
+async function assertOneOfItsKind(tx: Tx, calculation: string, code: string): Promise<void> {
+  if (calculation !== 'base_salary' && calculation !== 'absence') return;
+  const [other] = await tx
+    .select({ code: payComponent.code })
+    .from(payComponent)
+    .where(and(eq(payComponent.calculation, calculation), eq(payComponent.active, true)))
+    .limit(1);
+  if (other && other.code !== code) throw new HrValidationError('calculation', `${other.code} is already the ${calculation === 'base_salary' ? 'base salary' : 'absence deduction'}; deactivate it first`);
+}
+
 export async function createPayComponent(tx: Tx, ctx: ActorContext, input: PayComponentInput): Promise<{ code: string }> {
   await permit(ctx, 'configure', PERMISSION_OBJECT);
   const code = normaliseCode(input.code, 'code');
   const [existing] = await tx.select({ code: payComponent.code }).from(payComponent).where(eq(payComponent.code, code)).limit(1);
   if (existing) throw new HrValidationError('code', `'${code}' is already a pay component`);
-  const values = componentValues(input);
+  const values = { ...componentValues(input), ...(await componentAccounts(tx, input.kind, input)) };
+  await assertOneOfItsKind(tx, values.calculation, code);
   await tx.insert(payComponent).values({ code, ...values, createdBy: ctx.principal.userId });
   await recordChange(tx, ctx, { action: 'pay_component.created', objectType: 'pay_component', objectId: code, after: { code, ...values } });
   return { code };
@@ -137,9 +179,16 @@ export async function updatePayComponent(tx: Tx, ctx: ActorContext, code: string
   await permit(ctx, 'configure', PERMISSION_OBJECT, code);
   const [before] = await tx.select().from(payComponent).where(eq(payComponent.code, code)).limit(1);
   if (!before) throw new AdminNotFoundError('pay_component', code);
-  const values = componentValues(input);
+  const values = { ...componentValues(input), ...(await componentAccounts(tx, input.kind, input)) };
+  if (before.active) await assertOneOfItsKind(tx, values.calculation, code);
   await tx.update(payComponent).set({ ...values, updatedAt: new Date() }).where(eq(payComponent.code, code));
-  await recordChange(tx, ctx, { action: 'pay_component.updated', objectType: 'pay_component', objectId: code, before: { nameEn: before.nameEn, kind: before.kind, calculation: before.calculation, defaultValue: before.defaultValue, taxable: before.taxable }, after: values });
+  await recordChange(tx, ctx, {
+    action: 'pay_component.updated',
+    objectType: 'pay_component',
+    objectId: code,
+    before: { nameEn: before.nameEn, kind: before.kind, calculation: before.calculation, defaultValue: before.defaultValue, taxable: before.taxable, expenseAccountId: before.expenseAccountId, liabilityAccountId: before.liabilityAccountId },
+    after: values,
+  });
 }
 
 export async function setPayComponentActive(tx: Tx, ctx: ActorContext, code: string, active: boolean, reason?: string | null): Promise<void> {
@@ -147,12 +196,44 @@ export async function setPayComponentActive(tx: Tx, ctx: ActorContext, code: str
   const [before] = await tx.select({ active: payComponent.active }).from(payComponent).where(eq(payComponent.code, code)).limit(1);
   if (!active && !optionalText(reason)) throw new HrValidationError('reason', 'say why it is deactivated');
   if (!before) throw new AdminNotFoundError('pay_component', code);
+  if (active) {
+    const [row] = await tx.select({ calculation: payComponent.calculation }).from(payComponent).where(eq(payComponent.code, code)).limit(1);
+    await assertOneOfItsKind(tx, row?.calculation ?? '', code);
+  }
   await tx.update(payComponent).set({ active, updatedAt: new Date() }).where(eq(payComponent.code, code));
   await recordChange(tx, ctx, { action: active ? 'pay_component.activated' : 'pay_component.deactivated', objectType: 'pay_component', objectId: code, before: { active: before.active }, after: { active }, reason: optionalText(reason) });
 }
 
 export async function payComponents(tx: Tx) {
-  return tx.select().from(payComponent).orderBy(asc(payComponent.sortOrder), asc(payComponent.code));
+  return tx
+    .select({
+      code: payComponent.code,
+      nameEn: payComponent.nameEn,
+      nameAr: payComponent.nameAr,
+      kind: payComponent.kind,
+      calculation: payComponent.calculation,
+      defaultValue: payComponent.defaultValue,
+      taxable: payComponent.taxable,
+      active: payComponent.active,
+      sortOrder: payComponent.sortOrder,
+      expenseAccountId: payComponent.expenseAccountId,
+      liabilityAccountId: payComponent.liabilityAccountId,
+      expenseAccountCode: sql<string | null>`(select a.code from chart_of_account a where a.id = "pay_component"."expense_account_id")`,
+      liabilityAccountCode: sql<string | null>`(select a.code from chart_of_account a where a.id = "pay_component"."liability_account_id")`,
+    })
+    .from(payComponent)
+    .orderBy(asc(payComponent.sortOrder), asc(payComponent.code));
+}
+
+/** The accounts a component may name: postable expense accounts and plain liabilities (HR-3). */
+export async function componentAccountChoices(tx: Tx) {
+  const rows = (
+    await tx.execute(sql`
+      select id, code, name, account_type::text as "accountType" from chart_of_account
+       where is_active and not is_group and control_account is null and account_type in ('expense', 'liability')
+       order by code`)
+  ).rows as { id: string; code: string; name: string; accountType: 'expense' | 'liability' }[];
+  return { expense: rows.filter((r) => r.accountType === 'expense'), liability: rows.filter((r) => r.accountType === 'liability') };
 }
 
 // ---------------------------------------------------------------------------

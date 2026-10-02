@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Field, FilterRow, Flash, Form, Grid, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { AdminPage, Checkbox, Field, FilterRow, Flash, Form, Grid, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
@@ -19,12 +19,14 @@ import * as employees from '@/server/services/employees';
 import * as hrSettings from '@/server/services/hr-settings';
 import * as attendance from '@/server/services/attendance';
 import * as leave from '@/server/services/leave';
+import * as payroll from '@/server/services/payroll';
 import { showDays, daysFrom, weekdayOf } from '@/server/domain/hr-time';
 import {
   adjustLeaveBalance,
   linkEmployeeUser,
   moveEmployee,
   setEmployeeCompensation,
+  setEmployeePayFigure,
   setEmployeeStatus,
   updateEmployeeIdentity,
 } from '../actions';
@@ -63,6 +65,7 @@ export default async function EmployeePage({ params, searchParams }: { params: P
   const maySeeLeave = can(principal, 'view', leave.PERMISSION_OBJECT);
   const mayAdjustLeave = can(principal, 'administer', leave.PERMISSION_OBJECT);
   const maySeeAttendance = can(principal, 'view', attendance.PERMISSION_OBJECT);
+  const maySeePayslips = can(principal, 'view', payroll.PERMISSION_OBJECT);
   const query = await searchParams;
   const today = businessToday();
   const monthParam = typeof query.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(query.month) ? query.month : today.slice(0, 7);
@@ -94,6 +97,10 @@ export default async function EmployeePage({ params, searchParams }: { params: P
       requests: maySeeLeave ? await leave.requestsOf(tx, row.id) : [],
       leaveTypes: mayAdjustLeave ? await leave.activeTypes(tx) : [],
       month: maySeeAttendance ? await attendance.daysOf(tx, row.id, attendance.monthSpan(monthParam).fromDate, attendance.monthSpan(monthParam).toDate) : [],
+      // HR-3 — the person's own component figures (under the compensation grant) and their payslips.
+      figures: maySeePay ? await employees.payFiguresOf(tx, actor, row.id) : [],
+      settable: maySetPay ? (await hrSettings.payComponents(tx)).filter((c) => c.active && c.calculation !== 'base_salary' && c.calculation !== 'absence') : [],
+      payslips: maySeePayslips ? await payroll.payslipsOf(tx, row.id) : [],
     };
   });
   if (!found) notFound();
@@ -102,12 +109,13 @@ export default async function EmployeePage({ params, searchParams }: { params: P
   const when = (value: Date | string) => formatTimestamp(new Date(value).toISOString(), locale as Locale);
   const statusTone = row.status === 'active' ? 'approved' : row.status === 'suspended' ? 'submitted' : 'closed';
   const name = locale === 'ar' && row.fullNameAr ? row.fullNameAr : row.fullNameEn;
-  const label = (field: string) => x(`field_${field}`);
+  const label = (field: string) => (field.startsWith('pay_component:') ? x('field_pay_component', { code: field.slice('pay_component:'.length) }) : x(`field_${field}`));
   const value = (field: string, raw: string | null) => {
     if (raw === null) return '—';
     if (field === 'employment_kind') return x(`kind_${raw}`);
     if (field === 'status') return x(`status_${raw}`);
     if (field === 'manager_employee_id') return found.managers.find((m) => m.id === raw)?.fullNameEn ?? raw.slice(0, 8);
+    if (field.startsWith('pay_component:') && raw === 'stopped') return x('figure_stopped');
     return raw;
   };
 
@@ -415,6 +423,172 @@ export default async function EmployeePage({ params, searchParams }: { params: P
                 </Form>
               </div>
             ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {/* REQ-HR-001 HR-3 — the person's own figures for the pay components: dated rows under the compensation grant. */}
+      {maySeePay ? (
+        <section aria-labelledby="employee-figures-title" className={s.sapDoc}>
+          <div className={s.sapWindow}>
+            <h2 className={s.sapTitle} id="employee-figures-title">
+              <span>{x('pay_figures')}</span>
+              <span className={s.sapTitleMeta}>{t('rows_shown', { count: found.figures.length })}</span>
+            </h2>
+            <div className={s.sapTableWrap}>
+              <table aria-labelledby="employee-figures-title" className={s.sapTable}>
+                <thead>
+                  <tr>
+                    <th scope="col">{x('effective_from')}</th>
+                    <th scope="col">{x('component')}</th>
+                    <th className={s.sapNum} scope="col">
+                      {x('amount')}
+                    </th>
+                    <th scope="col">{x('note')}</th>
+                    <th scope="col">{x('col_recorded')}</th>
+                    <th scope="col">{x('col_by')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {found.figures.length === 0 ? (
+                    <tr>
+                      <td className={s.sapEmptyRow} colSpan={6}>
+                        {x('pay_figures_none')}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {found.figures.map((figure) => (
+                    <tr key={figure.id}>
+                      <td>
+                        <bdi dir="ltr">{day(figure.effectiveFrom)}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{figure.componentCode}</bdi> <bdi dir="auto">{locale === 'ar' && figure.nameAr ? figure.nameAr : figure.nameEn}</bdi>
+                      </td>
+                      <td className={s.sapNum}>
+                        <bdi dir="ltr">
+                          {figure.stopped || figure.amount === null
+                            ? x('figure_stopped')
+                            : figure.calculation === 'percent_of_base'
+                              ? `${figure.amount.replace(/\.?0+$/, '')} %`
+                              : formatMoney(figure.amount, 'IQD', locale as Locale)}
+                        </bdi>
+                      </td>
+                      <td>
+                        <bdi dir="auto">{figure.note ?? '—'}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{when(figure.recordedAt)}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="auto">{figure.recordedBy ?? '—'}</bdi>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {maySetPay && row.status !== 'ended' && found.settable.length > 0 ? (
+              <div className={s.sapBody}>
+                <Form action={setEmployeePayFigure}>
+                  {hidden}
+                  <p className={s.sapGridCaption}>{x('pay_figure_new')}</p>
+                  <p className="muted">{x('pay_figure_hint')}</p>
+                  <Grid>
+                    <Select
+                      label={x('component')}
+                      name="component_code"
+                      options={found.settable.map((c) => ({ value: c.code, label: `${c.code} · ${locale === 'ar' && c.nameAr ? c.nameAr : c.nameEn}` }))}
+                      required
+                    />
+                    <Field defaultValue={today} label={x('effective_from')} name="effective_from" required type="date" />
+                    <Field label={x('amount')} name="amount" />
+                    <Field label={x('note')} name="note" wide />
+                  </Grid>
+                  <Checkbox label={x('stopped')} name="stopped" />
+                  <SubmitRow>
+                    <Submit label={x('save')} small tone="secondary" />
+                  </SubmitRow>
+                </Form>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {/* REQ-HR-001 HR-3 — the person's payslips, newest first; each opens its page. */}
+      {maySeePayslips ? (
+        <section aria-labelledby="employee-payslips-title" className={s.sapDoc}>
+          <div className={s.sapWindow}>
+            <h2 className={s.sapTitle} id="employee-payslips-title">
+              <span>{x('payslips_title')}</span>
+              <span className={s.sapTitleMeta}>{t('rows_shown', { count: found.payslips.length })}</span>
+            </h2>
+            <div className={s.sapTableWrap}>
+              <table aria-labelledby="employee-payslips-title" className={s.sapTable}>
+                <thead>
+                  <tr>
+                    <th scope="col">{column('reference')}</th>
+                    <th scope="col">{x('col_month')}</th>
+                    <th scope="col">{x('col_run')}</th>
+                    <th className={s.sapNum} scope="col">
+                      {x('col_gross')}
+                    </th>
+                    <th className={s.sapNum} scope="col">
+                      {x('col_deductions')}
+                    </th>
+                    <th className={s.sapNum} scope="col">
+                      {x('col_net')}
+                    </th>
+                    <th scope="col">{column('status')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {found.payslips.length === 0 ? (
+                    <tr>
+                      <td className={s.sapEmptyRow} colSpan={7}>
+                        {x('payslips_none')}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {found.payslips.map((slip) => {
+                    const state = slip.status === 'reversed' ? 'reversed' : slip.paid ? 'paid' : 'issued';
+                    const tone = state === 'reversed' ? 'reversed' : state === 'paid' ? 'settled' : 'posted';
+                    return (
+                      <tr key={slip.payslipNo}>
+                        <td>
+                          <Link className={s.sapLink} href={`/hr/payroll/payslips/${encodeURIComponent(slip.payslipNo ?? '')}`}>
+                            <bdi dir="ltr">{slip.payslipNo}</bdi>
+                          </Link>
+                        </td>
+                        <td>
+                          <bdi dir="ltr">{slip.periodMonth.slice(0, 7)}</bdi>
+                        </td>
+                        <td>
+                          <Link className={s.sapLink} href={`/hr/payroll/${encodeURIComponent(slip.runNo)}`}>
+                            <bdi dir="ltr">{slip.runNo}</bdi>
+                          </Link>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{formatMoney(slip.grossIqd, 'IQD', locale as Locale)}</bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{formatMoney(slip.deductionsIqd, 'IQD', locale as Locale)}</bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{formatMoney(slip.netIqd, 'IQD', locale as Locale)}</bdi>
+                        </td>
+                        <td>
+                          <span className={`status status--${tone} ${s.sapRegisterStatus}`} data-status={tone}>
+                            {x(`payslip_${state}`)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       ) : null}

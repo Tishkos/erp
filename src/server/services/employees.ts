@@ -15,7 +15,7 @@
  */
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
-import { appUser, branch, department, employee, employeeCompensation, employeeHistory, position } from '../db/schema';
+import { appUser, branch, department, employee, employeeCompensation, employeeHistory, employeePayComponent, payComponent, position } from '../db/schema';
 import { businessToday } from '../domain/business-date';
 import {
   HrValidationError,
@@ -501,6 +501,78 @@ export async function setCompensation(tx: Tx, ctx: ActorContext, id: string, inp
     // The figure is in the compensation row, read under its own grant; the trail says when and by whom.
     after: { effectiveFrom, payMethod, bankCode },
   });
+}
+
+export interface PayFigureInput {
+  readonly componentCode: string;
+  readonly effectiveFrom: string;
+  /** IQD a month for a fixed component, a percentage for a percent one; ignored with a stop. */
+  readonly amount?: string | null;
+  /** Takes the component off the person from that day (an exemption, an allowance ended). */
+  readonly stopped?: boolean;
+  readonly note?: string | null;
+}
+
+/**
+ * HR-3 — a person's own figure for a pay component, or its stop: a new dated
+ * row under the compensation grant (R3, R5), read by payroll at each month's
+ * end. The history says the component changed, not to what.
+ */
+export async function setPayFigure(tx: Tx, ctx: ActorContext, id: string, input: PayFigureInput): Promise<void> {
+  const row = await loadById(tx, id);
+  await authz.authorize(ctx.principal, 'create', COMPENSATION_OBJECT, { branchCode: row.branchCode, objectId: row.employeeNo });
+  const effectiveFrom = assertDay(input.effectiveFrom, 'effective_from');
+  const code = normaliseCode(input.componentCode, 'component');
+  const [component] = await tx.select().from(payComponent).where(eq(payComponent.code, code)).limit(1);
+  if (!component) throw new HrValidationError('component', `names no pay component '${code}'`);
+  if (!component.active) throw new HrValidationError('component', `${component.nameEn} is deactivated`);
+  const stopped = Boolean(input.stopped);
+  if (component.calculation === 'base_salary' || component.calculation === 'absence') {
+    throw new HrValidationError('component', `${component.nameEn} is read from the ${component.calculation === 'base_salary' ? 'salary' : 'day sheet'}, not set per person`);
+  }
+  if (component.calculation === 'manual' && !stopped) throw new HrValidationError('component', `${component.nameEn} is typed on each month's run; a person can only be taken off it`);
+  let amount: string | null = null;
+  if (!stopped) {
+    const value = parseDecimal((input.amount ?? '').trim() || '0', MONEY_SCALE);
+    if (value < 0n) throw new HrValidationError('amount', 'cannot be negative');
+    if (component.calculation === 'percent_of_base' && value > 100n * 10n ** MONEY_SCALE) throw new HrValidationError('amount', 'a percentage of the base cannot exceed 100');
+    amount = toDecimalString(value, MONEY_SCALE);
+  }
+  const note = optionalText(input.note);
+  await tx.insert(employeePayComponent).values({ employeeId: id, branchCode: row.branchCode, componentCode: code, effectiveFrom, amount, stopped, note, recordedBy: ctx.principal.userId });
+  await history(tx, ctx, id, [{ field: `pay_component:${code}`, before: null, after: stopped ? 'stopped' : null, effectiveFrom, reason: note }]);
+  await recordChange(tx, ctx, {
+    action: stopped ? 'employee.pay_component_stopped' : 'employee.pay_component_set',
+    objectType: COMPENSATION_OBJECT,
+    objectId: row.employeeNo,
+    branchCode: row.branchCode,
+    // The figure is in the row, read under its own grant; the trail says which, when and by whom.
+    after: { componentCode: code, effectiveFrom, stopped },
+  });
+}
+
+/** The person's component rows, newest first — refused, and the refusal written, without the grant. */
+export async function payFiguresOf(tx: Tx, ctx: ActorContext, employeeId: string) {
+  const row = await loadById(tx, employeeId);
+  await authz.authorize(ctx.principal, 'view', COMPENSATION_OBJECT, { branchCode: row.branchCode, objectId: row.employeeNo });
+  return tx
+    .select({
+      id: employeePayComponent.id,
+      componentCode: employeePayComponent.componentCode,
+      nameEn: payComponent.nameEn,
+      nameAr: payComponent.nameAr,
+      calculation: payComponent.calculation,
+      effectiveFrom: employeePayComponent.effectiveFrom,
+      amount: employeePayComponent.amount,
+      stopped: employeePayComponent.stopped,
+      note: employeePayComponent.note,
+      recordedAt: employeePayComponent.recordedAt,
+      recordedBy: sql<string | null>`(select display_name from app_user u where u.id = ${employeePayComponent.recordedBy})`,
+    })
+    .from(employeePayComponent)
+    .innerJoin(payComponent, eq(payComponent.code, employeePayComponent.componentCode))
+    .where(eq(employeePayComponent.employeeId, employeeId))
+    .orderBy(desc(employeePayComponent.effectiveFrom), desc(employeePayComponent.recordedAt));
 }
 
 // ---------------------------------------------------------------------------

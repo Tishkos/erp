@@ -20,6 +20,9 @@ export async function savePayComponent(form: FormData): Promise<void> {
     calculation: text(form, 'calculation'),
     defaultValue: text(form, 'default_value') || null,
     taxable: flag(form, 'taxable'),
+    // HR-3 — where it posts; empty leaves it to the posting mapping.
+    expenseAccountId: text(form, 'expense_account_id') || null,
+    liabilityAccountId: text(form, 'liability_account_id') || null,
   };
   await runAdminAndReturn(
     (tx, ctx) => (existing ? settings.updatePayComponent(tx, ctx, code, input) : settings.createPayComponent(tx, ctx, { code, ...input })),

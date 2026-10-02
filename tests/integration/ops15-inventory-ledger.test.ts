@@ -151,6 +151,11 @@ beforeEach(async () => {
     ['supplier_advance', 'A000001', 'Supplier Advances', null],
     ['exchange_gain', 'R000001', 'Realised Exchange Gain', null],
     ['exchange_loss', 'X000001', 'Realised Exchange Loss', null],
+    // REQ-HR-001 HR-3 — a payroll run's cost, what it withholds and the net it owes.
+    ['salary_expense', 'X000001', 'Salaries and Wages', null],
+    ['payroll_employer_cost', 'X000001', 'Employer Social Security', null],
+    ['payroll_withholding', 'L000001', 'Payroll Deductions Payable', null],
+    ['net_pay', 'L000001', 'Salaries Payable', null],
   ] as const) {
     const { rows: parents } = await ownerPool.query(
       `select id, account_type from chart_of_account where code = $1`,

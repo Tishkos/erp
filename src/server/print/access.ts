@@ -44,9 +44,13 @@ export const EXPORT_ACCESS = {
   project_line_items: { kind: 'report', route: '/projects/reports', object: 'project' },
   project_milestone_trend: { kind: 'report', route: '/projects/reports', object: 'project' },
   project_earned_value: { kind: 'report', route: '/projects/reports', object: 'project' },
+  // REQ-HR-001 HR-3 — the run is read under the payroll grant; a payslip also
+  // by the person it pays (R5), whom row security alone lets through.
+  payroll_run: { kind: 'document', route: '/hr/payroll', object: 'payroll_run' },
+  payslip: { kind: 'document', route: '/hr/payroll', object: 'payroll_run', selfService: true },
 } as const satisfies Record<
   string,
-  { readonly kind: 'document' | 'report'; readonly route: string; readonly object: string }
+  { readonly kind: 'document' | 'report'; readonly route: string; readonly object: string; readonly selfService?: boolean }
 >;
 
 export type ExportKey = keyof typeof EXPORT_ACCESS;
@@ -60,7 +64,18 @@ export function verbFor(format: ExportFormat): 'print' | 'export' {
 /** May this reader have this format of this export? The menu and the route ask the same. */
 export function mayExport(principal: Principal, key: ExportKey, format: ExportFormat): boolean {
   const { object } = EXPORT_ACCESS[key];
-  return can(principal, 'view', object) && can(principal, verbFor(format), object);
+  return (can(principal, 'view', object) && can(principal, verbFor(format), object)) || isSelfService(key);
+}
+
+/**
+ * A copy the person it is about may take without the object's grant — their
+ * own payslip (REQ-HR-001 R5). The builder reads through row security, which
+ * returns their own row and nobody else's; so the grant is not asked, and
+ * the menu is offered wherever the screen itself could be read.
+ */
+export function isSelfService(key: ExportKey): boolean {
+  const entry = EXPORT_ACCESS[key] as { readonly selfService?: boolean };
+  return entry.selfService === true;
 }
 
 export function isExportKey(value: string): value is ExportKey {

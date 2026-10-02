@@ -267,6 +267,26 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     event: 'projects.settlement',
     lines: [line('project_auc', 'debit', true), line('project_cost', 'credit', true)],
   },
+  {
+    // REQ-HR-001 HR-3 (§9) — a month's pay posted: the earnings by department
+    // (the base less its absence), the employer's own costs, what is withheld
+    // or owed for the people (social security, tax) and the net they are
+    // owed. A pay component may name its own accounts (the expense, the
+    // liability); these roles answer for every component that does not.
+    event: 'hr.payroll_run',
+    lines: [
+      line('salary_expense', 'debit', true),
+      line('payroll_employer_cost', 'debit'),
+      line('payroll_withholding', 'credit'),
+      line('net_pay', 'credit', true),
+    ],
+  },
+  {
+    // REQ-HR-001 HR-3 (§9) — the net pay leaves a bank or cash account (the
+    // account is the payment's own, as a supplier payment's is).
+    event: 'hr.payroll_payment',
+    lines: [line('net_pay', 'debit', true)],
+  },
 ]);
 
 /** The catalogue as flat (event, role) pairs, in the order shown. */

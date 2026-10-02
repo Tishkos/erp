@@ -19,12 +19,17 @@ export type EmployeeStatus = (typeof EMPLOYEE_STATUSES)[number];
  * these are the ones "who was their manager in March" is asked about.
  */
 export const HISTORY_FIELDS = ['branch_code', 'department_code', 'position_code', 'manager_employee_id', 'status', 'employment_kind'] as const;
-export type HistoryField = (typeof HISTORY_FIELDS)[number] | 'base_salary_iqd' | 'hired' | 'ended' | 'contract_end_date';
+export type HistoryField = (typeof HISTORY_FIELDS)[number] | 'base_salary_iqd' | 'hired' | 'ended' | 'contract_end_date' | `pay_component:${string}`;
 
 export const PAY_COMPONENT_KINDS = ['earning', 'deduction', 'employer_cost'] as const;
 export type PayComponentKind = (typeof PAY_COMPONENT_KINDS)[number];
 
-export const PAY_CALCULATIONS = ['fixed', 'percent_of_base', 'manual'] as const;
+/**
+ * How a component's figure is reached (§6). HR-3: `base_salary` reads the
+ * compensation row in force and `absence` the day sheet — facts, never typed
+ * (R2); `manual` is typed on the run's line with a note (§9).
+ */
+export const PAY_CALCULATIONS = ['base_salary', 'fixed', 'percent_of_base', 'manual', 'absence'] as const;
 export type PayCalculation = (typeof PAY_CALCULATIONS)[number];
 
 export const PAY_METHODS = ['bank', 'cash'] as const;

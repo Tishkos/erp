@@ -314,6 +314,7 @@ export default async function Home() {
         waiting.receiptsAwaiting.length > 0 ||
         waiting.dueThisWeek.length > 0 ||
         waiting.leaveAwaiting.length > 0 ||
+        waiting.payrollAwaiting.length > 0 ||
         waiting.holdsNeedingReason.length > 0) ? (
         <Band
           count={
@@ -321,7 +322,8 @@ export default async function Home() {
             waiting.holdsIOwn.length +
             waiting.holdsNeedingReason.length +
             waiting.receiptsAwaiting.length +
-            waiting.leaveAwaiting.length
+            waiting.leaveAwaiting.length +
+            waiting.payrollAwaiting.length
           }
           href="/approvals"
           hrefLabel={t('dashboard.open_approvals')}
@@ -418,6 +420,28 @@ export default async function Home() {
                   </td>
                   <td>
                     <Link href={`/hr/leave/${encodeURIComponent(request.requestNo)}`}>{t('dashboard.open_leave')}</Link>
+                  </td>
+                </tr>
+              ))}
+            </BandTable>
+          ) : null}
+
+          {/* REQ-HR-001 HR-3 — payroll waiting for me: to approve, to post, to pay. */}
+          {waiting.payrollAwaiting.length > 0 ? (
+            <BandTable headings={[t('dashboard.payroll_awaiting'), column('amount'), '']}>
+              {waiting.payrollAwaiting.map((run) => (
+                <tr key={`pr:${run.runNo}`}>
+                  <td className={s.sapAccountCell}>
+                    <Link href={`/hr/payroll/${encodeURIComponent(run.runNo)}`}>
+                      <bdi dir="ltr">{run.runNo}</bdi>
+                    </Link>{' '}
+                    · <bdi dir="ltr">{`${run.branchCode} ${run.month}`}</bdi> · {t(`dashboard.payroll_action_${run.action}`)}
+                  </td>
+                  <td>
+                    <bdi dir="ltr">{formatMoney(run.netIqd, 'IQD', locale as Locale)}</bdi>
+                  </td>
+                  <td>
+                    <Link href={`/hr/payroll/${encodeURIComponent(run.runNo)}`}>{t('dashboard.open_payroll')}</Link>
                   </td>
                 </tr>
               ))}

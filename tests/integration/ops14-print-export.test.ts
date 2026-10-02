@@ -251,6 +251,11 @@ beforeAll(async () => {
     ['supplier_advance', 'A000001', 'Supplier Advances', null],
     ['exchange_gain', 'R000001', 'Realised Exchange Gain', null],
     ['exchange_loss', 'X000001', 'Realised Exchange Loss', null],
+    // REQ-HR-001 HR-3 — a payroll run's cost, what it withholds and the net it owes.
+    ['salary_expense', 'X000001', 'Salaries and Wages', null],
+    ['payroll_employer_cost', 'X000001', 'Employer Social Security', null],
+    ['payroll_withholding', 'L000001', 'Payroll Deductions Payable', null],
+    ['net_pay', 'L000001', 'Salaries Payable', null],
   ] as const) {
     const { rows: parents } = await ownerPool.query(`select id, account_type from chart_of_account where code = $1`, [
       parent,
@@ -826,10 +831,14 @@ describe('who may take a copy', () => {
   });
 
   it('gives every Operations Build export a print and an export grant to the roles that read it', async () => {
+    // REQ-HR-001 HR-3 — the payroll run is a sheet of salaries: the clerk,
+    // who reads no compensation (D-HR-7), has no copy of it; a payslip goes to
+    // whoever row security lets read it.
+    const COMPENSATION_GATED: readonly ExportKey[] = ['payroll_run'];
     for (const key of EXPORT_KEYS) {
       expect(mayExport(manager.principal, key, 'pdf')).toBe(true);
       expect(mayExport(manager.principal, key, 'xlsx')).toBe(true);
-      expect(mayExport(clerk.principal, key, 'pdf')).toBe(true);
+      expect(mayExport(clerk.principal, key, 'pdf')).toBe(!COMPENSATION_GATED.includes(key));
     }
   });
 });

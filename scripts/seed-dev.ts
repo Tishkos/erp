@@ -256,6 +256,11 @@ async function main() {
       ['L100040', 'Bank Loans', 'L000001', 'loan'],
       ['X100050', 'Bank Commission', 'X000001', null],
       ['X100060', 'Loan Interest', 'X000001', null],
+      // REQ-HR-001 HR-3 — the payroll's cost, what it withholds and the net it owes.
+      ['X100070', 'Salaries and Wages', 'X000001', null],
+      ['X100080', 'Employer Social Security', 'X000001', null],
+      ['L100050', 'Salaries Payable', 'L000001', null],
+      ['L100060', 'Payroll Deductions Payable', 'L000001', null],
     ];
     for (const [code, name, parent, control] of accounts) {
       await tx.execute(sql`
@@ -299,6 +304,11 @@ async function main() {
       ['treasury.loan_commission', 'landed_cost_clearing', 'A100040'],
       ['treasury.loan_commission', 'bank_commission', 'X100050'],
       ['payables.landed_cost', 'landed_cost_clearing', 'A100040'],
+      ['hr.payroll_run', 'salary_expense', 'X100070'],
+      ['hr.payroll_run', 'payroll_employer_cost', 'X100080'],
+      ['hr.payroll_run', 'payroll_withholding', 'L100060'],
+      ['hr.payroll_run', 'net_pay', 'L100050'],
+      ['hr.payroll_payment', 'net_pay', 'L100050'],
     ];
     for (const [event, role, code] of mappings) {
       await tx.execute(sql`

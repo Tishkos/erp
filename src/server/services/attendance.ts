@@ -218,7 +218,10 @@ export function monthSpan(month: string): { fromDate: string; toDate: string } {
 }
 
 export interface AttendanceSummary {
+  /** HR-3 — the span's working days on the calendar: what a month's pay is shared over. */
+  readonly workingDays: number;
   readonly present: number;
+  /** Absent on a working day: an absence recorded on a rest day or a holiday costs no pay. */
   readonly absent: number;
   readonly unrecorded: number;
   readonly holidays: number;
@@ -249,7 +252,16 @@ export async function summary(tx: Tx, employeeId: string, fromDate: string, toDa
     }
   }
   const count = (status: DayStatus) => days.filter((d) => d.status === status).length;
-  return { present: count('present'), absent: count('absent'), unrecorded: count('unrecorded'), holidays: count('holiday'), restDays: count('rest'), paidLeave, unpaidLeave };
+  return {
+    workingDays: days.filter((d) => d.kind === 'working').length,
+    present: count('present'),
+    absent: days.filter((d) => d.status === 'absent' && d.kind === 'working').length,
+    unrecorded: count('unrecorded'),
+    holidays: count('holiday'),
+    restDays: count('rest'),
+    paidLeave,
+    unpaidLeave,
+  };
 }
 
 export const ATTENDANCE_DAY_STATUSES = ATTENDANCE_STATUSES;

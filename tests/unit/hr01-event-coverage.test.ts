@@ -14,7 +14,8 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = process.cwd();
 const SERVICES = join(ROOT, 'src/server/services');
-const EMPLOYEE_TABLES = ['employee', 'employeeHistory', 'employeeCompensation'] as const;
+// HR-3 — a person's own pay component figures are compensation too.
+const EMPLOYEE_TABLES = ['employee', 'employeeHistory', 'employeeCompensation', 'employeePayComponent'] as const;
 
 function writes(source: string): string[] {
   const found: string[] = [];
@@ -28,7 +29,7 @@ function writes(source: string): string[] {
 describe('H8 · employee tables are written by one module, with history', () => {
   const files = readdirSync(SERVICES).filter((f) => f.endsWith('.ts'));
 
-  it('only services/employees.ts writes employee, employee_history or employee_compensation', () => {
+  it('only services/employees.ts writes employee, employee_history, employee_compensation or employee_pay_component', () => {
     const writers = files.filter((file) => writes(readFileSync(join(SERVICES, file), 'utf8')).length > 0);
     expect(writers).toEqual(['employees.ts']);
   });
@@ -41,7 +42,7 @@ describe('H8 · employee tables are written by one module, with history', () => 
     for (const chunk of chunks) {
       const name = chunk.slice(0, chunk.indexOf('('));
       const body = chunk;
-      const mutates = /\.(insert|update)\((employee|employeeCompensation)\)/.test(body);
+      const mutates = /\.(insert|update)\((employee|employeeCompensation|employeePayComponent)\)/.test(body);
       if (!mutates) continue;
       const records = /\bhistory\(/.test(body) || /\brecordChange\(/.test(body);
       if (!records) offenders.push(name);
@@ -55,6 +56,8 @@ describe('H8 · employee tables are written by one module, with history', () => 
     const source = readFileSync(join(SERVICES, 'employees.ts'), 'utf8');
     expect(source).not.toMatch(/\.(update|delete)\(employeeHistory\)/);
     expect(source).not.toMatch(/\.(update|delete)\(employeeCompensation\)/);
+    expect(source).not.toMatch(/\.(update|delete)\(employeePayComponent\)/);
+    expect(readFileSync(join(ROOT, 'src/server/db/migrations/0257_hr_payroll.sql'), 'utf8')).toMatch(/employee_pay_component_append_only/);
     const migration = readFileSync(join(ROOT, 'src/server/db/migrations/0241_hr_people.sql'), 'utf8');
     expect(migration).toMatch(/employee_history_append_only/);
     expect(migration).toMatch(/employee_compensation_append_only/);
