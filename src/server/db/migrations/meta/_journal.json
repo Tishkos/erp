@@ -1303,6 +1303,13 @@
       "when": 1795900000068,
       "tag": "0258_import_stage_shipment",
       "breakpoints": true
+    },
+    {
+      "idx": 186,
+      "version": "7",
+      "when": 1795900000069,
+      "tag": "0259_bank_never_negative",
+      "breakpoints": true
     }
   ]
 }

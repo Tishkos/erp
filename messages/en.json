@@ -1901,8 +1901,8 @@
       "last_movement": "Last movement",
       "never_moved": "Nothing has moved yet",
       "see_transactions": "See every transaction",
-      "reserved": "Reserved for payments",
-      "available": "Available"
+      "reserved": "Pending debit — promised to payment applications",
+      "available": "Available to pay with"
     },
     "bank_accounts": {
       "subtitle": "The company’s bank accounts, and the G/L account each is carried in.",
@@ -2988,7 +2988,8 @@
       "confirm_before_cut_over": "Paid before the cut-over",
       "confirm_before_cut_over_note": "For an application migrated from the sheet whose money left before the cut-over: the SWIFT date and reference from the bank’s copy are recorded and nothing is posted — that payment is already in the books the ERP opened with. Money that left after the cut-over is confirmed with the button beside this one, which posts it.",
       "exchange_open": "Fully paid in its currency; in dinars its invoices still owe {owed} and its payments are {over} over them. That is the exchange difference: it is booked once the exchange gain and loss are mapped on Posting Mappings.",
-      "exchange_settle": "Settle exchange difference"
+      "exchange_settle": "Settle exchange difference",
+      "amount_part_hint": "Any part of it. {remaining} is still owed — pay 20% with the order and the rest against the bill of lading if that is the deal, and raise another application for each part. Leave it empty to ask for all of it."
     },
     "supplier_advances": {
       "subtitle": "Money paid to a supplier before the invoice — the deposits on imports, and advances against orders.",

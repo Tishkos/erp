@@ -518,10 +518,17 @@ export async function AccountRecord({
                     </strong>
                   </div>
 
-                  {/* REQ-AP-001 §15.1 — what payment applications hold on
-                      this account, and what is left to promise. Only when
-                      something is held, like the transfer tiles below. */}
-                  {reserved && reserved.committedIqd > 0n ? (
+                  {/*
+                    REQ-AP-001 §15.1 — what payment applications hold on this
+                    account, and what is left to promise.
+
+                    Always drawn, including at nought (2026-10-03). It used to
+                    appear only when something was held, which hid it exactly
+                    when a person most needs to know that nothing is holding
+                    the balance back — and a figure that comes and goes
+                    teaches nobody what it means.
+                  */}
+                  {reserved ? (
                     <>
                       <div className={s.holdingsFlow}>
                         <span>{t('accounts_shared.reserved')}</span>

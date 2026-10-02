@@ -802,16 +802,18 @@ export default async function PayablePage({
                     <Form action={createApplication}>
                       <Hidden name="payable_no" value={row.payableNo} />
                       <Grid>
-                        <Select
-                          emptyLabel={pa('no_instalment')}
-                          label={pa('instalment')}
-                          name="instalment_id"
-                          options={pickers.instalments.map((instalment) => ({
-                            value: instalment.id,
-                            label: `${instalment.sequence}. ${instalment.label} — ${money(instalment.amountTxn)}`,
-                          }))}
+                        {/*
+                          A part payment is the ordinary case, not a special
+                          one: 20% with the order, the rest against the bill
+                          of lading. The box has always taken any amount —
+                          what it was missing was saying so, and saying what
+                          is still owed (2026-10-03).
+                        */}
+                        <Field
+                          hint={pa('amount_part_hint', { remaining: money(toDecimalString(paymentTotals.remainingTxn, 4n)) })}
+                          label={pa('col_amount')}
+                          name="amount"
                         />
-                        <Field hint={pa('amount_hint')} label={pa('col_amount')} name="amount" />
                         <Select
                           label={pa('col_method')}
                           name="payment_method"
@@ -836,12 +838,6 @@ export default async function PayablePage({
                             value: payee.id,
                             label: `${payee.bankName} · ${payee.accountNumber}${payee.swift ? ` · ${payee.swift}` : ''}${payee.verified ? '' : ` (${pa('unverified')})`}`,
                           }))}
-                        />
-                        <Select
-                          defaultValue="own_funds"
-                          label={pa('funding')}
-                          name="funding_source"
-                          options={pickers.funding.map((source) => ({ value: source.code, label: source.name }))}
                         />
                         {pickers.loans.length > 0 ? (
                           <Select
