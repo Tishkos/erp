@@ -27,7 +27,7 @@ import * as trialBalanceService from '../services/trial-balance';
 import { decimalString, isZero, scaled, sumMoney, sumQuantity } from './decimal';
 import type { BuildContext, Built } from './documents';
 import type { Messages } from './i18n';
-import type { Column, Fact, PrintModel, Row, Table } from './model';
+import { EXPORT_ROW_CAP, type Column, type Fact, type PrintModel, type Row, type Table } from './model';
 import { businessToday } from '../domain/business-date';
 
 /**
@@ -499,7 +499,10 @@ export async function stockMovement(ctx: BuildContext, query: Query): Promise<Bu
     itemCode: one('item') || null,
     warehouseCode: one('warehouse') || null,
   };
-  const rows = await stock.movements(tx, { principal: ctx.principal, branchCode: ctx.branchCode }, filter);
+  // OP-9 — read one row past the export cap, so a file that would have been
+  // cut short is refused with the count instead of quietly stopping at the
+  // list's page size while its filters say "All".
+  const rows = await stock.movements(tx, { principal: ctx.principal, branchCode: ctx.branchCode }, { ...filter, limit: EXPORT_ROW_CAP + 1 });
   const all = m.print('all');
   const title = m.print('titles.stock_movement');
   return built(

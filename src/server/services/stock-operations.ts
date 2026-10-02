@@ -792,7 +792,7 @@ export async function movements(
 ): Promise<Movement[]> {
   await authz.authorize(ctx.principal, 'view', MOVEMENT_OBJECT, { branchCode: ctx.branchCode });
 
-  const limit = Math.max(1, Math.min(filter.limit ?? 1000, 10_000));
+  const limit = Math.max(1, Math.min(filter.limit ?? 1000, 50_000));
   const offset = Math.max(0, filter.offset ?? 0);
   const result = await tx.execute(sql`
     ${movementRows(ctx, filter)}

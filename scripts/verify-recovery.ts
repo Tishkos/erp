@@ -90,11 +90,15 @@ async function main(): Promise<void> {
     `${triggers.length} found`,
   );
 
-  // 4. The application role cannot delete a document.
+  // 4. The application role cannot delete a document. Since migration 0169
+  //    a *draft* journal may be discarded, so DELETE exists on journal_entry
+  //    — fenced by journal_entry_reject_delete, which refuses anything that
+  //    is not a draft. A restore that lost the trigger but kept the grant is
+  //    the case this check exists for.
   const { rows: deletes } = await pool.query(`
     select table_name from information_schema.role_table_grants
      where grantee = 'erp_app' and privilege_type = 'DELETE'
-       and table_name in ('journal_entry','chart_of_account','audit_event','subledger_entry',
+       and table_name in ('chart_of_account','audit_event','subledger_entry',
                           'business_partner','item','workflow_instance')
   `);
   check(
@@ -102,6 +106,10 @@ async function main(): Promise<void> {
     deletes.length === 0,
     deletes.map((r) => r.table_name).join(', '),
   );
+  const { rows: fence } = await pool.query(
+    `select 1 from pg_trigger where tgname = 'journal_entry_reject_delete' and not tgisinternal`,
+  );
+  check('the draft-only delete fence stands on journal_entry', fence.length === 1);
 
   // 5. The ledger balances. A partial restore can pass every structural check
   //    and still have lost half a journal.

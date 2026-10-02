@@ -39,6 +39,7 @@ import {
   type PostingRequest,
   type PostingRule,
 } from '../domain/posting';
+import { logger } from '../logging';
 import { assertCurrencyAllowed, assertPostable } from '../domain/chart-of-accounts';
 import { assertMappedAccount } from '../domain/posting-map';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
@@ -474,10 +475,11 @@ async function emitPosted(event: PostedEvent): Promise<void> {
     try {
       await subscriber(event);
     } catch (error) {
-      console.error(
-        `[posting] subscriber failed for ${event.entryNo} (${event.eventType}); the posting stands.`,
+      logger.error('posting subscriber failed; the posting stands', {
         error,
-      );
+        entryNo: event.entryNo,
+        eventType: event.eventType,
+      });
     }
   }
 }

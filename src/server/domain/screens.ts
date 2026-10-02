@@ -463,6 +463,9 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/payables/loans',
   // REQ-AP-001 Stage 8 — the sheet import and its sign-off (§24.3).
   '/administration/payables-migration',
+  // REQ-IMPROVE-001 Stage 1 — the two screens the menu promised (OP-4).
+  '/administration/jobs',
+  '/administration/backup-health',
 ]);
 
 export function isDelivered(route: string): boolean {

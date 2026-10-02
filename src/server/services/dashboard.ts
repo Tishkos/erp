@@ -1,5 +1,6 @@
 import { and, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
+import { logger } from '../logging';
 import { apInvoice, arInvoice, businessPartner, customerReceipt } from '../db/schema';
 import { AGEING_BUCKETS, bucketFor, type AgeingBucket } from '../domain/ageing';
 import { parseDecimal, toDecimalString } from '../domain/money';
@@ -64,7 +65,7 @@ async function band<T>(name: string, read: () => Promise<T>): Promise<Band<T>> {
   try {
     return await read();
   } catch (cause) {
-    console.error(`[dashboard] the ${name} band could not be read`, cause);
+    logger.error('dashboard band could not be read', { error: cause, band: name });
     return null;
   }
 }

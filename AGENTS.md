@@ -79,3 +79,14 @@ Standing rule (by direction, 2026-10-01; see also newsettings.md: "DO NOT CHANGE
 * Only classes that already exist in `src/components/admin/admin.module.css` and `src/components/ui/*.module.css`. No new CSS classes, modules, inline styles, colours, fonts, spacing values, icons or layout patterns. If something cannot be expressed with what exists, stop and ask.
 * Never draw your own navigation, header rows, tab rows, chip rows or banners. Navigation is SectionTabs; status is the existing status chip (`status status--<x>` + `data-status`); a warning or stop is the existing Flash / `s.sapNote` banner in its existing colours.
 * Before a screen is called done: `npx playwright test tests/e2e/theme-readability.spec.ts --workers=1` passes, and two side-by-side screenshots (the new screen beside the model it copies, desktop EN and mobile AR) are shown for approval. If a reviewer could tell which one is new from the layout alone, it is not done.
+
+## Operations (REQ-IMPROVE-001 IMPROVE-1)
+
+* `/healthz` answers 200 only when the database answers and the migrations are at head (`services/system-health.probe`); the footer light and `deploy.sh` read it. A migration that the application role must read (the `drizzle` schema) is granted in 0239 — keep it.
+* Every script that writes fixtures refuses while `var/LIVE` exists (`scripts/lib/live-guard.ts` / `.sh`); a script whose purpose is the live database is listed with its reason in `tests/unit/im04-live-guard.test.ts`. Add a new writing script to one or the other.
+* Scheduled jobs are lines in `scripts/ops/crontab.erp`, each through `run-job.sh` (flock, timeout, log, `var/jobs/<job>.last`); the Background Jobs screen parses that file. A new job is a line there, nothing else.
+* Exports: read and audit inside the transaction (`prepareExport`), render after it (`renderExport`); `EXPORT_ROW_CAP` (20,000) over every table of the model. A new report that lists many rows reads `EXPORT_ROW_CAP + 1` rows so the cap trips rather than the list's page size.
+* Request id: `currentRequestId()` (`src/server/request-id.ts`) — nginx's `X-Request-ID` or a minted UUID — goes on every audit row from `runAdmin`; errors are logged by `src/instrumentation.ts` with the digest the error page shows.
+* The host, the environment keys, nginx, pm2, the crontab and the escrow are `docs/RUNBOOK-host-build.md`; backups, drill and recovery are `docs/RUNBOOK-database-recovery.md`. A release is `docs/RELEASE.md` (version, CHANGELOG, tag, deploy from `main`).
+* `vitest` is pinned at 4.1.10 (B-IM-6): npm 10 cannot resolve 4.1.11's peer set, and the server's npm 10 rejects a lock from npm 11. Do not "fix" the audit by bumping it without checking `npm ci --dry-run`.
+

@@ -638,6 +638,7 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from payment_method');
 
     await client.query('delete from item_uom');
+    await client.query('delete from item_supplier');
     await client.query('delete from item');
     await client.query('delete from bank_cash_account');
     await client.query(`
@@ -726,6 +727,12 @@ export async function resetTestData(): Promise<void> {
       begin
         delete from doc_number_allocation
          where document_no not in (select code from chart_of_account where is_system);
+        -- A root re-allocated by a test names that test's user, who is about
+        -- to go; with the FK triggers off here the row would be left pointing
+        -- at nobody — and a dump of this database would then not restore
+        -- (IM1). The seed's own allocations carry no allocator either.
+        update doc_number_allocation set allocated_by = null
+         where document_no in (select code from chart_of_account where is_system);
       end $$;
     `);
 
@@ -908,8 +915,10 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from user_branch_scope');
     await client.query('delete from user_department_scope');
 
-    // Roles seeded by a migration stay.
+    // Roles seeded by a migration stay, with their grants; a test's role goes
+    // with its grants, or the grants would outlive it (the FK triggers are off).
     await client.query('delete from app_user');
+    await client.query('delete from role_grant g where not exists (select 1 from role r where r.code = g.role_code and r.is_system)');
     await client.query('delete from role where not is_system');
     await client.query(`
       delete from branch;

@@ -44,6 +44,7 @@ export async function permit(
     branchCode: ctx.branchCode,
     objectId: objectId ?? null,
     requestId: ctx.requestId ?? null,
+    clientIp: ctx.clientIp ?? null,
   });
 }
 
@@ -60,6 +61,7 @@ export async function permitCeo(ctx: ActorContext): Promise<void> {
         branchCode: ctx.branchCode,
         objectId: null,
         requestId: ctx.requestId ?? null,
+        clientIp: ctx.clientIp ?? null,
       },
     );
   }
@@ -103,6 +105,7 @@ export async function recordChange(
     reason: input.reason ?? null,
     outcome: 'success',
     requestId: ctx.requestId ?? null,
+    clientIp: ctx.clientIp ?? null,
   });
 }
 

@@ -11,6 +11,7 @@ import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { Tx } from './db/client';
+import { currentClientIp, currentRequestId } from './request-id';
 import type { ActorContext } from './services/administration';
 import { withCurrentUser, type RequestContext } from './session';
 
@@ -19,11 +20,18 @@ export const FLASH_COOKIE = 'erp_admin_secret';
 
 export type AdminHandler<T> = (tx: Tx, ctx: ActorContext, request: RequestContext) => Promise<T>;
 
-function actorFor(request: RequestContext): ActorContext {
+/**
+ * The actor every service receives. OP-5: the request id is the request's
+ * (nginx's `X-Request-ID`, or one minted here), not the session's, and the
+ * client address travels with it to the audit trail.
+ */
+async function actorFor(request: RequestContext): Promise<ActorContext> {
+  const [requestId, clientIp] = await Promise.all([currentRequestId(), currentClientIp()]);
   return {
     principal: request.principal,
     branchCode: request.scope.branchCode,
-    requestId: request.sessionId,
+    requestId,
+    clientIp,
   };
 }
 
@@ -41,7 +49,7 @@ export interface RunOptions {
 /** Runs the handler in the caller's transaction and reports, never throws. */
 export async function runAdmin<T>(handler: AdminHandler<T>, options: RunOptions = {}): Promise<AdminOutcome<T>> {
   try {
-    const value = await withCurrentUser((tx, request) => handler(tx, actorFor(request), request), options);
+    const value = await withCurrentUser(async (tx, request) => handler(tx, await actorFor(request), request), options);
     return { ok: true, value };
   } catch (error) {
     return { ok: false, error: messageOf(error) };

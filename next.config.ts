@@ -34,11 +34,21 @@ const config: NextConfig = {
     ignoreBuildErrors: false,
   },
 
+  // REQ-IMPROVE-001 OP-2 — every build carries the deploy's id, so a browser
+  // holding the previous build's chunks asks for them under the old id and
+  // gets a reload instead of a 404 after an atomic swap. deploy.sh exports it;
+  // /healthz reports it.
+  ...(process.env.DEPLOYMENT_ID ? { deploymentId: process.env.DEPLOYMENT_ID } : {}),
+
   experimental: {
     // The domain layer is plain TypeScript and must never be bundled into a
     // client component. Anything reaching it goes through the server.
     serverActions: {
-      bodySizeLimit: '4mb', // Excel paste blocks — §7.2, §8.3
+      // REQ-IMPROVE-001 OP-9 — the one limit the attachment policy
+      // (domain/attachments.ts DEFAULT_MAX_BYTES, 25 MB) and the Excel
+      // paste blocks (§7.2, §8.3) both fit under; nginx's
+      // client_max_body_size says the same (deploy/nginx.example.conf).
+      bodySizeLimit: '26mb',
     },
   },
 

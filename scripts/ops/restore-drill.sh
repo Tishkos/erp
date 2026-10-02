@@ -41,12 +41,33 @@ PGPASSWORD=$(grep -oP '^DATABASE_URL_OWNER=postgres://erp_owner:\K[^@]+' "$APP/.
 psql() { command psql -h 127.0.0.1 -p 5434 -U erp_owner "$@"; }
 
 say() { printf '\n== %s\n' "$*"; }
-fail() { echo "DRILL FAILED: $*" >&2; psql -d postgres -qc "drop database if exists \"$DRILL_DB\"" || true; exit 1; }
+fail() { echo "DRILL FAILED: $*" >&2; psql -d postgres -qc "drop database if exists \"$DRILL_DB\"" || true; rm -f "/tmp/restore-drill-$STAMP.dump"; exit 1; }
 
-# The newest dump of the live database, whatever made it: a deploy, a format,
-# an orphan removal or the nightly backup all write here in custom format.
-DUMP=$(ls -t "$BACKUPS"/*.dump 2>/dev/null | head -1)
-[[ -n "$DUMP" ]] || fail "no *.dump in $BACKUPS"
+# The newest *nightly* set (backup.sh, REQ-IMPROVE-001 OP-1), decrypted when
+# it was encrypted; a deploy's pre-migration dump in the root is only the
+# fallback for a server the nightly job has never run on. A partial dump
+# (reset-statement-mapping.sh writes a two-table one) is never picked, and a
+# set older than 26 hours fails the drill: the drill proves the backup that
+# would be restored tonight, not one from last month (IM1).
+NIGHTLY_SET=$(ls -1d "$BACKUPS"/nightly/*/ 2>/dev/null | sort | tail -1)
+DRILL_STARTED=$(date -u +%s)
+if [[ -n "$NIGHTLY_SET" ]]; then
+  DUMP=$(ls "$NIGHTLY_SET"erp-*.dump "$NIGHTLY_SET"erp-*.dump.age 2>/dev/null | head -1)
+  [[ -n "$DUMP" ]] || fail "the newest nightly set $NIGHTLY_SET holds no erp-*.dump"
+  if [[ "$DUMP" == *.age ]]; then
+    [[ -f /etc/qs-erp/backup.env ]] && { set -a; . /etc/qs-erp/backup.env; set +a; }
+    [[ -n "${AGE_IDENTITY:-}" ]] || fail "the set is encrypted and AGE_IDENTITY is not set in /etc/qs-erp/backup.env"
+    CLEAR="/tmp/restore-drill-$STAMP.dump"
+    age -d -i "$AGE_IDENTITY" -o "$CLEAR" "$DUMP" || fail "could not decrypt $DUMP"
+    DUMP_SOURCE="$DUMP"; DUMP="$CLEAR"
+  fi
+  AGE_HOURS=$(( ( $(date -u +%s) - $(date -u -r "${DUMP_SOURCE:-$DUMP}" +%s) ) / 3600 ))
+  [[ "${1:-}" == "--any" || "$AGE_HOURS" -le 26 ]] || fail "the newest nightly set is $AGE_HOURS hours old — the backup job is not running"
+else
+  DUMP=$(ls -t "$BACKUPS"/db-before-*.dump 2>/dev/null | head -1)
+  [[ -n "$DUMP" ]] || fail "no nightly set under $BACKUPS/nightly and no deploy dump in $BACKUPS — run backup.sh"
+  say "WARNING: no nightly set yet; drilling the newest deploy dump instead"
+fi
 say "Restore drill $STAMP — $DUMP ($(du -h "$DUMP" | cut -f1), $(date -u -r "$DUMP" +%Y-%m-%dT%H:%MZ))"
 
 # A fresh database, owned by the owner role like the live one. The app role
@@ -96,6 +117,13 @@ COUNTS=$(psql -d "$DRILL_DB" -tAc "
   select 'journals '||(select count(*) from journal_entry)||', movements '||(select count(*) from inventory_movement)||', invoices '||(select count(*) from ap_invoice)+(select count(*) from ar_invoice)" | tail -1)
 say "Restored copy holds $COUNTS; newest posting $NEWEST"
 
+# 4. What the recovery runbook's own verifier says — RLS forced, grants in
+#    place, migrations at head, the ledger balanced (IM1).
+if [[ -f "$APP/scripts/verify-recovery.ts" ]]; then
+  (cd "$APP" && DATABASE_URL_OWNER="postgres://erp_owner:$PGPASSWORD@127.0.0.1:5434/$DRILL_DB" npx tsx scripts/verify-recovery.ts "$DRILL_DB") \
+    || fail "verify-recovery.ts did not pass on the restored copy"
+fi
+
 psql -d postgres -qc "drop database \"$DRILL_DB\""
-rm -f "/tmp/restore-drill-$STAMP.err"
-say "Restore drill $STAMP PASSED — $DUMP restores cleanly and its ledger agrees with its documents."
+rm -f "/tmp/restore-drill-$STAMP.err" "/tmp/restore-drill-$STAMP.dump"
+say "Restore drill $STAMP PASSED in $(( $(date -u +%s) - DRILL_STARTED ))s — $DUMP restores cleanly and its ledger agrees with its documents."

@@ -13,6 +13,7 @@
  *
  *   npm run db:seed
  */
+import { refuseOnLive } from './lib/live-guard';
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 import { db, applyScope } from '../src/server/db/client';
@@ -41,6 +42,7 @@ const ADMIN_EMAIL = 'admin@example.com';
 const PASSWORD = 'Ledger-Trial-Balance-7';
 
 async function main() {
+  refuseOnLive('seed development fixtures');
   if (process.env.NODE_ENV === 'production') {
     throw new Error('The development seed must not run against production.');
   }

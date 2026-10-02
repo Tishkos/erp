@@ -177,7 +177,9 @@ describe('every screen has one address', () => {
     expect(wired.map((screen) => screen.route).sort()).toEqual([
       '/',
       '/administration/audit',
+      '/administration/backup-health',
       '/administration/company',
+      '/administration/jobs',
       '/administration/managers',
       '/administration/numbering',
       // REQ-AP-001 Stage 8 — the sheet import.

@@ -104,6 +104,8 @@ export interface ActorContext {
   readonly principal: Principal;
   readonly branchCode: string;
   readonly requestId?: string | null;
+  /** OP-5 — the address nginx saw, for the audit trail's `client_ip`. */
+  readonly clientIp?: string | null;
 }
 
 export interface CreateAccountInput {
