@@ -17,12 +17,15 @@
  * at-least-once, which is why `raise` is idempotent on the dedupe key rather
  * than merely careful.
  */
-import { and, asc, eq, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 import {
   assertRule,
   dedupeKeyFor,
+  isDeliveryDue,
   isEscalationDue,
   renderNotification,
+  DELIVERY_MAX_ATTEMPTS,
+  type DeliveryStatus,
   type NotificationChannel,
   type NotificationRule,
   type QualifyingEvent,
@@ -187,7 +190,26 @@ export type ChannelSender = (message: {
   recipientUserId: string;
   subject: string;
   body: string;
-}) => Promise<void> | void;
+  notificationId: bigint;
+  deliveryId: bigint;
+  eventType: string;
+  objectType: string;
+  objectId: string;
+}, tx: Tx) => Promise<void> | void;
+
+/**
+ * Thrown by a sender when the recipient cannot be reached on this channel at
+ * all — no address, notifications switched off — as opposed to a transport
+ * that failed. The delivery is marked `suppressed`: not an error, nothing to
+ * retry, and the in-app copy is still there.
+ */
+export class DeliverySuppressed extends Error {
+  readonly code = 'DELIVERY_SUPPRESSED';
+  constructor(reason: string) {
+    super(reason);
+    this.name = 'DeliverySuppressed';
+  }
+}
 
 const senders = new Map<NotificationChannel, ChannelSender>();
 
@@ -195,8 +217,11 @@ const senders = new Map<NotificationChannel, ChannelSender>();
  * Registers how a channel actually delivers.
  *
  * In-app needs no sender — the row *is* the delivery. E-mail is registered by
- * the deployment, because the transport is infrastructure and §25 keeps
- * configuration out of code.
+ * the delivery job (`scripts/ops/deliver-notifications.ts`) and WhatsApp by
+ * the bridge (`scripts/ops/whatsapp-bridge.ts`), because each transport is
+ * infrastructure and §25 keeps configuration out of code. A process that owns
+ * no sender for a channel leaves that channel's rows pending for the one that
+ * does (REQ-WA-001 WA-1).
  */
 export function registerSender(channel: NotificationChannel, sender: ChannelSender): void {
   senders.set(channel, sender);
@@ -206,83 +231,146 @@ export function clearSenders(): void {
   senders.clear();
 }
 
+export function hasSender(channel: NotificationChannel): boolean {
+  return channel === 'in_app' || senders.has(channel);
+}
+
+type DeliveryRow = typeof notificationDelivery.$inferSelect;
+type NotificationRow = typeof notification.$inferSelect;
+
 /**
- * Attempts delivery on every pending channel of one notification.
- *
- * A failure is recorded and the attempt counted. It does not throw: the caller
- * is a job handler, and a notification that cannot be delivered is not a reason
- * to retry the *event*. §21 — the delivery outcome changes nothing upstream.
+ * One attempt on one delivery row. The outcome is written whatever it is:
+ * sent, failed with the reason, or suppressed — and the attempt counted. It
+ * does not throw: the caller is a job, and a notification that cannot be
+ * delivered is not a reason to retry the *event*. §21 — the delivery outcome
+ * changes nothing upstream.
  */
-export async function deliver(
-  tx: Tx,
-  notificationId: bigint,
-): Promise<{ sent: number; failed: number }> {
-  const [row] = await tx
-    .select()
-    .from(notification)
-    .where(eq(notification.id, notificationId))
-    .limit(1);
+async function attempt(tx: Tx, delivery: DeliveryRow, row: NotificationRow): Promise<'sent' | 'failed' | 'suppressed' | 'skipped'> {
+  const sender = senders.get(delivery.channel);
+  const now = new Date();
 
-  if (!row) return { sent: 0, failed: 0 };
+  // In-app delivery is the row existing; there is nothing to send. Another
+  // channel without a sender in this process belongs to another process.
+  if (delivery.channel !== 'in_app' && !sender) return 'skipped';
 
-  const pending = await tx
+  try {
+    if (sender && delivery.channel !== 'in_app') {
+      await sender({
+        channel: delivery.channel,
+        recipientUserId: row.recipientUserId,
+        subject: row.subject,
+        body: row.body,
+        notificationId: row.id,
+        deliveryId: delivery.id,
+        eventType: row.eventType,
+        objectType: row.objectType,
+        objectId: row.objectId,
+      }, tx);
+    }
+    await tx
+      .update(notificationDelivery)
+      .set({ status: 'sent', deliveredAt: now, lastAttemptAt: now, attempts: delivery.attempts + 1, errorMessage: null })
+      .where(eq(notificationDelivery.id, delivery.id));
+    return 'sent';
+  } catch (error) {
+    if (error instanceof DeliverySuppressed) {
+      await tx
+        .update(notificationDelivery)
+        .set({ status: 'suppressed', lastAttemptAt: now, attempts: delivery.attempts + 1, errorMessage: null })
+        .where(eq(notificationDelivery.id, delivery.id));
+      return 'suppressed';
+    }
+    await tx
+      .update(notificationDelivery)
+      .set({
+        status: 'failed',
+        lastAttemptAt: now,
+        attempts: delivery.attempts + 1,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      })
+      .where(eq(notificationDelivery.id, delivery.id));
+    return 'failed';
+  }
+}
+
+export interface DeliverResult {
+  readonly sent: number;
+  readonly failed: number;
+  readonly suppressed: number;
+  /** Channels this process has no sender for — left pending for the one that does. */
+  readonly skipped: number;
+}
+
+/**
+ * Attempts delivery on every due channel of one notification: the pending
+ * ones, and the failed ones whose retry is due (D-HD-4: three attempts,
+ * 1 / 10 / 60 minutes apart; after that the failure stays and is visible).
+ */
+export async function deliver(tx: Tx, notificationId: bigint, now = new Date()): Promise<DeliverResult> {
+  const [row] = await tx.select().from(notification).where(eq(notification.id, notificationId)).limit(1);
+  const result = { sent: 0, failed: 0, suppressed: 0, skipped: 0 };
+  if (!row) return result;
+
+  const candidates = await tx
     .select()
     .from(notificationDelivery)
     .where(
       and(
         eq(notificationDelivery.notificationId, notificationId),
-        eq(notificationDelivery.status, 'pending'),
+        inArray(notificationDelivery.status, ['pending', 'failed'] satisfies DeliveryStatus[]),
       ),
-    );
+    )
+    .orderBy(asc(notificationDelivery.id));
 
-  let sent = 0;
-  let failed = 0;
-
-  for (const delivery of pending) {
-    const sender = senders.get(delivery.channel);
-
-    try {
-      // In-app delivery is the row existing; there is nothing to send.
-      if (delivery.channel !== 'in_app') {
-        if (!sender) {
-          throw new Error(`No sender is registered for the ${delivery.channel} channel.`);
-        }
-        await sender({
-          channel: delivery.channel,
-          recipientUserId: row.recipientUserId,
-          subject: row.subject,
-          body: row.body,
-        });
-      }
-
-      await tx
-        .update(notificationDelivery)
-        .set({
-          status: 'sent',
-          deliveredAt: new Date(),
-          lastAttemptAt: new Date(),
-          attempts: delivery.attempts + 1,
-          errorMessage: null,
-        })
-        .where(eq(notificationDelivery.id, delivery.id));
-
-      sent += 1;
-    } catch (error) {
-      await tx
-        .update(notificationDelivery)
-        .set({
-          status: 'failed',
-          lastAttemptAt: new Date(),
-          attempts: delivery.attempts + 1,
-          errorMessage: error instanceof Error ? error.message : String(error),
-        })
-        .where(eq(notificationDelivery.id, delivery.id));
-
-      failed += 1;
-    }
+  for (const delivery of candidates) {
+    if (!isDeliveryDue(delivery, now)) continue;
+    const outcome = await attempt(tx, delivery, row);
+    result[outcome] += 1;
   }
+  return result;
+}
 
-  return { sent, failed };
+/**
+ * The deliveries one channel's process should attempt now: pending rows and
+ * failed rows whose retry is due, oldest first. Reads every recipient's
+ * notification, so it marks the transaction as the system sweep HD5 allows.
+ */
+export async function dueDeliveries(
+  tx: Tx,
+  channel: NotificationChannel,
+  options: { readonly now?: Date; readonly limit?: number } = {},
+): Promise<Array<{ delivery: DeliveryRow; notification: NotificationRow }>> {
+  const now = options.now ?? new Date();
+  await markSystemSweep(tx);
+  const rows = await tx
+    .select({ delivery: notificationDelivery, notification })
+    .from(notificationDelivery)
+    .innerJoin(notification, eq(notification.id, notificationDelivery.notificationId))
+    .where(
+      and(
+        eq(notificationDelivery.channel, channel),
+        inArray(notificationDelivery.status, ['pending', 'failed'] satisfies DeliveryStatus[]),
+        sql`${notificationDelivery.attempts} < ${DELIVERY_MAX_ATTEMPTS}`,
+      ),
+    )
+    .orderBy(asc(notificationDelivery.id))
+    .limit(Math.max(1, Math.min(1000, (options.limit ?? 200) * 2)));
+  return rows.filter((r) => isDeliveryDue(r.delivery, now)).slice(0, options.limit ?? 200);
+}
+
+/** One channel's sweep: every due delivery on it, attempted once each. */
+export async function deliverChannel(
+  tx: Tx,
+  channel: NotificationChannel,
+  options: { readonly now?: Date; readonly limit?: number } = {},
+): Promise<DeliverResult> {
+  const due = await dueDeliveries(tx, channel, options);
+  const result = { sent: 0, failed: 0, suppressed: 0, skipped: 0 };
+  for (const { delivery, notification: row } of due) {
+    const outcome = await attempt(tx, delivery, row);
+    result[outcome] += 1;
+  }
+  return result;
 }
 
 /** The failures, so §21's "delivery status" is visible rather than merely recorded. */

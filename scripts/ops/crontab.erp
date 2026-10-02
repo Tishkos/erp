@@ -15,7 +15,12 @@
 #   06:20 daily     due-notices            receivables due notices
 #   06:40 daily     health-check           backups fresh, partitions ahead, fiscal year
 #                                          open, disk, failed jobs → in-app notice
+#   */5 minutes     deliver-notifications  the outbox: in-app rows complete, e-mail
+#                                          sent, retries (REQ-WA-001 WA-1, HARDEN F1–F3)
 #   03:00 Sunday    restore-drill          restore the newest set, verify it
+#
+# The WhatsApp bridge is not a cron job: it is a long-running service
+# (deploy/whatsapp-bridge.service) that owns the whatsapp channel itself.
 #
 PATH=/usr/local/bin:/usr/bin:/bin
 APP=/opt/qs-erp-next
@@ -27,4 +32,5 @@ RUN=/opt/qs-erp-next/scripts/ops/run-job.sh
 10 6 * * *   $RUN payables-sweep      1800 npx tsx $APP/scripts/ops/payables-sweep.ts
 20 6 * * *   $RUN due-notices         1800 npx tsx $APP/scripts/ops/due-notices.ts
 40 6 * * *   $RUN health-check        900  npx tsx $APP/scripts/ops/health-check.ts
+*/5 * * * *  $RUN deliver-notifications 240 npx tsx $APP/scripts/ops/deliver-notifications.ts
 0  3 * * 0   $RUN restore-drill       5400 $APP/scripts/ops/restore-drill.sh --local

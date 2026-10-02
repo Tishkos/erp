@@ -139,7 +139,7 @@ const LANE_DEFAULT_ROLE: Readonly<Record<string, string>> = {
   cost: 'accounting_officer',
 };
 
-async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting> {
+export async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting> {
   const maySeePayables = can(principal, 'view', 'payable');
   const [inbox, unread, holdRows] = await Promise.all([
     can(principal, 'view', approvals.PERMISSION_OBJECT)

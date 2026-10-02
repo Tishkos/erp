@@ -192,7 +192,7 @@ describe('§21 · delivery status is recorded and visible', () => {
       notifications.deliver(tx, BigInt(created[0].id)),
     );
 
-    expect(result).toEqual({ sent: 1, failed: 1 }); // in-app arrived, e-mail did not
+    expect(result).toMatchObject({ sent: 1, failed: 1, suppressed: 0 }); // in-app arrived, e-mail did not
 
     const failures = await withScope(scope(manager), (tx) =>
       notifications.failedDeliveries(tx),

@@ -169,9 +169,9 @@ D-HD-2 below fixes the zone authoritatively.
 
 | # | Sev | Finding | Evidence |
 |---|---|---|---|
-| F1 | H | **No channel sender is registered anywhere** — every non-in-app delivery would throw "No sender is registered". | `notifications.ts:176,223` |
-| F2 | H | **The delivery job handler is never installed** and **no job runner process exists** — `pg-boss` is a dependency never imported; `notification_delivery` rows stay `pending` forever and the outbox grows unbounded. | `notifications.ts:439`, `jobs.ts:117,436` |
-| F3 | M | A failed delivery can never be retried: the forward-only trigger blocks `failed → pending`. | `notifications.ts:245-257`, `migrations/0016:103` |
+| F1 | H | ~~**No channel sender is registered anywhere**~~ **Built with REQ-WA-001 WA-1 (2026-10-02):** `notification-runner.registerEmailSender` (SMTP), `whatsapp.registerWhatsappSender` (the bridge); a channel with no sender in a process is left pending for the process that owns it. | `notification-runner.ts`, `whatsapp.ts` |
+| F2 | H | ~~**The delivery job handler is never installed** and **no job runner process exists**~~ **Built with REQ-WA-001 WA-1:** `notification-runner.runOnce` dispatches the outbox, runs `notification.deliver`, sweeps the owned channel; `scripts/ops/deliver-notifications.ts` every five minutes (crontab), the bridge every poll. HD10 → `tests/integration/wa01-bridge.test.ts`. | `notification-runner.ts`, `crontab.erp` |
+| F3 | M | ~~A failed delivery can never be retried~~ **Built with REQ-WA-001 WA-1:** a `failed` row is re-attempted in place (`failed → sent` is allowed by the trigger; only `sent` is terminal) per D-HD-4 — 1 / 10 / 60 minutes, three attempts (`domain/notifications.isDeliveryDue`); `suppressed` for an unreachable recipient. No new column was needed. | `notifications.ts` › `attempt`, `deliverChannel` |
 | F4 | M | All recurring jobs exist only as hand-installed crontab lines — a fresh VPS silently runs none (sweep, due-notices, integrity, statement checks, restore drill). | `scripts/ops/*`, runbook |
 | F5 | M | The Sunday restore drill is known-broken on `CASH-ACCOUNTANT_ERBIL` (deleted chart account) — tracked only in prose, no guard. | runbook §cron |
 | F6 | L | No exchange-rate fetch job (manual entry only); `nodemailer` installed, never imported. | `package.json:40,48` |

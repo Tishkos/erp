@@ -1163,6 +1163,13 @@
       "when": 1795900000045,
       "tag": "0241_hr_people",
       "breakpoints": true
+    },
+    {
+      "idx": 166,
+      "version": "7",
+      "when": 1795900000046,
+      "tag": "0242_whatsapp_bridge",
+      "breakpoints": true
     }
   ]
 }

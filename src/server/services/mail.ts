@@ -1,5 +1,5 @@
 /**
- * Outbound mail — Phase 0, one message type: a temporary password.
+ * Outbound mail — Phase 0: a temporary password; WA-1: the plain notification.
  *
  * Configuration is environment only (TECHSTACK A13): SMTP_HOST, SMTP_PORT,
  * SMTP_USER, SMTP_PASS and MAIL_FROM. When they are absent the system is not
@@ -101,6 +101,30 @@ export async function sendTemporaryPassword(mail: TemporaryPasswordMail): Promis
     </div>`;
 
   await transport(config).sendMail({ from: config.from, to: mail.to, subject, text, html });
+  return true;
+}
+
+export interface PlainMail {
+  readonly to: string;
+  readonly subject: string;
+  readonly text: string;
+}
+
+/**
+ * A plain message — what a notification becomes on the e-mail channel
+ * (REQ-HARDEN-001 F1, delivered with REQ-WA-001 WA-1). Returns false when
+ * mail is not configured; a transport failure throws, so the delivery is
+ * recorded as failed with the relay's own words.
+ */
+export async function sendPlain(mail: PlainMail): Promise<boolean> {
+  const config = settings();
+  if (!config) return false;
+  const html = `
+    <div style="font-family:Inter,Segoe UI,Arial,sans-serif;max-width:560px;margin:0 auto;color:#0d1d4e">
+      <p style="white-space:pre-wrap">${escape(mail.text)}</p>
+      <p style="color:#596884;font-size:12px"><a href="${config.appUrl}">${config.appUrl}</a></p>
+    </div>`;
+  await transport(config).sendMail({ from: config.from, to: mail.to, subject: mail.subject, text: mail.text, html });
   return true;
 }
 

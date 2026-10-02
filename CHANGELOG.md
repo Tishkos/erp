@@ -7,6 +7,32 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+### Added
+- REQ-WA-001 WA-1/WA-2 — the WhatsApp bridge (`npm run whatsapp-bridge`,
+  Baileys, pairing kept in the database), the `whatsapp` notification channel
+  with its contacts, settings and message log on the **WhatsApp** screen, and
+  the read-only query bot for the CEO (stock, payable and application status,
+  SWIFT pending, due this week, stopped payables, supplier and customer
+  balances with the statement as PDF, today's summary — Arabic and English;
+  the model router when `ANTHROPIC_API_KEY` is set). Migration 0242.
+- REQ-HARDEN-001 F1–F3 — the outbox finally delivers: the notification
+  delivery runner, the e-mail sender over SMTP, retries on the D-HD-4
+  schedule, `deliver-notifications` every five minutes in the crontab.
+- REQ-HR-001 Stage HR-1 — people and organisation (`/hr/employees`,
+  `/hr/organisation`, HR Settings). Migration 0241.
+- REQ-LEGACY-001 — the legacy books import (`/administration/legacy-import`),
+  reading the old system's `.xls`/`.xlsx` books into partners, items,
+  warehouses, opening balances and opening stock, once, with a dry run.
+  Migration 0240.
+
+### Migration notes
+- 0240–0242 are additive. 0242 adds an enum value (`whatsapp`) and must run
+  on its own before the bridge starts (the migrator runs it as one
+  transaction; nothing in the same file uses the value).
+- After deploying: install the crontab (`install-cron.sh`, done by
+  `deploy.sh`) so `deliver-notifications` runs; on the VPS install
+  `deploy/whatsapp-bridge.service` and pair (`docs/RUNBOOK-whatsapp.md`).
+
 ## 1.0.0 — 2026-10-02
 
 The first numbered release: everything delivered from the foundation to the

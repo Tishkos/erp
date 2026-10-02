@@ -30,6 +30,8 @@ const LIVE_USE: Readonly<Record<string, string>> = {
   'scripts/ops/due-notices.ts': 'a scheduled job on the live books',
   'scripts/ops/inventory-integrity-check.ts': 'a scheduled job; writes only notifications',
   'scripts/ops/health-check.ts': 'a scheduled job; writes only notifications',
+  'scripts/ops/deliver-notifications.ts': 'a scheduled job; writes only delivery status (REQ-WA-001 WA-1)',
+  'scripts/ops/whatsapp-bridge.ts': 'the live bridge; writes only its own session, the message log and delivery status (REQ-WA-001)',
   'scripts/ops/ensure-stage-warehouses.ts': 'creates the stage warehouses a live install needs; idempotent',
   'scripts/ops/install-cron.sh': 'writes the crontab, not the database',
   'scripts/ops/make-staging-copy.sh': 'writes only a database that is not the live one; refuses the live name',

@@ -26,8 +26,8 @@ const rule = (overrides: Partial<NotificationRule> = {}): NotificationRule => ({
 });
 
 describe('§21 · rules', () => {
-  it('delivers on the two channels the blueprint names', () => {
-    expect(NOTIFICATION_CHANNELS).toEqual(['in_app', 'email']);
+  it('delivers on the two channels the blueprint names, and WhatsApp (REQ-WA-001 WA-1)', () => {
+    expect(NOTIFICATION_CHANNELS).toEqual(['in_app', 'email', 'whatsapp']);
   });
 
   it('accepts a well-formed rule', () => {

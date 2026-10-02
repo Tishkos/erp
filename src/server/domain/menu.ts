@@ -441,6 +441,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('legacy_import', 'legacy_import', '/administration/legacy-import'),
       // REQ-HR-001 §12 — positions, pay components, leave types, calendars.
       page('hr_settings', 'hr_setting', '/administration/hr-settings'),
+      // REQ-WA-001 §6 — the bridge, the allow-list, the rules, the log.
+      page('whatsapp', 'whatsapp', '/administration/whatsapp'),
     ],
   },
   {

@@ -113,6 +113,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   payables_migration: 'settings',
   legacy_import: 'settings',
   hr_settings: 'settings',
+  whatsapp: 'settings',
 
   // 5 — Inventory
   availability: 'workspace',
@@ -474,6 +475,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/hr/employees',
   '/hr/organisation',
   '/administration/hr-settings',
+  // REQ-WA-001 WA-1/WA-2 — the WhatsApp bridge.
+  '/administration/whatsapp',
 ]);
 
 export function isDelivered(route: string): boolean {

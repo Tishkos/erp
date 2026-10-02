@@ -462,6 +462,21 @@ export async function resetTestData(): Promise<void> {
     // REQ-LEGACY-001 — the old books' history and the runs that wrote it.
     await client.query('delete from legacy_document');
     await client.query('delete from legacy_import_run');
+    // REQ-WA-001 — the bridge's log, allow-list and pairing; the seeded
+    // settings are restored, the bridge's heartbeat keys go.
+    await client.query('truncate whatsapp_message, whatsapp_contact restart identity cascade');
+    await client.query('delete from whatsapp_session');
+    await client.query(`delete from whatsapp_setting where key like 'bridge_%'`);
+    await client.query(`
+      update whatsapp_setting set value = case key
+        when 'router_model' then 'claude-haiku-4-5-20251001'
+        when 'agent_model' then 'claude-sonnet-5-5'
+        when 'inline_rows' then '15'
+        when 'export_rows_cap' then '5000'
+        when 'throttle_per_minute' then '60'
+        when 'retention_days' then '90'
+        when 'digest_hour' then '08'
+        else value end`);
     // REQ-HR-001 — people and their dated rows; the seeded masters stay, a
     // test's own masters (created_by set) go.
     await client.query('delete from employee_compensation');
