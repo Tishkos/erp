@@ -445,13 +445,21 @@ export async function markDigestSent(tx: Tx, day: string): Promise<void> {
 
 export async function recordInbound(
   tx: Tx,
-  input: { readonly e164: string; readonly body: string; readonly waMessageId?: string | null; readonly sender: ResolvedSender | null },
+  input: {
+    readonly e164: string;
+    readonly body: string;
+    readonly waMessageId?: string | null;
+    readonly sender: ResolvedSender | null;
+    /** WA-5 — the group it was said in, null for a direct message. */
+    readonly groupJid?: string | null;
+  },
 ): Promise<bigint> {
   const [row] = await tx
     .insert(whatsappMessage)
     .values({
       direction: 'in',
       e164: input.e164,
+      groupJid: input.groupJid ?? null,
       contactId: input.sender?.contactId ?? null,
       userId: input.sender?.userId ?? null,
       waMessageId: input.waMessageId ?? null,
@@ -489,6 +497,8 @@ export async function recordOutbound(
     readonly deliveryId?: bigint | null;
     readonly intent?: string | null;
     readonly detail?: Record<string, unknown> | null;
+    /** WA-5 — the group it is being said in, null for a direct message. */
+    readonly groupJid?: string | null;
   },
 ): Promise<bigint> {
   const [row] = await tx
@@ -496,6 +506,7 @@ export async function recordOutbound(
     .values({
       direction: 'out',
       e164: input.e164,
+      groupJid: input.groupJid ?? null,
       contactId: input.sender?.contactId ?? null,
       userId: input.sender?.userId ?? null,
       body: input.body,
@@ -588,7 +599,18 @@ export async function sentInLastMinute(tx: Tx, now = new Date()): Promise<number
 // The outbound sender — the `whatsapp` notification channel (W1)
 // ---------------------------------------------------------------------------
 
-export type Transport = (to: { readonly e164: string }, message: { readonly text: string; readonly attachment?: Attachment | null }) => Promise<{ waMessageId: string | null }>;
+/**
+ * Where a message goes.
+ *
+ * `e164` is a person. `groupJid`, when given, wins: WA-5 sends the answer
+ * back to the group it was asked in, and posts notifications and the digest
+ * there. The number is still carried, because the log records who it was
+ * about even when the words went to a group.
+ */
+export type Transport = (
+  to: { readonly e164: string; readonly groupJid?: string | null },
+  message: { readonly text: string; readonly attachment?: Attachment | null },
+) => Promise<{ waMessageId: string | null }>;
 
 /**
  * Registers the bridge's socket as the channel's sender. A recipient without
@@ -611,7 +633,55 @@ export function registerWhatsappSender(transport: Transport): void {
       await markOutbound(tx, outId, { status: 'failed', errorMessage: error instanceof Error ? error.message : String(error) });
       throw error;
     }
+
+    // WA-5 — and into the group, once per notification rather than once per
+    // recipient, so ten managers do not make ten copies. It carries the
+    // subject and body the rule already wrote: a notification says what
+    // happened and names its document, never a figure nobody asked for.
+    const settings = await settingsOf(tx);
+    if (settings.groupJid && settings.groupNotifications && (await firstGroupDelivery(tx, message.deliveryId))) {
+      const groupOut = await recordOutbound(tx, {
+        e164: contact.e164,
+        groupJid: settings.groupJid,
+        body: text,
+        sender: contact,
+        // Carried so the "already posted" check above can see this copy.
+        deliveryId: message.deliveryId,
+        intent: 'notification.group',
+        detail: { eventType: message.eventType, objectType: message.objectType, objectId: message.objectId },
+      });
+      try {
+        const { waMessageId } = await transport({ e164: contact.e164, groupJid: settings.groupJid }, { text });
+        await markOutbound(tx, groupOut, { status: 'sent', waMessageId });
+      } catch (error) {
+        // The person already has it; the group copy failing is not a reason
+        // to retry the whole delivery.
+        await markOutbound(tx, groupOut, { status: 'failed', errorMessage: error instanceof Error ? error.message : String(error) });
+      }
+    }
   });
+}
+
+/** The settings, for the sender — a plain read, no permission in its way. */
+async function settingsOf(tx: Tx): Promise<BotSettings> {
+  return settings(tx);
+}
+
+/**
+ * Has this notification already been posted to the group?
+ *
+ * A rule with five recipients delivers five times; the group wants one copy.
+ * The log is the answer: the first delivery of a notification posts it, the
+ * rest see it is already there.
+ */
+async function firstGroupDelivery(tx: Tx, deliveryId: bigint | null | undefined): Promise<boolean> {
+  if (deliveryId === null || deliveryId === undefined) return true;
+  const [seen] = await tx
+    .select({ id: whatsappMessage.id })
+    .from(whatsappMessage)
+    .where(and(eq(whatsappMessage.intent, 'notification.group'), eq(whatsappMessage.deliveryId, deliveryId)))
+    .limit(1);
+  return !seen;
 }
 
 // ---------------------------------------------------------------------------

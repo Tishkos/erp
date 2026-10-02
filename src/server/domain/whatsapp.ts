@@ -56,6 +56,60 @@ export function jidToE164(jid: string | null | undefined): string | null {
 }
 
 /**
+ * WA-6 — the decision commands, read by shape and never by meaning.
+ *
+ * The agent is not consulted here, and must not be: a sentence that *sounds
+ * like* an approval is a sentence, and approving on the strength of one would
+ * hand the company's approvals to whoever can get text in front of the bot.
+ * These four forms are the only ones that reach the approval engine:
+ *
+ *   `approve PAYAPP-HQ-2026-000012`
+ *   `reject PAYAPP-HQ-2026-000012 the price is wrong`
+ *   `confirm 123456`
+ *   `pending`                       — what is waiting for me
+ *
+ * Arabic equivalents are accepted for each, because the group speaks Arabic.
+ */
+export type Command =
+  | { readonly kind: 'approve'; readonly documentNo: string }
+  | { readonly kind: 'reject'; readonly documentNo: string; readonly reason: string }
+  | { readonly kind: 'confirm'; readonly code: string }
+  | { readonly kind: 'pending' }
+  | { readonly kind: 'none' };
+
+const APPROVE_WORDS = ['approve', 'approved', 'موافقة', 'موافق', 'اوافق', 'أوافق'];
+const REJECT_WORDS = ['reject', 'rejected', 'refuse', 'رفض', 'ارفض', 'أرفض', 'مرفوض'];
+const CONFIRM_WORDS = ['confirm', 'code', 'تأكيد', 'تاكيد', 'الرمز'];
+const PENDING_WORDS = ['pending', 'inbox', 'waiting', 'المعلق', 'بالانتظار', 'قائمتي'];
+
+export function parseCommand(text: string): Command {
+  const trimmed = asciiDigits(text).trim().replace(/\s+/g, ' ');
+  if (!trimmed) return { kind: 'none' };
+  const [head, ...rest] = trimmed.split(' ');
+  const word = (head ?? '').toLowerCase().replace(/[.,:!؟?]+$/, '');
+
+  if (PENDING_WORDS.includes(word) && rest.length === 0) return { kind: 'pending' };
+
+  if (CONFIRM_WORDS.includes(word)) {
+    const code = (rest[0] ?? '').replace(/\D/g, '');
+    return code.length === 6 ? { kind: 'confirm', code } : { kind: 'none' };
+  }
+
+  if (APPROVE_WORDS.includes(word)) {
+    const documentNo = (rest[0] ?? '').trim();
+    return documentNo ? { kind: 'approve', documentNo } : { kind: 'none' };
+  }
+
+  if (REJECT_WORDS.includes(word)) {
+    const documentNo = (rest[0] ?? '').trim();
+    const reason = rest.slice(1).join(' ').trim();
+    return documentNo ? { kind: 'reject', documentNo, reason } : { kind: 'none' };
+  }
+
+  return { kind: 'none' };
+}
+
+/**
  * WA-5 — is this address a group rather than a person?
  *
  * WhatsApp spells a group `<creator>-<timestamp>@g.us` on older accounts and

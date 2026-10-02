@@ -43,6 +43,15 @@ import { mayAct, principalOf, withReadOnlyScope, type ResolvedSender } from './w
 /** How long a code is good for. Long enough to read the document, short enough to matter. */
 export const CODE_MINUTES = 10;
 
+/**
+ * A refusal is a value, not an exception.
+ *
+ * Both steps here write before they refuse — an expired code is *marked*
+ * expired, a refused decision keeps the service's own words on the row — and
+ * a thrown error would roll that writing back with the transaction, leaving
+ * the code live and the reason lost. So the business answers are returned and
+ * only a programming fault throws.
+ */
 export class ActionRefused extends Error {
   readonly code = 'WHATSAPP_ACTION_REFUSED';
   constructor(readonly reason: string) {
@@ -50,6 +59,8 @@ export class ActionRefused extends Error {
     this.name = 'ActionRefused';
   }
 }
+
+export type Refusal = { readonly ok: false; readonly reason: string };
 
 export interface Waiting {
   readonly documentType: string;
@@ -128,6 +139,8 @@ export interface RequestOutcome {
   readonly expiresAt: Date;
 }
 
+export type RequestResult = RequestOutcome | Refusal;
+
 /**
  * Step one: name a document and get a code back.
  *
@@ -136,20 +149,21 @@ export interface RequestOutcome {
  * outstanding — the partial unique index is what makes "one live code" true
  * rather than hoped for.
  */
-export async function request(tx: Tx, input: RequestInput): Promise<RequestOutcome> {
+export async function request(tx: Tx, input: RequestInput): Promise<RequestResult> {
   const allowed = mayAct(input.sender);
-  if (!allowed.ok) throw new ActionRefused(allowed.reason);
+  if (!allowed.ok) return { ok: false, reason: allowed.reason };
   if (input.decision === 'reject' && !(input.reason ?? '').trim()) {
-    throw new ActionRefused('a rejection says why — send: reject <number> <reason>');
+    return { ok: false, reason: 'a rejection says why — send: reject <number> <reason>' };
   }
 
   const waiting = await waitingFor(input.sender.userId);
-  if (waiting.length === 0) throw new ActionRefused('nothing is waiting for your approval');
+  if (waiting.length === 0) return { ok: false, reason: 'nothing is waiting for your approval' };
   const chosen = match(waiting, input.documentNo);
   if (!chosen) {
-    throw new ActionRefused(
-      `'${input.documentNo.trim()}' is not one of the ${waiting.length} documents waiting for you`,
-    );
+    return {
+      ok: false,
+      reason: `'${input.documentNo.trim()}' is not one of the ${waiting.length} documents waiting for you`,
+    };
   }
 
   // One live code per contact: the old one is cancelled, never left standing.
@@ -186,11 +200,14 @@ export async function request(tx: Tx, input: RequestInput): Promise<RequestOutco
 }
 
 export interface ConfirmOutcome {
+  readonly ok: true;
   readonly decision: 'approve' | 'reject';
   readonly documentNo: string;
   readonly documentType: string;
   readonly status: string;
 }
+
+export type ConfirmResult = ConfirmOutcome | Refusal;
 
 /**
  * Step two: the code comes back, and the ERP decides.
@@ -203,25 +220,27 @@ export interface ConfirmOutcome {
 export async function confirm(
   tx: Tx,
   input: { readonly sender: ResolvedSender; readonly code: string },
-): Promise<ConfirmOutcome> {
+): Promise<ConfirmResult> {
   const allowed = mayAct(input.sender);
-  if (!allowed.ok) throw new ActionRefused(allowed.reason);
+  if (!allowed.ok) return { ok: false, reason: allowed.reason };
 
   const [row] = await tx
     .select()
     .from(whatsappAction)
     .where(and(eq(whatsappAction.contactId, input.sender.contactId), eq(whatsappAction.status, 'awaiting')))
     .limit(1);
-  if (!row) throw new ActionRefused('nothing is waiting for a code');
+  if (!row) return { ok: false, reason: 'nothing is waiting for a code' };
 
   if (row.expiresAt.getTime() < Date.now()) {
+    // Marked, then refused — and because this is a value and not a throw, the
+    // marking survives the transaction.
     await settle(tx, row.id, 'expired', 'the code expired');
-    throw new ActionRefused(`that code expired — send the ${row.decision} again`);
+    return { ok: false, reason: `that code expired — send the ${row.decision} again` };
   }
   if (row.code !== input.code.trim()) {
-    // The row stays awaiting: a wrong digit is a typo, not an attack worth
-    // throwing the request away for. It still expires on its own.
-    throw new ActionRefused('that code does not match');
+    // The row stays awaiting: a wrong digit is a typo, not a reason to throw
+    // the request away. It still expires on its own.
+    return { ok: false, reason: 'that code does not match' };
   }
 
   const principal = await principalOf(input.sender.userId);
@@ -248,8 +267,8 @@ export async function confirm(
     outcome: refusal ? 'denied' : 'success',
   });
 
-  if (refusal) throw new ActionRefused(refusal);
-  return { decision: row.decision as 'approve' | 'reject', documentNo: row.documentNo, documentType: row.documentType, status };
+  if (refusal) return { ok: false, reason: refusal };
+  return { ok: true, decision: row.decision as 'approve' | 'reject', documentNo: row.documentNo, documentType: row.documentType, status };
 }
 
 async function decideAs(
