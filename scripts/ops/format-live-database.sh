@@ -84,6 +84,8 @@ fi
 # them costs nothing, and the day one of them fills is not the day anybody
 # wants to discover this list was written before it existed.
 read -r -d '' DOCUMENT_TABLES <<'TABLES' || true
+leave_request
+attendance_day
 proof_of_delivery_photo
 proof_of_delivery
 delivery_note_line_unit
@@ -364,6 +366,8 @@ delete from project_etc;
 delete from project_budget_line;
 -- REQ-PM-001 PM-4: the milestone trend is append-only; TRUNCATE skips its row trigger.
 truncate project_milestone_history;
+-- REQ-HR-001 HR-2: leave balance rows are append-only too; opening balances are entered after the format.
+truncate leave_balance_entry;
 delete from project_activity_dependency;
 delete from project_activity;
 delete from project;

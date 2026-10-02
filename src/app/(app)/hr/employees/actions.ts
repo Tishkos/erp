@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { runAdmin, runAdminAndReturn, text } from '@/server/admin-action';
 import * as employees from '@/server/services/employees';
+import * as leave from '@/server/services/leave';
 
 /**
  * Employees — REQ-HR-001 Stage HR-1. The service holds every rule: the
@@ -27,6 +28,7 @@ export async function createEmployee(form: FormData): Promise<void> {
       managerEmployeeId: text(form, 'manager_employee_id') || null,
       hireDate: text(form, 'hire_date'),
       employmentKind: text(form, 'employment_kind') || 'permanent',
+      contractEndDate: text(form, 'contract_end_date') || null,
     }),
   );
   if (!outcome.ok) redirect(`${LIST}?error=${encodeURIComponent(outcome.error ?? '')}&new=1`);
@@ -61,6 +63,7 @@ export async function moveEmployee(form: FormData): Promise<void> {
         positionCode: text(form, 'position_code'),
         managerEmployeeId: text(form, 'manager_employee_id'),
         employmentKind: text(form, 'employment_kind') || null,
+        contractEndDate: text(form, 'contract_end_date'),
       }),
     record(employeeNo),
   );
@@ -96,6 +99,23 @@ export async function setEmployeeCompensation(form: FormData): Promise<void> {
         accountNumber: text(form, 'account_number') || null,
         iban: text(form, 'iban') || null,
         note: text(form, 'note') || null,
+      }),
+    record(employeeNo),
+  );
+}
+
+/** HR-2 — an opening balance or a correction of a leave balance, with its reason. */
+export async function adjustLeaveBalance(form: FormData): Promise<void> {
+  const employeeNo = text(form, 'employee_no');
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      leave.adjustBalance(tx, ctx, {
+        employeeId: text(form, 'id'),
+        leaveTypeCode: text(form, 'leave_type_code'),
+        year: Number(text(form, 'year')),
+        days: text(form, 'days'),
+        kind: text(form, 'kind') === 'opening' ? 'opening' : 'adjustment',
+        reason: text(form, 'reason'),
       }),
     record(employeeNo),
   );

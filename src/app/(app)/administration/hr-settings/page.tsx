@@ -14,6 +14,7 @@ import {
   addCalendarHoliday,
   removeCalendarHoliday,
   saveCalendar,
+  saveHrParameters,
   saveLeaveType,
   savePayComponent,
   setLeaveTypeActive,
@@ -22,7 +23,8 @@ import {
 
 /**
  * HR settings — REQ-HR-001 §5–§7 (R4). Copies the Payables Settings screen:
- * three stacked windows — pay components, leave types, working calendars —
+ * four stacked windows — pay components, leave types, working calendars and
+ * the morning sweep's limits (HR-2) —
  * each a register with a new-row form under it. Nothing deletes; a row is
  * deactivated. Positions moved to HR → Positions (REQ-FIX-001 FIX-5).
  */
@@ -44,7 +46,8 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
   }
   const mayConfigure = can(principal, 'configure', settings.PERMISSION_OBJECT);
 
-  const { components, leaveTypes, calendars } = await withCurrentUser(async (tx) => ({
+  const { components, leaveTypes, calendars, limits } = await withCurrentUser(async (tx) => ({
+    limits: await settings.parameters(tx),
     components: await settings.payComponents(tx),
     leaveTypes: await settings.leaveTypes(tx),
     calendars: await settings.calendars(tx),
@@ -163,6 +166,7 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
                   <th className={s.sapNum} scope="col">
                     {t('allowed_negative')}
                   </th>
+                  <th scope="col">{t('warn_before_lapse')}</th>
                   <th scope="col">{t('active')}</th>
                 </tr>
               </thead>
@@ -183,6 +187,7 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
                     <td>{row.paid ? '✓' : '—'}</td>
                     <td>{row.requiresAttachment ? '✓' : '—'}</td>
                     <td className={s.sapNum}>{Number(row.allowedNegativeDays)}</td>
+                    <td>{row.warnBeforeLapse ? '✓' : '—'}</td>
                     <td>{activeForm(setLeaveTypeActive, row.code, row.active)}</td>
                   </tr>
                 ))}
@@ -202,6 +207,7 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
               </Grid>
               <Checkbox defaultChecked label={t('paid')} name="paid" />
               <Checkbox label={t('requires_attachment')} name="requires_attachment" />
+              <Checkbox label={t('warn_before_lapse')} name="warn_before_lapse" />
               <SubmitRow>
                 <Submit label={t('save')} />
               </SubmitRow>
@@ -290,6 +296,47 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
                 </SubmitRow>
               </Form>
             </>
+          ) : null}
+        </div>
+      </section>
+      {/* REQ-HR-001 HR-2 — the morning sweep's limits, in days (R4). */}
+      <section aria-labelledby="hrs-limits-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="hrs-limits-title">
+            <span>{t('limits')}</span>
+          </h2>
+          <div className={s.sapTableWrap}>
+            <table className={s.sapTable}>
+              <thead>
+                <tr>
+                  <th scope="col">{t('limit')}</th>
+                  <th className={s.sapNum} scope="col">
+                    {t('limit_days')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {settings.PARAMETER_KEYS.map((key) => (
+                  <tr key={key}>
+                    <td>{t(`limit_${key}`)}</td>
+                    <td className={s.sapNum}>{limits[key]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {mayConfigure ? (
+            <Form action={saveHrParameters}>
+              <p className={s.sapGridCaption}>{t('limits_change')}</p>
+              <Grid>
+                <Field defaultValue={String(limits.contract_expiry_warning_days)} label={t('limit_contract_expiry_warning_days')} name="contract_expiry_warning_days" />
+                <Field defaultValue={String(limits.leave_pending_reminder_days)} label={t('limit_leave_pending_reminder_days')} name="leave_pending_reminder_days" />
+                <Field defaultValue={String(limits.leave_lapse_warning_days)} label={t('limit_leave_lapse_warning_days')} name="leave_lapse_warning_days" />
+              </Grid>
+              <SubmitRow>
+                <Submit label={t('save')} />
+              </SubmitRow>
+            </Form>
           ) : null}
         </div>
       </section>

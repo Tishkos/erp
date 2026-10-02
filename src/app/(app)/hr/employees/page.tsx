@@ -113,6 +113,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
                   options={EMPLOYMENT_KINDS.map((value) => ({ value, label: kind(value) }))}
                   required
                 />
+                <Field hint={x('contract_end_hint')} label={x('contract_end_date')} name="contract_end_date" type="date" />
                 <Field label={x('phone')} name="phone" />
                 <Field label={x('national_id')} name="national_id" />
                 <Field label={x('date_of_birth')} name="date_of_birth" type="date" />

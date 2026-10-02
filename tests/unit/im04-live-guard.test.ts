@@ -28,6 +28,7 @@ const LIVE_USE: Readonly<Record<string, string>> = {
   'scripts/ops/link-balance-sheet-to-cash-flow.ts': 'a live configuration fix, dry-run by default, --apply to write',
   'scripts/ops/payables-sweep.ts': 'a scheduled job on the live books (REQ-AP-001 §19.3)',
   'scripts/ops/due-notices.ts': 'a scheduled job on the live books',
+  'scripts/ops/hr-sweep.ts': 'a scheduled job; writes only notifications (REQ-HR-001 HR-2)',
   'scripts/ops/inventory-integrity-check.ts': 'a scheduled job; writes only notifications',
   'scripts/ops/health-check.ts': 'a scheduled job; writes only notifications',
   'scripts/ops/deliver-notifications.ts': 'a scheduled job; writes only delivery status (REQ-WA-001 WA-1)',

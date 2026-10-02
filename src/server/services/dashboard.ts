@@ -11,6 +11,7 @@ import * as statements from './financial-statements';
 import * as integrity from './inventory-integrity';
 import * as inventoryReports from './inventory-reports';
 import { rows as listRows } from './list';
+import * as leave from './leave';
 import * as notifications from './notifications';
 import * as openItems from './open-items';
 import * as statement from './partner-statement';
@@ -113,6 +114,8 @@ export interface Waiting {
   readonly receiptsAwaiting: readonly WaitingReceipt[];
   /** §21.13 — what falls due in the next seven days. */
   readonly dueThisWeek: readonly DuePayable[];
+  /** REQ-HR-001 HR-2 — leave waiting for my decision: as the person's manager, or every one as an HR manager. */
+  readonly leaveAwaiting: readonly { readonly requestNo: string; readonly fullNameEn: string; readonly fromDate: string; readonly toDate: string; readonly days: string }[];
   readonly unreadNotifications: number;
 }
 
@@ -233,6 +236,7 @@ export async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting>
     ),
     receiptsAwaiting,
     dueThisWeek: dueRows.rows as unknown as DuePayable[],
+    leaveAwaiting: await leave.waitingFor(tx, { principal, branchCode: '' }),
     unreadNotifications: unread.length,
   };
 }

@@ -216,8 +216,10 @@ describe('every screen has one address', () => {
       '/finance/posting-mappings',
       '/finance/reversals',
       '/finance/trial-balance',
+      '/hr/attendance',
       '/hr/departments',
       '/hr/employees',
+      '/hr/leave',
       '/hr/positions',
       '/inventory/availability',
       // Operations build — block 7's Warehouses Report.
