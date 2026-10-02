@@ -488,10 +488,18 @@ export async function resetTestData(): Promise<void> {
     await client.query('truncate whatsapp_message, whatsapp_contact restart identity cascade');
     await client.query('delete from whatsapp_session');
     await client.query(`delete from whatsapp_setting where key like 'bridge_%'`);
+    // The values the migrations leave (0242, and 0245's group and model),
+    // and nobody's name on them: a test's administrator is deleted below,
+    // and a dangling `updated_by` fails the IM1 restore on its foreign key.
     await client.query(`
-      update whatsapp_setting set value = case key
+      update whatsapp_setting set updated_by = null, value = case key
         when 'router_model' then 'claude-haiku-4-5-20251001'
-        when 'agent_model' then 'claude-sonnet-5-5'
+        when 'agent_model' then 'claude-sonnet-5'
+        when 'group_jid' then ''
+        when 'group_subject' then ''
+        when 'group_queries' then 'on'
+        when 'group_notifications' then 'on'
+        when 'group_digest' then 'on'
         when 'inline_rows' then '15'
         when 'export_rows_cap' then '5000'
         when 'throttle_per_minute' then '60'
