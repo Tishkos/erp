@@ -112,6 +112,9 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
   warehouses, opening balances and opening stock, once, with a dry run.
   Migration 0240.
 
+### Fixed
+- REQ-HARDEN-001 G5 / HD15 — the goods receipt, purchase order, service receipt, recurring contract, PD, loan, payment application and shipment (B/L) registers page at 50 with a true count: the filters and the search run in SQL, the header shows the total, and the standard pager appears past one page. Before, three stopped silently at 200 rows and five read every row and filtered in memory.
+
 ### Migration notes
 - 0240–0244 are additive (0244 adds indexes only). 0243 adds triggers: after it, a period that is `closed` refuses postings and stock movements at the table, and a period cannot be closed before the earlier ones of its year. 0242 adds an enum value (`whatsapp`) and must run
   on its own before the bridge starts (the migrator runs it as one

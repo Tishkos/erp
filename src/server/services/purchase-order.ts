@@ -22,6 +22,7 @@ import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
 import { allocateDocumentNumber } from './numbering';
+import { countOf, registerPage, whereOf, type RegisterPage, type RegisterPaging } from './register-page';
 import * as execution from './project-execution';
 
 export const PERMISSION_OBJECT = 'purchase_order';
@@ -611,27 +612,43 @@ export interface OrderListRow {
   readonly payableNo: string | null;
 }
 
-export async function listForScreen(tx: Tx): Promise<OrderListRow[]> {
-  const result = await tx.execute(sql`
-    select o.id,
-           o.order_no as "orderNo",
-           bp.legal_name as "supplierName",
-           o.order_date::text as "orderDate",
-           o.status::text as status,
-           coalesce(sum(l.quantity * l.unit_price), 0)::text as "totalIqd",
-           coalesce(sum(l.received_quantity), 0)::text || ' / ' || coalesce(sum(l.quantity), 0)::text
-             as "receivedShare",
-           coalesce(sum(l.invoiced_quantity), 0)::text || ' / ' || coalesce(sum(l.quantity), 0)::text
-             as "invoicedShare",
-           (select p.payable_no from payable p where p.purchase_order_id = o.id limit 1)
-             as "payableNo"
-      from purchase_order o
-      join business_partner bp on bp.id = o.supplier_id
-      left join purchase_order_line l on l.purchase_order_id = o.id
-     group by o.id, o.order_no, bp.legal_name, o.order_date, o.status, o.created_at
-     order by o.created_at desc
-     limit 200`);
-  return result.rows as unknown as OrderListRow[];
+export interface OrderListFilter extends RegisterPaging {
+  readonly status?: string | null;
+}
+
+/** HD15 — one page of fifty, newest first, with the true count. */
+export async function listForScreen(
+  tx: Tx,
+  filter: OrderListFilter = {},
+): Promise<RegisterPage<OrderListRow>> {
+  const where = whereOf([filter.status ? sql`o.status::text = ${filter.status}` : null]);
+  return registerPage({
+    paging: filter,
+    count: () => countOf(tx, sql`from purchase_order o ${where}`),
+    rows: async ({ limit, offset }) => {
+      const result = await tx.execute(sql`
+        select o.id,
+               o.order_no as "orderNo",
+               bp.legal_name as "supplierName",
+               o.order_date::text as "orderDate",
+               o.status::text as status,
+               coalesce(sum(l.quantity * l.unit_price), 0)::text as "totalIqd",
+               coalesce(sum(l.received_quantity), 0)::text || ' / ' || coalesce(sum(l.quantity), 0)::text
+                 as "receivedShare",
+               coalesce(sum(l.invoiced_quantity), 0)::text || ' / ' || coalesce(sum(l.quantity), 0)::text
+                 as "invoicedShare",
+               (select p.payable_no from payable p where p.purchase_order_id = o.id limit 1)
+                 as "payableNo"
+          from purchase_order o
+          join business_partner bp on bp.id = o.supplier_id
+          left join purchase_order_line l on l.purchase_order_id = o.id
+         ${where}
+         group by o.id, o.order_no, bp.legal_name, o.order_date, o.status, o.created_at
+         order by o.created_at desc, o.id desc
+         limit ${limit} offset ${offset}`);
+      return result.rows as unknown as OrderListRow[];
+    },
+  });
 }
 
 /** §21.6 — the record, by its number: the order, its lines, who it binds. */

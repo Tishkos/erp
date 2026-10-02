@@ -62,6 +62,7 @@ import * as holds from './payable-holds';
 import * as inventory from './inventory';
 import * as payables from './payables';
 import { allocateDocumentNumber } from './numbering';
+import { registerPage, searchOf, type RegisterPaging } from './register-page';
 import { businessToday } from '../domain/business-date';
 
 export const BL_OBJECT = 'bill_of_lading';
@@ -949,38 +950,82 @@ export async function statuses(tx: Tx) {
   return tx.select().from(containerStatus).orderBy(asc(containerStatus.sequence));
 }
 
-export async function listBls(tx: Tx, filter: { payableId?: string | null } = {}) {
-  const rows = await tx
-    .select({
-      id: billOfLading.id,
-      blNo: billOfLading.blNo,
-      blDate: sql<string>`${billOfLading.blDate}::text`,
-      vessel: billOfLading.vessel,
-      voyage: billOfLading.voyage,
-      shippingLine: billOfLading.shippingLine,
-      eta: sql<string | null>`${billOfLading.eta}::text`,
-      portName: port.name,
-      payableNo: payable.payableNo,
-      reference: payable.supplierReference,
-      supplierName: businessPartner.legalName,
-      cancelledAt: billOfLading.cancelledAt,
-      total: sql<number>`(select count(*)::int from shipment_container c where c.bl_id = ${billOfLading.id} and c.cancelled_at is null)`,
-      received: sql<number>`(select count(*)::int from shipment_container c join container_status s on s.code = c.status_code
-                               where c.bl_id = ${billOfLading.id} and c.cancelled_at is null and s.counts_as_received)`,
-      leastStatus: sql<string | null>`(select s.name from shipment_container c join container_status s on s.code = c.status_code
-                               where c.bl_id = ${billOfLading.id} and c.cancelled_at is null
-                               order by case when s.is_exception and not s.counts_as_received then 0 else s.sequence end limit 1)`,
-      leastStatusCode: sql<string | null>`(select s.code from shipment_container c join container_status s on s.code = c.status_code
-                               where c.bl_id = ${billOfLading.id} and c.cancelled_at is null
-                               order by case when s.is_exception and not s.counts_as_received then 0 else s.sequence end limit 1)`,
-    })
+const blColumns = {
+  id: billOfLading.id,
+  blNo: billOfLading.blNo,
+  blDate: sql<string>`${billOfLading.blDate}::text`,
+  vessel: billOfLading.vessel,
+  voyage: billOfLading.voyage,
+  shippingLine: billOfLading.shippingLine,
+  eta: sql<string | null>`${billOfLading.eta}::text`,
+  portName: port.name,
+  payableNo: payable.payableNo,
+  reference: payable.supplierReference,
+  supplierName: businessPartner.legalName,
+  cancelledAt: billOfLading.cancelledAt,
+  total: sql<number>`(select count(*)::int from shipment_container c where c.bl_id = ${billOfLading.id} and c.cancelled_at is null)`,
+  received: sql<number>`(select count(*)::int from shipment_container c join container_status s on s.code = c.status_code
+                           where c.bl_id = ${billOfLading.id} and c.cancelled_at is null and s.counts_as_received)`,
+  leastStatus: sql<string | null>`(select s.name from shipment_container c join container_status s on s.code = c.status_code
+                           where c.bl_id = ${billOfLading.id} and c.cancelled_at is null
+                           order by case when s.is_exception and not s.counts_as_received then 0 else s.sequence end limit 1)`,
+  leastStatusCode: sql<string | null>`(select s.code from shipment_container c join container_status s on s.code = c.status_code
+                           where c.bl_id = ${billOfLading.id} and c.cancelled_at is null
+                           order by case when s.is_exception and not s.counts_as_received then 0 else s.sequence end limit 1)`,
+};
+
+function blQuery(tx: Tx, where: ReturnType<typeof and>) {
+  return tx
+    .select(blColumns)
     .from(billOfLading)
     .innerJoin(payable, eq(payable.id, billOfLading.payableId))
     .innerJoin(businessPartner, eq(businessPartner.id, payable.supplierId))
     .leftJoin(port, eq(port.code, billOfLading.portOfDischargeCode))
-    .where(filter.payableId ? eq(billOfLading.payableId, filter.payableId) : undefined)
-    .orderBy(desc(billOfLading.blDate), desc(billOfLading.createdAt));
-  return rows;
+    .where(where)
+    .orderBy(desc(billOfLading.blDate), desc(billOfLading.createdAt), desc(billOfLading.id))
+    .$dynamic();
+}
+
+/** An import's B/Ls, newest first. */
+export async function listBls(tx: Tx, filter: { payableId?: string | null } = {}) {
+  return blQuery(tx, filter.payableId ? eq(billOfLading.payableId, filter.payableId) : undefined);
+}
+
+export interface BlRegisterFilter extends RegisterPaging {
+  readonly search?: string | null;
+}
+
+/** §21.9 — the Shipments register: one page of fifty with the true count (HD15). */
+export async function listBlsForScreen(tx: Tx, filter: BlRegisterFilter = {}) {
+  const where = searchOf(
+    [
+      billOfLading.blNo,
+      billOfLading.vessel,
+      billOfLading.voyage,
+      billOfLading.shippingLine,
+      billOfLading.blDate,
+      billOfLading.eta,
+      port.name,
+      payable.payableNo,
+      payable.supplierReference,
+      businessPartner.legalName,
+    ],
+    filter.search,
+  ) ?? undefined;
+  return registerPage({
+    paging: filter,
+    count: async () => {
+      const [row] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(billOfLading)
+        .innerJoin(payable, eq(payable.id, billOfLading.payableId))
+        .innerJoin(businessPartner, eq(businessPartner.id, payable.supplierId))
+        .leftJoin(port, eq(port.code, billOfLading.portOfDischargeCode))
+        .where(where);
+      return row?.n ?? 0;
+    },
+    rows: ({ limit, offset }) => blQuery(tx, where).limit(limit).offset(offset),
+  });
 }
 
 export interface ContainerFilter {

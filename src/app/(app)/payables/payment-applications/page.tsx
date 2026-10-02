@@ -11,8 +11,8 @@ import {
   Submit,
   SubmitRow,
   admin as s,
-  matches,
 } from '@/components/admin';
+import { Pagination } from '@/components/ui';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -65,15 +65,14 @@ export default async function PaymentApplicationsPage({ searchParams }: { search
   const params = await searchParams;
   const viewParam = typeof params.view === 'string' ? params.view : '';
 
-  const { rows, imports } = await withCurrentUser(async (tx) => ({
-    rows: await applications.list(tx),
+  const inView = Object.hasOwn(VIEWS, viewParam) ? VIEWS[viewParam] : undefined;
+  const { result, imports } = await withCurrentUser(async (tx) => ({
+    result: await applications.listForScreen(tx, { statuses: inView ?? null, search: outcome.q, page: outcome.page }),
     imports: mayCreate ? await applications.payableImports(tx) : [],
   }));
-
-  const inView = VIEWS[viewParam];
-  const shown = rows
-    .filter((row) => matches(row, outcome.q))
-    .filter((row) => (inView ? inView.includes(row.status) : true));
+  const shown = result.rows;
+  const query = (p: number) =>
+    [outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '', inView ? `view=${viewParam}` : '', `page=${p}`].filter(Boolean).join('&');
 
   const statusLabel = (status: string, kind: string) => t(statusKey(status, kind));
 
@@ -112,13 +111,13 @@ export default async function PaymentApplicationsPage({ searchParams }: { search
         <div className={s.sapWindow}>
           <h2 className={s.sapTitle} id="payapp-list-title">
             <span>{page('payment_applications')}</span>
-            <span className={s.sapTitleMeta}>{admin('rows_shown', { count: shown.length })}</span>
+            <span className={s.sapTitleMeta}>{admin('rows_shown', { count: result.total })}</span>
           </h2>
 
           <ListToolbar
             clearHref="/payables/payment-applications"
             clearLabel={admin('clear_search')}
-            countLabel={admin('rows_shown', { count: shown.length })}
+            countLabel={admin('rows_shown', { count: result.total })}
             placeholder={admin('search_placeholder')}
             q={outcome.q}
             searchLabel={admin('search')}
@@ -220,6 +219,9 @@ export default async function PaymentApplicationsPage({ searchParams }: { search
               </tbody>
             </table>
           </div>
+          {result.pages > 1 ? (
+            <Pagination count={result.pages} current={result.page} hrefFor={(p) => `/payables/payment-applications?${query(p)}`} labels={{ label: admin('pagination'), previous: admin('previous'), next: admin('next'), page: (p) => admin('page_n', { page: p }) }} locale={locale} />
+          ) : null}
         </div>
       </section>
     </AdminPage>
