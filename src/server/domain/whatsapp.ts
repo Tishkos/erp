@@ -55,6 +55,18 @@ export function jidToE164(jid: string | null | undefined): string | null {
   return match ? `+${match[1]}` : null;
 }
 
+/**
+ * WA-5 — is this address a group rather than a person?
+ *
+ * WhatsApp spells a group `<creator>-<timestamp>@g.us` on older accounts and
+ * `<digits>@g.us` on newer ones; both are matched, and nothing else is. The
+ * bridge asks this before it reads a message and the settings screen asks it
+ * before it stores an id, so one answer serves both.
+ */
+export function isGroupJid(jid: string | null | undefined): boolean {
+  return typeof jid === 'string' && /^[0-9]+(-[0-9]+)?@g\.us$/.test(jid.trim());
+}
+
 // ---------------------------------------------------------------------------
 // Language
 // ---------------------------------------------------------------------------
