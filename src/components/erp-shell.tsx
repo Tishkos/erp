@@ -237,10 +237,31 @@ function isActiveHref(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function moduleIsActive(pathname: string, module: ModuleGroup): boolean {
-  return module.sections.some((section) =>
-    section.items.some((item) => item.href && isActiveHref(pathname, item.href)),
-  );
+/**
+ * The one module the current page belongs to.
+ *
+ * A module matches when one of its own links matches the path, and more than
+ * one can: the Logistics screens are routed under `/payables/…` — the customs
+ * declarations, the bills of lading, the containers — so Payables matches them
+ * too, through its own `/payables` link. Both lit at once, and the first one
+ * drawn reads as the chosen one, which is why opening Customs
+ * Pre-Declarations lit Payables (reported 2026-10-02).
+ *
+ * So the longest matching link wins: `/payables/pd` beats `/payables`, and the
+ * module that actually lists the screen is the module that lights up. Routing
+ * a screen under another module's path stays a thing you can do.
+ */
+function activeModuleKey(pathname: string, modules: readonly ModuleGroup[]): string | null {
+  let best: { readonly key: string; readonly length: number } | null = null;
+  for (const module of modules) {
+    for (const section of module.sections) {
+      for (const item of section.items) {
+        if (!item.href || !isActiveHref(pathname, item.href)) continue;
+        if (!best || item.href.length > best.length) best = { key: module.key, length: item.href.length };
+      }
+    }
+  }
+  return best?.key ?? null;
 }
 
 function firstModuleHref(module: ModuleGroup): string | null {
@@ -402,6 +423,7 @@ export function ErpShell({
   const pathname = usePathname();
   const router = useRouter();
   const modules = useMemo(() => groupSections(sections), [sections]);
+  const activeKey = useMemo(() => activeModuleKey(pathname, modules), [pathname, modules]);
   const [openPopover, setOpenPopover] = useState<OpenPopover>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openMobileModules, setOpenMobileModules] = useState<readonly ModuleKey[]>([]);
@@ -652,7 +674,7 @@ export function ErpShell({
                 setOpenPopover(null);
                 setOpenMobileModules(
                   modules
-                    .filter((module) => moduleIsActive(pathname, module))
+                    .filter((module) => module.key === activeKey)
                     .map((module) => module.key),
                 );
                 setMobileOpen(true);
@@ -674,8 +696,8 @@ export function ErpShell({
                     <button
                       className="erp-nav__trigger"
                       type="button"
-                      data-active={moduleIsActive(pathname, module) ? 'true' : 'false'}
-                      aria-current={moduleIsActive(pathname, module) ? 'page' : undefined}
+                      data-active={module.key === activeKey ? 'true' : 'false'}
+                      aria-current={module.key === activeKey ? 'page' : undefined}
                       aria-expanded={isOpen}
                       aria-controls={panelId}
                       title={shell(`module.${module.key}`)}

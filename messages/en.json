@@ -6,7 +6,7 @@
   "nav": {
     "home": "Home",
     "crm": "CRM",
-    "sales": "Sales",
+    "sales": "Receivables",
     "purchasing": "Purchasing",
     "inventory": "Inventory & Warehouses",
     "projects": "Projects & Contracting",
@@ -986,7 +986,7 @@
     "module": {
       "dashboard": "Dashboard",
       "accounting": "Accounting",
-      "sales": "Sales",
+      "sales": "Receivables",
       "purchasing": "Purchasing",
       "payables": "Payables",
       "logistics": "Logistics",
