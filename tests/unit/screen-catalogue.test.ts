@@ -270,10 +270,12 @@ describe('every screen has one address', () => {
       '/payables/suppliers',
       // REQ-PM-001 PM-1 — the Project System's structure.
       '/projects',
+      '/projects/billing',
       '/projects/budgets',
       '/projects/change-orders',
       '/projects/contracts',
       '/projects/costs',
+      '/projects/forecast',
       '/projects/material-issues',
       '/projects/plan',
       '/projects/procurement',

@@ -152,6 +152,8 @@ describe('IM12 · im12-subledger-equals-gl — after the fixture every control a
     expect(value.state).toBe('pass');
     expect(value.detail[0]).toMatch(/^layers 1000000\.0000(0*)? · accounts 1000000\.0000/);
     expect(april.checks.map((c) => c.code)).toEqual([...closing.CHECK_CODES]);
+    // REQ-PM-001 §11 — before Finance ratifies recognition the warning says so rather than naming every project.
+    expect(april.checks.find((c) => c.code === 'project_recognition')).toMatchObject({ state: 'pass', figure: 'not ratified' });
 
     // A sub-ledger row nothing posted: the reconciliation shows the exact difference and blocks the close.
     const { rows: control } = await ownerPool.query(`select id from chart_of_account where control_account = 'supplier' limit 1`);

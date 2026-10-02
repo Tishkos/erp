@@ -490,6 +490,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/projects/procurement',
   '/projects/progress',
   '/projects/material-issues',
+  '/projects/billing',
+  '/projects/forecast',
   '/administration/project-settings',
 ]);
 

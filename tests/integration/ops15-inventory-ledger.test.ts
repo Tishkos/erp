@@ -136,6 +136,11 @@ beforeEach(async () => {
     ['expense', 'X000001', 'Service and Expense Cost', null],
     ['purchase_variance', 'X000001', 'Purchase Price Variance', null],
     ['inventory_adjustment', 'X000001', 'Inventory Adjustments', null],
+    // REQ-PM-001 PM-5 — a project certificate's and a recognition run's roles.
+    ['project_revenue', 'R000001', 'Contract Revenue', null],
+    ['project_retention_receivable', 'A000001', 'Retention Receivable', 'customer'],
+    ['project_wip', 'A000001', 'Unbilled Contract Work', null],
+    ['project_deferred_revenue', 'L000001', 'Billings in Excess of Work', null],
   ] as const) {
     const { rows: parents } = await ownerPool.query(
       `select id, account_type from chart_of_account where code = $1`,

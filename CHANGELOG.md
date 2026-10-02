@@ -8,6 +8,26 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-PM-001 PM-5 — billing, revenue recognition and forecast: a customer
+  project's **billing plan** (per billing element, due on a billing
+  milestone reached and approved, or on a date; a share of the contract as
+  it stands or an amount; never more than the contract); certificates
+  raised from a due line or from measured progress, carrying Phase 11's
+  retention and advance recovery, approved by somebody other than their
+  raiser and **posted** (D-PM-11: Dr customer receivable and retention
+  receivable on the customer's sub-ledger, Cr project revenue, the project
+  on every line); a draft withdrawn with a reason gives its balances back.
+  **Revenue recognition** by percentage of completion, cost to cost (D-PM-1):
+  nothing posts until Finance ratifies the method on Project Settings; then
+  per project and period end the difference between recognised and billed
+  goes to WIP or deferred revenue, reversed on the first day of the next
+  run; refused in a closed period; a loss contract is flagged. The
+  **Forecast** report: plan, budget, committed, actual, ETC (typed, dated
+  and reasoned, or the formula), EAC and VAC per element. The close
+  checklist warns of customer projects without recognition to the
+  period's end; the WhatsApp bot answers "project status P" (D-PM-10).
+  Migration 0249 (the measured-progress trigger now exempts a certificate
+  raised from a billing-plan line).
 - REQ-PM-001 PM-4 — schedule, progress and earned value: activities and
   milestones (usage billing, progress or date) under the elements,
   finish-to-start and start-to-start links with lags, the critical-path

@@ -193,6 +193,29 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     event: 'payables.landed_cost',
     lines: [line('landed_cost_clearing', 'credit', true)],
   },
+  {
+    // REQ-PM-001 PM-5 (D-PM-11) — a project certificate approved: the customer
+    // owes what was billed less what is retained; the retention is a
+    // receivable of its own until it is released; the whole is billed revenue.
+    event: 'projects.certificate',
+    lines: [
+      line('customer_receivable', 'debit', true, 'customer'),
+      line('project_retention_receivable', 'debit', false, 'customer'),
+      line('project_revenue', 'credit', true),
+    ],
+  },
+  {
+    // REQ-PM-001 PM-5 (D-PM-1) — percentage of completion at a period end:
+    // recognised beyond what was billed is unbilled work (WIP); billed beyond
+    // what is recognised is deferred revenue. Reversed next period, so each
+    // role is debited one month and credited the next.
+    event: 'projects.recognition',
+    lines: [
+      line('project_wip', 'either'),
+      line('project_deferred_revenue', 'either'),
+      line('project_revenue', 'either', true),
+    ],
+  },
 ]);
 
 /** The catalogue as flat (event, role) pairs, in the order shown. */

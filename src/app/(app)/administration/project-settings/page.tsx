@@ -9,13 +9,14 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as ps from '@/server/services/project-system';
-import { saveCostCode, saveProjectType, saveToleranceProfile, setCostCodeActive, setProjectTypeActive, setToleranceProfileActive } from './actions';
+import * as billing from '@/server/services/project-billing';
+import { ratifyRecognition, saveCostCode, saveProjectType, saveToleranceProfile, setCostCodeActive, setProjectTypeActive, setToleranceProfileActive } from './actions';
 
 /**
- * Project settings — REQ-PM-001 R4. Copies the HR Settings screen: three
- * stacked windows — project types, tolerance profiles, cost codes — each a
- * register with a new-row form under it. Nothing deletes; a row is
- * deactivated.
+ * Project settings — REQ-PM-001 R4. Copies the HR Settings screen: stacked
+ * windows — project types, tolerance profiles, cost codes, and (PM-5) the
+ * revenue-recognition method Finance ratifies — each a register with its
+ * form under it. Nothing deletes; a row is deactivated.
  */
 export const dynamic = 'force-dynamic';
 
@@ -34,7 +35,8 @@ export default async function ProjectSettingsPage({ searchParams }: { searchPara
   }
   const mayConfigure = can(principal, 'configure', ps.SETTINGS_OBJECT);
 
-  const { types, profiles, codes, accounts } = await withCurrentUser(async (tx) => ({
+  const { types, profiles, codes, accounts, policy } = await withCurrentUser(async (tx) => ({
+    policy: await billing.policy(tx),
     types: await ps.types(tx),
     profiles: await ps.toleranceProfiles(tx),
     codes: await ps.costCodes(tx),
@@ -218,6 +220,52 @@ export default async function ProjectSettingsPage({ searchParams }: { searchPara
               </Grid>
               <SubmitRow>
                 <Submit label={t('save')} />
+              </SubmitRow>
+            </Form>
+          ) : null}
+        </div>
+      </section>
+
+      <section aria-labelledby="pst-recognition-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="pst-recognition-title">
+            <span>{t('recognition')}</span>
+          </h2>
+          <div className={s.sapTableWrap}>
+            <table className={s.sapTable}>
+              <thead>
+                <tr>
+                  <th scope="col">{t('code')}</th>
+                  <th scope="col">{t('recognition_method')}</th>
+                  <th scope="col">{t('recognition_ratified')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <bdi dir="ltr">{policy.code}</bdi>
+                  </td>
+                  <td>
+                    <bdi dir="auto">{t(`method_${policy.method}`)}</bdi>
+                  </td>
+                  <td>
+                    <span className={`status status--${policy.ratified ? 'approved' : 'draft'} ${s.sapRegisterStatus}`} data-status={policy.ratified ? 'approved' : 'draft'}>
+                      {policy.ratified ? t('ratified') : t('not_ratified')}
+                    </span>{' '}
+                    {policy.ratified ? <bdi dir="auto">{`${policy.ratifiedByName ?? '—'} · ${policy.ratifiedNote ?? ''}`}</bdi> : null}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className={s.sapNote}>{t('recognition_note')}</p>
+          {mayConfigure && !policy.ratified ? (
+            <Form action={ratifyRecognition}>
+              <Grid>
+                <Field hint={t('ratify_hint')} label={admin('reason')} name="note" required wide />
+              </Grid>
+              <SubmitRow>
+                <Submit label={t('ratify')} />
               </SubmitRow>
             </Form>
           ) : null}

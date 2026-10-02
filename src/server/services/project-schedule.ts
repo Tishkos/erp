@@ -42,6 +42,7 @@ import {
 import { AdminNotFoundError, optionalText, permit, recordChange, requireText } from './administration';
 import type { ActorContext } from './chart-of-accounts';
 import * as budget from './project-budget';
+import * as billing from './project-billing';
 
 /** A literal, as in `project-budget.ts`. */
 export const PERMISSION_OBJECT = 'project';
@@ -226,6 +227,9 @@ export async function cancelActivity(tx: Tx, ctx: ActorContext, projectCode: str
   const before = await loadActivity(tx, projectCode, code);
   if (before.status !== 'open') throw new ProjectSystemError('status', `${code} is ${before.status}`);
   if (before.reachedOn) throw new ProjectSystemError('status', `${code} was reported reached; approve it or leave it`);
+  // PM-5 — a billing milestone with a plan line waiting on it: the line is cancelled (or moved to a date) first.
+  const [waiting] = (await tx.execute(sql`select line_no from project_billing_plan_line where activity_id = ${before.id}::uuid and status in ('planned', 'due') limit 1`)).rows as { line_no: number }[];
+  if (waiting) throw new ProjectSystemError('status', `billing-plan line ${waiting.line_no} falls due on ${code}; cancel the line first`);
   const why = requireText(reason, 'reason');
   await tx.update(projectActivity).set({ status: 'cancelled', cancelledBy: ctx.principal.userId, cancelledAt: new Date(), cancelReason: why, isCritical: false, updatedAt: new Date() }).where(eq(projectActivity.id, before.id));
   await recordChange(tx, ctx, { action: 'project_activity.cancelled', objectType: ACTIVITY_DOCUMENT_TYPE, objectId: `${projectCode}:${code}`, branchCode: row.branchCode, before: { status: 'open' }, after: { status: 'cancelled' }, reason: why });
@@ -405,6 +409,8 @@ export async function approveMilestone(tx: Tx, ctx: ActorContext, projectCode: s
     branchCode: row.branchCode,
     after: { reachedOn: before.reachedOn, usage: before.milestoneUsage, progressPercent: before.progressPercent, wbsCode: before.wbsCode },
   });
+  // PM-5 §11 — a billing milestone's approval makes its plan line due.
+  if (before.milestoneUsage === 'billing') await billing.refreshDue(tx, projectCode);
 }
 
 /** PM3 — technical completion waits for every activity done and every milestone reached or cancelled. */
@@ -548,7 +554,25 @@ export interface EarnedValueRow {
  * ratios are taken, so a parent's CPI is its children's money, not an
  * average of their ratios.
  */
+export interface OwnFigures {
+  budget: bigint;
+  planned: bigint;
+  earned: bigint;
+  actual: bigint;
+}
+
+/** Each element's own budget, plan to the day, earned and actual — before any roll-up. */
+export async function ownFigures(tx: Tx, projectCode: string, asOf: string) {
+  const { elements, own, measured } = await ownFiguresInner(tx, projectCode, asOf);
+  return { elements, own, measured };
+}
+
 export async function earnedValueTree(tx: Tx, projectCode: string, asOf: string = businessToday()): Promise<EarnedValueRow[]> {
+  const { elements, own, measured } = await ownFiguresInner(tx, projectCode, asOf);
+  return rollEarnedValue(elements, own, measured);
+}
+
+async function ownFiguresInner(tx: Tx, projectCode: string, asOf: string) {
   await load(tx, projectCode);
   const elements = await tx.select({ code: projectWbs.code, parentCode: projectWbs.parentCode, level: projectWbs.level, name: projectWbs.name }).from(projectWbs).where(eq(projectWbs.projectCode, projectCode));
   const { own: ownBudget } = await budget.ownBudgetByElement(tx, projectCode);
@@ -564,8 +588,7 @@ export async function earnedValueTree(tx: Tx, projectCode: string, asOf: string 
   const costs = await tx.select({ wbsCode: projectCost.wbsCode, amountIqd: projectCost.amountIqd }).from(projectCost).where(and(eq(projectCost.projectCode, projectCode), lte(projectCost.incurredOn, asOf)));
   const root = elements.find((e) => e.level === 1)?.code ?? null;
 
-  type Sums = { budget: bigint; planned: bigint; earned: bigint; actual: bigint };
-  const own = new Map<string, Sums>(elements.map((e) => [e.code, { budget: 0n, planned: 0n, earned: 0n, actual: 0n }] as const));
+  const own = new Map<string, OwnFigures>(elements.map((e) => [e.code, { budget: 0n, planned: 0n, earned: 0n, actual: 0n }] as const));
   for (const e of elements) own.get(e.code)!.budget = ownBudget.get(e.code) ?? 0n;
   for (const e of elements) {
     const lines = plan.filter((l) => l.wbsCode === e.code).map((l) => ({ period: l.period, amountIqd: parseDecimal(l.amountIqd, MONEY) }));
@@ -580,6 +603,15 @@ export async function earnedValueTree(tx: Tx, projectCode: string, asOf: string 
     const key = k.wbsCode ?? root;
     if (key && own.has(key)) own.get(key)!.actual += parseDecimal(k.amountIqd, MONEY);
   }
+  return { elements, own, measured };
+}
+
+function rollEarnedValue(
+  elements: readonly { code: string; parentCode: string | null; level: number; name: string }[],
+  own: ReadonlyMap<string, OwnFigures>,
+  measured: ReadonlyMap<string, string>,
+): EarnedValueRow[] {
+  type Sums = OwnFigures;
   // Sum each element's own figures over its subtree, deepest first.
   const totals = new Map<string, Sums>([...own].map(([code, s]) => [code, { ...s }] as const));
   for (const e of [...elements].sort((a, b) => b.level - a.level)) {

@@ -218,8 +218,9 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('material_issues', 'project', '/projects/material-issues'),
       // REQ-PM-001 PM-4 — progress, earned value, the milestones and their trend.
       page('progress', 'project', '/projects/progress'),
-      page('project_billing', 'project_billing'),
-      page('project_forecast', 'project_forecast'),
+      // REQ-PM-001 PM-5 — the billing plan, certificates, recognition; the forecast at completion.
+      page('project_billing', 'project', '/projects/billing'),
+      page('project_forecast', 'project', '/projects/forecast'),
       page('project_close', 'project_close'),
       page('project_reports', 'project_report'),
     ],
