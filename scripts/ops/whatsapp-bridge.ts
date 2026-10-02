@@ -252,16 +252,32 @@ function textOf(message: WAMessage): string | null {
  * WA-5's safety: a question still runs as a named human being, never as "the
  * group", so their own permissions and scope decide what comes back.
  */
-function senderOf(message: WAMessage): { readonly e164: string | null; readonly groupJid: string | null } {
+function senderOf(message: WAMessage, ownE164: string | null): { readonly e164: string | null; readonly groupJid: string | null } {
   const key = message.key;
   const jid = key.remoteJid ?? '';
   if (jid === 'status@broadcast') return { e164: null, groupJid: null };
-  if (isGroupJid(jid)) {
+  const groupJid = isGroupJid(jid) ? jid : null;
+
+  /*
+   * Whose words these are.
+   *
+   * `fromMe` means they were typed on the handset the bridge is paired to,
+   * and that handset's number is the author — nothing else about the message
+   * says so. In a direct chat `remoteJid` is the OTHER party, so reading the
+   * author off it credits a question to the person it was sent to, and the
+   * answer would then be worked out under their permissions and their branch
+   * scope rather than the asker's. Seen in the log on the day
+   * WA_ANSWER_SELF was added: a message typed on the bot's phone was logged
+   * as coming from the number it was sent to.
+   */
+  if (key.fromMe) return { e164: ownE164, groupJid };
+
+  if (groupJid) {
     const participant = key.participant ?? key.participantAlt ?? message.participant ?? null;
     const e164 =
       jidToE164(participant ? jidNormalizedUser(participant) : undefined) ??
       jidToE164(key.participantAlt ? jidNormalizedUser(key.participantAlt) : undefined);
-    return { e164, groupJid: jid };
+    return { e164, groupJid };
   }
   const e164 =
     jidToE164(jidNormalizedUser(jid)) ?? jidToE164(key.remoteJidAlt ? jidNormalizedUser(key.remoteJidAlt) : undefined);
@@ -273,9 +289,10 @@ async function handleInbound(
   send: wa.Transport,
   router: ((text: string, locale: 'ar' | 'en') => Promise<import('../../src/server/domain/whatsapp').Intent>) | undefined,
   message: WAMessage,
-  agentClient?: AgentClient,
+  agentClient: AgentClient | undefined,
+  ownE164: string | null,
 ): Promise<void> {
-  const { e164, groupJid } = senderOf(message);
+  const { e164, groupJid } = senderOf(message, ownE164);
   const text = textOf(message)?.trim();
   if (!e164 || !text) return;
 
@@ -805,7 +822,8 @@ async function main(): Promise<void> {
       if (type !== 'notify') return;
       for (const message of messages) {
         if (message.key.fromMe && !ANSWER_SELF) continue;
-        handleInbound(scope, send, router, message, agent ?? undefined).catch((e) => log(`inbound handling failed: ${e}`));
+        const ownE164 = socket?.user?.id ? jidToE164(jidNormalizedUser(socket.user.id)) : null;
+        handleInbound(scope, send, router, message, agent ?? undefined, ownE164).catch((e) => log(`inbound handling failed: ${e}`));
       }
     });
   };
