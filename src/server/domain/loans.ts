@@ -17,11 +17,53 @@ export class LoanError extends Error {
   }
 }
 
-export const LOAN_STATUSES = ['draft', 'approved', 'active', 'fully_repaid', 'cancelled'] as const;
+export const LOAN_STATUSES = [
+  'draft',
+  // Sent for approval: the offer and the schedule are as the bank wrote them
+  // and somebody else is asked to agree (2026-10-03). Before this they may be
+  // retyped freely; after approval an amendment is a decision with a trail.
+  'submitted',
+  'approved',
+  'active',
+  'fully_repaid',
+  'cancelled',
+] as const;
 export type LoanStatus = (typeof LOAN_STATUSES)[number];
 
-export const FREQUENCIES = ['monthly', 'quarterly', 'custom'] as const;
+export const FREQUENCIES = ['monthly', 'quarterly', 'semiannual', 'annual', 'custom'] as const;
 export type Frequency = (typeof FREQUENCIES)[number];
+
+/** How the principal comes back — the thing "four instalments" does not say. */
+export const PRINCIPAL_METHODS = ['equal_principal', 'equal_instalments', 'bullet', 'custom'] as const;
+export type PrincipalMethod = (typeof PRINCIPAL_METHODS)[number];
+
+/** How the bank works its interest out. Quoted alike, these are not alike. */
+export const INTEREST_BASES = ['reducing', 'flat'] as const;
+export type InterestBasis = (typeof INTEREST_BASES)[number];
+
+/** A rate that stands, or one that follows a published one plus a spread. */
+export const INTEREST_TYPES = ['fixed', 'variable'] as const;
+export type InterestType = (typeof INTEREST_TYPES)[number];
+
+/** How the letter states the commission. */
+export const COMMISSION_BASES = ['percentage', 'fixed', 'none'] as const;
+export type CommissionBasis = (typeof COMMISSION_BASES)[number];
+
+/** What a grace period holds off, and until when. */
+export const GRACE_KINDS = ['none', 'principal', 'interest', 'both'] as const;
+export type GraceKind = (typeof GRACE_KINDS)[number];
+
+/** What the money is for — the facility's purpose, not its accounting. */
+export const LOAN_PURPOSES = [
+  'working_capital',
+  'import_finance',
+  'equipment',
+  'project',
+  'construction',
+  'general',
+  'other',
+] as const;
+export type LoanPurpose = (typeof LOAN_PURPOSES)[number];
 
 export const ALLOCATION_METHODS = ['by_amount_used', 'equal', 'manual'] as const;
 export type AllocationMethod = (typeof ALLOCATION_METHODS)[number];
@@ -38,7 +80,17 @@ const ONE = 10n ** MONEY_SCALE;
 // ---------------------------------------------------------------------------
 
 const MOVES: Readonly<Record<LoanStatus, readonly LoanStatus[]>> = {
-  draft: ['approved', 'cancelled'],
+  /*
+   * Draft → submitted → approved → active (2026-10-03). The offer and its
+   * schedule are retyped freely while the loan is a draft or waiting; once
+   * approved they are a decision somebody made, and changing them is an
+   * amendment with a trail rather than an edit.
+   *
+   * A draft may still be approved outright: a bank offer entered by whoever
+   * will approve it has nobody to send it to.
+   */
+  draft: ['submitted', 'approved', 'cancelled'],
+  submitted: ['approved', 'draft', 'cancelled'],
   approved: ['active', 'cancelled'],
   active: ['fully_repaid'],
   fully_repaid: [],
@@ -117,6 +169,14 @@ export function splitEvenly(total: bigint, count: number): bigint[] {
   return parts;
 }
 
+/** How many months a frequency steps by. `custom` names its own dates. */
+const STEP_MONTHS: Partial<Record<Frequency, number>> = {
+  monthly: 1,
+  quarterly: 3,
+  semiannual: 6,
+  annual: 12,
+};
+
 export function dueDates(first: string, count: number, frequency: Frequency, custom?: readonly string[]): string[] {
   if (frequency === 'custom') {
     const dates = (custom ?? []).filter(Boolean);
@@ -128,7 +188,7 @@ export function dueDates(first: string, count: number, frequency: Frequency, cus
     }
     return [...dates];
   }
-  const step = frequency === 'monthly' ? 1 : 3;
+  const step = STEP_MONTHS[frequency] ?? 3;
   return Array.from({ length: count }, (_, i) => addMonths(first, i * step));
 }
 
@@ -144,6 +204,16 @@ export interface ScheduleInput {
   readonly customDates?: readonly string[];
   /** Interest runs from here to the first due date (the disbursement, or the loan's date). */
   readonly startDate: string;
+  /**
+   * How the principal comes back (2026-10-03). Left out it is equal principal,
+   * which is what every schedule built before this was.
+   */
+  readonly principalMethod?: PrincipalMethod;
+  /** On the reducing balance (the default) or flat on the original principal. */
+  readonly interestBasis?: InterestBasis;
+  /** What a grace period holds off, and the date it runs to. */
+  readonly grace?: GraceKind;
+  readonly graceUntil?: string | null;
 }
 
 export interface ScheduleRow {
@@ -156,9 +226,16 @@ export interface ScheduleRow {
 }
 
 /**
- * §15.7 — equal principal, the last absorbing rounding; a spread commission in
- * equal shares; interest on the outstanding principal for the days of each
- * period (actual/365), none when the loan carries no rate.
+ * §15.7, and the bank's own terms (2026-10-03).
+ *
+ * The principal comes back by the method the letter states; interest is on the
+ * reducing balance for the days of each period (actual/365) or flat on the
+ * original principal; a grace period defers principal and accrues interest to
+ * the first instalment after it; a spread commission rides along in equal
+ * shares. No rate at all and there is no interest to charge.
+ *
+ * Whatever the method, the principal comes back exactly once —
+ * `assertScheduleRepays` holds the typed version to the same rule.
  */
 export function buildSchedule(input: ScheduleInput): ScheduleRow[] {
   if (input.count <= 0) throw new LoanError('A loan is repaid in at least one instalment.');
@@ -167,15 +244,78 @@ export function buildSchedule(input: ScheduleInput): ScheduleRow[] {
   if (dates[0]! < input.startDate) {
     throw new LoanError(`The first instalment (${dates[0]}) falls before the loan starts (${input.startDate}).`);
   }
-  const principals = splitEvenly(input.principal, input.count);
-  const commissions = input.spreadCommission ? splitEvenly(input.commission, input.count) : principals.map(() => 0n);
+
+  const grace = input.grace ?? 'none';
+  const graceUntil = grace === 'none' ? null : (input.graceUntil ?? null);
+  if (grace !== 'none' && !graceUntil) {
+    throw new LoanError('A grace period runs to a date. Say when it ends.');
+  }
+  if (graceUntil && graceUntil < input.startDate) {
+    throw new LoanError(`The grace period (${graceUntil}) ends before the loan starts (${input.startDate}).`);
+  }
+  /** Instalments due on or before the grace date are inside it. */
+  const inGrace = (dueDate: string) => Boolean(graceUntil && dueDate <= graceUntil);
+  const holdsPrincipal = grace === 'principal' || grace === 'both';
+  const holdsInterest = grace === 'interest' || grace === 'both';
+
+  // Which instalments carry principal at all: the ones outside a principal grace.
+  const paying = dates.map((dueDate) => !(holdsPrincipal && inGrace(dueDate)));
+  if (!paying.some(Boolean)) {
+    throw new LoanError('The grace period covers every instalment: nothing would repay the principal.');
+  }
+
+  const days = (from: string, to: string) =>
+    BigInt(Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000)));
+
+  /** Interest on an outstanding balance for a stretch of days, actual/365. */
+  const interestOn = (balance: bigint, from: string, to: string) =>
+    input.interestPctPa ? roundToCent((balance * input.interestPctPa * days(from, to)) / (100n * ONE * 365n)) : 0n;
+
+  const method = input.principalMethod ?? 'equal_principal';
+  const basis = input.interestBasis ?? 'reducing';
+
+  /*
+   * Flat interest is on the original principal for the whole term, divided
+   * equally — a different and larger figure than the same rate on the reducing
+   * balance, and the one banks here quote. Worked out once, up front.
+   */
+  const flatEach =
+    basis === 'flat' && input.interestPctPa
+      ? splitEvenly(
+          roundToCent(
+            (input.principal * input.interestPctPa * days(input.startDate, dates[dates.length - 1]!)) /
+              (100n * ONE * 365n),
+          ),
+          input.count,
+        )
+      : null;
+
+  const principals = principalsBy(method, input.principal, paying, (balance, index) =>
+    basis === 'flat'
+      ? (flatEach?.[index] ?? 0n)
+      : interestOn(balance, index === 0 ? input.startDate : dates[index - 1]!, dates[index]!),
+  );
+
+  const commissions = input.spreadCommission ? splitEvenly(input.commission, input.count) : dates.map(() => 0n);
+
   let outstanding = input.principal;
   let from = input.startDate;
+  // Interest a grace held off, waiting for the first instalment that charges.
+  let deferred = 0n;
+
   return dates.map((dueDate, index) => {
-    const days = BigInt(Math.max(0, Math.round((Date.parse(dueDate) - Date.parse(from)) / 86_400_000)));
-    const interest = input.interestPctPa
-      ? roundToCent((outstanding * input.interestPctPa * days) / (100n * ONE * 365n))
-      : 0n;
+    const earned =
+      basis === 'flat' ? (flatEach?.[index] ?? 0n) : interestOn(outstanding, from, dueDate);
+    let interest: bigint;
+    if (holdsInterest && inGrace(dueDate)) {
+      // Not forgiven — carried to the first instalment after the grace.
+      deferred += earned;
+      interest = 0n;
+    } else {
+      interest = earned + deferred;
+      deferred = 0n;
+    }
+
     const principal = principals[index]!;
     const commission = commissions[index]!;
     outstanding -= principal;
@@ -189,6 +329,80 @@ export function buildSchedule(input: ScheduleInput): ScheduleRow[] {
       total: principal + commission + interest,
     };
   });
+}
+
+/**
+ * The principal of each instalment, by the method the bank's letter states.
+ *
+ * `paying` says which instalments carry principal at all — a principal grace
+ * excuses the early ones, and the whole principal comes back over the rest.
+ */
+function principalsBy(
+  method: PrincipalMethod,
+  principal: bigint,
+  paying: readonly boolean[],
+  interestAt: (balance: bigint, index: number) => bigint,
+): bigint[] {
+  const count = paying.length;
+  const live = paying.filter(Boolean).length;
+
+  if (method === 'bullet') {
+    // Nothing until the end, then all of it.
+    const rows = Array.from({ length: count }, () => 0n);
+    rows[count - 1] = principal;
+    return rows;
+  }
+
+  if (method === 'equal_instalments') {
+    /*
+     * The level payment: the same total every time. Found by halving the
+     * interval between "the principal split evenly" (too little, because it
+     * carries no interest) and "the whole principal at once" (plenty), because
+     * the annuity formula needs a power and a division this arithmetic does
+     * not do in whole cents. Thirty halvings settle it to the cent on any
+     * figure a bank would write.
+     */
+    let low = principal / BigInt(Math.max(1, live));
+    let high = principal + principal; // principal and then some, for the interest
+    for (let step = 0; step < 48; step += 1) {
+      const payment = (low + high) / 2n;
+      let balance = principal;
+      for (let index = 0; index < count; index += 1) {
+        const interest = interestAt(balance, index);
+        if (!paying[index]) continue;
+        const towards = payment - interest;
+        balance -= towards > balance ? balance : towards > 0n ? towards : 0n;
+      }
+      if (balance > 0n) low = payment;
+      else high = payment;
+    }
+
+    // Lay it out at the settled payment; the last paying row takes the rest.
+    const payment = high;
+    const rows = Array.from({ length: count }, () => 0n);
+    let balance = principal;
+    let lastPaying = -1;
+    for (let index = 0; index < count; index += 1) {
+      if (!paying[index]) continue;
+      lastPaying = index;
+      const interest = interestAt(balance, index);
+      const towards = payment - interest;
+      const taken = towards <= 0n ? 0n : towards > balance ? balance : (towards / CENT) * CENT;
+      rows[index] = taken;
+      balance -= taken;
+    }
+    if (lastPaying >= 0) rows[lastPaying] = rows[lastPaying]! + balance;
+    return rows;
+  }
+
+  // Equal principal, and the starting point a custom schedule is retyped from.
+  const shares = splitEvenly(principal, live);
+  const rows: bigint[] = [];
+  let next = 0;
+  for (let index = 0; index < count; index += 1) {
+    rows.push(paying[index] ? shares[next++]! : 0n);
+  }
+  return rows;
 }
 
 /** A schedule typed by hand (before approval) must still repay the principal exactly. */

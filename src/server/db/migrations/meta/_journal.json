@@ -1401,6 +1401,13 @@
       "when": 1795900000082,
       "tag": "0272_invoice_agreed_currency",
       "breakpoints": true
+    },
+    {
+      "idx": 200,
+      "version": "7",
+      "when": 1795900000083,
+      "tag": "0273_loan_bank_terms",
+      "breakpoints": true
     }
   ]
 }

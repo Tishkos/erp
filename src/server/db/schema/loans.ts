@@ -73,6 +73,28 @@ export const bankLoan = pgTable(
     principalIqd: numeric('principal_iqd', { precision: 19, scale: 4 }).notNull(),
     rateId: uuid('rate_id').references(() => exchangeRate.id),
 
+    /** The bank's own number for the facility (0273). */
+    facilityReference: text('facility_reference'),
+    /**
+     * How the principal comes back, how interest is worked out, and whether
+     * the rate stands — the parts of a bank's letter that decide what is owed
+     * (0273). The defaults are what every loan entered before this did.
+     */
+    principalMethod: text('principal_method').notNull().default('equal_principal'),
+    interestBasis: text('interest_basis').notNull().default('reducing'),
+    interestType: text('interest_type').notNull().default('fixed'),
+    interestReferenceRate: text('interest_reference_rate'),
+    interestSpreadPct: numeric('interest_spread_pct', { precision: 9, scale: 4 }),
+    /** How the letter states the commission: a percentage, a figure, or none. */
+    commissionBasis: text('commission_basis').notNull().default('percentage'),
+    otherFeesTxn: numeric('other_fees_txn', { precision: 19, scale: 4 }).notNull().default('0'),
+    /** What a grace period holds off, and the date it runs to. */
+    graceKind: text('grace_kind').notNull().default('none'),
+    graceUntil: date('grace_until', { mode: 'string' }),
+    /** What the money is for. The treatment of its commission is its own flag. */
+    purposeCode: text('purpose_code'),
+    /** When the bank says the money will arrive; the real date is stamped on disbursement. */
+    expectedDisbursementDate: date('expected_disbursement_date', { mode: 'string' }),
     commissionPct: numeric('commission_pct', { precision: 9, scale: 4 }).notNull().default('0'),
     commissionTxn: numeric('commission_txn', { precision: 19, scale: 4 }).notNull().default('0'),
     commissionTreatmentCode: text('commission_treatment_code')
@@ -102,6 +124,9 @@ export const bankLoan = pgTable(
       .notNull()
       .references(() => appUser.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Sent for approval: the offer as the bank wrote it, waiting (0273). */
+    submittedBy: uuid('submitted_by').references(() => appUser.id),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
     approvedBy: uuid('approved_by').references(() => appUser.id),
     approvedAt: timestamp('approved_at', { withTimezone: true }),
     activatedBy: uuid('activated_by').references(() => appUser.id),

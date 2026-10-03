@@ -48,8 +48,14 @@ import {
   assertMove,
   assertScheduleRepays,
   buildSchedule,
+  COMMISSION_BASES,
   commissionOf,
   commissionShares,
+  GRACE_KINDS,
+  INTEREST_BASES,
+  INTEREST_TYPES,
+  LOAN_PURPOSES,
+  PRINCIPAL_METHODS,
   instalmentState,
   netProceeds,
   outstanding,
@@ -217,6 +223,23 @@ export interface CreateLoanInput {
   /** The bank's own figure when it rounds; principal × pct otherwise. */
   readonly commissionTxn?: bigint | null;
   readonly commissionTreatmentCode: string;
+  /**
+   * The bank's own terms (0273). Each is optional and each default is what the
+   * register did before them: equal principal, interest on the reducing
+   * balance, a fixed rate, no grace.
+   */
+  readonly facilityReference?: string | null;
+  readonly principalMethod?: string | null;
+  readonly interestBasis?: string | null;
+  readonly interestType?: string | null;
+  readonly interestReferenceRate?: string | null;
+  readonly interestSpreadPct?: string | null;
+  readonly commissionBasis?: string | null;
+  readonly otherFeesTxn?: bigint | null;
+  readonly graceKind?: string | null;
+  readonly graceUntil?: string | null;
+  readonly purposeCode?: string | null;
+  readonly expectedDisbursementDate?: string | null;
   /** D5 — true (default) capitalises the commission into the funded imports. */
   readonly commissionCapitalised?: boolean;
   readonly interestPctPa?: string | null;
@@ -264,16 +287,52 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateLoanInput) 
   const interest = (input.interestPctPa ?? '').trim() ? percentOf(input.interestPctPa, 'An interest rate') : null;
   const net = netProceeds(input.principalTxn, commission, treatment.deducted);
 
+  /*
+   * The bank's terms (0273), each held to its own list. A letter that says
+   * nothing leaves the register as it was: equal principal, reducing balance,
+   * a fixed rate and no grace.
+   */
+  const oneOf = <T extends string>(value: string | null | undefined, list: readonly T[], fallback: T, what: string): T => {
+    const chosen = (value ?? '').trim();
+    if (!chosen) return fallback;
+    if (!(list as readonly string[]).includes(chosen)) throw new LoanError(`'${chosen}' is not ${what}.`);
+    return chosen as T;
+  };
+  const principalMethod = oneOf(input.principalMethod, PRINCIPAL_METHODS, 'equal_principal', 'a repayment method');
+  const interestBasis = oneOf(input.interestBasis, INTEREST_BASES, 'reducing', 'an interest basis');
+  const interestType = oneOf(input.interestType, INTEREST_TYPES, 'fixed', 'an interest type');
+  const commissionBasis = oneOf(input.commissionBasis, COMMISSION_BASES, 'percentage', 'a commission basis');
+  const graceKind = oneOf(input.graceKind, GRACE_KINDS, 'none', 'a grace period');
+  const purposeCode = (input.purposeCode ?? '').trim()
+    ? oneOf(input.purposeCode, LOAN_PURPOSES, 'general', 'a purpose')
+    : null;
+
+  const referenceRate = (input.interestReferenceRate ?? '').trim() || null;
+  if (interestType === 'variable' && !referenceRate) {
+    throw new LoanError('A variable rate follows a published one. Name it as the letter does.');
+  }
+  const spread = (input.interestSpreadPct ?? '').trim() ? percentOf(input.interestSpreadPct, 'A spread') : null;
+  const graceUntil = graceKind === 'none' ? null : ((input.graceUntil ?? '').trim() || null);
+  if (graceKind !== 'none' && !graceUntil) throw new LoanError('A grace period runs to a date. Say when it ends.');
+  const otherFees = input.otherFeesTxn ?? 0n;
+  if (otherFees < 0n) throw new LoanError('Bank fees are never negative.');
+
   const schedule = buildSchedule({
     principal: input.principalTxn,
     commission,
     spreadCommission: treatment.spread,
+    // A variable rate is its reference plus the spread; the letter's own rate
+    // is what the first schedule is built on either way.
     interestPctPa: interest,
     count,
     frequency,
     firstDueDate: input.firstDueDate,
     ...(input.customDates ? { customDates: input.customDates } : {}),
     startDate: startOf(input.firstDueDate, frequency),
+    principalMethod,
+    interestBasis,
+    grace: graceKind,
+    graceUntil,
   });
 
   const onDate = input.onDate || today();
@@ -298,6 +357,18 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateLoanInput) 
       rateId: converted.txnRateId ?? null,
       commissionPct: toDecimalString(pct, 4n),
       commissionTxn: money(commission),
+      facilityReference: (input.facilityReference ?? '').trim() || null,
+      principalMethod,
+      interestBasis,
+      interestType,
+      interestReferenceRate: referenceRate,
+      interestSpreadPct: spread === null ? null : toDecimalString(spread, 4n),
+      commissionBasis,
+      otherFeesTxn: money(otherFees),
+      graceKind,
+      graceUntil,
+      purposeCode,
+      expectedDisbursementDate: (input.expectedDisbursementDate ?? '').trim() || null,
       commissionTreatmentCode: treatment.code,
       commissionCapitalised: input.commissionCapitalised ?? true,
       interestPctPa: interest === null ? null : toDecimalString(interest, 4n),
@@ -384,6 +455,81 @@ export async function setSchedule(tx: Tx, ctx: ActorContext, loanId: string, row
     objectId: loan.id,
     branchCode: loan.branchCode,
     after: { instalments: schedule.map((row) => ({ dueDate: row.dueDate, totalTxn: money(row.total) })) },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// submit — the offer, as the bank wrote it, put in front of somebody else
+// ---------------------------------------------------------------------------
+
+/**
+ * Sent for approval (0273, by direction 2026-10-03).
+ *
+ * A draft is the accountant's: the offer and its schedule are retyped as often
+ * as the bank's letter is read again. Submitting says they are as the letter
+ * states, and hands them to whoever approves. It is still not a posting — no
+ * money has moved and none will until the bank sends it — so a submitted loan
+ * may be put back to draft and corrected.
+ *
+ * `create` on the loan: whoever may enter one may send it on. Approval is a
+ * different grant, and `approve` already refuses the person who entered it.
+ */
+export async function submit(tx: Tx, ctx: ActorContext, loanId: string) {
+  const loan = await lock(tx, loanId);
+  await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, { branchCode: loan.branchCode });
+  assertMove(loan.loanNo, loan.status, 'submitted');
+
+  const schedule = await scheduleOf(tx, loan.id);
+  if (schedule.length === 0) {
+    throw new LoanError(`${loan.loanNo} has no schedule to approve. Lay the instalments out first.`);
+  }
+
+  await tx
+    .update(bankLoan)
+    .set({
+      status: 'submitted',
+      submittedBy: ctx.principal.userId,
+      submittedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(bankLoan.id, loan.id));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'bank_loan.submitted',
+    objectType: PERMISSION_OBJECT,
+    objectId: loan.id,
+    branchCode: loan.branchCode,
+    before: { status: loan.status },
+    after: { status: 'submitted', instalments: schedule.length },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+}
+
+/** Back to draft, to be retyped — a submitted loan nobody has approved yet. */
+export async function returnToDraft(tx: Tx, ctx: ActorContext, loanId: string, reason: string) {
+  const loan = await lock(tx, loanId);
+  await authz.authorize(ctx.principal, 'approve', PERMISSION_OBJECT, { branchCode: loan.branchCode });
+  assertMove(loan.loanNo, loan.status, 'draft');
+  const said = reason.trim();
+  if (!said) throw new LoanError('Say what should be changed. A return without a reason is not an answer.');
+
+  await tx
+    .update(bankLoan)
+    .set({ status: 'draft', submittedBy: null, submittedAt: null, updatedAt: new Date() })
+    .where(eq(bankLoan.id, loan.id));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'bank_loan.returned',
+    objectType: PERMISSION_OBJECT,
+    objectId: loan.id,
+    branchCode: loan.branchCode,
+    before: { status: loan.status },
+    after: { status: 'draft', reason: said },
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });
