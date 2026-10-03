@@ -126,6 +126,21 @@ export async function createApInvoice(formData: FormData): Promise<void> {
   redirect(record(outcome.value!.invoiceNo));
 }
 
+/**
+ * The due date, said once it is known — by direction 2026-10-03.
+ *
+ * The company buys on advance, so the invoice is entered without one; this is
+ * the moment after, when the bank has confirmed the transfer and the supplier
+ * has named the day for the balance.
+ */
+export async function setDueDateAction(formData: FormData): Promise<void> {
+  const invoiceNo = text(formData, 'invoice_no');
+  await runAdminAndReturn(
+    (tx, ctx) => ap.setDueDate(tx, ctx, text(formData, 'id'), text(formData, 'due_date')),
+    record(invoiceNo),
+  );
+}
+
 /** What the grid hears back: it happened, or why it did not. */
 export interface LineOutcome {
   readonly ok: boolean;

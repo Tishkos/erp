@@ -27,7 +27,7 @@ import * as warehouses from '@/server/services/warehouses';
 import * as expenses from '@/server/services/expenses';
 import * as bankCash from '@/server/services/bank-cash-accounts';
 import * as payables from '@/server/services/payables';
-import { addInvoiceNoteAction, attachToInvoice, invoiceLineAvailability, markPaidAction, postApInvoice, removeApInvoiceLine, reverseApInvoice, saveApInvoiceAccounts, saveApInvoiceLine, submitApInvoice } from '../actions';
+import { addInvoiceNoteAction, attachToInvoice, invoiceLineAvailability, markPaidAction, postApInvoice, removeApInvoiceLine, reverseApInvoice, saveApInvoiceAccounts, saveApInvoiceLine, setDueDateAction, submitApInvoice } from '../actions';
 import { businessToday } from '@/server/domain/business-date';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '@/server/domain/money';
 import { QUANTITY_FACTOR, parseQuantity } from '@/server/domain/uom';
@@ -379,6 +379,37 @@ export default async function ApInvoicePage({
                   </Grid>
                   <SubmitRow>
                     <Submit label={x('mark_paid')} />
+                  </SubmitRow>
+                </Form>
+              </NewRecordDialog>
+            ) : null}
+            {/*
+              The due date, told to the invoice after the fact (2026-10-03).
+              Nothing is owed on a date when an advance-terms invoice is
+              entered, so the form asks for none and this says it once the bank
+              has confirmed and the supplier has named the day.
+            */}
+            {mayMarkPaid ? (
+              <NewRecordDialog
+                buttonLabel={x('set_due_date')}
+                closeLabel={t('close')}
+                title={x('set_due_date_title', { invoiceNo: invoice.invoiceNo })}
+              >
+                <p className="muted">{x('set_due_date_note')}</p>
+                <Form action={setDueDateAction}>
+                  <input name="id" type="hidden" value={invoice.id} />
+                  <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
+                  <Grid>
+                    <Field
+                      defaultValue={invoice.dueDate}
+                      label={column('due_date')}
+                      name="due_date"
+                      required
+                      type="date"
+                    />
+                  </Grid>
+                  <SubmitRow>
+                    <Submit label={x('set_due_date')} />
                   </SubmitRow>
                 </Form>
               </NewRecordDialog>

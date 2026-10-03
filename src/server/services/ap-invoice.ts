@@ -1344,6 +1344,78 @@ export async function submit(tx: Tx, ctx: ActorContext, id: string): Promise<voi
  * together would make the GRNI clearance approximate, and 05.5's gate asks for
  * it to be exact.
  */
+/**
+ * The due date, told to an invoice after the fact — by direction 2026-10-03.
+ *
+ * The company buys on advance, so nothing is owed on a date when the invoice is
+ * entered: the balance falls due once the bank has confirmed the transfer and
+ * the supplier has said when it wants the rest. The form therefore asks for no
+ * due date, and this is how the real one arrives.
+ *
+ * Set on the invoice *and* on its import application. The payable carries its
+ * own `due_date` and the payables ageing sorts by it, so setting one and not
+ * the other would leave two screens disagreeing about the same debt.
+ *
+ * Allowed on a posted invoice, which is the whole point — and refused on a
+ * reversed one, which is owed to nobody. Recorded as an event on the import and
+ * as an audit row, because a due date drives the ageing and moving one quietly
+ * is how an overdue invoice stops looking overdue.
+ */
+export async function setDueDate(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  dueDate: string,
+): Promise<void> {
+  const { invoice } = await load(tx, id, { lock: true });
+  await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, {
+    branchCode: invoice.branchCode,
+    objectId: id,
+  });
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+    throw new ApInvoiceStateError(invoice.invoiceNo, invoice.status, 'a due date is a date (YYYY-MM-DD).');
+  }
+  if (invoice.status === 'reversed') {
+    throw new ApInvoiceStateError(invoice.invoiceNo, invoice.status, 'nothing is owed on any date.');
+  }
+  if (dueDate < invoice.invoiceDate) {
+    throw new ApInvoiceStateError(
+      invoice.invoiceNo,
+      invoice.status,
+      `${dueDate} is before the invoice's own date (${invoice.invoiceDate}).`,
+    );
+  }
+  if (dueDate === invoice.dueDate) return;
+
+  const before = invoice.dueDate;
+  await tx.update(apInvoice).set({ dueDate, updatedAt: new Date() }).where(eq(apInvoice.id, id));
+  if (invoice.payableId) {
+    await tx.update(payable).set({ dueDate, updatedAt: new Date() }).where(eq(payable.id, invoice.payableId));
+    await payableEvents.record(tx, {
+      payableId: invoice.payableId,
+      eventCode: 'FIELD_CHANGED',
+      sourceType: PERMISSION_OBJECT,
+      sourceId: id,
+      sourceNo: invoice.invoiceNo,
+      summary: `Due date of ${invoice.invoiceNo}: ${before} → ${dueDate}`,
+      before: { dueDate: before },
+      after: { dueDate },
+      actorUserId: ctx.principal.userId,
+    });
+  }
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'ap_invoice.due_date_set',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: invoice.branchCode,
+    before: { dueDate: before },
+    after: { dueDate },
+    outcome: 'success',
+  });
+}
+
 export async function post(
   tx: Tx,
   ctx: ActorContext,

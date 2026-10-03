@@ -145,22 +145,6 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
       ),
     },
     {
-      label: column('due_date'),
-      control: true,
-      // Filled from the supplier's payment terms the moment the supplier is
-      // chosen, and editable after that — §16's default, not a lock.
-      value: (
-        <DueDateField
-          dateField="invoice_date"
-          label={column('due_date')}
-          name="due_date"
-          partnerField="supplier_id"
-          required
-          terms={supplierTerms}
-        />
-      ),
-    },
-    {
       label: t('invoices.statement_account_supplier'),
       control: true,
       value: (
