@@ -22,7 +22,7 @@
  * balance until the credit memo arrives; an ageing of that account is the
  * answer to *"what have we sent back and not been credited for?"*
  */
-import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   apInvoice,
@@ -37,8 +37,13 @@ import {
   goodsReceiptLine,
   goodsReturn,
   goodsReturnLine,
+  journalLine,
+  landedCostLayerAdjustment,
+  landedCostLock,
   supplierCreditMemo,
 } from '../db/schema';
+import { costOf as fifoCostOf } from '../domain/fifo';
+import type { PostingLineRequest } from '../domain/posting';
 import { formatQuantity, parseQuantity } from '../domain/uom';
 import { parseDecimal, toDecimalString } from '../domain/money';
 import type { ActorContext } from './chart-of-accounts';
@@ -123,6 +128,14 @@ export interface OffsetChoice {
   readonly offsetKind: OffsetKind;
   /** Required when `offsetKind` is 'bank', refused otherwise. */
   readonly offsetBankAccountId?: string | null;
+  /**
+   * IMPROVEMENT-002 — whether the supplier also pays back the landed cost
+   * (freight, duty, clearance) of the goods going back. No unless somebody
+   * says so: recoverability is never guessed. No sends that part to purchase
+   * variance, Yes to return clearing until the supplier's credit clears it.
+   * Frozen once the return is posted (0280's `goods_return_posted_is_final`).
+   */
+  readonly reimbursesLandedCost?: boolean;
 }
 
 export interface CreateGoodsReturnInput extends OffsetChoice {
@@ -287,6 +300,7 @@ export async function create(
       returnDate: input.returnDate,
       offsetKind: offset.offsetKind,
       offsetBankAccountId: offset.offsetBankAccountId,
+      reimbursesLandedCost: input.reimbursesLandedCost === true,
       reason: input.reason.trim(),
       supplierReference: input.supplierReference ?? null,
       createdBy: ctx.principal.userId,
@@ -340,6 +354,7 @@ export async function create(
       returnNo: allocated.documentNo,
       receiptNo: receipt.receiptNo,
       lines: input.lines.length,
+      reimbursesLandedCost: input.reimbursesLandedCost === true,
     },
     reason: input.reason.trim(),
     outcome: 'success',
@@ -472,6 +487,7 @@ export async function createFromInvoice(
       returnDate: input.returnDate,
       offsetKind: offset.offsetKind,
       offsetBankAccountId: offset.offsetBankAccountId,
+      reimbursesLandedCost: input.reimbursesLandedCost === true,
       reason: input.reason.trim(),
       supplierReference: input.supplierReference ?? null,
       createdBy: ctx.principal.userId,
@@ -533,6 +549,7 @@ export async function createFromInvoice(
       returnNo: allocated.documentNo,
       invoiceNo: invoice.invoiceNo,
       lines: input.lines.length,
+      reimbursesLandedCost: input.reimbursesLandedCost === true,
     },
     reason: input.reason.trim(),
     outcome: 'success',
@@ -638,7 +655,7 @@ export async function post(
   tx: Tx,
   ctx: ActorContext,
   id: string,
-): Promise<{ movementIds: readonly string[]; costIqd: bigint }> {
+): Promise<{ movementIds: readonly string[]; costIqd: bigint; landedIqd: bigint }> {
   const { document, lines } = await load(tx, id, { lock: true });
 
   await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, {
@@ -665,17 +682,30 @@ export async function post(
   // Raised against a Purchase Invoice that booked its own stock — Operations
   // block 10. Everything about it is settled here, in one journal; see below.
   const direct = Boolean(document.apInvoiceId) && lines.every((line) => !line.goodsReceiptLineId);
-  /** Each line's inventory credit, by the item's own inventory account. */
-  const inventoryCredits: { accountId: string | null; costIqd: bigint; warehouseCode: string }[] = [];
+  /**
+   * Each line's inventory credit, by the item's own inventory account, and
+   * what the same units cost on the invoice — the two differ by the landed
+   * cost a lock restated into the layers (IMPROVEMENT-002).
+   */
+  const inventoryCredits: {
+    accountId: string | null;
+    costIqd: bigint;
+    invoiceIqd: bigint;
+    warehouseCode: string;
+  }[] = [];
+  /** What the returned units cost on the invoice — the supplier's side. */
+  let invoiceIqd = 0n;
 
   for (const line of lines) {
     if (direct) {
       const moved = await returnInvoicedGoods(tx, ctx, document, line);
       movementIds.push(...moved.movementIds);
       costIqd += moved.costIqd;
+      invoiceIqd += moved.invoiceIqd;
       inventoryCredits.push({
         accountId: await itemInventoryAccount(tx, line.itemCode),
         costIqd: moved.costIqd,
+        invoiceIqd: moved.invoiceIqd,
         warehouseCode: line.warehouseCode,
       });
       await tx
@@ -753,20 +783,34 @@ export async function post(
    * company owed, and the supplier's statement never showed it.
    *
    * The debit is the payable the invoice credited (the account it chose, or the
-   * purchase-invoice mapping), or the bank the refund arrived in. The credit is
-   * each item's own inventory account (block 1). Both are the return's value
-   * at what the invoice paid for these goods, so they balance by construction.
+   * purchase-invoice mapping), or the bank the refund arrived in, at what the
+   * invoice charged for these goods. The credit is each item's own inventory
+   * account (block 1), at the FIFO cost the consumption rows record.
+   *
+   * Before a landed-cost lock the two are the same figure. After one they are
+   * not (IMPROVEMENT-002): the stock leaves at its restated cost — the invoice
+   * price plus its share of freight, duty and clearance — while the supplier
+   * credits only what they invoiced. The landed part of the returned units is
+   * its own debit line: purchase variance when the supplier does not pay it
+   * back, return clearing when they do (`reimburses_landed_cost`), until
+   * their credit clears it. The difference is taken from the same consumption
+   * rows, so the journal balances to the dinar.
    */
   let journalEntryId: string | null = null;
+  const landedIqd = costIqd - invoiceIqd;
   if (direct && costIqd > 0n) {
     const [invoice] = await tx
-      .select({ payableAccountId: apInvoice.payableAccountId, invoiceNo: apInvoice.invoiceNo })
+      .select({
+        payableAccountId: apInvoice.payableAccountId,
+        invoiceNo: apInvoice.invoiceNo,
+        journalEntryId: apInvoice.journalEntryId,
+      })
       .from(apInvoice)
       .where(eq(apInvoice.id, document.apInvoiceId!))
       .limit(1);
     const criteria = { branchCode: document.branchCode };
     const dimensions = { branch: document.branchCode, business_partner: supplier?.code ?? null };
-    const amount = toDecimalString(costIqd, 4n);
+    const amount = toDecimalString(invoiceIqd, 4n);
     const debitAccount =
       document.offsetKind === 'bank'
         ? await bankGlAccount(tx, document.offsetBankAccountId!)
@@ -778,6 +822,31 @@ export async function post(
             document.branchCode,
           )));
 
+    // The landed part, by the warehouse the goods left — a line per warehouse,
+    // debit as a lock only ever adds (a credit, should a restatement ever
+    // lower a layer, is the same line the other way round).
+    const landedByWarehouse = new Map<string, bigint>();
+    for (const credit of inventoryCredits) {
+      const part = credit.costIqd - credit.invoiceIqd;
+      if (part === 0n) continue;
+      landedByWarehouse.set(credit.warehouseCode, (landedByWarehouse.get(credit.warehouseCode) ?? 0n) + part);
+    }
+    const landedLines: PostingLineRequest[] = [];
+    if ([...landedByWarehouse.values()].some((part) => part !== 0n)) {
+      const target = await landedCostTarget(tx, document);
+      const analysis = await invoiceAnalysis(tx, invoice?.journalEntryId ?? null);
+      for (const [warehouseCode, part] of landedByWarehouse) {
+        if (part === 0n) continue;
+        landedLines.push({
+          role: target.role,
+          accountId: target.accountId,
+          ...(part > 0n ? { debit: toDecimalString(part, 4n) } : { credit: toDecimalString(-part, 4n) }),
+          criteria: { ...criteria, warehouseCode },
+          dimensions: { ...dimensions, warehouse: warehouseCode, ...analysis },
+        });
+      }
+    }
+
     const result = await posting.post(tx, ctx, {
       eventType: 'purchasing.goods_return',
       documentTypeCode: DOCUMENT_TYPE,
@@ -787,13 +856,18 @@ export async function post(
       postingDate: document.returnDate,
       description: `Purchase return ${document.returnNo} against ${invoice?.invoiceNo ?? 'invoice'}`,
       lines: [
-        {
-          role: document.offsetKind === 'bank' ? 'bank' : 'supplier_payable',
-          ...(debitAccount ? { accountId: debitAccount } : {}),
-          debit: amount,
-          criteria,
-          dimensions,
-        },
+        ...(invoiceIqd > 0n
+          ? [
+              {
+                role: document.offsetKind === 'bank' ? 'bank' : 'supplier_payable',
+                ...(debitAccount ? { accountId: debitAccount } : {}),
+                debit: amount,
+                criteria,
+                dimensions,
+              },
+            ]
+          : []),
+        ...landedLines,
         ...inventoryCredits
           .filter((credit) => credit.costIqd > 0n)
           .map((credit) => ({
@@ -855,6 +929,13 @@ export async function post(
       status: 'posted',
       movements: movementIds.length,
       costIqd: toDecimalString(costIqd, 4n),
+      ...(direct
+        ? {
+            invoiceIqd: toDecimalString(invoiceIqd, 4n),
+            landedIqd: toDecimalString(landedIqd, 4n),
+            reimbursesLandedCost: document.reimbursesLandedCost,
+          }
+        : {}),
       journalEntryId,
     },
     outcome: 'success',
@@ -867,18 +948,23 @@ export async function post(
     if (owner?.payableId) await payables.recomputeStage(tx, owner.payableId, ctx.principal.userId);
   }
 
-  return { movementIds, costIqd };
+  return { movementIds, costIqd, landedIqd: direct ? landedIqd : 0n };
 }
 
 /**
  * Takes one return line's goods out of the warehouse it names — block 10.
  *
- * The goods are the ones that invoice line bought: the same supplier, the same
- * unit cost and the same FIFO date as the layer the invoice created. Matching
- * on those rather than on that one layer is what lets a return follow the goods
- * after they have moved — through the shipment stages (block 8) or a transfer
- * (block 7) — because a move keeps all three (`inventory.relocate`) while the
- * layer the invoice first created is left empty behind it.
+ * The goods are the ones that invoice line bought, wherever they now stand
+ * (`lineageOf`): through the shipment stages (block 8), a container receipt
+ * out of transit, or a transfer (block 7), the layer the invoice first created
+ * is left empty behind them. They leave in FIFO order of the layers that hold
+ * them.
+ *
+ * Each unit leaves at its layer's cost now — after a landed-cost lock that is
+ * the invoice price plus its share of the charges — and what the same units
+ * cost on the invoice is worked out from the same consumption, so `post` can
+ * credit the supplier the one and inventory the other, and send the difference
+ * where `reimburses_landed_cost` says.
  *
  * Posts nothing itself: the return's one journal is written by `post`.
  */
@@ -887,7 +973,7 @@ async function returnInvoicedGoods(
   ctx: ActorContext,
   document: typeof goodsReturn.$inferSelect,
   line: typeof goodsReturnLine.$inferSelect,
-): Promise<{ movementIds: string[]; costIqd: bigint; firstLayerId: string | null }> {
+): Promise<{ movementIds: string[]; costIqd: bigint; invoiceIqd: bigint; firstLayerId: string | null }> {
   const source = await invoiceSource(tx, line.apInvoiceLineId);
   const originLayerId = source.movementId
     ? await inventory.layerForMovement(tx, source.movementId)
@@ -906,15 +992,25 @@ async function returnInvoicedGoods(
     .from(costLayer)
     .where(eq(costLayer.id, originLayerId))
     .limit(1);
-  const originCost = parseDecimal(origin!.unitCostIqd, 4n);
+  const [owner] = await tx
+    .select({ payableId: apInvoice.payableId })
+    .from(apInvoice)
+    .where(eq(apInvoice.id, document.apInvoiceId!))
+    .limit(1);
+  // What one unit cost on the invoice: the layer the invoice created, as it
+  // stood before any lock restated it.
+  const invoiceUnitCost = await costBeforeLanding(tx, originLayerId, parseDecimal(origin!.unitCostIqd, 4n));
 
-  const pool = (
-    await inventory.layersOf(tx, line.itemCode, line.warehouseCode, origin!.supplierId)
-  ).filter(
-    (layer) =>
-      layer.remainingQuantity > 0n &&
-      layer.unitCostIqd === originCost &&
-      layer.layerDate === origin!.layerDate,
+  const lineage = await lineageOf(tx, {
+    originLayerId,
+    itemCode: line.itemCode,
+    supplierId: origin!.supplierId,
+    layerDate: origin!.layerDate,
+    invoiceUnitCost,
+    payableId: owner?.payableId ?? null,
+  });
+  const pool = (await inventory.layersOf(tx, line.itemCode, line.warehouseCode)).filter(
+    (layer) => layer.remainingQuantity > 0n && lineage.has(layer.id),
   );
 
   // REQ-FIX-001 FIX-4 — in the item's base unit, as the layers are.
@@ -930,6 +1026,7 @@ async function returnInvoicedGoods(
 
   const movementIds: string[] = [];
   let costIqd = 0n;
+  let invoiceIqd = 0n;
   for (const layer of pool) {
     if (outstanding === 0n) break;
     const take = layer.remainingQuantity < outstanding ? layer.remainingQuantity : outstanding;
@@ -948,10 +1045,120 @@ async function returnInvoicedGoods(
       batchNumber: source.batchNumber,
     });
     movementIds.push(movement.movementId);
-    costIqd += movement.costIqd ?? 0n;
+    // The consumption rows are the cost: what the stock left at, and the same
+    // quantities at the invoice's unit cost, rounded the way the ledger rounds.
+    const consumed = movement.consumptions ?? [];
+    for (const consumption of consumed) {
+      costIqd += consumption.costIqd;
+      invoiceIqd += fifoCostOf(consumption.quantity, invoiceUnitCost);
+    }
+    if (consumed.length === 0) {
+      costIqd += movement.costIqd ?? 0n;
+      invoiceIqd += fifoCostOf(take, invoiceUnitCost);
+    }
     outstanding -= take;
   }
-  return { movementIds, costIqd, firstLayerId: pool[0]?.id ?? null };
+  return { movementIds, costIqd, invoiceIqd, firstLayerId: pool[0]?.id ?? null };
+}
+
+/**
+ * A layer's unit cost before any landed-cost lock restated it: the first lock's
+ * `unit_cost_before` (by the lock's own sequence), or the cost it carries when
+ * no lock has touched it.
+ */
+async function costBeforeLanding(tx: Tx, layerId: string, current: bigint): Promise<bigint> {
+  const [first] = await tx
+    .select({ unitCostBefore: landedCostLayerAdjustment.unitCostBefore })
+    .from(landedCostLayerAdjustment)
+    .innerJoin(landedCostLock, eq(landedCostLock.id, landedCostLayerAdjustment.lockId))
+    .where(eq(landedCostLayerAdjustment.costLayerId, layerId))
+    .orderBy(asc(landedCostLock.sequence))
+    .limit(1);
+  return first ? parseDecimal(first.unitCostBefore, 4n) : current;
+}
+
+/**
+ * Every layer that holds one invoice line's goods now — IMPROVEMENT-002.
+ *
+ * By fact first: a relocation writes on the layer it creates the layer its
+ * stock came from (`cost_layer.origin_layer_id`), so the goods are the invoice
+ * line's own layer and every layer whose origin chain leads back to it.
+ *
+ * Stock moved before that column was written carries no origin, and is
+ * recognised as it was before — never by a guess wider than that:
+ *
+ *   * the same item and supplier, the invoice's unit cost and the same FIFO
+ *     date (a move keeps all three — `inventory.relocate`); or
+ *   * for an import, a layer of the same item that the import's container
+ *     receipts created (or that its landed-cost lock reached through a
+ *     transfer), priced at the invoice's cost — now, or before the first lock
+ *     restated it (that lock's `unit_cost_before`).
+ *
+ * The origin chain is then followed from all of them, so a layer moved after
+ * the column existed out of one moved before it is still found.
+ */
+async function lineageOf(
+  tx: Tx,
+  input: {
+    readonly originLayerId: string;
+    readonly itemCode: string;
+    readonly supplierId: string | null;
+    readonly layerDate: string;
+    readonly invoiceUnitCost: bigint;
+    readonly payableId: string | null;
+  },
+): Promise<Set<string>> {
+  const cost = toDecimalString(input.invoiceUnitCost, 4n);
+  const importLayers = input.payableId
+    ? sql`
+      union
+      select cl.id
+        from cost_layer cl
+        left join first_cost f on f.layer_id = cl.id
+       where cl.item_code = ${input.itemCode}
+         and cl.origin_layer_id is null
+         and (cl.unit_cost_iqd = ${cost}::numeric or f.unit_cost_before = ${cost}::numeric)
+         and (
+           exists (select 1
+                     from inventory_movement m
+                     join container_receipt r on r.id::text = m.source_document_id
+                    where m.id = cl.created_by_movement_id
+                      and m.source_document_type = 'container_receipt'
+                      and r.payable_id = ${input.payableId}::uuid)
+           or exists (select 1
+                        from landed_cost_layer_adjustment a
+                       where a.cost_layer_id = cl.id
+                         and a.payable_id = ${input.payableId}::uuid)
+         )`
+    : sql``;
+  const result = await tx.execute(sql`
+    with recursive
+    first_cost as (
+      select distinct on (a.cost_layer_id) a.cost_layer_id as layer_id, a.unit_cost_before
+        from landed_cost_layer_adjustment a
+        join landed_cost_lock k on k.id = a.lock_id
+       where a.item_code = ${input.itemCode}
+       order by a.cost_layer_id, k.sequence
+    ),
+    roots as (
+      select ${input.originLayerId}::uuid as id
+      union
+      select cl.id
+        from cost_layer cl
+       where cl.item_code = ${input.itemCode}
+         and cl.origin_layer_id is null
+         and cl.supplier_id is not distinct from ${input.supplierId}::uuid
+         and cl.unit_cost_iqd = ${cost}::numeric
+         and cl.layer_date = ${input.layerDate}::date
+      ${importLayers}
+    ),
+    lineage as (
+      select id from roots
+      union
+      select cl.id from cost_layer cl join lineage l on cl.origin_layer_id = l.id
+    )
+    select id from lineage`);
+  return new Set((result.rows as { id: string }[]).map((row) => row.id));
 }
 
 /** The warehouse a return line sends goods back from: the one chosen, else the invoice's. */
@@ -982,6 +1189,76 @@ async function itemInventoryAccount(tx: Tx, itemCode: string): Promise<string | 
     .where(eq(itemTable.code, itemCode))
     .limit(1);
   return row?.accountId ?? null;
+}
+
+/**
+ * IMPROVEMENT-002 — the landed cost of returned goods has no posting rule of
+ * its own to fall back on, so a return that needs one and finds none says
+ * which role is missing rather than posting somewhere else.
+ */
+export class LandedCostAccountError extends Error {
+  readonly code = 'GOODS_RETURN_LANDED_COST_UNMAPPED';
+  constructor(
+    readonly role: 'purchase_variance' | 'return_clearing',
+    returnNo: string,
+  ) {
+    super(
+      `Return ${returnNo} sends back goods whose cost includes freight, duty and clearance, and that part posts to ` +
+        `'${role}' — no account is mapped for '${role}'. Map it on Posting Mappings, then send the return again.`,
+    );
+    this.name = 'LandedCostAccountError';
+  }
+}
+
+/**
+ * Where the landed part of a return goes, through the mappings the documents
+ * that own each account already use: purchase variance as the Purchase
+ * Invoice maps it, when the supplier does not pay it back; return clearing as
+ * the Supplier Credit Memo clears it (else as a goods return parks on it),
+ * when they do.
+ */
+async function landedCostTarget(
+  tx: Tx,
+  document: typeof goodsReturn.$inferSelect,
+): Promise<{ role: 'purchase_variance' | 'return_clearing'; accountId: string }> {
+  if (document.reimbursesLandedCost) {
+    const accountId =
+      (await posting.mappedAccountFor(tx, 'purchasing.supplier_credit_memo', 'return_clearing', document.branchCode)) ??
+      (await posting.mappedAccountFor(tx, 'inventory.goods_return', 'return_clearing', document.branchCode));
+    if (!accountId) throw new LandedCostAccountError('return_clearing', document.returnNo);
+    return { role: 'return_clearing', accountId };
+  }
+  const accountId = await posting.mappedAccountFor(
+    tx,
+    'purchasing.ap_invoice',
+    'purchase_variance',
+    document.branchCode,
+  );
+  if (!accountId) throw new LandedCostAccountError('purchase_variance', document.returnNo);
+  return { role: 'purchase_variance', accountId };
+}
+
+/**
+ * The department and business line the original Purchase Invoice posted with,
+ * where it posted any — the landed part may land on an expense account that
+ * asks for them.
+ */
+async function invoiceAnalysis(
+  tx: Tx,
+  journalEntryId: string | null,
+): Promise<{ department?: string; business_line?: string }> {
+  if (!journalEntryId) return {};
+  const rows = await tx
+    .select({ department: journalLine.departmentCode, businessLine: journalLine.businessLineCode })
+    .from(journalLine)
+    .where(eq(journalLine.journalEntryId, journalEntryId))
+    .orderBy(asc(journalLine.lineNo));
+  const department = rows.find((row) => row.department)?.department;
+  const businessLine = rows.find((row) => row.businessLine)?.businessLine;
+  return {
+    ...(department ? { department } : {}),
+    ...(businessLine ? { business_line: businessLine } : {}),
+  };
 }
 
 /** What a return is worth — the FIFO cost of what went back. */

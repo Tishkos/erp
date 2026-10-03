@@ -2285,6 +2285,8 @@
       "offset_payable": "Accounts Payable",
       "offset_bank": "Bank",
       "bank_account": "Bank or cash account",
+      "reimburses_landed_cost": "Supplier reimburses the landed cost",
+      "reimburses_landed_cost_hint": "Freight, duty and clearance on these goods: No → purchase variance; Yes → return clearing, to be cleared by the supplier's credit.",
       "reason": "Reason",
       "returnable": "Returnable",
       "return_quantity": "Return Quantity",

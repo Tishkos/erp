@@ -80,6 +80,10 @@ export default async function GoodsReturnPage({
           : t('goods_returns.offset_payable'),
     },
     {
+      label: t('goods_returns.reimburses_landed_cost'),
+      value: document.reimbursesLandedCost ? t('yes') : t('no'),
+    },
+    {
       label: t('goods_returns.reason'),
       value: <bdi dir="auto">{document.reason}</bdi>,
       wide: true,
