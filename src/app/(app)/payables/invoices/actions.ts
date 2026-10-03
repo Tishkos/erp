@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { rowCount, runAdmin, runAdminAndReturn, text, withQuery } from '@/server/admin-action';
 import { registerAllRecords } from '@/server/records';
 import { parseDecimal } from '@domain/money';
+import { toIqd } from '@domain/money';
 import { parseQuantity } from '@domain/uom';
 import { businessToday } from '@/server/domain/business-date';
 import { matchSupplier } from '@/server/domain/invoice-draft';
@@ -91,6 +92,35 @@ function linesFrom(formData: FormData): ap.InvoiceLineInput[] {
 export async function createApInvoice(formData: FormData): Promise<void> {
   const outcome = await runAdmin(async (tx, ctx) => {
     const lines = linesFrom(formData);
+
+    /*
+     * The currency the invoice is agreed in, and the rate that turns it into
+     * dinars (2026-10-03).
+     *
+     * The prices were typed in this currency, so each line carries both: the
+     * agreed figure as `unitPriceTxn`, and the dinars the journal needs. The
+     * rate is read here, from `rateOn` — the latest effective on the invoice's
+     * own date and not superseded — rather than taken from the form, because a
+     * rate that arrived from a browser is one somebody could have edited and
+     * these dinars end up in the ledger.
+     */
+    const invoiceDate = text(formData, 'invoice_date');
+    const currency = text(formData, 'currency').trim().toUpperCase() || 'IQD';
+    const priced =
+      currency === 'IQD'
+        ? lines
+        : await (async () => {
+            const rate = await rates.rateOn(tx, currency, invoiceDate);
+            return lines.map((line) => ({
+              ...line,
+              // What was typed is the agreed currency; the dinars are derived.
+              unitPriceTxn: line.unitPriceIqd,
+              unitPriceIqd: toIqd(line.unitPriceIqd, rate.iqdPerUnit),
+              ...(line.discountIqd === undefined
+                ? {}
+                : { discountIqd: toIqd(line.discountIqd, rate.iqdPerUnit) }),
+            }));
+          })();
     return ap.create(tx, ctx, {
       supplierId: text(formData, 'supplier_id'),
       // Block 4's header is the invoice number, the two dates and the
@@ -111,6 +141,9 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       expenseAccountId: text(formData, 'expense_account_id').trim() || null,
       // D13 — the accountant ticked Import: the application is born with it.
       isImport: text(formData, 'is_import') === '1',
+      // §1.1 — the invoice and its journal are in dinars; the import keeps the
+      // currency it was agreed in, which is what gets paid (FX7/FX8).
+      ...(currency === 'IQD' ? {} : { importCurrency: currency }),
       // §24.3 — ticked Import and naming an open import: the invoice joins it.
       payableId: text(formData, 'is_import') === '1' ? text(formData, 'payable_id').trim() || null : null,
       paymentTermsText: text(formData, 'payment_terms_text').trim() || null,
@@ -118,7 +151,7 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       projectCode: text(formData, 'project_element').split('|')[0]?.trim() || null,
       wbsCode: text(formData, 'project_element').split('|')[1]?.trim() || null,
       costCode: text(formData, 'project_cost_code').trim() || null,
-      lines,
+      lines: priced,
     });
   });
 

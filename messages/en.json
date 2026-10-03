@@ -2917,13 +2917,15 @@
       "project_element": "Project element",
       "project_element_none": "None — not for a project",
       "project_cost_code": "Project cost code",
-      "payment_terms_text": "Payment terms (as on the PDF)",
-      "payment_terms_placeholder": "e.g. 30% deposit, 70% against B/L",
+      "payment_terms_text": "Advance payment",
+      "payment_terms_placeholder": "e.g. 20% in advance, 80% before pickup",
       "import_application_new": "New — opened by this invoice",
       "state_part_paid": "Part paid",
       "set_due_date": "Set due date",
       "set_due_date_title": "Due date of {invoiceNo}",
-      "set_due_date_note": "The company buys on advance, so an invoice is entered without a due date. Set it once the bank has confirmed the transfer and the supplier has named the day for the balance. It moves the import application with it, and the change is kept on the record."
+      "set_due_date_note": "The company buys on advance, so an invoice is entered without a due date. Set it once the bank has confirmed the transfer and the supplier has named the day for the balance. It moves the import application with it, and the change is kept on the record.",
+      "rate_on_date": "1 {currency} = {rate} IQD",
+      "total_in": "Total {currency} {amount}"
     },
     "payment_applications": {
       "subtitle": "The company’s requests to its banks and cashier to pay a supplier — longest waiting first.",

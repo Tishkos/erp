@@ -4,6 +4,7 @@ import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { DueDateField } from '@/components/admin/due-date-field';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
+import { InvoiceCurrency } from '@/components/admin/invoice-currency';
 import { PairedPicker } from '@/components/admin/paired-picker';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -14,6 +15,7 @@ import * as ap from '@/server/services/ap-invoice';
 import * as items from '@/server/services/items';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as partners from '@/server/services/partners';
+import * as rates from '@/server/services/exchange-rates';
 import * as payables from '@/server/services/payables';
 import * as posting from '@/server/services/posting';
 import * as execution from '@/server/services/project-execution';
@@ -61,11 +63,24 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
     return <Denied object={page('ap_invoices')} />;
   }
 
-  const { suppliers, allSuppliers, stockItems, allItems, houses, schedules, accounts, mapped, imports, assignment } =
+  const { suppliers, allSuppliers, stockItems, allItems, houses, schedules, accounts, mapped, imports, assignment, moneys } =
     await withCurrentUser(async (tx) => ({
       // REQ-PM-001 §8 — the project elements a purchase may be assigned to.
       assignment: await execution.assignmentPickers(tx),
       suppliers: await partners.listActiveInRole(tx, 'supplier'),
+      /*
+       * The currencies an invoice may be agreed in, each with the rate in
+       * force on its date (2026-10-03). Read here so the header can show both
+       * totals as the lines are typed; the action converts again on the server,
+       * which is what the journal receives.
+       */
+      moneys: await Promise.all(
+        (await rates.currencies(tx)).map(async (row) => ({
+          code: row.code,
+          name: row.name,
+          iqdPerUnit: (await rates.rateOn(tx, row.code, today)).iqdPerUnit.toString(),
+        })),
+      ),
       // The whole list too, so an empty picker can say which of the two things is
       // wrong: nobody has been added, or nobody added is active.
       allSuppliers: await partners.listByRole(tx, 'supplier'),
@@ -128,6 +143,24 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
           }))}
           placeholder={t('search_placeholder')}
           required
+        />
+      ),
+    },
+    {
+      label: column('currency'),
+      control: true,
+      value: (
+        <InvoiceCurrency
+          choices={moneys}
+          labels={{
+            rate: x('rate_on_date'),
+            totalIn: x('total_in'),
+            totalLedger: x('total_in'),
+          }}
+          label={column('currency')}
+          ledger="IQD"
+          locale={locale}
+          name="currency"
         />
       ),
     },
