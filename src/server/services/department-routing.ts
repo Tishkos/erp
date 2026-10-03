@@ -151,10 +151,9 @@ export async function submitOrFinalise(
     ctx.principal.userId,
   );
 
-  const { instanceId } = await workflow.submit(tx, {
+  const { instanceId } = await workflow.submit(tx, ctx, {
     documentTypeCode: input.documentTypeCode,
     documentId: input.documentId,
-    submittedBy: ctx.principal.userId,
     branchCode: ctx.branchCode,
   });
 

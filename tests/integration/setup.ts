@@ -110,21 +110,7 @@ export async function rejection(promise: Promise<unknown>): Promise<string> {
   throw new Error('Expected the operation to be rejected, but it succeeded.');
 }
 
-/**
- * Creates a branch with the default warehouse and default cash account §4.1
- * requires, in one transaction.
- *
- * The three cannot be created separately: a warehouse belongs to a branch and a
- * branch has a default warehouse, so neither can exist first. The constraint
- * that enforces it is DEFERRED and judged at COMMIT, which is exactly what lets
- * this work — and is why every fixture goes through here rather than inserting
- * a bare branch row that production would refuse.
- *
- * The G/L account is written directly rather than raised through the Chart of
- * Accounts service: the maker-checker route is proved in its own tests, and a
- * fixture that had to approve an account before it could make a branch would
- * test the wrong thing.
- */
+/** Creates a branch, its default warehouse and an independent fixture bank account. */
 export async function seedBranch(code: string, name: string): Promise<void> {
   const client = await ownerPool.connect();
   try {
@@ -149,17 +135,17 @@ export async function seedBranch(code: string, name: string): Promise<void> {
       [`CASH-${code}`, `${name} Cash at Bank`, roots[0].id],
     );
 
-    const { rows: cash } = await client.query(
+    await client.query(
       `insert into bank_cash_account
-         (code, name, account_type, bank_name, account_number, gl_account_id, branch_code)
-       values ($1, $2, 'bank', 'Seed Bank', $3, $4, $5) returning id`,
-      [`CASH-${code}`, `${name} Cash Account`, `ACC-${code}`, account[0].id, code],
+         (code, name, account_type, bank_name, account_number, gl_account_id)
+       values ($1, $2, 'bank', 'Seed Bank', $3, $4)`,
+      [`CASH-${code}`, `${name} Cash Account`, `ACC-${code}`, account[0].id],
     );
 
-    await client.query(
-      `update branch set default_warehouse_code = $1, default_cash_account_id = $2 where code = $3`,
-      [`WH-${code}`, cash[0].id, code],
-    );
+    await client.query(`update branch set default_warehouse_code = $1 where code = $2`, [
+      `WH-${code}`,
+      code,
+    ]);
 
     await client.query('commit');
   } catch (error) {
@@ -313,14 +299,46 @@ export async function resetTestData(): Promise<void> {
 
   // Phase 11 — projects. Before the journals its costs point at, and before the
   // project dimension row every one of them hangs off. Children first.
+  // REQ-PM-001 PM-5 — the plan lines name their certificates; recognition
+  // names its journals; the ETC rows their elements; the policy is put back
+  // to unratified (D-PM-1) and lets go of the user who ratified it.
+  await client.query('delete from project_billing_plan_line');
+  await client.query('delete from project_recognition');
+  await client.query('delete from project_etc');
+  await client.query(`update project_recognition_policy set ratified_by = null, ratified_at = null, ratified_note = null`);
   await client.query('delete from project_balance_movement');
   await client.query('delete from project_certificate');
   await client.query('delete from project_progress');
+  // REQ-PM-001 PM-4 — the trend rows are append-only (TRUNCATE skips the
+  // row trigger); the activities and their links go with them.
+  await client.query('truncate project_milestone_history');
+  await client.query('delete from project_activity_dependency');
+  await client.query('delete from project_activity');
+  // REQ-PM-001 PM-3 — the material issues name their movements and cost rows.
+  await client.query('delete from project_material_issue_line');
+  await client.query('delete from project_material_issue');
+  // REQ-PM-001 PM-6 — the hours name their runs; the cost rows name their settlement.
+  await client.query('delete from project_timesheet');
+  await client.query('delete from project_timesheet_run');
   await client.query('delete from project_cost');
+  await client.query('delete from project_settlement');
   await client.query('delete from project_commitment');
+  // REQ-PM-001 PM-2 — the plan, the budget documents and the change orders' lines.
+  await client.query('delete from project_plan_line');
+  await client.query('delete from project_plan_version');
+  await client.query('delete from project_budget_document_line');
+  await client.query('delete from project_budget_document');
+  await client.query('delete from project_variation_line');
   await client.query('delete from project_variation');
   await client.query('delete from project_budget_line');
   await client.query('delete from project_wbs');
+  // REQ-PM-001 — the configuration a test added goes; the seeded rows stay active.
+  await client.query('delete from project_type where created_by is not null');
+  await client.query('delete from project_tolerance_profile where created_by is not null');
+  await client.query('delete from project_cost_code where created_by is not null');
+  await client.query('update project_type set active = true where created_by is null');
+  await client.query('update project_tolerance_profile set active = true where created_by is null');
+  await client.query('update project_cost_code set active = true where created_by is null');
 
   // Phase 08 — CRM. Before the sales orders an opportunity converted into and
   // before the partners everything here points at. Nothing in this block posts,
@@ -465,6 +483,173 @@ export async function resetTestData(): Promise<void> {
       delete from goods_return;
     `);
 
+    // REQ-AP-001 — payables. The log and the hold thread are append-only in
+    // production (TRUNCATE does not fire row triggers; the partitioned parent
+    // truncates its partitions). Masters are seeded by migration: fixture rows
+    // record who created them and are removed; seed rows (created_by NULL) are
+    // restored to their seeded active state.
+    await client.query('truncate payable_event');
+    // Stage 8 (0237) — the sheet import's runs and their sign-off.
+    await client.query('delete from payables_migration_run');
+    // REQ-LEGACY-001 — the old books' history and the runs that wrote it.
+    await client.query('delete from legacy_document');
+    await client.query('delete from legacy_import_run');
+    // REQ-AP-001 §21.8 — each reading of the ASYCUDA document list (0257).
+    await client.query('delete from asycuda_run');
+    // REQ-WA-001 — the bridge's log, allow-list and pairing; the seeded
+    // settings are restored, the bridge's heartbeat keys go.
+    await client.query('truncate whatsapp_message, whatsapp_contact restart identity cascade');
+    await client.query('delete from whatsapp_session');
+    await client.query(`delete from whatsapp_setting where key like 'bridge_%'`);
+    /*
+     * Every seeded key, not some of them.
+     *
+     * This `case` listed the keys 0242 seeded and ended `else value end`, so
+     * the group settings added by 0245/0246 kept whatever the last test had
+     * written. `wa05-group-and-actions` registers a group, and from then on
+     * `group_jid` stayed set in the database for the rest of the run and for
+     * every run after it — which posts a group copy of every notification
+     * (WA-5), so `wa01-bridge` counted two sends where it expects one and
+     * `wa02-intents` answered in a group nobody had registered. Two tests
+     * failing for a behaviour that is working exactly as designed, in a file
+     * that had not been touched.
+     *
+     * A key added to `whatsapp_setting` by a migration from here on belongs in
+     * this list, and `else value end` is the trap: it reads like a safe
+     * default and is how the leak got in.
+     *
+     * And nobody's name on them: a test's administrator is deleted below, and a
+     * dangling `updated_by` fails the IM1 restore on its foreign key.
+     */
+    await client.query(`
+      update whatsapp_setting set updated_by = null, value = case key
+        when 'router_model' then 'claude-haiku-4-5-20251001'
+        when 'agent_model' then 'claude-opus-5-5'
+        when 'inline_rows' then '15'
+        when 'export_rows_cap' then '5000'
+        when 'throttle_per_minute' then '60'
+        when 'retention_days' then '90'
+        when 'digest_hour' then '08'
+        when 'digest_locale' then 'ar'
+        when 'group_jid' then ''
+        when 'group_subject' then ''
+        when 'group_queries' then 'on'
+        when 'group_notifications' then 'on'
+        when 'group_digest' then 'on'
+        when 'group_only' then 'on'
+        else value end`);
+    await client.query(`delete from whatsapp_setting where key = 'digest_last_sent_day'`);
+    // REQ-HR-001 — people and their dated rows; the seeded masters stay, a
+    // test's own masters (created_by set) go.
+    // REQ-HR-001 HR-2 — leave, balances and the day sheet hang off the person;
+    // the limits go back to their seeds.
+    // REQ-HR-001 HR-3 — the runs name their journals; their lines and payments
+    // hang off them; a person's own component figures are dated rows like pay.
+    // REQ-HR-001 HR-4 — the recoveries name the runs and the advances; the equipment the people.
+    // REQ-HR-001 HR-6 — a claim's lines hang off it; a recovery may name the claim; the papers the person.
+    await client.query('delete from employee_request_line');
+    await client.query('delete from employee_request');
+    await client.query('delete from employee_document');
+    // REQ-HR-001 HR-5 — applicants name their vacancy and the employee a hire made; reviews the
+    // person and their cycle (a test's own: no cycle is seeded).
+    await client.query('delete from review_goal');
+    await client.query('delete from performance_review');
+    await client.query('delete from review_cycle');
+    await client.query('delete from applicant_stage');
+    await client.query('delete from applicant');
+    await client.query('delete from vacancy');
+    await client.query('delete from employee_advance_recovery');
+    await client.query('delete from employee_advance');
+    await client.query('delete from employee_asset');
+    await client.query('delete from payroll_line_component');
+    await client.query('delete from payroll_line');
+    await client.query('delete from payroll_payment');
+    await client.query('delete from payroll_run');
+    await client.query('delete from employee_pay_component');
+    await client.query('delete from leave_request');
+    await client.query('delete from leave_balance_entry');
+    await client.query('delete from attendance_day');
+    await client.query(`update hr_parameter set updated_by = null, value = case key
+        when 'contract_expiry_warning_days' then 30
+        when 'leave_pending_reminder_days' then 3
+        when 'leave_lapse_warning_days' then 45
+        when 'document_expiry_warning_days' then 30
+        else value end`);
+    await client.query('delete from employee_compensation');
+    await client.query('delete from employee_history');
+    await client.query('delete from employee');
+    await client.query('delete from position');
+    // REQ-PM-001 PM-4 — a project may count in a test's calendar.
+    await client.query('update project set calendar_code = null where calendar_code is not null');
+    await client.query('delete from working_calendar_holiday where calendar_code in (select code from working_calendar where created_by is not null)');
+    await client.query('delete from working_calendar where created_by is not null');
+    await client.query('delete from leave_type where created_by is not null');
+    await client.query('delete from pay_component where created_by is not null');
+    // REQ-HR-001 HR-3 — the seeded components back to their seeds: no accounts
+    // of their own (a test's accounts go), active, the D-HR-3 rates.
+    await client.query(`update pay_component set expense_account_id = null, liability_account_id = null, active = true, taxable = code in ('BASE', 'HOUSING', 'TRANSPORT', 'OVERTIME'),
+        default_value = case code when 'SS_EMPLOYEE' then 5 when 'SS_EMPLOYER' then 12 else 0 end`);
+    // Stage 6 (0235) — what the loans funded, their schedules, the loans.
+    await client.query('delete from bank_loan_allocation');
+    await client.query('delete from bank_loan_instalment');
+    await client.query('delete from bank_loan');
+    await client.query('delete from loan_commission_treatment where created_by is not null');
+    await client.query('update loan_commission_treatment set active = true where created_by is null');
+    // Stage 3 (0232) — applications and the plan they pay; fixture banks.
+    await client.query('delete from payment_application');
+    await client.query('delete from payable_instalment');
+    // Stage 5 (0234) — B/Ls, containers and their receipts (append-only in
+    // production: a receipt is the record of what arrived).
+    await client.query('delete from container_receipt_line');
+    await client.query('delete from container_receipt');
+    await client.query('delete from shipment_container_line');
+    await client.query('truncate shipment_container_status_history');
+    await client.query('delete from shipment_container');
+    await client.query('delete from bill_of_lading');
+    await client.query('delete from port where created_by is not null');
+    await client.query('delete from container_status where created_by is not null');
+    await client.query('update container_status set active = true where created_by is null');
+    // Stage 4 (0233) — the PDs and their history (append-only in production).
+    await client.query('truncate customs_pd_status_history');
+    await client.query('delete from customs_pd');
+    await client.query('delete from pd_status where created_by is not null');
+    await client.query('update pd_status set active = true where created_by is null');
+    await client.query('delete from bank where created_by is not null');
+    // Stage 6 (0235) opened `loan`; every seeded source is active again.
+    await client.query('update funding_source set active = true where created_by is null');
+    await client.query('delete from funding_source where created_by is not null');
+    await client.query('delete from instalment_trigger where created_by is not null');
+    await client.query('update payment_application_transition set active = true');
+    await client.query('truncate recurring_contract_amendment');
+    // Stage 7 (0236) — the locks and what they did to each layer (append-
+    // only in production); the charges name their lock, so they go between.
+    await client.query('delete from landed_cost_layer_adjustment');
+    await client.query('delete from landed_cost_charge');
+    await client.query('delete from landed_cost_lock');
+    await client.query('delete from landed_cost_basis where created_by is not null');
+    await client.query('update landed_cost_basis set active = (code not in (\'by_weight\', \'by_volume\')) where created_by is null');
+    await client.query('delete from landed_cost_type where created_by is not null');
+    // REQ-FIX-001 FX8 (0253) — the exchange differences an import closed on.
+    await client.query('delete from payable_exchange_difference');
+    await client.query('truncate payable_hold_update');
+    await client.query('delete from payable_hold');
+    await client.query('delete from payable_order_line');
+    await client.query('delete from payable');
+    await client.query('delete from recurring_contract');
+    await client.query('delete from stage_time_limit where created_by is not null');
+    await client.query('delete from payable_stage where created_by is not null');
+    await client.query('delete from payable_type_lane where payable_type_code in (select code from payable_type where created_by is not null)');
+    await client.query('delete from payable_type where created_by is not null');
+    await client.query('delete from hold_reason_code where created_by is not null');
+    await client.query('delete from expense_category where created_by is not null');
+    await client.query('delete from sweep_check where created_by is not null');
+    await client.query('delete from payable_event_code where created_by is not null');
+    await client.query('update payable_type set active = true where created_by is null');
+    await client.query('update payable_stage set active = true where created_by is null');
+    await client.query('update hold_reason_code set active = true where created_by is null');
+    await client.query('update sweep_check set active = true where created_by is null');
+    await client.query('update stage_time_limit set active = true where created_by is null');
+
     // Supplier advances before the invoices they settle and the orders they
     // answer to. A settlement is a record in production (Appendix C calls it the
     // settlement history) and carries no DELETE grant; the reset is the only
@@ -478,6 +663,7 @@ export async function resetTestData(): Promise<void> {
     // grant in production either — they are resolved, never removed.
     await client.query(`
       delete from ap_match_exception;
+      delete from ap_invoice_note;
       delete from ap_invoice_line;
       delete from ap_invoice;
     `);
@@ -538,6 +724,10 @@ export async function resetTestData(): Promise<void> {
 
     await client.query('delete from warehouse_transfer_line');
     await client.query('delete from warehouse_transfer');
+    // Operations block 7's transfer and reconciliation records (migration
+    // 0207). Append-only in production; lifted here only.
+    await client.query('delete from stock_transfer');
+    await client.query('delete from stock_adjustment');
 
     // Opening stock likewise: an approved document is immutable in production
     // (§1.1) because its lines are the FIFO layers every margin rests on. The
@@ -580,8 +770,8 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from payment_method');
 
     await client.query('delete from item_uom');
+    await client.query('delete from item_supplier');
     await client.query('delete from item');
-    await client.query('update branch set default_cash_account_id = null');
     await client.query('delete from bank_cash_account');
     await client.query(`
     `);
@@ -669,6 +859,12 @@ export async function resetTestData(): Promise<void> {
       begin
         delete from doc_number_allocation
          where document_no not in (select code from chart_of_account where is_system);
+        -- A root re-allocated by a test names that test's user, who is about
+        -- to go; with the FK triggers off here the row would be left pointing
+        -- at nobody — and a dump of this database would then not restore
+        -- (IM1). The seed's own allocations carry no allocator either.
+        update doc_number_allocation set allocated_by = null
+         where document_no in (select code from chart_of_account where is_system);
       end $$;
     `);
 
@@ -706,11 +902,30 @@ export async function resetTestData(): Promise<void> {
                          -- migrations 0204 and 0205. Like the account codes
                          -- above, these survive the reset.
                          'ITEM_CODE', 'BANK_ACCOUNT_CODE', 'CASH_ACCOUNT_CODE',
+                         -- Operations block 7's reconciliation, migration 0207.
+                         'STOCK_ADJUSTMENT',
+                         -- Customer, supplier, warehouse and payment term
+                         -- codes, migration 0208.
+                         'CUSTOMER_CODE', 'SUPPLIER_CODE', 'WAREHOUSE_CODE', 'PAYMENT_TERM_CODE',
+                         'DEPARTMENT_CODE', 'COST_CENTRE_CODE', 'PAYMENT_METHOD_CODE',
                          -- Phase 00, seeded by migration 0160.
                          'INVOICE',
                          'JOURNAL_ENTRY', 'WAREHOUSE_TRANSFER', 'OPENING_STOCK', 'STOCK_COUNT',
                          'PURCHASE_ORDER', 'GOODS_RECEIPT', 'SERVICE_RECEIPT', 'AP_INVOICE',
                          'SUPPLIER_ADVANCE',
+                         -- REQ-AP-001 Stage 1, migration 0225 — one per payable type.
+                         'PAYABLE_IMPORT', 'PAYABLE_SERVICE', 'PAYABLE_RECURRING',
+                         'PAYABLE_LOCAL_GOODS', 'PAYABLE_ADVANCE', 'RECURRING_CONTRACT',
+                         -- REQ-AP-001 Stage 3, migration 0232.
+                         'PAYMENT_APPLICATION', 'BANK_CODE',
+                         -- REQ-AP-001 Stage 5, migration 0234.
+                         'CONTAINER_RECEIPT', 'PORT_CODE',
+                         -- IMPROVEMENT-002, migration 0268 — the ASYCUDA reading as a document.
+                         'ASYCUDA_RUN',
+                         -- REQ-AP-001 Stage 6, migration 0235.
+                         'LOAN',
+                         -- REQ-HR-001 Stage HR-1, migration 0241.
+                         'EMPLOYEE', 'POSITION_CODE', 'LEAVE_REQUEST', 'PAYROLL_RUN', 'PAYSLIP', 'EMPLOYEE_ADVANCE', 'VACANCY', 'APPLICANT', 'PERFORMANCE_REVIEW', 'EXPENSE_CLAIM', 'TRAVEL_REQUEST', 'HR_LETTER', 'EMPLOYEE_REQUEST', 'EMPLOYEE_DOCUMENT', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',
@@ -802,6 +1017,7 @@ export async function resetTestData(): Promise<void> {
     // Sessions and credentials cascade from the user, but a revoked session is
     // protected from reinstatement by a trigger that also guards the token — off
     // for the delete, back on after.
+    await client.query('delete from sign_in_attempt');
     await client.query('delete from auth_session');
     await client.query('delete from auth_account');
     await client.query('delete from auth_verification');
@@ -835,8 +1051,10 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from user_branch_scope');
     await client.query('delete from user_department_scope');
 
-    // Roles seeded by a migration stay.
+    // Roles seeded by a migration stay, with their grants; a test's role goes
+    // with its grants, or the grants would outlive it (the FK triggers are off).
     await client.query('delete from app_user');
+    await client.query('delete from role_grant g where not exists (select 1 from role r where r.code = g.role_code and r.is_system)');
     await client.query('delete from role where not is_system');
     await client.query(`
       delete from branch;

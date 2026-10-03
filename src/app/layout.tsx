@@ -4,6 +4,7 @@ import { Inter, Noto_Sans_Arabic, Geist } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { directionOf } from '@/i18n/config';
+import { clientMessages } from '@/i18n/client-messages';
 import './globals.css';
 import { cn } from "@/lib/utils";
 
@@ -65,7 +66,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
       </head>
       <body>
-        <NextIntlClientProvider locale={locale} messages={messages}>
+        <NextIntlClientProvider locale={locale} messages={clientMessages(messages)}>
           {children}
         </NextIntlClientProvider>
       </body>

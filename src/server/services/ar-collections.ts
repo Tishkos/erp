@@ -417,6 +417,19 @@ export async function resolvePromise(
   outcome: 'kept' | 'broken' | 'cancelled',
   note?: string | null,
 ): Promise<void> {
+  // HD6 — the promise belongs to a branch; closing it is an act on the
+  // collections file, authorised like recording one.
+  const [promise] = await tx
+    .select({ branchCode: promiseToPay.branchCode, status: promiseToPay.status })
+    .from(promiseToPay)
+    .where(eq(promiseToPay.id, id))
+    .limit(1);
+  if (!promise) throw new Error(`No promise to pay '${id}' is visible to you.`);
+  await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, {
+    branchCode: promise.branchCode,
+    objectId: id,
+    requestId: ctx.requestId ?? null,
+  });
   await tx
     .update(promiseToPay)
     .set({ status: outcome, resolvedAt: new Date(), resolutionNote: note ?? null })

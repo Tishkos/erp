@@ -14,10 +14,9 @@ import { redirect } from 'next/navigation';
  * So the two role screens are the whole story, and this address forwards to
  * one of them rather than standing as a third, emptier way in.
  *
- * The record page below this path stays: `/master-data/business-partners/CODE`
- * is where both screens open a partner, because there is one record behind
- * both of them.
+ * Legacy bookmarks are forwarded to the Sales customer list. Records are
+ * opened from the role-specific Sales or Purchasing list.
  */
 export default function BusinessPartnersIndex() {
-  redirect('/master-data/customers');
+  redirect('/sales/customers');
 }

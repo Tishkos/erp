@@ -16,12 +16,11 @@ import {
   SubmitRow,
   matches,
 } from '@/components/admin';
-import { AutoCode } from '@/components/admin/auto-code';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as methods from '@/server/services/payment-methods';
 import { createPaymentMethod } from './actions';
@@ -66,10 +65,9 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
             title={t('payment_methods.new')}
           >
             <p className="muted">{t('payment_methods.created_note')}</p>
-            <AutoCode codeId="f-code" mode="upper" nameId="f-name" />
+            <p className="muted">{t('minted_code_note')}</p>
             <Form action={createPaymentMethod}>
               <Grid>
-                <Field hint={t('code_auto_hint')} label={t('code')} name="code" />
                 <Field label={t('name')} name="name" required requiredLabel={t('required_hint')} />
                 <Select
                   defaultValue="bank"
@@ -79,6 +77,16 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
                   options={methods.PAYMENT_METHOD_KINDS.map((kind) => ({
                     value: kind,
                     label: t(`payment_methods.kind_${kind}`),
+                  }))}
+                />
+                <Select
+                  defaultValue="transfer"
+                  hint={t('payment_methods.confirmation_hint')}
+                  label={t('payment_methods.confirmation')}
+                  name="confirmationKind"
+                  options={methods.CONFIRMATION_KINDS.map((kind) => ({
+                    value: kind,
+                    label: t(`payment_methods.confirmation_${kind}`),
                   }))}
                 />
               </Grid>
@@ -118,6 +126,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
                 <th scope="col">{column('code')}</th>
                 <th scope="col">{column('name')}</th>
                 <th scope="col">{t('payment_methods.kind')}</th>
+                <th scope="col">{t('payment_methods.confirmation')}</th>
                 <th scope="col">{t('payment_methods.fee')}</th>
                 <th scope="col">{column('active')}</th>
               </tr>
@@ -125,7 +134,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
             <tbody>
               {shown.length === 0 ? (
                 <tr>
-                  <td colSpan={5}>{t('payment_methods.none')}</td>
+                  <td colSpan={6}>{t('payment_methods.none')}</td>
                 </tr>
               ) : null}
               {shown.map((row) => (
@@ -137,6 +146,7 @@ export default async function PaymentMethodsPage({ searchParams }: { searchParam
                   </td>
                   <td>{row.name}</td>
                   <td>{t(`payment_methods.kind_${row.kind}`)}</td>
+                  <td>{t(`payment_methods.confirmation_${row.confirmationKind}`)}</td>
                   <td>
                     {Number(row.feePercent) === 0
                       ? t('none')

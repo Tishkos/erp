@@ -1,18 +1,15 @@
 /**
  * Branches — Phase 0 requirement 2.
  *
- * "Branches can be created, edited and deactivated." Created is the hard one:
- * §4.1 says a branch, its default warehouse and its default cash account come
- * into existence together, and the database holds that line with a deferred
- * constraint that fires at COMMIT. So `create` writes four rows — the branch,
- * a main warehouse, a GL cash account under Assets, and the cash account
- * itself — in the caller's one transaction. A branch is never deleted; it is
- * deactivated, and the `organisation_reject_delete` trigger would refuse the
- * alternative anyway.
+ * "Branches can be created, edited and deactivated." Each branch gets a
+ * default warehouse. Bank and cash accounts are company-wide masters and are
+ * selected on each payment or receipt, so creating a branch does not create or
+ * assign a bank/cash account. Branches are deactivated, never deleted; the
+ * `organisation_reject_delete` trigger also protects their audit history.
  */
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import type { Tx } from '../db/client';
-import { appUser, bankCashAccount, branch, chartOfAccount, warehouse } from '../db/schema';
+import { appUser, branch, warehouse } from '../db/schema';
 import {
   AdminNotFoundError,
   AdminValidationError,
@@ -25,7 +22,6 @@ import {
   requireText,
   type ActorContext,
 } from './administration';
-import { allocateDocumentNumber } from './numbering';
 
 export const PERMISSION_OBJECT = 'branch';
 
@@ -52,17 +48,9 @@ export async function listAll(tx: Tx) {
     .orderBy(asc(branch.code));
 }
 
-/** The record page's view: the row plus the codes of its defaults. */
+/** The record page's view. */
 export async function detail(tx: Tx, code: string) {
-  const row = await get(tx, code);
-  const [cash] = row.defaultCashAccountId
-    ? await tx
-        .select({ code: bankCashAccount.code, name: bankCashAccount.name })
-        .from(bankCashAccount)
-        .where(eq(bankCashAccount.id, row.defaultCashAccountId))
-        .limit(1)
-    : [];
-  return { ...row, defaultCashAccount: cash ? `${cash.code} · ${cash.name}` : null };
+  return get(tx, code);
 }
 
 export async function get(tx: Tx, code: string) {
@@ -106,7 +94,7 @@ export async function create(
     active: true,
   });
 
-  // §4.1 — the three defaults, in this transaction.
+  // The warehouse belongs to the branch; the company's bank/cash accounts do not.
   const warehouseCode = `WH-${code}`;
   await tx.insert(warehouse).values({
     code: warehouseCode,
@@ -115,59 +103,16 @@ export async function create(
     warehouseType: 'main',
   });
 
-  const [assetRoot] = await tx
-    .select({ id: chartOfAccount.id })
-    .from(chartOfAccount)
-    .where(and(eq(chartOfAccount.accountType, 'asset'), isNull(chartOfAccount.parentId)))
-    .limit(1);
-  if (!assetRoot) throw new AdminValidationError('chart', 'the Assets root account is missing');
-
-  const { documentNo: glCode } = await allocateDocumentNumber(
-    tx,
-    'ACCOUNT_CODE_ASSET',
-    {},
-    ctx.principal.userId,
-  );
-  const [glAccount] = await tx
-    .insert(chartOfAccount)
-    .values({
-      code: glCode,
-      name: `${name} Cash`,
-      accountType: 'asset',
-      parentId: assetRoot.id,
-      isGroup: false,
-      isActive: true,
-      approvalStatus: 'approved',
-      level: 1,
-      currencyRestriction: 'IQD',
-      createdBy: ctx.principal.userId,
-    })
-    .returning({ id: chartOfAccount.id });
-
-  const [cash] = await tx
-    .insert(bankCashAccount)
-    .values({
-      code: `CASH-${code}`,
-      name: `${name} Cash Account`,
-      accountType: 'cash',
-      // A cash account must have a custodian; the branch manager if named,
-      // otherwise the administrator who opened the branch, until changed.
-      custodianUserId: managerUserId ?? ctx.principal.userId,
-      glAccountId: glAccount!.id,
-      branchCode: code,
-    })
-    .returning({ id: bankCashAccount.id });
-
   await tx
     .update(branch)
-    .set({ defaultWarehouseCode: warehouseCode, defaultCashAccountId: cash!.id })
+    .set({ defaultWarehouseCode: warehouseCode })
     .where(eq(branch.code, code));
 
   await recordChange(tx, ctx, {
     action: 'branch.created',
     objectType: PERMISSION_OBJECT,
     objectId: code,
-    after: { code, name, managerUserId, defaultWarehouseCode: warehouseCode, glCode },
+    after: { code, name, managerUserId, defaultWarehouseCode: warehouseCode },
   });
 
   return get(tx, code);

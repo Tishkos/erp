@@ -5,14 +5,14 @@ import { PlannedScreen } from '@/components/screens/planned';
 import { optionalContext } from '@/server/session';
 import { can } from '@domain/permissions';
 import { screenRoutes } from '@domain/screens';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 
 /**
  * Every Appendix A screen that has not yet been written by hand.
  *
  * A catch-all rather than 200 near-identical page files. The screen catalogue
- * knows every address in the approved tree and the phase each one arrives in,
- * so an unbuilt address renders an honest "planned" page — no sample rows,
+ * knows every address in the approved tree and which of them are built, so
+ * an unbuilt address renders an honest "planned" page — no sample rows,
  * no invented figures — rather than a 404 or a mock-up.
  *
  * Static routes win over a catch-all in the App Router, so a screen that
@@ -42,7 +42,7 @@ export default async function ScreenPage({
   const parent = listRoute ? routes.get(listRoute) : undefined;
   const target = routes.get(route) ?? (parent?.archetype === 'document' ? parent : undefined);
   if (!target) notFound();
-  // The phase gate: a screen of a phase not yet shared does not exist here.
+  // A screen that is not built does not exist here.
   if (!visibleRoute(target.route)) notFound();
 
   const context = await optionalContext();

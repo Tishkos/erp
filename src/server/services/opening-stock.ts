@@ -11,9 +11,9 @@
  * wrong opening cost does not announce itself — it makes cost of goods sold
  * quietly wrong for as long as the stock lasts.
  */
-import { eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
-import { item as itemTable, openingStock, openingStockLine } from '../db/schema';
+import { item as itemTable, openingStock, openingStockLine, warehouse } from '../db/schema';
 import { formatQuantity, parseQuantity } from '../domain/uom';
 import { toDecimalString } from '../domain/money';
 import { costOf } from '../domain/fifo';
@@ -89,16 +89,30 @@ export async function create(
     );
   }
 
-  for (const line of input.lines) {
-    await assertLineUsable(tx, line);
-  }
-
   const allocated = await allocateDocumentNumber(
     tx,
     SEQUENCE_KEY,
     { branchCode: input.branchCode, year: Number(input.documentDate.slice(0, 4)) },
     ctx.principal.userId,
   );
+
+  // A batch-tracked item opened without a batch takes the document's number as
+  // its batch — the way a Purchase Invoice's number is the batch of what it
+  // brings in. The build's Opening Stock asks for no batch, and §9.3 still
+  // wants every unit traceable to the paper that put it on the system.
+  const lines: OpeningStockLineInput[] = [];
+  for (const line of input.lines) {
+    const [row] = await tx
+      .select({ tracking: itemTable.tracking })
+      .from(itemTable)
+      .where(eq(itemTable.code, line.itemCode))
+      .limit(1);
+    const batched = row?.tracking === 'batch' || row?.tracking === 'serial_and_batch';
+    const filled =
+      batched && !line.batchNumber?.trim() ? { ...line, batchNumber: allocated.documentNo } : line;
+    await assertLineUsable(tx, filled);
+    lines.push(filled);
+  }
 
   const [document] = await tx
     .insert(openingStock)
@@ -112,7 +126,7 @@ export async function create(
     })
     .returning({ id: openingStock.id });
 
-  for (const [index, line] of input.lines.entries()) {
+  for (const [index, line] of lines.entries()) {
     await tx.insert(openingStockLine).values({
       openingStockId: document!.id,
       lineNo: index + 1,
@@ -178,12 +192,14 @@ async function assertLineUsable(tx: Tx, line: OpeningStockLineInput): Promise<vo
   });
 }
 
-async function load(tx: Tx, id: string) {
-  const [document] = await tx
-    .select()
-    .from(openingStock)
-    .where(eq(openingStock.id, id))
-    .limit(1);
+/**
+ * The document and its lines. `lock` holds the header `for update` so that two
+ * approvals of one document serialise: the second reads `approved` and is
+ * refused, rather than opening the same stock twice (§9.7).
+ */
+async function load(tx: Tx, id: string, options: { lock?: boolean } = {}) {
+  const header = tx.select().from(openingStock).where(eq(openingStock.id, id)).limit(1);
+  const [document] = await (options.lock ? header.for('update') : header);
 
   if (!document) throw new OpeningStockNotFoundError(id);
 
@@ -249,7 +265,7 @@ export async function approve(
   id: string,
   input: ApproveInput = {},
 ): Promise<{ movementIds: readonly string[]; journalEntryId: string | null }> {
-  const { document, lines } = await load(tx, id);
+  const { document, lines } = await load(tx, id, { lock: true });
 
   await authz.authorize(ctx.principal, 'approve', PERMISSION_OBJECT, {
     branchCode: document.branchCode,
@@ -263,18 +279,17 @@ export async function approve(
     );
   }
 
-  if (document.createdBy === ctx.principal.userId) {
-    // §14.4 — the figures here become the FIFO layers every margin rests on.
-    // The person who typed them is not the person who confirms them.
-    throw new OpeningStockStateError(
-      document.documentNo,
-      document.status,
-      'the person who raised opening stock cannot approve it. Its costs become the FIFO layers every margin is computed against (§14.4).',
-    );
-  }
+  // §14.4 asked that the person who typed the opening figures not be the person
+  // who confirms them — their costs become the FIFO layers every margin rests
+  // on. The owner removed that requirement on 2026-09-27: the company runs this
+  // with one person who holds both roles, and a control nobody can satisfy
+  // stops the books being opened at all. `approve` on `opening_stock` is still
+  // required, so it remains a permission rather than a free action.
 
   const movementIds: string[] = [];
   let totalCostIqd = 0n;
+  /** Each line's debit, to the inventory account its item names (block 1). */
+  const debits: { accountId: string | null; costIqd: bigint }[] = [];
 
   for (const line of lines) {
     const quantity = parseQuantity(line.quantity);
@@ -301,6 +316,12 @@ export async function approve(
 
     movementIds.push(movement.movementId);
     totalCostIqd += costOf(quantity, unitCostIqd);
+    const [stocked] = await tx
+      .select({ accountId: itemTable.inventoryAccountId })
+      .from(itemTable)
+      .where(eq(itemTable.code, line.itemCode))
+      .limit(1);
+    debits.push({ accountId: stocked?.accountId ?? null, costIqd: costOf(quantity, unitCostIqd) });
 
     await tx
       .update(openingStockLine)
@@ -322,16 +343,19 @@ export async function approve(
       postingDate: document.documentDate,
       description: `Opening stock ${document.documentNo}`,
       lines: [
-        {
-          role: 'inventory',
-          debit: amount,
-          criteria: { warehouseCode: document.warehouseCode, branchCode: document.branchCode },
-          dimensions: {
-            warehouse: document.warehouseCode,
-            branch: document.branchCode,
-            ...(input.dimensions ?? {}),
-          },
-        },
+        ...debits
+          .filter((debit) => debit.costIqd > 0n)
+          .map((debit) => ({
+            role: 'inventory',
+            ...(debit.accountId ? { accountId: debit.accountId } : {}),
+            debit: toDecimalString(debit.costIqd, 4n),
+            criteria: { warehouseCode: document.warehouseCode, branchCode: document.branchCode },
+            dimensions: {
+              warehouse: document.warehouseCode,
+              branch: document.branchCode,
+              ...(input.dimensions ?? {}),
+            },
+          })),
         {
           role: 'opening_balance',
           credit: amount,
@@ -376,4 +400,84 @@ export async function approve(
 /** The document as a record page would show it. */
 export async function view(tx: Tx, id: string) {
   return load(tx, id);
+}
+
+/**
+ * Raises opening stock and sends it for approval in one step — the screen's
+ * Save (Operations build, block 7).
+ *
+ * The two were separate verbs because the blueprint's workflow had a draft
+ * nobody else could see. The build's Opening Stock is one form; what it keeps
+ * is the approval, because these figures become the FIFO layers every margin
+ * after them is measured against, and the person who typed them is not the one
+ * who confirms them.
+ */
+export async function raise(
+  tx: Tx,
+  ctx: ActorContext,
+  input: CreateOpeningStockInput,
+): Promise<{ id: string; documentNo: string }> {
+  // Each line in its item's own unit: the quantity typed is the quantity held.
+  const lines = [];
+  for (const line of input.lines) {
+    const [stocked] = await tx
+      .select({ baseUomCode: itemTable.baseUomCode })
+      .from(itemTable)
+      .where(eq(itemTable.code, line.itemCode))
+      .limit(1);
+    lines.push({ ...line, uomCode: stocked?.baseUomCode ?? line.uomCode });
+  }
+  const created = await create(tx, ctx, { ...input, lines });
+  await submit(tx, ctx, created.id);
+  return created;
+}
+
+/** The register, newest first, with what each document brings in. */
+export async function list(tx: Tx) {
+  return tx
+    .select({
+      id: openingStock.id,
+      documentNo: openingStock.documentNo,
+      documentDate: openingStock.documentDate,
+      status: openingStock.status,
+      warehouseCode: openingStock.warehouseCode,
+      warehouseName: warehouse.name,
+      lines: sql<number>`(select count(*)::int from opening_stock_line l where l.opening_stock_id = ${openingStock.id})`,
+      totalIqd: sql<string>`(select coalesce(sum(round(l.quantity * l.unit_cost_iqd, 4)), 0)::text
+                               from opening_stock_line l where l.opening_stock_id = ${openingStock.id})`,
+    })
+    .from(openingStock)
+    .innerJoin(warehouse, eq(warehouse.code, openingStock.warehouseCode))
+    .orderBy(desc(openingStock.documentDate), desc(openingStock.documentNo));
+}
+
+/** One document by its number, with each line's item name and its value. */
+export async function viewByNo(tx: Tx, documentNo: string) {
+  const [header] = await tx
+    .select({ id: openingStock.id, warehouseName: warehouse.name })
+    .from(openingStock)
+    .innerJoin(warehouse, eq(warehouse.code, openingStock.warehouseCode))
+    .where(eq(openingStock.documentNo, documentNo))
+    .limit(1);
+  if (!header) return null;
+
+  const { document, lines } = await load(tx, header.id);
+  const names = new Map(
+    (
+      await tx
+        .select({ code: itemTable.code, name: itemTable.name })
+        .from(itemTable)
+    ).map((row) => [row.code, row.name]),
+  );
+  return {
+    document: { ...document, warehouseName: header.warehouseName },
+    lines: lines.map((line) => ({
+      ...line,
+      itemName: names.get(line.itemCode) ?? line.itemCode,
+      totalIqd: toDecimalString(
+        costOf(parseQuantity(line.quantity), BigInt(line.unitCostIqd.replace('.', ''))),
+        4n,
+      ),
+    })),
+  };
 }

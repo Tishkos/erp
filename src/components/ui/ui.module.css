@@ -1,11 +1,8 @@
 /*
- * The UI kit — the visual language of the two approved screens, extracted.
+ * Shared admin UI primitives.
  *
- * Every value here is either a token from globals.css or a number lifted
- * verbatim from the Chart of Accounts workspace, which is the implementation
- * of UI.png. Nothing is invented: a primitive that looked *nearly* like the
- * approved screen would give the application two design languages, which is
- * the one outcome this file exists to prevent.
+ * Values use the tokens from globals.css and the component styles defined in
+ * this module, keeping the application visually consistent.
  *
  * Logical properties throughout — `padding-inline`, never `padding-left` — so
  * the Arabic layout mirrors without a second stylesheet (§25).
@@ -146,7 +143,7 @@ html[lang="ar"] .presentationBadge {
   border-color: var(--accent);
   color: var(--accent-contrast);
   background: var(--accent);
-  box-shadow: 0 7px 18px rgb(var(--accent-rgb) / 20%);
+  box-shadow: var(--shadow-button, 0 7px 18px rgb(var(--accent-rgb) / 20%));
 }
 
 .primary:hover {
@@ -310,8 +307,8 @@ html[lang="ar"] .presentationBadge {
   min-inline-size: 0;
   /* A panel is a card, and a card that hugs its content reads as cramped.
      Record pages override this to 1.5rem; this is the floor. */
-  padding: 1.35rem;
-  border: 1px solid var(--border);
+  padding: var(--erp-panel-padding, 1.35rem);
+  border: var(--erp-border-width, 1px) solid var(--erp-border-color, var(--border));
   border-radius: var(--radius-lg);
   background: var(--surface-raised);
   box-shadow: var(--shadow-card);
@@ -327,12 +324,12 @@ html[lang="ar"] .presentationBadge {
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-block-end: 1.05rem;
+  margin-block-end: var(--erp-panel-heading-gap, 1.05rem);
 }
 
 .panelFlush .panelHeader {
   margin-block-end: 0;
-  padding: 1.1rem 1.5rem;
+  padding: var(--erp-panel-header-padding, 1.1rem 1.5rem);
   border-block-end: 1px solid var(--border);
 }
 

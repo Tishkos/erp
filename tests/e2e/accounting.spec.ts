@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 /**
  * Phase 1 · the accounting round trip, in a browser.
  *
- * The phase's own expected result, performed: "Finance can create the Chart of
+ * The accounting core's expected result, performed: "Finance can create the Chart of
  * Accounts, enter and approve a Journal Entry, post it to the General Ledger,
  * review the Trial Balance and produce the basic financial statements."
  *
@@ -84,6 +84,13 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
 
     // Twelve monthly periods, and the calendar says which are open.
     await expect(page.getByRole('cell', { name: `FY${YEAR}` }).first()).toBeVisible();
+
+    // REQ-IMPROVE-001 FC-2 — the close checklist is on the same screen, for
+    // the next period to close, with every check named and judged.
+    await expect(page.getByRole('heading', { name: 'Period close checks' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Earlier periods are closed' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Sub-ledgers equal their control accounts' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Run checks' })).toBeVisible();
   });
 
   test('1b · a rate is published, so postings can be measured', async ({ page }) => {
@@ -122,8 +129,11 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
       await page.getByRole('button', { name: 'New account' }).click();
       await page.waitForTimeout(1200);
       const parent = page.getByRole('combobox', { name: 'Under' });
+      // An enabled option: a posting account under the type also carries its
+      // name ("… › Deferred Project Revenue — holds no sub-accounts") and
+      // cannot be chosen.
       const option = await parent
-        .locator('option')
+        .locator('option:not([disabled])')
         .filter({ hasText: under })
         .first()
         .getAttribute('value');
@@ -204,7 +214,8 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     // The balance is summed on screen as it is typed: both sides agree, so
     // it can be posted.
     await expect(page.getByText('Balanced', { exact: true })).toBeVisible();
-    await expect(page.locator('tfoot')).toContainText('2,400');
+    // The lines' own footer — the page draws a second register's below it.
+    await expect(page.getByRole('table', { name: 'Lines' }).locator('tfoot')).toContainText('2,400');
     await expect(page.getByRole('combobox', { name: 'Account' })).toHaveCount(3);
     // The button cannot be pressed until it can act, so no press is dropped.
     await expect(page.getByRole('button', { name: 'Submit', exact: true })).toBeEnabled({ timeout: 15_000 });
@@ -285,9 +296,12 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     let reversalNo = '';
     for (let attempt = 0; attempt < 4 && !reversalNo; attempt += 1) {
       await page.waitForTimeout(2_500);
-      // The reason is typed beside the button, in the document's own foot.
-      await page.getByRole('textbox', { name: 'Why it is being reversed' }).fill('posted twice');
+      // Reverse asks first: a confirmation dialog takes the reason, and its
+      // own button does the reversing.
       await page.getByRole('button', { name: 'Reverse', exact: true }).click();
+      const confirm = page.getByRole('dialog', { name: 'Confirm journal reversal' });
+      await confirm.getByRole('textbox', { name: 'Why it is being reversed' }).fill('posted twice');
+      await confirm.getByRole('button', { name: 'Yes, reverse this journal' }).click();
       await page.waitForTimeout(3_000);
 
       await page.goto(`/finance/journals/${entryNo}`);
@@ -347,21 +361,18 @@ test('an account statement keeps its partner when the filters run', async ({ pag
   await signIn(page, ADMIN);
   const stamp = Date.now().toString(36).toUpperCase();
   const createPartner = async (kind: 'supplier' | 'customer') => {
-    const code = `E2E-STMT-${kind === 'supplier' ? 'S' : 'C'}-${stamp}`;
+    // The code is the system's (Critical Rule 1): read it off the new record.
     await page.goto(`/master-data/${kind}s`);
     await page.getByRole('button', { name: `New ${kind}`, exact: true }).click();
     const dialog = page.locator('dialog[open], [role="dialog"]').first();
-    await dialog.getByLabel('Code', { exact: true }).fill(code);
     await dialog.getByLabel(/^Legal name/).fill(`Statement ${kind} ${stamp}`);
     await dialog.getByRole('button', { name: 'Create', exact: true }).click();
-    await page.waitForURL(new RegExp(`/master-data/business-partners/${code}(?:\\?|$)`), {
-      timeout: 60_000,
-    });
-    return code;
+    await page.waitForURL(/\/(?:payables\/suppliers|sales\/customers)\/[^/?]+/, { timeout: 60_000 });
+    return decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!.split('?')[0]!);
   };
 
   const sides = [
-    { kind: 'supplier', route: '/purchasing/supplier-statements' },
+    { kind: 'supplier', route: '/payables/supplier-statements' },
     { kind: 'customer', route: '/sales/customer-statements' },
   ] as const;
 
@@ -411,16 +422,25 @@ test('item sales account appears in invoice account selection', async ({ page })
   await press(page, 'Approve', 'Approved');
 
   await signIn(page, ADMIN);
-  const itemCode = `E2E-ITEM-${stamp}`;
   await page.goto('/master-data/items');
   await page.getByRole('button', { name: 'New item' }).click();
   const itemDialog = page.locator('dialog[open], [role="dialog"]').first();
-  await itemDialog.getByLabel('Code', { exact: true }).fill(itemCode);
-  await itemDialog.getByLabel(/^Name/).fill(`E2E Routed Item ${stamp}`);
-  await itemDialog.getByLabel('Base unit', { exact: true }).selectOption('EA');
-  await itemDialog.getByLabel('Tracking', { exact: true }).selectOption('batch');
+  // Block 1's form: the full name and the accounts. The code is minted.
+  await itemDialog.getByLabel(/Item Full Name/).fill(`E2E Routed Item ${stamp}`);
+  for (const [label, wanted] of [
+    [/Inventory account/, 'Inventory'],
+    [/COGS account/, 'Cost of Goods Sold'],
+  ] as const) {
+    const select = itemDialog.getByLabel(label);
+    const value = await select.evaluate((element, text) => {
+      const options = [...(element as HTMLSelectElement).options].filter((o) => o.value);
+      return (options.find((o) => o.textContent?.includes(text)) ?? options[0])?.value ?? '';
+    }, wanted);
+    await select.selectOption(value);
+  }
   await itemDialog.getByRole('button', { name: 'Create' }).click();
-  await page.waitForURL(new RegExp(`/master-data/items/${itemCode}`), { timeout: 60_000 });
+  await page.waitForURL(/\/inventory\/items\/[^/?]+/, { timeout: 60_000 });
+  const itemCode = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!.split('?')[0]!);
   const salesAccount = page.getByLabel('Sales account', { exact: true });
   const salesAccountId = await salesAccount
     .locator('option')
@@ -436,16 +456,13 @@ test('item sales account appears in invoice account selection', async ({ page })
     .click();
   await page.waitForLoadState('networkidle');
 
-  const customerCode = `E2E-CUST-${stamp}`;
   await page.goto('/master-data/customers');
   await page.getByRole('button', { name: 'New customer', exact: true }).click();
   const customerDialog = page.locator('dialog[open], [role="dialog"]').first();
-  await customerDialog.getByLabel('Code', { exact: true }).fill(customerCode);
   await customerDialog.getByLabel(/^Legal name/).fill(`E2E Routed Customer ${stamp}`);
   await customerDialog.getByRole('button', { name: 'Create', exact: true }).click();
-  await page.waitForURL(new RegExp(`/master-data/business-partners/${customerCode}`), {
-    timeout: 60_000,
-  });
+  await page.waitForURL(/\/(?:payables\/suppliers|sales\/customers)\/[^/?]+/, { timeout: 60_000 });
+  const customerCode = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!.split('?')[0]!);
 
   await page.goto('/sales/ar-invoices/new');
   await expect(page.locator('input[name="item_code_0"]')).toBeVisible({ timeout: 60_000 });
@@ -480,16 +497,13 @@ test('a sales invoice header carries block 5 fields, and approves without dimens
   await signIn(page, ADMIN);
 
   const stamp = Date.now().toString(36).toUpperCase();
-  const customerCode = `E2E-DIM-${stamp}`;
   await page.goto('/master-data/customers');
   await page.getByRole('button', { name: 'New customer', exact: true }).click();
   const dialog = page.locator('dialog[open], [role="dialog"]').first();
-  await dialog.getByLabel('Code', { exact: true }).fill(customerCode);
   await dialog.getByLabel(/^Legal name/).fill(`Dimension Customer ${stamp}`);
   await dialog.getByRole('button', { name: 'Create', exact: true }).click();
-  await page.waitForURL(new RegExp(`/master-data/business-partners/${customerCode}(?:\\?saved=1)?$`), {
-    timeout: 60_000,
-  });
+  await page.waitForURL(/\/(?:payables\/suppliers|sales\/customers)\/[^/?]+/, { timeout: 60_000 });
+  const customerCode = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!.split('?')[0]!);
 
   await page.goto('/sales/ar-invoices/new');
   await expect(page.locator('input[name="item_code_0"]')).toBeVisible({ timeout: 60_000 });

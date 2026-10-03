@@ -20,7 +20,7 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as reports from '@/server/services/inventory-reports';
 import * as warehouses from '@/server/services/warehouses';

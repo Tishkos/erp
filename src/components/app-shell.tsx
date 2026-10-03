@@ -2,12 +2,14 @@ import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
 import { visibleMenu } from '@domain/menu';
 import { routeFor } from '@domain/screens';
-import { visibleRoute } from '@/server/phase-gate';
-import { eq } from 'drizzle-orm';
-import { appUser } from '@/server/db/schema';
+import { visibleRoute } from '@/server/delivered';
+import { desc, eq } from 'drizzle-orm';
+import { appUser, notification } from '@/server/db/schema';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { AppFooter } from './app-footer';
 import { ErpShell } from './erp-shell';
+import { PermissionsWatch } from './permissions-watch';
+import type { UserAppearanceSettings } from '@/server/domain/appearance';
 
 /**
  * The authenticated application shell.
@@ -15,11 +17,21 @@ import { ErpShell } from './erp-shell';
  * Identity, scope, and menu visibility remain server-resolved and deny by
  * default. Only the interactive presentation is delegated to the client shell.
  */
-export async function AppShell({ children }: { children: ReactNode }) {
+export async function AppShell({
+  children,
+  initialAppearanceSettings,
+  appearanceSettingsSaved,
+}: {
+  readonly children: ReactNode;
+  readonly initialAppearanceSettings: UserAppearanceSettings;
+  readonly appearanceSettingsSaved: boolean;
+}) {
   const t = await getTranslations();
-  const { principal, scope } = await requireContext();
-  // The phase gate: only the accepted phase's screens exist, on every surface.
-  const sections = visibleMenu(principal)
+  // HD2 / HD4 — a restricted session gets the shell with no menu; the page
+  // it is allowed is the only one it can reach, and sign-out is in the header.
+  const { principal, scope, restriction, permissionsVersion } = await requireContext({ allowRestricted: true });
+  // Only the delivered screens exist, on every surface.
+  const sections = (restriction ? [] : visibleMenu(principal))
     .map((section) => ({
       ...section,
       items: section.items.filter(
@@ -30,13 +42,28 @@ export async function AppShell({ children }: { children: ReactNode }) {
       ),
     }))
     .filter((section) => section.items.length > 0);
-  const [me] = await withCurrentUser((tx) =>
-    tx
-      .select({ displayName: appUser.displayName, email: appUser.email, image: appUser.image })
-      .from(appUser)
-      .where(eq(appUser.id, principal.userId))
-      .limit(1),
-  );
+  const { me, notifications } = await withCurrentUser(async (tx) => ({
+    me: (
+      await tx
+        .select({ displayName: appUser.displayName, email: appUser.email, image: appUser.image })
+        .from(appUser)
+        .where(eq(appUser.id, principal.userId))
+        .limit(1)
+    )[0],
+    // What the bell shows: this person's ten latest, newest first.
+    notifications: await tx
+      .select({
+        id: notification.id,
+        subject: notification.subject,
+        body: notification.body,
+        createdAt: notification.createdAt,
+        readAt: notification.readAt,
+      })
+      .from(notification)
+      .where(eq(notification.recipientUserId, principal.userId))
+      .orderBy(desc(notification.createdAt))
+      .limit(10),
+  }), { allowRestricted: true });
 
   return (
     <ErpShell
@@ -50,8 +77,18 @@ export async function AppShell({ children }: { children: ReactNode }) {
       roleCodes={principal.roleCodes}
       isSuperUser={principal.isSuperUser}
       sections={sections}
+      initialAppearanceSettings={initialAppearanceSettings}
+      appearanceSettingsSaved={appearanceSettingsSaved}
+      notifications={notifications.map((note) => ({
+        id: String(note.id),
+        subject: note.subject ?? '',
+        body: note.body ?? '',
+        createdAt: new Date(note.createdAt).toISOString(),
+        read: note.readAt !== null,
+      }))}
       footer={<AppFooter />}
     >
+      <PermissionsWatch version={permissionsVersion} />
       {children}
     </ErpShell>
   );

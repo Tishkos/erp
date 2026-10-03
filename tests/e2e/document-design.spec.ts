@@ -26,6 +26,39 @@ async function signIn(page: Page) {
 }
 
 /**
+ * A purchase invoice to read: the register's first, or — on a database no
+ * earlier spec has raised one on — a draft raised here through the form, so
+ * the comparison never depends on what another run left behind.
+ */
+async function anInvoice(page: Page): Promise<void> {
+  await page.goto('/payables/invoices');
+  await expect(page.getByRole('heading', { name: 'Purchase Invoices' }).first()).toBeVisible({
+    timeout: 60_000,
+  });
+  // Not `/new`: that is the form, and it carries no document window. The
+  // register's own rows are the only links to a record.
+  const firstInvoice = page.locator('a[href^="/payables/invoices/"]:not([href$="/new"])').first();
+  if ((await firstInvoice.count()) > 0) {
+    await firstInvoice.click();
+  } else {
+    await page.goto('/payables/invoices/new');
+    await page.getByLabel('Supplier Code').fill('SUP-00001');
+    await page.locator('[name="item_code_0"]').fill('ITM-SEED');
+    await page.locator('input[name="quantity_0"]').fill('1');
+    await page.locator('input[name="unit_price_0"]').fill('1000');
+    await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
+    // A local purchase: the Import box starts ticked (2026-10-03).
+    await page.locator('input[name="is_import"]').uncheck();
+    await page.getByRole('button', { name: 'Create' }).click();
+  }
+  await page.waitForURL(
+    (url) => url.pathname.startsWith('/payables/invoices/') && !url.pathname.endsWith('/new'),
+    { timeout: 120_000 },
+  );
+  await expect(page.locator('#ap-invoice-document')).toBeVisible({ timeout: 60_000 });
+}
+
+/**
  * The document's shape: the chrome classes in the order they nest.
  *
  * Module CSS hashes the names, so the raw strings cannot be compared between
@@ -51,6 +84,7 @@ test.describe('an invoice is built like a journal entry', () => {
   test.describe.configure({ mode: 'serial' });
 
   test('wears the same document chrome', async ({ page }) => {
+    test.setTimeout(120_000);
     await signIn(page);
 
     // The reference: a posted Journal Entry, whichever one the seed left.
@@ -67,36 +101,19 @@ test.describe('an invoice is built like a journal entry', () => {
       expect(journal).toContain(part);
     }
 
-    await page.goto('/purchasing/ap-invoices');
-
-    // Wait for the register to have rendered before deciding it is empty. A
-    // `count()` against a page still compiling answers zero, and the test then
-    // skips itself — which reads as "passed" and proves nothing.
-    await expect(page.getByRole('heading', { name: 'Purchase Invoices' }).first()).toBeVisible({
-      timeout: 60_000,
-    });
-
-    // Not `/new`: that is the form, and it carries no document window. The
-    // register's own rows are the only links to a record.
-    const firstInvoice = page
-      .locator('a[href^="/purchasing/ap-invoices/"]:not([href$="/new"])')
-      .first();
-    if ((await firstInvoice.count()) === 0) {
-      test.skip(true, 'No purchase invoice to compare — raise one first.');
-      return;
-    }
-    await firstInvoice.click();
-    await page.waitForURL(/\/purchasing\/ap-invoices\/.+/);
-    await expect(page.locator('#ap-invoice-document')).toBeVisible({ timeout: 60_000 });
+    await anInvoice(page);
     const invoice = await shapeOf(page, '#ap-invoice-document');
 
     // Every structural part the journal has, the invoice has — except the ones
     // that are about a journal's content rather than a document's shape. An
     // account cell holds "code · name" and an invoice has no accounts on it;
     // a full-width field exists only where there is a description to put in
-    // one, and block 4's header has none (2026-09-16: "no extra details").
-    // Requiring either would be requiring the invoice to be a journal.
-    const contentOnly = ['sapAccountCell', 'sapWide'];
+    // one, and block 4's header has none (2026-09-16: "no extra details");
+    // a link to another record is there only when the entry names one (the
+    // document that posted it, the entry it reverses), which depends on which
+    // journal the register happens to list first.
+    // Requiring any of them would be requiring the invoice to be a journal.
+    const contentOnly = ['sapAccountCell', 'sapWide', 'sapLink'];
     const missing = journal
       .filter((part) => !contentOnly.includes(part))
       .filter((part) => !invoice.includes(part));
@@ -106,21 +123,21 @@ test.describe('an invoice is built like a journal entry', () => {
 
   test('the line grid opens a new line as each one is filled', async ({ page }) => {
     await signIn(page);
-    await page.goto('/purchasing/ap-invoices/new');
-    await expect(page.locator('select[name="item_code_0"]')).toBeVisible({ timeout: 60_000 });
+    await page.goto('/payables/invoices/new');
+    // The item code is the grid's searchable field — an input over a
+    // datalist, as on the sales invoice — not a select.
+    await expect(page.locator('input[name="item_code_0"]')).toBeVisible({ timeout: 60_000 });
 
     // One line to start with. There is no "Add line" button to look for —
     // the second row is meant to exist only because the first was filled.
     await expect(page.getByRole('button', { name: /add line/i })).toHaveCount(0);
-    await expect(page.locator('select[name="item_code_1"]')).toHaveCount(0);
+    await expect(page.locator('[name="item_code_1"]')).toHaveCount(0);
 
-    const item = await page
-      .locator('select[name="item_code_0"] option:not([value=""])')
-      .first()
-      .getAttribute('value');
-    await page.selectOption('select[name="item_code_0"]', item!);
+    const itemList = await page.locator('input[name="item_code_0"]').getAttribute('list');
+    const item = await page.locator(`datalist[id="${itemList}"] option`).first().getAttribute('value');
+    await page.fill('input[name="item_code_0"]', item!);
 
-    await expect(page.locator('select[name="item_code_1"]')).toBeVisible();
+    await expect(page.locator('input[name="item_code_1"]')).toBeVisible();
 
     // The line's total follows the typing rather than waiting for the server:
     // three at a thousand, less nothing, is three thousand on screen.
@@ -134,25 +151,13 @@ test.describe('an invoice is built like a journal entry', () => {
 
     // And a row is dropped from the row itself.
     await page.getByRole('button', { name: 'Remove line' }).first().click();
-    await expect(page.locator('select[name="item_code_0"]')).toHaveValue('');
+    await expect(page.locator('input[name="item_code_0"]')).toHaveValue('');
   });
 
   test('the document names everybody it passed through', async ({ page }) => {
+    test.setTimeout(120_000);
     await signIn(page);
-    await page.goto('/purchasing/ap-invoices');
-    await expect(page.getByRole('heading', { name: 'Purchase Invoices' }).first()).toBeVisible({
-      timeout: 60_000,
-    });
-
-    const firstInvoice = page
-      .locator('a[href^="/purchasing/ap-invoices/"]:not([href$="/new"])')
-      .first();
-    if ((await firstInvoice.count()) === 0) {
-      test.skip(true, 'No purchase invoice to read — raise one first.');
-      return;
-    }
-    await firstInvoice.click();
-    await expect(page.locator('#ap-invoice-document')).toBeVisible({ timeout: 60_000 });
+    await anInvoice(page);
 
     // Three questions with three different answers, as the Journal Entry asks
     // them. An empty box is an answer too: that step has not happened.
@@ -222,7 +227,7 @@ test.describe('an invoice is built like a journal entry', () => {
     const second = rows.nth(1);
     await second.locator('input[aria-label="Item Code"]').fill(item!);
     await second.locator('input[aria-label="Quantity"]').fill('2');
-    await second.locator('input[aria-label="Unit Price"]').fill('3000');
+    await second.locator('input[aria-label="Unit Price (IQD)"]').fill('3000');
     await expect(rows).toHaveCount(3);
 
     // Leaving the row saves it. There is no button to press.

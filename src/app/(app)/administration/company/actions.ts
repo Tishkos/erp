@@ -32,20 +32,3 @@ export async function saveMainBranch(formData: FormData): Promise<void> {
     '/administration/company',
   );
 }
-
-/**
- * The palette the whole company sees.
- *
- * Same landing page as the other two, so the choice and its result are on one
- * screen: the panel that made the change is redrawn in the colours it chose.
- */
-export async function saveAppearance(formData: FormData): Promise<void> {
-  await runAdminAndReturn(
-    (tx, ctx) =>
-      company.setAppearance(tx, ctx, {
-        palette: text(formData, 'uiPalette'),
-        accent: text(formData, 'uiAccent'),
-      }),
-    '/administration/company',
-  );
-}

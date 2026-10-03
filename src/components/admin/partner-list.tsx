@@ -16,7 +16,6 @@ import {
   SubmitRow,
   matches,
 } from './index';
-import { AutoCode } from './auto-code';
 import { SectionTabs } from './section-tabs';
 import { outcomeOf, type SearchParams } from './params';
 import { Denied } from '@/components/denied';
@@ -40,14 +39,11 @@ import { createPartnerInRole } from '@/app/(app)/master-data/business-partners/a
  */
 
 const ROUTES = {
-  customer: '/master-data/customers',
-  supplier: '/master-data/suppliers',
+  customer: '/sales/customers',
+  supplier: '/payables/suppliers',
 } as const;
 
 const PAGE_KEY = { customer: 'customers', supplier: 'suppliers' } as const;
-
-/** Both screens open a partner at the same address: one record, one page. */
-const RECORD = '/master-data/business-partners';
 
 export async function PartnerList({
   role,
@@ -89,11 +85,10 @@ export async function PartnerList({
             title={t(`partners.new_${role}`)}
           >
             <p className="muted">{t(`partners.created_note_${role}`)}</p>
-            <AutoCode codeId="f-code" mode="upper" nameId="f-legalName" />
+            <p className="muted">{t('minted_code_note')}</p>
             <Form action={createPartnerInRole}>
               <Hidden name="role" value={role} />
               <Grid>
-                <Field hint={t('code_auto_hint')} label={t('code')} name="code" />
                 <Field
                   label={t('partners.legal_name')}
                   name="legalName"
@@ -116,16 +111,6 @@ export async function PartnerList({
                     label: `${term.code} · ${term.name}`,
                   }))}
                 />
-                {role === 'customer' ? (
-                  <Field
-                    hint={t('partners.credit_limit_hint')}
-                    label={t('partners.credit_limit')}
-                    min={0}
-                    name="creditLimitIqd"
-                    step="0.0001"
-                    type="number"
-                  />
-                ) : null}
                 <Field label={t('partners.address')} name="address" type="textarea" wide />
               </Grid>
               <SubmitRow>
@@ -178,7 +163,7 @@ export async function PartnerList({
               {shown.map((row) => (
                 <tr key={row.code}>
                   <td>
-                    <Link href={`${RECORD}/${encodeURIComponent(row.code)}`}>{row.code}</Link>
+                    <Link href={`${route}/${encodeURIComponent(row.code)}?role=${role}`}>{row.code}</Link>
                   </td>
                   <td>{row.legalName}</td>
                   <td>{t(`partners.status_${row.status}`)}</td>

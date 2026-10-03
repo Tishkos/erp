@@ -44,7 +44,18 @@ export interface ValuationRow {
   readonly warehouseName: string;
   readonly branchCode: string;
   readonly quantity: string;
+  /**
+   * What the quantity is counted in — the item's base unit — so a figure
+   * never stands beside a sum of dinars as a bare number (2026-09-27).
+   */
+  readonly uomCode: string;
   readonly valueIqd: string;
+  /**
+   * Value ÷ quantity: what one unit of what is left cost, on average across
+   * its layers. Shown so a reader can see quantity × cost = value on the row
+   * rather than take the third figure for one of the other two.
+   */
+  readonly averageUnitCostIqd: string;
   /** §22 — the part of the value whose movements have reached the ledger. */
   readonly postedValueIqd: string;
   readonly provisionalValueIqd: string;
@@ -53,11 +64,20 @@ export interface ValuationRow {
 /**
  * FIFO valuation, by item and warehouse.
  *
- * The value is the layers' remaining quantity at their own unit costs — the
- * same arithmetic `domain/fifo.ts` does, expressed in SQL so a warehouse-wide
- * report does not have to load every layer into memory. The two are checked
- * against each other in the integration tests, because two implementations of
- * one rule is exactly the thing that drifts.
+ * **The quantity is the movement ledger's.** `inventory_movement` is the one
+ * truth for how much is where — the Stock Movement page, `positionOf`, the
+ * negative-stock trigger and every invoice's availability check all sum it —
+ * and a report that counted something else would be a second opinion. An
+ * earlier version counted the layers' remaining quantities instead; the two
+ * agree whenever the system is whole, and it is precisely when it is not that
+ * a report must not disagree with the screen beside it (2026-09-27).
+ *
+ * **The value is the layers'.** Remaining quantity at each layer's own unit
+ * cost — the same arithmetic `domain/fifo.ts` does, expressed in SQL so a
+ * warehouse-wide report does not have to load every layer into memory. The two
+ * are checked against each other in the integration tests, because two
+ * implementations of one rule is exactly the thing that drifts; and
+ * `integrity` below names any position where the layers and the ledger part.
  *
  * **Branch (D10).** Row-level security bounds this to the branches the user is
  * *permitted*; within that, the report opens on the **Active Branch**, because
@@ -74,42 +94,89 @@ export async function valuation(
   filter: {
     warehouseCode?: string;
     itemCode?: string;
+    /**
+     * What a person typed into the item box: matched against the item's name
+     * and, for somebody who has one, its code.
+     *
+     * Case-insensitive and anywhere in the text, which needs a leading wildcard
+     * — so it is `lower(...)` on both sides to meet the trigram indexes added in
+     * migration 0212. Write it any other way (`ilike`, or the column without
+     * `lower`) and the planner cannot use them and the report goes back to
+     * reading every item.
+     */
+    itemSearch?: string;
     branchCode?: string;
     allPermittedBranches?: boolean;
   } = {},
 ): Promise<ValuationRow[]> {
   assertCan(principal, 'view', PERMISSION_OBJECT);
 
-  const conditions = [sql`l.remaining_quantity > 0`];
-  if (filter.warehouseCode) conditions.push(sql`l.warehouse_code = ${filter.warehouseCode}`);
-  if (filter.itemCode) conditions.push(sql`l.item_code = ${filter.itemCode}`);
+  // A row exists while stock does: the ledger's sum for the item in the
+  // warehouse is not zero.
+  const conditions = [sql`g.quantity <> 0`];
+  if (filter.warehouseCode) conditions.push(sql`g.warehouse_code = ${filter.warehouseCode}`);
+  if (filter.itemCode) conditions.push(sql`g.item_code = ${filter.itemCode}`);
+
+  const term = filter.itemSearch?.trim();
+  if (term) {
+    // The term is a value, never spliced into the statement: `%` and `_` are
+    // wildcards a person may legitimately type, and escaping them here keeps a
+    // search for "A_1" a search for "A_1".
+    const like = `%${term.toLowerCase().replace(/([%_\\])/g, '\\$1')}%`;
+    conditions.push(
+      sql`(lower(i.name) like ${like} escape '\\' or lower(g.item_code) like ${like} escape '\\')`,
+    );
+  }
 
   if (filter.branchCode) {
-    conditions.push(sql`l.branch_code = ${filter.branchCode}`);
+    conditions.push(sql`g.branch_code = ${filter.branchCode}`);
   } else if (!filter.allPermittedBranches) {
-    conditions.push(sql`l.branch_code = current_setting('app.branch_code', true)`);
+    conditions.push(sql`g.branch_code = current_setting('app.branch_code', true)`);
   }
 
   const result = await tx.execute(sql`
-    select l.item_code                                          as "itemCode",
-           i.name                                               as "itemName",
-           l.warehouse_code                                     as "warehouseCode",
-           w.name                                               as "warehouseName",
-           l.branch_code                                        as "branchCode",
-           sum(l.remaining_quantity)::text                      as "quantity",
-           sum(l.remaining_quantity * l.unit_cost_iqd)::text    as "valueIqd",
-           -- §22 — split by whether the movement that created the layer has
-           -- reached the General Ledger.
-           coalesce(sum(l.remaining_quantity * l.unit_cost_iqd)
-             filter (where m.journal_entry_id is not null), 0)::text as "postedValueIqd",
-           coalesce(sum(l.remaining_quantity * l.unit_cost_iqd)
-             filter (where m.journal_entry_id is null), 0)::text     as "provisionalValueIqd"
-      from cost_layer l
-      join inventory_movement m on m.id = l.created_by_movement_id
-      join item i             on i.code = l.item_code
-      join warehouse w        on w.code = l.warehouse_code
+    with ledger as (
+      -- How much: the movements, summed. The same figure stock_position
+      -- carries and the Stock Movement page lists row by row.
+      select item_code, warehouse_code, branch_code, sum(quantity) as quantity
+        from inventory_movement
+       group by item_code, warehouse_code, branch_code
+    ),
+    layers as (
+      -- What it cost: the layers with stock left, at their own unit costs.
+      select l.item_code, l.warehouse_code, l.branch_code,
+             sum(l.remaining_quantity * l.unit_cost_iqd) as value_iqd,
+             -- §22 — split by whether the movement that created the layer has
+             -- reached the General Ledger.
+             coalesce(sum(l.remaining_quantity * l.unit_cost_iqd)
+               filter (where m.journal_entry_id is not null), 0) as posted_value_iqd,
+             coalesce(sum(l.remaining_quantity * l.unit_cost_iqd)
+               filter (where m.journal_entry_id is null), 0)     as provisional_value_iqd
+        from cost_layer l
+        join inventory_movement m on m.id = l.created_by_movement_id
+       where l.remaining_quantity > 0
+       group by l.item_code, l.warehouse_code, l.branch_code
+    )
+    select g.item_code                                    as "itemCode",
+           i.name                                         as "itemName",
+           g.warehouse_code                               as "warehouseCode",
+           w.name                                         as "warehouseName",
+           g.branch_code                                  as "branchCode",
+           g.quantity::text                               as "quantity",
+           i.base_uom_code                                as "uomCode",
+           coalesce(v.value_iqd, 0)::text                 as "valueIqd",
+           coalesce(round(coalesce(v.value_iqd, 0) / nullif(g.quantity, 0), 4), 0)::text
+                                                          as "averageUnitCostIqd",
+           coalesce(v.posted_value_iqd, 0)::text          as "postedValueIqd",
+           coalesce(v.provisional_value_iqd, 0)::text     as "provisionalValueIqd"
+      from ledger g
+      left join layers v
+        on v.item_code = g.item_code
+       and v.warehouse_code = g.warehouse_code
+       and v.branch_code = g.branch_code
+      join item i      on i.code = g.item_code
+      join warehouse w on w.code = g.warehouse_code
      where ${sql.join(conditions, sql` and `)}
-     group by l.item_code, i.name, l.warehouse_code, w.name, l.branch_code
      order by i.name, w.name
   `);
 

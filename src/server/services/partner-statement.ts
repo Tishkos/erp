@@ -39,6 +39,7 @@ import {
   supplierPayment,
 } from '../db/schema';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
+import * as trialBalance from './trial-balance';
 
 /** Which side of the ledger the party sits on. */
 export type PartySide = 'customer' | 'supplier' | 'bank';
@@ -66,6 +67,15 @@ export type DocumentKind =
 export interface StatementDocument {
   readonly kind: DocumentKind;
   readonly number: string;
+  /**
+   * When it falls due — invoices only.
+   *
+   * A statement that lists what is owed without saying when it was due makes
+   * the reader open every line to find out which ones are late. Null on a
+   * receipt, a payment or a return: those settle a debt rather than create
+   * one, and a due date on them would be a date that means nothing.
+   */
+  readonly dueDate?: string | null;
 }
 
 export interface StatementLine {
@@ -144,7 +154,7 @@ const AR_INVOICE: DocumentSource = {
   kind: 'ar_invoice',
   find: (tx, ids) =>
     tx
-      .select({ id: arInvoice.id, number: arInvoice.invoiceNo })
+      .select({ id: arInvoice.id, number: arInvoice.invoiceNo, dueDate: arInvoice.dueDate })
       .from(arInvoice)
       .where(inArray(arInvoice.id, ids)),
 };
@@ -171,7 +181,7 @@ const AP_INVOICE: DocumentSource = {
   kind: 'ap_invoice',
   find: (tx, ids) =>
     tx
-      .select({ id: apInvoice.id, number: apInvoice.invoiceNo })
+      .select({ id: apInvoice.id, number: apInvoice.invoiceNo, dueDate: apInvoice.dueDate })
       .from(apInvoice)
       .where(inArray(apInvoice.id, ids)),
 };
@@ -202,18 +212,40 @@ const RAISED_BY: Readonly<Record<PartySide, readonly DocumentSource[]>> = {
   bank: [CUSTOMER_RECEIPT, SUPPLIER_PAYMENT],
 };
 
+/**
+ * A document id is a uuid. A source reference is not always a document.
+ *
+ * The cut-over's opening balances post with a source of their own making —
+ * `opening-IQD-…`, one per currency — because there is no invoice behind
+ * them: they are the old system's closing position, carried in as a journal.
+ * Every lookup below compares against a `uuid` column, so handing it one of
+ * those makes PostgreSQL refuse the whole query ("invalid input syntax for
+ * type uuid") and the statement fails rather than the one line being
+ * unnamed. Found 2026-10-02: every partner carried in from the old books had
+ * no statement at all, on the screen as well as in chat.
+ *
+ * So anything that is not a uuid is left out of the lookup. It has no
+ * document to name, which is the truth about it, and the line still shows
+ * with its journal's own reference.
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function documentsFor(
   tx: Tx,
   side: PartySide,
   ids: readonly string[],
 ): Promise<ReadonlyMap<string, StatementDocument>> {
   const found = new Map<string, StatementDocument>();
-  const wanted = [...new Set(ids)];
+  const wanted = [...new Set(ids)].filter((id) => UUID.test(id));
   if (wanted.length === 0) return found;
 
   for (const source of RAISED_BY[side]) {
     for (const row of await source.find(tx, wanted)) {
-      found.set(row.id, { kind: source.kind, number: row.number });
+      found.set(row.id, {
+        kind: source.kind,
+        number: row.number,
+        dueDate: 'dueDate' in row ? ((row as { dueDate: string | null }).dueDate ?? null) : null,
+      });
     }
   }
   return found;
@@ -312,6 +344,101 @@ export async function statementFor(
   return {
     partyCode,
     side,
+    currency,
+    from: window.from ?? null,
+    to: window.to,
+    opening: decimal(opening),
+    lines,
+    totalDebit: decimal(totalDebit),
+    totalCredit: decimal(totalCredit),
+    closing: decimal(balance),
+  };
+}
+
+/**
+ * A bank or cash account's statement, read from the ledger account it posts
+ * to — Operations block 6: "Incoming amounts are shown as Debit. Outgoing
+ * amounts are shown as Credit."
+ *
+ * Why not the bank subledger (`statementFor(tx, 'bank', …)`): the subledger
+ * is written only for a line that names its bank account, and the supplier
+ * payment and customer receipt postings do not name it. An account left
+ * unmarked keeps no subledger at all, so its statement would be empty; one
+ * marked as the bank control account refuses those postings outright. Each
+ * bank or cash account carries a ledger account no other one may carry, so
+ * that account's postings are exactly this account's movements — the same
+ * figures, from the posted lines themselves.
+ *
+ * The same shape as a partner's statement, so one table shows both: the
+ * opening balance folds in everything before `from`, and each line carries
+ * the balance it left, debits less credits.
+ */
+export async function ledgerStatementFor(
+  tx: Tx,
+  account: { readonly code: string; readonly glAccountCode: string | null },
+  window: {
+    readonly from?: string | null;
+    readonly to: string;
+    readonly currency?: StatementCurrency;
+  },
+): Promise<PartnerStatement> {
+  const currency: StatementCurrency = window.currency === 'USD' ? 'USD' : 'IQD';
+  const usd = currency === 'USD';
+  const debitOf = (row: { debitIqd: string; debitUsd: string }) => parseDecimal(usd ? row.debitUsd : row.debitIqd, MONEY_SCALE);
+  const creditOf = (row: { creditIqd: string; creditUsd: string }) =>
+    parseDecimal(usd ? row.creditUsd : row.creditIqd, MONEY_SCALE);
+
+  // An account with no ledger account has posted nothing.
+  const ledgerCode = account.glAccountCode ?? '';
+  let opening = 0n;
+  if (window.from && ledgerCode) {
+    const [y, m, d] = window.from.split('-').map(Number);
+    const dayBefore = new Date(Date.UTC(y!, m! - 1, d! - 1)).toISOString().slice(0, 10);
+    for (const row of await trialBalance.accountActivity(tx, ledgerCode, {
+      from: '0001-01-01',
+      to: dayBefore,
+      allPermittedBranches: true,
+    })) {
+      opening += debitOf(row) - creditOf(row);
+    }
+  }
+
+  const rows = ledgerCode
+    ? await trialBalance.accountActivity(tx, ledgerCode, {
+        from: window.from ?? '0001-01-01',
+        to: window.to,
+        allPermittedBranches: true,
+      })
+    : [];
+  const documents = await documentsFor(
+    tx,
+    'bank',
+    rows.flatMap((row) => (row.sourceDocId ? [String(row.sourceDocId)] : [])),
+  );
+
+  let balance = opening;
+  let totalDebit = 0n;
+  let totalCredit = 0n;
+  const lines: StatementLine[] = rows.map((row) => {
+    const debit = debitOf(row);
+    const credit = creditOf(row);
+    totalDebit += debit;
+    totalCredit += credit;
+    balance += debit - credit;
+    return {
+      postingDate: String(row.postingDate),
+      entryNo: row.entryNo,
+      description: row.description,
+      document: (row.sourceDocId ? documents.get(String(row.sourceDocId)) : undefined) ?? null,
+      debit: decimal(debit),
+      credit: decimal(credit),
+      balance: decimal(balance),
+    };
+  });
+
+  return {
+    partyCode: account.code,
+    side: 'bank',
     currency,
     from: window.from ?? null,
     to: window.to,

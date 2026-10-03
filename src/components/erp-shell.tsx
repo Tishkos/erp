@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -15,6 +15,7 @@ import {
   Calculator,
   Check,
   ChevronDown,
+  Activity,
   Files,
   FolderKanban,
   Grid3X3,
@@ -35,8 +36,32 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { MenuItem, MenuSection } from '@domain/menu';
+import {
+  APPEARANCE_PRESETS,
+  APPEARANCE_PRESET_SETTINGS,
+  BORDER_STYLES,
+  COMPONENT_SIZES,
+  CONTENT_WIDTHS,
+  CORNER_STYLES,
+  DEFAULT_USER_APPEARANCE,
+  DENSITIES,
+  SHADOW_STYLES,
+  type AppearancePreset,
+  type UserAppearanceSettings,
+} from '@domain/appearance';
 import { routeFor } from '@domain/screens';
-import mainLogo from '../../mainLogo.png';
+import { saveMyAppearanceSettings } from '@/app/(app)/appearance-actions';
+import { Button, Panel } from '@/components/ui';
+/*
+ * The monogram, not the full mark.
+ *
+ * The logo carries the Q, "ERP" and the company's name in both scripts, which
+ * is right on a sign-in card or a letterhead. The slot here is 46 x 48 CSS
+ * pixels and the name is already written beside it in `erp-brand__wordmark`,
+ * so the full mark would put the name twice and neither legibly. Both files
+ * are cut from the same source, so there is one brand to keep in step.
+ */
+import mainLogo from '../../mainLogoMark.png';
 import { GlobalSearch } from './global-search';
 import { switchBranch } from '@/app/(app)/actions';
 
@@ -44,7 +69,7 @@ type ModuleKey =
   | 'dashboard'
   | 'accounting'
   | 'sales'
-  | 'purchasing'
+  | 'payables'
   | 'logistics'
   | 'money_transfer'
   | 'crm'
@@ -53,6 +78,7 @@ type ModuleKey =
   | 'hr'
   | 'reports'
   | 'documents'
+  | 'monitoring'
   | 'settings';
 
 type UtilityPanel = 'launcher' | 'notifications' | 'messages' | 'user';
@@ -68,6 +94,14 @@ interface ModuleGroup extends ModuleDefinition {
   readonly sections: readonly MenuSection[];
 }
 
+export interface ShellNotification {
+  readonly id: string;
+  readonly subject: string;
+  readonly body: string;
+  readonly createdAt: string;
+  readonly read: boolean;
+}
+
 interface ErpShellProps {
   readonly brand: string;
   readonly branchCode: string;
@@ -79,23 +113,32 @@ interface ErpShellProps {
   readonly roleCodes: readonly string[];
   readonly isSuperUser: boolean;
   readonly sections: readonly MenuSection[];
+  readonly initialAppearanceSettings: UserAppearanceSettings;
+  readonly appearanceSettingsSaved: boolean;
+  /**
+   * The signed-in person's latest notifications, newest first — what the bell
+   * shows. Block 8's status changes land here for the users selected to be
+   * told.
+   */
+  readonly notifications?: readonly ShellNotification[];
   /** Rendered after the main region, so it always ends the page. */
   readonly footer?: ReactNode;
   readonly children: ReactNode;
 }
 
-type Density = 'comfortable' | 'compact';
 type Accent = 'blue' | 'indigo' | 'teal' | 'orange';
-type Radius = 'soft' | 'rounded';
-type ContentWidth = 'fluid' | 'contained';
 type Theme = 'light' | 'dark';
 
 interface AppearancePreferences {
   readonly theme: Theme;
-  readonly density: Density;
   readonly accent: Accent;
-  readonly radius: Radius;
-  readonly width: ContentWidth;
+  readonly appearance: UserAppearanceSettings['appearance'];
+  readonly density: UserAppearanceSettings['density'];
+  readonly cornerStyle: UserAppearanceSettings['cornerStyle'];
+  readonly contentWidth: UserAppearanceSettings['contentWidth'];
+  readonly borderStyle: UserAppearanceSettings['borderStyle'];
+  readonly shadow: UserAppearanceSettings['shadow'];
+  readonly componentSize: UserAppearanceSettings['componentSize'];
 }
 
 type PreferenceName = keyof AppearancePreferences;
@@ -109,7 +152,7 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
     sectionKeys: [
       'finance_gl',
       'finance_ar',
-      'finance_ap',
+      // finance_ap merged into the Payables module (REQ-AP-001 §21.1).
       'treasury',
       'fixed_assets',
       'budgeting',
@@ -125,14 +168,18 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
   // where the work happens, and a salesperson opening Accounting to reach
   // Customers had to read past the general ledger to find them.
   { key: 'sales', icon: ShoppingCart, sectionKeys: ['sales'] },
-  { key: 'purchasing', icon: ShoppingBag, sectionKeys: ['purchasing'] },
-  { key: 'logistics', icon: Truck, sectionKeys: ['logistics'] },
+  // Purchasing became Payables — one module for everything owed (REQ-AP-001 D7).
+  // REQ-FIX-001 FIX-1 — four headings, like Accounting's.
+  { key: 'payables', icon: ShoppingBag, sectionKeys: ['payables', 'payables_suppliers', 'payables_setup'] },
+  // Everything logistics in the system (by direction, 2026-10-02).
+  { key: 'logistics', icon: Truck, sectionKeys: ['logistics_customs', 'logistics_shipping', 'logistics'] },
   { key: 'money_transfer', icon: ArrowLeftRight, sectionKeys: ['money_transfer'] },
   { key: 'crm', icon: Handshake, sectionKeys: ['crm'] },
   { key: 'projects', icon: FolderKanban, sectionKeys: ['projects'] },
   { key: 'inventory', icon: Boxes, sectionKeys: ['inventory'] },
   { key: 'hr', icon: Users, sectionKeys: ['hr_payroll'] },
   { key: 'documents', icon: Files, sectionKeys: ['documents'] },
+  { key: 'monitoring', icon: Activity, sectionKeys: ['monitoring'] },
   { key: 'reports', icon: BarChart3, sectionKeys: ['reports'] },
   {
     key: 'settings',
@@ -143,20 +190,37 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
 
 const DEFAULT_APPEARANCE: AppearancePreferences = {
   theme: 'light',
-  density: 'comfortable',
+  ...DEFAULT_USER_APPEARANCE,
   accent: 'blue',
-  radius: 'soft',
-  width: 'fluid',
 };
 
-const APPEARANCE_OPTIONS = {
+const LEGACY_APPEARANCE_OPTIONS = {
   theme: ['light', 'dark'],
-  density: ['comfortable', 'compact'],
   accent: ['blue', 'indigo', 'teal', 'orange'],
-  radius: ['soft', 'rounded'],
-  width: ['fluid', 'contained'],
+} as const;
+
+const SETTING_OPTIONS = {
+  density: DENSITIES,
+  cornerStyle: CORNER_STYLES,
+  contentWidth: CONTENT_WIDTHS,
+  borderStyle: BORDER_STYLES,
+  shadow: SHADOW_STYLES,
+  componentSize: COMPONENT_SIZES,
 } as const satisfies {
-  readonly [Name in PreferenceName]: readonly AppearancePreferences[Name][];
+  readonly [Name in Exclude<keyof UserAppearanceSettings, 'appearance'>]: readonly string[];
+};
+
+const ADVANCED_SETTING_NAMES = ['borderStyle', 'shadow', 'componentSize'] as const;
+const BASIC_SETTING_NAMES = ['density', 'cornerStyle', 'contentWidth'] as const;
+
+const PRESET_DESCRIPTIONS: Readonly<Record<AppearancePreset, string>> = {
+  current: 'preset_current_description',
+  standard: 'preset_standard_description',
+  enterprise: 'preset_enterprise_description',
+  minimal: 'preset_minimal_description',
+  modern: 'preset_modern_description',
+  command: 'preset_command_description',
+  studio: 'preset_studio_description',
 };
 
 function groupSections(sections: readonly MenuSection[]): readonly ModuleGroup[] {
@@ -176,10 +240,35 @@ function isActiveHref(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function moduleIsActive(pathname: string, module: ModuleGroup): boolean {
-  return module.sections.some((section) =>
-    section.items.some((item) => item.href && isActiveHref(pathname, item.href)),
-  );
+/**
+ * The one module the current page belongs to.
+ *
+ * A module matches when one of its own links matches the path, and more than
+ * one can: the Logistics screens are routed under `/payables/…` — the customs
+ * declarations, the bills of lading, the containers — so Payables matches them
+ * too, through its own `/payables` link. Both lit at once, and the first one
+ * drawn reads as the chosen one, which is why opening Customs
+ * Pre-Declarations lit Payables (reported 2026-10-02).
+ *
+ * So the longest matching link wins: `/payables/pd` beats `/payables`, and the
+ * module that actually lists the screen is the module that lights up. Routing
+ * a screen under another module's path stays a thing you can do.
+ */
+function activeLink(pathname: string, modules: readonly ModuleGroup[]): { readonly moduleKey: string; readonly href: string } | null {
+  let best: { moduleKey: string; href: string } | null = null;
+  for (const module of modules) {
+    for (const section of module.sections) {
+      for (const item of section.items) {
+        // The address the link actually goes to, which is not always the one
+        // the menu declares — `routeFor` is what the <Link> is built from, so
+        // matching on anything else compares against a page nobody opened.
+        const href = routeFor(item, section.key);
+        if (!isActiveHref(pathname, href)) continue;
+        if (!best || href.length > best.href.length) best = { moduleKey: module.key, href };
+      }
+    }
+  }
+  return best;
 }
 
 function firstModuleHref(module: ModuleGroup): string | null {
@@ -193,7 +282,7 @@ function firstModuleHref(module: ModuleGroup): string | null {
 }
 
 function readStoredPreference<T extends string>(
-  attribute: `data-${PreferenceName}`,
+  attribute: `data-${string}`,
   allowed: readonly T[],
   fallback: T,
 ): T {
@@ -205,9 +294,37 @@ function readStoredPreference<T extends string>(
   }
 }
 
+/**
+ * The attribute each preference is written to — one table, used by the write
+ * below and by every `readStoredPreference` call above.
+ *
+ * It was a conditional that special-cased `cornerStyle` and `contentWidth` and
+ * fell through to `data-${name}` for the rest. An HTML attribute name is
+ * case-insensitive, so `borderStyle` became `data-borderstyle` and
+ * `componentSize` became `data-componentsize` — attributes no stylesheet
+ * matches, while the server rendered the hyphenated ones and the read side
+ * looked for those too. Border style and Component size therefore did nothing
+ * at all, silently, and the panel showed the choice as taken (reported
+ * 2026-09-29). The names now exist in exactly one place.
+ */
+const PREFERENCE_ATTRIBUTE = {
+  theme: 'data-theme',
+  accent: 'data-accent',
+  appearance: 'data-appearance',
+  density: 'data-density',
+  cornerStyle: 'data-radius',
+  contentWidth: 'data-width',
+  borderStyle: 'data-border-style',
+  shadow: 'data-shadow',
+  componentSize: 'data-component-size',
+} as const satisfies Record<PreferenceName, `data-${string}`>;
+
 function applyPreference(name: PreferenceName, value: PreferenceValue): void {
-  const attribute = `data-${name}` as const;
-  document.documentElement.setAttribute(attribute, value);
+  const attribute = PREFERENCE_ATTRIBUTE[name];
+  const target = name === 'theme' || name === 'accent'
+    ? document.documentElement
+    : document.querySelector<HTMLElement>('.erp-root');
+  target?.setAttribute(attribute, value);
   try {
     window.localStorage.setItem(attribute, value);
   } catch {
@@ -215,14 +332,26 @@ function applyPreference(name: PreferenceName, value: PreferenceValue): void {
   }
 }
 
+function savedSettingsFrom(value: AppearancePreferences): UserAppearanceSettings {
+  return {
+    appearance: value.appearance,
+    density: value.density,
+    cornerStyle: value.cornerStyle,
+    contentWidth: value.contentWidth,
+    borderStyle: value.borderStyle,
+    shadow: value.shadow,
+    componentSize: value.componentSize,
+  };
+}
+
 function PendingItem({ item }: { readonly item: MenuItem }) {
   const page = useTranslations('page');
-  const phase = useTranslations('phase');
+  const pending = useTranslations('screen');
 
   return (
     <span
       className="erp-menu-item erp-menu-item--pending"
-      title={phase('not_built')}
+      title={pending('not_built')}
     >
       <span className="erp-menu-item__label">{page(item.key)}</span>
     </span>
@@ -232,15 +361,18 @@ function PendingItem({ item }: { readonly item: MenuItem }) {
 function ModuleContents({
   module,
   pathname,
+  activeHref,
   onNavigate,
 }: {
   readonly module: ModuleGroup;
   readonly pathname: string;
+  /** The one deepest link that matches the path, worked out once by the shell. */
+  readonly activeHref: string | null;
   readonly onNavigate: () => void;
 }) {
   const nav = useTranslations('nav');
   const page = useTranslations('page');
-  const phase = useTranslations('phase');
+  const pending = useTranslations('screen');
 
   return (
     <div className="erp-module-contents">
@@ -251,7 +383,7 @@ function ModuleContents({
             {section.items.map((item) => {
               // Every item in the approved tree has an address: the one its
               // module declared, or the one the screen catalogue derives. An
-              // item still drawn over samples keeps its phase badge, so the
+              // item that is not built yet keeps its pending badge, so the
               // tree says which pages are previews without refusing to open
               // them — which is what it used to do, for 176 of 218 items.
               const href = routeFor(item, section.key);
@@ -259,11 +391,15 @@ function ModuleContents({
               return (
                 <li className="erp-module-section__item" key={item.key}>
                   <Link
-                    aria-current={isActiveHref(pathname, href) ? 'page' : undefined}
+                    // The one deepest link, not every link the path starts
+                    // with: Update from ASYCUDA lives under Customs
+                    // Pre-Declarations' address, so both used to read as the
+                    // open screen (reported 2026-10-02).
+                    aria-current={activeHref === href ? 'page' : undefined}
                     className={`erp-menu-item erp-menu-item--link${preview ? ' erp-menu-item--preview' : ''}`}
                     href={href}
                     onClick={onNavigate}
-                    title={preview ? phase('not_built') : undefined}
+                    title={preview ? pending('not_built') : undefined}
                   >
                     <span className="erp-menu-item__label">{page(item.key)}</span>
                   </Link>
@@ -288,22 +424,33 @@ export function ErpShell({
   roleCodes,
   isSuperUser,
   sections,
+  initialAppearanceSettings,
+  appearanceSettingsSaved,
+  notifications = [],
   footer,
   children,
 }: ErpShellProps) {
   const shell = useTranslations('shell');
   const page = useTranslations('page');
-  const phase = useTranslations('phase');
+  const pending = useTranslations('screen');
   const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
   const modules = useMemo(() => groupSections(sections), [sections]);
+  const active = useMemo(() => activeLink(pathname, modules), [pathname, modules]);
+  const activeKey = active?.moduleKey ?? null;
   const [openPopover, setOpenPopover] = useState<OpenPopover>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openMobileModules, setOpenMobileModules] = useState<readonly ModuleKey[]>([]);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [currentLocale, setCurrentLocale] = useState(locale === 'ar' ? 'ar' : 'en');
-  const [appearance, setAppearance] = useState<AppearancePreferences>(DEFAULT_APPEARANCE);
+  const [appearance, setAppearance] = useState<AppearancePreferences>({
+    ...DEFAULT_APPEARANCE,
+    ...initialAppearanceSettings,
+  });
+  const [appearanceSaveState, setAppearanceSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>(
+    appearanceSettingsSaved ? 'saved' : 'idle',
+  );
 
   const shortUserId = userId.slice(0, 8);
   const initials = displayName
@@ -322,36 +469,47 @@ export function ErpShell({
     .flatMap((section) => section.items)
     .find((item) => item.key === 'notifications');
 
+  const persistAppearanceSettings = async (settings: UserAppearanceSettings) => {
+    setAppearanceSaveState('saving');
+    try {
+      const result = await saveMyAppearanceSettings(settings);
+      setAppearanceSaveState(result.ok ? 'saved' : 'error');
+    } catch {
+      setAppearanceSaveState('error');
+    }
+  };
+
   useLayoutEffect(() => {
+    // Existing choices lived in this browser. Adopt them once for this
+    // account, then the database is authoritative across devices and logins.
+    const settings: UserAppearanceSettings = appearanceSettingsSaved
+      ? initialAppearanceSettings
+      : {
+          appearance: readStoredPreference('data-appearance', APPEARANCE_PRESETS, initialAppearanceSettings.appearance),
+          density: readStoredPreference('data-density', DENSITIES, initialAppearanceSettings.density),
+          cornerStyle: readStoredPreference('data-radius', CORNER_STYLES, initialAppearanceSettings.cornerStyle),
+          contentWidth: readStoredPreference('data-width', CONTENT_WIDTHS, initialAppearanceSettings.contentWidth),
+          borderStyle: readStoredPreference('data-border-style', BORDER_STYLES, initialAppearanceSettings.borderStyle),
+          shadow: readStoredPreference('data-shadow', SHADOW_STYLES, initialAppearanceSettings.shadow),
+          componentSize: readStoredPreference('data-component-size', COMPONENT_SIZES, initialAppearanceSettings.componentSize),
+        };
     const stored: AppearancePreferences = {
-      theme: readStoredPreference(
-        'data-theme',
-        APPEARANCE_OPTIONS.theme,
-        DEFAULT_APPEARANCE.theme,
-      ),
-      density: readStoredPreference(
-        'data-density',
-        APPEARANCE_OPTIONS.density,
-        DEFAULT_APPEARANCE.density,
-      ),
-      accent: readStoredPreference(
-        'data-accent',
-        APPEARANCE_OPTIONS.accent,
-        DEFAULT_APPEARANCE.accent,
-      ),
-      radius: readStoredPreference(
-        'data-radius',
-        APPEARANCE_OPTIONS.radius,
-        DEFAULT_APPEARANCE.radius,
-      ),
-      width: readStoredPreference('data-width', APPEARANCE_OPTIONS.width, DEFAULT_APPEARANCE.width),
+      ...settings,
+      theme: readStoredPreference('data-theme', LEGACY_APPEARANCE_OPTIONS.theme, DEFAULT_APPEARANCE.theme),
+      accent: readStoredPreference('data-accent', LEGACY_APPEARANCE_OPTIONS.accent, DEFAULT_APPEARANCE.accent),
     };
 
     setAppearance(stored);
     (Object.keys(stored) as PreferenceName[]).forEach((name) => {
       applyPreference(name, stored[name]);
     });
-  }, []);
+    if (!appearanceSettingsSaved) {
+      setAppearanceSaveState('saving');
+      void saveMyAppearanceSettings(settings).then((result) => {
+        setAppearanceSaveState(result.ok ? 'saved' : 'error');
+      }).catch(() => setAppearanceSaveState('error'));
+    }
+  }, [appearanceSettingsSaved, initialAppearanceSettings]);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -392,9 +550,24 @@ export function ErpShell({
     window.location.reload();
   };
 
-  const changeAppearance = (name: PreferenceName, value: PreferenceValue) => {
-    setAppearance((current) => ({ ...current, [name]: value }) as AppearancePreferences);
-    applyPreference(name, value);
+  const changeAppearanceSetting = (name: keyof UserAppearanceSettings, value: string) => {
+    const next = { ...appearance, [name]: value } as AppearancePreferences;
+    setAppearance(next);
+    applyPreference(name, value as PreferenceValue);
+    void persistAppearanceSettings(savedSettingsFrom(next));
+  };
+
+  const chooseAppearancePreset = (preset: AppearancePreset) => {
+    const next: AppearancePreferences = {
+      ...appearance,
+      appearance: preset,
+      ...APPEARANCE_PRESET_SETTINGS[preset],
+    };
+    setAppearance(next);
+    (Object.keys(savedSettingsFrom(next)) as (keyof UserAppearanceSettings)[]).forEach((name) => {
+      applyPreference(name, next[name]);
+    });
+    void persistAppearanceSettings(savedSettingsFrom(next));
   };
 
   const openAppearance = () => {
@@ -434,6 +607,43 @@ export function ErpShell({
       </span>
     </div>
   );
+
+  const renderAppearanceSetting = (name: keyof typeof SETTING_OPTIONS) => {
+    const titleKey = {
+      density: 'density',
+      cornerStyle: 'radius',
+      contentWidth: 'width',
+      borderStyle: 'border_style',
+      shadow: 'shadow_style',
+      componentSize: 'component_size',
+    }[name];
+    const values = SETTING_OPTIONS[name];
+
+    return (
+      <fieldset className="erp-preference" key={name}>
+        <legend className="erp-preference__legend">{shell(titleKey)}</legend>
+        <div className={`erp-preference__options erp-preference__options--${name}`}>
+          {values.map((value) => {
+            const selected = appearance[name] === value;
+            return (
+              <button
+                aria-pressed={selected}
+                className="erp-preference__option"
+                data-selected={selected ? 'true' : 'false'}
+                data-value={value}
+                key={value}
+                onClick={() => changeAppearanceSetting(name, value)}
+                type="button"
+              >
+                <span>{shell(value)}</span>
+                {selected ? <Check aria-hidden="true" /> : null}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+    );
+  };
 
   return (
     <div className="erp-shell">
@@ -479,7 +689,7 @@ export function ErpShell({
                 setOpenPopover(null);
                 setOpenMobileModules(
                   modules
-                    .filter((module) => moduleIsActive(pathname, module))
+                    .filter((module) => module.key === activeKey)
                     .map((module) => module.key),
                 );
                 setMobileOpen(true);
@@ -501,8 +711,8 @@ export function ErpShell({
                     <button
                       className="erp-nav__trigger"
                       type="button"
-                      data-active={moduleIsActive(pathname, module) ? 'true' : 'false'}
-                      aria-current={moduleIsActive(pathname, module) ? 'page' : undefined}
+                      data-active={module.key === activeKey ? 'true' : 'false'}
+                      aria-current={module.key === activeKey ? 'page' : undefined}
                       aria-expanded={isOpen}
                       aria-controls={panelId}
                       title={shell(`module.${module.key}`)}
@@ -518,6 +728,7 @@ export function ErpShell({
                         <ModuleContents
                           module={module}
                           pathname={pathname}
+                          activeHref={active?.href ?? null}
                           onNavigate={closeNavigation}
                         />
                       </div>
@@ -639,7 +850,7 @@ export function ErpShell({
                 ) : (
                   <span
                     className="erp-launcher__item erp-launcher__item--pending"
-                    title={phase('not_built')}
+                    title={pending('not_built')}
                     key={module.key}
                   >
                     {content}
@@ -660,7 +871,22 @@ export function ErpShell({
               <Bell aria-hidden="true" />
               <h2>{shell('notifications')}</h2>
             </div>
-            {notificationItem?.href ? (
+            {notifications.length > 0 ? (
+              <ul className="erp-notifications__list">
+                {notifications.map((note) => (
+                  <li key={note.id} className={note.read ? undefined : 'erp-notifications__unread'}>
+                    <strong>
+                      <bdi dir="auto">{note.subject}</bdi>
+                    </strong>
+                    <p>
+                      <bdi dir="auto">{note.body}</bdi>
+                    </p>
+                    <time dateTime={note.createdAt}>{note.createdAt.slice(0, 16).replace('T', ' ')}</time>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {notifications.length > 0 ? null : notificationItem?.href ? (
               <Link
                 className="erp-utility-popover__link"
                 href={notificationItem.href}
@@ -799,6 +1025,7 @@ export function ErpShell({
                     <ModuleContents
                       module={module}
                       pathname={pathname}
+                      activeHref={active?.href ?? null}
                       onNavigate={closeNavigation}
                     />
                   </details>
@@ -875,32 +1102,109 @@ export function ErpShell({
             </div>
 
             <div className="erp-appearance-drawer__body">
-              {(Object.keys(APPEARANCE_OPTIONS) as PreferenceName[])
-                .filter((name) => name !== 'theme' && name !== 'accent')
-                .map((name) => (
-                <fieldset className="erp-preference" key={name}>
-                  <legend className="erp-preference__legend">{shell(name)}</legend>
-                  <div className={`erp-preference__options erp-preference__options--${name}`}>
-                    {APPEARANCE_OPTIONS[name].map((value) => {
-                      const selected = appearance[name] === value;
-                      return (
-                        <button
-                          className="erp-preference__option"
-                          type="button"
-                          data-value={value}
-                          data-selected={selected ? 'true' : 'false'}
-                          aria-pressed={selected}
-                          key={value}
-                          onClick={() => changeAppearance(name, value)}
-                        >
-                          <span>{shell(value)}</span>
+              <section aria-labelledby="erp-appearance-preset-title" className="erp-appearance-section">
+                <div className="erp-appearance-section__heading">
+                  <h3 id="erp-appearance-preset-title">{shell('interface_style')}</h3>
+                  <p>{shell('interface_style_hint')}</p>
+                </div>
+                <div aria-label={shell('interface_style')} className="erp-appearance-cards" role="radiogroup">
+                  {APPEARANCE_PRESETS.map((preset) => {
+                    const selected = appearance.appearance === preset;
+                    const settings = APPEARANCE_PRESET_SETTINGS[preset];
+                    const selectWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        chooseAppearancePreset(preset);
+                        return;
+                      }
+                      const direction =
+                        event.key === 'ArrowRight' || event.key === 'ArrowDown'
+                          ? 1
+                          : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+                            ? -1
+                            : 0;
+                      if (!direction) return;
+                      event.preventDefault();
+                      const cards = event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="radio"]');
+                      if (!cards?.length) return;
+                      const currentIndex = Array.from(cards).indexOf(event.currentTarget);
+                      const nextIndex = (currentIndex + direction + cards.length) % cards.length;
+                      chooseAppearancePreset(APPEARANCE_PRESETS[nextIndex]!);
+                      cards[nextIndex]?.focus();
+                    };
+                    return (
+                      <div
+                        aria-checked={selected}
+                        className="erp-appearance-card"
+                        key={preset}
+                        onClick={() => chooseAppearancePreset(preset)}
+                        onKeyDown={selectWithKeyboard}
+                        role="radio"
+                        tabIndex={selected ? 0 : -1}
+                      >
+                        <span className="erp-appearance-card__heading">
+                          <strong>{shell(`preset_${preset}`)}</strong>
                           {selected ? <Check aria-hidden="true" /> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </fieldset>
-              ))}
+                        </span>
+                        <span className="erp-appearance-card__description">
+                          {shell(PRESET_DESCRIPTIONS[preset])}
+                        </span>
+                        <span
+                          aria-hidden="true"
+                          className="erp-appearance-preview"
+                          data-appearance={preset}
+                          data-border-style={settings.borderStyle}
+                          data-component-size={settings.componentSize}
+                          data-density={settings.density}
+                          data-radius={settings.cornerStyle}
+                          data-shadow={settings.shadow}
+                          data-width={settings.contentWidth}
+                        >
+                          <span className="erp-appearance-preview__bar">
+                            <span />
+                            <span />
+                            <span />
+                          </span>
+                          <Panel>
+                            <span className="erp-appearance-preview__title" />
+                            <span className="erp-appearance-preview__lines">
+                              <span />
+                              <span />
+                            </span>
+                            <table className="erp-appearance-preview__table">
+                              <tbody>
+                                <tr><td /><td /></tr>
+                                <tr><td /><td /></tr>
+                              </tbody>
+                            </table>
+                            <Button disabled label={shell('preview_action')} tone="primary" />
+                          </Panel>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section aria-labelledby="erp-appearance-controls-title" className="erp-appearance-section">
+                <div className="erp-appearance-section__heading">
+                  <h3 id="erp-appearance-controls-title">{shell('layout_settings')}</h3>
+                </div>
+                <div className="erp-appearance-settings-grid">
+                  {BASIC_SETTING_NAMES.map(renderAppearanceSetting)}
+                </div>
+              </section>
+
+              <details className="erp-advanced-appearance">
+                <summary>{shell('advanced_appearance')}</summary>
+                <div className="erp-appearance-settings-grid">
+                  {ADVANCED_SETTING_NAMES.map(renderAppearanceSetting)}
+                </div>
+              </details>
+
+              <p aria-live="polite" className="erp-appearance-save-state" role="status">
+                {shell(`appearance_save_${appearanceSaveState}`)}
+              </p>
             </div>
           </aside>
         </div>

@@ -23,6 +23,18 @@
 # below is children before parents for the same reason: with the keys lifted,
 # nothing warns you when it is wrong.
 #
+# ── And why it was amended (2026-09-27) ───────────────────────────────────
+# Operations block 7 added stock_transfer and stock_adjustment (migration 0207)
+# after this list was written, and the list was not updated. Five formats that
+# morning deleted every inventory_movement, cost_layer and journal on the box
+# and left TRF-HQ-2026-000001, TRF-HQ-2026-000002 and ADJ-HQ-2026-000001
+# standing: documents on the Transfer page with no rows in the Stock Movement
+# ledger, and a number sequence reset underneath them. tests/integration/
+# setup.ts already deleted both tables; this script did not. The two tables are
+# in the list now, and the report at the end names any document left without
+# its ledger rows, so the next omission is seen the moment it happens rather
+# than when somebody's arithmetic disagrees with a screen.
+#
 set -euo pipefail
 
 ERP_SSH="${ERP_SSH:-root@31.97.123.206}"
@@ -46,12 +58,49 @@ if [[ -n "$MASTER" && "$MASTER" != "--master-data" ]]; then
   exit 2
 fi
 
+# ── The books are open: this script no longer applies ──────────────────────
+# Once real trading has begun, a format destroys history that the audit trail,
+# the document numbers and every backup assume is permanent. The marker file
+# below is placed on the server the day the company starts trading for real
+# (2026-09-27), and while it stands this script does nothing but say so.
+# Lifting it is a deliberate act by a person, not a flag on the command line:
+# there is no --force, because the one time somebody reaches for --force is
+# the one time it must not exist.
+LIVE_MARKER="$APP/var/LIVE"
+if ssh "$ERP_SSH" test -e "$LIVE_MARKER"; then
+  say "Refusing to format a live database"
+  ssh "$ERP_SSH" cat "$LIVE_MARKER"
+  echo
+  echo "The books on this server are live. A format would erase real invoices, real" >&2
+  echo "stock movements and the audit trail behind them, as it did on 2026-09-27." >&2
+  echo "Trials and demos belong on a separate database. If this really is not a live" >&2
+  echo "system any more, remove $LIVE_MARKER on the server by hand and run again." >&2
+  exit 3
+fi
+
 # ── What a document is, in the order it has to be taken apart ──────────────
 # Every table a posted document touches, children first. Tables belonging to
 # phases that are not built yet are here too: they are empty, deleting from
 # them costs nothing, and the day one of them fills is not the day anybody
 # wants to discover this list was written before it existed.
 read -r -d '' DOCUMENT_TABLES <<'TABLES' || true
+employee_request_line
+employee_document
+review_goal
+performance_review
+applicant_stage
+applicant
+vacancy
+employee_advance_recovery
+employee_request
+employee_advance
+employee_asset
+payroll_line_component
+payroll_line
+payroll_payment
+payroll_run
+leave_request
+attendance_day
 proof_of_delivery_photo
 proof_of_delivery
 delivery_note_line_unit
@@ -80,6 +129,35 @@ ap_match_exception
 supplier_credit_memo
 goods_return_line
 goods_return
+container_receipt_line
+container_receipt
+shipment_container_line
+shipment_container_status_history
+shipment_container
+bill_of_lading
+bank_loan_allocation
+bank_loan_instalment
+bank_loan
+payment_application
+payable_instalment
+asycuda_run
+customs_pd_status_history
+customs_pd
+ap_invoice_note
+legacy_document
+legacy_import_run
+payables_migration_run
+payable_exchange_difference
+landed_cost_layer_adjustment
+landed_cost_charge
+landed_cost_lock
+payable_hold_update
+payable_hold
+payable_event
+payable_order_line
+payable
+recurring_contract_amendment
+recurring_contract
 supplier_payment_allocation
 supplier_payment
 supplier_advance_settlement
@@ -102,6 +180,8 @@ stock_count_line
 stock_count
 warehouse_transfer_line
 warehouse_transfer
+stock_transfer
+stock_adjustment
 bank_statement_rejected_line
 bank_statement_line
 bank_statement
@@ -118,6 +198,53 @@ payment_proposal_item
 payment_proposal
 bank_execution_batch_line
 bank_execution_batch
+money_transfer_expense
+money_transfer_deposit_usage
+money_transfer
+logistics_delivery_evidence
+logistics_claim
+logistics_job_cost
+logistics_client_charge
+logistics_client_funding
+logistics_job_settlement
+logistics_job_leg
+logistics_job
+client_goods_delivery
+client_import_payment
+client_import_file_reference
+client_import_file
+money_transfer_deposit
+project_billing_plan_line
+project_recognition
+project_balance_movement
+project_certificate
+project_progress
+project_material_issue_line
+project_material_issue
+project_timesheet
+project_timesheet_run
+project_settlement
+project_plan_line
+project_plan_version
+project_budget_document_line
+project_budget_document
+project_variation_line
+project_variation
+project_cost
+project_commitment
+asset_verification
+asset_impairment
+asset_transfer
+asset_depreciation
+fixed_asset
+investment_capital_call
+investment_disposal
+investment_impairment
+investment_valuation
+investment_income
+investment_funding
+investment
+investment_proposal
 invoice_line
 invoice
 subledger_entry
@@ -134,7 +261,6 @@ notification_delivery
 notification
 job_outbox
 job_run
-job_queue
 import_row
 import_batch
 audit_event
@@ -166,6 +292,43 @@ delete from posting_rule
  where account_id in (select id from chart_of_account where name like 'E2E %');
 delete from account_required_dimension
  where account_id in (select id from chart_of_account where name like 'E2E %');
+
+-- A bank or cash account carries exactly one G/L account and the database has
+-- the foreign key for it. This runs with the keys down, so deleting an account
+-- something still points at does not fail — it leaves a bank account naming a
+-- row that is not there.
+--
+-- That is what happened to CASH-ACCOUNTANT_ERBIL on 2026-09-27: its G/L
+-- account was named "E2E ..." and went out with this statement. The account
+-- then vanished from its own screen (the list inner-joined the chart until
+-- bbe05f1), so the one place that could repair the link was the place the
+-- break had hidden it from, and it was reported as "I can't link the cash
+-- account to a G/L account".
+--
+-- Refused rather than cascaded. Deleting the bank account too would destroy
+-- something nobody asked to lose, and re-pointing it is a choice about which
+-- account the money sits in — the person running the format is the one to
+-- make it. Named here, before anything is deleted, so the transaction rolls
+-- back whole.
+do $fmt$
+declare
+  v_names text;
+begin
+  select string_agg(b.code || ' -> ' || a.code || ' ' || a.name, ', ' order by b.code)
+    into v_names
+    from bank_cash_account b
+    join chart_of_account a on a.id = b.gl_account_id
+   where a.name like 'E2E %' and not a.is_system;
+
+  if v_names is not null then
+    raise exception
+      'These bank/cash accounts still carry a G/L account this format would delete: %. '
+      'Point them at another account first (Master data -> Bank/Cash accounts), '
+      'or remove them. Nothing has been changed.', v_names;
+  end if;
+end
+$fmt$;
+
 delete from chart_of_account where name like 'E2E %' and not is_system;
 SQL
 
@@ -217,7 +380,15 @@ delete from money_transfer_client_account;
 delete from investment_proposal;
 delete from investment;
 delete from project_cost;
+-- REQ-PM-001 PM-5: the manager's estimates to complete name the elements.
+delete from project_etc;
 delete from project_budget_line;
+-- REQ-PM-001 PM-4: the milestone trend is append-only; TRUNCATE skips its row trigger.
+truncate project_milestone_history;
+-- REQ-HR-001 HR-2: leave balance rows are append-only too; opening balances are entered after the format.
+truncate leave_balance_entry;
+delete from project_activity_dependency;
+delete from project_activity;
 delete from project;
 delete from ap_match_tolerance;
 delete from partner_bank_account;
@@ -251,12 +422,66 @@ select rpad(t.table_name, 28) || lpad(t.n::text, 8)
     union all select 'supplier_credit_memo', count(*) from supplier_credit_memo
     union all select 'inventory_movement', count(*) from inventory_movement
     union all select 'cost_layer', count(*) from cost_layer
+    union all select 'stock_transfer', count(*) from stock_transfer
+    union all select 'stock_adjustment', count(*) from stock_adjustment
+    union all select 'supplier_shipment', count(*) from supplier_shipment
+    union all select 'opening_stock', count(*) from opening_stock
     union all select 'workflow_instance', count(*) from workflow_instance
     union all select 'attachment', count(*) from attachment
     union all select 'audit_event', count(*) from audit_event
   ) t
  where t.n > 0
  order by 1;
+
+select '';
+select 'MASTER DATA POINTING AT SOMETHING GONE (must be empty)';
+-- The keys are down while this script runs, so a delete can leave a master
+-- record naming a row that no longer exists — and unlike a document, a master
+-- record is not re-created by the next day's trading. Reported before and
+-- after, because a break that arrives some other way (a restore of one table,
+-- a hand-run delete) reads exactly the same from here.
+select rpad('bank/cash -> G/L', 22) || b.code || ' names a chart_of_account that is not there'
+  from bank_cash_account b
+ where not exists (select 1 from chart_of_account a where a.id = b.gl_account_id)
+ order by b.code;
+
+select '';
+select 'DOCUMENTS WITHOUT THEIR LEDGER ROWS (must be empty)';
+-- A stock document whose movements are gone is exactly what an incomplete
+-- table list leaves behind. Listed here, before and after, so it is seen.
+select rpad(kind, 18) || rpad(document_no, 22) || ' movements: 0'
+  from (
+    select 'stock_transfer' as kind, t.transfer_no as document_no
+      from stock_transfer t
+     where not exists (select 1 from inventory_movement m
+                        where m.source_document_type = 'stock_transfer'
+                          and m.source_document_id = t.id::text)
+    union all
+    select 'stock_adjustment', a.adjustment_no
+      from stock_adjustment a
+     where not exists (select 1 from inventory_movement m
+                        where m.source_document_type = 'stock_adjustment'
+                          and m.source_document_id = a.id::text)
+    union all
+    select 'ap_invoice', i.invoice_no
+      from ap_invoice i
+     where i.posted_at is not null
+       and exists (select 1 from ap_invoice_line l
+                    where l.ap_invoice_id = i.id and l.warehouse_code is not null)
+       and not exists (select 1 from inventory_movement m
+                        where m.source_document_type = 'ap_invoice'
+                          and m.source_document_id = i.id::text)
+    union all
+    select 'ar_invoice', i.invoice_no
+      from ar_invoice i
+     where i.posted_at is not null
+       and exists (select 1 from ar_invoice_line l
+                    where l.ar_invoice_id = i.id and l.warehouse_code is not null)
+       and not exists (select 1 from inventory_movement m
+                        where m.source_document_type = 'ar_invoice'
+                          and m.source_document_id = i.id::text)
+  ) o
+ order by o.kind, o.document_no;
 
 select '';
 select 'MASTER DATA THE TESTS LEFT';

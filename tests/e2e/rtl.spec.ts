@@ -28,6 +28,9 @@ async function signIn(page: Page) {
   await page.waitForURL('/');
 }
 
+/** The chart's rows — its register table is labelled by the window title. */
+const CHART_ROWS = 'table[aria-labelledby="chart-title"] tbody tr';
+
 /** Flips direction the way a locale would, without touching the application. */
 async function flipToRtl(page: Page) {
   await page.evaluate(() => document.documentElement.setAttribute('dir', 'rtl'));
@@ -38,8 +41,9 @@ test.describe('§25 · the layout mirrors without a code change', () => {
     await signIn(page);
     await page.goto('/master-data/chart-of-accounts');
     // The chart is drawn by a client component; measuring before it has put a
-    // row on screen measures nothing.
-    await expect(page.locator('table.list tbody tr').first()).toBeVisible();
+    // row on screen measures nothing. It is the standard register table now,
+    // named by its window title, as shell.spec.ts reads it.
+    await expect(page.locator(CHART_ROWS).first()).toBeVisible();
   });
 
   test('mirrors the brand and user utilities in the application header', async ({ page }) => {
@@ -61,7 +65,7 @@ test.describe('§25 · the layout mirrors without a code change', () => {
     // The first cell is the tree column: its content is a full-width flex row
     // (toggle, icon, code), so it fills the cell in either direction and cannot
     // show the shift. The name cell is a plain text run, which can.
-    const cell = page.locator('table.list tbody tr').first().locator('td').nth(1);
+    const cell = page.locator(CHART_ROWS).first().locator('td').nth(1);
 
     // The computed value is the logical keyword itself. A cell written as
     // `text-align: left` would report "left" here and would stay left-aligned
@@ -115,7 +119,7 @@ test.describe('§25 · the layout mirrors without a code change', () => {
   });
 
   test('keeps the record page usable, including the draft band', async ({ page }) => {
-    await page.locator('table.list tbody tr td:first-child a').first().click();
+    await page.locator(`${CHART_ROWS} td:first-child a`).first().click();
     await page.waitForURL(/chart-of-accounts\/[^/]+$/);
 
     await flipToRtl(page);

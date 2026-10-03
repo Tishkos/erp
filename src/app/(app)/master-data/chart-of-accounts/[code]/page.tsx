@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Download, Landmark, Printer, ReceiptText, Scale, TrendingUp, WalletCards, type LucideIcon } from 'lucide-react';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { RecordPage } from '@/components/record-page';
 import { registerAllRecords } from '@/server/records';
 import { RecordNotFoundError, view } from '@/server/services/record';

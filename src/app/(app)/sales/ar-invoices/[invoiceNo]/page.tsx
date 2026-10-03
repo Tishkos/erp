@@ -1,16 +1,20 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Flash, admin as s } from '@/components/admin';
+import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { InvoiceSettlement } from '@/components/admin/invoice-settlement';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
+import { PrintSheet } from '@/components/print/print-sheet';
+import { printSheet } from '@/server/print/sheet';
 import { Panel } from '@/components/ui';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as ar from '@/server/services/ar-invoice';
 import * as items from '@/server/services/items';
@@ -24,8 +28,10 @@ import {
   postArInvoice,
   removeArInvoiceLine,
   returnArInvoiceToDraft,
+  reverseArInvoice,
   saveArInvoiceLine,
 } from '../actions';
+import { MONEY_SCALE, parseDecimal } from '@domain/money';
 
 /**
  * One Sales Invoice — Operations build, block 5.
@@ -101,6 +107,22 @@ export default async function ArInvoicePage({
       // What may be chosen on the document: the customer control accounts the
       // statement can be kept on, and the revenue accounts income may go to.
       accounts: editable ? await coa.postableAccounts(tx) : [],
+      /*
+       * The accounts this invoice actually names, looked up by id.
+       *
+       * Separately from the picker, because the picker is empty on anything
+       * but a draft — so a posted invoice with a deliberately chosen
+       * receivable or revenue account reported "As configured", which is the
+       * opposite of what was configured. Looked up regardless of whether the
+       * account is still selectable: an account since deactivated is still
+       * the account this document posts to, and saying otherwise hides the
+       * one fact somebody opened the page for.
+       */
+      chosenAccounts: await Promise.all(
+        [document.receivableAccountId, document.revenueAccountId]
+          .filter((id): id is string => Boolean(id))
+          .map((id) => coa.loadAccount(tx, id).catch(() => null)),
+      ),
     };
   });
 
@@ -131,10 +153,22 @@ export default async function ArInvoicePage({
     can(principal, 'edit_draft', ar.PERMISSION_OBJECT);
   const mayPost = invoice.status === 'approved' && can(principal, 'post', ar.PERMISSION_OBJECT);
   const mayChooseAccounts = mayEdit && can(principal, 'edit_draft', ar.PERMISSION_OBJECT);
+  /*
+   * What the field says, and why it is not simply the picker's label.
+   *
+   * "As configured" means *no account was chosen on this document* — the
+   * mapping decides. It must never be shown for a document that did choose
+   * one, and it used to be shown for every posted invoice, because the list
+   * it searched is only populated while the invoice is editable.
+   */
   const accountLabel = (id: string | null) => {
     if (!id) return t('invoices.account_default');
-    const account = found.accounts.find((row) => row.id === id);
-    return account ? `${account.code} · ${account.name}` : t('invoices.account_default');
+    const account =
+      found.accounts.find((row) => row.id === id) ??
+      found.chosenAccounts.find((row) => row?.id === id);
+    // An id that names nothing at all is a broken link, not a default. Said
+    // plainly, because it is the screen the link is repaired from.
+    return account ? `${account.code} · ${account.name}` : t('invoices.account_missing');
   };
   const mayReturnToDraft =
     invoice.status === 'approved' &&
@@ -144,6 +178,12 @@ export default async function ArInvoicePage({
     invoice.postedAt === null &&
     can(principal, 'approve', ar.PERMISSION_OBJECT) &&
     can(principal, 'edit_draft', ar.PERMISSION_OBJECT);
+  // A posted invoice is undone, never edited (§3.2). Offered while nothing has
+  // been received against it; the service refuses the rest and says why.
+  const mayReverse =
+    invoice.status === 'posted' &&
+    parseDecimal(invoice.allocatedIqd, MONEY_SCALE) === 0n &&
+    can(principal, 'reverse_cancel', ar.PERMISSION_OBJECT);
 
   const fields: DocumentField[] = [
     { label: column('invoice_no'), value: <bdi dir="ltr">{invoice.invoiceNo}</bdi> },
@@ -223,8 +263,11 @@ export default async function ArInvoicePage({
     },
   ];
 
+  const sheet = await printSheet('sales_invoice', invoice.invoiceNo);
+
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="sales_invoice" id={invoice.invoiceNo} />}
       back={{ href: '/sales/ar-invoices', label: t('back') }}
       title={invoice.invoiceNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -244,14 +287,14 @@ export default async function ArInvoicePage({
               <form action={saveArInvoiceAccounts} id="ar-invoice-accounts">
                 <input name="id" type="hidden" value={invoice.id} />
                 <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-                <button className="action" type="submit">{t('invoices.save_accounts')}</button>
+                <Submit label={t('invoices.save_accounts')} tone="secondary" variant="document" />
               </form>
             ) : null}
             {mayApprove ? (
               <form action={approveArInvoice}>
                 <input name="id" type="hidden" value={invoice.id} />
                 <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-                <button className="action action--primary" type="submit">{t('ar_invoices.approve')}</button>
+                <Submit label={t('ar_invoices.approve')} variant="document" />
               </form>
             ) : null}
             {/* "The invoice is not posted until CEO approval." */}
@@ -259,9 +302,7 @@ export default async function ArInvoicePage({
               <form action={postArInvoice}>
                 <input name="id" type="hidden" value={invoice.id} />
                 <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-                <button className="action action--primary" type="submit">
-                  {t('ar_invoices.post')}
-                </button>
+                <Submit label={t('ar_invoices.post')} variant="document" />
               </form>
             ) : null}
             {mayReturnToDraft ? (
@@ -269,7 +310,15 @@ export default async function ArInvoicePage({
                 <input name="id" type="hidden" value={invoice.id} />
                 <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
                 <input aria-label={t('reason')} name="reason" placeholder={t('reason_placeholder')} required type="text" />
-                <button className="action" type="submit">{t('ar_invoices.return_to_draft')}</button>
+                <Submit label={t('ar_invoices.return_to_draft')} tone="secondary" variant="document" />
+              </form>
+            ) : null}
+            {mayReverse ? (
+              <form action={reverseArInvoice} title={t('invoices.reverse_hint')}>
+                <input name="id" type="hidden" value={invoice.id} />
+                <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
+                <input aria-label={t('reason')} name="reason" placeholder={t('invoices.reverse_reason')} required type="text" />
+                <Submit label={t('invoices.reverse')} tone="secondary" variant="document" />
               </form>
             ) : null}
           </>
@@ -291,6 +340,7 @@ export default async function ArInvoicePage({
             items={found.options}
             loadAvailability={invoiceLineAvailability}
             mode="sale"
+            widthsKey={`erp.lines.ar.${context.principal.userId}`}
             labels={{
               itemCode: column('item_code'),
               itemName: column('item_name'),
@@ -305,8 +355,8 @@ export default async function ArInvoicePage({
               remove: t('remove_line'),
               documentTotal: t('reports.totals'),
               saving: t('journals.saving'),
+              resizeColumn: t('invoices.resize_column'),
               saveFailed: t('invoices.save_failed'),
-              noDefaultPrice: t('invoices.no_default_price'),
               checkingStock: t('invoices.checking_stock'),
               stockUnavailable: t('invoices.stock_unavailable'),
               availableStock: t('invoices.available_stock'),
@@ -465,7 +515,13 @@ export default async function ArInvoicePage({
         ) : null}
       </Panel>
 
+      {/* How it stands against its payment terms — read through the same
+          service the Receivables and Payables reports use, so an invoice and
+          the report listing it cannot disagree about its own due date. */}
+      <InvoiceSettlement invoiceNo={invoice.invoiceNo} side="customer" />
+
       <RecordHistory objectId={invoice.id} objectType={ar.PERMISSION_OBJECT} />
+      {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>
   );
 }

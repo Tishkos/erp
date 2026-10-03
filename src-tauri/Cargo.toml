@@ -1,0 +1,45 @@
+[package]
+name = "qs-erp-desktop"
+version = "1.0.0"
+description = "Qimah Al-Safinah ERP — Windows desktop client"
+authors = ["Qimah Al-Safinah"]
+edition = "2021"
+rust-version = "1.77.2"
+
+# The binary is the shell; there is no library surface anyone links against.
+[lib]
+name = "qs_erp_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-process = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
+tauri-plugin-updater = "2"
+
+[profile.release]
+# Kept deliberately plain. The size-squeezing set — lto, codegen-units = 1,
+# opt-level = "s", panic = "abort" together — crashed rustc on this machine
+# with STATUS_STACK_BUFFER_OVERRUN on tauri-utils, rustls and tokio-util
+# (2026-09-29). A few megabytes on a shell that holds no business logic is not
+# worth a toolchain that falls over, and the binary is still small.
+strip = true
+# opt-level 1, not the default 3: see .cargo/config.toml. The shell forwards
+# events to WebView2 and does nothing hot, so the optimiser has nothing to win
+# here and at 3 it crashes the compiler.
+opt-level = 1
+
+[profile.dev]
+# rustc crashed with STATUS_STACK_BUFFER_OVERRUN compiling the `windows` crate
+# with full debug info on this machine (2026-09-29). The shell has almost no
+# Rust of its own to debug — the application is on the server — so line tables
+# are enough and the compiler stops running out of stack.
+debug = 1

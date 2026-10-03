@@ -145,7 +145,9 @@ export function buildAuditEvent(input: AuditEventInput): AuditEventDraft {
     action: input.action,
     objectType: input.objectType,
     objectId: input.objectId ?? null,
-    branchCode: input.branchCode ?? null,
+    // No selected branch is represented by an empty string in request scope;
+    // audit_event stores the company-wide/no-branch case as SQL NULL.
+    branchCode: input.branchCode?.trim() || null,
     beforeValue: input.before === undefined ? null : redact(input.before),
     afterValue: input.after === undefined ? null : redact(input.after),
     reason: input.reason?.trim() || null,

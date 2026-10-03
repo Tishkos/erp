@@ -4,11 +4,12 @@ import { AdminPage, admin as s } from '@/components/admin';
 import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/report-filter';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { levelFrom, maxLevel, rollUp } from '@domain/report-levels';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as trialBalance from '@/server/services/trial-balance';
 
@@ -61,6 +62,7 @@ export default async function TrialBalancePage({ searchParams }: { searchParams:
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="trial_balance" query={params} />}
       back={{ href: '/', label: t('dashboard_label') }}
       tabs={<SectionTabs route="/finance/trial-balance" />}
       subtitle={t('reports.trial_balance_subtitle')}

@@ -9,10 +9,10 @@
  * it, the argument happens seven times and the rest is data.
  *
  * This file is the classification, and it is pure data in the domain layer for
- * the same reason the menu tree is (`menu.ts`): three separate things need the
- * same answer — the route that serves a screen, the coverage test that proves
- * none was dropped, and the build tracker that reports what a phase still owes.
- * A classification assembled inside JSX could not be asserted against.
+ * the same reason the menu tree is (`menu.ts`): two separate things need the
+ * same answer — the route that serves a screen, and the coverage test that
+ * proves none was dropped. A classification assembled inside JSX could not be
+ * asserted against.
  *
  * A `document` screen is really a pair — the list and the record behind it,
  * since Appendix A rules 1–4 govern both — so counts treat it as two screens.
@@ -88,26 +88,40 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   sales_reports: 'report',
   sales_settings: 'settings',
 
-  // 4 — Purchasing
+  // 4 — Payables (was Purchasing; REQ-AP-001 D7 — one module for all owed)
+  payables_workbench: 'workspace',
   procurement_dashboard: 'dashboard',
   suppliers: 'document',
   ap_statements: 'report',
   purchase_orders: 'document',
   goods_receipts: 'document',
   service_receipts: 'document',
+  recurring_contracts: 'document',
   ap_invoices: 'document',
+  payment_applications: 'document',
   supplier_advances: 'document',
   supplier_payments: 'document',
   goods_returns: 'document',
   supplier_credit_memos: 'document',
   match_exceptions: 'workspace',
+  pds: 'document',
+  asycuda_update: 'workspace',
+  shipments: 'document',
+  containers: 'list',
+  loans: 'document',
   purchasing_reports: 'report',
-  purchasing_settings: 'settings',
+  payables_settings: 'settings',
+  payables_migration: 'settings',
+  legacy_import: 'settings',
+  hr_settings: 'settings',
+  whatsapp: 'settings',
+  project_settings: 'settings',
 
   // 5 — Inventory
   availability: 'workspace',
   opening_stock: 'document',
   stock_movements: 'document',
+  stock_ledger: 'report',
   transfer_requests: 'document',
   in_transit: 'list',
   quarantine: 'workspace',
@@ -124,6 +138,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   project_master: 'document',
   contracts: 'document',
   wbs: 'workspace',
+  cost_plan: 'workspace',
   project_budgets: 'document',
   change_orders: 'document',
   project_costs: 'list',
@@ -216,6 +231,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   daily_position: 'report',
   cash_forecast: 'report',
   treasury_reports: 'report',
+  bank_deposits: 'document',
 
   // 14 — Fixed Assets
   asset_categories: 'document',
@@ -238,16 +254,19 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   variance_reports: 'report',
 
   // 16 — HR & Payroll
+  // REQ-FIX-001 FIX-5 — the sponsor's thirteen, in his order.
+  hr_dashboard: 'dashboard',
   employees: 'document',
-  organisation: 'workspace',
+  hr_departments: 'document',
+  hr_positions: 'document',
   attendance: 'workspace',
   leave: 'document',
   payroll: 'workspace',
-  payslips: 'report',
   employee_advances: 'document',
-  expense_claims: 'document',
-  travel: 'document',
-  asset_assignment: 'document',
+  recruitment: 'document',
+  performance: 'document',
+  employee_requests: 'document',
+  hr_documents: 'list',
   hr_reports: 'report',
 
   // 17 — Documents & Tasks
@@ -311,6 +330,12 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   change_requests: 'document',
   uat_evidence: 'list',
   support_runbooks: 'list',
+
+  // 22 — Monitoring (by direction, 2026-10-03). Drawn, reading nothing yet:
+  // a list of customers, the history behind it, and its reports.
+  customer_list: 'list',
+  history: 'report',
+  reports: 'report',
 };
 
 export function archetypeOf(key: string): ScreenArchetype | undefined {
@@ -326,11 +351,6 @@ export function catalogueGaps(): { missing: string[]; orphaned: string[] } {
   };
 }
 
-/** The build phase (two digits) an item's `phase` field belongs to. */
-export function phaseNumberOf(item: MenuItem): string {
-  return item.phase.slice(0, 2);
-}
-
 /**
  * The route a screen lives at.
  *
@@ -340,8 +360,8 @@ export function phaseNumberOf(item: MenuItem): string {
  * from its position in Appendix A, `/{section}/{screen}`, so that **every**
  * entry in the approved tree is a real address rather than a dead menu item.
  *
- * Section keys and item keys are both unique — asserted in the Phase 01.12
- * tests — so the derivation cannot collide.
+ * Section keys and item keys are both unique — asserted in the unit tests —
+ * so the derivation cannot collide.
  *
  * Deriving rather than storing matters: the route and the tree cannot drift
  * apart, and a module that later ships its own page changes one field.
@@ -352,23 +372,28 @@ export function routeFor(item: MenuItem, sectionKey: string): string {
 }
 
 /**
- * The screens that read the database today.
+ * The screens that read the database today — the one list the server trusts.
  *
  * A menu item's `href` records where a module *intends* to put its page, and
- * 38 of the 42 name a path no module has written yet. That makes `href` the
- * wrong thing to badge a screen "live" with — the badge has to mean *these are
- * your figures*, and only these are. Every other screen renders the approved
- * design over samples and says so, in as many words.
+ * most name a path no module has written yet. That makes `href` the wrong
+ * thing to badge a screen "live" with — the badge has to mean *these are your
+ * figures*, and only these are. `visibleRoute` (src/server/delivered.ts)
+ * reads this set, so a route that is not here is refused on the URL and
+ * absent from every surface.
  *
- * A route joins this set when its page stops reading `src/sample` and starts
- * calling a service. Until then the honesty banner stays up.
+ * A route joins this set on the day its page reads the real database, as the
+ * company's requirements (docs/requirements/) are built out.
  */
 const DELIVERED: ReadonlySet<string> = new Set([
   '/',
   '/master-data/chart-of-accounts',
   '/inventory/availability',
   '/documents',
-  // Phase 0 — the administration screens read and write the database.
+  // Monitoring — drawn, reading nothing yet (2026-10-03).
+  '/monitoring/customer-list',
+  '/monitoring/history',
+  '/monitoring/reports',
+  // Administration.
   '/administration/company',
   '/administration/users',
   '/administration/managers',
@@ -379,19 +404,19 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/master-data/branches',
   '/master-data/departments',
   '/approvals',
-  // Phase 1 — the accounting core.
+  // The accounting core.
   '/finance/journals',
   '/finance/reversals',
   '/finance/gl-inquiry',
   '/finance/trial-balance',
   '/finance/income-statement',
-  // Phase 2 — the accounting master data.
+  // The accounting master data.
   '/master-data/cost-centres',
   '/master-data/statement-mapping',
-  '/master-data/customers',
-  '/master-data/suppliers',
-  '/master-data/items',
-  '/master-data/uom',
+  '/sales/customers',
+  '/payables/suppliers',
+  '/inventory/items',
+  '/inventory/uom',
   '/master-data/bank-accounts',
   '/master-data/cash-accounts',
   '/master-data/payment-terms',
@@ -401,27 +426,106 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/finance/cash-flow',
   '/finance/periods',
   '/master-data/exchange-rates',
-  // Operations build — block 7's Warehouses Report and Warehouse Setup.
+  // The Warehouses Report and Warehouse Setup.
   '/inventory/fifo-valuation',
   '/master-data/warehouses',
-  // Block 4 — the Purchase Invoice.
-  '/purchasing/ap-invoices',
-  // Block 5 — the Sales Invoice.
+  // Transfer, Opening Stock, Item Reconciliation, Stock Movement.
+  '/inventory/transfers',
+  '/inventory/opening-stock',
+  '/inventory/stock-reconciliation',
+  '/inventory/stock-movements',
+  // The Stock Ledger — the movements with a running balance (2026-09-27).
+  '/inventory/stock-ledger',
+  // The Purchase Invoice.
+  '/payables/invoices',
+  // The Sales Invoice.
   '/sales/ar-invoices',
-  // Block 9 — Sales Returns.
+  // Sales Returns.
   '/sales/sales-returns',
-  // Block 10 — Purchase Returns.
-  '/purchasing/goods-returns',
-  // Block 6 — Payments and Receipts.
-  '/purchasing/supplier-payments',
+  // Purchase Returns.
+  '/payables/goods-returns',
+  // Payments and Receipts.
+  '/payables/supplier-payments',
   '/sales/customer-receipts',
-  // Block 8 — Invoice Status Tracking.
+  // Invoice Status Tracking.
   '/inventory/in-transit',
-  // Blocks 2 and 3 — the Account Statement, one screen on each side.
+  // The Account Statement, one screen on each side.
   '/sales/customer-statements',
-  '/purchasing/supplier-statements',
+  '/payables/supplier-statements',
   // Where every document that cannot name its own account says which one.
   '/finance/posting-mappings',
+  // Treasury and Banking reporting — the balance, and what it is made of.
+  '/treasury/reporting',
+  // REQ-FIX-001 FIX-1 — the deposits register, and the ASYCUDA list as its own item.
+  '/treasury/deposits',
+  '/payables/pd/asycuda',
+  // §15 and §16 — open items and ageing, one screen on each side.
+  '/sales/receivables',
+  // REQ-AP-001 Stage 1 — the payables workbench, the payable page's list
+  // route, and the module's settings.
+  '/payables',
+  '/administration/payables-settings',
+  '/payables/open-items',
+  // REQ-AP-001 Stage 2 — the standing commitments, the department's inbox,
+  // and the two documents that finally earn their screens (§21.4-§21.6).
+  '/payables/contracts',
+  '/payables/service-receipts',
+  '/payables/purchase-orders',
+  '/payables/goods-receipts',
+  // REQ-AP-001 Stage 3 — payments & bank (§15, §21.7): the applications, the
+  // advances' own register, and the bank master.
+  '/payables/payment-applications',
+  '/payables/advances',
+  '/master-data/banks',
+  // REQ-AP-001 Stage 4 — PD / ASYCUDA (§16, §21.8).
+  '/payables/pd',
+  // REQ-AP-001 Stage 5 — B/Ls and containers (§17, §18, §21.9).
+  '/payables/shipments',
+  '/payables/containers',
+  // REQ-AP-001 Stage 6 — bank loans (§15.7, §21.10).
+  '/treasury/loans',
+  // REQ-AP-001 Stage 8 — the sheet import and its sign-off (§24.3).
+  '/administration/payables-migration',
+  // REQ-IMPROVE-001 Stage 1 — the two screens the menu promised (OP-4).
+  '/administration/jobs',
+  '/administration/backup-health',
+  // REQ-LEGACY-001 — the old system's books, once.
+  '/administration/legacy-import',
+  // REQ-HR-001 Stage HR-1 — people and organisation.
+  '/hr/employees',
+  '/hr/departments',
+  '/hr/positions',
+  '/hr/attendance',
+  '/hr/leave',
+  '/hr/payroll',
+  '/hr/advances',
+  // REQ-HR-001 Stage HR-5 — recruitment and performance.
+  '/hr/recruitment',
+  '/hr/performance',
+  // REQ-HR-001 Stage HR-6 — requests, documents, the HR dashboard and reports.
+  '/hr/dashboard',
+  '/hr/requests',
+  '/hr/documents',
+  '/hr/reports',
+  '/administration/hr-settings',
+  // REQ-WA-001 WA-1/WA-2 — the WhatsApp bridge.
+  '/administration/whatsapp',
+  // REQ-PM-001 PM-1 — the Project System's structure.
+  '/projects',
+  '/projects/contracts',
+  '/projects/wbs',
+  '/projects/plan',
+  '/projects/budgets',
+  '/projects/change-orders',
+  '/projects/costs',
+  '/projects/procurement',
+  '/projects/progress',
+  '/projects/material-issues',
+  '/projects/billing',
+  '/projects/forecast',
+  '/projects/close',
+  '/projects/reports',
+  '/administration/project-settings',
 ]);
 
 export function isDelivered(route: string): boolean {
@@ -460,26 +564,4 @@ export function screenRoutes(): ReadonlyMap<string, ScreenRoute> {
     }
   }
   return routes;
-}
-
-export interface PhaseScreen {
-  readonly item: MenuItem;
-  readonly section: MenuSection;
-  readonly archetype: ScreenArchetype;
-}
-
-/** Every screen a build phase owes the frontend, in Appendix A order. */
-export function screensByPhase(): ReadonlyMap<string, readonly PhaseScreen[]> {
-  const byPhase = new Map<string, PhaseScreen[]>();
-  for (const section of MENU) {
-    for (const item of section.items) {
-      const archetype = SCREENS[item.key];
-      if (!archetype) continue;
-      const phase = phaseNumberOf(item);
-      const bucket = byPhase.get(phase) ?? [];
-      bucket.push({ item, section, archetype });
-      byPhase.set(phase, bucket);
-    }
-  }
-  return byPhase;
 }

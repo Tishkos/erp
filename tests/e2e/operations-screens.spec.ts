@@ -1,11 +1,11 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
  * The Operations Build screens open.
  *
  * A lesson rather than a formality. The Warehouses Report was written, unit
  * tested, typechecked and deployed, and answered "That page does not exist"
- * because its route was never added to the phase gate. Every check I made was
+ * because its route was never added to the delivered list. Every check I made was
  * a `curl`, and the middleware redirects an unauthenticated request to the
  * sign-in page *before* the gate runs — so the route answered 307 whether it
  * worked or not, and the first person to see the truth was the sponsor.
@@ -28,6 +28,30 @@ const OFFICER = { email: 'officer@example.com', password: 'Ledger-Trial-Balance-
  * a session of their own — and the invoice is still raised as the manager.
  */
 const ADMIN = { email: 'admin@example.com', password: 'Ledger-Trial-Balance-7' };
+
+/**
+ * The code the system gave a record — read off the page the create redirected
+ * to. Critical Rule 1 (2026-09-26): codes are minted, never typed, so a test
+ * learns them the way a person does, from the record it just made.
+ */
+const mintedCode = (page: Page) =>
+  decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!);
+
+/** Chooses the option whose text names `wanted`, else the first real one. */
+async function chooseAccount(select: Locator, wanted: string) {
+  const value = await select.evaluate((element, text) => {
+    const options = [...(element as HTMLSelectElement).options].filter((o) => o.value);
+    return (options.find((o) => o.textContent?.includes(text)) ?? options[0])?.value ?? '';
+  }, wanted);
+  await select.selectOption(value);
+}
+
+/** Block 1's item form: the full name and the accounts a sale cannot do without. */
+async function fillNewItem(dialog: Locator, name: string) {
+  await dialog.getByLabel(/Item Full Name/).fill(name);
+  await chooseAccount(dialog.getByLabel(/Inventory account/), 'Inventory');
+  await chooseAccount(dialog.getByLabel(/COGS account/), 'Cost of Goods Sold');
+}
 
 async function signIn(page: Page, who: { email: string; password: string } = MANAGER) {
   await page.goto('/sign-in');
@@ -56,10 +80,24 @@ test.describe('the Operations Build screens open', () => {
       'Warehouse Name',
       'Warehouse Code',
       'Quantity',
-      'Total Price',
+      // Named with its currency: IQD at FIFO cost, not a quantity and not a
+      // selling price.
+      'Total Price (IQD)',
     ]) {
       await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
     }
+  });
+
+  test('block 7 · the Stock Ledger opens and carries the Print / Export menu', async ({ page }) => {
+    await page.goto('/inventory/stock-ledger');
+    await expect(page.getByRole('heading', { name: 'Stock Ledger' })).toBeVisible();
+
+    // The same menu every other document and report carries — asked for on
+    // 2026-09-29, and the one thing this screen was missing.
+    const menu = page.locator('[data-export-menu="stock_ledger"]').first();
+    await expect(menu).toBeVisible();
+    await menu.getByText('Print / Export').click();
+    await expect(menu.getByRole('link', { name: 'PDF' }).first()).toBeVisible();
   });
 
   test('block 7 · a warehouse can be set up', async ({ page }) => {
@@ -67,12 +105,13 @@ test.describe('the Operations Build screens open', () => {
     await expect(page.getByRole('heading', { name: 'Warehouses' })).toBeVisible();
 
     await page.getByRole('button', { name: 'New warehouse' }).click();
-    const code = `WH-E2E-${Date.now().toString().slice(-6)}`;
+    const name = `End To End Depot ${Date.now().toString().slice(-6)}`;
     // Scoped to the dialog: the list behind it renames warehouses in place, so
     // the page carries one name field per row as well as this one.
     const dialog = page.locator('dialog[open], [role="dialog"]').first();
-    await dialog.getByLabel('Warehouse Code').fill(code);
-    await dialog.getByLabel(/Warehouse Name/).fill('End To End Depot');
+    // Critical Rule 1: there is no code to type. The system mints it.
+    await expect(dialog.getByLabel('Warehouse Code')).toHaveCount(0);
+    await dialog.getByLabel(/Warehouse Name/).fill(name);
     await dialog.getByRole('button', { name: 'Create' }).click();
 
     // Wait for the redirect back to the list before looking for the row. The
@@ -80,16 +119,20 @@ test.describe('the Operations Build screens open', () => {
     // the flake this suite has already been bitten by twice.
     await page.waitForURL(/\/master-data\/warehouses(\?|$)/, { timeout: 60_000 });
 
-    // The row is on the list, and its code opens the warehouse's own record —
-    // where it is named, edited, and carries its history, like every other
-    // master record.
+    // The row is on the list with the code the system gave it, and that code
+    // opens the warehouse's own record — where it is named, edited, and carries
+    // its history, like every other master record.
+    const row = page.getByRole('row').filter({ hasText: name });
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    const code = (await row.getByRole('link').first().innerText()).trim();
+    expect(code).toMatch(/^WH-\d{4}$/);
     await expect(page.getByRole('link', { name: code })).toBeVisible({ timeout: 30_000 });
     await page.getByRole('link', { name: code }).click();
     await page.waitForURL(new RegExp(`/master-data/warehouses/${code}`), { timeout: 60_000 });
     await expect(page.getByRole('heading', { level: 1, name: new RegExp(code) })).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByLabel('Warehouse Name')).toHaveValue('End To End Depot');
+    await expect(page.getByLabel('Warehouse Name')).toHaveValue(name);
 
     // Laid out as a branch is: identity and facts on the left, editing and
     // history on the right.
@@ -98,7 +141,7 @@ test.describe('the Operations Build screens open', () => {
   });
 
   test('block 4 · the Purchase Invoice register opens', async ({ page }) => {
-    await page.goto('/purchasing/ap-invoices');
+    await page.goto('/payables/invoices');
 
     await expect(page.getByRole('heading', { name: 'Purchase Invoices' }).first()).toBeVisible();
     for (const column of ['Posting Date', 'Due Date', 'Supplier Code', 'Supplier Name']) {
@@ -118,12 +161,13 @@ test.describe('the Operations Build screens open', () => {
     await supplier.getByRole('button', { name: 'Create' }).click();
     await expect(page.getByText('End To End Supplies').first()).toBeVisible();
 
-    await page.goto('/purchasing/ap-invoices/new');
+    await page.goto('/payables/invoices/new');
 
     await expect(page.getByRole('heading', { name: 'New invoice' })).toBeVisible();
 
-    // The sponsor's line columns, in the sponsor's own words.
-    for (const column of ['Item Code', 'Item Name', 'Quantity', 'Unit Price', 'Discount']) {
+    // The sponsor's line columns, in the sponsor's own words — the price
+    // named with its currency.
+    for (const column of ['Item Code', 'Item Name', 'Quantity', 'Unit Price (IQD)', 'Discount']) {
       await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
     }
 
@@ -133,7 +177,9 @@ test.describe('the Operations Build screens open', () => {
     // The supplier is the sponsor's "searchable" field — an input over a
     // datalist rather than a select, so it is the list that is counted.
     await expect(page.locator('datalist option')).not.toHaveCount(0);
-    await expect(page.locator('select[name="item_code_0"] option')).not.toHaveCount(1);
+    // The item code is searchable too now, an input over its own list.
+    const itemList = await page.locator('input[name="item_code_0"]').getAttribute('list');
+    await expect(page.locator(`datalist[id="${itemList}"] option`)).not.toHaveCount(0);
     await expect(page.locator('select[name="warehouse_code_0"] option')).not.toHaveCount(0);
   });
 
@@ -155,8 +201,8 @@ test.describe('the Operations Build screens open', () => {
      * form before anything is saved.
      */
     const stamp = Date.now().toString().slice(-6);
-    const termsCode = `E2ET${stamp}`;
-    const supplierCode = `E2ESUP${stamp}`;
+    let termsCode = '';
+    let supplierCode = '';
 
     const administration = await browser.newContext();
     const administrator = await administration.newPage();
@@ -165,14 +211,12 @@ test.describe('the Operations Build screens open', () => {
       await administrator.goto('/master-data/payment-terms');
       await administrator.getByRole('button', { name: 'New payment term' }).click();
       const term = administrator.locator('dialog[open], [role="dialog"]').first();
-      await term.getByLabel('Code', { exact: true }).fill(termsCode);
-      await term.getByLabel(/^Name/).fill('Thirty days');
+      await term.getByLabel(/^Name/).fill(`Thirty days ${stamp}`);
       await term.getByLabel('Days to pay').fill('30');
       await term.getByRole('button', { name: 'Create' }).click();
       // A new term opens its own record, where its worked example is.
-      await administrator.waitForURL(new RegExp(`/master-data/payment-terms/${termsCode}`), {
-        timeout: 60_000,
-      });
+      await administrator.waitForURL(/\/master-data\/payment-terms\/[^/?]+/, { timeout: 60_000 });
+      termsCode = mintedCode(administrator);
     } finally {
       await administration.close();
     }
@@ -180,15 +224,13 @@ test.describe('the Operations Build screens open', () => {
     await page.goto('/master-data/suppliers');
     await page.getByRole('button', { name: 'New supplier' }).click();
     const supplier = page.locator('dialog[open], [role="dialog"]').first();
-    await supplier.getByLabel('Code', { exact: true }).fill(supplierCode);
     await supplier.getByLabel(/^Legal name/).fill(`Terms Test ${stamp}`);
     await supplier.getByLabel(/^Payment terms/).selectOption(termsCode);
     await supplier.getByRole('button', { name: 'Create' }).click();
-    await page.waitForURL(new RegExp(`/master-data/business-partners/${supplierCode}`), {
-      timeout: 60_000,
-    });
+    await page.waitForURL(/\/(?:payables\/suppliers|sales\/customers)\/[^/?]+/, { timeout: 60_000 });
+    supplierCode = mintedCode(page);
 
-    await page.goto('/purchasing/ap-invoices/new');
+    await page.goto('/payables/invoices/new');
     await expect(page.getByRole('heading', { name: 'New invoice' })).toBeVisible();
 
     // Today, as the form opens it — and thirty days after it, which is what
@@ -200,17 +242,19 @@ test.describe('the Operations Build screens open', () => {
     await page.getByLabel('Supplier Code').fill(supplierCode);
     await expect(page.getByLabel('Due Date')).toHaveValue(thirtyDaysOn.toISOString().slice(0, 10));
 
-    await page.locator('select[name="item_code_0"]').selectOption('ITM-SEED');
+    await page.locator('input[name="item_code_0"]').fill('ITM-SEED');
     await page.getByLabel('Quantity').first().fill('2');
     await page.getByLabel('Unit Price').first().fill('1000');
     await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
+    // A local purchase: the Import box starts ticked since 2026-10-03.
+    await page.locator('input[name="is_import"]').uncheck();
 
     await page.getByRole('button', { name: 'Create' }).click();
 
     // On the invoice's own record, not back on the form under a refusal.
     await page.waitForURL(
       (url) =>
-        url.pathname.startsWith('/purchasing/ap-invoices/') &&
+        url.pathname.startsWith('/payables/invoices/') &&
         !url.pathname.endsWith('/new') &&
         url.search === '',
       { timeout: 120_000 },
@@ -221,8 +265,8 @@ test.describe('the Operations Build screens open', () => {
   test('draft quantity remains reliable while a row saves', async ({ browser, page }) => {
     test.setTimeout(180_000);
     const stamp = Date.now().toString(36).toUpperCase();
-    const supplierCode = `E2E-SUP-${stamp}`;
-    const itemCode = `E2E-ITM-${stamp}`;
+    let supplierCode = '';
+    let itemCode = '';
     const administration = await browser.newContext();
     const administrator = await administration.newPage();
 
@@ -231,39 +275,33 @@ test.describe('the Operations Build screens open', () => {
       await administrator.goto('/master-data/suppliers');
       await administrator.getByRole('button', { name: 'New supplier' }).click();
       const supplier = administrator.locator('dialog[open], [role="dialog"]').first();
-      await supplier.getByLabel('Code', { exact: true }).fill(supplierCode);
       await supplier.getByLabel(/^Legal name/).fill(`Draft Save ${stamp}`);
       await supplier.getByRole('button', { name: 'Create' }).click();
-      await administrator.waitForURL(
-        new RegExp(`/master-data/business-partners/${supplierCode}`),
-        { timeout: 60_000 },
-      );
+      await administrator.waitForURL(/\/(?:payables\/suppliers|sales\/customers)\/[^/?]+/, {
+        timeout: 60_000,
+      });
+      supplierCode = mintedCode(administrator);
 
       await administrator.goto('/master-data/items');
       await administrator.getByRole('button', { name: 'New item' }).click();
       const item = administrator.locator('dialog[open], [role="dialog"]').first();
-      await item.getByLabel('Code', { exact: true }).fill(itemCode);
-      await item.getByLabel(/^Name/).fill(`Draft Save Item ${stamp}`);
-      const uom = item.getByLabel('Base unit', { exact: true });
-      await uom.selectOption(
-        (await uom.locator('option:not([value=""])').first().getAttribute('value'))!,
-      );
+      await fillNewItem(item, `Draft Save Item ${stamp}`);
       await item.getByRole('button', { name: 'Create' }).click();
-      await administrator.waitForURL(new RegExp(`/master-data/items/${itemCode}`), {
-        timeout: 60_000,
-      });
+      await administrator.waitForURL(/\/inventory\/items\/[^/?]+/, { timeout: 60_000 });
+      itemCode = mintedCode(administrator);
     } finally {
       await administration.close();
     }
 
-    await page.goto('/purchasing/ap-invoices/new');
+    await page.goto('/payables/invoices/new');
     await page.getByLabel('Supplier Code').fill(supplierCode);
-    await page.locator('select[name="item_code_0"]').selectOption('ITM-SEED');
+    await page.locator('input[name="item_code_0"]').fill('ITM-SEED');
     await page.locator('input[name="quantity_0"]').fill('2');
     await page.locator('input[name="unit_price_0"]').fill('100');
     await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
+    await page.locator('input[name="is_import"]').uncheck();
     await page.getByRole('button', { name: 'Create' }).click();
-    await page.waitForURL(/\/purchasing\/ap-invoices\/[^/]+$/, { timeout: 60_000 });
+    await page.waitForURL(/\/payables\/invoices\/(?!new$)[^/]+$/, { timeout: 60_000 });
 
     const grid = page.locator('table[aria-labelledby="ap-invoice-document-lines-heading"]');
     const rows = grid.locator('tbody tr:not([aria-hidden="true"])');
@@ -375,23 +413,23 @@ test.describe('the Operations Build screens open', () => {
         .getByLabel('Quantity', { exact: true }),
     ).toHaveValue('5');
 
-    await page.goto('/purchasing/ap-invoices/new');
+    await page.goto('/payables/invoices/new');
     const newQuantity = page.locator('input[name="quantity_0"]');
-    const newItem = page.locator('select[name="item_code_0"]');
-    await newItem.selectOption('ITM-SEED');
+    const newItem = page.locator('input[name="item_code_0"]');
+    await newItem.fill('ITM-SEED');
     await expect(newQuantity).toHaveValue('1');
     await newQuantity.fill('2');
-    await newItem.selectOption(itemCode);
+    await newItem.fill(itemCode);
     await expect(newQuantity).toHaveValue('2');
   });
 
   test('invoice prices follow user-maintained defaults', async ({ browser, page }) => {
     test.setTimeout(180_000);
     const stamp = Date.now().toString(36).toUpperCase();
-    const supplierACode = `E2E-PA-${stamp}`;
-    const supplierBCode = `E2E-PB-${stamp}`;
-    const customerCode = `E2E-C-${stamp}`;
-    const itemCode = `E2E-P-${stamp}`;
+    let supplierACode = '';
+    let supplierBCode = '';
+    let customerCode = '';
+    let itemCode = '';
     const administration = await browser.newContext();
     const administrator = await administration.newPage();
 
@@ -400,7 +438,7 @@ test.describe('the Operations Build screens open', () => {
         administrator.waitForResponse(
           (response) =>
             response.request().method() === 'POST' &&
-            response.url().includes('/master-data/items/'),
+            response.url().includes('/inventory/items/'),
           { timeout: 60_000 },
         ),
         submit(),
@@ -413,45 +451,50 @@ test.describe('the Operations Build screens open', () => {
       const makePartner = async (
         list: 'suppliers' | 'customers',
         buttonName: string,
-        code: string,
         name: string,
       ) => {
         await administrator.goto(`/master-data/${list}`);
         await administrator.getByRole('button', { name: buttonName }).click();
         const dialog = administrator.locator('dialog[open], [role="dialog"]').first();
-        await dialog.getByLabel('Code', { exact: true }).fill(code);
         await dialog.getByLabel(/^Legal name/).fill(name);
         await dialog.getByRole('button', { name: 'Create' }).click();
-        await administrator.waitForURL(new RegExp(`/master-data/business-partners/${code}`), {
+        await administrator.waitForURL(/\/(?:payables\/suppliers|sales\/customers)\/[^/?]+/, {
           timeout: 60_000,
         });
+        return mintedCode(administrator);
       };
-      await makePartner('suppliers', 'New supplier', supplierACode, `Price Supplier A ${stamp}`);
-      await makePartner('suppliers', 'New supplier', supplierBCode, `Price Supplier B ${stamp}`);
-      await makePartner('customers', 'New customer', customerCode, `Price Customer ${stamp}`);
+      supplierACode = await makePartner('suppliers', 'New supplier', `Price Supplier A ${stamp}`);
+      supplierBCode = await makePartner('suppliers', 'New supplier', `Price Supplier B ${stamp}`);
+      customerCode = await makePartner('customers', 'New customer', `Price Customer ${stamp}`);
 
       await administrator.goto('/master-data/items');
       await administrator.getByRole('button', { name: 'New item' }).click();
       const item = administrator.locator('dialog[open], [role="dialog"]').first();
-      await item.getByLabel('Code', { exact: true }).fill(itemCode);
-      await item.getByLabel(/^Name/).fill(`Priced Item ${stamp}`);
-      const uom = item.getByLabel('Base unit', { exact: true });
-      await uom.selectOption(
-        (await uom.locator('option:not([value=""])').first().getAttribute('value'))!,
-      );
+      await fillNewItem(item, `Priced Item ${stamp}`);
       await item.getByRole('button', { name: 'Create' }).click();
-      await administrator.waitForURL(new RegExp(`/master-data/items/${itemCode}`), {
-        timeout: 60_000,
-      });
+      await administrator.waitForURL(/\/inventory\/items\/[^/?]+/, { timeout: 60_000 });
+      itemCode = mintedCode(administrator);
+      const itemPath = new URL(administrator.url()).pathname;
 
+      // Each step from the record opened afresh, and each waits for its own
+      // `saved=1`: choosing from the picker while the last save was still
+      // redrawing it linked whichever supplier the redraw left selected.
+      const saved = async (submit: () => Promise<void>) => {
+        await Promise.all([
+          administrator.waitForURL((url) => url.searchParams.get('saved') === '1', { timeout: 60_000 }),
+          submit(),
+        ]);
+        await administrator.goto(itemPath);
+      };
       for (const [code, name, price] of [
         [supplierACode, `Price Supplier A ${stamp}`, '80'],
         [supplierBCode, `Price Supplier B ${stamp}`, '90'],
       ] as const) {
-        await administrator
-          .getByLabel('Add a supplier', { exact: true })
-          .selectOption({ label: `${code} · ${name}` });
-        await saveCurrentPage(() =>
+        await administrator.goto(itemPath);
+        const picker = administrator.getByLabel('Add a supplier', { exact: true });
+        await picker.selectOption({ label: `${code} · ${name}` });
+        await expect(picker.locator('option:checked')).toHaveText(`${code} · ${name}`);
+        await saved(() =>
           administrator
             .getByRole('button', { name: 'Link supplier', exact: true })
             .click(),
@@ -461,7 +504,7 @@ test.describe('the Operations Build screens open', () => {
           .filter({ hasText: code })
           .first();
         await supplierRow.locator('input[name="price"]').fill(price);
-        await saveCurrentPage(() =>
+        await saved(() =>
           supplierRow.getByRole('button', { name: 'Save', exact: true }).click(),
         );
       }
@@ -486,16 +529,19 @@ test.describe('the Operations Build screens open', () => {
         )
         .toBe('150');
       await saveCurrentPage(() => sellingPrice.press('Enter'));
+      // Read back from the database, as the record draws a price (to four
+      // places, like the buying prices above), not from what was typed.
+      await administrator.goto(itemPath);
       await expect(administrator.getByLabel(/^Selling price \(IQD\)/)).toHaveValue(
-        '150',
+        '150.0000',
       );
     } finally {
       await administration.close();
     }
 
-    await page.goto('/purchasing/ap-invoices/new');
+    await page.goto('/payables/invoices/new');
     await page.getByLabel('Supplier Code').fill(supplierACode);
-    await page.locator('select[name="item_code_0"]').selectOption(itemCode);
+    await page.locator('input[name="item_code_0"]').fill(itemCode);
     await expect(page.locator('input[name="quantity_0"]')).toHaveValue('1');
     await expect(page.locator('input[name="unit_price_0"]')).toHaveValue('80.0000');
 
@@ -509,8 +555,9 @@ test.describe('the Operations Build screens open', () => {
     await warehouse.selectOption(
       (await warehouse.locator('option:not([value=""])').first().getAttribute('value'))!,
     );
+    await page.locator('input[name="is_import"]').uncheck();
     await page.getByRole('button', { name: 'Create' }).click();
-    await page.waitForURL(/\/purchasing\/ap-invoices\/(?!new\b)[^/]+$/, {
+    await page.waitForURL(/\/payables\/invoices\/(?!new\b)[^/]+$/, {
       timeout: 60_000,
     });
     const draftUrl = page.url();
@@ -539,7 +586,7 @@ test.describe('the Operations Build screens open', () => {
         .locator('table[aria-labelledby="ap-invoice-document-lines-heading"]')
         .locator('tbody tr:not([aria-hidden="true"])')
         .first()
-        .getByLabel('Unit Price', { exact: true }),
+        .getByLabel('Unit Price (IQD)', { exact: true }),
     ).toHaveValue('95');
 
     await page.goto('/sales/ar-invoices/new');
@@ -725,7 +772,7 @@ test.describe('the Operations Build screens open', () => {
     // The sponsor's line columns, Supplier among them — it is on the line and
     // not the header because the same item bought from two suppliers is two
     // pools of stock at two costs.
-    for (const column of ['Item Code', 'Item Name', 'Quantity', 'Unit Price', 'Discount', 'Supplier']) {
+    for (const column of ['Item Code', 'Item Name', 'Quantity', 'Unit Price (IQD)', 'Discount', 'Supplier']) {
       await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
     }
 
@@ -778,8 +825,10 @@ test.describe('the Operations Build screens open', () => {
     // The sponsor: "Offset Account (Accounts Receivable or Bank — one must be
     // selected)". Both are offered, and no third option exists.
     const offset = page.locator('select[name="offset_kind"]');
-    const choices = page.locator('select[name="invoice"] option:not([value=""])');
-    if ((await choices.count()) === 0) {
+    // The invoice is typed into a box over the posted invoices (no longer a
+    // drop-down), and Choose opens the form for it.
+    const invoice = page.locator('input[name="invoice"]');
+    if ((await invoice.count()) === 0) {
       // Nothing posted to return against yet — the page says so rather than
       // offering a form that cannot be completed.
       await expect(page.getByText('Post a sales invoice first.')).toBeVisible();
@@ -787,10 +836,9 @@ test.describe('the Operations Build screens open', () => {
     }
 
     // The form belongs to an invoice, so one is chosen before there is a form.
-    await page
-      .locator('select[name="invoice"]')
-      .selectOption((await choices.first().getAttribute('value'))!);
-    await page.getByRole('button', { name: 'Choose the invoice being returned against.' }).click();
+    const first = page.locator('datalist#sales-return-invoices option').first();
+    await invoice.fill((await first.getAttribute('value'))!);
+    await page.getByRole('button', { name: 'Choose', exact: true }).click();
     await page.waitForURL(/invoice=/, { timeout: 60_000 });
 
     await expect(offset).toHaveCount(1);
@@ -798,7 +846,7 @@ test.describe('the Operations Build screens open', () => {
   });
 
   test('block 10 · the Purchase Returns register opens', async ({ page }) => {
-    await page.goto('/purchasing/goods-returns');
+    await page.goto('/payables/goods-returns');
 
     await expect(page.getByRole('heading', { name: 'Purchase Returns' }).first()).toBeVisible();
     for (const column of ['Supplier Code', 'Supplier Name', 'Offset Account']) {
@@ -807,11 +855,11 @@ test.describe('the Operations Build screens open', () => {
   });
 
   test('block 10 · the return form asks for one offset account', async ({ page }) => {
-    await page.goto('/purchasing/goods-returns/new');
+    await page.goto('/payables/goods-returns/new');
     await expect(page.getByRole('heading', { name: 'New return' })).toBeVisible();
 
-    const choices = page.locator('select[name="invoice"] option:not([value=""])');
-    if ((await choices.count()) === 0) {
+    const invoice = page.locator('input[name="invoice"]');
+    if ((await invoice.count()) === 0) {
       await expect(page.getByText('Post a purchase invoice first.')).toBeVisible();
       return;
     }
@@ -819,10 +867,9 @@ test.describe('the Operations Build screens open', () => {
     // The form belongs to an invoice, so one has to be chosen before there is
     // a form to look at. Asserting without choosing passed only while the
     // database held no posted invoice — which is to say, it asserted nothing.
-    await page
-      .locator('select[name="invoice"]')
-      .selectOption((await choices.first().getAttribute('value'))!);
-    await page.getByRole('button', { name: 'Choose the invoice being returned against.' }).click();
+    const first = page.locator('datalist#goods-return-invoices option').first();
+    await invoice.fill((await first.getAttribute('value'))!);
+    await page.getByRole('button', { name: 'Choose', exact: true }).click();
     await page.waitForURL(/invoice=/, { timeout: 60_000 });
 
     // "Accounts Payable or Bank — one must be selected", and the sign is the
@@ -834,7 +881,7 @@ test.describe('the Operations Build screens open', () => {
   });
 
   test('block 6 · Payments and Receipts open, with the bank columns', async ({ page }) => {
-    await page.goto('/purchasing/supplier-payments');
+    await page.goto('/payables/supplier-payments');
     await expect(page.getByRole('heading', { name: 'Payments' }).first()).toBeVisible();
     for (const column of ['Supplier Code', 'Supplier Name', 'Bank/Cash Code', 'Bank/Cash Name']) {
       await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
@@ -845,11 +892,30 @@ test.describe('the Operations Build screens open', () => {
     for (const column of ['Customer Code', 'Customer Name', 'Bank/Cash Code', 'Bank/Cash Name']) {
       await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
     }
+
+    // Both drafts wear the document window their document wears, rather than
+    // the settings form they used to be (2026-09-29).
+    await page.goto('/sales/customer-receipts/new');
+    const draft = page.locator('#receipt-new');
+    await expect(draft).toBeVisible();
+    await expect(draft.getByText('Customer Receipts', { exact: false }).first()).toBeVisible();
+    await expect(draft.getByText('Customer Invoice', { exact: true })).toBeVisible();
+    await expect(draft.getByRole('button', { name: 'Create' })).toBeVisible();
   });
 
   test('block 6 · a payment can be recorded against a bank account', async ({ page }) => {
-    await page.goto('/purchasing/supplier-payments/new');
+    await page.goto('/payables/supplier-payments/new');
     await expect(page.getByRole('heading', { name: 'New payment' })).toBeVisible();
+
+    // The draft wears the document window the payment will wear — the same
+    // title bar, the same field boxes, the same lines section, Create in the
+    // foot. Asked for on 2026-09-29: pressing Create used to change the design
+    // under the person who pressed it.
+    const draft = page.locator('#payment-new');
+    await expect(draft).toBeVisible();
+    await expect(draft.getByText('Supplier Payments', { exact: false }).first()).toBeVisible();
+    await expect(draft.getByText('Supplier Invoice', { exact: true })).toBeVisible();
+    await expect(draft.getByRole('button', { name: 'Create' })).toBeVisible();
 
     // Both pickers have something in them, or the screen is built and unusable.
     // Supplier and bank are both code-and-name pairs now — inputs over
@@ -879,11 +945,13 @@ test.describe('the Operations Build screens open', () => {
     // compiling for the first time, and an assertion that starts its own clock
     // fails on a cold build while passing on every warm one — which is a flaky
     // test, and a flaky test gets muted.
-    await page.waitForURL(/\/purchasing\/supplier-payments\/PAY-/, { timeout: 60_000 });
+    await page.waitForURL(/\/payables\/supplier-payments\/PAY-/, { timeout: 60_000 });
 
     // The payment exists and says what is still unallocated, which is the whole
-    // of it until somebody puts it against an invoice.
-    await expect(page.getByText('Unallocated')).toBeVisible({ timeout: 30_000 });
+    // of it until somebody puts it against an invoice. Read in the document
+    // window: the page also carries its print sheet, hidden until printed,
+    // which names the same field.
+    await expect(page.locator('#payment-document').getByText('Unallocated')).toBeVisible({ timeout: 30_000 });
 
     // Every record carries its history, as the master-data screens do. A
     // document you cannot ask "who did this, and when" of is a document you

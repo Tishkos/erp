@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { AdminPage, LinkButton, ListToolbar, admin as s } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { ChartOfAccountsWorkspace } from '@/components/chart-of-accounts-workspace';
 import { registerAllLists } from '@/server/lists';
 import { rows } from '@/server/services/list';

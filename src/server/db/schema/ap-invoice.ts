@@ -45,11 +45,15 @@ import {
 } from 'drizzle-orm/pg-core';
 import { appUser, branch } from './platform';
 import { businessPartner, costCentre, warehouse } from './organisation';
-import { item, unitOfMeasure } from './item';
+import { bankCashAccount, item, unitOfMeasure } from './item';
 import { documentStatus } from './workflow';
 import { chartOfAccount } from './accounting';
 import { journalEntry } from './journal';
 import { purchaseOrder, purchaseOrderLine } from './purchase-order';
+import { expenseCategory, payable } from './payables';
+import { recurringContract } from './payables-contracts';
+import { currency } from './fiscal';
+// (charged_to_payable_id on the line also references payable — §9.2, §20.2.)
 
 /** Appendix B's Matched / Exception, on its own axis. */
 export const MATCH_STATUSES = ['matched', 'exception'] as const;
@@ -128,6 +132,41 @@ export const apInvoice = pgTable(
      */
     purchaseOrderId: uuid('purchase_order_id').references(() => purchaseOrder.id),
 
+    /**
+     * REQ-AP-001 §5.1 — the payable this invoice belongs to. One invoice
+     * belongs to at most one payable; one payable may hold several invoices
+     * (a rent paid in two, an import invoiced -A / -B). Nullable: an invoice
+     * outside the payables module carries nothing.
+     */
+    payableId: uuid('payable_id').references(() => payable.id),
+
+    /**
+     * REQ-AP-001 §8, D13 — the accountant ticks *Import* on the supplier's
+     * invoice and the import application is created behind it in the same
+     * transaction. The CHECK in migration 0231 holds the pairing: an import
+     * invoice always has its application.
+     */
+    isImport: boolean('is_import').notNull().default(false),
+
+    /**
+     * D12 — expenses are purchase invoices. The type of fee (rent, freight
+     * forwarding, customs brokerage …) is the expense category; it carries the
+     * default expense account the line posts to.
+     */
+    expenseCategoryCode: text('expense_category_code').references(() => expenseCategory.code),
+
+    /**
+     * §10, D12 — a contract period is an invoice that knows its contract and
+     * its period. One invoice per contract per period (partial unique index).
+     */
+    recurringContractId: uuid('recurring_contract_id').references(() => recurringContract.id),
+    periodStart: date('period_start'),
+    periodEnd: date('period_end'),
+    /** REQ-PM-001 §8 — the project, the element and the cost code the purchase is assigned to; the three together, or none. */
+    projectCode: text('project_code'),
+    wbsCode: text('wbs_code'),
+    costCode: text('cost_code'),
+
     branchCode: text('branch_code')
       .notNull()
       .references(() => branch.code),
@@ -135,6 +174,14 @@ export const apInvoice = pgTable(
     invoiceDate: date('invoice_date').notNull(),
     /** §4.3 — from the supplier's payment terms. */
     dueDate: date('due_date').notNull(),
+    /**
+     * When somebody set the due date on purpose (0272).
+     *
+     * The column above cannot be empty, so an invoice entered on advance terms
+     * carries the day it was entered. Until this is stamped — by
+     * `setDueDate` and by nothing else — the invoice has no due date to show.
+     */
+    dueDateSetAt: timestamp('due_date_set_at', { withTimezone: true }),
 
     /*
      * The accounts this invoice names for itself — by direction, 2026-09-22.
@@ -147,6 +194,17 @@ export const apInvoice = pgTable(
     payableAccountId: uuid('payable_account_id').references(() => chartOfAccount.id),
     expenseAccountId: uuid('expense_account_id').references(() => chartOfAccount.id),
     currency: text('currency').notNull().default('IQD'),
+    /**
+     * What the supplier's invoice was actually agreed in, and what one unit of
+     * it was worth in dinars on the invoice's own date (0272).
+     *
+     * A record of where the dinars on the lines came from — null when they
+     * were typed as dinars, which is the ordinary case. `currency` above is
+     * the invoice's ledger currency and the posting reads it; these two are a
+     * different fact and keep their own columns.
+     */
+    agreedCurrency: text('agreed_currency').references(() => currency.code),
+    agreedRate: numeric('agreed_rate', { precision: 19, scale: 8 }),
     note: text('note'),
 
     /**
@@ -159,6 +217,26 @@ export const apInvoice = pgTable(
      * all three disagree, so the lines are frozen at the same moment.
      */
     totalIqd: numeric('total_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+
+    /**
+     * The advance paid in front, as a percentage of this invoice — §15.3, by
+     * direction 2026-10-03.
+     *
+     * Not a commission: a commission is what a bank charges for its own
+     * service, an advance is part of the price of the goods paid early, and
+     * they post to different places. The field the sponsor described was
+     * called the wrong thing and the name was worth correcting.
+     *
+     * The account and the method are here for the same reason the percent is:
+     * a payment application cannot exist without saying where the money
+     * leaves from and how it travels, so the invoice asks once and the
+     * application is raised without a second form.
+     */
+    advancePercent: numeric('advance_percent', { precision: 9, scale: 4 }),
+    advancePaidFromAccountId: uuid('advance_paid_from_account_id').references(() => bankCashAccount.id),
+    advancePaymentMethodCode: text('advance_payment_method_code'),
+    /** The application it raised, so a second posting raises no second advance. */
+    advanceApplicationId: uuid('advance_application_id'),
 
     /**
      * How much of the total has been discharged — by supplier advances (§8.5)
@@ -285,6 +363,13 @@ export const apInvoiceLine = pgTable(
     /** Null only on the §15 non-PO route. */
     purchaseOrderLineId: uuid('purchase_order_line_id').references(() => purchaseOrderLine.id),
 
+    /**
+     * REQ-AP-001 §9.2, §20.2 — a line whose cost belongs to an import. The
+     * expense parks in the landed-cost clearing account instead of P&L, and
+     * the line becomes a landed-cost charge of that import at posting.
+     */
+    chargedToPayableId: uuid('charged_to_payable_id').references(() => payable.id),
+
     itemCode: text('item_code').references(() => item.code),
     description: text('description').notNull(),
     quantity: numeric('quantity', { precision: 24, scale: 6 }).notNull(),
@@ -385,4 +470,25 @@ export const apMatchException = pgTable(
               and coalesce(btrim(${t.resolutionReason}), '') <> '')`,
     ),
   ],
+);
+
+/**
+ * D12 — "Overdue — add a note". A dated, signed line on an invoice that is
+ * never edited (append-only by trigger, migration 0231): the whole of "where
+ * is it stopped and why" for an expense.
+ */
+export const apInvoiceNote = pgTable(
+  'ap_invoice_note',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    apInvoiceId: uuid('ap_invoice_id')
+      .notNull()
+      .references(() => apInvoice.id),
+    note: text('note').notNull(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('ap_invoice_note_invoice_idx').on(t.apInvoiceId, t.createdAt)],
 );

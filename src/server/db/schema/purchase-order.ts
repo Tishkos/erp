@@ -90,6 +90,10 @@ export const purchaseOrder = pgTable(
     paymentTermsCode: text('payment_terms_code'),
     reference: text('reference'),
     note: text('note'),
+    /** REQ-PM-001 §8 — the project, the element and the cost code the purchase is assigned to; the three together, or none. */
+    projectCode: text('project_code'),
+    wbsCode: text('wbs_code'),
+    costCode: text('cost_code'),
 
     createdBy: uuid('created_by')
       .notNull()

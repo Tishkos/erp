@@ -39,6 +39,7 @@ import * as inventory from '@/server/services/inventory';
 import { parseDecimal } from '@/server/domain/money';
 import { parseQuantity } from '@/server/domain/uom';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
+import { fundLedger, openingFundsAccount } from './funds';
 
 const BAGHDAD = 'BGW';
 const PANEL = 'ITM-PANEL';
@@ -65,7 +66,11 @@ async function createUser(role: string): Promise<ActorContext> {
     `${id}@example.com`,
     'Test User',
   ]);
-  await ownerPool.query(`insert into user_role (user_id, role_code) values ($1,$2)`, [id, role]);
+  // 'accounting_manager+ceo' is a manager who also holds the CEO's invoice
+  // approval (Operations build, blocks 4 and 5).
+  for (const code of role.split('+')) {
+    await ownerPool.query(`insert into user_role (user_id, role_code) values ($1,$2)`, [id, code]);
+  }
   await ownerPool.query(`insert into user_branch_scope (user_id, branch_code) values ($1,$2)`, [
     id,
     BAGHDAD,
@@ -92,7 +97,7 @@ beforeEach(async () => {
   );
 
   clerk = await createUser('accounting_officer');
-  manager = await createUser('accounting_manager');
+  manager = await createUser('accounting_manager+ceo');
 
   accounts = {};
   for (const [role, parent, name] of [
@@ -188,7 +193,6 @@ beforeEach(async () => {
       accountNumber: 'RF-9001',
       currency: 'IQD',
       glAccountId: bankGlAccountId,
-      branchCode: BAGHDAD,
     }),
   );
   const { rows: banked } = await ownerPool.query(
@@ -453,6 +457,18 @@ describe('ops 9 · one offset account must be selected', () => {
   });
 });
 
+/** C-20: the refund leaves a bank that holds it — opening funds, which no test here reads. */
+async function fundRefund() {
+  await fundLedger({
+    glAccountId: bankGlAccountId,
+    contraAccountId: await openingFundsAccount(),
+    amountIqd: '500000.0000',
+    branchCode: BAGHDAD,
+    userId: manager.principal.userId,
+    on: BUY_ON,
+  });
+}
+
 // ---------------------------------------------------------------------------
 describe('ops 9 · the journal follows the offset that was chosen', () => {
   it('credits Accounts Receivable when the customer has not been paid back', async () => {
@@ -469,6 +485,7 @@ describe('ops 9 · the journal follows the offset that was chosen', () => {
   });
 
   it('credits the bank when the money goes back to the customer', async () => {
+    await fundRefund();
     await buy({ quantity: '10', unitPrice: '100000' });
     const invoice = await sell('4', '250000');
     const taken = await takeBack(invoice, '2', {
@@ -484,6 +501,7 @@ describe('ops 9 · the journal follows the offset that was chosen', () => {
   });
 
   it('leaves the receivable alone when the refund came out of the bank', async () => {
+    await fundRefund();
     await buy({ quantity: '10', unitPrice: '100000' });
     const invoice = await sell('4', '250000');
     const taken = await takeBack(invoice, '2', {

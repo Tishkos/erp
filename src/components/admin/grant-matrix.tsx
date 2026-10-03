@@ -2,7 +2,7 @@ import { getTranslations } from 'next-intl/server';
 import { MENU } from '@domain/menu';
 import { PERMISSION_VERBS } from '@domain/permissions';
 import { routeFor, screenRoutes } from '@domain/screens';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { Pill, Submit, SubmitRow, admin as s } from './index';
 
 /**
@@ -34,7 +34,7 @@ export async function GrantMatrix({
     getTranslations('action'),
   ]);
 
-  // Only the accepted phase's screens can be granted: a permission over a
+  // Only the delivered screens can be granted: a permission over a
   // section that does not exist yet would be a promise the system cannot keep.
   const sections = MENU.map((section) => {
     const objects = new Map<string, string[]>();
@@ -59,8 +59,15 @@ export async function GrantMatrix({
         <input key={k} name={k} type="hidden" value={v} />
       ))}
       {/* What this editor showed. The service replaces only these objects, so
-          a grant belonging to a phase that is not on screen survives a save. */}
-      {sections.flatMap((section) => section.rows.map((r) => r.object)).map((object) => (
+          a grant whose screen is not on this page survives a save.
+
+          Once each: an object may be reached from two sections — a partner is
+          a customer in Receivables and a supplier in Payables, an invoice is
+          filed twice, a statement is under Accounting and under Reports — and
+          the rows dedupe within a section but not across them. Twice over, it
+          said the same thing to the service and gave React two children with
+          one key (2026-10-04). */}
+      {[...new Set(sections.flatMap((section) => section.rows.map((r) => r.object)))].map((object) => (
         <input key={object} name="offered" type="hidden" value={object} />
       ))}
       <p className={s.sectionHint}>{t('roles.grants_hint')}</p>

@@ -13,14 +13,15 @@
  */
 
 .page {
-  --ground: #0b1430;
-
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
   min-block-size: 100dvh;
-  padding: 8px;
-  background: var(--surface-sunken);
+  background: var(--w-canvas);
+  color: var(--w-text);
+  font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+  font-size: 0.8rem;
+  color-scheme: light;
 }
 
 /* Brand panel ------------------------------------------------------------- */
@@ -28,24 +29,20 @@
 /* The same blue as the sign-in button, so the panel and the action agree. */
 .brand {
   position: relative;
-  overflow: hidden;
-  border-radius: 24px;
-  color: #fff;
-  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+  padding: 1rem 2rem;
+  border-block-end: 1px solid var(--w-chrome-line);
+  color: var(--w-chrome-text);
+  background: linear-gradient(180deg, var(--w-chrome-a), var(--w-chrome-b));
 }
 
 /* Faint 36px grid, fading out toward the bottom. */
 .brand::before {
-  position: absolute;
-  inset: 0;
-  content: "";
-  background-image:
-    linear-gradient(rgb(255 255 255 / 3.5%) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(255 255 255 / 3.5%) 1px, transparent 1px);
-  pointer-events: none;
-  background-size: 36px 36px;
-  -webkit-mask-image: linear-gradient(to bottom, black, transparent 80%);
-  mask-image: linear-gradient(to bottom, black, transparent 80%);
+  display: none;
 }
 
 /*
@@ -53,24 +50,14 @@
  * spread shadows. Cheaper and crisper than three stacked elements.
  */
 .brand::after {
-  position: absolute;
-  inset-block-start: 17%;
-  inset-inline-end: -20%;
-  inline-size: 70%;
-  aspect-ratio: 1;
-  content: "";
-  border: 1px solid rgb(255 255 255 / 8%);
-  border-radius: 50%;
-  box-shadow:
-    0 0 0 90px rgb(255 255 255 / 2.5%),
-    0 0 0 180px rgb(255 255 255 / 1.8%);
+  display: none;
 }
 
 .brandHeading {
-  position: absolute;
-  z-index: 1;
-  inset-block-start: 40px;
-  inset-inline-start: 40px;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  min-inline-size: 0;
 }
 
 /*
@@ -79,74 +66,70 @@
  * gradient like a watermark rather than a sticker.
  */
 .brandLogo {
-  inline-size: 132px;
+  inline-size: 72px;
   block-size: auto;
-  filter: brightness(0) invert(1) drop-shadow(0 8px 24px rgb(0 0 0 / 35%));
-  opacity: 0.96;
+  flex: 0 0 auto;
 }
 
 .brandStrapline {
-  margin: 18px 0 0;
-  color: rgb(255 255 255 / 72%);
-  font-size: 14px;
-  letter-spacing: 0.01em;
+  margin: 0;
+  max-inline-size: 24rem;
+  color: var(--w-label);
+  font-size: 0.85rem;
+  line-height: 1.5;
 }
 
 .brandFooter {
-  position: absolute;
-  z-index: 1;
-  inset-block-end: 40px;
-  inset-inline: 40px;
   display: grid;
   align-items: stretch;
-  gap: 12px;
+  gap: 1.25rem;
   grid-template-columns: 1fr 1px 1fr;
+  max-inline-size: 30rem;
 }
 
 .brandFooter > i {
   inline-size: 1px;
-  background: rgb(255 255 255 / 25%);
+  background: var(--w-chrome-line);
 }
 
 .pillarTitle {
   margin: 0;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .pillarBody {
-  margin: 4px 0 0;
-  color: rgb(255 255 255 / 67%);
-  font-size: 11px;
+  margin: 0.25rem 0 0;
+  color: var(--w-muted);
+  font-size: 0.7rem;
   line-height: 1.55;
 }
 
 /* Form side --------------------------------------------------------------- */
 
 .formSide {
-  position: relative;
-  z-index: 1;
   display: grid;
-  place-items: center;
+  grid-template-columns: minmax(0, 27rem);
+  grid-template-rows: 1fr auto 1fr auto;
   justify-content: center;
-  padding: 72px 24px;
+  gap: 1rem;
+  padding: 2rem 1.25rem 1rem;
 }
 
 .authorized {
-  position: absolute;
-  inset-block-start: 20px;
-  inset-inline-end: 40px;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 5px;
+  align-self: end;
+  justify-content: center;
+  gap: 0.4rem;
   margin: 0;
-  color: var(--text-muted);
-  font-size: 11px;
+  color: var(--w-muted);
+  font-size: 0.72rem;
 }
 
 .card {
-  inline-size: min(100%, 410px);
-  margin-inline: auto;
+  inline-size: 100%;
+  min-inline-size: 0;
 }
 
 .authorized svg {
@@ -155,20 +138,22 @@
 }
 
 .pageFooter {
-  position: absolute;
-  inset-block-end: 20px;
-  inset-inline: 40px;
+  grid-row: 4;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  color: var(--text-soft);
-  font-size: 10px;
+  gap: 0.75rem;
+  padding-block-start: 0.75rem;
+  border-block-start: 1px solid var(--w-rule);
+  color: var(--w-muted);
+  font-size: 0.7rem;
 }
 
 .pageFooterLang {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 0.3rem;
 }
 
 .pageFooterLang svg {
@@ -176,49 +161,191 @@
   block-size: 12px;
 }
 
+.window {
+  margin: 0;
+}
+
+.heading {
+  margin: 0 0 0.5rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--w-label);
+}
+
+.body {
+  padding: 1.5rem;
+}
+
+.hint {
+  margin: 0 0 1.5rem;
+  color: var(--w-muted);
+  line-height: 1.6;
+}
+
+.form {
+  display: grid;
+  gap: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.label {
+  color: var(--w-label);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.input {
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+  block-size: 2.6rem;
+  padding-inline: 2.5rem;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 0.12rem;
+  background: var(--w-field);
+  color: var(--w-text);
+  font-family: inherit;
+  font-size: 1rem;
+  box-shadow: none;
+}
+
+.input::placeholder {
+  color: var(--w-muted);
+  opacity: 1;
+}
+
+.input:focus-visible {
+  background: var(--w-focus);
+  outline: 2px solid var(--w-title-line);
+  outline-offset: 1px;
+}
+
+.icon {
+  pointer-events: none;
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  display: grid;
+  place-items: center;
+  inline-size: 2.5rem;
+  color: var(--w-muted);
+}
+
+.toggle {
+  position: absolute;
+  inset-block: 1px;
+  inset-inline-end: 1px;
+  display: grid;
+  place-items: center;
+  inline-size: 2.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.12rem;
+  background: transparent;
+  color: var(--w-label);
+  cursor: pointer;
+}
+
+.toggle:hover {
+  background: var(--w-head);
+}
+
+.toggle:focus-visible,
+.submit:focus-visible,
+.remember input:focus-visible {
+  outline: 2px solid var(--w-title-line);
+  outline-offset: 2px;
+}
+
+.remember {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--w-text);
+  cursor: pointer;
+}
+
+.remember input {
+  inline-size: 1rem;
+  block-size: 1rem;
+  margin: 0;
+  accent-color: var(--w-label);
+}
+
+.submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  min-block-size: 2.6rem;
+  inline-size: 100%;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--w-amber-line);
+  border-radius: 0.15rem;
+  background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
+  color: var(--w-accent-ink);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  box-shadow: 0 1px 1px rgb(24 39 31 / 10%);
+  cursor: pointer;
+}
+
+.submit:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+
+.submit:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.support {
+  margin: 1.5rem 0 0;
+  padding-block-start: 1rem;
+  border-block-start: 1px solid var(--w-rule);
+  color: var(--w-muted);
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+
+.error {
+  display: flex;
+  align-items: start;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid #b43d3d;
+  border-radius: 0.12rem;
+  color: #8b2525;
+  background: #fff1ed;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
 /* Below the split, the panel becomes a compact header card above the form. */
 @media (max-width: 52rem) {
-  .page {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-  }
-
   .brand {
-    border-radius: 18px;
-  }
-
-  .brandHeading {
-    position: static;
-    display: grid;
-    justify-items: center;
-    padding: 22px 16px;
-    text-align: center;
-  }
-
-  .brandLogo {
-    inline-size: 96px;
-  }
-
-  .brandStrapline {
-    margin-block-start: 10px;
+    padding: 1rem;
   }
 
   .brandFooter {
     display: none;
   }
 
+  .brandStrapline {
+    font-size: 0.78rem;
+  }
+
   .formSide {
-    padding: 56px 16px 64px;
+    padding: 1.5rem 1rem 1rem;
   }
 
-
-  .authorized {
-    inset-block-start: 14px;
-    inset-inline-end: 16px;
-  }
-
-  .pageFooter {
-    inset-inline: 16px;
-    inset-block-end: 14px;
+  .body {
+    padding: 1.25rem;
   }
 }

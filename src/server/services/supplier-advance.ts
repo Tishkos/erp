@@ -22,20 +22,23 @@
  * grow without limit and never reconcile, and §8.5 asks in terms for settlement
  * and refund. There is no second treatment to choose between.
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   apInvoice,
+  appUser,
   bankCashAccount,
   businessPartner,
   purchaseOrder,
   supplierAdvance,
   supplierAdvanceSettlement,
+  payable,
 } from '../db/schema';
 import { parseDecimal, toDecimalString } from '../domain/money';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
+import * as payables from './payables';
 import * as posting from './posting';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
@@ -219,7 +222,8 @@ export async function approve(tx: Tx, ctx: ActorContext, id: string): Promise<vo
     );
   }
 
-  if (advance.createdBy === ctx.principal.userId) {
+  // the super user approves alone, by direction 2026-10-03 — the company has one approver and a rule nobody can satisfy approves nothing.
+  if (advance.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) {
     throw new SupplierAdvanceStateError(
       advance.advanceNo,
       advance.status,
@@ -238,6 +242,18 @@ export async function approve(tx: Tx, ctx: ActorContext, id: string): Promise<vo
       updatedAt: new Date(),
     })
     .where(eq(supplierAdvance.id, id));
+
+  // §12 — an approved advance can move its payable's rail.
+  if (advance.payableId) {
+    await payables.onAdvanceEvent(tx, {
+      payableId: advance.payableId,
+      eventCode: 'FIELD_CHANGED',
+      advanceId: advance.id,
+      advanceNo: advance.advanceNo,
+      summary: `Advance ${advance.advanceNo} approved`,
+      actorUserId: ctx.principal.userId,
+    });
+  }
 
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
@@ -339,6 +355,18 @@ export async function pay(
     })
     .where(eq(supplierAdvance.id, id));
 
+  // §12 — a deposit paid on a linked payable is the bank lane's news.
+  if (advance.payableId) {
+    await payables.onAdvanceEvent(tx, {
+      payableId: advance.payableId,
+      eventCode: 'DEPOSIT_RECORDED',
+      advanceId: advance.id,
+      advanceNo: advance.advanceNo,
+      summary: `Deposit paid — advance ${advance.advanceNo}, ${toDecimalString(parseDecimal(advance.amountIqd, 4n), 4n)} IQD on ${paidDate}`,
+      actorUserId: ctx.principal.userId,
+    });
+  }
+
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
     action: 'supplier_advance.paid',
@@ -351,6 +379,71 @@ export async function pay(
   });
 
   return { journalEntryId: result.journalEntryId };
+}
+
+/**
+ * §12 — ties an advance to the payable it funds, so the payable's bank lane
+ * can see it. The link is set once; the same-supplier rule is §5.1's.
+ */
+export async function linkToPayable(
+  tx: Tx,
+  ctx: ActorContext,
+  input: { supplierAdvanceId: string; payableId: string },
+): Promise<void> {
+  const advance = await load(tx, input.supplierAdvanceId);
+  await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, {
+    branchCode: advance.branchCode,
+  });
+
+  const [target] = await tx
+    .select({
+      id: payable.id,
+      payableNo: payable.payableNo,
+      supplierId: payable.supplierId,
+      cancelledAt: payable.cancelledAt,
+      closedAt: payable.closedAt,
+    })
+    .from(payable)
+    .where(eq(payable.id, input.payableId))
+    .limit(1);
+  if (!target) throw new Error('No such payable to link this advance to.');
+  if (target.supplierId !== advance.supplierId) {
+    throw new Error(
+      `${target.payableNo} belongs to a different supplier than ${advance.advanceNo}.`,
+    );
+  }
+  if (target.cancelledAt || target.closedAt) {
+    throw new Error(`${target.payableNo} is closed — it takes no further advances.`);
+  }
+  if (advance.payableId && advance.payableId !== target.id) {
+    throw new Error(
+      `${advance.advanceNo} already funds another payable — one advance, one payable.`,
+    );
+  }
+
+  await tx
+    .update(supplierAdvance)
+    .set({ payableId: target.id, updatedAt: new Date() })
+    .where(eq(supplierAdvance.id, advance.id));
+
+  await payables.onAdvanceEvent(tx, {
+    payableId: target.id,
+    eventCode: 'FIELD_CHANGED',
+    advanceId: advance.id,
+    advanceNo: advance.advanceNo,
+    summary: `Advance ${advance.advanceNo} linked — ${toDecimalString(parseDecimal(advance.amountIqd, 4n), 4n)} IQD (${advance.status})`,
+    actorUserId: ctx.principal.userId,
+  });
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'supplier_advance.linked',
+    objectType: PERMISSION_OBJECT,
+    objectId: advance.id,
+    branchCode: advance.branchCode,
+    after: { payableNo: target.payableNo },
+    outcome: 'success',
+  });
 }
 
 /**
@@ -377,6 +470,22 @@ export async function settle(
   await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, {
     branchCode: advance.branchCode,
   });
+  return settleChecked(tx, ctx, advance, input);
+}
+
+/** The settlement itself, once the caller's right to it is established. */
+async function settleChecked(
+  tx: Tx,
+  ctx: ActorContext,
+  advance: Awaited<ReturnType<typeof load>>,
+  input: {
+    supplierAdvanceId: string;
+    apInvoiceId: string;
+    amountIqd: bigint;
+    settlementDate: string;
+    automatic?: boolean;
+  },
+): Promise<{ settlementId: string; journalEntryId: string; advanceBalance: bigint }> {
 
   if (advance.status !== 'posted' && advance.status !== 'partially_executed') {
     throw new SupplierAdvanceStateError(
@@ -516,6 +625,18 @@ export async function settle(
     })
     .where(eq(apInvoice.id, input.apInvoiceId));
 
+  // §12 — a settled advance moves the linked payable's rail too.
+  if (advance.payableId) {
+    await payables.onAdvanceEvent(tx, {
+      payableId: advance.payableId,
+      eventCode: 'FIELD_CHANGED',
+      advanceId: advance.id,
+      advanceNo: advance.advanceNo,
+      summary: `Advance ${advance.advanceNo} settled against an invoice`,
+      actorUserId: ctx.principal.userId,
+    });
+  }
+
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
     action: 'supplier_advance.settled',
@@ -578,6 +699,68 @@ export async function settleAutomatically(
   });
 
   return { settlementId: result.settlementId, amountIqd };
+}
+
+/**
+ * REQ-FIX-001 FX6 — a deposit is applied to the invoice it was paid ahead of.
+ *
+ * Confirming a payment before the import's invoice posts pays a supplier
+ * advance (§15.4), linked to the import; nothing applied it when the invoice arrived, so the import
+ * read *Fully paid* while its invoice stayed part-owed and the supplier's
+ * account showed the debt **and** the unapplied advance. Called by
+ * `ap-invoice.post` in the posting transaction: every paid advance of the
+ * same supplier held against this invoice's import is
+ * applied, oldest first, until the invoice owes nothing or the advances are
+ * spent — Dr Supplier A/P, Cr Supplier Advance, dated the invoice's day.
+ *
+ * Authorised by the posting it belongs to: whoever may post the invoice
+ * posts the consequences of its posting, as confirming an application posts
+ * the supplier payment it makes.
+ */
+export async function applyToPostedInvoice(
+  tx: Tx,
+  ctx: ActorContext,
+  apInvoiceId: string,
+): Promise<{ advanceNo: string; amountIqd: bigint }[]> {
+  const [invoice] = await tx.select().from(apInvoice).where(eq(apInvoice.id, apInvoiceId)).limit(1);
+  if (!invoice || (invoice.status !== 'posted' && invoice.status !== 'partially_executed')) return [];
+  // The deposits of the payable this invoice belongs to — an import's, paid
+  // through its payment applications. An advance raised by hand against a
+  // purchase order stays for the accountant to settle (§8.5, manual or
+  // automatic, on the advance).
+  if (!invoice.payableId) return [];
+
+  const held = await tx
+    .select()
+    .from(supplierAdvance)
+    .where(
+      and(
+        eq(supplierAdvance.supplierId, invoice.supplierId),
+        inArray(supplierAdvance.status, ['posted', 'partially_executed']),
+        eq(supplierAdvance.payableId, invoice.payableId),
+      ),
+    )
+    .orderBy(asc(supplierAdvance.paidDate), asc(supplierAdvance.createdAt))
+    .for('update');
+
+  const applied: { advanceNo: string; amountIqd: bigint }[] = [];
+  for (const advance of held) {
+    const [current] = await tx.select().from(apInvoice).where(eq(apInvoice.id, apInvoiceId)).limit(1);
+    const owed = invoiceBalance(current!);
+    if (owed <= 0n) break;
+    const available = availableBalance(advance);
+    const amountIqd = available < owed ? available : owed;
+    if (amountIqd <= 0n) continue;
+    await settleChecked(tx, ctx, advance, {
+      supplierAdvanceId: advance.id,
+      apInvoiceId,
+      amountIqd,
+      settlementDate: invoice.invoiceDate,
+      automatic: true,
+    });
+    applied.push({ advanceNo: advance.advanceNo, amountIqd });
+  }
+  return applied;
 }
 
 /**
@@ -736,4 +919,98 @@ export async function settlementHistory(tx: Tx, supplierAdvanceId: string) {
 export async function view(tx: Tx, id: string) {
   const advance = await load(tx, id);
   return { advance, balance: availableBalance(advance) };
+}
+
+// ---------------------------------------------------------------------------
+// REQ-AP-001 Stage 3 (§21.1) — the Advances screen reads these.
+// ---------------------------------------------------------------------------
+
+/** The register: every advance, newest first, with its order, supplier and import. */
+export async function listForScreen(tx: Tx) {
+  return tx
+    .select({
+      id: supplierAdvance.id,
+      advanceNo: supplierAdvance.advanceNo,
+      status: supplierAdvance.status,
+      orderNo: purchaseOrder.orderNo,
+      supplierCode: businessPartner.code,
+      supplierName: businessPartner.legalName,
+      payableNo: payable.payableNo,
+      requestDate: sql<string>`${supplierAdvance.requestDate}::text`,
+      paidDate: sql<string | null>`${supplierAdvance.paidDate}::text`,
+      currency: supplierAdvance.currency,
+      amountIqd: supplierAdvance.amountIqd,
+      amountTxn: supplierAdvance.amountTxn,
+      settledAmountIqd: supplierAdvance.settledAmountIqd,
+      refundedAmountIqd: supplierAdvance.refundedAmountIqd,
+      branchCode: supplierAdvance.branchCode,
+    })
+    .from(supplierAdvance)
+    .innerJoin(businessPartner, eq(businessPartner.id, supplierAdvance.supplierId))
+    .innerJoin(purchaseOrder, eq(purchaseOrder.id, supplierAdvance.purchaseOrderId))
+    .leftJoin(payable, eq(payable.id, supplierAdvance.payableId))
+    .orderBy(sql`${supplierAdvance.createdAt} desc`);
+}
+
+export async function viewByNo(tx: Tx, advanceNo: string) {
+  const [row] = await tx
+    .select({ id: supplierAdvance.id })
+    .from(supplierAdvance)
+    .where(eq(supplierAdvance.advanceNo, advanceNo))
+    .limit(1);
+  if (!row) throw new SupplierAdvanceNotFoundError(advanceNo);
+  const advance = await load(tx, row.id);
+  const [order] = await tx
+    .select({ orderNo: purchaseOrder.orderNo })
+    .from(purchaseOrder)
+    .where(eq(purchaseOrder.id, advance.purchaseOrderId))
+    .limit(1);
+  const [supplier] = await tx
+    .select({ code: businessPartner.code, name: businessPartner.legalName })
+    .from(businessPartner)
+    .where(eq(businessPartner.id, advance.supplierId))
+    .limit(1);
+  const [owner] = advance.payableId
+    ? await tx
+        .select({ payableNo: payable.payableNo })
+        .from(payable)
+        .where(eq(payable.id, advance.payableId))
+        .limit(1)
+    : [];
+  const people = await tx
+    .select({ id: appUser.id, name: appUser.displayName })
+    .from(appUser)
+    .where(
+      inArray(
+        appUser.id,
+        [advance.createdBy, advance.approvedBy, advance.paidBy].filter((v): v is string => Boolean(v)),
+      ),
+    );
+  const nameOf = (id: string | null) => people.find((p) => p.id === id)?.name ?? null;
+  return {
+    advance,
+    balance: availableBalance(advance),
+    orderNo: order?.orderNo ?? null,
+    supplier: supplier ?? null,
+    payableNo: owner?.payableNo ?? null,
+    requestedBy: nameOf(advance.createdBy),
+    approvedBy: nameOf(advance.approvedBy),
+    paidBy: nameOf(advance.paidBy),
+    settlements: await settlementHistory(tx, advance.id),
+  };
+}
+
+/** Orders an advance may be paid against: committed, not cancelled (§8.5). */
+export async function orderChoices(tx: Tx) {
+  return tx
+    .select({
+      id: purchaseOrder.id,
+      orderNo: purchaseOrder.orderNo,
+      supplierName: businessPartner.legalName,
+      branchCode: purchaseOrder.branchCode,
+    })
+    .from(purchaseOrder)
+    .innerJoin(businessPartner, eq(businessPartner.id, purchaseOrder.supplierId))
+    .where(sql`${purchaseOrder.status} not in ('draft', 'cancelled', 'closed', 'rejected')`)
+    .orderBy(sql`${purchaseOrder.createdAt} desc`);
 }

@@ -31,12 +31,14 @@ import {
   inventoryMovement,
   item,
   businessPartner,
+  customerCreditMemo,
   deliveryNote,
   deliveryNoteLine,
   department,
   journalEntry,
   salesOrder,
   salesOrderLine,
+  salesReturn,
   warehouse,
 } from '../db/schema';
 import { formatQuantity, parseQuantity } from '../domain/uom';
@@ -66,6 +68,7 @@ import * as posting from './posting';
 import { assertResultAccount, assertStatementAccount } from '../domain/posting-map';
 import * as dimensions from './dimensions';
 import * as inventory from './inventory';
+import * as journal from './journal';
 import * as statuses from './statuses';
 import * as terms from './payment-terms';
 import * as warranty from './warranty';
@@ -88,6 +91,19 @@ export class DeliveryNotInvoiceableError extends Error {
         'given the customer anything to be billed for.',
     );
     this.name = 'DeliveryNotInvoiceableError';
+  }
+}
+
+export class BuyerNotACustomerError extends Error {
+  readonly code = 'BUYER_NOT_A_CUSTOMER';
+
+  constructor(readonly partnerCode: string) {
+    super(
+      `${partnerCode} does not hold the Customer role, so a Sales Invoice cannot be raised for them (§6). ` +
+        'A supplier who buys from us is the same record with both roles — grant the Customer role on the ' +
+        'partner record and the sale goes through as any other.',
+    );
+    this.name = 'BuyerNotACustomerError';
   }
 }
 
@@ -696,11 +712,30 @@ export async function createDirect(
   }
 
   const [customer] = await tx
-    .select({ id: businessPartner.id, paymentTermsCode: businessPartner.paymentTermsCode })
+    .select({
+      id: businessPartner.id,
+      code: businessPartner.code,
+      isCustomer: businessPartner.isCustomer,
+      paymentTermsCode: businessPartner.paymentTermsCode,
+    })
     .from(businessPartner)
     .where(eq(businessPartner.id, input.customerId))
     .limit(1);
   if (!customer) throw new Error(`No customer with id '${input.customerId}'.`);
+
+  /*
+   * §6 — whoever is being billed is being sold to, and only a Customer can be
+   * sold to. The Sales Order asks the same question before it will take an
+   * order; this document is the first in its own chain, so it has to ask it
+   * itself rather than inherit the answer.
+   *
+   * A supplier buying from us is not an exception to the rule, it is the case
+   * the rule is written for: one record, both roles. Without this the invoice
+   * posted, the stock left the warehouse, and the partner appeared on a
+   * customer statement while `is_customer` was still false — a receivable
+   * against somebody the master data says we never sell to.
+   */
+  if (!customer.isCustomer) throw new BuyerNotACustomerError(customer.code);
 
   const dueDate =
     input.dueDate ?? (await terms.dueDateOn(tx, customer.paymentTermsCode ?? null, input.invoiceDate));
@@ -769,11 +804,20 @@ export async function createDirect(
     netTotal += net;
 
     const [stockItem] = await tx
-      .select({ name: item.name })
+      .select({ name: item.name, baseUomCode: item.baseUomCode })
       .from(item)
       .where(eq(item.code, line.itemCode))
       .limit(1);
     if (!stockItem) throw new DirectSalesLineError(index + 1, `names no item '${line.itemCode}'.`);
+    // REQ-FIX-001 FIX-4 (D-FX-8): a sale is counted in the item's base unit —
+    // the quantity leaves the warehouse as it is written — so a line may not
+    // name another unit and be issued as if it were the base.
+    if (line.uomCode && line.uomCode !== stockItem.baseUomCode) {
+      throw new DirectSalesLineError(
+        index + 1,
+        `sells ${line.itemCode} in ${line.uomCode}; a sale is written in the item's base unit, ${stockItem.baseUomCode}.`,
+      );
+    }
 
     await tx.insert(arInvoiceLine).values({
       arInvoiceId: created!.id,
@@ -785,7 +829,7 @@ export async function createDirect(
       // from the master rather than taken from the caller, so an invoice
       // cannot name an item one thing and the chart another.
       description: line.description ?? stockItem.name,
-      uomCode: line.uomCode ?? 'EA',
+      uomCode: stockItem.baseUomCode,
       quantity: formatQuantity(line.quantity),
       unitPrice: toDecimalString(line.unitPriceIqd, 4n),
       discountAmountIqd: discount === 0n ? null : toDecimalString(discount, 4n),
@@ -1348,6 +1392,184 @@ export async function post(
   });
 
   return { journalEntryId: result.journalEntryId };
+}
+
+// ---------------------------------------------------------------------------
+// Reverse — posted → reversed (§3.2, §14.3; decided 2026-09-27)
+// ---------------------------------------------------------------------------
+
+export class ArInvoiceNotReversibleError extends Error {
+  readonly code = 'AR_INVOICE_NOT_REVERSIBLE';
+  constructor(
+    readonly invoiceNo: string,
+    detail: string,
+  ) {
+    super(`${invoiceNo} cannot be reversed: ${detail}`);
+    this.name = 'ArInvoiceNotReversibleError';
+  }
+}
+
+/**
+ * Undoes a posted Sales Invoice, whole.
+ *
+ * A posted invoice is never edited (§3.2). Until now the only correction was
+ * a Sales Return, which is the right document when the customer sends goods
+ * back and the wrong one when the invoice itself was a mistake — the wrong
+ * warehouse, the wrong quantity, the wrong customer. A return books Sales
+ * Returns and leaves the original standing; a reversal says the original
+ * should not have happened.
+ *
+ * Three things are undone together, in one transaction, or none is:
+ *
+ *   the journal   mirrored line for line by `journal.reverse`, which links the
+ *                 two permanently and writes the subledger the other way, so
+ *                 the customer's statement no longer shows the sale;
+ *   the stock     every delivery movement reversed through the inventory
+ *                 engine, which puts the units back on the exact FIFO layers
+ *                 they were taken from at the cost they left at (§9.2);
+ *   the document  status reversed, with who, when and why.
+ *
+ * And it is refused when anything has been built on the invoice: money
+ * received against it, a return raised from it, or a credit memo. Those are
+ * documents in their own right, and a reversal that swept them away would be
+ * the edit §3.2 forbids under another name. Undo them first, in their own
+ * documents, and the invoice can then be reversed.
+ */
+export async function reverse(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  input: { readonly reason: string },
+): Promise<{ reversalEntryNo: string; movementsReversed: number }> {
+  await lockInvoice(tx, id);
+  const invoice = await load(tx, id);
+
+  await authz.authorize(ctx.principal, 'reverse_cancel', PERMISSION_OBJECT, {
+    branchCode: invoice.branchCode,
+    objectId: id,
+  });
+
+  const reason = input.reason.trim();
+  if (!reason) {
+    throw new ArInvoiceNotReversibleError(
+      invoice.invoiceNo,
+      'a reversal records why the invoice was wrong (§14.3). Give a reason.',
+    );
+  }
+
+  // The specific refusals first, the status machine last: a part-paid invoice
+  // is `partially_executed`, and "reverse the receipt first" is the useful
+  // sentence, not "cannot move from partially_executed". Returns and memos
+  // before the allocation, because a settled return is *also* an allocation
+  // and the return is the thing the reader has to go and look at.
+  const [openReturn] = await tx
+    .select({ returnNo: salesReturn.returnNo, status: salesReturn.status })
+    .from(salesReturn)
+    .where(
+      and(
+        eq(salesReturn.arInvoiceId, id),
+        sql`${salesReturn.status} not in ('rejected', 'cancelled')`,
+      ),
+    )
+    .limit(1);
+  if (openReturn) {
+    throw new ArInvoiceNotReversibleError(
+      invoice.invoiceNo,
+      `Sales Return ${openReturn.returnNo} was raised against it. An invoice with a return behind it is corrected through the return, not undone.`,
+    );
+  }
+
+  const [memo] = await tx
+    .select({ memoNo: customerCreditMemo.memoNo })
+    .from(customerCreditMemo)
+    .where(eq(customerCreditMemo.arInvoiceId, id))
+    .limit(1);
+  if (memo) {
+    throw new ArInvoiceNotReversibleError(
+      invoice.invoiceNo,
+      `Credit Memo ${memo.memoNo} was raised against it, so the customer has already been credited for part of it.`,
+    );
+  }
+  if (parseDecimal(invoice.allocatedIqd, 4n) !== 0n) {
+    throw new ArInvoiceNotReversibleError(
+      invoice.invoiceNo,
+      `${invoice.allocatedIqd} IQD has been received against it. Reverse the receipt first; the invoice can then be reversed.`,
+    );
+  }
+
+  await statuses.assertTransitionAllowed(tx, DOCUMENT_TYPE, invoice.status, 'reversed', reason);
+  if (!invoice.journalEntryId) {
+    throw new ArInvoiceNotReversibleError(invoice.invoiceNo, 'it has no journal to reverse.');
+  }
+
+  // The stock first: putting units back is what can fail (a damaged warehouse
+  // refusing, a layer gone), and a journal reversed beside stock that stayed
+  // sold would be exactly the disagreement §9.9 forbids.
+  const deliveries = await tx
+    .select({ id: inventoryMovement.id })
+    .from(inventoryMovement)
+    .where(
+      and(
+        eq(inventoryMovement.sourceDocumentType, DOCUMENT_TYPE),
+        eq(inventoryMovement.sourceDocumentId, id),
+        eq(inventoryMovement.kind, 'delivery'),
+      ),
+    )
+    .orderBy(asc(inventoryMovement.createdAt));
+
+  for (const movement of deliveries) {
+    await inventory.reverseMovement(tx, ctx, movement.id, reason);
+  }
+
+  const reversal = await journal.reverse(tx, ctx, invoice.journalEntryId, { reason });
+
+  // What the delivery and the order were credited with when this posted.
+  const lines = await tx
+    .select()
+    .from(arInvoiceLine)
+    .where(eq(arInvoiceLine.arInvoiceId, id));
+  for (const line of lines) {
+    if (!line.deliveryNoteLineId || !line.salesOrderLineId) continue;
+    await tx
+      .update(deliveryNoteLine)
+      .set({ invoicedQuantity: sql`${deliveryNoteLine.invoicedQuantity} - ${line.quantity}` })
+      .where(eq(deliveryNoteLine.id, line.deliveryNoteLineId));
+    await tx
+      .update(salesOrderLine)
+      .set({ invoicedQuantity: sql`${salesOrderLine.invoicedQuantity} - ${line.quantity}` })
+      .where(eq(salesOrderLine.id, line.salesOrderLineId));
+  }
+
+  const now = new Date();
+  await tx
+    .update(arInvoice)
+    .set({
+      status: 'reversed',
+      reversedBy: ctx.principal.userId,
+      reversedAt: now,
+      reversalReason: reason,
+      updatedAt: now,
+    })
+    .where(eq(arInvoice.id, id));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'ar_invoice.reversed',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: invoice.branchCode,
+    outcome: 'success',
+    before: { status: invoice.status, journalEntryId: invoice.journalEntryId },
+    after: {
+      status: 'reversed',
+      reversalEntryNo: reversal.entryNo,
+      movementsReversed: deliveries.length,
+    },
+    reason,
+    relatedObjectId: reversal.id,
+  });
+
+  return { reversalEntryNo: reversal.entryNo, movementsReversed: deliveries.length };
 }
 
 // ---------------------------------------------------------------------------

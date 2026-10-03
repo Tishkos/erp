@@ -46,8 +46,8 @@ async function createUser(role: string): Promise<ActorContext> {
 
 const scope = (ctx: ActorContext) => ({ userId: ctx.principal.userId, branchCode: BAGHDAD });
 
-const make = (ctx: ActorContext, code: string, name: string) =>
-  withScope(scope(ctx), (tx) => warehouses.create(tx, ctx, { code, name }));
+const make = (ctx: ActorContext, name: string) =>
+  withScope(scope(ctx), (tx) => warehouses.create(tx, ctx, { name }));
 
 const listed = (ctx: ActorContext) => withScope(scope(ctx), (tx) => warehouses.list(tx));
 
@@ -60,13 +60,12 @@ beforeEach(async () => {
 
 // ---------------------------------------------------------------------------
 describe('ops 7 · setting up a warehouse', () => {
-  it('takes a name and a code, and nothing else', async () => {
-    await make(manager, 'WH-EAST', 'East Warehouse');
+  it('takes a name, and the system gives it its code', async () => {
+    const east = await make(manager, 'East Warehouse');
+    expect(east.code).toMatch(/^WH-\d{4}$/);
 
     const rows = await listed(manager);
-    const created = rows.find((row) => row.code === 'WH-EAST');
-    expect(created).toMatchObject({
-      code: 'WH-EAST',
+    expect(rows.find((row) => row.code === east.code)).toMatchObject({
       name: 'East Warehouse',
       branchCode: BAGHDAD,
       active: true,
@@ -76,36 +75,32 @@ describe('ops 7 · setting up a warehouse', () => {
   it('puts it in the branch of whoever made it', async () => {
     // The branch is not on the form and cannot be absent from the record, so
     // it comes from the person. This is the assertion that says so.
-    await make(manager, 'WH-EAST', 'East Warehouse');
-    const [row] = (await listed(manager)).filter((r) => r.code === 'WH-EAST');
+    const east = await make(manager, 'East Warehouse');
+    const [row] = (await listed(manager)).filter((r) => r.code === east.code);
     expect(row!.branchCode).toBe(manager.branchCode);
   });
 
-  it('upper-cases the code, so WH-east and WH-EAST are one warehouse', async () => {
-    await make(manager, 'wh-east', 'East Warehouse');
-    expect((await listed(manager)).some((row) => row.code === 'WH-EAST')).toBe(true);
-
-    await expect(make(manager, 'WH-EAST', 'Another')).rejects.toThrow(/already exists/i);
+  it('mints a different code every time, so two warehouses can never share one', async () => {
+    const first = await make(manager, 'East Warehouse');
+    const second = await make(manager, 'East Warehouse');
+    expect(second.code).not.toBe(first.code);
   });
 
-  it('refuses a code that is already taken, and says what holds it', async () => {
-    await make(manager, 'WH-EAST', 'East Warehouse');
-
-    // A code is what every stock movement names. Two warehouses sharing one
-    // would put stock in a place that is two places.
-    await expect(make(manager, 'WH-EAST', 'East Annexe')).rejects.toThrow(
-      /already exists — it is 'East Warehouse'/,
+  it('takes no code from the caller, even one slipped into the request', async () => {
+    const made = await withScope(scope(manager), (tx) =>
+      warehouses.create(tx, manager, { name: 'East', code: 'TYPED' } as never),
     );
+    expect(made.code).toMatch(/^WH-\d{4}$/);
+    expect((await listed(manager)).some((row) => row.code === 'TYPED')).toBe(false);
   });
 
-  it('refuses a blank name or a blank code', async () => {
-    await expect(make(manager, 'WH-X', '   ')).rejects.toThrow(/needs a name/i);
-    await expect(make(manager, '   ', 'Nameless')).rejects.toThrow(/needs a code/i);
+  it('refuses a blank name', async () => {
+    await expect(make(manager, '   ')).rejects.toThrow(/needs a name/i);
   });
 
   it('refuses somebody without the verb', async () => {
     // The officer may look at the list and may not add to it.
-    await expect(make(officer, 'WH-EAST', 'East Warehouse')).rejects.toThrow();
+    await expect(make(officer, 'East Warehouse')).rejects.toThrow();
     expect(await listed(officer)).toBeDefined();
   });
 });
@@ -113,42 +108,40 @@ describe('ops 7 · setting up a warehouse', () => {
 // ---------------------------------------------------------------------------
 describe('ops 7 · changing one afterwards', () => {
   it('renames it without touching its code', async () => {
-    await make(manager, 'WH-EAST', 'East Warehouse');
-    await withScope(scope(manager), (tx) =>
-      warehouses.rename(tx, manager, 'WH-EAST', 'Eastern Depot'),
-    );
+    const { code } = await make(manager, 'East Warehouse');
+    await withScope(scope(manager), (tx) => warehouses.rename(tx, manager, code, 'Eastern Depot'));
 
-    const [row] = (await listed(manager)).filter((r) => r.code === 'WH-EAST');
+    const [row] = (await listed(manager)).filter((r) => r.code === code);
     expect(row!.name).toBe('Eastern Depot');
   });
 
   it('closes one without deleting it', async () => {
-    await make(manager, 'WH-EAST', 'East Warehouse');
+    const { code } = await make(manager, 'East Warehouse');
     // Closing costs a reason — "why" is the question somebody asks a year
     // later, and the service has required it since the warehouses kept their
     // history.
     await withScope(scope(manager), (tx) =>
-      warehouses.setActive(tx, manager, 'WH-EAST', false, 'The depot lease ended.'),
+      warehouses.setActive(tx, manager, code, false, 'The depot lease ended.'),
     );
 
     // Gone from the pickers, still in the record — the movements that put stock
     // there point at this row, and where the stock was is part of the history.
     const picker = await withScope(scope(manager), (tx) => warehouses.listActive(tx));
-    expect(picker.some((row) => row.code === 'WH-EAST')).toBe(false);
+    expect(picker.some((row) => row.code === code)).toBe(false);
 
     const rows = await listed(manager);
-    expect(rows.find((row) => row.code === 'WH-EAST')).toMatchObject({ active: false });
+    expect(rows.find((row) => row.code === code)).toMatchObject({ active: false });
   });
 
   it('reopens one that was closed', async () => {
-    await make(manager, 'WH-EAST', 'East Warehouse');
+    const { code } = await make(manager, 'East Warehouse');
     await withScope(scope(manager), (tx) =>
-      warehouses.setActive(tx, manager, 'WH-EAST', false, 'Closed for stocktaking.'),
+      warehouses.setActive(tx, manager, code, false, 'Closed for stocktaking.'),
     );
-    await withScope(scope(manager), (tx) => warehouses.setActive(tx, manager, 'WH-EAST', true));
+    await withScope(scope(manager), (tx) => warehouses.setActive(tx, manager, code, true));
 
     const picker = await withScope(scope(manager), (tx) => warehouses.listActive(tx));
-    expect(picker.some((row) => row.code === 'WH-EAST')).toBe(true);
+    expect(picker.some((row) => row.code === code)).toBe(true);
   });
 
   it('refuses to rename one that does not exist', async () => {
@@ -158,7 +151,7 @@ describe('ops 7 · changing one afterwards', () => {
   });
 
   it('offers only ordinary warehouses to a picker', async () => {
-    await make(manager, 'WH-EAST', 'East Warehouse');
+    const { code } = await make(manager, 'East Warehouse');
     await ownerPool.query(
       `insert into warehouse (code, name, branch_code, warehouse_type, is_transit)
        values ('WH-TRANSIT','In Transit',$1,'transit',true)`,
@@ -170,6 +163,66 @@ describe('ops 7 · changing one afterwards', () => {
     // warehouse would leave them unable to see why their stock vanished.
     const picker = await withScope(scope(manager), (tx) => warehouses.listActive(tx));
     expect(picker.some((row) => row.code === 'WH-TRANSIT')).toBe(false);
-    expect(picker.some((row) => row.code === 'WH-EAST')).toBe(true);
+    expect(picker.some((row) => row.code === code)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('ops 7 · the warehouses block 8 needs', () => {
+  const ensure = (ctx: ActorContext) =>
+    withScope(scope(ctx), (tx) => warehouses.ensureStageWarehouses(tx, ctx));
+
+  it('makes one warehouse for each shipment stage', async () => {
+    const made = await ensure(manager);
+
+    expect(made.map((entry) => entry.stage)).toEqual(['in_process', 'on_board', 'on_port']);
+    expect(made.map((entry) => entry.name)).toEqual(['In Process', 'On Board', 'On Port']);
+    expect(made.every((entry) => entry.created)).toBe(true);
+    // Minted like any other warehouse's — Critical Rule 1 has no exception for
+    // a warehouse the system asks for rather than a person.
+    expect(made.every((entry) => /^WH-\d{4}$/.test(entry.code))).toBe(true);
+  });
+
+  it('makes them transit, and keeps them out of the pickers stock is put away from (REQ-AP-001 §17.4)', async () => {
+    const made = await ensure(manager);
+    const inProcess = made.find((entry) => entry.stage === 'in_process')!;
+
+    // Since REQ-AP-001 Stage 5 (0234) goods at sea are owned, not available:
+    // a stage warehouse is a transit warehouse. Nobody books into it by hand —
+    // an import invoice puts its stock lines there itself, and the container
+    // receipt takes them out — so the everyday picker leaves it out, while the
+    // stock reports still show it.
+    const picker = await withScope(scope(manager), (tx) => warehouses.listActive(tx));
+    expect(picker.some((row) => row.code === inProcess.code)).toBe(false);
+    const reports = await withScope(scope(manager), (tx) => warehouses.listForReports(tx));
+    expect(reports.find((row) => row.code === inProcess.code)?.warehouseType).toBe('transit');
+  });
+
+  it('creates nothing the second time, so it can be run on a live database', async () => {
+    const first = await ensure(manager);
+    const again = await ensure(manager);
+
+    expect(again.every((entry) => entry.created)).toBe(false);
+    expect(again.map((entry) => entry.code)).toEqual(first.map((entry) => entry.code));
+
+    const stages = await withScope(scope(manager), (tx) => warehouses.stageWarehouses(tx));
+    expect(stages).toHaveLength(3);
+  });
+
+  it('keeps a stage a company renamed its own way', async () => {
+    const [inProcess] = await ensure(manager);
+    await withScope(scope(manager), (tx) =>
+      warehouses.rename(tx, manager, inProcess!.code, 'Customs Clearance'),
+    );
+
+    // Idempotent on the stage, not on the name: a second run must not decide
+    // the renamed warehouse is a different one and make a second In Process.
+    const again = await ensure(manager);
+    expect(again[0]).toMatchObject({ code: inProcess!.code, name: 'Customs Clearance', created: false });
+    expect(await withScope(scope(manager), (tx) => warehouses.stageWarehouses(tx))).toHaveLength(3);
+  });
+
+  it('refuses somebody who may not create a warehouse', async () => {
+    await expect(ensure(officer)).rejects.toThrow();
   });
 });

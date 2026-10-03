@@ -43,20 +43,25 @@ npm-debug.log*
 # password in plaintext.
 vps.md
 
-# Runtime attachment storage — uploaded documents, not source.
-var/
-
-# Design references and phase PDFs kept beside the project, not part of it.
-Dashboard.png
-DashboardNew.png
+# Local reference images and PDFs, not application assets.
+Dashboard*.png
 UI.png
 *.jpeg
+ERP Build Map*.pdf
 QS ERP Phase*.pdf
-
-# Working briefs from the sponsor — read, acted on, and kept out of the repo.
-cleandesign.md
 shots/
+
+# Runtime attachment storage — uploaded documents, not source.
+var/
 
 # Agent worktrees and scratch space — tooling, not the product.
 .claude/worktrees/
 .devin/
+
+# dev server logs, captured by the npm script, not part of the app
+.dev-server.err
+.dev-server.out
+
+# Tauri desktop shell — build output only; the source lives in src-tauri/
+src-tauri/target/
+src-tauri/gen/

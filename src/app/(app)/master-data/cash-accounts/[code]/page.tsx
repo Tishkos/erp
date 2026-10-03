@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { AccountRecord } from '@/components/admin/bank-cash-account';
 import type { SearchParams } from '@/components/admin/params';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 
 /** One cash account — Phase 2 requirement 6. */
 export const dynamic = 'force-dynamic';

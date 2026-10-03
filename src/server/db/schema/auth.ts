@@ -16,6 +16,7 @@
  */
 import { sql } from 'drizzle-orm';
 import {
+  bigserial,
   boolean,
   check,
   index,
@@ -149,3 +150,36 @@ export const userMfa = pgTable(
   },
   (t) => [check('user_mfa_secret_present', sql`length(${t.secret}) >= 16`)],
 );
+
+/**
+ * REQ-HARDEN-001 HD3 — every sign-in, succeeded or refused, with where it
+ * came from. The lockout counts the failures here (D-HD-3: five in fifteen
+ * minutes for one account from one address); the login-history screen reads
+ * it. Written and read, never changed.
+ */
+export const signInAttempt = pgTable(
+  'sign_in_attempt',
+  {
+    id: bigserial('id', { mode: 'bigint' }).primaryKey(),
+    email: text('email').notNull(),
+    userId: uuid('user_id').references(() => appUser.id),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    outcome: text('outcome').$type<SignInOutcome>().notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('sign_in_attempt_email_idx').on(t.email, t.occurredAt),
+    index('sign_in_attempt_ip_idx').on(t.ipAddress, t.occurredAt),
+  ],
+);
+
+export type SignInOutcome =
+  | 'success'
+  | 'failed'
+  | 'locked'
+  | 'temporary_expired'
+  | 'second_factor_required'
+  | 'second_factor_wrong'
+  | 'second_factor_not_enrolled'
+  | 'inactive';

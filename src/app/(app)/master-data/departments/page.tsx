@@ -16,7 +16,6 @@ import {
   ListToolbar,
   matches,
 } from '@/components/admin';
-import { AutoCode } from '@/components/admin/auto-code';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -54,10 +53,9 @@ export default async function DepartmentsPage({ searchParams }: { searchParams: 
             openOnLoad={Boolean(outcome.error)}
             title={t('departments.new')}
           >
-              <AutoCode codeId="f-code" mode="upper" nameId="f-name" />
+              <p className="muted">{t('minted_code_note')}</p>
               <Form action={createDepartment}>
                 <Grid>
-                  <Field hint={t('code_auto_hint')} label={t('code')} name="code" />
                   <Field label={t('name')} name="name" required requiredLabel={t('required_hint')} />
                   <Select
                     emptyLabel={t('departments.no_parent')}

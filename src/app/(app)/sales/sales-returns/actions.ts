@@ -5,6 +5,7 @@ import { runAdmin, runAdminAndReturn, text, withQuery } from '@/server/admin-act
 import { parseQuantity } from '@domain/uom';
 import * as sr from '@/server/services/sales-return';
 import { LINE_ROWS } from './lines';
+import { businessToday } from '@/server/domain/business-date';
 
 const LIST = '/sales/sales-returns';
 const record = (returnNo: string) => `${LIST}/${encodeURIComponent(returnNo)}`;
@@ -65,17 +66,29 @@ export async function receiveReturn(formData: FormData): Promise<void> {
 /**
  * Appendix B — Inspected, then Accepted.
  *
- * The whole quantity, back to the warehouse it was sold from, because block 9
- * asks for one warehouse per line and nothing about splitting a return between
+ * The whole quantity, into the warehouse chosen on each line — block 9 asks
+ * for one warehouse per line and nothing about splitting a return between
  * dispositions. Quarantine and damaged-goods routing exists in the service for
  * §7.5 and is not part of what the sponsor asked for here.
  */
 export async function acceptReturn(formData: FormData): Promise<void> {
   const returnNo = text(formData, 'return_no');
   const id = text(formData, 'id');
-  const warehouseCode = text(formData, 'warehouse_code');
 
   await runAdminAndReturn(async (tx, ctx) => {
+    // One step for the person accepting: goods that were raised as a return
+    // and are being accepted have, by that act, been received. Block 9
+    // describes one return document, not a receive-then-accept workflow.
+    const raised = await sr.view(tx, id);
+    if (raised.status === 'submitted') {
+      await sr.receiveGoods(tx, ctx, id, {
+        receivedOn: businessToday(),
+        lines: raised.lines.map((line) => ({
+          salesReturnLineId: line.id,
+          quantity: parseQuantity(line.requestedQuantity),
+        })),
+      });
+    }
     const document = await sr.view(tx, id);
     await sr.inspect(
       tx,
@@ -85,10 +98,13 @@ export async function acceptReturn(formData: FormData): Promise<void> {
         salesReturnLineId: line.id,
         acceptedQuantity: parseQuantity(line.receivedQuantity ?? line.requestedQuantity),
         disposition: 'saleable' as const,
-        destinationWarehouseCode: warehouseCode,
+        // The warehouse chosen on the line (block 9).
+        destinationWarehouseCode: text(formData, `warehouse_code_${line.id}`).trim(),
       })),
     );
-    return sr.accept(tx, ctx, id);
+    // The goods back on the shelf and the customer credited, together —
+    // block 9's journal is one act, not two.
+    return sr.acceptAndSettle(tx, ctx, id);
   }, record(returnNo));
 }
 

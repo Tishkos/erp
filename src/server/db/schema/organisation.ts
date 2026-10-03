@@ -73,7 +73,7 @@ export const company = pgTable(
     // failure shows on every screen at once with nothing to explain it.
     check(
       'company_ui_palette_known',
-      sql`${t.uiPalette} in ('sand', 'classic', 'slate', 'graphite', 'midnight', 'carbon')`,
+      sql`${t.uiPalette} in ('sand', 'classic', 'slate', 'graphite', 'pearl', 'midnight', 'carbon', 'ocean', 'obsidian_plum', 'evergreen', 'espresso', 'lunar_slate', 'ivory_linen', 'glacier', 'sage_white', 'porcelain_rose', 'dune_bronze', 'harbor_mist')`,
     ),
     check(
       'company_ui_accent_known',
@@ -321,6 +321,23 @@ export const partnerBankAccount = pgTable(
     swift: text('swift'),
     currency: char('currency', { length: 3 }).notNull().default('IQD'),
     accountHolder: text('account_holder'),
+    /**
+     * IMPROVEMENT-002 (0269) — the account in full. `bank_code` names the bank
+     * from the bank list when it is on it (a foreign supplier's bank usually is
+     * not); the intermediary is what a dollar transfer routes through.
+     */
+    bankCode: text('bank_code'),
+    bankBranch: text('bank_branch'),
+    bankAddress: text('bank_address'),
+    intermediaryBank: text('intermediary_bank'),
+    intermediarySwift: text('intermediary_swift'),
+    note: text('note'),
+    /** The account a payment run pays to; one per partner, payable only (0269). */
+    isDefault: boolean('is_default').notNull().default(false),
+    /** Taken out of use with a reason, never deleted (0269). */
+    deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
+    deactivatedBy: uuid('deactivated_by').references(() => appUser.id),
+    deactivationReason: text('deactivation_reason'),
 
     /** Runs through the shared status machine and workflow engine (01.6, 01.7). */
     approvalStatus: documentStatus('approval_status').notNull().default('draft'),
@@ -455,6 +472,31 @@ export const project = pgTable(
     recognitionMethod: text('recognition_method'),
     /** §10 — whether project spending must name a valid cost code. */
     requiresCostCode: boolean('requires_cost_code').notNull().default(true),
+
+    // ---- REQ-PM-001 PM-1: the definition's type and status profile --------
+    /** customer / internal / investment, by its master row (§4). */
+    typeCode: text('type_code').notNull().default('CUSTOMER'),
+    /** Availability control's warn and stop lines (§7). */
+    toleranceProfileCode: text('tolerance_profile_code').notNull().default('STANDARD'),
+    description: text('description'),
+    /** Where scheduling says the project now stands; the baseline is above. */
+    forecastStartsOn: date('forecast_starts_on'),
+    forecastEndsOn: date('forecast_ends_on'),
+    heldAt: timestamp('held_at', { withTimezone: true }),
+    heldBy: uuid('held_by').references(() => appUser.id),
+    heldReason: text('held_reason'),
+    technicallyCompleteAt: timestamp('technically_complete_at', { withTimezone: true }),
+    technicallyCompleteBy: uuid('technically_complete_by').references(() => appUser.id),
+    /** One reopen after technical completion, with its reason (§6). */
+    reopenedAt: timestamp('reopened_at', { withTimezone: true }),
+    reopenedBy: uuid('reopened_by').references(() => appUser.id),
+    reopenedReason: text('reopened_reason'),
+    /** PM-4 — the working calendar the schedule counts in (HR-1's); none is Sunday–Thursday. */
+    calendarCode: text('calendar_code'),
+    /** PM-4 — the last critical-path pass: when, the finish it gave, and its run number (the trend's x axis). */
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+    scheduledFinishOn: date('scheduled_finish_on'),
+    scheduleRun: integer('schedule_run').notNull().default(0),
 
     approvedBy: uuid('approved_by').references(() => appUser.id),
     approvedAt: timestamp('approved_at', { withTimezone: true }),

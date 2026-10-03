@@ -1,5 +1,5 @@
 import { getLocale, getTranslations } from 'next-intl/server';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { notFound } from 'next/navigation';
 import { redirect } from 'next/navigation';
 import {
@@ -37,8 +37,7 @@ export default async function DocumentsPage() {
     key: item.key,
     label: t(`page.${item.key}`),
     href: item.href,
-    phase: item.phase,
-    phaseHint: t('phase.not_built'),
+    pendingHint: t('screen.not_built'),
   }));
 
   const labels: DocumentCentreLabels = {
@@ -64,8 +63,8 @@ export default async function DocumentsPage() {
     clearSearch: t('list.clear_filters'),
     noResults: t('list.no_rows'),
     noResultsHint: t('list.no_rows_hint'),
-    pending: t('phase.not_built'),
-    phaseExplanation: t('phase.explanation'),
+    pending: t('screen.not_built'),
+    pendingExplanation: t('screen.explanation'),
     noAccessTitle: t('error.no_permission_title'),
     noAccessDescription: t('error.no_permission'),
     close: t('shell.close'),

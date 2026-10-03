@@ -1,0 +1,153 @@
+/*
+ * The Print / Export menu: one button, and under it the three formats in each
+ * language. The application's own tokens, so it wears the palette the rest
+ * of the screen does; it never prints.
+ */
+.menu {
+  position: relative;
+  display: inline-block;
+}
+
+.trigger {
+  display: inline-flex;
+  min-block-size: 2rem;
+  align-items: center;
+  gap: 0.45rem;
+  padding-inline: 0.85rem;
+  border: 1px solid var(--w-amber-line, var(--border-strong));
+  border-radius: 0.15rem;
+  color: var(--w-accent-ink, var(--text));
+  background: linear-gradient(180deg, var(--w-amber-a, var(--surface)), var(--w-amber-b, var(--surface-muted)));
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.trigger::-webkit-details-marker {
+  display: none;
+}
+
+.trigger svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+}
+
+.trigger:hover,
+.menu[open] > .trigger {
+  border-color: var(--w-amber-line, var(--accent));
+  color: var(--w-label, var(--text));
+  background: var(--w-selected, var(--accent-soft));
+}
+
+.trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/*
+ * The panel escapes its ancestors' clipping.
+ *
+ * It used to be `position: absolute`, which any scrolling or hidden ancestor
+ * clips — and `z-index` cannot lift anything out of an overflow clip. On the
+ * Transfer and Item Reconciliation lists the menu sits in a row inside
+ * `.table-wrap` (`overflow: auto`) inside a flush `Panel` (`overflow: hidden`),
+ * so the panel opened into the clipped region and was never drawn: the button
+ * looked broken while no request was ever made (reported 2026-09-27). Every
+ * menu that did work sits in a page header, outside both.
+ *
+ * `fixed` is positioned against the viewport, so no ancestor clips it. Anchor
+ * positioning keeps it on its trigger; where that is unavailable it is pinned
+ * to the corner instead — plainly worse to look at, and still usable, which is
+ * the right way round for a menu that otherwise cannot be opened at all.
+ */
+.panel {
+  position: fixed;
+  z-index: 60;
+  inset-block-end: 1rem;
+  inset-inline-end: 1rem;
+  display: grid;
+  gap: 0.35rem;
+  min-inline-size: 16rem;
+  padding: 0.55rem;
+  max-inline-size: calc(100vw - 2rem);
+  box-sizing: border-box;
+  border: 1px solid var(--w-line-strong, var(--border-strong));
+  border-radius: 0.2rem;
+  background: var(--w-bg, var(--surface-raised));
+  color: var(--w-text, var(--text));
+  box-shadow: 0 2px 6px rgb(24 39 31 / 18%);
+}
+
+@supports (anchor-name: --a) {
+  .menu {
+    anchor-name: --exportMenu;
+    anchor-scope: --exportMenu;
+  }
+
+  .panel {
+    position-anchor: --exportMenu;
+    inset-block-start: calc(anchor(bottom) + 0.3rem);
+    inset-block-end: auto;
+    inset-inline-end: anchor(right);
+    position-try-fallbacks: flip-block;
+  }
+}
+
+.language {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.languageName {
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.formats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.format {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--w-line-strong, var(--border-strong));
+  border-radius: 0.12rem;
+  color: var(--w-text, var(--text));
+  background: var(--w-field, var(--surface));
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.format:hover,
+.format:focus-visible {
+  border-color: var(--w-amber-line, var(--accent));
+  color: var(--w-label, var(--text));
+  background: var(--w-selected, var(--accent-soft));
+  outline: none;
+}
+
+@media (max-width: 40rem) {
+  .panel {
+    position-anchor: auto;
+    inset-block-start: auto;
+    inset-block-end: 1rem;
+    inset-inline: 1rem;
+    min-inline-size: 0;
+    max-block-size: calc(100dvh - 2rem);
+    overflow: auto;
+  }
+}
+
+@media print {
+  .menu {
+    display: none;
+  }
+}

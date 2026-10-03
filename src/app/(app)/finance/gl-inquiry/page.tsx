@@ -5,13 +5,15 @@ import { AdminPage, admin as s } from '@/components/admin';
 import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/report-filter';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { levelFrom, maxLevel, rollUp } from '@domain/report-levels';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as trialBalance from '@/server/services/trial-balance';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * The General Ledger — Phase 1 requirement 4.
@@ -46,7 +48,7 @@ export default async function GeneralLedgerPage({ searchParams }: { searchParams
     return <Denied object={page('gl_inquiry')} />;
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const asAt = typeof params.to === 'string' ? params.to : today;
   const currency = currencyFrom(params.currency);
 
@@ -91,6 +93,7 @@ export default async function GeneralLedgerPage({ searchParams }: { searchParams
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="gl_inquiry" query={params} />}
       back={{ href: '/', label: t('dashboard_label') }}
       tabs={<SectionTabs route="/finance/gl-inquiry" />}
       subtitle={t('reports.gl_subtitle')}

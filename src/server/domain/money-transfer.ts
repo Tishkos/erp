@@ -1,5 +1,5 @@
 /**
- * Money Transfer — Phase 09, §12.
+ * Money Transfer — §12.
  *
  * The arithmetic of the service, with no I/O. §12.4 names six figures the system
  * "shall calculate"; this file is the only place they are calculated, so a
@@ -10,9 +10,8 @@
  * rate economics less actual transfer cost, fees and recognised FX effects
  * **according to finance policy**"*. The policy is Finance's (§28.1), so the
  * disputed step — whether a residual client balance is owed back to the client
- * or becomes the company's margin — is not chosen here. It is recorded in
- * `docs/open-questions-phase-09.md`. What this file computes is only what the
- * blueprint and the Phase 09 gates pin down exactly:
+ * or becomes the company's margin — is intentionally not decided here. This
+ * file computes the transfer amounts specified below:
  *
  *   Total Client Deposits       Σ posted deposits on the client account
  *   Transfer Principal          the IQD transfer amount (§12.2 — the ledger amount)

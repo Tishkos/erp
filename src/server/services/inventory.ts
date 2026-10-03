@@ -127,17 +127,29 @@ export async function positionOf(
   warehouseCode: string,
   branchCode: string,
 ): Promise<StockPosition> {
+  // The view groups by branch as well as by item and warehouse. A warehouse
+  // belongs to one branch, so this is one row — unless a movement was ever
+  // written under another branch code, and then it is two, and reading the
+  // first would show part of the stock and hide the rest. The negative-stock
+  // trigger and the Stock Movement page both read the warehouse whole, so the
+  // position does too: whatever rows there are, summed. `reserved` is not
+  // summed, because the view already counts it once per row.
   const result = await tx.execute(sql`
-    select on_hand, reserved, in_quarantine, damaged, returns_stock, in_transit
+    select sum(on_hand)::text        as on_hand,
+           max(reserved)::text       as reserved,
+           sum(in_quarantine)::text  as in_quarantine,
+           sum(damaged)::text        as damaged,
+           sum(returns_stock)::text  as returns_stock,
+           max(in_transit)::text     as in_transit
       from stock_position
      where item_code = ${itemCode} and warehouse_code = ${warehouseCode}
   `);
 
-  const row = (result as unknown as { rows: Record<string, string>[] }).rows[0];
+  const row = (result as unknown as { rows: Record<string, string | null>[] }).rows[0];
 
   // No movements yet is a real position of zero, not a missing record — a
   // caller asking "how much do we have?" must never get null.
-  if (!row) {
+  if (!row || row.on_hand === null) {
     return {
       itemCode,
       warehouseCode,
@@ -170,12 +182,22 @@ export async function positionOf(
 
 /** Every position for an item, across warehouses — §9.5's four view levels. */
 export async function positionsOf(tx: Tx, itemCode: string): Promise<StockPosition[]> {
+  // One row per warehouse, whatever branch codes its movements carry — see
+  // `positionOf`. The branch is the warehouse's own, not a movement's.
   const result = await tx.execute(sql`
-    select warehouse_code, branch_code, on_hand, reserved, in_quarantine,
-           damaged, returns_stock, in_transit
-      from stock_position
-     where item_code = ${itemCode}
-     order by warehouse_code
+    select p.warehouse_code,
+           w.branch_code,
+           sum(p.on_hand)::text        as on_hand,
+           max(p.reserved)::text       as reserved,
+           sum(p.in_quarantine)::text  as in_quarantine,
+           sum(p.damaged)::text        as damaged,
+           sum(p.returns_stock)::text  as returns_stock,
+           max(p.in_transit)::text     as in_transit
+      from stock_position p
+      join warehouse w on w.code = p.warehouse_code
+     where p.item_code = ${itemCode}
+     group by p.warehouse_code, w.branch_code
+     order by p.warehouse_code
   `);
 
   return (result as unknown as { rows: Record<string, string>[] }).rows.map((row) => ({
@@ -193,6 +215,9 @@ export async function positionsOf(tx: Tx, itemCode: string): Promise<StockPositi
   }));
 }
 
+/** A FIFO layer as the service reads it: the domain's layer, and whose stock it is. */
+export type StockLayer = CostLayer & { readonly supplierId: string | null };
+
 /** The FIFO layers with stock left, oldest first. */
 export async function layersOf(
   tx: Tx,
@@ -203,7 +228,7 @@ export async function layersOf(
    * is read, which is the behaviour that came before.
    */
   supplierId?: string | null,
-): Promise<CostLayer[]> {
+): Promise<StockLayer[]> {
   const rows = await tx
     .select()
     .from(costLayer)
@@ -252,6 +277,47 @@ async function loadItem(tx: Tx, itemCode: string) {
   const [row] = await tx.select().from(itemTable).where(eq(itemTable.code, itemCode)).limit(1);
   if (!row) throw new Error(`No item '${itemCode}'.`);
   return row;
+}
+
+export class WarehouseBranchMismatchError extends Error {
+  readonly code = 'WAREHOUSE_BRANCH_MISMATCH';
+  constructor(
+    readonly warehouseCode: string,
+    readonly warehouseBranch: string,
+    readonly requestedBranch: string,
+  ) {
+    super(
+      `${warehouseCode} belongs to branch ${warehouseBranch}, and this movement was raised under ${requestedBranch}. ` +
+        'Stock is recorded under the branch of the warehouse that holds it, so the two must agree. ' +
+        'Choose a warehouse of the current branch, or switch branch first.',
+    );
+    this.name = 'WarehouseBranchMismatchError';
+  }
+}
+
+/**
+ * The branch a movement is recorded under is the warehouse's, not the actor's.
+ *
+ * `stock_position` groups by branch, row-level security scopes by branch, and
+ * a warehouse belongs to exactly one. A movement written under any other
+ * branch code would be stock that the warehouse's own branch cannot see and
+ * that the position view splits into two rows. Rather than quietly rewriting
+ * the caller's branch, the mismatch is refused: a caller that names the wrong
+ * branch has usually chosen the wrong warehouse (2026-09-27). Migration 0215
+ * holds the same rule in the database for anything that does not come through
+ * here.
+ */
+async function branchOfWarehouse(tx: Tx, warehouseCode: string, requested: string): Promise<string> {
+  const [house] = await tx
+    .select({ branchCode: warehouse.branchCode })
+    .from(warehouse)
+    .where(eq(warehouse.code, warehouseCode))
+    .limit(1);
+  if (!house) throw new Error(`No warehouse '${warehouseCode}'.`);
+  if (house.branchCode !== requested) {
+    throw new WarehouseBranchMismatchError(warehouseCode, house.branchCode, requested);
+  }
+  return house.branchCode;
 }
 
 /**
@@ -369,6 +435,7 @@ export async function receive(
 
   const stockItem = await loadItem(tx, input.itemCode);
   if (!stockItem.isStock) throw new ItemNotStockedError(input.itemCode);
+  await branchOfWarehouse(tx, input.warehouseCode, input.branchCode);
 
   assertTrackingSupplied(input.itemCode, stockItem.tracking, input);
 
@@ -552,6 +619,7 @@ export async function issue(
 
   const stockItem = await loadItem(tx, input.itemCode);
   if (!stockItem.isStock) throw new ItemNotStockedError(input.itemCode);
+  await branchOfWarehouse(tx, input.warehouseCode, input.branchCode);
   assertTrackingSupplied(input.itemCode, stockItem.tracking, input);
 
   // §9.2 — the layers for this item and warehouse are locked for the duration
@@ -698,6 +766,7 @@ export async function issueFromLayer(
 
   const stockItem = await loadItem(tx, input.itemCode);
   if (!stockItem.isStock) throw new ItemNotStockedError(input.itemCode);
+  await branchOfWarehouse(tx, input.warehouseCode, input.branchCode);
   assertTrackingSupplied(input.itemCode, stockItem.tracking, input);
 
   await tx.execute(sql`
@@ -895,6 +964,10 @@ export function postingRequestFor(input: {
 
   return {
     eventType: `inventory.${input.kind}`,
+    // The document that moved the stock decides which dimensions it must
+    // carry (§4.2's document-type layer) — a sales return's credit to COGS is
+    // judged as a sales return, not as a bare movement.
+    ...(input.sourceDocumentType ? { documentTypeCode: input.sourceDocumentType } : {}),
     source: {
       module: 'inventory',
       // The movement, not the document that caused it: a goods receipt with ten
@@ -927,8 +1000,30 @@ export async function postMovement(
   ctx: ActorContext,
   input: Parameters<typeof postingRequestFor>[0],
 ): Promise<{ journalEntryId: string } | null> {
-  const request = postingRequestFor(input);
-  if (!request) return null;
+  const planned = postingRequestFor(input);
+  if (!planned) return null;
+
+  // The item's own accounts answer the inventory and cost-of-sales lines —
+  // block 1 puts an Inventory Account and a COGS Account on every item, and the
+  // invoices already post to them. A movement that asked a mapping instead
+  // would hold the same goods in a second account, or refuse for want of a
+  // mapping nobody can set. A rule narrowed to this warehouse still wins
+  // (`resolveLineAccount`); a plain mapping does not.
+  const [accounts] = await tx
+    .select({ inventory: itemTable.inventoryAccountId, cogs: itemTable.cogsAccountId })
+    .from(itemTable)
+    .where(eq(itemTable.code, input.itemCode))
+    .limit(1);
+  const request: PostingRequest = {
+    ...planned,
+    lines: planned.lines.map((line) =>
+      line.role === 'inventory' && accounts?.inventory
+        ? { ...line, itemAccountId: accounts.inventory }
+        : line.role === 'cogs' && accounts?.cogs
+          ? { ...line, itemAccountId: accounts.cogs }
+          : line,
+    ),
+  };
 
   const result = await posting.post(tx, ctx, request);
 
@@ -977,6 +1072,24 @@ export async function reverseMovement(
     .select()
     .from(costLayerConsumption)
     .where(eq(costLayerConsumption.movementId, movementId));
+
+  // A receipt made a layer, and reversing the receipt must take the layer
+  // back out — or the Warehouses Report, which values the layers, would keep
+  // showing stock the ledger says has gone. Only a layer nobody has drawn on
+  // can go: goods already issued from it are somewhere, and the correction
+  // for that is a return or a reconciliation, not an undo.
+  const layerId = await layerForMovement(tx, movementId);
+  const [layer] = layerId
+    ? await tx.select().from(costLayer).where(eq(costLayer.id, layerId)).limit(1).for('update')
+    : [];
+  if (layer && parseQuantity(layer.remainingQuantity) !== parseQuantity(layer.originalQuantity)) {
+    throw new Error(
+      `Movement ${movementId} received ${formatQuantity(parseQuantity(layer.originalQuantity))} of ${original.itemCode} ` +
+        `into ${original.warehouseCode}, and ${formatQuantity(parseQuantity(layer.originalQuantity) - parseQuantity(layer.remainingQuantity))} ` +
+        'of that has since been issued. A receipt that stock has left cannot be reversed (§9.2); ' +
+        'take the rest out with a return or a reconciliation.',
+    );
+  }
 
   const [reversal] = await tx
     .insert(inventoryMovement)
@@ -1034,6 +1147,25 @@ export async function reverseMovement(
         .set({ remainingQuantity: formatQuantity(layer.remainingQuantity) })
         .where(eq(costLayer.id, layer.id));
     }
+  }
+
+  if (layer) {
+    // The whole layer, consumed by the reversal and recorded as such, so that
+    // remaining = original − consumed still holds (0025's deferred trigger) and
+    // the layers agree with the ledger they value.
+    const quantity = parseQuantity(layer.originalQuantity);
+    const unitCostIqd = BigInt(layer.unitCostIqd.replace('.', ''));
+    await tx.insert(costLayerConsumption).values({
+      movementId: reversal!.id,
+      layerId: layer.id,
+      quantity: formatQuantity(quantity),
+      unitCostIqd: layer.unitCostIqd,
+      costIqd: toDecimalString(fifoCostOf(quantity, unitCostIqd), 4n),
+    });
+    await tx
+      .update(costLayer)
+      .set({ remainingQuantity: formatQuantity(0n) })
+      .where(eq(costLayer.id, layer.id));
   }
 
   await audit.record(tx, {
@@ -1256,4 +1388,105 @@ export async function layerQuantityOf(
   warehouseCode: string,
 ): Promise<bigint> {
   return totalRemaining(await layersOf(tx, itemCode, warehouseCode));
+}
+
+// ---------------------------------------------------------------------------
+// Relocating stock between warehouses — Operations blocks 7 and 8
+// ---------------------------------------------------------------------------
+
+export interface RelocateInput {
+  readonly itemCode: string;
+  readonly fromWarehouseCode: string;
+  readonly toWarehouseCode: string;
+  readonly branchCode: string;
+  /** At most this much moves. Less moves when the layers given hold less. */
+  readonly quantity: bigint;
+  readonly movementDate: string;
+  /** The layers at the source to move from, in the order to take them. */
+  readonly layers: readonly StockLayer[];
+  readonly sourceDocumentType: string;
+  readonly sourceDocumentId: string;
+  readonly sourceLineId?: string | null;
+}
+
+/**
+ * Moves stock from one warehouse to another and changes nothing else about it.
+ *
+ * Each layer taken at the source arrives at the destination as the same layer
+ * would have been: the same unit cost, the same supplier, the same FIFO date.
+ * Block 5 sells by "item, supplier and warehouse stock", so a move that dropped
+ * the supplier — or that restamped the goods as bought today — would put stock
+ * where a sale that names its supplier cannot find it, or make the newest
+ * goods look like the oldest.
+ *
+ * No posting. The item carries its inventory account (block 1), so the same
+ * goods standing in another warehouse are the same balance in the same
+ * account; a journal here would debit and credit one account with one figure.
+ *
+ * Returns how much moved. Whether moving less than asked is an error is the
+ * caller's question: a transfer refuses it, a shipment moves what is left.
+ */
+export async function relocate(
+  tx: Tx,
+  ctx: ActorContext,
+  input: RelocateInput,
+): Promise<{ moved: bigint; costIqd: bigint }> {
+  if (input.fromWarehouseCode === input.toWarehouseCode) {
+    throw new Error('Stock moves between two different warehouses. Choose another destination.');
+  }
+
+  let outstanding = input.quantity;
+  let costIqd = 0n;
+
+  for (const layer of input.layers) {
+    if (outstanding === 0n) break;
+    if (layer.remainingQuantity <= 0n) continue;
+
+    const take = layer.remainingQuantity < outstanding ? layer.remainingQuantity : outstanding;
+
+    // The batch the goods carry is the one the movement that created the layer
+    // named — the same trace a sale reads (§9.3).
+    const [origin] = await tx
+      .select({ batchNumber: inventoryMovement.batchNumber })
+      .from(costLayer)
+      .innerJoin(inventoryMovement, eq(inventoryMovement.id, costLayer.createdByMovementId))
+      .where(eq(costLayer.id, layer.id))
+      .limit(1);
+    const batchNumber = origin?.batchNumber ?? null;
+
+    const issued = await issueFromLayer(tx, ctx, {
+      costLayerId: layer.id,
+      itemCode: input.itemCode,
+      warehouseCode: input.fromWarehouseCode,
+      branchCode: input.branchCode,
+      quantity: take,
+      movementDate: input.movementDate,
+      kind: 'transfer_issue',
+      batchNumber,
+      sourceDocumentType: input.sourceDocumentType,
+      sourceDocumentId: input.sourceDocumentId,
+      sourceLineId: input.sourceLineId ?? null,
+    });
+
+    await receive(tx, ctx, {
+      itemCode: input.itemCode,
+      warehouseCode: input.toWarehouseCode,
+      branchCode: input.branchCode,
+      quantity: take,
+      unitCostIqd: layer.unitCostIqd,
+      supplierId: layer.supplierId,
+      movementDate: input.movementDate,
+      layerDate: layer.layerDate,
+      kind: 'transfer_receipt',
+      batchNumber,
+      sourceDocumentType: input.sourceDocumentType,
+      sourceDocumentId: input.sourceDocumentId,
+      sourceLineId: input.sourceLineId ?? null,
+    });
+
+    costIqd += issued.costIqd ?? 0n;
+    outstanding -= take;
+  }
+
+  return { moved: input.quantity - outstanding, costIqd };
 }

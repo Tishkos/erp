@@ -19,7 +19,8 @@
  */
 
 /** §21 — the two channels this release delivers on. */
-export const NOTIFICATION_CHANNELS = ['in_app', 'email'] as const;
+// REQ-WA-001 — the WhatsApp bridge delivers the third channel (2026-10-02).
+export const NOTIFICATION_CHANNELS = ['in_app', 'email', 'whatsapp'] as const;
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
 
 export const DELIVERY_STATUSES = ['pending', 'sent', 'failed', 'suppressed'] as const;
@@ -106,14 +107,32 @@ export interface QualifyingEvent {
  * key — which is the only way a unique index can recognise a repeat. Job
  * delivery is at-least-once (01.10), so a repeat is not an edge case: it is the
  * normal consequence of a retry.
+ *
+ * Per event and recipient, not per rule. The rules are written per role and a
+ * person may hold two that cover one event; keyed by the rule, one supplier
+ * payment told the same person twice (live, 2026-10-02).
  */
-export function dedupeKeyFor(
-  rule: Pick<NotificationRule, 'code'>,
-  event: QualifyingEvent,
-  recipientUserId: string,
-): string {
+/**
+ * The event a dedupe key names, without the person it was for.
+ *
+ * For anything that must happen once per event rather than once per recipient
+ * — the copy into the WhatsApp group, on 2026-10-03. The occurrence stays in
+ * it, so a daily notice is one copy a day and not one copy ever.
+ *
+ * The recipient is a UUID and carries no separator, so the last one is where
+ * it begins.
+ */
+export function eventKeyOf(dedupeKey: string): string {
+  const cut = dedupeKey.lastIndexOf('|');
+  return cut === -1 ? dedupeKey : dedupeKey.slice(0, cut);
+}
+
+export function dedupeKeyFor(event: QualifyingEvent, recipientUserId: string): string {
   return [
-    rule.code,
+    // The event type, which the rule's code used to carry implicitly. Without
+    // it `payable.held` and `payable.released` would share a key on one
+    // payable and the second would be suppressed as a repeat of the first.
+    event.eventType,
     event.objectType,
     event.objectId,
     event.occurrence ?? '',
@@ -211,4 +230,29 @@ export function renderNotification(
 function humanise(value: string): string {
   const spaced = value.replace(/[._]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+// ---------------------------------------------------------------------------
+// Delivery retries — REQ-HARDEN-001 D-HD-4, delivered with REQ-WA-001 WA-1
+// ---------------------------------------------------------------------------
+
+/** Three attempts, then it stays failed and visible: 1 min, 10 min, 60 min. */
+export const DELIVERY_RETRY_DELAYS_SECONDS = [60, 600, 3600] as const;
+export const DELIVERY_MAX_ATTEMPTS = DELIVERY_RETRY_DELAYS_SECONDS.length;
+
+/**
+ * Whether a delivery is due another attempt: a pending row always is; a
+ * failed one when it has attempts left and the back-off since the last has
+ * elapsed; a sent or suppressed one never.
+ */
+export function isDeliveryDue(
+  delivery: { readonly status: DeliveryStatus; readonly attempts: number; readonly lastAttemptAt: Date | null },
+  now: Date,
+): boolean {
+  if (delivery.status === 'pending') return true;
+  if (delivery.status !== 'failed') return false;
+  if (delivery.attempts >= DELIVERY_MAX_ATTEMPTS) return false;
+  const wait = DELIVERY_RETRY_DELAYS_SECONDS[Math.max(0, delivery.attempts - 1)] ?? DELIVERY_RETRY_DELAYS_SECONDS[DELIVERY_RETRY_DELAYS_SECONDS.length - 1]!;
+  const since = delivery.lastAttemptAt ? (now.getTime() - delivery.lastAttemptAt.getTime()) / 1000 : Infinity;
+  return since >= wait;
 }

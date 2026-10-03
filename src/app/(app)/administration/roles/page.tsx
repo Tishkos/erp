@@ -6,7 +6,7 @@ import { AutoCode } from '@/components/admin/auto-code';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { can } from '@domain/permissions';
+import { can, isCeo } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as roles from '@/server/services/roles';
 import { createRole } from './actions';
@@ -26,7 +26,7 @@ export default async function RolesPage({ searchParams }: { searchParams: Search
   if (!can(principal, 'view', roles.PERMISSION_OBJECT)) {
     return <Denied object={page('roles')} />;
   }
-  const mayCreate = can(principal, 'create', roles.PERMISSION_OBJECT);
+  const mayCreate = isCeo(principal) && can(principal, 'create', roles.PERMISSION_OBJECT);
   const rows = await withCurrentUser((tx) => roles.listAll(tx));
   const shown = rows.filter((row) => matches(row, outcome.q));
 

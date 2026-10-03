@@ -16,12 +16,11 @@ import {
   SubmitRow,
   matches,
 } from '@/components/admin';
-import { AutoCode } from '@/components/admin/auto-code';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as branches from '@/server/services/branches';
 import * as costCentres from '@/server/services/cost-centres';
@@ -65,10 +64,9 @@ export default async function CostCentresPage({ searchParams }: { searchParams: 
             title={t('cost_centres.new')}
           >
             <p className="muted">{t('cost_centres.created_note')}</p>
-            <AutoCode codeId="f-code" mode="upper" nameId="f-name" />
+            <p className="muted">{t('minted_code_note')}</p>
             <Form action={createCostCentre}>
               <Grid>
-                <Field hint={t('code_auto_hint')} label={t('code')} name="code" />
                 <Field label={t('name')} name="name" required requiredLabel={t('required_hint')} />
                 <Select
                   emptyLabel={t('cost_centres.no_owner')}

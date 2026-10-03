@@ -21,8 +21,7 @@ import { can } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as branches from '@/server/services/branches';
 import * as company from '@/server/services/company';
-import { ACCENTS, PALETTES } from '@domain/appearance';
-import { saveAppearance, saveCompany, saveMainBranch } from './actions';
+import { saveCompany, saveMainBranch } from './actions';
 
 /**
  * Company Setup — Phase 0 requirement 1.
@@ -46,11 +45,10 @@ export default async function CompanyPage({ searchParams }: { searchParams: Sear
   const mayEditBranch = can(context.principal, 'configure', branches.PERMISSION_OBJECT);
   const mayConfigure = can(context.principal, 'configure', company.PERMISSION_OBJECT);
 
-  const { current, main, look } = await withCurrentUser(async (tx) => {
+  const { current, main } = await withCurrentUser(async (tx) => {
     const all = await branches.listAll(tx);
     return {
       current: await company.current(tx),
-      look: await company.appearance(tx),
       main: all.find((b) => b.code === 'HQ') ?? all.find((b) => b.active) ?? null,
     };
   });
@@ -107,66 +105,6 @@ export default async function CompanyPage({ searchParams }: { searchParams: Sear
             <Submit label={current ? t('update') : t('create')} />
           </SubmitRow>
         </Form>
-      </Panel>
-
-      {/* The look of the whole application, chosen once for everybody. Presets
-          rather than free colours: each has been checked as a whole — a title
-          bar against the text on it, a grid rule against the row behind it —
-          and on a company-wide setting one illegible choice is everybody's
-          problem, usually not the chooser's. */}
-      <Panel title={t('company.appearance')}>
-        <p className={s.sectionHint}>{t('company.appearance_hint')}</p>
-        {mayConfigure ? (
-          <Form action={saveAppearance}>
-            <div className={s.paletteChoices}>
-              {PALETTES.map((name) => (
-                <label className={s.paletteChoice} key={name}>
-                  <input
-                    defaultChecked={name === look.palette}
-                    name="uiPalette"
-                    type="radio"
-                    value={name}
-                  />
-                  <span className={s.paletteSwatch} data-palette={name}>
-                    <span className={s.paletteSwatchBar} />
-                    <span className={s.paletteSwatchBody}>
-                      <span className={s.paletteSwatchRow} />
-                      <span className={s.paletteSwatchRow} />
-                      <span className={s.paletteSwatchButton} />
-                    </span>
-                  </span>
-                  <span className={s.paletteName}>{t(`company.palette_${name}`)}</span>
-                </label>
-              ))}
-            </div>
-            {/* The accent: the one colour that marks pressed, selected and
-                actionable. Each dot carries its own data-accent, so it is
-                painted by the same tokens the application would use — the
-                gold dot shows the current palette's own amber. */}
-            <p className={s.sectionHint} style={{ marginBlockStart: '0.8rem' }}>
-              {t('company.accent_hint')}
-            </p>
-            <div className={s.accentChoices}>
-              {ACCENTS.map((name) => (
-                <label className={s.accentChoice} data-accent={name} key={name}>
-                  <input
-                    defaultChecked={name === look.accent}
-                    name="uiAccent"
-                    type="radio"
-                    value={name}
-                  />
-                  <span className={s.accentDot} />
-                  <span className={s.paletteName}>{t(`company.accent_${name}`)}</span>
-                </label>
-              ))}
-            </div>
-            <SubmitRow>
-              <Submit label={t('update')} />
-            </SubmitRow>
-          </Form>
-        ) : (
-          <p className={s.sectionHint}>{t(`company.palette_${look.palette}`)}</p>
-        )}
       </Panel>
 
       <Panel

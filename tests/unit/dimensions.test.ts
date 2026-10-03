@@ -251,7 +251,7 @@ describe('a dimension with no master data yet', () => {
 
   it('says when it will become available, rather than just refusing', () => {
     expect(() => assertDimensionAvailable(warehouse)).toThrow(
-      /becomes available when the phase that delivers its master data registers it/,
+      /becomes available when the module that delivers its master data registers it/,
     );
   });
 

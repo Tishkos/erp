@@ -5,15 +5,16 @@
  */
 
 .flash {
+  --flash-tone: var(--status-posted);
   display: flex;
   align-items: flex-start;
   gap: 0.6rem;
   margin: 0 0 var(--space-4);
   padding: 0.7rem 0.9rem;
-  border: 1px solid var(--accent-border);
+  border: 1px solid color-mix(in srgb, var(--flash-tone) 45%, var(--w-bg, var(--surface)));
   border-radius: var(--radius-sm);
-  background: var(--accent-soft);
-  color: var(--text);
+  background: color-mix(in srgb, var(--flash-tone) 9%, var(--w-bg, var(--surface)));
+  color: var(--w-text, var(--text));
   font-size: 0.85rem;
 }
 
@@ -22,16 +23,11 @@
   block-size: 1rem;
   flex: 0 0 auto;
   margin-block-start: 0.1rem;
-  color: var(--accent);
+  color: var(--flash-tone);
 }
 
 .flashError {
-  border-color: color-mix(in srgb, var(--status-rejected) 40%, transparent);
-  background: color-mix(in srgb, var(--status-rejected) 9%, var(--surface));
-}
-
-.flashError svg {
-  color: var(--status-rejected);
+  --flash-tone: var(--status-rejected);
 }
 
 .flash strong {
@@ -159,6 +155,98 @@
   flex: 1 1 12rem;
 }
 
+/* A screen's own filters. `.grid` stretches one picker across the whole window
+   and drops its button onto a line of its own, which is what made a single
+   status filter read as the widest thing on the page. Here each control takes
+   its own width and the button stands on the same line, at the same baseline. */
+/* ── Naming a document by typing it ──────────────────────────────────────
+   Two search boxes — the partner, then the document — and the button that
+   loads what was named.
+
+   Not `.filterRow`: that aligns on `flex-end`, which is the bottom of each
+   field, and these two fields carry hints of different lengths, so their
+   bottoms line up while their boxes do not. Aligned on the top instead, where
+   the labels are one line each and the boxes therefore agree.
+
+   Wider, too. A filter takes a status or a date; these take an invoice number
+   and a company's name, and 15rem cut both off. */
+.pickRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 0.75rem;
+  margin-block-end: 0.9rem;
+}
+
+.pickRow .field {
+  flex: 1 1 22rem;
+  min-inline-size: 16rem;
+  max-inline-size: 34rem;
+}
+
+/* The button keeps its own width; only the boxes grow. */
+.pickRow .fieldWithAction > input {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+/* A control with a button beside it, inside one field.
+   `.filterRow` aligns on `flex-end`, which is the bottom of each field — and a
+   field carrying a hint is taller than its own box, so the button landed below
+   the picker rather than level with it. The pair is a row of its own now, and
+   the hint sits under both. */
+.fieldWithAction {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
+.fieldWithAction > select,
+.fieldWithAction > input {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+/* The band a filter row sits in when the panel around it is flush, so the
+   controls are not flattened against the panel's edge. */
+.filterBar {
+  padding: 0.7rem 0.8rem 0;
+  border-block-end: 1px solid var(--border);
+  background: var(--surface);
+}
+
+/* A fact read off the document rather than typed into it — a supplier's code
+   on a return, say. It stands in the row of fields, so it is the same box as a
+   field's, in the ink of something you cannot change. Previously these were
+   spans carrying class names that are in no stylesheet, which is why they were
+   the one unstyled thing in a styled row. */
+.readOnlyBox {
+  composes: input;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  background: var(--surface-sunken, var(--surface));
+  cursor: default;
+}
+
+.filterRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+  margin-block-end: 0.9rem;
+}
+
+.filterRow .field {
+  flex: 0 1 15rem;
+  min-inline-size: 9rem;
+}
+
+/* The submit sits in the row rather than under it. */
+.filterRow .submitRow {
+  margin: 0;
+}
+
 /* Buttons ---------------------------------------------------------------- */
 
 .button {
@@ -222,6 +310,11 @@
   gap: 0.5rem;
   justify-content: flex-end;
   margin-block-start: 1.25rem;
+}
+
+.confirmReasonForm {
+  display: grid;
+  gap: 0.9rem;
 }
 
 .small {
@@ -580,6 +673,12 @@
 
 /* Dialog ------------------------------------------------------------------- */
 
+/* A dialog holding a grid of lines rather than a column of fields. Stated in
+   both classes so it beats `.dialog` whatever order the two land in. */
+.dialog.dialogWide {
+  inline-size: min(76rem, calc(100vw - 2rem));
+}
+
 .dialog {
   inline-size: min(44rem, calc(100vw - 2rem));
   padding: 0;
@@ -837,6 +936,163 @@
 
 .profileFacts li:last-child {
   border-block-end: 0;
+}
+
+/* A way out of a panel — the link under the account's balances to the ledger
+   those balances are made of. Quiet, because it is an offer rather than the
+   point of the panel. */
+.panelNote {
+  margin: 0.75rem 0 0;
+  font-size: 0.78rem;
+}
+
+/* -------------------------------------------------------------------------
+ * What a bank or cash account holds
+ *
+ * One figure the reader came for, and the flows that made it. Laid out across
+ * rather than down, which is the reason it sits in the wide column beside the
+ * form and not in the narrow one with the details: a balance read as the sixth
+ * row of a label-and-value list is a balance nobody sees.
+ * ---------------------------------------------------------------------- */
+.holdings {
+  display: grid;
+  gap: 1rem;
+}
+
+.holdingsHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding-block-end: 0.95rem;
+  border-block-end: 1px solid var(--border);
+}
+
+.holdingsHead > span:first-child {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.holdingsAmount {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.holdingsFlows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.7rem;
+}
+
+.holdingsFlow {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+}
+
+.holdingsFlow > span {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.holdingsFlow > span > svg {
+  inline-size: 0.85rem;
+  block-size: 0.85rem;
+}
+
+.holdingsFlow > strong {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* Money arriving reads as the good direction, money leaving as the other —
+   the only colour on the panel, and it is carrying meaning rather than
+   decoration. */
+.holdingsIn > span > svg {
+  color: var(--status-posted);
+}
+
+.holdingsOut > span > svg {
+  color: var(--status-rejected, var(--text-muted));
+}
+
+/* Money a payment application has claimed and the bank has not yet sent:
+   amber, the same token the ERP already gives a submitted document, because
+   that is precisely what is holding it. */
+.holdingsPending > span > svg {
+  color: var(--status-submitted, var(--text-muted));
+}
+
+/* -------------------------------------------------------------------------
+ * Two report panels, one above the other
+ *
+ * `Panel` carries no margin of its own, so stacked siblings touched: the
+ * account positions and the ledger under them read as one table with a stray
+ * heading in the middle of it.
+ * ---------------------------------------------------------------------- */
+.reportStack {
+  display: grid;
+  gap: 1.1rem;
+}
+
+/* -------------------------------------------------------------------------
+ * Does the ageing tie to the statement?
+ *
+ * Stated on the report rather than left to a reader with a calculator. The
+ * only thing an ageing must never do is disagree with the statement silently,
+ * so the three figures that make up the identity are shown together and the
+ * verdict is a word, not a colour alone.
+ * ---------------------------------------------------------------------- */
+.tieStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1.5rem;
+  margin: 0 1rem 1rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+  font-size: 0.78rem;
+}
+
+.tieStrip > span {
+  color: var(--text-muted);
+}
+
+.tieStrip strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.tieVerdict {
+  margin-inline-start: auto;
+  font-weight: 700;
+}
+
+.tieStrip[data-ties='yes'] .tieVerdict {
+  color: var(--status-posted);
+}
+
+/* Not an error — a difference that is accounted for, and named in the rows
+   above. Amber rather than red: the report is telling you where to look. */
+.tieStrip[data-ties='no'] .tieVerdict {
+  color: var(--status-submitted, var(--text));
 }
 
 .profileFacts li > span:first-child {
@@ -1496,12 +1752,21 @@
 .dateInput {
   composes: input;
 }
+/* The calendar is the point of a date box, so it is drawn in the accent
+   instead of at half opacity — at 55% grey on a grey field it read as
+   decoration and people could not find it. */
 .dateInput::-webkit-calendar-picker-indicator {
+  padding: 0.12rem;
+  border-radius: var(--w-radius);
+  background-color: color-mix(in srgb, var(--accent) 22%, transparent);
   cursor: pointer;
-  opacity: 0.55;
-}
-.dateInput::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
+}
+
+.dateInput::-webkit-calendar-picker-indicator:hover,
+.dateInput:focus::-webkit-calendar-picker-indicator {
+  background-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 :global(:root[data-theme='dark']) .dateInput::-webkit-calendar-picker-indicator {
   filter: invert(1);
@@ -1518,7 +1783,7 @@
    and if it read its colours from the theme it would come apart the moment
    somebody flipped it. Scoped to the journal's .sapDoc and route-owned
    .sapPage classes so none of it escapes onto the rest of the application. */
-:global(html:has([data-palette])),
+:global(html:has(.erp-root[data-palette])),
 :global([data-palette]) {
   --w-bg: #fbfbf4;
   --w-canvas: #f3f2e9;
@@ -1549,6 +1814,53 @@
   --w-accent-ink: #3a2600;
   --w-paper: #ffffff;
   --w-band: #f6f7f0;
+
+  /* The chips — a document's status, and a figure that is a problem.
+     These were four sets of hard-coded pastels, which is why every dark
+     palette still drew a Draft chip in cream on a near-black window
+     (reported 2026-09-29): a colour written as a hex cannot follow a theme.
+     Light values first, the same ones they always were; the dark palettes
+     override the whole set below, in one place. */
+  --chip-line: #c1aa67;
+  --chip-bg: #fff3bd;
+  --chip-ink: #654b06;
+  --chip-good-line: #86a28c;
+  --chip-good-bg: #e2f0df;
+  --chip-good-ink: #235b32;
+  --chip-info-line: #91a8bb;
+  --chip-info-bg: #e5eef5;
+  --chip-info-ink: #294f6d;
+  --chip-bad-line: #ca9b94;
+  --chip-bad-bg: #f7e5e2;
+  --chip-bad-ink: #7e332c;
+  --chip-warn-line: #b03a2e;
+  --chip-warn-bg: #f8d7d2;
+  --chip-warn-ink: #7d201a;
+
+  /* ── Charts ──────────────────────────────────────────────────────────────
+     Two categorical slots and a five-step ordinal ramp, both validated
+     against this application's own light surface rather than a generic one:
+     lightness band, chroma floor, colour-vision separation, normal-vision
+     separation and contrast all pass (blue↔orange ΔE 24.7 protan, 33.6
+     normal). The ramp is one hue getting darker, for the ageing buckets,
+     which are an ordered scale and not identities.
+
+     They are deliberately not the palette's own `--w-*` colours: a chart that
+     recoloured itself with the theme would have eighteen unvalidated
+     palettes, and the two that matter — is this series distinguishable, does
+     it clear the surface — would be true in none of them by construction. */
+  --chart-series-1: #2a78d6;
+  --chart-series-2: #eb6834;
+  --chart-ramp-1: #86b6ef;
+  --chart-ramp-2: #5598e7;
+  --chart-ramp-3: #2a78d6;
+  --chart-ramp-4: #1c5cab;
+  --chart-ramp-5: #104281;
+  --chart-negative: #d03b3b;
+  --chart-grid: var(--w-rule);
+  --chart-axis: var(--w-muted);
+  --chart-ink: var(--w-text);
+  --chart-track: var(--w-field-ro);
 }
 
 .sapDoc,
@@ -1563,7 +1875,7 @@
   margin-block-end: 0.85rem;
   overflow: hidden;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background: var(--w-bg);
   box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
 }
@@ -1579,14 +1891,14 @@
   padding: 0.4rem 0.75rem 0.35rem;
   border-block-end: 4px solid var(--w-title-line);
   background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
-  color: #21362e;
+  color: var(--w-label);
   font-size: 0.92rem;
   font-weight: 700;
   line-height: 1.15;
 }
 
 .sapTitleMeta {
-  color: #3b5046;
+  color: var(--w-muted);
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.015em;
@@ -1627,7 +1939,7 @@
   padding: 0.25rem 0.45rem;
   overflow: hidden;
   border: 1px solid var(--w-line);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-field-ro);
   color: var(--w-text);
   font-size: 0.8rem;
@@ -1642,8 +1954,9 @@
   inline-size: fit-content;
   min-inline-size: 5.5rem;
   justify-content: center;
-  border-color: #c1aa67;
-  background: #fff3bd;
+  border-color: var(--chip-line);
+  background: var(--chip-bg);
+  color: var(--chip-ink);
   font-weight: 700;
 }
 
@@ -1652,24 +1965,24 @@
 .sapStatus[data-status='matched'],
 .sapStatus[data-status='posted'],
 .sapStatus[data-status='approved'] {
-  border-color: #86a28c;
-  background: #e2f0df;
-  color: #235b32;
+  border-color: var(--chip-good-line);
+  background: var(--chip-good-bg);
+  color: var(--chip-good-ink);
 }
 
 .sapStatus[data-status='submitted'] {
-  border-color: #91a8bb;
-  background: #e5eef5;
-  color: #294f6d;
+  border-color: var(--chip-info-line);
+  background: var(--chip-info-bg);
+  color: var(--chip-info-ink);
 }
 
 .sapStatus[data-status='exception'],
 .sapStatus[data-status='rejected'],
 .sapStatus[data-status='cancelled'],
 .sapStatus[data-status='reversed'] {
-  border-color: #ca9b94;
-  background: #f7e5e2;
-  color: #7e332c;
+  border-color: var(--chip-bad-line);
+  background: var(--chip-bad-bg);
+  color: var(--chip-bad-ink);
 }
 
 .sapGridCaption {
@@ -1686,7 +1999,7 @@
 }
 
 .sapDisclosure {
-  color: #765b0b;
+  color: var(--w-label);
   font-size: 0.82rem;
 }
 
@@ -1756,17 +2069,317 @@
 .sapTable .sapNum {
   text-align: end;
 }
+
+/* ── The invoice lines grid ───────────────────────────────────────────────
+   A typed grid has known columns, so it declares them: the widths come from
+   the colgroup and `table-layout: fixed` holds them. Without that the widest
+   thing in a cell decided how wide its column was.
+
+   The notes under a field are blocks. Inline, in a `white-space: nowrap`
+   cell, each was added to the width of its own column — the quantity column
+   grew to fit "Available stock: 12 EA" beside the box, which is what made the
+   field look long and put a sentence between the quantity and the price. */
+.sapLineGrid {
+  table-layout: fixed;
+  /* `.sapTable` floors every table at 76rem so the registers keep their shape.
+     The lines grid states its own floor, and the floor is not a free number:
+     the item's name is the one fluid column, so it receives whatever the fixed
+     columns leave. Set the floor below their sum and the name receives nothing
+     and the column disappears. Every floor here is the sum of this
+     breakpoint's fixed columns plus the narrowest name worth reading. Change a
+     column width and the floor changes with it. */
+  min-inline-size: 68.5rem; /* 54.4 fixed + 14.1 name */
+}
+
+/* The ten columns, widest window first. Only the name is fluid: it takes what
+   the others leave, so the grid grows into a wide screen instead of stranding
+   empty space at the end of the row. */
+.sapLineGrid .colIndex {
+  inline-size: 2.5rem;
+}
+.sapLineGrid .colCode {
+  inline-size: 7.5rem;
+}
+.sapLineGrid .colName {
+  inline-size: auto;
+}
+.sapLineGrid .colQty {
+  inline-size: 5.5rem;
+}
+.sapLineGrid .colPrice {
+  inline-size: 6.5rem;
+}
+.sapLineGrid .colDiscount {
+  inline-size: 5.5rem;
+}
+.sapLineGrid .colTotal {
+  inline-size: 6.5rem;
+}
+.sapLineGrid .colSupplier {
+  inline-size: 9.5rem;
+}
+.sapLineGrid .colWarehouse {
+  inline-size: 9rem;
+}
+.sapLineGrid .colRemove {
+  inline-size: 1.9rem;
+}
+
+/* A laptop, or a half-width window on a desktop. The same ten columns, closer
+   together — none is dropped, because a line a person cannot finish typing is
+   worse than a line they have to read carefully. */
+@media (max-width: 90rem) {
+  .sapLineGrid {
+    min-inline-size: 60.5rem; /* 49.4 fixed + 11.1 name */
+    font-size: 0.74rem;
+  }
+  .sapLineGrid .colIndex {
+    inline-size: 2.25rem;
+  }
+  .sapLineGrid .colCode {
+    inline-size: 6.75rem;
+  }
+  .sapLineGrid .colQty {
+    inline-size: 5rem;
+  }
+  .sapLineGrid .colPrice {
+    inline-size: 6rem;
+  }
+  .sapLineGrid .colDiscount {
+    inline-size: 5rem;
+  }
+  .sapLineGrid .colTotal {
+    inline-size: 6rem;
+  }
+  .sapLineGrid .colSupplier {
+    inline-size: 8.5rem;
+  }
+  .sapLineGrid .colWarehouse {
+    inline-size: 8rem;
+  }
+}
+
+/* A tablet. Tighter again, and the padding goes with it. */
+@media (max-width: 64rem) {
+  .sapLineGrid {
+    min-inline-size: 52.75rem; /* 43.65 fixed + 9.1 name */
+    font-size: 0.72rem;
+  }
+  .sapLineGrid th,
+  .sapLineGrid td {
+    padding-inline: 0.28rem;
+  }
+  .sapLineGrid .colCode {
+    inline-size: 6rem;
+  }
+  .sapLineGrid .colQty {
+    inline-size: 4.5rem;
+  }
+  .sapLineGrid .colPrice {
+    inline-size: 5.5rem;
+  }
+  .sapLineGrid .colDiscount {
+    inline-size: 4.5rem;
+  }
+  .sapLineGrid .colTotal {
+    inline-size: 5.5rem;
+  }
+  .sapLineGrid .colSupplier {
+    inline-size: 7rem;
+  }
+  .sapLineGrid .colWarehouse {
+    inline-size: 6.5rem;
+  }
+}
+
+/* A handset. Ten columns of form fields do not honestly fit one, so the grid
+   stops shrinking here and the wrap scrolls it sideways — the page itself
+   never does, at any width. Shrinking further would mean fields too small to
+   type into, which reads as fitting without being usable. */
+@media (max-width: 48rem) {
+  .sapLineGrid {
+    min-inline-size: 45.25rem; /* 37.65 fixed + 7.6 name */
+  }
+  .sapLineGrid .colIndex {
+    inline-size: 2rem;
+  }
+  .sapLineGrid .colCode {
+    inline-size: 5.25rem;
+  }
+  .sapLineGrid .colQty {
+    inline-size: 4rem;
+  }
+  .sapLineGrid .colPrice {
+    inline-size: 4.75rem;
+  }
+  .sapLineGrid .colDiscount {
+    inline-size: 4rem;
+  }
+  .sapLineGrid .colTotal {
+    inline-size: 4.75rem;
+  }
+  .sapLineGrid .colSupplier {
+    inline-size: 5.75rem;
+  }
+  .sapLineGrid .colWarehouse {
+    inline-size: 5.25rem;
+  }
+}
+
+/* ── A grid of document lines with fewer columns than an invoice ──────────
+   Opening stock and a count sheet are the same grid, and the same design, with
+   fewer columns. The floor is stated in both classes so it beats the
+   breakpoint rules above whatever order the rules land in — a seven-column
+   sheet must not be held open to the width of ten columns it does not have. */
+.sapLineGrid.sapLineGridCompact {
+  min-inline-size: 45rem; /* 30.9 fixed + 14.1 name */
+}
+
+@media (max-width: 64rem) {
+  .sapLineGrid.sapLineGridCompact {
+    min-inline-size: 38rem;
+  }
+}
+
+@media (max-width: 48rem) {
+  .sapLineGrid.sapLineGridCompact {
+    min-inline-size: 34rem;
+  }
+}
+
+/* Worked out rather than typed, so it is read like the figures either side. */
+.sapLineGrid .colAverage {
+  inline-size: 7rem;
+}
+
+@media (max-width: 90rem) {
+  .sapLineGrid .colAverage {
+    inline-size: 6rem;
+  }
+}
+
+@media (max-width: 64rem) {
+  .sapLineGrid .colAverage {
+    inline-size: 5.5rem;
+  }
+}
+
+/* A figure the grid works out: the same ink as a field's, without the box,
+   because there is nothing here to type into. */
+.sapLineGrid output {
+  display: block;
+  padding-inline: 0.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── The grid's own field chrome ──────────────────────────────────────────
+   `.sapDoc` dresses the fields inside a document window. A grid of lines is
+   also opened in a dialog, which is not one, and there the boxes fell back to
+   the browser's own — a different design in the same table. The grid therefore
+   dresses its own, so a line looks the same wherever it is opened. Where a
+   document window does surround it, `.sapDoc.sapDoc` is the more specific rule
+   and still wins. */
+.sapLineGrid input,
+.sapLineGrid select,
+.sapCellField {
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 1.75rem;
+  block-size: auto;
+  padding: 0.18rem 0.35rem;
+  border: 1px solid var(--w-line-strong);
+  border-radius: var(--w-radius-sm);
+  background: var(--w-field);
+  color: var(--w-text);
+  font: inherit;
+  font-size: 0.78rem;
+  box-shadow: none;
+}
+
+.sapLineGrid input:focus,
+.sapLineGrid select:focus,
+.sapCellField:focus {
+  background: var(--w-focus);
+  outline: 2px solid var(--w-title-line);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 1px #fff;
+}
+
+.sapLineGrid .sapRowRemove button {
+  min-inline-size: 1.5rem;
+  min-block-size: 1.35rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--w-radius-sm);
+  background: transparent;
+  color: var(--w-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sapLineGrid .sapRowRemove button:hover {
+  border-color: #b03a2e;
+  background: #f8d7d2;
+  color: #7d201a;
+}
+
+/* ── Dragging a column boundary ───────────────────────────────────────────
+   The grip lives in the heading, on the boundary it moves. The head is
+   sticky, which is already a positioned box, so the grip hangs off its inline
+   end without the heading needing `position: relative`. A width a person set
+   by hand is an inline style on the `col`, so it beats every rule above and
+   survives a change of breakpoint. */
+.sapColGrip {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: -1px;
+  z-index: 3;
+  inline-size: 0.45rem;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.sapColGrip:hover,
+.sapColGrip[data-dragging='true'] {
+  background: var(--w-line-strong);
+}
+
+/* While a boundary is moving, the pointer is a resize arrow everywhere — the
+   drag is not cancelled by leaving the 7px the grip occupies. */
+.sapLineGrid[data-resizing='true'] {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* A number reads as a number: right-aligned under its right-aligned heading,
+   rather than a left-aligned figure below an end-aligned label. */
+.sapLineGrid .sapNum input {
+  text-align: end;
+}
+
+.sapLineGrid .sapCellNote {
+  display: block;
+  margin-block-start: 0.15rem;
+  overflow-wrap: anywhere;
+  color: var(--w-muted);
+  font-size: 0.68rem;
+  line-height: 1.3;
+  text-align: start;
+  white-space: normal;
+}
 .sapTable .sapGroup {
   background: var(--w-head-strong);
   text-align: center;
 }
 
 .sapTable tbody tr:not(.sapFiller):not(.sapEntryRow):hover > td {
-  background: #fff8d9;
+  background: var(--w-selected);
 }
 
 .sapAccountCell {
-  color: #284e3f;
+  color: var(--w-label);
   font-weight: 650;
 }
 /* The row being typed. */
@@ -1787,6 +2400,31 @@
   font-weight: 700;
 }
 
+/* Two figures in one totals cell — what the supplier is owed, and what the
+   ledger will carry underneath it. `.sapNum` already ends them both at the
+   cell's right edge; this only closes the gap between the two lines so they
+   read as one total rather than two (2026-10-03). */
+.sapTable .sapTotalRow > td.sapNum {
+  line-height: 1.35;
+}
+
+/* A field block placed under the lines — the purchase invoice's notes — stands
+   off the table the way the lines caption stands off the fields above it
+   (2026-10-03). */
+.sapTableWrap + .sapFields {
+  margin-block-start: 0.9rem;
+}
+
+/* The advance's own two figures, said under its percentage box, hold one line:
+   wrapped, the field grew to three rows and the figures read as a paragraph.
+   By direction (2026-10-03) overflowing is the better fault. */
+.sapField > .sapEnteredNote {
+  overflow: hidden;
+  margin-block-start: 0.15rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ── Controls ────────────────────────────────────────────────────────────
    The class is repeated so these beat the app's own button and input rules on
    specificity, whichever order the two stylesheets land in. */
@@ -1799,7 +2437,7 @@
   block-size: auto;
   padding: 0.18rem 0.35rem;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-field);
   color: var(--w-text);
   font: inherit;
@@ -1811,7 +2449,7 @@
 .sapDoc.sapDoc select:focus,
 .sapDoc.sapDoc textarea:focus {
   background: var(--w-focus);
-  outline: 2px solid #9a760d;
+  outline: 2px solid var(--w-title-line);
   outline-offset: 1px;
   box-shadow: 0 0 0 1px #fff;
 }
@@ -1828,7 +2466,7 @@
   min-block-size: 2rem;
   padding: 0.28rem 0.9rem;
   border: 1px solid var(--w-amber-line);
-  border-radius: 0.14rem;
+  border-radius: var(--w-radius-sm);
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
   color: var(--w-accent-ink, #3a2600);
   font-size: 0.78rem;
@@ -1839,7 +2477,7 @@
   background: linear-gradient(180deg, #ffdf95, color-mix(in srgb, var(--w-amber-b) 88%, #fff));
 }
 .sapDoc.sapDoc button:focus-visible {
-  outline: 2px solid #745807;
+  outline: 2px solid var(--w-title-line);
   outline-offset: 2px;
 }
 .sapDoc.sapDoc .danger {
@@ -1902,14 +2540,14 @@
  */
 .sapDoc.sapDoc .sapFootActions button:not(:global(.action--primary)) {
   border-color: var(--w-line-strong);
-  background: linear-gradient(180deg, #fff, var(--w-field-ro));
+  background: linear-gradient(180deg, var(--w-bg), var(--w-field-ro));
   color: var(--w-muted);
   font-weight: 600;
 }
 
 .sapDoc.sapDoc .sapFootActions button:not(:global(.action--primary)):hover {
-  background: linear-gradient(180deg, #fff, #e4e9de);
-  color: inherit;
+  background: var(--w-selected);
+  color: var(--w-label);
 }
 
 .sapFootActions > form input[type='text'] {
@@ -1936,7 +2574,7 @@
   min-inline-size: 6rem;
   padding: 0.24rem 0.4rem;
   border: 1px solid var(--w-line);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-field-ro);
   font-size: 0.78rem;
   font-weight: 700;
@@ -1968,10 +2606,10 @@
 /* An out-of-balance document says so where the totals are. */
 .sapWarn {
   padding: 0.28rem 0.5rem;
-  border: 1px solid #b03a2e;
-  border-radius: 0.12rem;
-  background: #f8d7d2;
-  color: #7d201a;
+  border: 1px solid var(--chip-warn-line);
+  border-radius: var(--w-radius-sm);
+  background: var(--chip-warn-bg);
+  color: var(--chip-warn-ink);
   font-size: 0.72rem;
   font-weight: 700;
 }
@@ -1981,12 +2619,12 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  color: #274f3f;
+  color: var(--w-label);
   font-weight: 700;
   text-decoration: none;
 }
 .sapLink:hover {
-  color: #183c2f;
+  color: var(--w-label);
   text-decoration: underline;
   text-underline-offset: 0.15rem;
 }
@@ -2011,7 +2649,7 @@
      written next to each other than guessed from another stylesheet. */
   padding: 1rem;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background: var(--w-bg);
   box-shadow: 0 1px 2px rgb(24 39 31 / 8%);
 }
@@ -2019,11 +2657,11 @@
   margin: -1rem -1rem 0.8rem;
   padding: 0.4rem 0.7rem 0.35rem;
   border-block-end: 4px solid var(--w-title-line);
-  border-radius: 0.15rem 0.15rem 0 0;
+  border-radius: var(--w-radius-sm) var(--w-radius-sm) 0 0;
   background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
 }
 .sapDoc.sapDoc section > header h2 {
-  color: #21362e;
+  color: var(--w-label);
   font-size: 0.85rem;
   font-weight: 700;
 }
@@ -2046,7 +2684,7 @@
 }
 
 .sapRegister .toolbarClear {
-  color: #315f4d;
+  color: var(--w-label);
 }
 
 .sapRegister .toolbarSearch input {
@@ -2054,7 +2692,7 @@
   block-size: 2.05rem;
   border-color: var(--w-line-strong);
   border-inline-end: 0;
-  border-radius: 0.12rem 0 0 0.12rem;
+  border-radius: var(--w-radius-sm) 0 0 var(--w-radius-sm);
   background: var(--w-field);
 }
 
@@ -2064,17 +2702,17 @@
   min-block-size: 2.05rem;
   block-size: 2.05rem;
   padding: 0;
-  border-radius: 0 0.12rem 0.12rem 0;
+  border-radius: 0 var(--w-radius-sm) var(--w-radius-sm) 0;
 }
 
 :global(html[dir='rtl']) .sapRegister .toolbarSearch input {
   border-inline-start: 1px solid var(--w-line-strong);
   border-inline-end: 0;
-  border-radius: 0 0.12rem 0.12rem 0;
+  border-radius: 0 var(--w-radius-sm) var(--w-radius-sm) 0;
 }
 
 :global(html[dir='rtl']) .sapRegister.sapRegister .toolbarSearch button {
-  border-radius: 0.12rem 0 0 0.12rem;
+  border-radius: var(--w-radius-sm) 0 0 var(--w-radius-sm);
 }
 
 .sapRegisterTableWrap {
@@ -2108,36 +2746,48 @@
   text-overflow: ellipsis;
 }
 
+/* The register's own status chip — the same four families as `.sapStatus`
+   above, and now the same tokens. This was a second set of hard-coded pastels,
+   which is why Draft, Posted and Approved still came out cream and near-white
+   on every dark palette after the document window's chips were fixed: a chip
+   in a list is a different rule from a chip on a document, and fixing one of
+   them fixed exactly one of them (reported 2026-09-29). Anything that draws a
+   status now derives from --chip-*; nothing here names a colour. */
 .sapRegister .sapRegisterStatus {
   min-block-size: 1.45rem;
   padding-inline: 0.55rem;
-  border: 1px solid #c1aa67;
+  border: 1px solid var(--chip-line);
   border-radius: 999px;
-  background: #fff3bd;
-  color: #654b06;
+  background: var(--chip-bg);
+  color: var(--chip-ink);
   font-size: 0.69rem;
   font-weight: 750;
 }
 
+.sapRegister .sapRegisterStatus[data-status='matched'],
 .sapRegister .sapRegisterStatus[data-status='posted'],
+.sapRegister .sapRegisterStatus[data-status='settled'],
 .sapRegister .sapRegisterStatus[data-status='approved'] {
-  border-color: #86a28c;
-  background: #e2f0df;
-  color: #235b32;
+  border-color: var(--chip-good-line);
+  background: var(--chip-good-bg);
+  color: var(--chip-good-ink);
 }
 
-.sapRegister .sapRegisterStatus[data-status='submitted'] {
-  border-color: #91a8bb;
-  background: #e5eef5;
-  color: #294f6d;
+.sapRegister .sapRegisterStatus[data-status='submitted'],
+.sapRegister .sapRegisterStatus[data-status='partially_executed'],
+.sapRegister .sapRegisterStatus[data-status='executed'] {
+  border-color: var(--chip-info-line);
+  background: var(--chip-info-bg);
+  color: var(--chip-info-ink);
 }
 
+.sapRegister .sapRegisterStatus[data-status='exception'],
 .sapRegister .sapRegisterStatus[data-status='rejected'],
 .sapRegister .sapRegisterStatus[data-status='cancelled'],
 .sapRegister .sapRegisterStatus[data-status='reversed'] {
-  border-color: #ca9b94;
-  background: #f7e5e2;
-  color: #7e332c;
+  border-color: var(--chip-bad-line);
+  background: var(--chip-bad-bg);
+  color: var(--chip-bad-ink);
 }
 
 .sapEmptyRow {
@@ -2227,12 +2877,12 @@
   margin: -0.25rem;
   padding: 0.75rem;
   border: 1px solid var(--w-line);
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background:
     linear-gradient(rgb(255 255 255 / 18%), rgb(255 255 255 / 0%)),
     var(--w-canvas);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 65%);
-  color-scheme: light;
+  color-scheme: var(--w-color-scheme, light);
 }
 
 .sapPage .sapPageHeader {
@@ -2243,13 +2893,13 @@
   padding: 0.55rem 0.75rem 0.5rem;
   border: 1px solid var(--w-line-strong);
   border-block-end: 5px solid var(--w-title-line);
-  border-radius: 0.18rem 0.18rem 0 0;
-  background: linear-gradient(180deg, #e8ece9, #cbd4cf);
+  border-radius: var(--w-radius) var(--w-radius) 0 0;
+  background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
   box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
 }
 
 .sapPage .sapPageHeader h1 {
-  color: #1d3129;
+  color: var(--w-label);
   font-family: Tahoma, "Segoe UI", Arial, sans-serif;
   font-size: 1.05rem;
   font-weight: 700;
@@ -2259,7 +2909,7 @@
 
 .sapPage .sapPageHeader p {
   margin-block-start: 0.2rem;
-  color: #51645b;
+  color: var(--w-muted);
   font-size: 0.73rem;
 }
 
@@ -2274,7 +2924,7 @@
   min-block-size: 1.9rem;
   padding-inline: 0.55rem 0.7rem;
   border-color: #557890;
-  border-radius: 0.18rem;
+  border-radius: var(--w-radius);
   color: #f8fbfd;
   background: linear-gradient(180deg, #7299b4, #456f8c);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 35%);
@@ -2293,7 +2943,7 @@
 }
 
 .sapPage .crumbTrail a:hover {
-  color: #315f4d;
+  color: var(--w-label);
 }
 
 .sapPage .crumbTrail strong {
@@ -2310,7 +2960,7 @@
   padding: 0;
   overflow-x: auto;
   border-color: var(--w-line-strong);
-  border-radius: 0.15rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-head);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 55%);
   scrollbar-color: var(--w-line-strong) var(--w-canvas);
@@ -2322,37 +2972,28 @@
   padding-inline: 0.8rem;
   border-inline-end: 1px solid var(--w-rule);
   border-radius: 0;
-  color: #3f534a;
+  color: var(--w-label);
   background: transparent;
   font-size: 0.73rem;
   font-weight: 650;
 }
 
 .sapPage .tabItem:hover {
-  color: #213c31;
-  background: #fff7d4;
+  color: var(--w-label);
+  background: var(--w-selected);
 }
 
 .sapPage .tabItem[aria-current='page'] {
-  color: #493400;
-  background: linear-gradient(180deg, #ffe59c, #efb737);
-  box-shadow: inset 0 -3px 0 #b97e08;
+  color: var(--w-accent-ink);
+  background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
+  box-shadow: inset 0 -3px 0 var(--w-amber-line);
 }
 
 .sapPage .flash {
   margin-block-end: 0.7rem;
   padding: 0.55rem 0.7rem;
-  border-color: #93a58f;
-  border-radius: 0.15rem;
-  background: #edf4e9;
-  color: #284b33;
+  border-radius: var(--w-radius-sm);
   font-size: 0.76rem;
-}
-
-.sapPage .flashError {
-  border-color: #bd746a;
-  background: #f8e5e1;
-  color: #782f28;
 }
 
 .sapPage .sectionHint {
@@ -2360,8 +3001,8 @@
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--w-line);
   border-inline-start: 3px solid var(--w-title-line);
-  background: #fff9dc;
-  color: #5f593f;
+  background: var(--w-selected);
+  color: var(--w-label);
   font-size: 0.75rem;
 }
 
@@ -2369,9 +3010,9 @@
   min-block-size: 2rem;
   padding-inline: 0.8rem;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.14rem;
-  color: #293a33;
-  background: linear-gradient(180deg, #fffef7, #e6e9e1);
+  border-radius: var(--w-radius-sm);
+  color: var(--w-label);
+  background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
   font-family: Tahoma, "Segoe UI", Arial, sans-serif;
   font-size: 0.75rem;
@@ -2379,9 +3020,9 @@
 }
 
 .sapPage.sapPage .button:hover {
-  border-color: #8b751f;
-  color: #3f3007;
-  background: linear-gradient(180deg, #fff9dc, #eadb9b);
+  border-color: var(--w-amber-line);
+  color: var(--w-label);
+  background: var(--w-selected);
 }
 
 .sapPage.sapPage .primary {
@@ -2391,9 +3032,9 @@
 }
 
 .sapPage.sapPage .primary:hover {
-  border-color: #966707;
-  color: #2e2000;
-  background: linear-gradient(180deg, #ffe5a0, #efa91d);
+  border-color: var(--w-amber-line);
+  color: var(--w-accent-ink);
+  background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
 }
 
 .sapPage.sapPage .danger {
@@ -2411,7 +3052,7 @@
 .sapPage.sapPage .button:focus-visible,
 .sapPage .backButton:focus-visible,
 .sapPage .tabItem:focus-visible {
-  outline: 2px solid #745807;
+  outline: 2px solid var(--w-title-line);
   outline-offset: 2px;
 }
 
@@ -2419,7 +3060,7 @@
   max-block-size: calc(100dvh - 2rem);
   overflow-y: auto;
   border-color: var(--w-line-strong);
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   color: var(--w-text);
   background: var(--w-bg);
   box-shadow: 0 22px 60px -20px rgb(15 27 21 / 55%);
@@ -2443,7 +3084,7 @@
 }
 
 .sapPage .dialogHeader h2 {
-  color: #21362e;
+  color: var(--w-label);
   font-size: 0.9rem;
   font-weight: 700;
 }
@@ -2455,14 +3096,14 @@
   min-block-size: 1.7rem;
   padding: 0;
   border-color: var(--w-line-strong);
-  border-radius: 0.12rem;
-  color: #42564c;
+  border-radius: var(--w-radius-sm);
+  color: var(--w-muted);
   background: var(--w-field-ro);
 }
 
 .sapPage.sapPage .dialogClose:hover {
-  border-color: #8b751f;
-  color: #3f3007;
+  border-color: var(--w-amber-line);
+  color: var(--w-label);
   background: var(--w-focus);
 }
 
@@ -2491,7 +3132,7 @@
   min-block-size: 2rem;
   padding-inline: 0.45rem;
   border-color: var(--w-line-strong);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   color: var(--w-text);
   background: var(--w-field);
   font-family: Tahoma, "Segoe UI", Arial, sans-serif;
@@ -2504,12 +3145,25 @@
   padding-block: 0.4rem;
 }
 
+/* A field and a button standing on the same row are the same height.
+   The rule above gives both a `min-block-size` of 2rem, but the application's
+   base rule also sets `block-size: var(--control-height)` on the boxes and
+   nothing on the buttons — so every box on a document-style page kept the
+   app's taller 2.55rem (41px) while every button took 2rem (32px), and a
+   filter row read as two different sizes standing next to each other. The
+   boxes are pinned to the same 2rem the buttons use. Not the textarea, which
+   is meant to be tall. */
+.sapPage.sapPage .input,
+.sapPage.sapPage .select {
+  block-size: 2rem;
+}
+
 .sapPage.sapPage .input:focus,
 .sapPage.sapPage .select:focus,
 .sapPage.sapPage .textarea:focus {
-  border-color: #8b751f;
+  border-color: var(--w-amber-line);
   background: var(--w-focus);
-  outline: 2px solid #9a760d;
+  outline: 2px solid var(--w-title-line);
   outline-offset: 1px;
   box-shadow: 0 0 0 1px #fff;
 }
@@ -2558,7 +3212,7 @@
 }
 
 .sapDoc .timelineMeta code {
-  color: #43574d;
+  color: var(--w-muted);
 }
 
 .sapDoc .emptyState {
@@ -2585,13 +3239,13 @@
   inline-size: 1.9rem;
   block-size: 1.9rem;
   border: 1px solid var(--w-line);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   color: #9a6d0b;
   background: var(--w-field-ro);
 }
 
 .sapDoc .fileBody a {
-  color: #274f3f;
+  color: var(--w-label);
   font-size: 0.78rem;
 }
 
@@ -2610,15 +3264,15 @@
 .sapDoc .uploadPicker {
   padding: 0.4rem 0.6rem;
   border-color: var(--w-line-strong);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   color: var(--w-label);
   background: var(--w-field-ro);
   font-size: 0.73rem;
 }
 
 .sapDoc .uploadPicker:hover {
-  border-color: #8b751f;
-  color: #3f3007;
+  border-color: var(--w-amber-line);
+  color: var(--w-label);
   background: var(--w-focus);
 }
 
@@ -2783,7 +3437,7 @@
 .sapPage :global(section[class*='panel']) {
   padding: 1rem;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background: var(--w-bg);
   box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
 }
@@ -2798,7 +3452,7 @@
 }
 
 .sapPage :global(section[class*='panel']) > header h2 {
-  color: #0f3350;
+  color: var(--w-label);
   font-size: 0.85rem;
   font-weight: 700;
   letter-spacing: 0;
@@ -2830,7 +3484,7 @@
   min-block-size: 2.05rem;
   block-size: 2.05rem;
   border-color: var(--w-line-strong);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-field);
 }
 
@@ -2884,36 +3538,44 @@
 }
 
 .sapPage :global(table.list) a {
-  color: #14507d;
+  color: var(--w-label);
+  text-decoration: underline;
   font-weight: 700;
 }
 
-/* ── Status, as a pill rather than a solid block ──────────────────────── */
+/* ── Status, as a pill rather than a solid block ──────────────────────────
+   The third place a status is drawn, after the document window and the
+   register — the global `.status` element as it appears on a SAP-chrome page.
+   All three now derive from the same --chip-* tokens. They were three separate
+   copies of the same twelve hexes, so a dark palette had to be fixed three
+   times to be fixed once, and twice it was not. */
 .sapPage :global(.status) {
   min-block-size: 1.4rem;
   padding-inline: 0.5rem;
-  border: 1px solid #c1aa67;
+  border: 1px solid var(--chip-line);
   border-radius: 999px;
-  background: #fff3bd;
-  color: #654b06;
+  background: var(--chip-bg);
+  color: var(--chip-ink);
   font-size: 0.69rem;
   font-weight: 750;
 }
 
 .sapPage :global(.status--posted),
+.sapPage :global(.status--settled),
 .sapPage :global(.status--approved),
 .sapPage :global(.status--active),
 .sapPage :global(.status--open) {
-  border-color: #86a28c;
-  background: #e2f0df;
-  color: #235b32;
+  border-color: var(--chip-good-line);
+  background: var(--chip-good-bg);
+  color: var(--chip-good-ink);
 }
 
 .sapPage :global(.status--submitted),
+.sapPage :global(.status--executed),
 .sapPage :global(.status--partially_executed) {
-  border-color: #91a8bb;
-  background: #e5eef5;
-  color: #294f6d;
+  border-color: var(--chip-info-line);
+  background: var(--chip-info-bg);
+  color: var(--chip-info-ink);
 }
 
 .sapPage :global(.status--rejected),
@@ -2921,9 +3583,9 @@
 .sapPage :global(.status--reversed),
 .sapPage :global(.status--closed),
 .sapPage :global(.status--inactive) {
-  border-color: #ca9b94;
-  background: #f7e5e2;
-  color: #7e332c;
+  border-color: var(--chip-bad-line);
+  background: var(--chip-bad-bg);
+  color: var(--chip-bad-ink);
 }
 
 /* Odds and ends the screens lean on. */
@@ -2953,7 +3615,7 @@
   block-size: 2.05rem;
   padding: 0;
   border: 1px solid var(--w-amber-line);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
   color: var(--w-accent-ink, #3a2600);
 }
@@ -2976,15 +3638,15 @@
 }
 
 .sapPage .pillOn {
-  border-color: #86a28c;
-  background: #e2f0df;
-  color: #235b32;
+  border-color: var(--chip-good-line);
+  background: var(--chip-good-bg);
+  color: var(--chip-good-ink);
 }
 
 .sapPage .pillOff {
-  border-color: #ca9b94;
-  background: #f7e5e2;
-  color: #7e332c;
+  border-color: var(--chip-bad-line);
+  background: var(--chip-bad-bg);
+  color: var(--chip-bad-ink);
 }
 
 /* ── Chart of Accounts, and the record framework ──────────────────────────
@@ -3001,7 +3663,7 @@
 .sapPage :global(.coa-kpi-card),
 .sapPage :global(.panel) {
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background: var(--w-bg);
   box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
 }
@@ -3018,7 +3680,7 @@
 .sapPage :global(.coa-title),
 .sapPage :global(.panel__title),
 .sapPage :global(.page__title) {
-  color: #0f3350;
+  color: var(--w-label);
   font-size: 0.85rem;
   font-weight: 700;
   letter-spacing: 0;
@@ -3078,7 +3740,8 @@
 .sapPage :global(.coa-account-link),
 .sapPage :global(.coa-detail-link),
 .sapPage :global(.coa-inline-link) {
-  color: #14507d;
+  color: var(--w-label);
+  text-decoration: underline;
   font-weight: 700;
 }
 
@@ -3090,7 +3753,7 @@
 .sapPage :global(.coa-page-button),
 .sapPage :global(.action) {
   border: 1px solid var(--w-amber-line);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
   color: var(--w-accent-ink, #3a2600);
   font-weight: 700;
@@ -3119,7 +3782,7 @@
 .sapPage :global(.coa-select),
 .sapPage :global(.coa-context-field) {
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-field);
   color: var(--w-text);
   font-size: 0.78rem;
@@ -3129,7 +3792,7 @@
 .sapPage :global(.page__header) {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background: linear-gradient(180deg, var(--w-title-a), var(--w-title-b));
   box-shadow: inset 0 -2px 0 var(--w-title-line);
 }
@@ -3170,7 +3833,7 @@
 
 /* The accounting package as most people first met it: cool blue-grey chrome,
    a blue title bar, amber buttons. */
-:global(html:has([data-palette='classic'])),
+:global(html:has(.erp-root[data-palette='classic'])),
 :global([data-palette='classic']) {
   --w-bg: #eef2f7;
   --w-canvas: #dfe6ee;
@@ -3201,7 +3864,7 @@
 }
 
 /* Cooler and quieter than classic, for a room with a lot of screens in it. */
-:global(html:has([data-palette='slate'])),
+:global(html:has(.erp-root[data-palette='slate'])),
 :global([data-palette='slate']) {
   --w-bg: #f4f6f8;
   --w-canvas: #e3e8ed;
@@ -3233,7 +3896,7 @@
 
 /* Near-neutral chrome, white paper. The one to pick when the company's own
    colours are doing the talking elsewhere. */
-:global(html:has([data-palette='graphite'])),
+:global(html:has(.erp-root[data-palette='graphite'])),
 :global([data-palette='graphite']) {
   --w-bg: #f7f7f6;
   --w-canvas: #e6e6e4;
@@ -3279,7 +3942,7 @@
   justify-items: center;
   padding: 0.6rem;
   border: 1px solid var(--w-line, var(--border));
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background: var(--w-bg, var(--surface));
   cursor: pointer;
 }
@@ -3312,7 +3975,7 @@
   inline-size: 100%;
   overflow: hidden;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.15rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-canvas);
 }
 
@@ -3356,7 +4019,7 @@
   min-block-size: 1.75rem;
   padding-inline: 0.5rem 0.65rem;
   border: 1px solid var(--w-amber-line);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
   color: var(--w-accent-ink, #3a2600);
   font-size: 0.76rem;
@@ -3470,10 +4133,10 @@
 }
 
 .sapPage .system {
-  border: 1px solid #91a8bb;
+  border: 1px solid var(--chip-info-line);
   border-radius: 999px;
-  background: #e5eef5;
-  color: #294f6d;
+  background: var(--chip-info-bg);
+  color: var(--chip-info-ink);
   font-size: 0.69rem;
   font-weight: 750;
 }
@@ -3484,14 +4147,14 @@
    otherwise ruled screen that still read as a different product. */
 .sapPage .stat {
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background: var(--w-bg);
   box-shadow: 0 1px 2px rgb(24 39 31 / 10%);
 }
 
 .sapPage .statIcon {
   border: 1px solid var(--w-line);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-head-strong);
   color: var(--w-label);
 }
@@ -3540,8 +4203,9 @@
    wins over a palette's own amber by source order, never by specificity
    games. The picker's dots carry these attributes too, which is how a dot is
    painted by the very tokens it selects. */
-:global(html:has([data-accent='red'])),
-:global([data-accent='red']) {
+:global(html:has(.erp-root[data-palette][data-accent='red'])),
+:global([data-palette][data-accent='red']),
+:global([data-accent='red']:not(html)) {
   --w-amber-a: #f2b6a6;
   --w-amber-b: #d96a50;
   --w-amber-line: #a63d26;
@@ -3552,8 +4216,9 @@
   --w-focus: #ffe9e2;
 }
 
-:global(html:has([data-accent='blue'])),
-:global([data-accent='blue']) {
+:global(html:has(.erp-root[data-palette][data-accent='blue'])),
+:global([data-palette][data-accent='blue']),
+:global([data-accent='blue']:not(html)) {
   --w-amber-a: #c6ddf3;
   --w-amber-b: #6f9fce;
   --w-amber-line: #37678f;
@@ -3564,8 +4229,9 @@
   --w-focus: #e9f3fd;
 }
 
-:global(html:has([data-accent='green'])),
-:global([data-accent='green']) {
+:global(html:has(.erp-root[data-palette][data-accent='green'])),
+:global([data-palette][data-accent='green']),
+:global([data-accent='green']:not(html)) {
   --w-amber-a: #c4e3bd;
   --w-amber-b: #6da868;
   --w-amber-line: #39702f;
@@ -3576,8 +4242,9 @@
   --w-focus: #edf7e9;
 }
 
-:global(html:has([data-accent='purple'])),
-:global([data-accent='purple']) {
+:global(html:has(.erp-root[data-palette][data-accent='purple'])),
+:global([data-palette][data-accent='purple']),
+:global([data-accent='purple']:not(html)) {
   --w-amber-a: #d9ccee;
   --w-amber-b: #977bc9;
   --w-amber-line: #644a99;
@@ -3604,7 +4271,7 @@
   gap: 0.45rem;
   padding: 0.35rem 0.6rem;
   border: 1px solid var(--w-line, var(--border));
-  border-radius: 0.2rem;
+  border-radius: var(--w-radius);
   background: var(--w-bg, var(--surface));
   cursor: pointer;
 }
@@ -3632,7 +4299,7 @@
   inline-size: 1.05rem;
   block-size: 1.05rem;
   border: 1px solid var(--w-amber-line);
-  border-radius: 0.15rem;
+  border-radius: var(--w-radius-sm);
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
 }
 
@@ -3672,10 +4339,13 @@
   font-size: 0.78rem;
 }
 
+/* The same 2rem the fields and `.button` stand at. At 1.75rem with 0.6rem of
+   inset this was the one control on a document that was shorter and tighter
+   than everything beside it, which read as a button with no padding. */
 .sapPage :global(.action) {
-  min-block-size: 1.75rem;
-  padding-inline: 0.6rem;
-  border-radius: 0.12rem;
+  min-block-size: 2rem;
+  padding-inline: 0.85rem;
+  border-radius: var(--w-radius-sm);
   font-size: 0.76rem;
   font-weight: 700;
 }
@@ -3706,7 +4376,7 @@
 .sapPage .avatarLarge,
 .sapPage .avatarSmall {
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.15rem;
+  border-radius: var(--w-radius-sm);
   color: var(--w-label);
   background: var(--w-head-strong);
 }
@@ -3768,7 +4438,7 @@
 .sapDoc .timeline li::before,
 .sapPage .timeline li::before {
   border: 1px solid var(--w-amber-line);
-  border-radius: 0.1rem;
+  border-radius: var(--w-radius-sm);
   background: linear-gradient(180deg, var(--w-amber-a), var(--w-amber-b));
 }
 
@@ -3805,7 +4475,7 @@
   min-inline-size: 1.8rem;
   min-block-size: 1.7rem;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.12rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-bg);
   color: var(--w-label);
   font-size: 0.76rem;
@@ -3840,7 +4510,7 @@
    light one always has a corner nobody inverted. The gold accent stays gold
    — the light amber pair reads on a dark ground, and the accents override it
    the same way they do in the light. */
-:global(html:has([data-palette='midnight'])),
+:global(html:has(.erp-root[data-palette='midnight'])),
 :global([data-palette='midnight']) {
   --w-bg: #1d232a;
   --w-canvas: #151a20;
@@ -3872,7 +4542,7 @@
   --w-band: #222932;
 }
 
-:global(html:has([data-palette='carbon'])),
+:global(html:has(.erp-root[data-palette='carbon'])),
 :global([data-palette='carbon']) {
   --w-bg: #222220;
   --w-canvas: #191918;
@@ -3902,6 +4572,518 @@
   --w-chrome-text: #e4e4df;
   --w-paper: #2c2c29;
   --w-band: #272724;
+}
+
+:global(html:has(.erp-root[data-palette='pearl'])),
+:global([data-palette='pearl']) {
+  --w-bg: #ffffff;
+  --w-canvas: #f3f5f9;
+  --w-line: #c8d2df;
+  --w-line-strong: #8b9cb2;
+  --w-rule: #dce3ed;
+  --w-field: #ffffff;
+  --w-field-ro: #f1f4f8;
+  --w-label: #30415a;
+  --w-text: #1c2940;
+  --w-muted: #607087;
+  --w-title-a: #ffffff;
+  --w-title-b: #e8edf5;
+  --w-title-line: #e0a415;
+  --w-head: #edf1f7;
+  --w-head-strong: #e3eaf3;
+  --w-filler: #f8fafd;
+  --w-selected: #fff2af;
+  --w-selected-strong: #f7cf7a;
+  --w-amber-a: #ffd978;
+  --w-amber-b: #e9aa24;
+  --w-amber-line: #b77d0b;
+  --w-focus: #fff5b8;
+  --w-chrome-a: #ffffff;
+  --w-chrome-b: #edf1f7;
+  --w-chrome-line: #c8d2df;
+  --w-chrome-text: #30415a;
+  --w-paper: #ffffff;
+  --w-band: #f6f8fc;
+}
+
+:global(html:has(.erp-root[data-palette='ocean'])),
+:global([data-palette='ocean']) {
+  --w-bg: #142b3b;
+  --w-canvas: #0b1b29;
+  --w-line: #35546a;
+  --w-line-strong: #52748b;
+  --w-rule: #294557;
+  --w-field: #193447;
+  --w-field-ro: #172e3f;
+  --w-label: #d2e7f2;
+  --w-text: #edf7fc;
+  --w-muted: #9cb9ca;
+  --w-title-a: #23465a;
+  --w-title-b: #183748;
+  --w-title-line: #e9aa24;
+  --w-head: #1e3c4f;
+  --w-head-strong: #284b60;
+  --w-filler: #102635;
+  --w-selected: #394334;
+  --w-selected-strong: #57593a;
+  --w-amber-a: #ffd978;
+  --w-amber-b: #e9aa24;
+  --w-amber-line: #b77d0b;
+  --w-focus: #354433;
+  --w-chrome-a: #1b384b;
+  --w-chrome-b: #102738;
+  --w-chrome-line: #294b61;
+  --w-chrome-text: #dceef7;
+  --w-paper: #193244;
+  --w-band: #173041;
+}
+
+:global(html:has(.erp-root[data-palette='obsidian_plum'])),
+:global([data-palette='obsidian_plum']) {
+  --w-canvas: #1b1622;
+  --w-bg: #292131;
+  --w-line: #53445f;
+  --w-line-strong: #786484;
+  --w-rule: #493b54;
+  --w-field: #342b3e;
+  --w-field-ro: #2d2535;
+  --w-text: #f4eef7;
+  --w-label: #e8dcef;
+  --w-muted: #bcabc7;
+  --w-title-a: #43334e;
+  --w-title-b: #34283e;
+  --w-head: #3a2e44;
+  --w-head-strong: #4a3956;
+  --w-filler: #251d2d;
+  --w-chrome-a: #392b44;
+  --w-chrome-b: #251d2d;
+  --w-chrome-line: #51405e;
+  --w-chrome-text: #efe4f5;
+  --w-paper: #2e2537;
+  --w-band: #31273a;
+}
+
+:global(html:has(.erp-root[data-palette='evergreen'])),
+:global([data-palette='evergreen']) {
+  --w-canvas: #101e19;
+  --w-bg: #1c2e25;
+  --w-line: #3d594a;
+  --w-line-strong: #62816f;
+  --w-rule: #344e40;
+  --w-field: #263c30;
+  --w-field-ro: #213328;
+  --w-text: #edf6ee;
+  --w-label: #d7e9da;
+  --w-muted: #a7c1ad;
+  --w-title-a: #304d3c;
+  --w-title-b: #243c2e;
+  --w-head: #2a4434;
+  --w-head-strong: #365440;
+  --w-filler: #18291f;
+  --w-chrome-a: #284434;
+  --w-chrome-b: #182b21;
+  --w-chrome-line: #395544;
+  --w-chrome-text: #e2f0e5;
+  --w-paper: #20372a;
+  --w-band: #243a2d;
+}
+
+:global(html:has(.erp-root[data-palette='espresso'])),
+:global([data-palette='espresso']) {
+  --w-canvas: #211914;
+  --w-bg: #30251e;
+  --w-line: #605044;
+  --w-line-strong: #897262;
+  --w-rule: #534337;
+  --w-field: #3d3027;
+  --w-field-ro: #362a22;
+  --w-text: #f7efe3;
+  --w-label: #ecddca;
+  --w-muted: #c7b29b;
+  --w-title-a: #4d3a2c;
+  --w-title-b: #3b2d23;
+  --w-head: #433326;
+  --w-head-strong: #554031;
+  --w-filler: #2a2019;
+  --w-chrome-a: #443225;
+  --w-chrome-b: #2c211a;
+  --w-chrome-line: #5b4636;
+  --w-chrome-text: #f1e4d1;
+  --w-paper: #362a22;
+  --w-band: #3a2d24;
+}
+
+:global(html:has(.erp-root[data-palette='lunar_slate'])),
+:global([data-palette='lunar_slate']) {
+  --w-canvas: #222935;
+  --w-bg: #2e3745;
+  --w-line: #55647a;
+  --w-line-strong: #8190a5;
+  --w-rule: #48576b;
+  --w-field: #394555;
+  --w-field-ro: #323d4c;
+  --w-text: #f3f6fb;
+  --w-label: #e0e8f3;
+  --w-muted: #b4c2d4;
+  --w-title-a: #455369;
+  --w-title-b: #354154;
+  --w-head: #3b485b;
+  --w-head-strong: #4a5970;
+  --w-filler: #293240;
+  --w-chrome-a: #3c495e;
+  --w-chrome-b: #2b3545;
+  --w-chrome-line: #526177;
+  --w-chrome-text: #e6edf8;
+  --w-paper: #333f50;
+  --w-band: #354153;
+}
+
+:global(html:has(.erp-root[data-palette='ivory_linen'])),
+:global([data-palette='ivory_linen']) {
+  --w-canvas: #f2ece0;
+  --w-bg: #fffcf5;
+  --w-line: #cec2ae;
+  --w-line-strong: #a7977e;
+  --w-rule: #e1d7c6;
+  --w-field: #fffef9;
+  --w-field-ro: #f1eadc;
+  --w-text: #302a21;
+  --w-label: #4b4031;
+  --w-muted: #665642;
+  --w-title-a: #faf4e7;
+  --w-title-b: #e7dcc7;
+  --w-head: #f0e7d6;
+  --w-head-strong: #e7dbc5;
+  --w-filler: #f9f4ea;
+  --w-chrome-a: #faf4e9;
+  --w-chrome-b: #e8ddc9;
+  --w-chrome-line: #cbbda4;
+  --w-chrome-text: #4b4031;
+  --w-paper: #fffdf8;
+  --w-band: #f7f1e6;
+}
+
+:global(html:has(.erp-root[data-palette='glacier'])),
+:global([data-palette='glacier']) {
+  --w-canvas: #eaf3f8;
+  --w-bg: #ffffff;
+  --w-line: #bed1df;
+  --w-line-strong: #829eb2;
+  --w-rule: #d4e4ed;
+  --w-field: #ffffff;
+  --w-field-ro: #eaf2f8;
+  --w-text: #1b3044;
+  --w-label: #29495f;
+  --w-muted: #496175;
+  --w-title-a: #f3faff;
+  --w-title-b: #d5e8f4;
+  --w-head: #e3f0f8;
+  --w-head-strong: #d3e6f2;
+  --w-filler: #f5fafe;
+  --w-chrome-a: #f5fbff;
+  --w-chrome-b: #d9eaf5;
+  --w-chrome-line: #b9cfdc;
+  --w-chrome-text: #29495f;
+  --w-paper: #ffffff;
+  --w-band: #f1f7fc;
+}
+
+:global(html:has(.erp-root[data-palette='sage_white'])),
+:global([data-palette='sage_white']) {
+  --w-canvas: #edf3ec;
+  --w-bg: #fcfefb;
+  --w-line: #c1d0be;
+  --w-line-strong: #899f86;
+  --w-rule: #d9e3d6;
+  --w-field: #ffffff;
+  --w-field-ro: #eaf1e7;
+  --w-text: #25352a;
+  --w-label: #354e3b;
+  --w-muted: #4e6651;
+  --w-title-a: #f4f8f0;
+  --w-title-b: #dbe7d4;
+  --w-head: #e7efdf;
+  --w-head-strong: #d8e4cf;
+  --w-filler: #f5f8f1;
+  --w-chrome-a: #f3f8ef;
+  --w-chrome-b: #dfe9d7;
+  --w-chrome-line: #bacdb5;
+  --w-chrome-text: #354e3b;
+  --w-paper: #fefffc;
+  --w-band: #f1f6ec;
+}
+
+:global(html:has(.erp-root[data-palette='porcelain_rose'])),
+:global([data-palette='porcelain_rose']) {
+  --w-canvas: #f5eff1;
+  --w-bg: #fffcfd;
+  --w-line: #d7c3cb;
+  --w-line-strong: #ab8b98;
+  --w-rule: #e8d8df;
+  --w-field: #ffffff;
+  --w-field-ro: #f4eaf0;
+  --w-text: #392b36;
+  --w-label: #573e50;
+  --w-muted: #715568;
+  --w-title-a: #fff6f9;
+  --w-title-b: #edd8e1;
+  --w-head: #f3e5eb;
+  --w-head-strong: #e9d3de;
+  --w-filler: #fcf6f8;
+  --w-chrome-a: #fff8fa;
+  --w-chrome-b: #efdee5;
+  --w-chrome-line: #d5bfc9;
+  --w-chrome-text: #573e50;
+  --w-paper: #fffefe;
+  --w-band: #faf0f4;
+}
+
+:global(html:has(.erp-root[data-palette='dune_bronze'])),
+:global([data-palette='dune_bronze']) {
+  --w-canvas: #c8b99f;
+  --w-bg: #e0d5c2;
+  --w-line: #ab997d;
+  --w-line-strong: #806e51;
+  --w-rule: #c0af94;
+  --w-field: #eee4d2;
+  --w-field-ro: #d4c7b0;
+  --w-text: #30291f;
+  --w-label: #3d3324;
+  --w-muted: #473b29;
+  --w-title-a: #cbbb9e;
+  --w-title-b: #b5a58a;
+  --w-head: #d0c1a6;
+  --w-head-strong: #c3b191;
+  --w-filler: #d7cbb5;
+  --w-chrome-a: #cdbda1;
+  --w-chrome-b: #b5a58a;
+  --w-chrome-line: #948165;
+  --w-chrome-text: #30291f;
+  --w-paper: #e8decb;
+  --w-band: #dbcfb7;
+}
+
+:global(html:has(.erp-root[data-palette='harbor_mist'])),
+:global([data-palette='harbor_mist']) {
+  --w-canvas: #a5b5be;
+  --w-bg: #ccd6db;
+  --w-line: #8da1ad;
+  --w-line-strong: #637e8c;
+  --w-rule: #a5b8c1;
+  --w-field: #dde6eb;
+  --w-field-ro: #bfccd3;
+  --w-text: #1d303b;
+  --w-label: #213641;
+  --w-muted: #293a44;
+  --w-title-a: #b3c3cc;
+  --w-title-b: #91a5b0;
+  --w-head: #b8c9d2;
+  --w-head-strong: #a7bbc7;
+  --w-filler: #c2cfd6;
+  --w-chrome-a: #b5c6d0;
+  --w-chrome-b: #91a5b0;
+  --w-chrome-line: #738e9e;
+  --w-chrome-text: #1d303b;
+  --w-paper: #d4dee4;
+  --w-band: #c3d0d8;
+}
+
+:global(html:has(.erp-root[data-palette][data-accent='gold'])),
+:global([data-palette][data-accent='gold']),
+:global([data-accent='gold']:not(html)) {
+  --w-amber-a: #ffd978;
+  --w-amber-b: #e9aa24;
+  --w-amber-line: #b77d0b;
+  --w-accent-ink: #3a2600;
+  --w-selected: #fff2af;
+  --w-selected-strong: #f7cf7a;
+  --w-title-line: #e0a415;
+  --w-focus: #fff5b8;
+}
+
+:global(html:has(.erp-root[data-palette])),
+:global([data-palette]) {
+  --surface: var(--w-bg);
+  --surface-raised: var(--w-bg);
+  --surface-sunken: var(--w-canvas);
+  --surface-muted: var(--w-head);
+  --surface-overlay: var(--w-bg);
+  --border: var(--w-rule);
+  --border-strong: var(--w-line-strong);
+  --text: var(--w-text);
+  --text-soft: var(--w-label);
+  --text-muted: var(--w-muted);
+  --accent: var(--w-label);
+  --accent-hover: var(--w-text);
+  --accent-soft: var(--w-selected);
+  --accent-border: var(--w-amber-line);
+  --accent-contrast: var(--w-bg);
+  --accent-foreground: var(--w-bg);
+  --status-rejected: #c62845;
+  --status-posted: #14804a;
+  --status-approved: #2563eb;
+  --status-submitted: #b45309;
+  --destructive: var(--status-rejected);
+  --background: var(--w-canvas);
+  --foreground: var(--w-text);
+  --card: var(--w-bg);
+  --card-foreground: var(--w-text);
+  --popover: var(--w-bg);
+  --popover-foreground: var(--w-text);
+  --primary: var(--w-label);
+  --primary-foreground: var(--w-bg);
+  --secondary: var(--w-head);
+  --secondary-foreground: var(--w-label);
+  --muted: var(--w-head);
+  --muted-foreground: var(--w-muted);
+  --input: var(--w-line-strong);
+  --ring: var(--w-title-line);
+  --focus-ring: 0 0 0 2px var(--w-title-line);
+  --w-check: #e9aa24;
+  --w-check-ink: #ffffff;
+  --w-color-scheme: light;
+  color-scheme: var(--w-color-scheme);
+}
+
+:global(html:has(.erp-root[data-palette='midnight'][data-accent])),
+:global(html:has(.erp-root[data-palette='carbon'][data-accent])),
+:global(html:has(.erp-root[data-palette='ocean'][data-accent])),
+:global(.erp-root[data-palette='midnight'][data-accent]),
+:global(.erp-root[data-palette='carbon'][data-accent]),
+:global(.erp-root[data-palette='ocean'][data-accent]),
+:global([data-palette='midnight']),
+:global([data-palette='carbon']),
+:global([data-palette='ocean']),
+:global(html:has(.erp-root[data-palette='obsidian_plum'][data-accent])),
+:global(html:has(.erp-root[data-palette='evergreen'][data-accent])),
+:global(html:has(.erp-root[data-palette='espresso'][data-accent])),
+:global(html:has(.erp-root[data-palette='lunar_slate'][data-accent])),
+:global(.erp-root[data-palette='obsidian_plum'][data-accent]),
+:global(.erp-root[data-palette='evergreen'][data-accent]),
+:global(.erp-root[data-palette='espresso'][data-accent]),
+:global(.erp-root[data-palette='lunar_slate'][data-accent]),
+:global([data-palette='obsidian_plum']),
+:global([data-palette='evergreen']),
+:global([data-palette='espresso']),
+:global([data-palette='lunar_slate']) {
+  --w-color-scheme: dark;
+  --w-check-ink: #17241f;
+  --w-selected: color-mix(in srgb, var(--w-amber-b) 18%, var(--w-bg));
+  --w-selected-strong: color-mix(in srgb, var(--w-amber-b) 28%, var(--w-bg));
+  --w-focus: color-mix(in srgb, var(--w-amber-b) 16%, var(--w-field));
+  --w-title-line: var(--w-amber-b);
+  --status-rejected: #ff9b9b;
+  --status-posted: #75d7a1;
+  --status-approved: #9cbfff;
+  --status-submitted: #f4c568;
+
+  /* The chips, on a dark ground. Built from the `--status-*` tokens this block
+     already sets rather than from a second set of hand-picked colours: the ink
+     is the status colour itself — light, because these are the dark variants —
+     over a low tint of it mixed into the window's own field colour, so a chip
+     belongs to whichever dark palette is on and not to a generic "dark mode".
+     The mix is against `--w-field`, so Espresso's chips are warm and Ocean's
+     are cool without either being written down. */
+  --chip-line: color-mix(in srgb, var(--status-submitted) 55%, var(--w-line-strong));
+  --chip-bg: color-mix(in srgb, var(--status-submitted) 16%, var(--w-field));
+  --chip-ink: var(--status-submitted);
+  --chip-good-line: color-mix(in srgb, var(--status-posted) 55%, var(--w-line-strong));
+  --chip-good-bg: color-mix(in srgb, var(--status-posted) 16%, var(--w-field));
+  --chip-good-ink: var(--status-posted);
+  --chip-info-line: color-mix(in srgb, var(--status-approved) 55%, var(--w-line-strong));
+  --chip-info-bg: color-mix(in srgb, var(--status-approved) 16%, var(--w-field));
+  --chip-info-ink: var(--status-approved);
+  --chip-bad-line: color-mix(in srgb, var(--status-rejected) 55%, var(--w-line-strong));
+  --chip-bad-bg: color-mix(in srgb, var(--status-rejected) 16%, var(--w-field));
+  --chip-bad-ink: var(--status-rejected);
+  --chip-warn-line: color-mix(in srgb, var(--status-rejected) 60%, var(--w-line-strong));
+  --chip-warn-bg: color-mix(in srgb, var(--status-rejected) 18%, var(--w-field));
+  --chip-warn-ink: var(--status-rejected);
+
+  /* The charts, stepped for a dark ground — the same hues, chosen for the dark
+     band and validated against this application's darkest surface, not an
+     automatic inversion of the light steps. The ramp stops one step lighter
+     than the light-mode ramp does: its darkest step measured 1.95:1 against
+     the window and would have sunk into it. */
+  --chart-series-1: #3987e5;
+  --chart-series-2: #d95926;
+  --chart-ramp-1: #cde2fb;
+  --chart-ramp-2: #9ec5f4;
+  --chart-ramp-3: #6da7ec;
+  --chart-ramp-4: #3987e5;
+  --chart-ramp-5: #256abf;
+  --chart-negative: #ff9b9b;
+}
+
+:global([data-palette] input[type='checkbox']),
+:global([data-palette] input[type='radio']) {
+  accent-color: var(--w-check);
+}
+
+:global([data-palette] input[type='checkbox']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  box-sizing: border-box;
+  inline-size: 1rem;
+  block-size: 1rem;
+  min-inline-size: 1rem;
+  min-block-size: 1rem;
+  padding: 0;
+  border: 1px solid var(--w-line-strong);
+  border-radius: var(--w-radius-sm);
+  background: var(--w-field);
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+:global([data-palette] input[type='checkbox'])::before {
+  content: '';
+  inline-size: 0.8rem;
+  block-size: 0.8rem;
+  background: var(--w-check-ink);
+  clip-path: polygon(8% 43%, 20% 31%, 40% 53%, 79% 13%, 92% 26%, 40% 80%);
+  visibility: hidden;
+}
+
+:global([data-palette] input[type='checkbox']:checked),
+:global([data-palette] input[type='checkbox']:indeterminate) {
+  background: var(--w-check);
+  border-color: #b77d0b;
+}
+
+:global([data-palette] input[type='checkbox']:checked)::before,
+:global([data-palette] input[type='checkbox']:indeterminate)::before {
+  visibility: visible;
+}
+
+:global([data-palette] input[type='checkbox']:indeterminate)::before {
+  clip-path: inset(40% 12%);
+}
+
+:global([data-palette] input[type='checkbox']:focus-visible) {
+  outline: 2px solid var(--w-title-line);
+  outline-offset: 2px;
+}
+
+:global([data-palette] input[type='checkbox']:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (forced-colors: active) {
+  :global([data-palette] input[type='checkbox']) {
+    appearance: auto;
+  }
+
+  :global([data-palette] input[type='checkbox'])::before {
+    display: none;
+  }
+}
+
+:global([data-palette]) ::selection {
+  color: var(--w-accent-ink);
+  background: var(--w-amber-a);
 }
 
 /* ── Phones ───────────────────────────────────────────────────────────────
@@ -3954,7 +5136,8 @@
 /* A file on a document is a door: it looks like one. */
 .sapDoc .fileList a,
 .sapPage .fileList a {
-  color: #14507d;
+  color: var(--w-label);
+  text-decoration: underline;
   font-weight: 700;
   text-decoration: underline;
 }
@@ -4024,16 +5207,20 @@
   gap: 0.35rem;
 }
 
+/* A shade bigger than it was, and it says it can be clicked (2026-10-03):
+   at 1.7rem with a 0.85rem glyph the two icons beside a document's title read
+   as decoration, and the cursor did not contradict that. */
 .sapDoc.sapDoc .sapIconButton,
 .sapDoc.sapDoc a.sapIconButton {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
   min-inline-size: 0;
-  min-block-size: 1.7rem;
-  padding: 0.15rem 0.55rem;
+  min-block-size: 1.95rem;
+  padding: 0.2rem 0.65rem;
+  cursor: pointer;
   border: 1px solid var(--w-line-strong);
-  border-radius: 0.14rem;
+  border-radius: var(--w-radius-sm);
   background: var(--w-bg);
   color: var(--w-label);
   font-size: 0.72rem;
@@ -4047,8 +5234,8 @@
 }
 
 .sapDoc .sapIconButton svg {
-  inline-size: 0.85rem;
-  block-size: 0.85rem;
+  inline-size: 1.02rem;
+  block-size: 1.02rem;
 }
 
 .sapIconCount {
@@ -4086,10 +5273,10 @@
 
 .sapBalanced {
   padding: 0.28rem 0.5rem;
-  border: 1px solid #86a28c;
-  border-radius: 0.12rem;
-  background: #e2f0df;
-  color: #235b32;
+  border: 1px solid var(--chip-good-line);
+  border-radius: var(--w-radius-sm);
+  background: var(--chip-good-bg);
+  color: var(--chip-good-ink);
   font-size: 0.72rem;
   font-weight: 700;
 }
@@ -4101,9 +5288,32 @@
   font-size: 0.68rem;
 }
 
-/* The header boxes a draft may type into, drawn like the read-only ones. */
-.sapDoc.sapDoc .sapField > input {
+/* The header boxes a draft may type into, drawn like the read-only ones.
+   `select` as well as `input` (2026-10-03): the rule named only inputs, so a
+   header's selects — Payable account (statement) among them — stood shorter
+   than the `.sapBox` cells either side and the row read as out of line. */
+.sapDoc.sapDoc .sapField > input,
+.sapDoc.sapDoc .sapField > select {
   min-block-size: 2rem;
+}
+
+/* A tick with its sentence beside it — "This is an import" — is a field like
+   any other and was reading as an afterthought under a label (2026-10-03). The
+   wrapper takes the same height as the boxes either side and centres what is
+   in it; the tick itself is a shade larger here and nowhere else, because the
+   global 1rem is right in a permissions matrix of two hundred of them. */
+.sapDoc.sapDoc .sapField > label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-block-size: 2rem;
+}
+
+.sapDoc.sapDoc .sapField > label > input[type='checkbox'] {
+  inline-size: 1.15rem;
+  block-size: 1.15rem;
+  min-inline-size: 1.15rem;
+  min-block-size: 1.15rem;
 }
 
 /* ── Reporting levels ─────────────────────────────────────────────────────
@@ -4255,7 +5465,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: #765b0b;
+  color: var(--w-label);
   font-size: 0.8rem;
   box-shadow: none;
 }
@@ -4481,4 +5691,193 @@
   .mapTable {
     min-inline-size: 40rem;
   }
+}
+
+/* ── Chart anatomy ────────────────────────────────────────────────────────
+   Layout only. Every colour above is a token; nothing here picks one. */
+.chartGrid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  margin: 0;
+}
+
+/*
+ * A document window standing in that grid fills its cell.
+ *
+ * The import's four lanes sit side by side (2026-10-03). A grid cell already
+ * stretches to the tallest in its row, but the window inside it keeps its own
+ * height, so four lanes of different lengths drew four boxes with white space
+ * under the short ones. Scoped to a window inside the grid: nothing else that
+ * uses `.chartGrid` holds one.
+ */
+.chartGrid > .sapDoc {
+  display: flex;
+}
+
+.chartGrid > .sapDoc > .sapWindow {
+  flex: 1;
+  margin-block-end: 0;
+}
+
+.chartFigure {
+  /* Each card is as tall as its own content. Stretching them to the tallest in
+     the row leaves a short chart floating in a half-empty box. */
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0.7rem 0.8rem 0.6rem;
+  border: 1px solid var(--w-line);
+  border-radius: var(--w-radius);
+  background: var(--w-bg);
+}
+
+.chartCaption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  color: var(--w-text);
+  font-size: 0.78rem;
+}
+
+.chartCaption span {
+  color: var(--w-muted);
+  font-size: 0.7rem;
+  font-weight: 400;
+}
+
+/* The plot grows with the card; the axis band is inside the height, so the
+   card never gets a nested scrollbar to reveal its own labels. */
+.chartSvg {
+  inline-size: 100%;
+  block-size: 10.5rem;
+  overflow: visible;
+}
+
+.chartLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.8rem;
+  margin: 0;
+  padding: 0;
+  color: var(--w-muted);
+  font-size: 0.68rem;
+  list-style: none;
+}
+
+.chartLegend li {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.chartLegend li > span {
+  inline-size: 0.6rem;
+  block-size: 0.6rem;
+  border-radius: 0.1rem;
+}
+
+.chartLegend strong {
+  color: var(--w-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.chartBars {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chartBars li {
+  display: grid;
+  align-items: center;
+  gap: 0.5rem;
+  grid-template-columns: minmax(5rem, 9rem) 1fr auto;
+  font-size: 0.72rem;
+}
+
+.chartBarLabel {
+  overflow: hidden;
+  color: var(--w-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chartBarTrack {
+  display: block;
+  block-size: 0.7rem;
+  border-radius: 0.1rem;
+  background: var(--chart-track);
+}
+
+.chartBarFill {
+  display: block;
+  block-size: 100%;
+  /* 4px rounded data-end, square where it meets the baseline. */
+  border-radius: 0 0.25rem 0.25rem 0;
+  block-size: 0.7rem;
+}
+
+.chartBarValue {
+  color: var(--w-text);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* The 2px separators are the surface showing through — never a stroke. */
+.chartStack {
+  display: flex;
+  gap: 2px;
+  overflow: hidden;
+  block-size: 1.1rem;
+  border-radius: 0.1rem;
+}
+
+.chartStackSegment {
+  display: block;
+  block-size: 100%;
+  border-radius: 0.1rem;
+}
+
+.chartTable {
+  color: var(--w-muted);
+  font-size: 0.68rem;
+}
+
+.chartTable summary {
+  cursor: pointer;
+}
+
+.chartTable table {
+  inline-size: 100%;
+  margin-block-start: 0.35rem;
+  border-collapse: collapse;
+}
+
+.chartTable :is(th, td) {
+  padding: 0.18rem 0.3rem;
+  border-block-end: 1px solid var(--w-rule);
+  color: var(--w-text);
+  font-variant-numeric: tabular-nums;
+  text-align: start;
+}
+
+.chartTable td:last-child,
+.chartTable th:last-child {
+  text-align: end;
+}
+
+.chartWide {
+  grid-column: 1 / -1;
+}
+
+.chartWide .chartSvg {
+  block-size: 12rem;
 }

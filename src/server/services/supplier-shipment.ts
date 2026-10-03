@@ -38,17 +38,20 @@ import {
   apInvoice,
   apInvoiceLine,
   businessPartner,
+  costLayer,
   inventoryMovement,
-  notification,
   shipmentWatcher,
   supplierShipment,
   warehouse,
 } from '../db/schema';
 import { parseQuantity } from '../domain/uom';
+import { parseDecimal } from '../domain/money';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
+import * as notifications from './notifications';
 import * as inventory from './inventory';
+import { businessToday } from '../domain/business-date';
 
 export const PERMISSION_OBJECT = 'supplier_shipment';
 
@@ -173,17 +176,44 @@ export async function advance(
   /** Required for `in_bounded`: the warehouse the goods finally land in. */
   destinationWarehouseCode?: string | null,
 ): Promise<void> {
+  // Held `for update` until the move commits. Two advances of one shipment
+  // arriving together would each read the same stage and each try to carry
+  // the goods on; the inventory lock would stop the second, but late and with
+  // a message about stock rather than about the stage. Held here, the second
+  // waits, reads the new stage, and is told the goods have already moved.
   const [shipment] = await tx
     .select()
     .from(supplierShipment)
     .where(eq(supplierShipment.id, id))
-    .limit(1);
+    .limit(1)
+    .for('update');
   if (!shipment) throw new ShipmentError(`No shipment '${id}'.`);
 
   await authz.authorize(ctx.principal, 'execute', PERMISSION_OBJECT, {
     branchCode: shipment.branchCode,
     objectId: id,
   });
+
+  // An invoice reversed after it opened tracking took its goods with it —
+  // the receipt was undone, so there is nothing on this shipment to move.
+  const [behind] = await tx
+    .select({ status: apInvoice.status, invoiceNo: apInvoice.invoiceNo, isImport: apInvoice.isImport })
+    .from(apInvoice)
+    .where(eq(apInvoice.id, shipment.apInvoiceId))
+    .limit(1);
+  // REQ-FIX-001 FX9 — an import is followed container by container on its
+  // bills of lading (§17.4, D38); a tracker left from before the migration
+  // moved here would put its goods somewhere its containers are not.
+  if (behind?.isImport) {
+    throw new ShipmentError(
+      `Purchase invoice ${behind.invoiceNo} is an import, followed on its bills of lading and containers. Move its containers on the import instead.`,
+    );
+  }
+  if (behind?.status === 'reversed') {
+    throw new ShipmentError(
+      `Purchase invoice ${behind.invoiceNo} was reversed, so this shipment carries nothing. There is no stage to move it to.`,
+    );
+  }
 
   const from = shipment.status as ShipmentStatus;
   const next = SHIPMENT_STATUSES[SHIPMENT_STATUSES.indexOf(from) + 1];
@@ -252,14 +282,21 @@ export async function advance(
 /**
  * Carries every line of the invoice from one warehouse to the next.
  *
- * Out of the first and into the second, at the cost the layers already hold —
- * which is what `issue` returns and what `receive` is then told. A stage that
- * priced its own stock would be a second opinion about what the company paid,
- * and the two would part company the first time an invoice was corrected.
+ * Only this invoice's own goods, and all of them: the layers its lines created
+ * when it posted, followed stage by stage. Taking "the oldest stock in the In
+ * Process warehouse" instead would ship another supplier's panels under this
+ * invoice's name whenever two containers were in process at once.
+ *
+ * Each layer keeps its unit cost, its supplier and its FIFO date wherever it
+ * goes (`inventory.relocate`). A stage that priced its own stock would be a
+ * second opinion about what the company paid; a stage that forgot the
+ * supplier would land the goods where a sale that names that supplier —
+ * block 5 — could not find them.
  *
  * Only the lines that went into the warehouse the shipment is leaving. An
  * invoice can carry freight and services beside the goods, and those never
- * boarded anything.
+ * boarded anything. A line part-sold out of a staging warehouse moves what is
+ * left rather than failing the whole shipment.
  */
 async function move(
   tx: Tx,
@@ -280,50 +317,75 @@ async function move(
     .orderBy(asc(apInvoiceLine.lineNo));
 
   const [invoice] = await tx
-    .select({ invoiceNo: apInvoice.invoiceNo, invoiceDate: apInvoice.invoiceDate })
+    .select({ invoiceDate: apInvoice.invoiceDate })
     .from(apInvoice)
     .where(eq(apInvoice.id, apInvoiceId))
     .limit(1);
+  const movementDate = invoice?.invoiceDate ?? businessToday();
 
   for (const line of lines) {
     if (!line.itemCode) continue;
 
-    const held = await inventory.positionOf(tx, line.itemCode, fromWarehouse, branchCode);
-    const wanted = parseQuantity(line.quantity);
-    // Never more than is there. A line part-sold out of the staging warehouse
-    // moves what is left rather than failing the whole shipment.
-    const quantity = held.onHand < wanted ? held.onHand : wanted;
-    if (quantity <= 0n) continue;
-
-    const issued = await inventory.issue(tx, ctx, {
+    const layers = await layersOfLine(tx, apInvoiceId, line.id, fromWarehouse);
+    await inventory.relocate(tx, ctx, {
       itemCode: line.itemCode,
-      warehouseCode: fromWarehouse,
+      fromWarehouseCode: fromWarehouse,
+      toWarehouseCode: toWarehouse,
       branchCode,
-      quantity,
-      movementDate: invoice?.invoiceDate ?? new Date().toISOString().slice(0, 10),
-      kind: 'transfer_issue',
-      batchNumber: invoice?.invoiceNo ?? null,
-      sourceDocumentType: PERMISSION_OBJECT,
-      sourceDocumentId: apInvoiceId,
-      sourceLineId: line.id,
-    });
-
-    const cost = issued.costIqd ?? 0n;
-    await inventory.receive(tx, ctx, {
-      itemCode: line.itemCode,
-      warehouseCode: toWarehouse,
-      branchCode,
-      quantity,
-      // What it cost where it came from, carried across unchanged.
-      unitCostIqd: (cost * 1_000_000n) / quantity,
-      movementDate: invoice?.invoiceDate ?? new Date().toISOString().slice(0, 10),
-      kind: 'transfer_receipt',
-      batchNumber: invoice?.invoiceNo ?? null,
+      quantity: parseQuantity(line.quantity),
+      movementDate,
+      layers,
       sourceDocumentType: PERMISSION_OBJECT,
       sourceDocumentId: apInvoiceId,
       sourceLineId: line.id,
     });
   }
+}
+
+/**
+ * The layers one invoice line has standing in one warehouse, oldest first.
+ *
+ * A layer belongs to the line whose movement created it: the invoice's own
+ * receipt into In Process, then each stage's receipt after that — every one of
+ * them written with the invoice as its source document and the line as its
+ * source line.
+ */
+async function layersOfLine(
+  tx: Tx,
+  apInvoiceId: string,
+  lineId: string,
+  warehouseCode: string,
+): Promise<inventory.StockLayer[]> {
+  const rows = await tx
+    .select({
+      id: costLayer.id,
+      itemCode: costLayer.itemCode,
+      warehouseCode: costLayer.warehouseCode,
+      layerDate: costLayer.layerDate,
+      sequence: costLayer.sequence,
+      originalQuantity: costLayer.originalQuantity,
+      remainingQuantity: costLayer.remainingQuantity,
+      unitCostIqd: costLayer.unitCostIqd,
+      supplierId: costLayer.supplierId,
+    })
+    .from(costLayer)
+    .innerJoin(inventoryMovement, eq(inventoryMovement.id, costLayer.createdByMovementId))
+    .where(
+      and(
+        eq(costLayer.warehouseCode, warehouseCode),
+        eq(inventoryMovement.sourceDocumentId, apInvoiceId),
+        eq(inventoryMovement.sourceLineId, lineId),
+        sql`${costLayer.remainingQuantity} > 0`,
+      ),
+    )
+    .orderBy(asc(costLayer.layerDate), asc(costLayer.sequence));
+
+  return rows.map((row) => ({
+    ...row,
+    originalQuantity: parseQuantity(row.originalQuantity),
+    remainingQuantity: parseQuantity(row.remainingQuantity),
+    unitCostIqd: parseDecimal(row.unitCostIqd, 4n),
+  }));
 }
 
 /**
@@ -346,26 +408,22 @@ async function tell(
 
   let sent = 0;
   for (const watcher of watchers) {
-    const inserted = await tx
-      .insert(notification)
-      .values({
-        ruleCode: null,
-        eventType: 'shipment.status_changed',
-        objectType: PERMISSION_OBJECT,
-        objectId: message.shipmentId,
-        recipientUserId: watcher.userId,
-        subject: message.subject,
-        body: message.body,
-        context: { shipmentId: message.shipmentId },
-        // One per recipient per status change: the subject carries the stage,
-        // so moving on and moving back would be two messages, not one
-        // suppressed.
-        dedupeKey: `shipment:${message.shipmentId}:${message.subject}:${watcher.userId}`,
-        branchCode: message.branchCode,
-      })
-      .onConflictDoNothing({ target: notification.dedupeKey })
-      .returning({ id: notification.id });
-    sent += inserted.length;
+    const inserted = await notifications.insertNotification(tx, {
+      ruleCode: null,
+      eventType: 'shipment.status_changed',
+      objectType: PERMISSION_OBJECT,
+      objectId: message.shipmentId,
+      recipientUserId: watcher.userId,
+      subject: message.subject,
+      body: message.body,
+      context: { shipmentId: message.shipmentId },
+      // One per recipient per status change: the subject carries the stage,
+      // so moving on and moving back would be two messages, not one
+      // suppressed.
+      dedupeKey: `shipment:${message.shipmentId}:${message.subject}:${watcher.userId}`,
+      branchCode: message.branchCode,
+    });
+    if (inserted !== null) sent += 1;
   }
   return sent;
 }
@@ -401,6 +459,37 @@ export async function unwatch(
 }
 
 /**
+ * Replaces who is told when a shipment moves in this branch — block 8's
+ * "the selected system users", selected on the Invoice Status Tracking screen.
+ */
+export async function setWatchers(
+  tx: Tx,
+  ctx: ActorContext,
+  branchCode: string,
+  userIds: readonly string[],
+): Promise<void> {
+  await authz.authorize(ctx.principal, 'configure', PERMISSION_OBJECT, { branchCode });
+  const wanted = new Set(userIds.filter(Boolean));
+  const current = new Set((await watchers(tx, branchCode)).map((row) => row.userId));
+  for (const userId of wanted) {
+    if (!current.has(userId)) await watch(tx, ctx, branchCode, userId);
+  }
+  for (const userId of current) {
+    if (!wanted.has(userId)) await unwatch(tx, ctx, branchCode, userId);
+  }
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'supplier_shipment.watchers_set',
+    objectType: PERMISSION_OBJECT,
+    objectId: branchCode,
+    branchCode,
+    before: { users: [...current] },
+    after: { users: [...wanted] },
+    outcome: 'success',
+  });
+}
+
+/**
  * The shipments, with the invoice each one is following.
  *
  * The invoice's details are read from the invoice, not held here — see the
@@ -425,7 +514,16 @@ export async function list(tx: Tx, filter: { status?: ShipmentStatus } = {}) {
     .innerJoin(apInvoice, eq(apInvoice.id, supplierShipment.apInvoiceId))
     .innerJoin(businessPartner, eq(businessPartner.id, apInvoice.supplierId))
     .innerJoin(warehouse, eq(warehouse.code, supplierShipment.warehouseCode))
-    .where(filter.status ? eq(supplierShipment.status, filter.status) : sql`true`)
+    .where(
+      and(
+        // A reversed invoice's shipment is history, not a container to follow.
+        sql`${apInvoice.status} <> 'reversed'`,
+        // REQ-FIX-001 FX9 — imports are followed on their containers (D38);
+        // the migration left their old trackers behind.
+        eq(apInvoice.isImport, false),
+        filter.status ? eq(supplierShipment.status, filter.status) : sql`true`,
+      ),
+    )
     .orderBy(asc(apInvoice.invoiceDate), asc(apInvoice.invoiceNo));
 }
 

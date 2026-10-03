@@ -237,6 +237,47 @@ describe('the control account an invoice mapping must name', () => {
       required: 'customer',
       opposite: 'supplier',
     },
+    /*
+     * Clearing a debt is constrained exactly as raising one is.
+     *
+     * These five were not, and the asymmetry was expensive: a live mapping
+     * sent `sales.customer_receipt` / `customer_receivable` at a cash account,
+     * so a receipt debited the bank and credited *another cash account*. The
+     * journal balanced, the receipt said Settled, the invoice said Paid — and
+     * the customer's statement never moved, because nothing had touched
+     * Trade Receivables. An ageing read from invoices agreed with the invoice;
+     * the ledger did not.
+     */
+    {
+      eventType: 'sales.customer_receipt',
+      lineRole: 'customer_receivable',
+      required: 'customer',
+      opposite: 'supplier',
+    },
+    {
+      eventType: 'sales.customer_receipt_identified',
+      lineRole: 'customer_receivable',
+      required: 'customer',
+      opposite: 'supplier',
+    },
+    {
+      eventType: 'sales.customer_credit_memo',
+      lineRole: 'customer_receivable',
+      required: 'customer',
+      opposite: 'supplier',
+    },
+    {
+      eventType: 'purchasing.supplier_payment',
+      lineRole: 'supplier_payable',
+      required: 'supplier',
+      opposite: 'customer',
+    },
+    {
+      eventType: 'purchasing.supplier_credit_memo',
+      lineRole: 'supplier_payable',
+      required: 'supplier',
+      opposite: 'customer',
+    },
   ] as const)('requires %s / %s to use a %s control account', ({ eventType, lineRole, required, opposite }) => {
     expect(requiredControlAccount(eventType, lineRole)).toBe(required);
     expect(() =>
@@ -399,9 +440,10 @@ describe('the catalogue the mappings screen is drawn from', () => {
     for (const document of POSTING_MAP) {
       for (const line of document.lines) {
         if (!line.controlAccount) continue;
-        // Only the two party subledgers are designated from a mapping; the
-        // rest are decided by the record the posting names.
-        expect(['customer', 'supplier']).toContain(line.controlAccount);
+        // Only the party subledgers are designated from a mapping — the two
+        // partner ledgers and, since REQ-AP-001 Stage 6, the loan register;
+        // the rest are decided by the record the posting names.
+        expect(['customer', 'supplier', 'loan']).toContain(line.controlAccount);
         expect(requiredControlAccount(document.event, line.role)).toBe(line.controlAccount);
       }
     }
@@ -416,6 +458,8 @@ describe('the catalogue the mappings screen is drawn from', () => {
       ['supplier_payable', 'credit', true],
       ['grni', 'debit', false],
       ['expense', 'debit', false],
+      // §9.2 — a line charged to an import parks on the clearing account.
+      ['landed_cost_clearing', 'debit', false],
       // Over the order it is a debit, under it a credit.
       ['purchase_variance', 'either', false],
     ]);
@@ -425,5 +469,48 @@ describe('the catalogue the mappings screen is drawn from', () => {
       ['customer_receivable', 'debit', true],
       ['sales_revenue', 'credit', false],
     ]);
+  });
+});
+
+/**
+ * Every line that moves a partner's balance, named once.
+ *
+ * The rule above is stated case by case, which is how five of the seven came
+ * to be missed: each was added beside its own document and nobody read the
+ * column down. This asserts the property instead — if a role's name says it
+ * belongs to a subledger, its mapping is constrained to that subledger's
+ * control account, whichever document the line is on and whichever direction
+ * it goes.
+ */
+describe('no subledger line is left unconstrained', () => {
+  it('constrains every receivable and payable line in the map', () => {
+    const unconstrained = POSTING_MAP.flatMap((document) =>
+      document.lines
+        .filter(
+          (entry) =>
+            (entry.role.includes('receivable') || entry.role.includes('payable')) &&
+            !entry.controlAccount,
+        )
+        .map((entry) => `${document.event} / ${entry.role}`),
+    );
+
+    expect(unconstrained).toEqual([]);
+  });
+
+  it('points each at the subledger its name claims', () => {
+    const wrong = POSTING_MAP.flatMap((document) =>
+      document.lines
+        .filter((entry) => entry.controlAccount)
+        .filter((entry) =>
+          entry.role.includes('receivable')
+            ? entry.controlAccount !== 'customer'
+            : entry.role.includes('payable')
+              ? entry.controlAccount !== 'supplier'
+              : false,
+        )
+        .map((entry) => `${document.event} / ${entry.role} -> ${entry.controlAccount}`),
+    );
+
+    expect(wrong).toEqual([]);
   });
 });

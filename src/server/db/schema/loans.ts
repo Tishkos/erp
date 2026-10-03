@@ -1,0 +1,306 @@
+/**
+ * Payables — REQ-AP-001 Stage 6, loans (§15.7). Migration 0235.
+ *
+ * **One register for every lender.** A loan names its bank, the account its
+ * proceeds land in (and its repayments leave from), the commission and how
+ * the bank takes it, and a schedule. It moves
+ *
+ *     draft ──approve──▶ approved ──disburse──▶ active ──last instalment paid──▶ fully_repaid
+ *       └──────── cancel (reason) ────┘
+ *
+ * The disbursement and every repayment post through the existing journal; the
+ * liability sits on a `loan` control account whose subledger party is the
+ * loan number (`journal_line.loan_no`), so it reconciles as AP does.
+ *
+ * **Allocations** say which payment applications the loan funded. The
+ * commission share of each — commission × allocated / principal by default —
+ * is a `bank_commission` landed-cost charge of the import it paid (D5).
+ */
+import { sql } from 'drizzle-orm';
+import {
+  boolean,
+  char,
+  check,
+  date,
+  index,
+  numeric,
+  pgTable,
+  smallint,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
+import { appUser, branch } from './platform';
+import { bank, bankCashAccount } from './item';
+import { currency, exchangeRate } from './fiscal';
+import { journalEntry } from './journal';
+import { payable } from './payables';
+import { paymentApplication } from './payments';
+import { landedCostCharge } from './payables-contracts';
+
+export const loanCommissionTreatment = pgTable(
+  'loan_commission_treatment',
+  {
+    code: text('code').primaryKey(),
+    name: text('name').notNull(),
+    deducted: boolean('deducted').notNull().default(false),
+    spread: boolean('spread').notNull().default(false),
+    sortOrder: smallint('sort_order').notNull().default(0),
+    active: boolean('active').notNull().default(true),
+    createdBy: uuid('created_by').references(() => appUser.id),
+  },
+  (t) => [check('loan_commission_treatment_one_way', sql`not (${t.deducted} and ${t.spread})`)],
+);
+
+export const bankLoan = pgTable(
+  'bank_loan',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    loanNo: text('loan_no').notNull(),
+    bankCode: text('bank_code')
+      .notNull()
+      .references(() => bank.code),
+    bankCashAccountId: uuid('bank_cash_account_id')
+      .notNull()
+      .references(() => bankCashAccount.id),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+
+    /**
+     * What the loan is owed in — the bank's currency, not the receiving
+     * account's (0276). A 50,000 dollar facility paid into a dinar account is
+     * a dollar debt, and stays one however the rate moves.
+     */
+    currency: char('currency', { length: 3 })
+      .notNull()
+      .references(() => currency.code),
+    principalTxn: numeric('principal_txn', { precision: 19, scale: 4 }).notNull(),
+    principalIqd: numeric('principal_iqd', { precision: 19, scale: 4 }).notNull(),
+    rateId: uuid('rate_id').references(() => exchangeRate.id),
+
+    /** The bank's own number for the facility (0273). */
+    facilityReference: text('facility_reference'),
+    /**
+     * How the principal comes back, how interest is worked out, and whether
+     * the rate stands — the parts of a bank's letter that decide what is owed
+     * (0273). The defaults are what every loan entered before this did.
+     */
+    principalMethod: text('principal_method').notNull().default('equal_principal'),
+    interestBasis: text('interest_basis').notNull().default('reducing'),
+    interestType: text('interest_type').notNull().default('fixed'),
+    interestReferenceRate: text('interest_reference_rate'),
+    interestSpreadPct: numeric('interest_spread_pct', { precision: 9, scale: 4 }),
+    /** How the letter states the commission: a percentage, a figure, or none. */
+    commissionBasis: text('commission_basis').notNull().default('percentage'),
+    otherFeesTxn: numeric('other_fees_txn', { precision: 19, scale: 4 }).notNull().default('0'),
+    /** What a grace period holds off, and the date it runs to. */
+    graceKind: text('grace_kind').notNull().default('none'),
+    graceUntil: date('grace_until', { mode: 'string' }),
+    /** What the money is for. The treatment of its commission is its own flag. */
+    purposeCode: text('purpose_code'),
+    /** When the bank says the money will arrive; the real date is stamped on disbursement. */
+    expectedDisbursementDate: date('expected_disbursement_date', { mode: 'string' }),
+    commissionPct: numeric('commission_pct', { precision: 9, scale: 4 }).notNull().default('0'),
+    commissionTxn: numeric('commission_txn', { precision: 19, scale: 4 }).notNull().default('0'),
+    commissionTreatmentCode: text('commission_treatment_code')
+      .notNull()
+      .references(() => loanCommissionTreatment.code),
+    commissionCapitalised: boolean('commission_capitalised').notNull().default(true),
+    interestPctPa: numeric('interest_pct_pa', { precision: 9, scale: 4 }),
+    netProceedsTxn: numeric('net_proceeds_txn', { precision: 19, scale: 4 }).notNull(),
+    allocationMethod: text('allocation_method').notNull().default('by_amount_used'),
+
+    instalmentCount: smallint('instalment_count').notNull(),
+    frequency: text('frequency').notNull(),
+    firstDueDate: date('first_due_date', { mode: 'string' }).notNull(),
+    maturityDate: date('maturity_date', { mode: 'string' }),
+    disbursementDate: date('disbursement_date', { mode: 'string' }),
+    disbursementReference: text('disbursement_reference'),
+    disbursementJournalEntryId: uuid('disbursement_journal_entry_id').references(() => journalEntry.id),
+    commissionPaidOn: date('commission_paid_on', { mode: 'string' }),
+    commissionReference: text('commission_reference'),
+    commissionJournalEntryId: uuid('commission_journal_entry_id').references(() => journalEntry.id),
+
+    status: text('status').notNull().default('draft'),
+    /** The day the loan came to nothing (0275). Null while anything is owed. */
+    repaidOn: date('repaid_on', { mode: 'string' }),
+    /** When its dinar carrying value was last moved to the rate of the day. */
+    revaluedOn: date('revalued_on', { mode: 'string' }),
+    /** What ending it early cost beyond principal and interest, if it did. */
+    settlementFeeTxn: numeric('settlement_fee_txn', { precision: 19, scale: 4 }),
+    purpose: text('purpose'),
+    closedReason: text('closed_reason'),
+
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Sent for approval: the offer as the bank wrote it, waiting (0273). */
+    submittedBy: uuid('submitted_by').references(() => appUser.id),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    approvedBy: uuid('approved_by').references(() => appUser.id),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    activatedBy: uuid('activated_by').references(() => appUser.id),
+    activatedAt: timestamp('activated_at', { withTimezone: true }),
+    closedBy: uuid('closed_by').references(() => appUser.id),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('bank_loan_no_uniq').on(t.loanNo),
+    index('bank_loan_account_idx').on(t.bankCashAccountId),
+    index('bank_loan_status_idx').on(t.status),
+  ],
+);
+
+/**
+ * What was actually repaid — the ledger the loan's status is read from (0275).
+ *
+ * One row per posted repayment, saying what of it went to principal, to
+ * interest and to fees, with the journal that posted it. An instalment payment
+ * writes one; so does an extra payment of principal, and so does an early
+ * settlement. The outstanding principal is the loan's principal less the
+ * principal on these rows — not a count of instalments, and not a status
+ * somebody typed.
+ *
+ * Append-only by trigger: a repayment that was wrong is reversed by its journal
+ * and a correcting row.
+ */
+export const bankLoanRepayment = pgTable(
+  'bank_loan_repayment',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    loanId: uuid('loan_id')
+      .notNull()
+      .references(() => bankLoan.id),
+    /** The instalment it settles, where it settles one. */
+    instalmentId: uuid('instalment_id').references(() => bankLoanInstalment.id),
+    kind: text('kind').notNull(),
+    paidDate: date('paid_date', { mode: 'string' }).notNull(),
+    principalTxn: numeric('principal_txn', { precision: 19, scale: 4 }).notNull().default('0'),
+    interestTxn: numeric('interest_txn', { precision: 19, scale: 4 }).notNull().default('0'),
+    feesTxn: numeric('fees_txn', { precision: 19, scale: 4 }).notNull().default('0'),
+    totalTxn: numeric('total_txn', { precision: 19, scale: 4 }).notNull(),
+    totalIqd: numeric('total_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    reference: text('reference').notNull(),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('bank_loan_repayment_loan_idx').on(t.loanId, t.paidDate),
+    index('bank_loan_repayment_instalment_idx').on(t.instalmentId),
+    check(
+      'bank_loan_repayment_kind',
+      sql`${t.kind} in ('instalment', 'extra_principal', 'settlement')`,
+    ),
+  ],
+);
+
+/**
+ * What a foreign-currency loan was worth in dinars when the rate moved (0276).
+ *
+ * The debt is unchanged — 50,000 dollars is 50,000 dollars — and what the books
+ * carry for it is not. Each row is one revaluation: the outstanding in the
+ * loan's own currency, the rate of the day from Currencies & Rates, the dinar
+ * carrying value before and after, and the gain or loss that made up the
+ * difference. Append-only; a revaluation that was wrong is corrected by a later
+ * one.
+ */
+export const bankLoanRevaluation = pgTable(
+  'bank_loan_revaluation',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    loanId: uuid('loan_id')
+      .notNull()
+      .references(() => bankLoan.id),
+    onDate: date('on_date', { mode: 'string' }).notNull(),
+    rateId: uuid('rate_id').references(() => exchangeRate.id),
+    outstandingTxn: numeric('outstanding_txn', { precision: 19, scale: 4 }).notNull(),
+    iqdPerUnit: numeric('iqd_per_unit', { precision: 18, scale: 8 }).notNull(),
+    carryingBeforeIqd: numeric('carrying_before_iqd', { precision: 19, scale: 4 }).notNull(),
+    carryingAfterIqd: numeric('carrying_after_iqd', { precision: 19, scale: 4 }).notNull(),
+    /** Positive: the debt grew in dinars, which is a loss. Negative: a gain. */
+    differenceIqd: numeric('difference_iqd', { precision: 19, scale: 4 }).notNull(),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('bank_loan_revaluation_loan_idx').on(t.loanId, t.onDate),
+    uniqueIndex('bank_loan_revaluation_once_a_day').on(t.loanId, t.onDate),
+  ],
+);
+
+export const bankLoanInstalment = pgTable(
+  'bank_loan_instalment',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    loanId: uuid('loan_id')
+      .notNull()
+      .references(() => bankLoan.id),
+    sequence: smallint('sequence').notNull(),
+    dueDate: date('due_date', { mode: 'string' }).notNull(),
+    principalTxn: numeric('principal_txn', { precision: 19, scale: 4 }).notNull().default('0'),
+    commissionTxn: numeric('commission_txn', { precision: 19, scale: 4 }).notNull().default('0'),
+    interestTxn: numeric('interest_txn', { precision: 19, scale: 4 }).notNull().default('0'),
+    totalTxn: numeric('total_txn', { precision: 19, scale: 4 }).notNull(),
+    status: text('status').notNull().default('upcoming'),
+    paidDate: date('paid_date', { mode: 'string' }),
+    paidReference: text('paid_reference'),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    paidBy: uuid('paid_by').references(() => appUser.id),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    overdueNotifiedAt: timestamp('overdue_notified_at', { withTimezone: true }),
+    supersededAt: timestamp('superseded_at', { withTimezone: true }),
+    supersededBy: uuid('superseded_by').references(() => appUser.id),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('bank_loan_instalment_live_uniq')
+      .on(t.loanId, t.sequence)
+      .where(sql`${t.supersededAt} is null`),
+  ],
+);
+
+export const bankLoanAllocation = pgTable(
+  'bank_loan_allocation',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    loanId: uuid('loan_id')
+      .notNull()
+      .references(() => bankLoan.id),
+    paymentApplicationId: uuid('payment_application_id')
+      .notNull()
+      .references(() => paymentApplication.id),
+    payableId: uuid('payable_id')
+      .notNull()
+      .references(() => payable.id),
+    amountTxn: numeric('amount_txn', { precision: 19, scale: 4 }).notNull(),
+    commissionShareTxn: numeric('commission_share_txn', { precision: 19, scale: 4 }).notNull().default('0'),
+    landedCostChargeId: uuid('landed_cost_charge_id').references(() => landedCostCharge.id),
+    releasedAt: timestamp('released_at', { withTimezone: true }),
+    releasedBy: uuid('released_by').references(() => appUser.id),
+    releaseReason: text('release_reason'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('bank_loan_allocation_live_uniq')
+      .on(t.paymentApplicationId)
+      .where(sql`${t.releasedAt} is null`),
+    index('bank_loan_allocation_loan_idx').on(t.loanId),
+    index('bank_loan_allocation_payable_idx').on(t.payableId),
+  ],
+);

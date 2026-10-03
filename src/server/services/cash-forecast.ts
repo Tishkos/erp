@@ -121,13 +121,17 @@ export const FORECAST_SOURCES = [
   'payroll',
   'transfer_funding',
   'investment_calls',
+  // What the bank loans do to the accounts (2026-10-03): instalments falling
+  // due, and the money a loan brings in when it is drawn.
+  'loan_repayments',
+  'loan_drawdowns',
 ] as const;
 
 export type ForecastSource = (typeof FORECAST_SOURCES)[number];
 
 export interface SourceStatus {
   readonly source: ForecastSource;
-  /** False while the phase that produces this data has not been built. */
+  /** False while the module that produces this data has not been built. */
   readonly available: boolean;
   readonly note: string;
 }
@@ -154,8 +158,8 @@ export const SOURCE_STATUS: readonly SourceStatus[] = [
   },
   {
     source: 'payroll',
-    available: false,
-    note: 'Awaits Phase 15, itself blocked on D3: payroll shall not be programmed from assumptions (§20).',
+    available: true,
+    note: 'Approved and posted payroll runs still to be paid, on their pay date (REQ-HR-001 HR-3) — totals only, never a salary.',
   },
   {
     source: 'transfer_funding',
@@ -167,7 +171,41 @@ export const SOURCE_STATUS: readonly SourceStatus[] = [
     available: true,
     note: 'Unmet capital calls, by due date (§13.7). Committed money with a date on it, which is exactly what a forecast is for.',
   },
+  {
+    source: 'loan_repayments',
+    available: true,
+    note: 'Bank loan instalments still to be paid, on their due date (§15.7). An instalment inside a grace period asks for nothing and is not in here.',
+  },
+  {
+    source: 'loan_drawdowns',
+    available: true,
+    note: 'Approved loans on the day the bank said it would send the money — the net of it, since a commission deducted at disbursement never arrives.',
+  },
 ];
+
+/**
+ * REQ-HR-001 HR-3 — the net pay of approved and posted payroll runs not yet
+ * paid, on the run's pay date. Read through `app_payroll_outflows`, which
+ * returns totals by day for the reader's branches: a treasurer forecasting
+ * cash needs the month's pay, not who earns what, so no salary leaves the
+ * payroll's own grant. A draft is not here — nobody has agreed to it yet.
+ */
+async function payrollDue(
+  tx: Tx,
+  from: string,
+  to: string,
+  branchCode: string | null,
+): Promise<{ date: string; source: ForecastSource; amountIqd: bigint }[]> {
+  const result = (await tx.execute(sql`
+    select pay_date::text as "date", amount_iqd::text as "amountIqd"
+      from app_payroll_outflows(${from}::date, ${to}::date, ${branchCode}::text)
+  `)) as unknown as { rows: { date: string; amountIqd: string }[] };
+  return result.rows.map((row) => ({
+    date: row.date,
+    source: 'payroll' as const,
+    amountIqd: -parseDecimal(row.amountIqd, 4n),
+  }));
+}
 
 /**
  * §13.7 — unmet capital calls, by the date they fall due.
@@ -280,11 +318,20 @@ export async function forecast(
   if (!excluded.includes('ar_expected')) {
     movements.push(...(await arExpected(tx, input.from, input.to, branchCode)));
   }
+  if (!excluded.includes('loan_repayments')) {
+    movements.push(...(await loanRepayments(tx, input.from, input.to, branchCode)));
+  }
+  if (!excluded.includes('loan_drawdowns')) {
+    movements.push(...(await loanDrawdowns(tx, input.from, input.to, branchCode)));
+  }
   if (!excluded.includes('investment_calls')) {
     movements.push(...(await investmentCalls(tx, input.from, input.to, branchCode)));
   }
-  // project_commitments, payroll and transfer_funding contribute nothing until
-  // their phases exist. They appear in `sources` either way, so the report says
+  if (!excluded.includes('payroll')) {
+    movements.push(...(await payrollDue(tx, input.from, input.to, branchCode)));
+  }
+  // project_commitments and transfer_funding contribute nothing until their
+  // modules are wired (payroll is, since REQ-HR-001 HR-3). They appear in `sources` either way, so the report says
   // what it drew on rather than leaving the reader to assume.
   //
   // Two of those three phases now exist — Phase 11 built project commitments and
@@ -392,6 +439,93 @@ async function apDue(
   }));
 }
 
+/**
+ * §15.7 — the bank loan instalments still to be paid, on the day they fall due.
+ *
+ * The schedule says what is owed and when; a row that has been paid is gone
+ * from here, and a row inside a grace period asks for nothing and never was.
+ * Converted at the rate in force on the due date, because a dollar loan repaid
+ * next quarter costs whatever dinars it costs then — the forecast's own
+ * assumption, stated here rather than hidden.
+ */
+async function loanRepayments(
+  tx: Tx,
+  from: string,
+  to: string,
+  branchCode: string | null,
+): Promise<{ date: string; source: ForecastSource; amountIqd: bigint }[]> {
+  const result = (await tx.execute(sql`
+    select s.due_date::text as "date",
+           -- Rounded here: a rate carries eight places and money four.
+           round(s.total_txn * coalesce(r.iqd_per_unit, 1), 4)::text as "amountIqd"
+      from bank_loan_instalment s
+      join bank_loan l on l.id = s.loan_id
+      left join lateral (
+        select x.iqd_per_unit
+          from exchange_rate x
+         where x.currency_code = l.currency
+           and x.effective_from <= s.due_date
+           and x.superseded_at is null
+         order by x.effective_from desc
+         limit 1
+      ) r on true
+     where l.status = 'active'
+       and s.superseded_at is null
+       and s.status <> 'paid'
+       and s.total_txn > 0
+       and s.due_date between ${from}::date and ${to}::date
+       and (${branchCode}::text is null or l.branch_code = ${branchCode})
+  `)) as unknown as { rows: { date: string; amountIqd: string }[] };
+
+  // Money going out is negative, as every outgoing source here is.
+  return result.rows.map((row) => ({
+    date: row.date,
+    source: 'loan_repayments' as const,
+    amountIqd: -parseDecimal(row.amountIqd, 4n),
+  }));
+}
+
+/**
+ * §15.7 — the money an approved loan will bring in, on the day its bank said.
+ *
+ * The net: a commission the bank deducts at disbursement never reaches the
+ * account, so a forecast that counted the principal would promise money that
+ * was never coming. A loan with no expected date is not in here — a forecast
+ * is made of dated things.
+ */
+async function loanDrawdowns(
+  tx: Tx,
+  from: string,
+  to: string,
+  branchCode: string | null,
+): Promise<{ date: string; source: ForecastSource; amountIqd: bigint }[]> {
+  const result = (await tx.execute(sql`
+    select l.expected_disbursement_date::text as "date",
+           round(l.net_proceeds_txn * coalesce(r.iqd_per_unit, 1), 4)::text as "amountIqd"
+      from bank_loan l
+      left join lateral (
+        select x.iqd_per_unit
+          from exchange_rate x
+         where x.currency_code = l.currency
+           and x.effective_from <= l.expected_disbursement_date
+           and x.superseded_at is null
+         order by x.effective_from desc
+         limit 1
+      ) r on true
+     where l.status = 'approved'
+       and l.expected_disbursement_date is not null
+       and l.net_proceeds_txn > 0
+       and l.expected_disbursement_date between ${from}::date and ${to}::date
+       and (${branchCode}::text is null or l.branch_code = ${branchCode})
+  `)) as unknown as { rows: { date: string; amountIqd: string }[] };
+
+  return result.rows.map((row) => ({
+    date: row.date,
+    source: 'loan_drawdowns' as const,
+    amountIqd: parseDecimal(row.amountIqd, 4n),
+  }));
+}
+
 /** §16 — what is expected in, from the customer invoices already raised. */
 async function arExpected(
   tx: Tx,
@@ -465,6 +599,7 @@ export async function currencyExposure(
               where l.account_id = b.gl_account_id
                 and e.posting_date <= ${asOf}::date
                 and e.status in ('posted', 'reversed')
+                and (${scoped}::text is null or e.branch_code = ${scoped})
            ), 0)), 0)::text                             as "balanceIqd",
            coalesce(sum(coalesce((
              select sum(l.debit_usd - l.credit_usd)
@@ -473,10 +608,19 @@ export async function currencyExposure(
               where l.account_id = b.gl_account_id
                 and e.posting_date <= ${asOf}::date
                 and e.status in ('posted', 'reversed')
+                and (${scoped}::text is null or e.branch_code = ${scoped})
            ), 0)), 0)::text                             as "balanceUsd"
-      from bank_cash_account b
+     from bank_cash_account b
      where b.active
-       and (${scoped}::text is null or b.branch_code = ${scoped})
+       and (${scoped}::text is null or exists (
+         select 1
+           from journal_line jl
+           join journal_entry je on je.id = jl.journal_entry_id
+          where jl.account_id = b.gl_account_id
+            and je.branch_code = ${scoped}
+            and je.posting_date <= ${asOf}::date
+            and je.status in ('posted', 'reversed')
+       ))
      group by b.currency
      order by b.currency
   `)) as unknown as { rows: CurrencyExposure[] };

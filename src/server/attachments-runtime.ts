@@ -10,8 +10,8 @@
 import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
-import { eq } from 'drizzle-orm';
-import { journalEntry } from './db/schema';
+import { eq, sql } from 'drizzle-orm';
+import { applicant, asycudaRun, bankLoan, bankTransfer, billOfLading, customsPd, employeeDocument, employeeRequest, journalEntry, otherReceipt, payable, paymentApplication, shipmentContainer } from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -103,6 +103,108 @@ const journalParentAccess = async (tx: Tx, principal: Principal, objectId: strin
   return Boolean(row);
 };
 
+/**
+ * REQ-AP-001 — the payable's attachments (the supplier's PI, the contract)
+ * and the payment application's (the SWIFT copy, the signed voucher). The
+ * same two questions; row-level security answers the branch.
+ */
+const payableParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'payable')) return false;
+  const [row] = await tx.select({ id: payable.id }).from(payable).where(eq(payable.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const paymentApplicationParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'payment_application')) return false;
+  const [row] = await tx
+    .select({ id: paymentApplication.id })
+    .from(paymentApplication)
+    .where(eq(paymentApplication.id, objectId))
+    .limit(1);
+  return Boolean(row);
+};
+
+const customsPdParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'customs_pd')) return false;
+  const [row] = await tx.select({ id: customsPd.id }).from(customsPd).where(eq(customsPd.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const containerParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'shipment_container')) return false;
+  const [row] = await tx
+    .select({ id: shipmentContainer.id })
+    .from(shipmentContainer)
+    .where(eq(shipmentContainer.id, objectId))
+    .limit(1);
+  return Boolean(row);
+};
+
+const blParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'bill_of_lading')) return false;
+  const [row] = await tx.select({ id: billOfLading.id }).from(billOfLading).where(eq(billOfLading.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/** IMPROVEMENT-002 — an ASYCUDA reading's files: whoever may see the declarations. */
+const asycudaRunParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'customs_pd')) return false;
+  const [row] = await tx.select({ id: asycudaRun.id }).from(asycudaRun).where(eq(asycudaRun.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const loanParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'bank_loan')) return false;
+  const [row] = await tx.select({ id: bankLoan.id }).from(bankLoan).where(eq(bankLoan.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/**
+ * REQ-HR-001 HR-5 — an applicant's CV and letters: recruitment's own grant,
+ * and the applicant's row policy (which asks for it too) answers the branch.
+ */
+const applicantParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'recruitment')) return false;
+  const [row] = await tx.select({ id: applicant.id }).from(applicant).where(eq(applicant.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/**
+ * REQ-HR-001 HR-6 — a request's receipts and papers: HR by its grant, or the
+ * person and their manager (the link), as the request itself is read.
+ */
+const employeeRequestParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  const [row] = await tx.select({ employeeId: employeeRequest.employeeId }).from(employeeRequest).where(eq(employeeRequest.id, objectId)).limit(1);
+  if (!row) return false;
+  if (can(principal, 'view', 'employee_request')) return true;
+  const reach = await tx.execute(sql`select app_employee_reach(${row.employeeId}) as ok`);
+  return Boolean((reach.rows[0] as { ok: boolean } | undefined)?.ok);
+};
+
+/** HR-6 — a person's document's scan: HR by its grant, or the person (the row policy decides which rows exist). */
+const employeeDocumentParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  const [row] = await tx.select({ employeeId: employeeDocument.employeeId }).from(employeeDocument).where(eq(employeeDocument.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/**
+ * A deposit's slip — by direction, 2026-10-04. A deposit is not its own table:
+ * the cash one is a `bank_transfer` and the bank one is an `other_receipt`, so
+ * the paperwork hangs on those. Both ask the grant the Manual Deposits screen
+ * asks before it draws the record, which is the deposit register's own.
+ */
+const bankTransferParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'bank_transfer')) return false;
+  const [row] = await tx.select({ id: bankTransfer.id }).from(bankTransfer).where(eq(bankTransfer.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const otherReceiptParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'other_receipt')) return false;
+  const [row] = await tx.select({ id: otherReceipt.id }).from(otherReceipt).where(eq(otherReceipt.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -112,6 +214,18 @@ export function registerAttachmentRuntime(): void {
   attachments.registerStorage(fileStorage);
   attachments.registerScanner(signatureScanner);
   attachments.registerParentAccessCheck('journal_entry', journalParentAccess);
+  attachments.registerParentAccessCheck('payable', payableParentAccess);
+  attachments.registerParentAccessCheck('payment_application', paymentApplicationParentAccess);
+  attachments.registerParentAccessCheck('customs_pd', customsPdParentAccess);
+  attachments.registerParentAccessCheck('shipment_container', containerParentAccess);
+  attachments.registerParentAccessCheck('bill_of_lading', blParentAccess);
+  attachments.registerParentAccessCheck('asycuda_run', asycudaRunParentAccess);
+  attachments.registerParentAccessCheck('bank_loan', loanParentAccess);
+  attachments.registerParentAccessCheck('bank_transfer', bankTransferParentAccess);
+  attachments.registerParentAccessCheck('other_receipt', otherReceiptParentAccess);
+  attachments.registerParentAccessCheck('applicant', applicantParentAccess);
+  attachments.registerParentAccessCheck('employee_request', employeeRequestParentAccess);
+  attachments.registerParentAccessCheck('employee_document', employeeDocumentParentAccess);
 }
 
 /** Streams a stored file, for a route handler that has already checked access. */

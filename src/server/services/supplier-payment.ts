@@ -36,11 +36,14 @@ import {
   supplierPaymentAllocation,
 } from '../db/schema';
 import { parseDecimal, toDecimalString } from '../domain/money';
+import * as treasury from './treasury';
 import { bucketFor, horizonFor } from '../domain/ageing';
+import { oldestFirst, proposeAllocation } from '../domain/receipt-allocation';
 export { AGEING_BUCKETS, bucketFor, horizonFor, type AgeingBucket } from '../domain/ageing';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
+import * as dueNotices from './due-notices';
 import * as posting from './posting';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
@@ -81,6 +84,27 @@ export class SupplierBlockedError extends Error {
 }
 
 /** §15 — *"payment amount cannot exceed approved available invoice balance."* */
+/**
+ * §15.3's funds check, on the door it was missing from.
+ *
+ * The payment application has checked this since it was written. A supplier
+ * payment raised and posted directly did not, so money left an account that
+ * held none and the balance went negative — which is an overdraft, and an
+ * overdraft is a loan somebody has to have agreed. Deposit it, draw it, or
+ * pay from an account that holds it.
+ */
+export class InsufficientFundsError extends Error {
+  readonly code = 'INSUFFICIENT_FUNDS';
+  constructor(accountCode: string, available: bigint, requested: bigint) {
+    const money = (v: bigint) => toDecimalString(v, 4n);
+    super(
+      `${accountCode} has ${money(available)} IQD available against ${money(requested)} IQD — ` +
+        'deposit or draw the money first, or pay from an account that holds it.',
+    );
+    this.name = 'InsufficientFundsError';
+  }
+}
+
 export class AllocationTooLargeError extends Error {
   readonly code = 'ALLOCATION_TOO_LARGE';
   constructor(
@@ -110,6 +134,18 @@ export class DuplicateAllocationError extends Error {
         'Reverse that allocation if it was wrong; applying the same money twice would clear a debt that is still owed.',
     );
     this.name = 'DuplicateAllocationError';
+  }
+}
+
+export class NothingToAllocateError extends Error {
+  readonly code = 'PAYMENT_NOTHING_TO_ALLOCATE';
+
+  constructor(readonly paymentNo: string) {
+    super(
+      `Payment ${paymentNo} has nothing left to apply, or the supplier has no invoice still owing ` +
+        'that this payment is not already against. Money with no debt to settle stays unallocated.',
+    );
+    this.name = 'NothingToAllocateError';
   }
 }
 
@@ -373,6 +409,29 @@ export async function allocate(
     .set({ status: remaining === 0n ? 'settled' : 'partially_executed', updatedAt: new Date() })
     .where(eq(apInvoice.id, input.apInvoiceId));
 
+  // §21 — an invoice settled after its due date, said once, when it settles.
+  // Not a chase: the money is in. It is the record of how an account actually
+  // behaves, which a list of what is *currently* overdue cannot give — a
+  // supplier always paid eleven days late never stays on that list long
+  // enough to notice.
+  if (remaining === 0n) {
+    const [supplier] = await tx
+      .select({ name: businessPartner.legalName })
+      .from(businessPartner)
+      .where(eq(businessPartner.id, payment.supplierId))
+      .limit(1);
+    await dueNotices.announcePaidLate(tx, {
+      side: 'supplier',
+      invoiceId: invoice.id,
+      invoiceNo: invoice.invoiceNo,
+      partyName: supplier?.name ?? null,
+      dueDate: invoice.dueDate,
+      paidOn: payment.paymentDate,
+      branchCode: payment.branchCode,
+      link: `/payables/invoices/${invoice.invoiceNo}`,
+    });
+  }
+
   const paymentAfter = await load(tx, input.supplierPaymentId);
 
   await audit.record(tx, {
@@ -409,6 +468,15 @@ export async function post(
   tx: Tx,
   ctx: ActorContext,
   id: string,
+  options: {
+    /**
+     * Money already reserved on the account for this very payment — a payment
+     * application being confirmed (§15.1). It is part of what `availableIqd`
+     * subtracts, so it is given back for the check: the application's own
+     * reservation is what pays it, not a rival for the same money.
+     */
+    readonly drawsReservedIqd?: bigint;
+  } = {},
 ): Promise<{ journalEntryId: string }> {
   const payment = await load(tx, id);
 
@@ -422,6 +490,21 @@ export async function post(
       payment.status,
       'it has already posted.',
     );
+  }
+
+  /*
+   * The money has to be there.
+   *
+   * `availableIqd` is the balance less what other approved payments have
+   * already committed, so two payments that each fit the balance cannot both
+   * go out against the same money. A payment drawn from its own reservation
+   * counts that reservation back in.
+   */
+  const position = await treasury.accountPosition(tx, payment.bankCashAccountId);
+  const amount = parseDecimal(payment.amountIqd, 4n);
+  const available = position.availableIqd + (options.drawsReservedIqd ?? 0n);
+  if (available < amount) {
+    throw new InsufficientFundsError(position.accountCode, available, amount);
   }
 
   const [supplier] = await tx
@@ -439,7 +522,10 @@ export async function post(
   // credit the wrong account on every payment and 07.1's identity — an account's
   // ledger balance *is* its G/L balance — would quietly stop holding.
   const [account] = await tx
-    .select({ glAccountId: bankCashAccount.glAccountId })
+    // The code as well as the id: the bank subledger's party is the account
+    // code, and without it a G/L account flagged as a bank control account
+    // refuses the whole posting (§1.2).
+    .select({ glAccountId: bankCashAccount.glAccountId, code: bankCashAccount.code })
     .from(bankCashAccount)
     .where(eq(bankCashAccount.id, payment.bankCashAccountId))
     .limit(1);
@@ -460,6 +546,7 @@ export async function post(
         credit: payment.amountIqd,
         criteria,
         dimensions,
+        bankAccountCode: account!.code,
       },
     ],
   });
@@ -486,6 +573,19 @@ export async function post(
     before: { status: payment.status },
     after: { status: 'posted', journalEntryId: result.journalEntryId },
     outcome: 'success',
+  });
+
+  // §21 — the other side of the same coin: money leaving is news to the
+  // person who approved it.
+  const parties = await partiesOf(tx, id);
+  await dueNotices.announceSettlement(tx, {
+    side: 'supplier',
+    documentId: id,
+    documentNo: payment.paymentNo,
+    partyName: parties.supplierName,
+    amountIqd: payment.amountIqd,
+    branchCode: payment.branchCode,
+    link: `/payables/supplier-payments/${payment.paymentNo}`,
   });
 
   return { journalEntryId: result.journalEntryId };
@@ -545,7 +645,10 @@ export async function reverse(
     .limit(1);
 
   const [account] = await tx
-    .select({ glAccountId: bankCashAccount.glAccountId })
+    // The code as well as the id: the bank subledger's party is the account
+    // code, and without it a G/L account flagged as a bank control account
+    // refuses the whole posting (§1.2).
+    .select({ glAccountId: bankCashAccount.glAccountId, code: bankCashAccount.code })
     .from(bankCashAccount)
     .where(eq(bankCashAccount.id, payment.bankCashAccountId))
     .limit(1);
@@ -570,6 +673,7 @@ export async function reverse(
         debit: payment.amountIqd,
         criteria,
         dimensions,
+        bankAccountCode: account!.code,
       },
       { role: 'supplier_payable', credit: payment.amountIqd, criteria, dimensions },
     ],
@@ -959,6 +1063,46 @@ export async function list(tx: Tx) {
     .orderBy(desc(supplierPayment.paymentDate), desc(supplierPayment.paymentNo));
 }
 
+/**
+ * Who was paid and from which account — the build's Supplier Name and Code
+ * and Bank/Cash Name and Code, which the payment carries as references.
+ */
+export async function partiesOf(tx: Tx, supplierPaymentId: string) {
+  const [row] = await tx
+    .select({
+      supplierCode: businessPartner.code,
+      supplierName: businessPartner.legalName,
+      bankCode: bankCashAccount.code,
+      bankName: bankCashAccount.name,
+    })
+    .from(supplierPayment)
+    .leftJoin(businessPartner, eq(businessPartner.id, supplierPayment.supplierId))
+    .leftJoin(bankCashAccount, eq(bankCashAccount.id, supplierPayment.bankCashAccountId))
+    .where(eq(supplierPayment.id, supplierPaymentId))
+    .limit(1);
+  return row ?? { supplierCode: null, supplierName: null, bankCode: null, bankName: null };
+}
+
+/** The invoices this payment settles, with what it put against each. Live allocations only. */
+export async function allocationsOf(tx: Tx, supplierPaymentId: string) {
+  return tx
+    .select({
+      invoiceNo: apInvoice.invoiceNo,
+      dueDate: apInvoice.dueDate,
+      amountIqd: supplierPaymentAllocation.amountIqd,
+      allocatedAt: supplierPaymentAllocation.allocatedAt,
+    })
+    .from(supplierPaymentAllocation)
+    .innerJoin(apInvoice, eq(apInvoice.id, supplierPaymentAllocation.apInvoiceId))
+    .where(
+      and(
+        eq(supplierPaymentAllocation.supplierPaymentId, supplierPaymentId),
+        isNull(supplierPaymentAllocation.reversedAt),
+      ),
+    )
+    .orderBy(supplierPaymentAllocation.allocatedAt);
+}
+
 export async function viewByNo(tx: Tx, paymentNo: string) {
   const [row] = await tx
     .select({ id: supplierPayment.id })
@@ -974,19 +1118,121 @@ export async function openInvoicesFor(tx: Tx, supplierId: string) {
   const rows = await tx
     .select()
     .from(apInvoice)
-    .where(and(eq(apInvoice.supplierId, supplierId), inArray(apInvoice.status, ['posted', 'settled'])))
+    .where(and(eq(apInvoice.supplierId, supplierId), // Part-paid invoices too: block 6 allocates partial payments, and the rest
+      // of a part-paid invoice is still owed.
+      inArray(apInvoice.status, ['posted', 'partially_executed', 'settled'])))
     .orderBy(asc(apInvoice.dueDate));
 
-  return rows
+  const open = rows
     .map((invoice) => ({
       id: invoice.id,
       invoiceNo: invoice.invoiceNo,
       supplierInvoiceNo: invoice.supplierInvoiceNo,
+      invoiceDate: invoice.invoiceDate,
       dueDate: invoice.dueDate,
       totalIqd: invoice.totalIqd,
       outstanding: outstandingOn(invoice),
     }))
     .filter((invoice) => invoice.outstanding > 0n);
+
+  // Read down the screen in the order the money would be applied in — the
+  // same rule `proposeAllocation` follows, so the list and the plan agree.
+  const order = new Map(
+    oldestFirst(
+      open.map((invoice) => ({
+        id: invoice.id,
+        dueDate: invoice.dueDate,
+        invoiceDate: invoice.invoiceDate,
+        invoiceNo: invoice.invoiceNo,
+        openIqd: invoice.outstanding,
+      })),
+    ).map((invoice, index) => [invoice.id, index]),
+  );
+
+  return open.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+}
+
+/**
+ * What oldest-first would do with what is left of this payment.
+ *
+ * The screen fills each invoice's box from this, so the amounts offered add up
+ * to the payment instead of each offering the whole of it.
+ */
+export async function planFor(
+  tx: Tx,
+  payment: typeof supplierPayment.$inferSelect,
+): Promise<Map<string, bigint>> {
+  const open = await openInvoicesFor(tx, payment.supplierId);
+
+  /*
+   * Skip what this payment is already against.
+   *
+   * §15 allows one live allocation per payment and invoice — a second is
+   * refused as a duplicate. So an invoice this payment has already part-paid
+   * is not a candidate for the rest of it, however much it still owes; the
+   * remainder goes to the next invoice down, and the clerk who wants to
+   * increase the first one reverses that allocation and makes it again.
+   */
+  const already = new Set(
+    (
+      await tx
+        .select({ apInvoiceId: supplierPaymentAllocation.apInvoiceId })
+        .from(supplierPaymentAllocation)
+        .where(
+          and(
+            eq(supplierPaymentAllocation.supplierPaymentId, payment.id),
+            isNull(supplierPaymentAllocation.reversedAt),
+          ),
+        )
+    ).map((row) => row.apInvoiceId),
+  );
+
+  const plan = proposeAllocation(
+    {
+      amountIqd: parseDecimal(payment.amountIqd, 4n),
+      allocatedIqd: parseDecimal(payment.allocatedAmountIqd, 4n),
+    },
+    open
+      .filter((invoice) => !already.has(invoice.id))
+      .map((invoice) => ({
+        id: invoice.id,
+        dueDate: invoice.dueDate,
+        invoiceDate: invoice.invoiceDate,
+        invoiceNo: invoice.invoiceNo,
+        openIqd: invoice.outstanding,
+      })),
+  );
+  // `proposeAllocation` names its key for the receivable side; the plan itself
+  // is the same arithmetic whichever way the money is going.
+  return new Map(plan.map((line) => [line.arInvoiceId, line.amountIqd]));
+}
+
+/**
+ * Put what is left of a payment against the oldest supplier invoices first.
+ *
+ * The whole plan in one transaction. A supplier who is paid 100,000 against a
+ * 50,000 invoice from Monday and a 100,000 from Tuesday has settled Monday and
+ * half of Tuesday, and the ageing has to say so.
+ */
+export async function allocateOldestFirst(
+  tx: Tx,
+  ctx: ActorContext,
+  supplierPaymentId: string,
+): Promise<{ invoices: number; paymentUnallocated: bigint }> {
+  const payment = await load(tx, supplierPaymentId);
+  const plan = [...(await planFor(tx, payment))];
+
+  if (plan.length === 0) {
+    throw new NothingToAllocateError(payment.paymentNo);
+  }
+
+  let unallocatedLeft = unallocatedOn(payment);
+  for (const [apInvoiceId, amountIqd] of plan) {
+    const outcome = await allocate(tx, ctx, { supplierPaymentId, apInvoiceId, amountIqd });
+    unallocatedLeft = outcome.paymentUnallocated;
+  }
+
+  return { invoices: plan.length, paymentUnallocated: unallocatedLeft };
 }
 
 export async function view(tx: Tx, id: string) {

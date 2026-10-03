@@ -10,11 +10,12 @@
  * System roles keep their code and name; their grants may still be edited,
  * because which sections Finance reaches is a business decision.
  */
+import { bumpPermissionsForRole } from './authorization';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { role, roleGrant, userRole } from '../db/schema';
 import { menuObjects } from '../domain/menu';
-import { phaseObjects } from '../phase-gate';
+import { liveObjects } from '../delivered';
 import { PERMISSION_VERBS, isPermissionVerb, type PermissionVerb } from '../domain/permissions';
 import {
   AdminNotFoundError,
@@ -24,6 +25,7 @@ import {
   uniqueCode,
   optionalText,
   permit,
+  permitCeo,
   recordChange,
   requireText,
   type ActorContext,
@@ -52,7 +54,7 @@ export async function listAll(tx: Tx) {
   const roles = await tx.select().from(role).orderBy(asc(role.code));
   const grants = await tx.select().from(roleGrant);
   const holders = await tx.select({ roleCode: userRole.roleCode }).from(userRole);
-  const live = phaseObjects();
+  const live = liveObjects();
   return roles.map((r) => ({
     ...r,
     grantCount: grants.filter((g) => g.roleCode === r.code && live.has(g.object)).length,
@@ -83,6 +85,7 @@ export function grantableObjects(): readonly string[] {
 }
 
 export async function create(tx: Tx, ctx: ActorContext, input: RoleInput & { readonly code?: string }) {
+  await permitCeo(ctx);
   await permit(ctx, 'create', PERMISSION_OBJECT);
   const name = requireText(input.name, 'name', 120);
   // "Accountant Branch" becomes accountant_branch.
@@ -106,6 +109,7 @@ export async function create(tx: Tx, ctx: ActorContext, input: RoleInput & { rea
 }
 
 export async function update(tx: Tx, ctx: ActorContext, code: string, input: RoleInput) {
+  await permitCeo(ctx);
   await permit(ctx, 'configure', PERMISSION_OBJECT, code);
   const before = await get(tx, code);
   if (before.isSystem) throw new AdminValidationError('role', 'a system role keeps its name');
@@ -131,6 +135,7 @@ export async function setGrants(
   grants: readonly GrantInput[],
   options?: { readonly offeredObjects?: readonly string[] },
 ) {
+  await permitCeo(ctx);
   await permit(ctx, 'administer', 'permission', code);
   const before = await get(tx, code);
 
@@ -147,7 +152,7 @@ export async function setGrants(
   }
 
   // Only the objects the screen offered are replaced. A grant on something
-  // this phase does not show is left alone: an editor cannot revoke what it
+  // this build does not show is left alone: an editor cannot revoke what it
   // never displayed, so saving a role never quietly loses a permission.
   const offered = new Set(options?.offeredObjects ?? [...new Set([...wanted.values()].map((g) => g.object))]);
   if (offered.size > 0) {
@@ -162,6 +167,7 @@ export async function setGrants(
       .onConflictDoNothing();
   }
 
+  await bumpPermissionsForRole(tx, code);
   await recordChange(tx, ctx, {
     action: 'role.grants_set',
     objectType: PERMISSION_OBJECT,

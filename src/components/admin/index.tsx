@@ -185,6 +185,38 @@ export function Inline({ children }: { readonly children: ReactNode }) {
   return <div className={styles.inline}>{children}</div>;
 }
 
+/**
+ * A screen's filters: the controls at their own width with the button beside
+ * them. `Grid` is for a form to fill in; a filter bar is one line to set.
+ */
+export function FilterRow({ children }: { readonly children: ReactNode }) {
+  return <div className={styles.filterRow}>{children}</div>;
+}
+
+/**
+ * A fact the document already knows, shown in the row of fields it belongs to.
+ *
+ * Not a disabled `Field`: there is nothing to submit and nothing to edit, so
+ * there is no input. It wears the same box as the fields beside it, in the ink
+ * of something that cannot be changed.
+ */
+export function ReadOnlyField({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: ReactNode;
+}) {
+  return (
+    <div className={styles.field}>
+      <span className={styles.label}>{label}</span>
+      <span aria-readonly="true" className={styles.readOnlyBox}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
 export interface FieldProps {
   readonly label: string;
   readonly name: string;
@@ -208,6 +240,12 @@ export interface FieldProps {
   readonly maxLength?: number | undefined;
   readonly pattern?: string | undefined;
   readonly autoComplete?: string | undefined;
+  /**
+   * The id of a `datalist` to suggest from. A filter box that searches on what
+   * is typed still wants to offer the names it knows — and unlike a picker it
+   * accepts a partial term, so the list suggests rather than constrains.
+   */
+  readonly list?: string | undefined;
   /**
    * The element id, when the field name is not unique on the page.
    *
@@ -237,6 +275,7 @@ export function Field({
   maxLength,
   pattern,
   autoComplete = 'off',
+  list,
   id: idOverride,
 }: FieldProps) {
   const id = idOverride ?? `f-${name}`;
@@ -269,6 +308,7 @@ export function Field({
           maxLength={maxLength}
           min={min}
           pattern={pattern}
+          list={list}
           step={type === 'number' ? (step ?? 'any') : undefined}
           type={type}
           {...common}

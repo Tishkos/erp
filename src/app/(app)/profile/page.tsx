@@ -16,7 +16,7 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { formatTimestamp, type Locale } from '@/i18n/config';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as users from '@/server/services/users';
-import { ACCENTS, PALETTES } from '@domain/appearance';
+import { ACCENTS, PALETTES, accentOrDefault, paletteOrDefault } from '@domain/appearance';
 import { changePassword, saveAvatar, saveMyAppearance, saveProfile } from './actions';
 
 /**
@@ -44,7 +44,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
   const { user, roles, branches, departments, sessions } = await withCurrentUser((tx) =>
     users.detail(tx, context.principal.userId),
   );
-  const own = { palette: user.uiPalette ?? 'company', accent: user.uiAccent ?? 'company' };
+  const own = { palette: paletteOrDefault(user.uiPalette), accent: accentOrDefault(user.uiAccent) };
   const fmt = (d: Date | null) => (d ? formatTimestamp(d.toISOString(), locale as Locale) : admin('none'));
   const live = sessions.filter((x) => !x.revokedAt && x.expiresAt > new Date()).length;
   const roleLabel = context.principal.isSuperUser
@@ -81,7 +81,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
               <p>{user.email}</p>
               <Pill label={roleLabel} on={true} />
 
-              <form action={saveAvatar} className={s.profileActions} encType="multipart/form-data">
+              <form action={saveAvatar} className={s.profileActions}>
                 <label className={s.label} htmlFor="f-avatar">
                   {t('avatar_choose')}
                 </label>
@@ -147,16 +147,13 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
         </div>
 
         <div className={s.profileStack}>
-          {/* The look is personal — the person staring at this screen all day
-              chooses it. 'company' stores null: follow the default, and move
-              when the company moves. The swatches carry their own data-palette
-              so each is painted by the tokens it would apply; the company one
-              carries none and shows the look now in force. */}
+          {/* Each account saves its own palette and accent, independently of
+              other users and of the company record. */}
           <Panel title={admin('company.appearance')}>
             <p className={s.sectionHint}>{admin('company.appearance_profile_hint')}</p>
             <Form action={saveMyAppearance}>
               <div className={s.paletteChoices}>
-                {['company', ...PALETTES].map((name) => (
+                {PALETTES.map((name) => (
                   <label className={s.paletteChoice} key={name}>
                     <input
                       defaultChecked={name === own.palette}
@@ -166,7 +163,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
                     />
                     <span
                       className={s.paletteSwatch}
-                      data-palette={name === 'company' ? undefined : name}
+                      data-palette={name}
                     >
                       <span className={s.paletteSwatchBar} />
                       <span className={s.paletteSwatchBody}>
@@ -176,9 +173,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
                       </span>
                     </span>
                     <span className={s.paletteName}>
-                      {name === 'company'
-                        ? admin('company.company_default')
-                        : admin(`company.palette_${name}`)}
+                      {admin(`company.palette_${name}`)}
                     </span>
                   </label>
                 ))}
@@ -187,11 +182,11 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
                 {admin('company.accent_hint')}
               </p>
               <div className={s.accentChoices}>
-                {['company', ...ACCENTS].map((name) => (
+                {ACCENTS.map((name) => (
                   <label
                     key={name}
                     className={s.accentChoice}
-                    data-accent={name === 'company' ? undefined : name}
+                    data-accent={name}
                   >
                     <input
                       defaultChecked={name === own.accent}
@@ -201,9 +196,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
                     />
                     <span className={s.accentDot} />
                     <span className={s.paletteName}>
-                      {name === 'company'
-                        ? admin('company.company_default')
-                        : admin(`company.accent_${name}`)}
+                      {admin(`company.accent_${name}`)}
                     </span>
                   </label>
                 ))}

@@ -1,0 +1,32 @@
+# systemd unit for the QS ERP WhatsApp bridge — REQ-WA-001 D-WA-6 (production).
+#
+#   sudo cp deploy/whatsapp-bridge.service /etc/systemd/system/qs-erp-whatsapp.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now qs-erp-whatsapp
+#   sudo journalctl -u qs-erp-whatsapp -f        # the QR code prints here on first start
+#
+# The bridge is a separate process from the application (pm2 runs that): one
+# socket on the company's own number (W-R6), restarted by systemd if it dies,
+# stopped cleanly on SIGTERM. It reads /opt/qs-erp-next/.env for DATABASE_URL
+# and, optionally, ANTHROPIC_API_KEY (.env.example). For the pilot on a
+# laptop (D-WA-6) run `npm run whatsapp-bridge` in a terminal instead.
+[Unit]
+Description=QS ERP WhatsApp bridge (Baileys)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/qs-erp-next
+EnvironmentFile=/opt/qs-erp-next/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npx tsx scripts/ops/whatsapp-bridge.ts
+Restart=always
+RestartSec=10
+KillSignal=SIGTERM
+TimeoutStopSec=20
+StandardOutput=append:/var/log/qs-erp/whatsapp-bridge.log
+StandardError=append:/var/log/qs-erp/whatsapp-bridge.log
+
+[Install]
+WantedBy=multi-user.target

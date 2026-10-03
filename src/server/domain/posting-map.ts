@@ -45,7 +45,7 @@ export interface MappedLine {
    * they are needed, which is why they are listed rather than hidden.
    */
   readonly always: boolean;
-  readonly controlAccount?: 'customer' | 'supplier';
+  readonly controlAccount?: 'customer' | 'supplier' | 'loan';
 }
 
 export interface MappedDocument {
@@ -58,7 +58,7 @@ const line = (
   role: string,
   side: PostingSide,
   always = false,
-  controlAccount?: 'customer' | 'supplier',
+  controlAccount?: 'customer' | 'supplier' | 'loan',
 ): MappedLine => ({ role, side, always, ...(controlAccount ? { controlAccount } : {}) });
 
 export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
@@ -73,6 +73,9 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
       line('grni', 'debit'),
       // A service line — nothing was received into a warehouse.
       line('expense', 'debit'),
+      // §9.2 — a line charged to an import file: the cost belongs to the
+      // goods, parked on the clearing account until the file's cost is locked.
+      line('landed_cost_clearing', 'debit'),
       // §8.4 — the difference between what was ordered and what was billed,
       // which never goes into the value of the stock. Either way round: over
       // the order it is a debit, under it a credit.
@@ -89,8 +92,14 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
   {
     event: 'sales.customer_receipt',
     lines: [
-      // Money in against a named customer.
-      line('customer_receivable', 'credit', true),
+      // Money in against a named customer. Constrained to the customer control
+      // account for the same reason the invoice's debit is: a receipt credited
+      // anywhere else posts a balanced journal, leaves the customer's statement
+      // exactly where it was, and the money looks received while the debt looks
+      // unpaid. That is not a hypothetical — a live mapping sent this line to a
+      // cash account, so receipts moved money between two cash accounts and no
+      // customer balance ever came down.
+      line('customer_receivable', 'credit', true, 'customer'),
       // Money in that no customer has been put to yet — it waits here rather
       // than being guessed at.
       line('customer_clearing', 'credit'),
@@ -102,26 +111,226 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     // arrived earlier, and this is only the moment it found its owner.
     lines: [
       line('customer_clearing', 'debit', true),
-      line('customer_receivable', 'credit', true),
+      line('customer_receivable', 'credit', true, 'customer'),
     ],
   },
   {
     event: 'purchasing.supplier_payment',
-    lines: [line('supplier_payable', 'debit', true)],
+    lines: [line('supplier_payable', 'debit', true, 'supplier')],
+  },
+  // REQ-FIX-001 FIX-3 — the supplier advance posted under these three events
+  // from the start, but they were never listed here, so they could not be
+  // mapped on the screen and a deposit could not post. The bank side is the
+  // account the money left (a property of the payment) unless none is named.
+  {
+    // Money paid to a supplier before the invoice — a deposit on an import.
+    event: 'purchasing.supplier_advance_payment',
+    lines: [line('supplier_advance', 'debit', true), line('bank', 'credit')],
+  },
+  {
+    // The deposit applied to the invoice it was paid ahead of (§8.5, FX6).
+    event: 'purchasing.supplier_advance_settlement',
+    lines: [line('supplier_payable', 'debit', true, 'supplier'), line('supplier_advance', 'credit', true)],
+  },
+  {
+    // The supplier gives the deposit back.
+    event: 'purchasing.supplier_advance_refund',
+    lines: [line('bank', 'debit'), line('supplier_advance', 'credit', true)],
+  },
+  {
+    // REQ-FIX-001 FX8 — an import agreed in a foreign currency, fully paid in
+    // it: what its dinar invoices still owe is a gain, what was paid over them
+    // a loss. The supplier side either way; an unused deposit closes on the
+    // advance account.
+    event: 'payables.exchange_difference',
+    lines: [
+      line('supplier_payable', 'either', true, 'supplier'),
+      line('supplier_advance', 'credit'),
+      line('exchange_gain', 'credit'),
+      line('exchange_loss', 'debit'),
+    ],
   },
   {
     event: 'purchasing.supplier_credit_memo',
     lines: [
-      line('supplier_payable', 'debit', true),
+      line('supplier_payable', 'debit', true, 'supplier'),
       line('return_clearing', 'credit', true),
     ],
   },
   {
     event: 'sales.customer_credit_memo',
     lines: [
-      line('customer_receivable', 'credit', true),
+      line('customer_receivable', 'credit', true, 'customer'),
       line('sales_returns', 'debit', true),
     ],
+  },
+  {
+    // Operations block 7 — Opening Stock. The stock side is each item's own
+    // inventory account; what it is opened against is asked here.
+    event: 'inventory.opening_stock',
+    lines: [line('opening_balance', 'credit', true)],
+  },
+  {
+    // Operations block 7 — Item Reconciliation. An Out debits it and an In
+    // credits it; the inventory side is the item's own account.
+    event: 'inventory.stock_adjustment',
+    lines: [line('inventory_adjustment', 'either', true)],
+  },
+  // REQ-AP-001 §15.7 — loans. The bank side of each is the loan's own account
+  // (a property of the loan, like a receipt's bank), so it is not asked here.
+  {
+    // The money arrives: the liability is the principal; a commission the
+    // bank kept is capitalised to the imports the loan funds (D5) or, when
+    // the loan says so, expensed.
+    event: 'treasury.loan_disbursement',
+    lines: [
+      line('loan_liability', 'credit', true, 'loan'),
+      line('landed_cost_clearing', 'debit'),
+      line('bank_commission', 'debit'),
+    ],
+  },
+  {
+    /*
+     * An instalment leaves the account: the principal off the liability, the
+     * interest as a cost, a spread commission as at disbursement.
+     *
+     * A loan owed in one currency and repaid from an account in another
+     * settles at a different rate from the one it was carried at, and the
+     * difference is a gain or a loss (2026-10-03) — through the same accounts
+     * an import's exchange difference uses, because it is the same thing
+     * happening to a different kind of debt.
+     */
+    event: 'treasury.loan_repayment',
+    lines: [
+      line('loan_liability', 'debit', true, 'loan'),
+      line('loan_interest', 'debit'),
+      line('landed_cost_clearing', 'debit'),
+      line('bank_commission', 'debit'),
+      line('exchange_gain', 'credit'),
+      line('exchange_loss', 'debit'),
+    ],
+  },
+  {
+    /*
+     * What a foreign-currency loan is worth in dinars when the rate has moved
+     * (2026-10-03). The debt is unchanged — 50,000 dollars is 50,000 dollars —
+     * and what the books carry for it is not. The liability moves either way
+     * against the exchange gain or loss.
+     */
+    event: 'treasury.loan_revaluation',
+    lines: [
+      line('loan_liability', 'either', true, 'loan'),
+      line('exchange_gain', 'credit'),
+      line('exchange_loss', 'debit'),
+    ],
+  },
+  {
+    // A commission the bank charged on its own.
+    event: 'treasury.loan_commission',
+    lines: [line('landed_cost_clearing', 'debit'), line('bank_commission', 'debit')],
+  },
+  {
+    // REQ-LEGACY-001 — the partners' balances from the old books, posted
+    // once at the cut-over: what each customer owed and each supplier was
+    // owed, against the same equity line the opening stock opens against.
+    // Debit or credit per partner, as the old books had it.
+    event: 'legacy.opening_balance',
+    lines: [
+      line('customer_receivable', 'either', true, 'customer'),
+      line('supplier_payable', 'either', true, 'supplier'),
+      line('opening_balance', 'either', true),
+    ],
+  },
+  {
+    // REQ-AP-001 §20.2 — the import's landed cost locked: the clearing account
+    // the charges were parked on is emptied into the stock they bought (the
+    // item's inventory account) and, for what is already sold, cost of sales
+    // (the item's own account) — both properties of the item, not asked here.
+    event: 'payables.landed_cost',
+    lines: [line('landed_cost_clearing', 'credit', true)],
+  },
+  {
+    // REQ-PM-001 PM-5 (D-PM-11) — a project certificate approved: the customer
+    // owes what was billed less what is retained; the retention is a
+    // receivable of its own until it is released; the whole is billed revenue.
+    event: 'projects.certificate',
+    lines: [
+      line('customer_receivable', 'debit', true, 'customer'),
+      line('project_retention_receivable', 'debit', false, 'customer'),
+      line('project_revenue', 'credit', true),
+    ],
+  },
+  {
+    // REQ-PM-001 PM-5 (D-PM-1) — percentage of completion at a period end:
+    // recognised beyond what was billed is unbilled work (WIP); billed beyond
+    // what is recognised is deferred revenue. Reversed next period, so each
+    // role is debited one month and credited the next.
+    event: 'projects.recognition',
+    lines: [
+      line('project_wip', 'either'),
+      line('project_deferred_revenue', 'either'),
+      line('project_revenue', 'either', true),
+    ],
+  },
+  {
+    // REQ-PM-001 PM-6 (D-PM-13) — a Material Issue document: the stock's
+    // FIFO cost leaves the item's inventory account for the element's cost;
+    // a return the other way, at the cost it went out at.
+    event: 'projects.material_issue',
+    lines: [line('project_material_cost', 'either', true), line('inventory', 'either', true)],
+  },
+  {
+    // REQ-PM-001 PM-6 (D-PM-8) — a month's approved hours at the employees'
+    // rates: the project's labour cost against the absorption account.
+    event: 'projects.timesheet',
+    lines: [line('project_labour', 'debit', true), line('labour_absorption', 'credit', true)],
+  },
+  {
+    // REQ-PM-001 PM-6 (D-PM-7) — an investment project settled: its cost
+    // leaves the accounts it was posted to for the asset under construction.
+    event: 'projects.settlement',
+    lines: [line('project_auc', 'debit', true), line('project_cost', 'credit', true)],
+  },
+  {
+    // REQ-HR-001 HR-3 (§9) — a month's pay posted: the earnings by department
+    // (the base less its absence), the employer's own costs, what is withheld
+    // or owed for the people (social security, tax) and the net they are
+    // owed. A pay component may name its own accounts (the expense, the
+    // liability); these roles answer for every component that does not.
+    event: 'hr.payroll_run',
+    lines: [
+      line('salary_expense', 'debit', true),
+      line('payroll_employer_cost', 'debit'),
+      line('payroll_withholding', 'credit'),
+      // HR-4 — an advance or loan recovered from the pay.
+      line('employee_advance', 'credit'),
+      line('net_pay', 'credit', true),
+    ],
+  },
+  {
+    // REQ-HR-001 HR-3 (§9) — the net pay leaves a bank or cash account (the
+    // account is the payment's own, as a supplier payment's is).
+    event: 'hr.payroll_payment',
+    lines: [line('net_pay', 'debit', true)],
+  },
+  {
+    // REQ-HR-001 HR-4 (§10) — an advance or loan paid to a person: what they
+    // owe the company, against the bank or cash account it left.
+    event: 'hr.employee_advance',
+    lines: [line('employee_advance', 'debit', true)],
+  },
+  {
+    // REQ-HR-001 HR-4 — cash a person hands back against their advance.
+    event: 'hr.employee_advance_repayment',
+    lines: [line('employee_advance', 'credit', true)],
+  },
+  {
+    // REQ-HR-001 HR-6 (§10) — an expense claim reimbursed: what was spent, by
+    // the person's department (a category may name its own account; this role
+    // answers for every one that does not), the trip's advance it settles, and
+    // the bank or cash account the rest left.
+    event: 'hr.expense_claim',
+    lines: [line('employee_expense', 'debit', true), line('employee_advance', 'credit')],
   },
 ]);
 

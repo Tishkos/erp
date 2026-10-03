@@ -23,3 +23,17 @@ export async function advanceShipment(formData: FormData): Promise<void> {
     LIST,
   );
 }
+
+/** Who is told when a shipment moves — block 8's "selected system users". */
+export async function setShipmentWatchers(formData: FormData): Promise<void> {
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      shipments.setWatchers(
+        tx,
+        ctx,
+        ctx.branchCode,
+        formData.getAll('watcher').map((value) => String(value)),
+      ),
+    LIST,
+  );
+}

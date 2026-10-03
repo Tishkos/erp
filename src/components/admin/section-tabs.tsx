@@ -3,7 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import { can } from '@domain/permissions';
 import { screenRoutes } from '@domain/screens';
 import { requireContext } from '@/server/session';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import styles from './admin.module.css';
 
 /**
@@ -26,7 +26,7 @@ import styles from './admin.module.css';
  * worse than no tab row: the reader cannot tell which one is lying.
  *
  * Nothing is invented and nothing is offered that the URL would refuse: a
- * screen appears only if it is built, its phase is open, and the signed-in
+ * screen appears only if it is built and the signed-in
  * person may view it. A row of one is no row at all, so it is not drawn.
  */
 export async function SectionTabs({ route }: { readonly route: string }) {

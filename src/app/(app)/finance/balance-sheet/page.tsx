@@ -5,13 +5,15 @@ import { ReportFilter, ReportWindow, currencyFrom } from '@/components/admin/rep
 import { StatementTable } from '@/components/admin/statement-table';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, formatStatementAmount, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { levelFrom } from '@domain/report-levels';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as statements from '@/server/services/financial-statements';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * The Balance Sheet — the Statement of Financial Position, Phase 1
@@ -43,7 +45,7 @@ export default async function BalanceSheetPage({ searchParams }: { searchParams:
     return <Denied object={page('balance_sheet')} />;
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const asAt = typeof params.to === 'string' ? params.to : today;
   const currency = currencyFrom(params.currency);
   const level = levelFrom(params.level, LEVELS);
@@ -110,6 +112,7 @@ export default async function BalanceSheetPage({ searchParams }: { searchParams:
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="balance_sheet" query={params} />}
       back={{ href: '/', label: t('dashboard_label') }}
       tabs={<SectionTabs route="/finance/balance-sheet" />}
       subtitle={t('reports.balance_sheet_subtitle')}

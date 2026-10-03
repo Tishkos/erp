@@ -8,6 +8,7 @@ import {
   Flash,
   Form,
   Grid,
+  Hidden,
   ListToolbar,
   NewRecordDialog,
   Pill,
@@ -20,11 +21,12 @@ import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { formatQuantity, parseQuantity } from '@domain/uom';
 import * as items from '@/server/services/items';
-import * as uom from '@/server/services/units-of-measure';
+import * as uomService from '@/server/services/units-of-measure';
+import * as coa from '@/server/services/chart-of-accounts';
 import { createItem } from './actions';
 
 /**
@@ -38,7 +40,7 @@ import { createItem } from './actions';
 export const dynamic = 'force-dynamic';
 
 export default async function ItemsPage({ searchParams }: { searchParams: SearchParams }) {
-  if (!visibleRoute('/master-data/items')) notFound();
+  if (!visibleRoute('/inventory/items')) notFound();
 
   const [t, page, column, context, outcome] = await Promise.all([
     getTranslations('admin'),
@@ -53,10 +55,16 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
   }
   const mayCreate = can(principal, 'create', items.PERMISSION_OBJECT);
 
-  const { rows, units } = await withCurrentUser(async (tx) => ({
+  const { rows, accounts, uoms } = await withCurrentUser(async (tx) => ({
     rows: await items.listAll(tx),
-    units: mayCreate ? await uom.listActive(tx) : [],
+    accounts: mayCreate ? await coa.postableAccounts(tx) : [],
+    // REQ-FIX-001 FIX-4 — the unit its stock is counted in is chosen, not assumed.
+    uoms: mayCreate ? await uomService.listActive(tx) : [],
   }));
+  const accountOptions = (type: string) =>
+    accounts
+      .filter((a) => a.accountType === type)
+      .map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }));
   const shown = rows.filter((row) => matches(row, outcome.q));
 
   return (
@@ -75,34 +83,51 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
                 typed is a code that can be typed twice. */}
             <Form action={createItem}>
               <Grid>
-                <Field label={t('name')} name="name" required requiredLabel={t('required_hint')} />
-                <Select
-                  defaultValue="stock"
-                  hint={t('items.kind_hint')}
-                  label={t('items.kind')}
-                  name="isStock"
-                  options={[
-                    { value: 'stock', label: t('items.kind_stock') },
-                    { value: 'service', label: t('items.kind_service') },
-                  ]}
+                {/* Block 1: Item Code (the system's), Item Full Name, Related
+                    Supplier(s) — linked on the item once it exists — and the
+                    three accounts. Nothing else is asked. A build item is a
+                    stock item counted in each, identified by the invoice that
+                    brought it in (its batch), so those are set, not asked. */}
+                <Hidden name="isStock" value="stock" />
+                <Hidden name="tracking" value="batch" />
+                <Field
+                  label={t('items.full_name')}
+                  name="name"
+                  required
+                  requiredLabel={t('required_hint')}
+                  wide
                 />
                 <Select
-                  label={t('items.base_uom')}
+                  defaultValue={uoms.some((uom) => uom.code === 'EA') ? 'EA' : (uoms[0]?.code ?? '')}
+                  hint={t('items.base_unit_hint')}
+                  label={t('items.base_unit')}
                   name="baseUomCode"
-                  options={units.map((u) => ({ value: u.code, label: `${u.code} · ${u.name}` }))}
+                  options={uoms.map((uom) => ({ value: uom.code, label: `${uom.code} · ${uom.name}` }))}
                   required
                 />
-                {/* §9.3 — a stock item must track serials, batches or both.
-                    A service tracks nothing, and the service ignores this. */}
                 <Select
-                  defaultValue="batch"
-                  hint={t('items.tracking_hint')}
-                  label={t('items.tracking')}
-                  name="tracking"
-                  options={items.ITEM_TRACKING.map((value) => ({
-                    value,
-                    label: t(`items.tracking_${value}`),
-                  }))}
+                  emptyLabel=""
+                  label={t('items.inventory_account')}
+                  name="inventoryAccountId"
+                  options={accountOptions('asset')}
+                  required
+                />
+                {/* Blank is a real answer here, as on the item's own page: the
+                    sale then posts to the revenue mapping. Inventory and COGS
+                    have no such fallback — a sale refuses an item without them —
+                    so those two are required. */}
+                <Select
+                  emptyLabel={t('items.account_by_rule')}
+                  label={t('items.sales_account')}
+                  name="salesAccountId"
+                  options={accountOptions('revenue')}
+                />
+                <Select
+                  emptyLabel=""
+                  label={t('items.cogs_account')}
+                  name="cogsAccountId"
+                  options={accountOptions('expense')}
+                  required
                 />
               </Grid>
               <SubmitRow>
@@ -113,7 +138,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
         ) : null
       }
       back={{ href: '/', label: t('dashboard_label') }}
-      tabs={<SectionTabs route="/master-data/items" />}
+      tabs={<SectionTabs route="/inventory/items" />}
       subtitle={t('items.subtitle')}
       title={page('items')}
       variant="sap"
@@ -127,7 +152,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
 
       <Panel flush>
         <ListToolbar
-          clearHref="/master-data/items"
+          clearHref="/inventory/items"
           clearLabel={t('clear_search')}
           countLabel={t('rows_shown', { count: shown.length })}
           placeholder={t('search_placeholder')}
@@ -156,7 +181,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Search
               {shown.map((row) => (
                 <tr key={row.code}>
                   <td>
-                    <Link href={`/master-data/items/${encodeURIComponent(row.code)}`}>{row.code}</Link>
+                    <Link href={`/inventory/items/${encodeURIComponent(row.code)}`}>{row.code}</Link>
                   </td>
                   <td>{row.name}</td>
                   <td>{row.isStock ? t('items.kind_stock') : t('items.kind_service')}</td>

@@ -73,6 +73,15 @@ export async function withScope<T>(scope: RequestScope, fn: (tx: Tx) => Promise<
  * failed sign-in — need the context on a transaction they opened themselves.
  * See `src/server/services/audit.ts` for why those cannot share the caller's.
  */
+/**
+ * HD5 — marks a transaction as a system sweep: one that escalates or
+ * re-delivers notifications for everybody and must read them all. Set by the
+ * scheduled jobs on their own transactions; no web request sets it.
+ */
+export async function markSystemSweep(tx: Tx): Promise<void> {
+  await tx.execute(sql`select set_config('app.system_sweep', 'on', true)`);
+}
+
 export async function applyScope(tx: Tx, scope: RequestScope): Promise<void> {
   await tx.execute(sql`select set_config('app.user_id', ${scope.userId}, true)`);
   await tx.execute(sql`select set_config('app.branch_code', ${scope.branchCode}, true)`);

@@ -16,7 +16,9 @@ on:
   pull_request:
 
 env:
-  NODE_VERSION: '24'
+  # The server runs the version in .nvmrc (REQ-IMPROVE-001 OP-11); CI builds
+  # with the same one, so a build that passes here is the build that ships.
+  NODE_VERSION: '22'
 
 jobs:
   quality:
@@ -33,6 +35,13 @@ jobs:
         run: npm run typecheck
       - name: Unit tests
         run: npm run test:unit
+
+      # REQ-IMPROVE-001 OP-11 / SG-9 — a dependency with a known high or
+      # critical advisory in what ships does not ship. Development-only
+      # tooling is reported by Dependabot, not gated here, because an
+      # advisory in a test runner is not an exposure of the live system.
+      - name: Dependency audit (production, high and above)
+        run: npm audit --omit=dev --audit-level=high
 
       # Phase 00.5 gate: "Coverage is measured and published per build."
       # Published as a build artefact rather than gated on a threshold: a
@@ -76,6 +85,16 @@ jobs:
           cache: npm
       - run: npm ci
 
+      # im01 dumps and restores with pg_dump/pg_restore, which must be at
+      # least the server's version; the runner's own client is older.
+      - name: PostgreSQL 17 client
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-17
+          pg_dump --version
+
       # The service container does not run docker-entrypoint-initdb.d, so the
       # role separation is applied here instead.
       - name: Create database roles
@@ -94,6 +113,34 @@ jobs:
   e2e:
     name: End-to-end tests
     runs-on: ubuntu-latest
+    # REQ-IMPROVE-001 OP-11 — the browser tests run against a real, migrated,
+    # seeded database, so every signed-in flow is exercised, not only the
+    # sign-in page. The seed is the development fixture (scripts/seed-dev.ts),
+    # the same one the local server uses.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: erp_owner
+          POSTGRES_PASSWORD: owner_dev_password
+          POSTGRES_DB: erp
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U erp_owner"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CI: 'true'
+      DATABASE_URL_OWNER: postgres://erp_owner:owner_dev_password@localhost:5432/erp
+      DATABASE_URL: postgres://erp_app:app_dev_password@localhost:5432/erp
+      BETTER_AUTH_SECRET: ci-only-secret-not-for-any-real-environment-0123456789
+      BETTER_AUTH_URL: http://localhost:3000
+      NODE_ENV: development
+      APP_ENV: ci
+      LEDGER_CURRENCY: IQD
+      REPORTING_CURRENCY: USD
+      SHOW_UNBUILT_SCREENS: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -101,6 +148,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
+      - name: Create database roles
+        run: psql "$DATABASE_URL_OWNER" -v ON_ERROR_STOP=1 -f scripts/sql/00-init-roles.sql
+      - run: npm run db:migrate
+      - run: npm run db:seed
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v4

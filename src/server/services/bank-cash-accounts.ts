@@ -2,7 +2,8 @@
  * Bank and cash accounts — Phase 2 requirements 5 and 6.
  *
  * *"Company bank accounts can be created and maintained and linked to the
- *  correct branch and G/L account…"* and the same for cash accounts.
+ *  correct G/L account…"* and the same for cash accounts. Branch belongs to
+ *  each payment, receipt, count, and statement; the account is company-wide.
  *
  * One table, two kinds, two screens. They are one table because both are a
  * place company money sits, and every later payment, receipt and transfer
@@ -23,9 +24,9 @@
  * asset; a header carries the sum of what is beneath it and nothing posts to
  * it; and an account already spoken for by another cash account is not free.
  */
-import { and, asc, eq, inArray, not, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, not, or, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
-import { appUser, bankCashAccount, branch, chartOfAccount } from '../db/schema';
+import { appUser, bank, bankCashAccount, branch, chartOfAccount } from '../db/schema';
 import {
   AdminNotFoundError,
   AdminValidationError,
@@ -43,11 +44,12 @@ export type AccountKind = 'bank' | 'cash';
 
 export interface AccountInput {
   readonly name: string;
-  readonly branchCode: string;
   readonly glAccountId: string;
   readonly currency?: string | null;
   /** Bank only. */
   readonly bankName?: string | null;
+  /** REQ-AP-001 §15.1 — the bank master row; the name follows it when blank. */
+  readonly bankCode?: string | null;
   readonly accountNumber?: string | null;
   readonly iban?: string | null;
   readonly swift?: string | null;
@@ -69,7 +71,6 @@ export async function listOfKind(tx: Tx, kind: AccountKind) {
       bankName: bankCashAccount.bankName,
       accountNumber: bankCashAccount.accountNumber,
       currency: bankCashAccount.currency,
-      branchCode: bankCashAccount.branchCode,
       glAccountCode: chartOfAccount.code,
       glAccountName: chartOfAccount.name,
       custodianName: appUser.displayName,
@@ -77,7 +78,25 @@ export async function listOfKind(tx: Tx, kind: AccountKind) {
       active: bankCashAccount.active,
     })
     .from(bankCashAccount)
-    .innerJoin(chartOfAccount, eq(chartOfAccount.id, bankCashAccount.glAccountId))
+    /*
+     * Left, not inner.
+     *
+     * The G/L account is required and the database has the foreign key for
+     * it, so every account has one — until something goes around the
+     * application. `format-live-database.sh` deletes with the triggers
+     * disabled, and on 2026-09-27 it took `chart_of_account` rows while
+     * leaving `bank_cash_account` standing: CASH-ACCOUNTANT_ERBIL kept an id
+     * pointing at an account that no longer existed.
+     *
+     * Under an inner join that row simply stopped being listed. The account
+     * was not shown as broken, it was not shown at all — so the one screen
+     * that could repair the link was the screen the link had removed it from,
+     * and the report was "I cannot link the cash account to a G/L account".
+     *
+     * A missing G/L account is a thing to say out loud, never a reason to
+     * hide the record that needs it.
+     */
+    .leftJoin(chartOfAccount, eq(chartOfAccount.id, bankCashAccount.glAccountId))
     .leftJoin(appUser, eq(appUser.id, bankCashAccount.custodianUserId))
     .where(eq(bankCashAccount.accountType, kind))
     .orderBy(asc(bankCashAccount.code));
@@ -96,11 +115,6 @@ export async function detail(tx: Tx, code: string) {
     .from(chartOfAccount)
     .where(eq(chartOfAccount.id, row.glAccountId))
     .limit(1);
-  const [place] = await tx
-    .select({ name: branch.name })
-    .from(branch)
-    .where(eq(branch.code, row.branchCode))
-    .limit(1);
   const [custodian] = row.custodianUserId
     ? await tx
         .select({ name: appUser.displayName, email: appUser.email })
@@ -108,11 +122,15 @@ export async function detail(tx: Tx, code: string) {
         .where(eq(appUser.id, row.custodianUserId))
         .limit(1)
     : [];
+  const [held] = row.bankCode
+    ? await tx.select({ name: bank.name, swiftBic: bank.swiftBic }).from(bank).where(eq(bank.code, row.bankCode)).limit(1)
+    : [];
   return {
     ...row,
+    bankMasterName: held?.name ?? null,
+    bankMasterSwift: held?.swiftBic ?? null,
     glAccountCode: gl?.code ?? null,
     glAccountName: gl?.name ?? null,
-    branchName: place?.name ?? null,
     custodianName: custodian?.name ?? null,
     custodianEmail: custodian?.email ?? null,
   };
@@ -141,6 +159,17 @@ export async function availableGlAccounts(tx: Tx, keep?: string | null) {
         eq(chartOfAccount.isGroup, false),
         eq(chartOfAccount.isActive, true),
         eq(chartOfAccount.approvalStatus, 'approved'),
+        // Not another subledger's control account. "An unused asset posting
+        // account" was the whole rule, and Accounts Receivable satisfies it —
+        // so on the live books a cash account had been pointed at exactly
+        // that, and a 5,000,000 receipt posted through it (2026-09-29).
+        //
+        // `bank` is the one control role that belongs here: it is what an
+        // account carrying a bank or cash balance is *for*, and the test
+        // fixtures have always flagged their ledger accounts with it. An
+        // unflagged asset account is still allowed, because most charts never
+        // set the flag and refusing them would offer nobody anything.
+        or(isNull(chartOfAccount.controlAccount), eq(chartOfAccount.controlAccount, 'bank')),
         takenIds.length > 0 ? not(inArray(chartOfAccount.id, takenIds)) : sql`true`,
       ),
     )
@@ -154,6 +183,7 @@ async function assertGlAccount(tx: Tx, id: string, keep?: string | null): Promis
       isGroup: chartOfAccount.isGroup,
       accountType: chartOfAccount.accountType,
       isActive: chartOfAccount.isActive,
+      controlAccount: chartOfAccount.controlAccount,
     })
     .from(chartOfAccount)
     .where(eq(chartOfAccount.id, id))
@@ -166,6 +196,17 @@ async function assertGlAccount(tx: Tx, id: string, keep?: string | null): Promis
     throw new AdminValidationError('glAccountId', 'must be an asset account — cash is an asset');
   }
   if (!account.isActive) throw new AdminValidationError('glAccountId', 'is not active');
+  // Refused when it is being *chosen*; allowed when it is the one the record
+  // already carries, so a bank or cash account that was mis-linked before this
+  // rule existed can still be opened and renamed. The dashboard's attention
+  // band is what says it is wrong; refusing the whole record would only make
+  // the mistake harder to correct.
+  if (account.controlAccount && account.controlAccount !== 'bank' && id !== keep) {
+    throw new AdminValidationError(
+      'glAccountId',
+      `is the ${account.controlAccount} control account, which its own subledger maintains — choose a cash or bank account`,
+    );
+  }
 
   const [claimed] = await tx
     .select({ code: bankCashAccount.code })
@@ -181,12 +222,6 @@ async function assertGlAccount(tx: Tx, id: string, keep?: string | null): Promis
     throw new AdminValidationError('glAccountId', `is already carried by account ${claimed.code}`);
   }
   return account.id;
-}
-
-async function assertBranch(tx: Tx, code: string): Promise<string> {
-  const [row] = await tx.select({ code: branch.code }).from(branch).where(eq(branch.code, code)).limit(1);
-  if (!row) throw new AdminValidationError('branchCode', 'is not a known branch');
-  return row.code;
 }
 
 async function assertCustodian(tx: Tx, userId: string | null): Promise<string | null> {
@@ -217,8 +252,19 @@ function assertCurrency(value: string | null | undefined): string {
 /** The fields that belong to one kind, checked as that kind requires. */
 async function shapeFor(tx: Tx, kind: AccountKind, input: AccountInput) {
   if (kind === 'bank') {
+    // §15.1 — the bank is a master row; the free text stays for what the
+    // master does not say (a branch, a desk) and defaults to the bank's name.
+    const code = optionalText(input.bankCode);
+    let bankName = optionalText(input.bankName);
+    if (code) {
+      const [known] = await tx.select().from(bank).where(eq(bank.code, code)).limit(1);
+      if (!known) throw new AdminValidationError('bankCode', 'is not a known bank');
+      if (!known.active) throw new AdminValidationError('bankCode', `${known.name} is no longer active`);
+      bankName = bankName ?? known.name;
+    }
     return {
-      bankName: optionalText(input.bankName),
+      bankCode: code,
+      bankName,
       // §4.4 — a bank account with no number cannot be reconciled to a statement.
       accountNumber: requireText(input.accountNumber ?? '', 'accountNumber'),
       iban: optionalText(input.iban),
@@ -232,6 +278,7 @@ async function shapeFor(tx: Tx, kind: AccountKind, input: AccountInput) {
   const custodian = await assertCustodian(tx, input.custodianUserId ?? null);
   if (!custodian) throw new AdminValidationError('custodianUserId', 'is required for a cash account');
   return {
+    bankCode: null,
     bankName: null,
     accountNumber: null,
     iban: null,
@@ -271,12 +318,8 @@ async function allocateFreeCode(tx: Tx, kind: AccountKind, userId: string): Prom
 }
 
 /**
- * A new bank or cash account. Its number is minted, never given.
- *
- * Operations build, block 6: *"Bank/Cash Name; Bank Number (automatically
- * generated); Type (Cash or Bank); Related Account."* It used to be a slug of
- * the name that anybody could type over, which is not what "automatically
- * generated" describes.
+ * A new bank or cash master. Its ERP code is minted, never given. A bank's
+ * actual account number is provided by the user for statement matching.
  */
 export async function create(tx: Tx, ctx: ActorContext, kind: AccountKind, input: AccountInput) {
   await permit(ctx, 'create', PERMISSION_OBJECT);
@@ -290,7 +333,6 @@ export async function create(tx: Tx, ctx: ActorContext, kind: AccountKind, input
     accountType: kind,
     currency: assertCurrency(input.currency),
     glAccountId: await assertGlAccount(tx, input.glAccountId),
-    branchCode: await assertBranch(tx, input.branchCode),
     approvalLimitIqd: assertAmount(input.approvalLimitIqd, 'approvalLimitIqd'),
     ...(await shapeFor(tx, kind, input)),
     active: true,
@@ -302,7 +344,7 @@ export async function create(tx: Tx, ctx: ActorContext, kind: AccountKind, input
     objectType: PERMISSION_OBJECT,
     objectId: code,
     after: values,
-    branchCode: values.branchCode,
+    branchCode: ctx.branchCode,
   });
   return get(tx, code);
 }
@@ -316,7 +358,6 @@ export async function update(tx: Tx, ctx: ActorContext, code: string, input: Acc
     name: requireText(input.name, 'name'),
     currency: assertCurrency(input.currency),
     glAccountId: await assertGlAccount(tx, input.glAccountId, before.glAccountId),
-    branchCode: await assertBranch(tx, input.branchCode),
     approvalLimitIqd: assertAmount(input.approvalLimitIqd, 'approvalLimitIqd'),
     ...(await shapeFor(tx, kind, input)),
   };
@@ -330,12 +371,11 @@ export async function update(tx: Tx, ctx: ActorContext, code: string, input: Acc
       name: before.name,
       currency: before.currency,
       glAccountId: before.glAccountId,
-      branchCode: before.branchCode,
       accountNumber: before.accountNumber,
       custodianUserId: before.custodianUserId,
     },
     after: values,
-    branchCode: values.branchCode,
+    branchCode: ctx.branchCode,
   });
   return get(tx, code);
 }
@@ -353,21 +393,6 @@ export async function setActive(
   if (!active && !reason?.trim()) {
     throw new AdminValidationError('reason', 'is required to deactivate an account');
   }
-  // §4.1 — a branch's default cash account is part of what makes the branch
-  // operable. Retiring it would leave the branch unable to take cash.
-  if (!active) {
-    const [defaulted] = await tx
-      .select({ code: branch.code })
-      .from(branch)
-      .where(eq(branch.defaultCashAccountId, before.id))
-      .limit(1);
-    if (defaulted) {
-      throw new AdminValidationError(
-        'code',
-        `is the default cash account of branch ${defaulted.code}`,
-      );
-    }
-  }
   await tx.update(bankCashAccount).set({ active }).where(eq(bankCashAccount.code, code));
   await recordChange(tx, ctx, {
     action: active ? 'bank_account.reactivated' : 'bank_account.deactivated',
@@ -376,7 +401,7 @@ export async function setActive(
     before: { active: before.active },
     after: { active },
     reason: reason?.trim() || null,
-    branchCode: before.branchCode,
+    branchCode: ctx.branchCode,
   });
   return get(tx, code);
 }

@@ -20,10 +20,11 @@ const kindOf = (formData: FormData): accounts.AccountKind =>
 function inputFrom(formData: FormData) {
   return {
     name: text(formData, 'name'),
-    branchCode: text(formData, 'branchCode'),
+    // Bank and cash accounts belong to the company; documents carry their branch.
     glAccountId: text(formData, 'glAccountId'),
     currency: text(formData, 'currency') || null,
     bankName: text(formData, 'bankName') || null,
+    bankCode: text(formData, 'bankCode') || null,
     accountNumber: text(formData, 'accountNumber') || null,
     iban: text(formData, 'iban') || null,
     swift: text(formData, 'swift') || null,

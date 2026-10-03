@@ -21,7 +21,7 @@
  * wants. So the rule is: within tolerance, receive; beyond it, a manager says
  * yes in writing, and the reason is kept.
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   businessPartner,
@@ -40,8 +40,12 @@ import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
 import * as inventory from './inventory';
+import * as units from './item-units';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
+import { countOf, registerPage, whereOf, type RegisterPage, type RegisterPaging } from './register-page';
+import * as payableEvents from './payable-events';
+import * as payables from './payables';
 
 /** The Appendix B document type this service manages. */
 export const DOCUMENT_TYPE = 'goods_receipt';
@@ -514,12 +518,15 @@ export async function post(
   const movementIds: string[] = [];
 
   for (const plan of planned) {
+    // REQ-FIX-001 FIX-4 — received in the order's unit, counted in the base.
+    const baseQuantity = await units.toBaseQuantity(tx, plan.line.itemCode, plan.line.uomCode, plan.quantity);
     const movement = await inventory.receive(tx, ctx, {
       itemCode: plan.line.itemCode,
       warehouseCode: plan.line.warehouseCode,
       branchCode: receipt.branchCode,
-      quantity: plan.quantity,
-      unitCostIqd: plan.unitCostIqd,
+      quantity: baseQuantity,
+      // The order's price is per its unit; a base unit costs that share of it.
+      unitCostIqd: baseQuantity === plan.quantity || baseQuantity === 0n ? plan.unitCostIqd : (plan.unitCostIqd * plan.quantity) / baseQuantity,
       movementDate: receipt.receiptDate,
       kind: 'goods_receipt',
       sourceDocumentType: PERMISSION_OBJECT,
@@ -566,6 +573,34 @@ export async function post(
     .where(eq(goodsReceipt.id, id));
 
   const orderStatus = await refreshOrderStatus(tx, receipt.purchaseOrderId);
+
+  // REQ-AP-001 §11 — a local-goods payable hears its warehouse lane move.
+  {
+    const { payable: payableTable } = await import('../db/schema');
+    const { and: andOp, eq: eqOp, isNull: isNullOp } = await import('drizzle-orm');
+    const [owner] = await tx
+      .select({ id: payableTable.id })
+      .from(payableTable)
+      .where(
+        andOp(
+          eqOp(payableTable.purchaseOrderId, receipt.purchaseOrderId),
+          isNullOp(payableTable.cancelledAt),
+        ),
+      )
+      .limit(1);
+    if (owner) {
+      await payableEvents.record(tx, {
+        payableId: owner.id,
+        eventCode: 'GOODS_RECEIVED',
+        summary: `Goods receipt ${receipt.receiptNo} posted`,
+        sourceType: 'goods_receipt',
+        sourceId: receipt.id,
+        sourceNo: receipt.receiptNo,
+        actorUserId: ctx.principal.userId,
+      });
+      await payables.recomputeStage(tx, owner.id, ctx.principal.userId);
+    }
+  }
 
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
@@ -752,3 +787,75 @@ export async function isQuarantine(tx: Tx, warehouseCode: string): Promise<boole
   return row?.type === 'quarantine';
 }
 
+
+/** §21.6 — the list: what arrived, against which order, into which warehouse. */
+export interface GoodsReceiptListRow {
+  readonly id: string;
+  readonly receiptNo: string;
+  readonly status: string;
+  readonly orderNo: string | null;
+  readonly supplierName: string | null;
+  readonly receiptDate: string;
+  readonly warehouses: string | null;
+  readonly lineCount: number;
+}
+
+export interface GoodsReceiptListFilter extends RegisterPaging {
+  readonly status?: string | null;
+}
+
+/** HD15 — one page of fifty, newest first, with the true count. */
+export async function listForScreen(
+  tx: Tx,
+  filter: GoodsReceiptListFilter = {},
+): Promise<RegisterPage<GoodsReceiptListRow>> {
+  const from = sql`
+      from goods_receipt r
+      left join purchase_order o on o.id = r.purchase_order_id
+      left join business_partner bp on bp.id = o.supplier_id
+     ${whereOf([filter.status ? sql`r.status::text = ${filter.status}` : null])}`;
+  return registerPage({
+    paging: filter,
+    count: () => countOf(tx, from),
+    rows: async ({ limit, offset }) => {
+      const result = await tx.execute(sql`
+        select r.id,
+               r.receipt_no as "receiptNo",
+               r.status::text as status,
+               o.order_no as "orderNo",
+               bp.legal_name as "supplierName",
+               r.receipt_date::text as "receiptDate",
+               (select string_agg(distinct l.warehouse_code, ', ')
+                  from goods_receipt_line l where l.goods_receipt_id = r.id) as warehouses,
+               (select count(*)::int from goods_receipt_line l where l.goods_receipt_id = r.id)
+                 as "lineCount"
+          ${from}
+         order by r.created_at desc, r.id desc
+         limit ${limit} offset ${offset}`);
+      return result.rows as unknown as GoodsReceiptListRow[];
+    },
+  });
+}
+
+/** §21.6 — the record, by its number. */
+export async function viewByNo(tx: Tx, receiptNo: string) {
+  const [receipt] = await tx
+    .select()
+    .from(goodsReceipt)
+    .where(eq(goodsReceipt.receiptNo, receiptNo))
+    .limit(1);
+  if (!receipt) return null;
+  const lines = await tx
+    .select()
+    .from(goodsReceiptLine)
+    .where(eq(goodsReceiptLine.goodsReceiptId, receipt.id))
+    .orderBy(asc(goodsReceiptLine.lineNo));
+  const [order] = receipt.purchaseOrderId
+    ? await tx
+        .select({ orderNo: purchaseOrder.orderNo })
+        .from(purchaseOrder)
+        .where(eq(purchaseOrder.id, receipt.purchaseOrderId))
+        .limit(1)
+    : [];
+  return { receipt, lines, orderNo: order?.orderNo ?? null };
+}

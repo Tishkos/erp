@@ -24,10 +24,11 @@ import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { DUE_DATE_BASIS } from '@domain/payment-terms';
 import { AdminNotFoundError } from '@/server/services/administration';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as terms from '@/server/services/payment-terms';
 import { setPaymentTermActive, updatePaymentTerm } from '../actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * One payment term — Phase 2 requirement 7.
@@ -68,7 +69,7 @@ export default async function PaymentTermPage({
 
   // The example runs from a date the reader can change, defaulting to today.
   const query = await searchParams;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const exampleDate = typeof query.on === 'string' ? query.on : today;
 
   const row = await withCurrentUser(async (tx) => {
@@ -291,16 +292,20 @@ export default async function PaymentTermPage({
               <p className="muted">{t('payment_terms.no_partners')}</p>
             ) : (
               <ul className={s.profileFacts}>
-                {row.partners.map((partner) => (
-                  <li key={partner.code}>
-                    <span>
-                      <Link href={`/master-data/business-partners/${encodeURIComponent(partner.code)}`}>
-                        {partner.code}
-                      </Link>
-                    </span>
-                    <span>{partner.name}</span>
-                  </li>
-                ))}
+                {row.partners.map((partner) => {
+                  const role = partner.isSupplier && !partner.isCustomer ? 'supplier' : 'customer';
+                  const route = role === 'supplier' ? '/payables/suppliers' : '/sales/customers';
+                  return (
+                    <li key={partner.code}>
+                      <span>
+                        <Link href={`${route}/${encodeURIComponent(partner.code)}?role=${role}`}>
+                          {partner.code}
+                        </Link>
+                      </span>
+                      <span>{partner.name}</span>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </Panel>

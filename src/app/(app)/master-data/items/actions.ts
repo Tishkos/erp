@@ -2,8 +2,9 @@
 
 import { flag, runAdminAndReturn, text } from '@/server/admin-action';
 import * as items from '@/server/services/items';
+import * as units from '@/server/services/item-units';
 
-const LIST = '/master-data/items';
+const LIST = '/inventory/items';
 const record = (code: string) => `${LIST}/${encodeURIComponent(code)}`;
 
 const createdRecord = (value: unknown) => {
@@ -111,4 +112,51 @@ export async function unlinkItemSupplier(formData: FormData): Promise<void> {
     (tx, ctx) => items.unlinkSupplier(tx, ctx, code, text(formData, 'supplierId')),
     record(code),
   );
+}
+
+/**
+ * REQ-FIX-001 FIX-4 — "1 carton = 24 EA". The person types how many base
+ * units one of the new unit holds, as a decimal; it is kept as an exact
+ * fraction (24/1, 0.5 → 1/2, 12.5 → 25/2).
+ */
+function fractionOf(value: string): { numerator: bigint; denominator: bigint } {
+  const cleaned = value.replace(/[,\s]/g, '');
+  const match = /^(\d+)(?:\.(\d{1,6}))?$/.exec(cleaned);
+  if (!match) throw new Error(`"${value}" is not a quantity of the base unit. Say how many base units one of this unit holds, e.g. 24 or 0.5.`);
+  const decimals = match[2] ?? '';
+  let numerator = BigInt(`${match[1]}${decimals}`);
+  let denominator = 10n ** BigInt(decimals.length);
+  const gcd = (a: bigint, b: bigint): bigint => (b === 0n ? a : gcd(b, a % b));
+  const common = gcd(numerator, denominator) || 1n;
+  numerator /= common;
+  denominator /= common;
+  return { numerator, denominator };
+}
+
+export async function addItemUnit(formData: FormData): Promise<void> {
+  const code = text(formData, 'code');
+  await runAdminAndReturn(async (tx, ctx) => {
+    const { numerator, denominator } = fractionOf(text(formData, 'baseQuantity'));
+    return units.addUnit(tx, ctx, code, {
+      uomCode: text(formData, 'uomCode'),
+      numerator,
+      denominator,
+      isPurchaseDefault: flag(formData, 'purchaseDefault'),
+      isSalesDefault: flag(formData, 'salesDefault'),
+      barcode: text(formData, 'barcode') || null,
+    });
+  }, record(code));
+}
+
+export async function setItemUnitDefault(formData: FormData): Promise<void> {
+  const code = text(formData, 'code');
+  await runAdminAndReturn(
+    (tx, ctx) => units.setDefault(tx, ctx, code, text(formData, 'uomCode'), text(formData, 'kind') === 'sales' ? 'sales' : 'purchase'),
+    record(code),
+  );
+}
+
+export async function deactivateItemUnit(formData: FormData): Promise<void> {
+  const code = text(formData, 'code');
+  await runAdminAndReturn((tx, ctx) => units.deactivate(tx, ctx, code, text(formData, 'uomCode'), text(formData, 'reason')), record(code));
 }

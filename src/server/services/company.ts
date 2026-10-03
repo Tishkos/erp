@@ -159,25 +159,21 @@ export async function setAppearance(
 }
 
 /**
- * The look this person actually sees: their own choice where they made one,
- * the company's default where they did not. Read on every authenticated page.
+ * The look this person actually sees: their own saved choice, or the shared
+ * Sand and Gold application defaults. Company preferences never affect users.
  */
 export async function appearanceFor(
   tx: Tx,
   userId: string,
 ): Promise<{ palette: Palette; accent: Accent }> {
-  const [c] = await tx
-    .select({ palette: company.uiPalette, accent: company.uiAccent })
-    .from(company)
-    .limit(1);
   const [u] = await tx
     .select({ palette: appUser.uiPalette, accent: appUser.uiAccent })
     .from(appUser)
     .where(eq(appUser.id, userId))
     .limit(1);
   return {
-    palette: paletteOrDefault(u?.palette ?? c?.palette),
-    accent: accentOrDefault(u?.accent ?? c?.accent),
+    palette: paletteOrDefault(u?.palette),
+    accent: accentOrDefault(u?.accent),
   };
 }
 
@@ -185,24 +181,17 @@ export async function appearanceFor(
  * A person chooses their own look — or hands the choice back.
  *
  * Self-service by construction: it writes only the caller's row, so the only
- * permission needed is being signed in. 'company' is the sentinel for "follow
- * the default"; it stores null, which is what appearanceFor reads it as.
+ * permission needed is being signed in. Users always have a saved preference;
+ * there is no company-wide appearance fallback.
  */
 export async function setMyAppearance(
   tx: Tx,
   ctx: ActorContext,
   input: { readonly palette: string; readonly accent: string },
 ): Promise<void> {
-  let palette: string | null = null;
-  if (input.palette !== 'company') {
-    assertPalette(input.palette);
-    palette = input.palette;
-  }
-  let accent: string | null = null;
-  if (input.accent !== 'company') {
-    assertAccent(input.accent);
-    accent = input.accent;
-  }
+  const { palette, accent } = input;
+  assertPalette(palette);
+  assertAccent(accent);
 
   await tx
     .update(appUser)
@@ -213,6 +202,7 @@ export async function setMyAppearance(
     action: 'user.appearance_changed',
     objectType: 'app_user',
     objectId: ctx.principal.userId,
+    branchCode: ctx.branchCode,
     after: { uiPalette: palette, uiAccent: accent },
   });
 }

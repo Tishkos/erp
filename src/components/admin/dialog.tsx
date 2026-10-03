@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { Plus, X } from 'lucide-react';
 import styles from './admin.module.css';
 
@@ -19,15 +19,24 @@ export function NewRecordDialog({
   title,
   closeLabel,
   openOnLoad = false,
+  wide = false,
   children,
 }: {
   readonly buttonLabel: string;
   readonly title: string;
   readonly closeLabel: string;
   readonly openOnLoad?: boolean;
+  /**
+   * For a form built round a grid of lines rather than a column of fields. A
+   * document is read across as well as down, and 44rem cannot hold a line.
+   */
+  readonly wide?: boolean;
   readonly children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // Its own title id: a page with two dialogs (Bank Deposits has a cash and an
+  // other deposit) named both after the first one's title.
+  const titleId = useId();
 
   useEffect(() => {
     if (openOnLoad && ref.current && !ref.current.open) ref.current.showModal();
@@ -44,8 +53,8 @@ export function NewRecordDialog({
         <span>{buttonLabel}</span>
       </button>
       <dialog
-        aria-labelledby="admin-dialog-title"
-        className={styles.dialog}
+        aria-labelledby={titleId}
+        className={wide ? `${styles.dialog} ${styles.dialogWide}` : styles.dialog}
         onClick={(event) => {
           // A click on the backdrop (the dialog element itself, not its content) closes it.
           if (event.target === ref.current) ref.current?.close();
@@ -54,7 +63,7 @@ export function NewRecordDialog({
       >
         <div className={styles.dialogBody}>
           <header className={styles.dialogHeader}>
-            <h2 id="admin-dialog-title">{title}</h2>
+            <h2 id={titleId}>{title}</h2>
             <button
               aria-label={closeLabel}
               className={styles.dialogClose}

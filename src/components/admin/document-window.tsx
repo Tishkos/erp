@@ -49,11 +49,13 @@ export function DocumentWindow({
   documentType,
   number,
   fields,
+  fieldsAfterLines = [],
   linesTitle,
   linesCount,
   children,
   actions,
   totals = [],
+  titleActions,
   auditHref,
   auditLabel,
   id = 'document',
@@ -63,6 +65,12 @@ export function DocumentWindow({
   /** Its own number, shown beside the type and again in the fields. */
   readonly number: string;
   readonly fields: readonly DocumentField[];
+  /**
+   * Fields that belong after the lines rather than before them — the purchase
+   * invoice's notes, asked for "after the totals" (2026-10-03). The same
+   * objects as `fields`, drawn by the same function into a second block.
+   */
+  readonly fieldsAfterLines?: readonly DocumentField[];
   readonly linesTitle: string;
   /**
    * How many lines the document has. Omitted on a form whose grid grows as it
@@ -76,10 +84,46 @@ export function DocumentWindow({
   readonly actions?: ReactNode;
   readonly totals?: readonly DocumentTotal[];
   readonly auditHref?: string | undefined;
+  /**
+   * The small doors in the title bar — the paperclip, the clock, whatever a
+   * document has but is not. The shape journals have had since they were
+   * written: the document is the document, and everything about it opens over
+   * it rather than running on underneath it.
+   */
+  readonly titleActions?: ReactNode;
   readonly auditLabel?: string | undefined;
   readonly id?: string;
 }) {
   const headingId = `${id}-lines-heading`;
+
+  /*
+   * One field — a label and whatever sits under it. Used for the header block
+   * and for the block under the lines, so a field is the same object and the
+   * same markup wherever it is placed.
+   */
+  const drawField = (field: DocumentField, index: number) =>
+    field.bare ? (
+      <Fragment key={index}>{field.value}</Fragment>
+    ) : (
+      <div
+        // `sapWide` rather than an inline grid span: the Journal Entry marks a
+        // full-width field with that class, and a second way of saying the
+        // same thing is a second thing to keep in step.
+        className={field.wide ? `${admin.sapField} ${admin.sapWide}` : admin.sapField}
+        key={index}
+      >
+        <span className={admin.sapLabel}>{field.label}</span>
+        {field.control ? (
+          field.value
+        ) : field.status ? (
+          <span className={`${admin.sapBox} ${admin.sapStatus}`} data-status={field.status}>
+            {field.value}
+          </span>
+        ) : (
+          <span className={admin.sapBox}>{field.value}</span>
+        )}
+      </div>
+    );
 
   return (
     <div className={admin.sapDoc} id={id}>
@@ -91,43 +135,24 @@ export function DocumentWindow({
               <bdi dir="ltr">{number}</bdi>
             </span>
           </span>
-          {auditHref && auditLabel ? (
+          {titleActions || (auditHref && auditLabel) ? (
             <span className={admin.sapTitleActions}>
-              <Link className={admin.sapIconButton} href={auditHref} title={auditLabel}>
-                <History aria-hidden="true" />
-                <span>{auditLabel}</span>
-              </Link>
+              {titleActions}
+              {auditHref && auditLabel ? (
+                <Link className={admin.sapIconButton} href={auditHref} title={auditLabel}>
+                  <History aria-hidden="true" />
+                  <span>{auditLabel}</span>
+                </Link>
+              ) : null}
             </span>
           ) : null}
         </div>
 
         <div className={admin.sapBody}>
-          <div className={admin.sapFields}>
-            {fields.map((field) =>
-              field.bare ? (
-                <Fragment key={field.label}>{field.value}</Fragment>
-              ) : (
-              <div
-                // `sapWide` rather than an inline grid span: the Journal Entry
-                // marks a full-width field with that class, and a second way of
-                // saying the same thing is a second thing to keep in step.
-                className={field.wide ? `${admin.sapField} ${admin.sapWide}` : admin.sapField}
-                key={field.label}
-              >
-                <span className={admin.sapLabel}>{field.label}</span>
-                {field.control ? (
-                  field.value
-                ) : field.status ? (
-                  <span className={`${admin.sapBox} ${admin.sapStatus}`} data-status={field.status}>
-                    {field.value}
-                  </span>
-                ) : (
-                  <span className={admin.sapBox}>{field.value}</span>
-                )}
-              </div>
-              ),
-            )}
-          </div>
+          {/* Keyed by position, not by label: two fields may legitimately
+              share a caption, and a duplicate key silently drops one of them
+              (the payment carried two "Reference" boxes, 2026-09-29). */}
+          <div className={admin.sapFields}>{fields.map(drawField)}</div>
 
           <div className={admin.sapGridCaption} id={headingId}>
             <span aria-hidden="true" className={admin.sapDisclosure}>
@@ -140,6 +165,14 @@ export function DocumentWindow({
           </div>
 
           <div className={`${admin.sapTableWrap} ${admin.sapLineTableWrap}`}>{children}</div>
+
+          {/* Fields that belong after the lines rather than before them — the
+              purchase invoice's notes, asked for "after the totals"
+              (2026-10-03). Drawn by the same function as the header fields, so
+              they are the same labelled boxes in the same grid. */}
+          {fieldsAfterLines.length > 0 ? (
+            <div className={admin.sapFields}>{fieldsAfterLines.map(drawField)}</div>
+          ) : null}
         </div>
 
         {actions || totals.length > 0 ? (

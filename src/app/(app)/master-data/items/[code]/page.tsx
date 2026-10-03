@@ -6,6 +6,7 @@ import { Panel } from '@/components/ui';
 import {
   ActionButton,
   AdminPage,
+  Checkbox,
   Field,
   Flash,
   Form,
@@ -23,16 +24,20 @@ import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
 import { AdminNotFoundError } from '@/server/services/administration';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { formatQuantity, parseQuantity } from '@domain/uom';
 import { formatMoney, type Locale } from '@/i18n/config';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as items from '@/server/services/items';
-import * as uom from '@/server/services/units-of-measure';
+import * as itemUnits from '@/server/services/item-units';
+import * as uomService from '@/server/services/units-of-measure';
 import {
+  addItemUnit,
+  deactivateItemUnit,
   linkItemSupplier,
   makeDefaultSupplier,
+  setItemUnitDefault,
   setItemActive,
   setItemSellingPrice,
   setItemSupplierPrice,
@@ -58,7 +63,7 @@ export default async function ItemPage({
   params: Promise<{ code: string }>;
   searchParams: SearchParams;
 }) {
-  if (!visibleRoute('/master-data/items')) notFound();
+  if (!visibleRoute('/inventory/items')) notFound();
 
   const [t, page, column, locale, context, outcome, { code: rawCode }] = await Promise.all([
     getTranslations('admin'),
@@ -82,9 +87,11 @@ export default async function ItemPage({
       const row = await items.detail(tx, code);
       return {
         row,
-        units: mayEdit ? await uom.listActive(tx) : [],
         accounts: mayEdit ? await coa.postableAccounts(tx) : [],
         suppliers: mayEdit ? await items.selectableSuppliers(tx) : [],
+        // REQ-FIX-001 FIX-4 — the units it is bought and sold in.
+        units: await itemUnits.unitsOf(tx, code),
+        uoms: mayEdit ? await uomService.listActive(tx) : [],
       };
     } catch (error) {
       if (error instanceof AdminNotFoundError) return null;
@@ -92,7 +99,9 @@ export default async function ItemPage({
     }
   });
   if (!data) notFound();
-  const { row, units, accounts, suppliers } = data;
+  const { row, accounts, suppliers, units, uoms } = data;
+  const kept = new Set(units.filter((unit) => unit.active).map((unit) => unit.uomCode));
+  const addable = uoms.filter((uom) => !kept.has(uom.code));
 
   const revenue = accounts.filter((a) => a.accountType === 'revenue');
   const expense = accounts.filter((a) => a.accountType === 'expense');
@@ -103,12 +112,17 @@ export default async function ItemPage({
   return (
     <AdminPage
       actions={<AuditLogButton label={t('history')} />}
-      back={{ href: '/master-data/items', label: t('back') }}
+      back={{ href: '/inventory/items', label: t('back') }}
       title={`${row.code} · ${row.name}`}
       trail={[{ href: '/', label: t('dashboard_label') }]}
       variant="sap"
     >
-      <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
+      <Flash
+        error={outcome.error}
+        errorTitle={t('error_title')}
+        saved={outcome.saved}
+        savedLabel={t('saved')}
+      />
 
       <div className={s.profileGrid}>
         <div className={s.profileStack}>
@@ -128,27 +142,8 @@ export default async function ItemPage({
           <Panel title={t('details')}>
             <ul className={s.profileFacts}>
               <li>
-                <span>{t('items.kind')}</span>
-                <span>{row.isStock ? t('items.kind_stock') : t('items.kind_service')}</span>
-              </li>
-              <li>
-                <span>{t('items.base_uom')}</span>
-                <span>
-                  {row.baseUomCode}
-                  {row.baseUomName ? ` · ${row.baseUomName}` : ''}
-                </span>
-              </li>
-              <li>
-                <span>{t('items.tracking')}</span>
-                <span>{row.tracking ? t(`items.tracking_${row.tracking}`) : t('items.tracking_none')}</span>
-              </li>
-              <li>
                 <span>{t('items.sales_account')}</span>
                 <span>{row.salesAccount ?? t('none')}</span>
-              </li>
-              <li>
-                <span>{t('items.purchase_account')}</span>
-                <span>{row.purchaseAccount ?? t('none')}</span>
               </li>
               <li>
                 <span>{t('items.inventory_account')}</span>
@@ -157,10 +152,6 @@ export default async function ItemPage({
               <li>
                 <span>{t('items.cogs_account')}</span>
                 <span>{row.cogsAccount ?? t('none')}</span>
-              </li>
-              <li>
-                <span>{t('items.warranty_months')}</span>
-                <span>{row.warrantyMonths ?? t('none')}</span>
               </li>
               <li>
                 <span>{t('items.selling_price')}</span>
@@ -208,11 +199,16 @@ export default async function ItemPage({
                         {line.warehouseName ? ` · ${line.warehouseName}` : ''}
                       </span>
                       <span>
-                        <bdi dir="ltr">{formatQuantity(parseQuantity(line.onHand))}</bdi> {row.baseUomCode}
+                        <bdi dir="ltr">{formatQuantity(parseQuantity(line.onHand))}</bdi>{' '}
+                        {row.baseUomCode}
                         {parseQuantity(line.reserved) > 0n ? (
                           <span className="muted">
                             {' '}
-                            ({t('items.reserved', { quantity: formatQuantity(parseQuantity(line.reserved)) })})
+                            (
+                            {t('items.reserved', {
+                              quantity: formatQuantity(parseQuantity(line.reserved)),
+                            })}
+                            )
                           </span>
                         ) : null}
                       </span>
@@ -269,7 +265,7 @@ export default async function ItemPage({
                       <tr key={supplier.supplierId}>
                         <td>
                           <Link
-                            href={`/master-data/business-partners/${encodeURIComponent(supplier.supplierCode)}`}
+                            href={`/payables/suppliers/${encodeURIComponent(supplier.supplierCode)}?role=supplier`}
                           >
                             {supplier.supplierCode}
                           </Link>{' '}
@@ -360,6 +356,123 @@ export default async function ItemPage({
             ) : null}
           </Panel>
 
+          {/* REQ-FIX-001 FIX-4 — the units it is bought and sold in, each a
+              share of the base unit its stock is counted in. */}
+          <Panel
+            title={t('items.units_title', { count: units.filter((unit) => unit.active).length })}
+          >
+            <div className="table-wrap">
+              <table className="list">
+                <thead>
+                  <tr>
+                    <th scope="col">{t('items.unit')}</th>
+                    <th scope="col">{t('items.unit_holds')}</th>
+                    <th scope="col">{t('items.unit_purchase_default')}</th>
+                    <th scope="col">{t('items.unit_sales_default')}</th>
+                    {mayEdit ? <th scope="col">{t('actions')}</th> : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {units.map((unit) => (
+                    <tr key={unit.uomCode}>
+                      <td>
+                        <bdi dir="ltr">{unit.uomCode}</bdi> · {unit.uomName}
+                        {unit.isBase ? <Pill label={t('items.base_unit')} on /> : null}
+                        {unit.active ? null : <Pill label={t('inactive')} on={false} />}
+                      </td>
+                      <td>
+                        <bdi dir="ltr">
+                          1 {unit.uomCode} ={' '}
+                          {itemUnits.formatFraction(unit.numerator, unit.denominator)}{' '}
+                          {row.baseUomCode}
+                        </bdi>
+                      </td>
+                      <td>
+                        {unit.isPurchaseDefault ||
+                        (unit.isBase &&
+                          !units.some((other) => other.active && other.isPurchaseDefault)) ? (
+                          <Pill label={t('items.default')} on />
+                        ) : mayEdit && unit.active ? (
+                          <ActionButton
+                            action={setItemUnitDefault}
+                            hidden={{ code: row.code, uomCode: unit.uomCode, kind: 'purchase' }}
+                            label={t('items.make_default')}
+                          />
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>
+                        {unit.isSalesDefault ||
+                        (unit.isBase &&
+                          !units.some((other) => other.active && other.isSalesDefault)) ? (
+                          <Pill label={t('items.default')} on />
+                        ) : mayEdit && unit.active ? (
+                          <ActionButton
+                            action={setItemUnitDefault}
+                            hidden={{ code: row.code, uomCode: unit.uomCode, kind: 'sales' }}
+                            label={t('items.make_default')}
+                          />
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      {mayEdit ? (
+                        <td>
+                          {unit.isBase || !unit.active ? (
+                            unit.deactivatedReason ? (
+                              <bdi dir="auto">{unit.deactivatedReason}</bdi>
+                            ) : (
+                              '—'
+                            )
+                          ) : (
+                            <ReasonForm
+                              action={deactivateItemUnit}
+                              hidden={{ code: row.code, uomCode: unit.uomCode }}
+                              label={t('deactivate')}
+                              reasonLabel={t('reason')}
+                              reasonPlaceholder={t('reason_placeholder')}
+                            />
+                          )}
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className={s.sectionHint}>{t('items.units_hint', { base: row.baseUomCode })}</p>
+
+            {mayEdit && addable.length > 0 ? (
+              <Form action={addItemUnit}>
+                <Hidden name="code" value={row.code} />
+                <Grid>
+                  <Select
+                    label={t('items.add_unit')}
+                    name="uomCode"
+                    options={addable.map((uom) => ({
+                      value: uom.code,
+                      label: `${uom.code} · ${uom.name}`,
+                    }))}
+                    required
+                  />
+                  <Field
+                    hint={t('items.unit_holds_hint', { base: row.baseUomCode })}
+                    label={t('items.unit_holds')}
+                    name="baseQuantity"
+                    required
+                  />
+                  <Field label={t('items.unit_barcode')} name="barcode" />
+                </Grid>
+                <Checkbox label={t('items.unit_purchase_default')} name="purchaseDefault" />
+                <Checkbox label={t('items.unit_sales_default')} name="salesDefault" />
+                <SubmitRow>
+                  <Submit label={t('items.add_unit')} />
+                </SubmitRow>
+              </Form>
+            ) : null}
+          </Panel>
+
           {mayEdit ? (
             <Panel title={t('update')}>
               <Form action={updateItem}>
@@ -372,33 +485,23 @@ export default async function ItemPage({
                     required
                     requiredLabel={t('required_hint')}
                   />
-                  <Select
-                    defaultValue={row.isStock ? 'stock' : 'service'}
-                    hint={t('items.kind_hint')}
-                    label={t('items.kind')}
-                    name="isStock"
-                    options={[
-                      { value: 'stock', label: t('items.kind_stock') },
-                      { value: 'service', label: t('items.kind_service') },
-                    ]}
+                  {/* Not block 1's fields, so not on the screen — and carried
+                      through a save, so what is stored is not wiped by its
+                      absence. */}
+                  <input name="isStock" type="hidden" value={row.isStock ? 'stock' : 'service'} />
+                  <input name="baseUomCode" type="hidden" value={row.baseUomCode} />
+                  <input name="tracking" type="hidden" value={row.tracking ?? ''} />
+                  <input
+                    name="purchaseAccountId"
+                    type="hidden"
+                    value={row.purchaseAccountId ?? ''}
                   />
-                  <Select
-                    defaultValue={row.baseUomCode}
-                    label={t('items.base_uom')}
-                    name="baseUomCode"
-                    options={units.map((u) => ({ value: u.code, label: `${u.code} · ${u.name}` }))}
-                    required
+                  <input
+                    name="warrantyMonths"
+                    type="hidden"
+                    value={row.warrantyMonths === null ? '' : String(row.warrantyMonths)}
                   />
-                  <Select
-                    defaultValue={row.tracking ?? 'batch'}
-                    hint={t('items.tracking_hint')}
-                    label={t('items.tracking')}
-                    name="tracking"
-                    options={items.ITEM_TRACKING.map((value) => ({
-                      value,
-                      label: t(`items.tracking_${value}`),
-                    }))}
-                  />
+                  <input name="description" type="hidden" value={row.description ?? ''} />
                   {/* Block 1's fields are the code, the name, the suppliers
                       and the three accounts. The category is none of them, so
                       it is off the screen — and carried through a save, so
@@ -411,14 +514,6 @@ export default async function ItemPage({
                     label={t('items.sales_account')}
                     name="salesAccountId"
                     options={revenue.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
-                  />
-                  <Select
-                    defaultValue={row.purchaseAccountId ?? ''}
-                    emptyLabel={t('items.account_by_rule')}
-                    hint={t('items.purchase_account_hint')}
-                    label={t('items.purchase_account')}
-                    name="purchaseAccountId"
-                    options={expense.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
                   />
                   <Select
                     defaultValue={row.inventoryAccountId ?? ''}
@@ -435,21 +530,6 @@ export default async function ItemPage({
                     label={t('items.cogs_account')}
                     name="cogsAccountId"
                     options={expense.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
-                  />
-                  <Field
-                    defaultValue={row.warrantyMonths === null ? '' : String(row.warrantyMonths)}
-                    hint={t('items.warranty_hint')}
-                    label={t('items.warranty_months')}
-                    min={0}
-                    name="warrantyMonths"
-                    type="number"
-                  />
-                  <Field
-                    defaultValue={row.description}
-                    label={column('description')}
-                    name="description"
-                    type="textarea"
-                    wide
                   />
                 </Grid>
                 <SubmitRow>

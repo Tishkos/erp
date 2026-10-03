@@ -48,8 +48,9 @@ export function isLocale(value: string): value is Locale {
  *
  * Takes the scaled-integer string the database returns (`numeric(19,4)` comes
  * back as a string precisely so no value passes through a float) and formats it
- * for display. IQD has no minor unit in practice, so it shows whole dinars;
- * USD shows cents.
+ * for display. IQD has no minor unit in practice, so it shows whole dinars —
+ * "2,000 IQD", never "2,000.00" — and USD shows cents. The currency follows the
+ * figure rather than preceding it.
  */
 export function formatMoney(
   amount: string | number,
@@ -57,17 +58,19 @@ export function formatMoney(
   locale: Locale = DEFAULT_LOCALE,
 ): string {
   const value = typeof amount === 'string' ? Number(amount) : amount;
-  // The dinar has no subunit in practice and the rest carry two places. Any
-  // code outside the four the company trades in still formats — it takes
-  // Intl's own idea of the currency rather than being rounded to a guess.
-  const decimals = DECIMALS[currency];
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency,
-    ...(decimals === undefined
-      ? {}
-      : { minimumFractionDigits: decimals, maximumFractionDigits: decimals }),
+  // The dinar has no subunit in practice and the rest carry two places. A code
+  // outside the four the company trades in is shown to two, rather than to
+  // Intl's own idea of it: one rule read the same way everywhere is worth more
+  // here than being right about a currency nobody invoices in.
+  const decimals = DECIMALS[currency] ?? 2;
+  // The figure first, the currency after it — "2,000 IQD", asked for on
+  // 2026-09-27. `style: 'currency'` puts the code in front in English, which
+  // read as a price tag rather than an amount of money.
+  const figure = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
   }).format(value);
+  return `${figure} ${currency}`;
 }
 
 /**

@@ -2,7 +2,12 @@ import type { ReactNode } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { optionalContext, withCurrentUser } from '@/server/session';
 import * as companyService from '@/server/services/company';
-import { DEFAULT_ACCENT, DEFAULT_PALETTE } from '@domain/appearance';
+import * as userAppearance from '@/server/services/user-appearance';
+import {
+  DEFAULT_ACCENT,
+  DEFAULT_PALETTE,
+  DEFAULT_USER_APPEARANCE,
+} from '@domain/appearance';
 
 /**
  * The authenticated application — every screen except sign-in lives in this
@@ -20,7 +25,7 @@ import { DEFAULT_ACCENT, DEFAULT_PALETTE } from '@domain/appearance';
  * form before any child renders.
  *
  * ── The palette ────────────────────────────────────────────────────────────
- * `data-palette` carries the company's choice, and every colour in the
+ * `data-palette` carries this user's saved choice, and every colour in the
  * application is read from the tokens it selects — the navigation and footer
  * as much as the screens inside them.
  *
@@ -30,25 +35,48 @@ import { DEFAULT_ACCENT, DEFAULT_PALETTE } from '@domain/appearance';
  * setting they will not see. Custom properties inherit, so one attribute here
  * dresses everything below it.
  *
- * It falls back rather than failing: an installation with no company row yet
- * gets the default palette and an ordinary-looking system, not an unstyled one.
+ * It falls back rather than failing: an account with no saved preference gets
+ * its own Sand and Gold defaults, not an unstyled system.
  */
 export default async function AuthenticatedLayout({ children }: { children: ReactNode }) {
-  // The person's own look where they chose one, the company default where
-  // they did not. optionalContext rather than require: a signed-out visitor
+  // This user's saved look or the per-user default. optionalContext rather
+  // than require: a signed-out visitor
   // is redirected by AppShell below, and must not be answered with a palette
   // read that throws first.
   const context = await optionalContext();
   const fallback = { palette: DEFAULT_PALETTE, accent: DEFAULT_ACCENT };
-  const { palette, accent } = context
-    ? await withCurrentUser((tx) =>
-        companyService.appearanceFor(tx, context.principal.userId),
-      ).catch(() => fallback)
-    : fallback;
+  const appearance = context
+    ? await withCurrentUser(
+        async (tx) => ({
+          colors: await companyService.appearanceFor(tx, context.principal.userId),
+          settings: await userAppearance.settingsFor(tx, context.principal.userId),
+        }),
+        // HD2 / HD4 — the shell dresses a restricted session too; the page decides.
+        { allowRestricted: true },
+      ).catch(() => ({
+        colors: fallback,
+        settings: { settings: DEFAULT_USER_APPEARANCE, saved: true },
+      }))
+    : { colors: fallback, settings: { settings: DEFAULT_USER_APPEARANCE, saved: true } };
+  const { palette, accent } = appearance.colors;
+  const { settings, saved } = appearance.settings;
 
   return (
-    <div className="erp-root" data-accent={accent} data-palette={palette}>
-      <AppShell>{children}</AppShell>
+    <div
+      className="erp-root"
+      data-accent={accent}
+      data-appearance={settings.appearance}
+      data-border-style={settings.borderStyle}
+      data-component-size={settings.componentSize}
+      data-density={settings.density}
+      data-palette={palette}
+      data-radius={settings.cornerStyle}
+      data-shadow={settings.shadow}
+      data-width={settings.contentWidth}
+    >
+      <AppShell initialAppearanceSettings={settings} appearanceSettingsSaved={saved}>
+        {children}
+      </AppShell>
     </div>
   );
 }

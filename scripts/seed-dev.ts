@@ -1,5 +1,5 @@
 /**
- * Development and end-to-end seed — Phase 01.12.
+ * Development and end-to-end seed.
  *
  * Creates the minimum a person needs to sign in and reach a screen: one branch,
  * one department, and two users who differ only in role, so that the
@@ -13,6 +13,7 @@
  *
  *   npm run db:seed
  */
+import { refuseOnLive } from './lib/live-guard';
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 import { db, applyScope } from '../src/server/db/client';
@@ -22,6 +23,8 @@ import { sql } from 'drizzle-orm';
 const OFFICER_EMAIL = 'officer@example.com';
 const MANAGER_EMAIL = 'manager@example.com';
 const OUTSIDER_EMAIL = 'outsider@example.com';
+// The one who approves the invoices — Operations build, blocks 4 and 5.
+const CEO_EMAIL = 'ceo@example.com';
 /**
  * A super user, for reviewing screens rather than for testing permissions.
  *
@@ -39,6 +42,7 @@ const ADMIN_EMAIL = 'admin@example.com';
 const PASSWORD = 'Ledger-Trial-Balance-7';
 
 async function main() {
+  refuseOnLive('seed development fixtures');
   if (process.env.NODE_ENV === 'production') {
     throw new Error('The development seed must not run against production.');
   }
@@ -46,10 +50,8 @@ async function main() {
   await db.transaction(async (tx) => {
     await applyScope(tx, { userId: randomUUID(), branchCode: 'HQ', isSuperUser: true });
 
-    // §4.1 — a branch, its default warehouse and its default cash account are
-    // created together. The deferred constraint that enforces this fires at
-    // COMMIT, so all three must be in this one transaction; a branch left
-    // without them is exactly the half-configured state it exists to prevent.
+    // A branch gets a default warehouse. Its example bank/cash account is a
+    // separate company-wide master and has no branch assignment.
     const existing = await tx.execute(sql`SELECT 1 FROM branch WHERE code = 'HQ'`);
 
     if (existing.rows.length === 0) {
@@ -71,19 +73,15 @@ async function main() {
       `);
       const glAccountId = (account.rows[0] as { id: string }).id;
 
-      const cash = await tx.execute(sql`
+      await tx.execute(sql`
         INSERT INTO bank_cash_account
-          (code, name, account_type, bank_name, account_number, gl_account_id, branch_code)
+          (code, name, account_type, bank_name, account_number, gl_account_id)
         VALUES ('CASH-HQ', 'Head Office Cash Account', 'bank', 'Seed Bank', 'ACC-HQ',
-                ${glAccountId}, 'HQ')
-        RETURNING id
+                ${glAccountId})
       `);
 
       await tx.execute(sql`
-        UPDATE branch
-           SET default_warehouse_code = 'WH-HQ',
-               default_cash_account_id = ${(cash.rows[0] as { id: string }).id}
-         WHERE code = 'HQ'
+        UPDATE branch SET default_warehouse_code = 'WH-HQ' WHERE code = 'HQ'
       `);
     }
 
@@ -96,6 +94,7 @@ async function main() {
     for (const [email, name, role] of [
       [OFFICER_EMAIL, 'Accounting Officer', 'accounting_officer'],
       [MANAGER_EMAIL, 'Accounting Manager', 'accounting_manager'],
+      [CEO_EMAIL, 'CEO', 'ceo'],
       // A signed-in user holding nothing. §25's deny-by-default is only
       // demonstrable if somebody is denied, and the 01.2 gate asks for a
       // denial on the direct URL rather than a hidden menu item.
@@ -115,6 +114,30 @@ async function main() {
       if (role) {
         await tx.execute(sql`
           INSERT INTO user_role (user_id, role_code) VALUES (${userId}, ${role})
+          ON CONFLICT DO NOTHING
+        `);
+      }
+      // The CEO also administers the system here, as the sponsor does: role
+      // assignment needs the CEO's hat *and* `administer permission`
+      // (`permitCeo`), and nobody else in the seed holds both.
+      if (role === 'ceo') {
+        await tx.execute(sql`
+          INSERT INTO user_role (user_id, role_code) VALUES (${userId}, 'system_administrator')
+          ON CONFLICT DO NOTHING
+        `);
+      }
+      // REQ-HR-001 — the development manager also runs HR, so the people
+      // screens can be exercised without a third account; the officer keeps
+      // identity only (D-HR-7), which is what the compensation gate is tested on.
+      if (role === 'accounting_manager') {
+        await tx.execute(sql`
+          INSERT INTO user_role (user_id, role_code) VALUES (${userId}, 'hr_manager')
+          ON CONFLICT DO NOTHING
+        `);
+      }
+      if (role === 'accounting_officer') {
+        await tx.execute(sql`
+          INSERT INTO user_role (user_id, role_code) VALUES (${userId}, 'hr_officer')
           ON CONFLICT DO NOTHING
         `);
       }
@@ -163,7 +186,7 @@ async function main() {
     await setPassword(tx, adminId, PASSWORD, { temporary: false });
   });
 
-  // Stock to look at and to issue from — Phase 04. Written through raw SQL
+  // Stock to look at and to issue from. Written through raw SQL
   // rather than the service because a seed is not a user, and the availability
   // rules it would exercise are proved by the tests, not by the seed.
   await db.transaction(async (tx) => {
@@ -204,8 +227,195 @@ async function main() {
     `);
   });
 
+  // The Operations build, ready to post (2026-09-26 audit). Without these a
+  // seeded system can raise every document and post none of them: no
+  // inventory, revenue or cost account to put on an item, no mapping for the
+  // payable or the receivable, no open period and no USD rate. They are what
+  // an administrator sets up on the Chart of Accounts, Posting Mappings,
+  // Periods and Currencies screens — written here so a development database
+  // starts where a configured company does. Idempotent, like the rest.
+  await db.transaction(async (tx) => {
+    await applyScope(tx, { userId: randomUUID(), branchCode: 'HQ', isSuperUser: true });
+
+    const accounts: readonly [string, string, string, string | null][] = [
+      ['A100010', 'Inventory', 'A000001', null],
+      ['A100020', 'Trade Receivables', 'A000001', 'customer'],
+      ['A100030', 'Receipts Not Yet Identified', 'A000001', null],
+      ['L100010', 'Trade Payables', 'L000001', 'supplier'],
+      ['L100020', 'Goods Received Not Invoiced', 'L000001', null],
+      ['L100030', 'Return Clearing', 'L000001', null],
+      ['E100010', 'Opening Balance Equity', 'E000001', null],
+      ['R100010', 'Product Sales', 'R000001', null],
+      ['R100020', 'Sales Returns', 'R000001', null],
+      ['X100010', 'Cost of Goods Sold', 'X000001', null],
+      ['X100020', 'Service and Expense Cost', 'X000001', null],
+      ['X100030', 'Purchase Price Variance', 'X000001', null],
+      ['X100040', 'Inventory Adjustments', 'X000001', null],
+      // REQ-AP-001 — the import's clearing account and the loan register's.
+      ['A100040', 'Landed Cost Clearing', 'A000001', null],
+      ['L100040', 'Bank Loans', 'L000001', 'loan'],
+      ['X100050', 'Bank Commission', 'X000001', null],
+      ['X100060', 'Loan Interest', 'X000001', null],
+      // REQ-HR-001 HR-3 — the payroll's cost, what it withholds and the net it owes.
+      ['X100070', 'Salaries and Wages', 'X000001', null],
+      ['X100080', 'Employer Social Security', 'X000001', null],
+      ['L100050', 'Salaries Payable', 'L000001', null],
+      ['L100060', 'Payroll Deductions Payable', 'L000001', null],
+      // REQ-HR-001 HR-4 — what people owe on advances and loans.
+      ['A100050', 'Employee Advances and Loans', 'A000001', null],
+      // REQ-HR-001 HR-6 — what people spent for the company and are reimbursed.
+      ['X100090', 'Staff Expenses', 'X000001', null],
+      // REQ-PM-001 PM-5 — a certificate's retention is the customer's own
+      // receivable (the customer sub-ledger, as POSTING_MAP requires); billed
+      // revenue; and the two sides recognition moves between periods.
+      ['A100060', 'Retention Receivable', 'A000001', 'customer'],
+      ['A100070', 'Unbilled Project Work (WIP)', 'A000001', null],
+      ['L100070', 'Deferred Project Revenue', 'L000001', null],
+      ['R100030', 'Project Revenue', 'R000001', null],
+    ];
+    for (const [code, name, parent, control] of accounts) {
+      await tx.execute(sql`
+        INSERT INTO chart_of_account
+          (code, name, account_type, parent_id, is_group, is_active, approval_status, level,
+           currency_restriction, control_account)
+        SELECT ${code}, ${name}, account_type, id, false, true, 'approved', 1, 'IQD',
+               ${control}::control_account_kind
+          FROM chart_of_account WHERE code = ${parent}
+        ON CONFLICT DO NOTHING
+      `);
+    }
+
+    // Every mapping the Posting Mappings screen lists, and nothing else.
+    const mappings: readonly [string, string, string][] = [
+      ['purchasing.ap_invoice', 'supplier_payable', 'L100010'],
+      ['purchasing.ap_invoice', 'grni', 'L100020'],
+      ['purchasing.ap_invoice', 'expense', 'X100020'],
+      ['purchasing.ap_invoice', 'purchase_variance', 'X100030'],
+      ['sales.ar_invoice', 'customer_receivable', 'A100020'],
+      ['sales.ar_invoice', 'sales_revenue', 'R100010'],
+      ['sales.customer_receipt', 'customer_receivable', 'A100020'],
+      ['sales.customer_receipt', 'customer_clearing', 'A100030'],
+      ['sales.customer_receipt_identified', 'customer_clearing', 'A100030'],
+      ['sales.customer_receipt_identified', 'customer_receivable', 'A100020'],
+      ['purchasing.supplier_payment', 'supplier_payable', 'L100010'],
+      ['purchasing.supplier_credit_memo', 'supplier_payable', 'L100010'],
+      ['purchasing.supplier_credit_memo', 'return_clearing', 'L100030'],
+      ['sales.customer_credit_memo', 'customer_receivable', 'A100020'],
+      ['sales.customer_credit_memo', 'sales_returns', 'R100020'],
+      ['inventory.opening_stock', 'opening_balance', 'E100010'],
+      ['inventory.stock_adjustment', 'inventory_adjustment', 'X100040'],
+      ['purchasing.ap_invoice', 'landed_cost_clearing', 'A100040'],
+      ['treasury.loan_disbursement', 'loan_liability', 'L100040'],
+      ['treasury.loan_disbursement', 'landed_cost_clearing', 'A100040'],
+      ['treasury.loan_disbursement', 'bank_commission', 'X100050'],
+      ['treasury.loan_repayment', 'loan_liability', 'L100040'],
+      ['treasury.loan_repayment', 'loan_interest', 'X100060'],
+      ['treasury.loan_repayment', 'landed_cost_clearing', 'A100040'],
+      ['treasury.loan_repayment', 'bank_commission', 'X100050'],
+      ['treasury.loan_commission', 'landed_cost_clearing', 'A100040'],
+      ['treasury.loan_commission', 'bank_commission', 'X100050'],
+      ['payables.landed_cost', 'landed_cost_clearing', 'A100040'],
+      ['hr.payroll_run', 'salary_expense', 'X100070'],
+      ['hr.payroll_run', 'payroll_employer_cost', 'X100080'],
+      ['hr.payroll_run', 'payroll_withholding', 'L100060'],
+      ['hr.payroll_run', 'net_pay', 'L100050'],
+      ['hr.payroll_payment', 'net_pay', 'L100050'],
+      ['hr.payroll_run', 'employee_advance', 'A100050'],
+      ['hr.employee_advance', 'employee_advance', 'A100050'],
+      ['hr.employee_advance_repayment', 'employee_advance', 'A100050'],
+      ['hr.expense_claim', 'employee_expense', 'X100090'],
+      ['hr.expense_claim', 'employee_advance', 'A100050'],
+      ['projects.certificate', 'customer_receivable', 'A100020'],
+      ['projects.certificate', 'project_retention_receivable', 'A100060'],
+      ['projects.certificate', 'project_revenue', 'R100030'],
+      ['projects.recognition', 'project_wip', 'A100070'],
+      ['projects.recognition', 'project_deferred_revenue', 'L100070'],
+      ['projects.recognition', 'project_revenue', 'R100030'],
+    ];
+    for (const [event, role, code] of mappings) {
+      await tx.execute(sql`
+        INSERT INTO posting_rule (event_type, line_role, account_id, is_active)
+        SELECT ${event}, ${role}, id, true FROM chart_of_account WHERE code = ${code}
+        ON CONFLICT DO NOTHING
+      `);
+    }
+
+    // This year, open, month by month — and a USD rate from its first day.
+    const year = new Date().getUTCFullYear();
+    await tx.execute(sql`
+      INSERT INTO fiscal_year (code, name, starts_on, ends_on, status)
+      VALUES (${`FY${year}`}, ${String(year)}, ${`${year}-01-01`}, ${`${year}-12-31`}, 'open')
+      ON CONFLICT DO NOTHING
+    `);
+    for (let month = 1; month <= 12; month += 1) {
+      const from = `${year}-${String(month).padStart(2, '0')}-01`;
+      const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      const to = `${year}-${String(month).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
+      await tx.execute(sql`
+        INSERT INTO fiscal_period (fiscal_year_id, period_no, name, starts_on, ends_on)
+        SELECT id, ${month}, ${`${year}-${String(month).padStart(2, '0')}`}, ${from}, ${to}
+          FROM fiscal_year WHERE code = ${`FY${year}`}
+        ON CONFLICT DO NOTHING
+      `);
+    }
+    await tx.execute(sql`
+      INSERT INTO exchange_rate (currency_code, rate_type, iqd_per_unit, effective_from, entered_by)
+      SELECT 'USD', 'accounting', 1310, ${`${year}-01-01`}, id
+        FROM app_user WHERE lower(email) = ${MANAGER_EMAIL}
+      ON CONFLICT DO NOTHING
+    `);
+
+    // The money a company starts with (C-20): a bank or cash account cannot
+    // pay what it does not hold, so a seeded company with an empty till
+    // could pay nobody. One opening journal into CASH-HQ against Opening
+    // Balance Equity, posted on the year's first day — what the accountant's
+    // opening balances would be on a real install. Once, by its number.
+    const opening = `OPEN-DEV-${year}`;
+    const exists = await tx.execute(sql`SELECT 1 FROM journal_entry WHERE entry_no = ${opening}`);
+    if (exists.rows.length === 0) {
+      const entry = await tx.execute(sql`
+        INSERT INTO journal_entry (entry_no, document_date, posting_date, fiscal_period_id, branch_code, description, status, total_debit_iqd, total_credit_iqd, created_by)
+        SELECT ${opening}, ${`${year}-01-01`}::date, ${`${year}-01-01`}::date, p.id, 'HQ', 'Opening cash (development seed)', 'draft', 1000000000, 1000000000, u.id
+          FROM fiscal_period p JOIN fiscal_year y ON y.id = p.fiscal_year_id, app_user u
+         WHERE y.code = ${`FY${year}`} AND p.period_no = 1 AND lower(u.email) = ${MANAGER_EMAIL}
+        RETURNING id, created_by
+      `);
+      const { id: entryId, created_by: managerId } = entry.rows[0] as { id: string; created_by: string };
+      await tx.execute(sql`
+        INSERT INTO journal_line (journal_entry_id, line_no, account_id, debit_txn, credit_txn, debit_iqd, credit_iqd, debit_usd, credit_usd, currency, branch_code)
+        SELECT ${entryId}::uuid, 1, gl_account_id, 1000000000, 0, 1000000000, 0, 0, 0, 'IQD', 'HQ' FROM bank_cash_account WHERE code = 'CASH-HQ'
+        UNION ALL
+        SELECT ${entryId}::uuid, 2, id, 0, 1000000000, 0, 1000000000, 0, 0, 'IQD', 'HQ' FROM chart_of_account WHERE code = 'E100010'
+      `);
+      await tx.execute(sql`UPDATE journal_entry SET status = 'posted', approved_by = ${managerId}, posted_at = now() WHERE id = ${entryId}`);
+    }
+
+    // Block 8's three stages, each a warehouse of its own — transit since
+    // REQ-AP-001 §17.4: goods at sea are owned, not available for sale.
+    await tx.execute(sql`
+      INSERT INTO warehouse (code, name, branch_code, warehouse_type, is_transit, shipment_stage) VALUES
+        ('WH-INPROC', 'In Process', 'HQ', 'transit', true, 'in_process'),
+        ('WH-BOARD', 'On Board', 'HQ', 'transit', true, 'on_board'),
+        ('WH-PORT', 'On Port', 'HQ', 'transit', true, 'on_port')
+      ON CONFLICT DO NOTHING
+    `);
+
+    // A workbench with no supplier can raise nothing, and a sales screen with
+    // no customer can sell nothing — the first partners a trading company
+    // meets, so every document screen starts usable. Active, not prospect:
+    // a purchase order (and so an import, D13) is refused against a prospect
+    // (§6), and a seed that cannot raise one is not usable.
+    await tx.execute(sql`
+      INSERT INTO business_partner (code, legal_name, is_supplier, is_customer, active, status) VALUES
+        ('SUP-00001', 'Al-Rafidain Trading Co.', true, false, true, 'active'),
+        ('SUP-00002', 'Basra Freight and Forwarding', true, false, true, 'active'),
+        ('CUS-00001', 'Erbil Retail Group', false, true, true, 'active')
+      ON CONFLICT DO NOTHING
+    `);
+  });
+
   console.log(
-    `seeded ${OFFICER_EMAIL}, ${MANAGER_EMAIL}, ${OUTSIDER_EMAIL} and ` +
+    `seeded ${OFFICER_EMAIL}, ${MANAGER_EMAIL}, ${CEO_EMAIL}, ${OUTSIDER_EMAIL} and ` +
       `${ADMIN_EMAIL} (super user) — password ${PASSWORD}`,
   );
   process.exit(0);

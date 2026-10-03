@@ -161,6 +161,12 @@ export const itemUom = pgTable(
 
     isPurchaseDefault: boolean('is_purchase_default').notNull().default(false),
     isSalesDefault: boolean('is_sales_default').notNull().default(false),
+
+    /** REQ-FIX-001 FIX-4 (0254) — a unit is deactivated with its reason, never deleted; the base stays active. */
+    active: boolean('active').notNull().default(true),
+    deactivatedReason: text('deactivated_reason'),
+    deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
+    deactivatedBy: uuid('deactivated_by').references(() => appUser.id),
   },
   (t) => [
     primaryKey({ columns: [t.itemId, t.uomCode] }),
@@ -168,6 +174,9 @@ export const itemUom = pgTable(
     // resolve to a piece.
     uniqueIndex('item_uom_barcode_uniq').on(t.barcode).where(sql`${t.barcode} is not null`),
     check('item_uom_conversion_positive', sql`${t.conversionNumerator} > 0 and ${t.conversionDenominator} > 0`),
+    check('item_uom_deactivated_has_reason', sql`${t.active} or coalesce(btrim(${t.deactivatedReason}), '') <> ''`),
+    uniqueIndex('item_uom_one_purchase_default').on(t.itemId).where(sql`${t.isPurchaseDefault} and ${t.active}`),
+    uniqueIndex('item_uom_one_sales_default').on(t.itemId).where(sql`${t.isSalesDefault} and ${t.active}`),
   ],
 );
 
@@ -239,6 +248,28 @@ export const cashAccountType = pgEnum('cash_account_type', ['bank', 'cash']);
  * reconciles against a G/L balance, and that is only a reconciliation if the
  * balance belongs to one account.
  */
+/**
+ * The banks — REQ-AP-001 §15.1. Mansour, Arab, NBI, Rafidain … a master, not
+ * a fixed list. The code is minted (BNK-0001); the SWIFT/BIC is the bank's own
+ * identifier and unique when known. Migration 0232.
+ */
+export const bank = pgTable(
+  'bank',
+  {
+    code: text('code').primaryKey(),
+    name: text('name').notNull(),
+    swiftBic: text('swift_bic'),
+    country: char('country', { length: 2 }).notNull().default('IQ'),
+    active: boolean('active').notNull().default(true),
+    createdBy: uuid('created_by').references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('bank_swift_uniq').on(t.swiftBic).where(sql`${t.swiftBic} is not null`),
+    check('bank_name_not_blank', sql`btrim(${t.name}) <> ''`),
+  ],
+);
+
 export const bankCashAccount = pgTable(
   'bank_cash_account',
   {
@@ -248,6 +279,8 @@ export const bankCashAccount = pgTable(
     accountType: cashAccountType('account_type').notNull(),
 
     bankName: text('bank_name'),
+    /** REQ-AP-001 §15.1 — the bank this account is held with (bank accounts). */
+    bankCode: text('bank_code').references(() => bank.code),
     accountNumber: text('account_number'),
     iban: text('iban'),
     swift: text('swift'),
@@ -258,10 +291,6 @@ export const bankCashAccount = pgTable(
     glAccountId: uuid('gl_account_id')
       .notNull()
       .references(() => chartOfAccount.id),
-
-    branchCode: text('branch_code')
-      .notNull()
-      .references(() => branch.code),
 
     /** §17 — a cash account without a custodian is nobody's responsibility. */
     custodianUserId: uuid('custodian_user_id').references(() => appUser.id),

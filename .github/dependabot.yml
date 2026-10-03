@@ -1,0 +1,33 @@
+# REQ-IMPROVE-001 OP-11 / SG-9 — dependency and action updates arrive as pull
+# requests, weekly, grouped so a Monday brings one review rather than thirty.
+# The CI audit step gates what ships; this is how the fix reaches the tree.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Asia/Baghdad
+    open-pull-requests-limit: 5
+    groups:
+      production:
+        dependency-type: production
+      development:
+        dependency-type: development
+    ignore:
+      # Major versions of the framework are a planned upgrade (NOW-2), not a bot's.
+      - dependency-name: next
+        update-types: ['version-update:semver-major']
+      - dependency-name: react
+        update-types: ['version-update:semver-major']
+      - dependency-name: react-dom
+        update-types: ['version-update:semver-major']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Asia/Baghdad

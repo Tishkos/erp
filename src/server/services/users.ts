@@ -11,11 +11,14 @@
  * is immediate), and an account is never deleted: its id is cited by the audit
  * trail and by everything it ever approved.
  */
+import { bumpPermissions } from './authorization';
+import * as employees from './employees';
 import { randomBytes } from 'node:crypto';
 import { and, asc, eq } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   appUser,
+  authAccount,
   branch,
   department,
   role,
@@ -27,6 +30,7 @@ import {
   AdminNotFoundError,
   AdminValidationError,
   permit,
+  permitCeo,
   recordChange,
   requireText,
   type ActorContext,
@@ -48,6 +52,25 @@ export interface UserInput {
   readonly branchCodes?: readonly string[];
   readonly defaultBranchCode?: string | null;
   readonly departmentCodes?: readonly string[];
+  /**
+   * REQ-FIX-001 FIX-5 — *Also an employee*, ticked by default on the form:
+   * the person is put in the HR register with the account, linked. Absent,
+   * the account is only a sign-in (a service account, an auditor's).
+   */
+  readonly employee?: { readonly departmentCode?: string | null; readonly positionCode?: string | null } | null;
+}
+
+/**
+ * REQ-HARDEN-001 G2 — who a form may name as an owner: active users, their id
+ * and name, nothing else. The payable record loaded every user with their
+ * credentials join for two drop-downs.
+ */
+export async function pickable(tx: Tx) {
+  return tx
+    .select({ id: appUser.id, displayName: appUser.displayName })
+    .from(appUser)
+    .where(eq(appUser.isActive, true))
+    .orderBy(asc(appUser.displayName));
 }
 
 export async function listAll(tx: Tx) {
@@ -63,13 +86,25 @@ export async function listAll(tx: Tx) {
       createdAt: appUser.createdAt,
     })
     .from(appUser)
+    .innerJoin(
+      authAccount,
+      and(eq(authAccount.userId, appUser.id), eq(authAccount.providerId, 'credential')),
+    )
     .orderBy(asc(appUser.displayName));
 }
 
 export async function get(tx: Tx, id: string) {
-  const [row] = await tx.select().from(appUser).where(eq(appUser.id, id)).limit(1);
-  if (!row) throw new AdminNotFoundError('user', id);
-  return row;
+  const [row] = await tx
+    .select({ user: appUser })
+    .from(appUser)
+    .innerJoin(
+      authAccount,
+      and(eq(authAccount.userId, appUser.id), eq(authAccount.providerId, 'credential')),
+    )
+    .where(eq(appUser.id, id))
+    .limit(1);
+  if (!row) throw new AdminNotFoundError('account', id);
+  return row.user;
 }
 
 /** Everything the Users record page shows: roles, scopes, sessions. */
@@ -149,6 +184,16 @@ export async function create(tx: Tx, ctx: ActorContext, input: UserInput) {
     await setDepartmentScope(tx, ctx, id, code, true, { quiet: true });
   }
 
+  // The person behind the account, in the same transaction: both or neither.
+  let employeeNo: string | null = null;
+  if (input.employee) {
+    if (!defaultBranch) throw new AdminValidationError('alsoEmployee', 'an employee works at a branch — give the user a branch, or untick "Also an employee"');
+    const departmentCode = input.employee.departmentCode?.trim() || input.departmentCodes?.[0] || null;
+    if (!departmentCode) throw new AdminValidationError('alsoEmployee', 'an employee belongs to a department — choose the employee\'s department, or untick "Also an employee"');
+    employeeNo = (await employees.createForUser(tx, ctx, { appUserId: id, fullNameEn: displayName, branchCode: defaultBranch, departmentCode, positionCode: input.employee.positionCode ?? null }))
+      .employeeNo;
+  }
+
   await recordChange(tx, ctx, {
     action: 'app_user.created',
     objectType: PERMISSION_OBJECT,
@@ -159,10 +204,11 @@ export async function create(tx: Tx, ctx: ActorContext, input: UserInput) {
       roleCodes: input.roleCodes ?? [],
       branchCodes: branches,
       departmentCodes: input.departmentCodes ?? [],
+      employeeNo,
     },
   });
 
-  return { id, email, displayName, temporaryPassword: password };
+  return { id, email, displayName, temporaryPassword: password, employeeNo };
 }
 
 export async function update(
@@ -204,6 +250,7 @@ export async function setActive(
   if (!active) {
     await revokeAllSessionsFor(tx, ctx, id, `Account deactivated: ${reason!.trim()}`);
   }
+  await bumpPermissions(tx, id);
   await recordChange(tx, ctx, {
     action: active ? 'app_user.reactivated' : 'app_user.deactivated',
     objectType: PERMISSION_OBJECT,
@@ -241,7 +288,9 @@ export async function setRole(
   on: boolean,
   options: Quiet = {},
 ) {
+  await permitCeo(ctx);
   await permit(ctx, 'configure', PERMISSION_OBJECT, id);
+  await get(tx, id);
   const [known] = await tx.select({ code: role.code }).from(role).where(eq(role.code, roleCode));
   if (!known) throw new AdminValidationError('roleCode', `'${roleCode}' is not a role`);
   if (on) {
@@ -252,6 +301,7 @@ export async function setRole(
   } else {
     await tx.delete(userRole).where(and(eq(userRole.userId, id), eq(userRole.roleCode, roleCode)));
   }
+  await bumpPermissions(tx, id);
   if (!options.quiet) {
     await recordChange(tx, ctx, {
       action: on ? 'app_user.role_granted' : 'app_user.role_revoked',
@@ -280,6 +330,7 @@ export async function setBranchScope(
       .delete(userBranchScope)
       .where(and(eq(userBranchScope.userId, id), eq(userBranchScope.branchCode, branchCode)));
   }
+  await bumpPermissions(tx, id);
   if (!options.quiet) {
     await recordChange(tx, ctx, {
       action: on ? 'app_user.branch_scope_granted' : 'app_user.branch_scope_revoked',
@@ -309,6 +360,7 @@ export async function setDefaultBranch(
     .update(userBranchScope)
     .set({ isDefault: true })
     .where(and(eq(userBranchScope.userId, id), eq(userBranchScope.branchCode, branchCode)));
+  await bumpPermissions(tx, id);
   if (!options.quiet) {
     await recordChange(tx, ctx, {
       action: 'app_user.default_branch_set',
@@ -349,6 +401,7 @@ export async function setDepartmentScope(
       .set({ managerUserId: null })
       .where(and(eq(department.code, departmentCode), eq(department.managerUserId, id)));
   }
+  await bumpPermissions(tx, id);
   if (!options.quiet) {
     await recordChange(tx, ctx, {
       action: on ? 'app_user.department_scope_granted' : 'app_user.department_scope_revoked',

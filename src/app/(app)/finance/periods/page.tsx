@@ -5,6 +5,7 @@ import { Panel } from '@/components/ui';
 import {
   AdminPage,
   Field,
+  FilterRow,
   Flash,
   Form,
   Grid,
@@ -20,10 +21,11 @@ import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as periods from '@/server/services/periods';
 import { createFiscalYear, setPeriodStatus } from './actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * The accounting calendar.
@@ -57,8 +59,20 @@ export default async function PeriodsPage({ searchParams }: { searchParams: Sear
 
   const calendar = await withCurrentUser((tx) => periods.calendar(tx));
   const year = new Date().getFullYear();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const current = calendar.find((p) => p.startsOn <= today && today <= p.endsOn);
+
+  // REQ-IMPROVE-001 FC-2 — the close checklist for one period: the one
+  // asked for, else the earliest period not yet closed (the next to close).
+  const query = await searchParams;
+  const askedCheck = typeof query.check === 'string' ? query.check : '';
+  const nextToClose = calendar.find((p) => p.status !== 'closed') ?? current ?? calendar[0];
+  const checkPeriod = calendar.find((p) => p.id === askedCheck) ?? nextToClose;
+  const closeReport = checkPeriod ? await withCurrentUser((tx) => periods.closeReport(tx, checkPeriod.id)) : null;
+  const checkState = (check: { state: string }) => ({
+    label: t(`periods.check_state_${check.state}`),
+    on: check.state === 'pass' ? true : check.state === 'fail' ? false : null,
+  });
 
   const state = (status: string) => ({
     label: t(`periods.state_${status}`),
@@ -186,6 +200,72 @@ export default async function PeriodsPage({ searchParams }: { searchParams: Sear
             </Panel>
           ) : null}
 
+          {closeReport ? (
+            <Panel flush title={t('periods.close_checks')}>
+              <form className={s.filterBar} method="get">
+                <FilterRow>
+                  <Select
+                    defaultValue={closeReport.period.id}
+                    label={t('periods.period')}
+                    name="check"
+                    options={calendar.map((period) => ({
+                      value: period.id,
+                      label: `${period.name} · ${t(`periods.state_${period.status}`)}`,
+                    }))}
+                  />
+                  <SubmitRow>
+                    <Submit label={t('periods.run_checks')} />
+                  </SubmitRow>
+                </FilterRow>
+              </form>
+              <p className={s.sectionHint}>
+                {closeReport.mayClose
+                  ? t('periods.close_checks_pass', { period: closeReport.period.name, asOf: formatBusinessDate(closeReport.asOf, locale as Locale) })
+                  : t('periods.close_checks_fail', { period: closeReport.period.name, count: closeReport.blockingFailures.length })}
+              </p>
+              <div className="table-wrap" style={{ border: 0 }}>
+                <table className="list">
+                  <thead>
+                    <tr>
+                      <th scope="col">{t('periods.check')}</th>
+                      <th scope="col">{t('periods.check_severity')}</th>
+                      <th scope="col">{t('periods.check_figure')}</th>
+                      <th scope="col">{t('periods.check_detail')}</th>
+                      <th scope="col">{t('periods.state')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {closeReport.checks.map((check) => (
+                      <tr key={check.code}>
+                        <td>
+                          <Link className={s.sapLink} href={check.route}>
+                            {t(`periods.check_${check.code}`)}
+                          </Link>
+                        </td>
+                        <td>{t(`periods.check_severity_${check.severity}`)}</td>
+                        <td className={s.mono}>
+                          <bdi dir="ltr">{check.figure}</bdi>
+                        </td>
+                        <td>
+                          {check.detail.length === 0 ? '—' : null}
+                          {check.detail.slice(0, 8).map((line) => (
+                            <div key={line}>
+                              <bdi dir="auto">{line}</bdi>
+                            </div>
+                          ))}
+                          {check.detail.length > 8 ? <div>{t('periods.check_more', { count: check.detail.length - 8 })}</div> : null}
+                        </td>
+                        <td>
+                          <Pill {...checkState(check)} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+          ) : null}
+
           <Panel flush title={t('periods.calendar')}>
             <div className="table-wrap" style={{ border: 0 }}>
               <table className="list">
@@ -203,7 +283,7 @@ export default async function PeriodsPage({ searchParams }: { searchParams: Sear
                     <tr key={period.id}>
                       <td className={s.mono}>
                         {/* The month opens its own journals. Invoices and the
-                            rest join this link as later phases land them. */}
+                            rest join this link as later modules land them. */}
                         <Link
                           className={s.sapLink}
                           href={`/finance/journals?month=${period.startsOn.slice(0, 7)}`}

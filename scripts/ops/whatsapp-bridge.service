@@ -1,0 +1,43 @@
+# The WhatsApp bridge as a service — REQ-WA-001 D-WA-6.
+#
+# The pilot ran the bridge from a laptop, which means the bot is offline
+# whenever the laptop sleeps. On the server it belongs here: started at boot,
+# restarted if it dies, logging where the other jobs log.
+#
+#   install:  cp scripts/ops/whatsapp-bridge.service /etc/systemd/system/
+#             systemctl daemon-reload
+#             systemctl enable --now whatsapp-bridge
+#   watch:    journalctl -u whatsapp-bridge -f
+#             tail -f /var/log/qs-erp/whatsapp-bridge.log
+#   pair:     systemctl stop whatsapp-bridge
+#             cd /opt/qs-erp-next && npm run whatsapp-bridge      # scan the QR
+#             systemctl start whatsapp-bridge
+#
+# Pairing needs a terminal, because the QR has to be looked at; once the
+# session is in the database the service starts from it and never asks again.
+# Two bridges on one pairing fight over the socket, so stop the service before
+# running it by hand.
+
+[Unit]
+Description=QS ERP WhatsApp bridge (REQ-WA-001)
+Documentation=file:///opt/qs-erp-next/docs/requirements/REQ-WA-001-whatsapp-bot.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/qs-erp-next
+# tsx rather than a build step: the bridge is a script, not part of the app's
+# bundle, and it reads the same .env the application does.
+ExecStart=/usr/bin/npx tsx scripts/ops/whatsapp-bridge.ts
+Restart=always
+RestartSec=10
+# A socket that keeps failing should not spin: five tries a minute, then wait.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+StandardOutput=append:/var/log/qs-erp/whatsapp-bridge.log
+StandardError=append:/var/log/qs-erp/whatsapp-bridge.log
+SyslogIdentifier=whatsapp-bridge
+
+[Install]
+WantedBy=multi-user.target

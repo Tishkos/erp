@@ -1,0 +1,10 @@
+# rustc 1.98.1 on this machine dies with STATUS_STACK_BUFFER_OVERRUN — a stack
+# overflow inside the compiler — while optimising the `windows`, `windows-sys`,
+# `rustls`, `tokio-util` and `tauri-utils` crates. It is the optimiser that
+# overflows: the same crates compile at opt-level 0.
+#
+# Set here rather than exported by whoever runs the build, because a build that
+# only works when someone remembers an environment variable is a build that
+# breaks for the next person.
+[env]
+RUST_MIN_STACK = "67108864"

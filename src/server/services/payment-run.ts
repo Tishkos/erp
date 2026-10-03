@@ -19,7 +19,7 @@
  * posted its own journal would be a second way for money to leave the company,
  * and the first thing that would go wrong is that the two disagreed.
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   apInvoice,
@@ -260,15 +260,18 @@ interface CandidateRow {
  * is only invisible in most systems because nobody modelled it.
  */
 async function loadCandidates(tx: Tx, input: BuildProposalInput): Promise<CandidateRow[]> {
+  // IMPROVEMENT-002 — a partner may hold several verified accounts; the run
+  // pays the default (else the most recently verified), and takes that
+  // account's own revision with it.
   const beneficiary = tx
-    .select({
+    .selectDistinctOn([partnerBankAccount.partnerId], {
       partnerId: partnerBankAccount.partnerId,
-      id: sql<string>`min(${partnerBankAccount.id}::text)`.as('bank_id'),
-      revision: sql<number>`min(${partnerBankAccount.revision})`.as('bank_revision'),
+      id: sql<string>`${partnerBankAccount.id}::text`.as('bank_id'),
+      revision: sql<number>`${partnerBankAccount.revision}`.as('bank_revision'),
     })
     .from(partnerBankAccount)
     .where(and(eq(partnerBankAccount.approvalStatus, 'approved'), eq(partnerBankAccount.isActive, true)))
-    .groupBy(partnerBankAccount.partnerId)
+    .orderBy(partnerBankAccount.partnerId, desc(partnerBankAccount.isDefault), sql`${partnerBankAccount.approvedAt} desc nulls last`)
     .as('beneficiary');
 
   const invoices = await tx

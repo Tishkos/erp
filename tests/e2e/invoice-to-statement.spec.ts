@@ -98,11 +98,16 @@ async function controlAccount(
   //
   // Scoped to its own panel: the account's record carries several Save
   // buttons, and the first one on the page belongs to the name.
+  //
+  // The approval left `saved=1` in the address; open the record afresh so the
+  // wait below is for this save's own redirect, not the last one's.
+  const record = `/master-data/chart-of-accounts/${code}`;
+  await page.goto(record);
   const designation = page.locator('form:has(select[name="controlAccount"])').first();
   await designation.locator('select[name="controlAccount"]').selectOption(kind);
   await designation.locator('button[type="submit"]').first().click();
-  await page.waitForLoadState('networkidle');
-  await page.reload();
+  await page.waitForURL(/[?&]saved=1/, { timeout: 60_000 });
+  await page.goto(record);
   await expect(page.locator('select[name="controlAccount"]')).toHaveValue(kind.toLowerCase());
 
   return code;
@@ -132,19 +137,23 @@ async function itemAccounts(page: Page, code = 'ITM-SEED') {
   }
 }
 
-async function createPartner(page: Page, screen: string, button: string, code: string) {
+/**
+ * A partner, named and saved. Its code is the system's (Critical Rule 1), so
+ * it is read off the record the save opens and handed back.
+ */
+async function createPartner(page: Page, screen: string, button: string, name: string) {
   await page.goto(screen);
   await page.getByRole('button', { name: button, exact: true }).click();
   const dialog = page.locator('dialog[open], [role="dialog"]').first();
-  await dialog.getByLabel('Code', { exact: true }).fill(code);
-  await dialog.getByLabel(/^Legal name/).fill(`${code} Limited`);
+  await dialog.getByLabel(/^Legal name/).fill(`${name} Limited`);
   await dialog.getByRole('button', { name: 'Create', exact: true }).click();
-  await page.waitForURL(new RegExp(`/master-data/business-partners/${code}`), { timeout: 60_000 });
+  await page.waitForURL(/\/(?:payables\/suppliers|sales\/customers)\/[^/?]+/, { timeout: 60_000 });
+  return decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!);
 }
 
 /** The statement's own figures, read from the screen a person opens. */
 const STATEMENT = {
-  supplier: '/purchasing/supplier-statements',
+  supplier: '/payables/supplier-statements',
   customer: '/sales/customer-statements',
 } as const;
 
@@ -157,7 +166,7 @@ async function statementOf(page: Page, code: string, side: 'supplier' | 'custome
 }
 
 test.describe('a purchase invoice reaches the supplier statement', () => {
-  const supplierCode = `E2E-SUP-${RUN}`;
+  let supplierCode = '';
   let payableCode = '';
 
   test('the payable account is designated as the supplier subledger', async ({ page }) => {
@@ -173,14 +182,14 @@ test.describe('a purchase invoice reaches the supplier statement', () => {
 
   test('the invoice posts, and the supplier statement shows it', async ({ page }) => {
     await signIn(page, ADMIN);
-    await createPartner(page, '/master-data/suppliers', 'New supplier', supplierCode);
+    supplierCode = await createPartner(page, '/master-data/suppliers', 'New supplier', `E2E Supplier ${RUN}`);
 
     // The item holds its own inventory account — the direct route debits it
     // rather than a mapping (§3.3 answers what is *not* on a record).
     await page.goto('/master-data/items/ITM-SEED');
     await itemAccounts(page);
 
-    await page.goto('/purchasing/ap-invoices/new');
+    await page.goto('/payables/invoices/new');
     await expect(page.getByRole('heading', { name: 'New invoice' })).toBeVisible({
       timeout: 60_000,
     });
@@ -208,8 +217,10 @@ test.describe('a purchase invoice reaches the supplier statement', () => {
     await page.locator('input[name="quantity_0"]').fill('3');
     await page.locator('input[name="unit_price_0"]').fill('2500');
     await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
+    // A local purchase: the Import box starts ticked since 2026-10-03.
+    await page.locator('input[name="is_import"]').uncheck();
     await page.getByRole('button', { name: 'Create', exact: true }).click();
-    await page.waitForURL(/\/purchasing\/ap-invoices\/API-/, { timeout: 90_000 });
+    await page.waitForURL(/\/payables\/invoices\/API-/, { timeout: 90_000 });
 
     // Exact status words: the record page carries "Posted by" and
     // "Waiting for approval" as labels, and a loose match on those would
@@ -235,7 +246,7 @@ test.describe('a purchase invoice reaches the supplier statement', () => {
 });
 
 test.describe('a sales invoice reaches the customer statement', () => {
-  const customerCode = `E2E-CUS-${RUN}`;
+  let customerCode = '';
   let receivableCode = '';
 
   test('the receivable account is designated as the customer subledger', async ({ page }) => {
@@ -251,7 +262,7 @@ test.describe('a sales invoice reaches the customer statement', () => {
 
   test('the invoice posts with no Business Line, and the statement shows it', async ({ page }) => {
     await signIn(page, ADMIN);
-    await createPartner(page, '/master-data/customers', 'New customer', customerCode);
+    customerCode = await createPartner(page, '/master-data/customers', 'New customer', `E2E Customer ${RUN}`);
     await itemAccounts(page);
 
     await page.goto('/sales/ar-invoices/new');

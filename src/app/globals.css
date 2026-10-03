@@ -51,6 +51,9 @@
   --radius: 0.7rem;
   --control-height: 2.55rem;
   --table-row-height: 2.9rem;
+  --erp-main-padding-block: clamp(1rem, 1.6vw, 1.75rem);
+  --erp-main-padding-inline: clamp(1rem, 3vw, 2.8rem);
+  --erp-main-padding-inline-mobile: 0.8rem;
   /*
    * The fluid default. It must be a length, not `none`: `.shell__main` sizes
    * itself with `min(100%, var(--content-max))`, and `min(100%, none)` is not a
@@ -255,17 +258,114 @@
   background: rgb(244 184 92 / 12%);
 }
 
-:root[data-density="compact"] {
+:is(.erp-root, .erp-appearance-preview)[data-density="compact"] {
   --control-height: 2.1rem;
   --table-row-height: 2.25rem;
 }
 
-:root[data-radius="rounded"] {
+:is(.erp-root, .erp-appearance-preview)[data-density="spacious"] {
+  --control-height: 2.8rem;
+  --table-row-height: 3.2rem;
+  --space-1: 0.3rem;
+  --space-2: 0.65rem;
+  --space-3: 0.9rem;
+  --space-4: 1.2rem;
+  --space-5: 1.5rem;
+  --space-6: 1.8rem;
+  --space-8: 2.4rem;
+  --erp-panel-padding: 1.55rem;
+  --erp-panel-padding-global: 1.35rem;
+  --erp-panel-heading-gap: 1.25rem;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-density="airy"] {
+  --control-height: 3rem;
+  --table-row-height: 3.5rem;
+  --space-1: 0.35rem;
+  --space-2: 0.75rem;
+  --space-3: 1rem;
+  --space-4: 1.4rem;
+  --space-5: 1.7rem;
+  --space-6: 2rem;
+  --space-8: 2.75rem;
+  --erp-panel-padding: 1.8rem;
+  --erp-panel-padding-global: 1.55rem;
+  --erp-panel-heading-gap: 1.45rem;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-radius="rounded"] {
   --radius: 1rem;
 }
 
-:root[data-width="contained"] {
+:is(.erp-root, .erp-appearance-preview)[data-radius="subtle"] {
+  --radius: 0.38rem;
+  --radius-sm: 0.22rem;
+  --radius-lg: 0.5rem;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-radius="sharp"] {
+  --radius: 0;
+  --radius-sm: 0;
+  --radius-lg: 0;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-radius="pill"] {
+  --radius: 1.1rem;
+  --radius-sm: 999px;
+  --radius-lg: 1rem;
+}
+
+/* ── The document window's own corners ────────────────────────────────────
+   `--radius` is the application's scale — panels, cards, the shell. The SAP
+   document windows are drawn much tighter than that on purpose (a document is
+   a form on paper), so they were written with their corners as literals:
+   0.2rem for a window, 0.12rem for a box or a control.
+
+   That is why choosing Pill or Sharp appeared to do nothing (reported
+   2026-09-29). The setting was stored, the attribute was on `.erp-root`, and
+   `--radius` changed — but the screens people actually look at are drawn by
+   admin.module.css, and a literal cannot follow a token. These two carry the
+   window scale instead, defaulting to exactly the values that were hard-coded,
+   so "Soft" is pixel-for-pixel what the application already looked like. */
+:is(.erp-root, .erp-appearance-preview) {
+  --w-radius: 0.2rem;
+  --w-radius-sm: 0.12rem;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-radius="sharp"] {
+  --w-radius: 0;
+  --w-radius-sm: 0;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-radius="subtle"] {
+  --w-radius: 0.3rem;
+  --w-radius-sm: 0.18rem;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-radius="rounded"] {
+  --w-radius: 0.7rem;
+  --w-radius-sm: 0.45rem;
+}
+
+/* A pill's controls go fully round; its windows do not — a rounded rectangle
+   is still a window, and a window with 999px corners is a lozenge. */
+:is(.erp-root, .erp-appearance-preview)[data-radius="pill"] {
+  --w-radius: 1rem;
+  --w-radius-sm: 999px;
+}
+
+.erp-root[data-width="contained"] {
   --content-max: 90rem;
+}
+
+.erp-root[data-width="wide"] {
+  --content-max: 110rem;
+}
+
+.erp-root[data-width="full_width"] {
+  --content-max: 100%;
+  --erp-main-padding-inline: 0;
+  --erp-main-padding-inline-mobile: 0;
 }
 
 *,
@@ -356,7 +456,7 @@ button {
   min-inline-size: 0;
   margin-inline: auto;
   flex: 1;
-  padding: clamp(1rem, 1.6vw, 1.75rem) clamp(1rem, 3vw, 2.8rem) 0;
+  padding: var(--erp-main-padding-block) var(--erp-main-padding-inline) 0;
 }
 
 .shell__spacer {
@@ -386,7 +486,7 @@ html[lang="ar"] .page__title {
 
 .panel {
   margin-block-end: var(--space-4);
-  padding: 1.1rem;
+  padding: var(--erp-panel-padding-global, 1.1rem);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-raised);
@@ -678,7 +778,7 @@ table.list a {
 
 @media (max-width: 48rem) {
   .shell__main {
-    padding-inline: 0.8rem;
+    padding-inline: var(--erp-main-padding-inline-mobile);
   }
 
   .page__header {
@@ -819,8 +919,10 @@ table.list a {
 }
 
 .erp-brand__logo {
-  inline-size: 2.9rem;
-  block-size: 3rem;
+  /* Smaller by direction (2026-10-02). The mark here is the Q on its own, and
+     a monogram carries at a size the full logo could not. */
+  inline-size: 2.3rem;
+  block-size: 2.4rem;
   flex: 0 0 auto;
   object-fit: cover;
   object-position: center 28%;
@@ -1261,6 +1363,36 @@ html[lang="ar"] .erp-module-section__title {
   text-decoration: none;
 }
 
+.erp-notifications__list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-block-size: 22rem;
+  overflow-y: auto;
+}
+
+.erp-notifications__list li {
+  padding: 0.5rem 0.625rem;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+}
+
+.erp-notifications__list li p {
+  margin: 0.25rem 0;
+}
+
+.erp-notifications__list li time {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.erp-notifications__unread {
+  border-inline-start: 3px solid var(--accent);
+}
+
 .erp-utility-popover__empty {
   margin: 0;
   padding: 1.3rem 0.7rem;
@@ -1443,10 +1575,14 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
 }
 
 .erp-mobile-drawer__logo {
-  inline-size: 8.2rem;
+  /* Square, because the mark is. This slot was 8.2rem wide and cropped a
+     horizontal band out of the old logo — that band was the Q, with the name
+     below it left outside the frame. The header now carries the Q on its own,
+     so a wide slot would crop the monogram itself and show a slice through
+     the middle of it. */
+  inline-size: 3.1rem;
   block-size: 3.1rem;
-  object-fit: cover;
-  object-position: center 28%;
+  object-fit: contain;
 }
 
 .erp-mobile-drawer__context {
@@ -1673,10 +1809,6 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
     display: none;
   }
 
-  .erp-header__utilities > :is(.erp-appearance-trigger, .erp-locale-toggle) {
-    display: none;
-  }
-
   html[lang="ar"] .erp-brand {
     min-inline-size: 11.5rem;
   }
@@ -1698,6 +1830,19 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
 
   .erp-user-trigger__identity,
   .erp-user-trigger__chevron {
+    display: none;
+  }
+}
+
+/* Appearance and Language leave the header only when it is genuinely narrow.
+   They used to go at 108rem — 1728px — which is wider than almost every
+   laptop, so for nearly everybody the palette button simply was not there and
+   the appearance settings could not be reached at all except through the user
+   menu (reported 2026-09-29: "appearance doesn't work in production"). The
+   user menu still carries both, which is what makes hiding them safe here and
+   what made hiding them at 1728px invisible rather than obviously wrong. */
+@media (max-width: 60rem) {
+  .erp-header__utilities > :is(.erp-appearance-trigger, .erp-locale-toggle) {
     display: none;
   }
 }
@@ -4161,4 +4306,519 @@ html:has([data-palette]) body {
 .erp-root {
   min-block-size: 100vh;
   background: var(--w-canvas);
+}
+
+/*
+ * A page that carries a print sheet (src/components/print/print-sheet.tsx)
+ * prints the sheet and nothing else: every element that neither holds the
+ * sheet nor sits inside it is removed, and the sheet's ancestors are reduced
+ * to plain blocks so no sidebar column, card padding or scroll box of the
+ * screen layout squeezes the paper.
+ */
+@media print {
+  body:has([data-print-sheet]) *:not(:has([data-print-sheet])):not([data-print-sheet]):not([data-print-sheet] *) {
+    display: none !important;
+  }
+
+  body:has([data-print-sheet]),
+  body:has([data-print-sheet]) *:has([data-print-sheet]) {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    inline-size: auto !important;
+    max-inline-size: none !important;
+    min-inline-size: 0 !important;
+    block-size: auto !important;
+    min-block-size: 0 !important;
+    max-block-size: none !important;
+    overflow: visible !important;
+    transform: none !important;
+  }
+}
+
+/* Optional appearance presets: structure tokens inherit the active palette. */
+:is(.erp-root, .erp-appearance-preview)[data-shadow="none"] {
+  --shadow-card: none;
+  --shadow-menu: none;
+  --header-shadow: none;
+  --shadow-button: none;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-shadow="subtle"] {
+  --shadow-card: 0 2px 9px rgb(20 31 52 / 5%);
+  --shadow-menu: 0 8px 22px rgb(20 31 52 / 8%);
+  --header-shadow: 0 1px 5px rgb(20 31 52 / 4%);
+  --shadow-button: 0 3px 9px rgb(var(--accent-rgb) / 12%);
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-shadow="elevated"] {
+  --shadow-card: 0 14px 38px rgb(20 31 52 / 14%);
+  --shadow-menu: 0 24px 62px rgb(20 31 52 / 21%);
+  --header-shadow: 0 5px 20px rgb(20 31 52 / 10%);
+  --shadow-button: 0 9px 24px rgb(var(--accent-rgb) / 24%);
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-appearance="modern"][data-radius="rounded"],
+:is(.erp-root, .erp-appearance-preview)[data-appearance="studio"][data-radius="rounded"] {
+  --radius-sm: 0.65rem;
+  --radius-lg: 1.25rem;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-component-size="small"] {
+  --control-height: 2.1rem;
+  --table-row-height: 2.35rem;
+  --font-control: 0.68rem;
+  --font-button: 0.68rem;
+  --font-cell: 0.71rem;
+  --erp-panel-padding: 1rem;
+  --erp-panel-padding-global: 0.8rem;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-component-size="large"] {
+  --control-height: 3.15rem;
+  --table-row-height: 3.65rem;
+  --font-control: 0.82rem;
+  --font-button: 0.82rem;
+  --font-cell: 0.84rem;
+  --erp-panel-padding: 1.8rem;
+  --erp-panel-padding-global: 1.55rem;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-border-style="none"] {
+  --erp-border-width: 1px;
+  --erp-border-color: transparent;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-border-style="none"] :is(
+  .panel,
+  section[class*="_panel_"],
+  .table-wrap,
+  [class*="_tableWrap_"],
+  input:not([type="checkbox"]),
+  select,
+  textarea,
+  .erp-preference__option
+) {
+  border-color: transparent;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-border-style="subtle"] {
+  --erp-border-width: 1px;
+  --erp-border-color: color-mix(in srgb, var(--border) 68%, transparent);
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-border-style="subtle"] :is(
+  .panel,
+  section[class*="_panel_"],
+  .table-wrap,
+  [class*="_tableWrap_"],
+  input:not([type="checkbox"]),
+  select,
+  textarea,
+  .erp-preference__option
+) {
+  border-color: color-mix(in srgb, var(--border) 68%, transparent);
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-border-style="strong"] {
+  --erp-border-width: 2px;
+  --erp-border-color: var(--border-strong);
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-border-style="strong"] :is(
+  .panel,
+  section[class*="_panel_"],
+  .table-wrap,
+  [class*="_tableWrap_"],
+  input:not([type="checkbox"]),
+  select,
+  textarea,
+  .erp-preference__option
+) {
+  border-color: var(--border-strong);
+  border-width: 2px;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-border-style="none"] table :is(th, td) {
+  border-color: transparent;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-border-style="subtle"] table :is(th, td) {
+  border-color: color-mix(in srgb, var(--border) 68%, transparent);
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-border-style="strong"] table th {
+  border-block-end: 2px solid var(--border-strong);
+}
+
+.erp-appearance-drawer {
+  inline-size: min(46rem, 96vw);
+}
+
+.erp-appearance-section {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.erp-appearance-section__heading h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.86rem;
+}
+
+.erp-appearance-section__heading p {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.erp-appearance-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.erp-appearance-card {
+  display: grid;
+  min-inline-size: 0;
+  gap: 0.3rem;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  background: var(--surface-raised);
+  text-align: start;
+  cursor: pointer;
+}
+
+.erp-appearance-card:hover,
+.erp-appearance-card[aria-checked="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface-raised));
+}
+
+.erp-appearance-card:focus-visible {
+  outline: 3px solid rgb(var(--accent-rgb) / 34%);
+  outline-offset: 2px;
+}
+
+.erp-appearance-card__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  font-size: 0.77rem;
+}
+
+.erp-appearance-card__heading svg {
+  inline-size: 0.9rem;
+  block-size: 0.9rem;
+  color: var(--accent);
+}
+
+.erp-appearance-card__description {
+  min-block-size: 1.1rem;
+  color: var(--text-muted);
+  font-size: 0.67rem;
+}
+
+.erp-appearance-preview {
+  display: grid;
+  min-inline-size: 0;
+  gap: 0.32rem;
+  margin-block-start: 0.2rem;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.erp-appearance-preview__bar {
+  display: flex;
+  gap: 0.18rem;
+  padding: 0.18rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 0.25rem);
+  background: var(--surface-raised);
+}
+
+.erp-appearance-preview__bar span {
+  inline-size: 0.28rem;
+  block-size: 0.28rem;
+  border-radius: 50%;
+  background: var(--accent-border);
+}
+
+.erp-appearance-preview section[class*="_panel_"] {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.erp-appearance-preview__title,
+.erp-appearance-preview__lines span {
+  display: block;
+  block-size: 0.23rem;
+  border-radius: 999px;
+  background: var(--border-strong);
+}
+
+.erp-appearance-preview__title {
+  inline-size: 48%;
+  background: var(--accent-border);
+}
+
+.erp-appearance-preview__lines {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.erp-appearance-preview__lines span:last-child {
+  inline-size: 72%;
+}
+
+.erp-appearance-preview__table {
+  inline-size: 100%;
+  border-collapse: collapse;
+}
+
+.erp-appearance-preview__table td {
+  block-size: 0.3rem;
+  border-block-end: 1px solid var(--border);
+}
+
+.erp-appearance-preview__table td:first-child {
+  inline-size: 66%;
+}
+
+.erp-appearance-preview .button {
+  justify-self: start;
+  min-block-size: 1.35rem;
+  padding-inline: 0.42rem;
+  font-size: 0.56rem;
+}
+
+.erp-appearance-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.erp-advanced-appearance {
+  border-block-start: 1px solid var(--border);
+}
+
+.erp-advanced-appearance > summary {
+  padding-block: 0.75rem;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.erp-advanced-appearance > .erp-appearance-settings-grid {
+  padding-block-end: 0.75rem;
+}
+
+.erp-appearance-save-state {
+  min-block-size: 1rem;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.69rem;
+}
+
+@media (max-width: 36rem) {
+  .erp-appearance-cards,
+  .erp-appearance-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .erp-appearance-drawer {
+    inline-size: 100vw;
+  }
+}
+
+/*
+ * Preset signatures. Current intentionally has no appearance-specific rules:
+ * it continues to use the approved ERP design above. The optional presets
+ * change page framing, table treatment, and surfaces while retaining the
+ * user's palette and the independent density, radius, width, border, shadow,
+ * and component-size controls.
+ */
+:is(.erp-root, .erp-appearance-preview)[data-appearance="standard"] {
+  --erp-main-padding-block: clamp(1.2rem, 1.8vw, 1.9rem);
+  --erp-main-padding-inline: clamp(1.25rem, 3.2vw, 3rem);
+}
+
+.erp-root[data-appearance="standard"] .erp-main {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-raised) 34%, var(--w-canvas)),
+    var(--w-canvas) 18rem
+  );
+}
+
+.erp-root[data-appearance="standard"] :is(.page__header, header[class*="_pageHeader_"]) {
+  padding-block-end: 0.8rem;
+  border-block-end: var(--erp-border-width, 1px) solid var(--erp-border-color, var(--border));
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-appearance="enterprise"] {
+  --erp-main-padding-block: 0.75rem;
+  --erp-main-padding-inline: clamp(0.7rem, 1.2vw, 1.2rem);
+}
+
+.erp-root[data-appearance="enterprise"] .erp-header {
+  block-size: 3rem;
+}
+
+.erp-root[data-appearance="enterprise"] :is(.page__header, header[class*="_pageHeader_"]) {
+  margin-block-end: 0.8rem;
+}
+
+.erp-root[data-appearance="enterprise"] table th {
+  border-block-end-width: var(--erp-border-width, 2px);
+  border-block-end-color: var(--erp-border-color, var(--border-strong));
+  letter-spacing: 0.025em;
+}
+
+.erp-root[data-appearance="enterprise"] table td {
+  padding-inline: 0.55rem;
+}
+
+.erp-root[data-appearance="enterprise"] table tbody tr:nth-child(even) td {
+  background: var(--surface-muted);
+}
+
+.erp-root[data-appearance="enterprise"] header[class*="_panelHeader_"] {
+  padding-block-end: 0.55rem;
+  border-block-end: var(--erp-border-width, 1px) solid var(--erp-border-color, var(--border));
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-appearance="minimal"] {
+  --erp-main-padding-block: clamp(1.8rem, 3vw, 2.8rem);
+  --erp-main-padding-inline: clamp(1.4rem, 4vw, 4rem);
+}
+
+.erp-root[data-appearance="minimal"] :is(.panel, section[class*="_panel_"]) {
+  background: transparent;
+}
+
+.erp-root[data-appearance="minimal"] .erp-header {
+  box-shadow: none;
+}
+
+.erp-root[data-appearance="minimal"] :is(.page__header, header[class*="_pageHeader_"]) {
+  margin-block-end: 2rem;
+}
+
+.erp-root[data-appearance="minimal"] table th {
+  background: transparent;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-appearance="modern"] {
+  --erp-main-padding-block: clamp(1.5rem, 2.5vw, 2.25rem);
+  --erp-main-padding-inline: clamp(1.25rem, 3vw, 3rem);
+}
+
+.erp-root[data-appearance="modern"] .erp-main {
+  background:
+    radial-gradient(ellipse at 92% 0%, color-mix(in srgb, var(--accent-soft) 68%, transparent), transparent 38rem),
+    var(--w-canvas);
+}
+
+.erp-root[data-appearance="modern"] :is(.panel, section[class*="_panel_"]) {
+  background: color-mix(in srgb, var(--surface-raised) 91%, var(--accent-soft));
+}
+
+.erp-root[data-appearance="modern"] :is(.page__header, header[class*="_pageHeader_"]) {
+  margin-block-end: 1.65rem;
+}
+
+.erp-root[data-appearance="modern"] .erp-header {
+  block-size: 3.8rem;
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-appearance="command"] {
+  --erp-main-padding-block: 0.55rem;
+  --erp-main-padding-inline: 0.65rem;
+}
+
+.erp-root[data-appearance="command"] .erp-header {
+  block-size: 2.9rem;
+}
+
+.erp-root[data-appearance="command"] :is(.page__header, header[class*="_pageHeader_"]) {
+  margin-block-end: 0.65rem;
+}
+
+.erp-root[data-appearance="command"] table {
+  font-variant-numeric: tabular-nums;
+}
+
+.erp-root[data-appearance="command"] table th {
+  border-block-end-width: var(--erp-border-width, 2px);
+  border-block-end-color: var(--erp-border-color, var(--border-strong));
+  letter-spacing: 0.015em;
+}
+
+.erp-root[data-appearance="command"] table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface));
+}
+
+:is(.erp-root, .erp-appearance-preview)[data-appearance="studio"] {
+  --erp-main-padding-block: clamp(2rem, 3.5vw, 3.2rem);
+  --erp-main-padding-inline: clamp(1.5rem, 4vw, 4rem);
+}
+
+.erp-root[data-appearance="studio"] .erp-header {
+  block-size: 4rem;
+}
+
+.erp-root[data-appearance="studio"] :is(.page__header, header[class*="_pageHeader_"]) {
+  margin-block-end: 2.25rem;
+}
+
+.erp-root[data-appearance="studio"] :is(.page__title, h1[class*="_title_"]) {
+  font-size: clamp(1.5rem, 2.4vw, 1.9rem);
+}
+
+/* The user-selected width remains authoritative for every optional preset. */
+.erp-root[data-width="full_width"] {
+  --erp-main-padding-inline: 0;
+  --erp-main-padding-inline-mobile: 0;
+}
+
+/* The preset cards use the same panel and table treatment as the live shell. */
+.erp-appearance-preview[data-appearance="standard"] {
+  background: color-mix(in srgb, var(--surface-raised) 55%, var(--surface-sunken));
+}
+
+.erp-appearance-preview[data-appearance="enterprise"] .erp-appearance-preview__bar {
+  border-radius: 0;
+}
+
+.erp-appearance-preview[data-appearance="enterprise"] .erp-appearance-preview__table tr:nth-child(even) td {
+  background: var(--surface-muted);
+}
+
+.erp-appearance-preview[data-appearance="minimal"] :is(.panel, section[class*="_panel_"]) {
+  background: transparent;
+}
+
+.erp-appearance-preview[data-appearance="modern"] :is(.panel, section[class*="_panel_"]) {
+  background: color-mix(in srgb, var(--surface-raised) 91%, var(--accent-soft));
+}
+
+.erp-appearance-preview[data-appearance="command"] .erp-appearance-preview__table {
+  font-variant-numeric: tabular-nums;
+}
+
+.erp-appearance-preview[data-appearance="studio"] .erp-appearance-preview__title {
+  block-size: 0.32rem;
 }

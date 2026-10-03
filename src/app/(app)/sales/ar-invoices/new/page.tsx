@@ -1,22 +1,25 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Flash, admin as s } from '@/components/admin';
+import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
+import { DueDateField } from '@/components/admin/due-date-field';
 import { PairedPicker } from '@/components/admin/paired-picker';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as ar from '@/server/services/ar-invoice';
 import * as items from '@/server/services/items';
 import * as coa from '@/server/services/chart-of-accounts';
+import * as paymentTerms from '@/server/services/payment-terms';
 import * as partners from '@/server/services/partners';
 import * as posting from '@/server/services/posting';
 import * as warehouses from '@/server/services/warehouses';
 import { gapsFor } from '@domain/setup-gaps';
 import { createArInvoice, invoiceLineAvailability } from '../actions';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * Raising a Sales Invoice — Operations build, block 5.
@@ -63,7 +66,7 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
     return <Denied object={page('ar_invoices')} />;
   }
 
-  const { customers, allCustomers, options, allItems, houses, accounts, mapped } =
+  const { customers, allCustomers, options, allItems, houses, schedules, accounts, mapped } =
     await withCurrentUser(async (tx) => ({
     customers: await partners.listActiveInRole(tx, 'customer'),
     // The whole list too, so an empty picker can say which of the two things
@@ -76,8 +79,10 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
     ),
     // Where this invoice will post, shown on the form that raises it — by
     // direction, 2026-09-23: the accounts are chosen here, not on a screen of
-    // their own. The configured mapping opens as the chosen value, so the
-    // ordinary case is "leave it alone" and the exception is one click.
+    // their own. The receivable opens on the configured mapping, so the
+    // ordinary case is "leave it alone"; revenue opens on "as configured"
+    // (see the field) so each item's own Sales Account still applies.
+    schedules: await paymentTerms.allWithSchedules(tx),
     accounts: await coa.postableAccounts(tx),
     mapped: {
       receivable: await posting.mappedAccountFor(
@@ -86,16 +91,18 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
         'customer_receivable',
         context.scope.branchCode,
       ),
-      revenue: await posting.mappedAccountFor(
-        tx,
-        'sales.ar_invoice',
-        'sales_revenue',
-        context.scope.branchCode,
-      ),
     },
   }));
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
+
+  // Each customer beside the terms they are on, which is all the due date
+  // needs: the partner chosen in the header decides which schedule applies.
+  const termsByCode = new Map(schedules.map((terms) => [terms.code, terms]));
+  const customerTerms = customers.map((customer) => ({
+    partnerId: customer.id,
+    terms: (customer.paymentTermsCode ? termsByCode.get(customer.paymentTermsCode) : null) ?? null,
+  }));
 
   const missing = gapsFor([
     { kind: 'customers', total: allCustomers.length, usable: customers.length },
@@ -138,7 +145,21 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
     {
       label: column('due_date'),
       control: true,
-      value: <input aria-label={column('due_date')} name="due_date" type="date" />,
+      // Filled from the customer's payment terms the moment the customer is
+      // chosen, and editable after — §16's default, not a lock. It had been a
+      // bare date box: the terms were applied by the service on save, so the
+      // stored date was right while the form showed nothing, and a person
+      // reading the screen could not tell the invoice had a due date at all.
+      value: (
+        <DueDateField
+          dateField="invoice_date"
+          label={column('due_date')}
+          name="due_date"
+          partnerField="customer_id"
+          required
+          terms={customerTerms}
+        />
+      ),
     },
     {
       label: t('invoices.statement_account_customer'),
@@ -164,9 +185,13 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
       label: t('invoices.revenue_account'),
       control: true,
       value: (
+        // Opens on "as configured", not on the mapping: an account chosen
+        // here outranks every item's own Sales Account (block 1), so opening
+        // on the mapping silently overrode them all. Blank means each line
+        // posts to its item's account, then the mapping.
         <select
           aria-label={t('invoices.revenue_account')}
-          defaultValue={mapped.revenue ?? ''}
+          defaultValue=""
           name="revenue_account_id"
         >
           <option value="">{t('invoices.account_default')}</option>
@@ -199,9 +224,7 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
         <form action={createArInvoice}>
           <DocumentWindow
             actions={
-              <button className="action action--primary" type="submit">
-                {t('create')}
-              </button>
+              <Submit label={t('create')} variant="document" />
             }
             documentType={page('ar_invoice')}
             fields={fields}
@@ -215,6 +238,7 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
               items={options}
               loadAvailability={invoiceLineAvailability}
               mode="sale"
+              widthsKey={`erp.lines.ar.${context.principal.userId}`}
               labels={{
                 itemCode: column('item_code'),
                 itemName: column('item_name'),
@@ -229,8 +253,8 @@ export default async function NewArInvoicePage({ searchParams }: { searchParams:
                 remove: t('remove_line'),
                 documentTotal: t('reports.totals'),
                 saving: t('journals.saving'),
+                resizeColumn: t('invoices.resize_column'),
                 saveFailed: t('invoices.save_failed'),
-                noDefaultPrice: t('invoices.no_default_price'),
                 checkingStock: t('invoices.checking_stock'),
                 stockUnavailable: t('invoices.stock_unavailable'),
                 availableStock: t('invoices.available_stock'),

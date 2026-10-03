@@ -39,6 +39,7 @@ import { businessPartner } from './organisation';
 import { documentStatus } from './workflow';
 import { journalEntry } from './journal';
 import { purchaseOrder } from './purchase-order';
+import { payable } from './payables';
 import { apInvoice } from './ap-invoice';
 
 export const supplierAdvance = pgTable(
@@ -70,6 +71,9 @@ export const supplierAdvance = pgTable(
       .notNull()
       .references(() => businessPartner.id),
 
+    /** REQ-AP-001 §12 — the advance payable this document pays. */
+    payableId: uuid('payable_id').references(() => payable.id),
+
     branchCode: text('branch_code')
       .notNull()
       .references(() => branch.code),
@@ -80,6 +84,8 @@ export const supplierAdvance = pgTable(
     currency: text('currency').notNull().default('IQD'),
 
     amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+    /** REQ-AP-001 §15.4 — the amount in its own currency (the SWIFT amount); the journal stays IQD. */
+    amountTxn: numeric('amount_txn', { precision: 19, scale: 4 }),
     /** Consumed by A/P invoices. Maintained from the settlement history. */
     settledAmountIqd: numeric('settled_amount_iqd', { precision: 19, scale: 4 })
       .notNull()

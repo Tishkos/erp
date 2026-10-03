@@ -109,21 +109,22 @@ test.describe('Appendix A · the shell', () => {
     // It used to be shown as inert text. Every screen in the tree now has an
     // address — the one its module declared, or one the screen catalogue
     // derives — so the item opens, and what marks it as not-yet-live is the
-    // phase badge here plus the preview banner on the screen itself. An item
+    // pending badge here plus the preview banner on the screen itself. An item
     // that renders but refuses to open was the worse of the two honesty
     // signals: it left 176 of 218 functions with no way to see them at all.
-    const pending = nav.getByRole('link', { name: 'Price Lists', exact: true });
-    await expect(pending).toBeVisible();
-    await expect(pending).toHaveAttribute('href', '/master-data/price-lists');
+    //
+    // Since "a screen is served because it is built, and for no other reason",
+    // an item whose screen is not built is not offered at all — neither in the
+    // tree nor at its address.
+    await expect(nav.getByRole('link', { name: 'Price Lists', exact: true })).toHaveCount(0);
   });
 
   test('opens a screen the tree offers but no module has wired yet', async ({ page }) => {
     // The other half of the promise above: the link resolves, and the screen it
     // reaches says plainly that its figures are samples.
+    // An unbuilt screen is refused at its address, as it is absent from the tree.
     await page.goto('/master-data/price-lists');
-    await expect(page.getByRole('heading', { name: 'Price Lists', level: 1 })).toBeVisible();
-    // No sample figures anywhere: an unbuilt screen says which phase delivers it.
-    await expect(page.getByText('This screen is not available yet.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'That page does not exist', level: 1 })).toBeVisible();
   });
 
   test('declares the language and direction the whole layout flips on', async ({ page }) => {
@@ -132,17 +133,11 @@ test.describe('Appendix A · the shell', () => {
     await expect(html).toHaveAttribute('dir', /^(ltr|rtl)$/);
   });
 
-  test('switches the navbar theme and keeps the choice after reload', async ({ page }) => {
-    const html = page.locator('html');
-    const theme = page.getByRole('button', { name: 'Theme: Light / Dark' });
-
-    await expect(theme).toHaveAttribute('aria-pressed', 'false');
-    await theme.click();
-    await expect(theme).toHaveAttribute('aria-pressed', 'true');
-    await expect(html).toHaveAttribute('data-theme', 'dark');
-
-    await page.reload();
-    await expect(html).toHaveAttribute('data-theme', 'dark');
+  test('opens the appearance drawer from the navbar', async ({ page }) => {
+    // The light/dark toggle became the Appearance drawer (palettes and
+    // accents); every palette is exercised by theme-readability.spec.ts.
+    await page.getByRole('button', { name: 'Appearance' }).click();
+    await expect(page.getByRole('dialog', { name: 'Appearance' })).toBeVisible();
   });
 
   test('shows the branch the session is working in', async ({ page }) => {

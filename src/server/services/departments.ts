@@ -7,20 +7,20 @@
  * `user_department_scope` row — the flag is what the §5.2 approval routing
  * reads, so setting a manager here is what makes them able to finalise.
  */
+import { bumpPermissions } from './authorization';
 import { and, asc, eq } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { appUser, department, userDepartmentScope } from '../db/schema';
 import {
   AdminNotFoundError,
   AdminValidationError,
-  codeFromName,
   normaliseCode,
-  uniqueCode,
   permit,
   recordChange,
   requireText,
   type ActorContext,
 } from './administration';
+import { allocateFreeCode } from './numbering';
 
 export const PERMISSION_OBJECT = 'department';
 
@@ -81,18 +81,20 @@ async function parentOrNull(tx: Tx, parentCode: string | null | undefined, self?
 export async function create(
   tx: Tx,
   ctx: ActorContext,
-  input: DepartmentInput & { readonly code?: string },
+  input: DepartmentInput,
 ) {
   await permit(ctx, 'create', PERMISSION_OBJECT);
   const name = requireText(input.name, 'name');
-  const code = input.code?.trim()
-    ? normaliseCode(input.code)
-    : await uniqueCode(codeFromName(name), async (candidate) => {
-        const [row] = await tx.select({ code: department.code }).from(department).where(eq(department.code, candidate));
-        return Boolean(row);
-      });
-  const [existing] = await tx.select({ code: department.code }).from(department).where(eq(department.code, code));
-  if (existing) throw new AdminValidationError('code', `'${code}' is already a department`);
+  // Minted, never typed — Critical Rule 1 (migration 0208).
+  const code = await allocateFreeCode(
+    tx,
+    'DEPARTMENT_CODE',
+    async (candidate) => {
+      const [row] = await tx.select({ code: department.code }).from(department).where(eq(department.code, candidate));
+      return Boolean(row);
+    },
+    ctx.principal.userId,
+  );
 
   const values = {
     code,
@@ -198,6 +200,7 @@ export async function removeMember(tx: Tx, ctx: ActorContext, code: string, user
     await tx.update(department).set({ managerUserId: null }).where(eq(department.code, code));
   }
 
+  await bumpPermissions(tx, userId);
   await recordChange(tx, ctx, {
     action: 'department.member_removed',
     objectType: 'user_department_scope',
@@ -246,6 +249,7 @@ export async function setManager(
     await tx.update(department).set({ managerUserId: null }).where(eq(department.code, code));
   }
 
+  await bumpPermissions(tx, userId);
   await recordChange(tx, ctx, {
     action: isManager ? 'department.manager_assigned' : 'department.manager_removed',
     objectType: 'user_department_scope',

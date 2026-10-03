@@ -164,7 +164,7 @@ export function CountBadge({ count, locale }: { readonly count: number; readonly
 }
 
 /* -------------------------------------------------------------------------
- * Context bar — the company / branch / currency / period row from UI.png
+ * Context bar — the company / branch / currency / period row.
  * ---------------------------------------------------------------------- */
 
 export interface ContextFieldProps {

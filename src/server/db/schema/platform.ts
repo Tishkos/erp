@@ -58,9 +58,6 @@ export const branch = pgTable('branch', {
   managerUserId: uuid('manager_user_id'),
   /** §4.1 — the warehouse a branch's stock movements default to. */
   defaultWarehouseCode: text('default_warehouse_code'),
-  /** §4.1 — the cash account a branch's receipts default to. Master is 03.5. */
-  defaultCashAccountId: uuid('default_cash_account_id'),
-
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -108,6 +105,14 @@ export const appUser = pgTable(
      */
     uiPalette: text('ui_palette'),
     uiAccent: text('ui_accent'),
+    /** Per-user layout choices, separate from the palette and accent colours. */
+    uiAppearance: text('ui_appearance'),
+    uiDensity: text('ui_density'),
+    uiCornerStyle: text('ui_corner_style'),
+    uiContentWidth: text('ui_content_width'),
+    uiBorderStyle: text('ui_border_style'),
+    uiShadow: text('ui_shadow'),
+    uiComponentSize: text('ui_component_size'),
     /** Deactivation, never deletion — §1.1 "No deletion of saved or posted records." */
     isActive: boolean('is_active').notNull().default(true),
 
@@ -122,10 +127,46 @@ export const appUser = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     /** A6 — optimistic concurrency. */
     version: integer('version').notNull().default(1),
+    /** HD1 — moves whenever a role, grant or scope of this user changes. */
+    permissionsVersion: integer('permissions_version').notNull().default(1),
+    /** HD4 — when the first privileged sign-in started the enrolment grace. */
+    mfaRequiredSince: timestamp('mfa_required_since', { withTimezone: true }),
   },
   (t) => [
     uniqueIndex('app_user_email_uniq').on(sql`lower(${t.email})`),
     check('app_user_email_shape', sql`position('@' in ${t.email}) > 1`),
+    check(
+      'app_user_ui_palette_known',
+      sql`${t.uiPalette} is null or ${t.uiPalette} in ('sand', 'classic', 'slate', 'graphite', 'pearl', 'midnight', 'carbon', 'ocean', 'obsidian_plum', 'evergreen', 'espresso', 'lunar_slate', 'ivory_linen', 'glacier', 'sage_white', 'porcelain_rose', 'dune_bronze', 'harbor_mist')`,
+    ),
+    check(
+      'app_user_ui_appearance_known',
+      sql`${t.uiAppearance} is null or ${t.uiAppearance} in ('current', 'standard', 'enterprise', 'minimal', 'modern', 'command', 'studio')`,
+    ),
+    check(
+      'app_user_ui_density_known',
+      sql`${t.uiDensity} is null or ${t.uiDensity} in ('comfortable', 'compact', 'spacious', 'airy')`,
+    ),
+    check(
+      'app_user_ui_corner_style_known',
+      sql`${t.uiCornerStyle} is null or ${t.uiCornerStyle} in ('soft', 'rounded', 'sharp', 'subtle', 'pill')`,
+    ),
+    check(
+      'app_user_ui_content_width_known',
+      sql`${t.uiContentWidth} is null or ${t.uiContentWidth} in ('fluid', 'contained', 'wide', 'full_width')`,
+    ),
+    check(
+      'app_user_ui_border_style_known',
+      sql`${t.uiBorderStyle} is null or ${t.uiBorderStyle} in ('none', 'subtle', 'standard', 'strong')`,
+    ),
+    check(
+      'app_user_ui_shadow_known',
+      sql`${t.uiShadow} is null or ${t.uiShadow} in ('none', 'subtle', 'soft', 'elevated')`,
+    ),
+    check(
+      'app_user_ui_component_size_known',
+      sql`${t.uiComponentSize} is null or ${t.uiComponentSize} in ('small', 'medium', 'large')`,
+    ),
   ],
 );
 

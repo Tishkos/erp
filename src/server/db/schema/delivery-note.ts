@@ -1,5 +1,5 @@
 /**
- * Delivery Note and Proof of Delivery — Phase 06.5, §7.2.
+ * Delivery Note and Proof of Delivery.
  *
  * > §7.2: *"External Excel → Sales Order → Automatic Stock Reservation → Pick
  * > List → **Goods Issue / Delivery Note** → A/R Invoice on the same delivery
@@ -10,9 +10,7 @@
  * Appendix B: **Draft, Approved, Delivered, Reversed** — and no Cancelled. That
  * absence is honoured rather than filled in: a delivery is undone by reversing
  * it, because by then stock has moved and COGS has posted. A draft that is never
- * approved simply stays a draft. (If the business wants a cancellable draft,
- * that is a change to Appendix B and so a change request under §28.1 — see the
- * note in `phases/PHASE-06-sales-ar.md`.)
+ * approved simply stays a draft.
  *
  * **Where the accounting happens.** At *Delivered*, not at Approved. Appendix C
  * gives one row for the whole event — *"Sales delivery and invoice … Same

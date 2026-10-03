@@ -16,13 +16,12 @@ import {
   SubmitRow,
   matches,
 } from '@/components/admin';
-import { AutoCode } from '@/components/admin/auto-code';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
 import { DUE_DATE_BASIS } from '@domain/payment-terms';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as terms from '@/server/services/payment-terms';
 import { createPaymentTerm } from './actions';
@@ -64,10 +63,9 @@ export default async function PaymentTermsPage({ searchParams }: { searchParams:
             title={t('payment_terms.new')}
           >
             <p className="muted">{t('payment_terms.created_note')}</p>
-            <AutoCode codeId="f-code" mode="upper" nameId="f-name" />
+            <p className="muted">{t('minted_code_note')}</p>
             <Form action={createPaymentTerm}>
               <Grid>
-                <Field hint={t('code_auto_hint')} label={t('code')} name="code" />
                 <Field label={t('name')} name="name" required requiredLabel={t('required_hint')} />
                 <Select
                   defaultValue="document_date"

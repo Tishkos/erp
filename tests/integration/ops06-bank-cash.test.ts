@@ -185,7 +185,6 @@ describe('ops 6 · the bank and cash master', () => {
       banks.create(tx, manager, 'bank', {
         name: 'Al Rafidain — Current',
         glAccountId: bankGl,
-        branchCode: BAGHDAD,
         currency: 'IQD',
         bankName: 'Al Rafidain',
         accountNumber: '0011-22334455',
@@ -205,7 +204,6 @@ describe('ops 6 · the bank and cash master', () => {
       banks.create(tx, manager, 'cash', {
         name: 'Head Office Petty Cash',
         glAccountId: cashGl,
-        branchCode: BAGHDAD,
         currency: 'IQD',
         // §17 — a float without a custodian is nobody's responsibility.
         custodianUserId: manager.principal.userId,
@@ -216,12 +214,43 @@ describe('ops 6 · the bank and cash master', () => {
     expect(row.glAccountName).toBe('Petty Cash Float');
   });
 
+  it('offers free approved asset accounts and lets an existing account be relinked', async () => {
+    const made = await withScope(scope(manager), (tx) =>
+      banks.create(tx, manager, 'bank', {
+        name: 'Al Rafidain — Current',
+        glAccountId: bankGl,
+        currency: 'IQD',
+        bankName: 'Al Rafidain',
+        accountNumber: '0011-22334455',
+      }),
+    );
+    const replacementGl = await account('A000001', 'Replacement bank', 'bank');
+
+    const available = await withScope(scope(manager), (tx) =>
+      banks.availableGlAccounts(tx, made.glAccountId),
+    );
+    expect(available.map((row) => row.id)).toContain(replacementGl);
+
+    await withScope(scope(manager), (tx) =>
+      banks.update(tx, manager, made.code, {
+        name: made.name,
+        glAccountId: replacementGl,
+        currency: 'IQD',
+        bankName: 'Al Rafidain',
+        accountNumber: '0011-22334455',
+      }),
+    );
+
+    const repaired = await withScope(scope(manager), (tx) => banks.detail(tx, made.code));
+    expect(repaired.glAccountId).toBe(replacementGl);
+    expect(repaired.glAccountName).toBe('Replacement bank');
+  });
+
   it('refuses to let two accounts carry the same ledger account', async () => {
     await withScope(scope(manager), (tx) =>
       banks.create(tx, manager, 'bank', {
         name: 'First',
         glAccountId: bankGl,
-        branchCode: BAGHDAD,
         currency: 'IQD',
         bankName: 'Al Rafidain',
         accountNumber: '0011-1',
@@ -232,13 +261,37 @@ describe('ops 6 · the bank and cash master', () => {
         banks.create(tx, manager, 'bank', {
           name: 'Second',
           glAccountId: bankGl,
-          branchCode: BAGHDAD,
           currency: 'IQD',
           bankName: 'Al Rafidain',
           accountNumber: '0011-2',
         }),
       ),
     ).rejects.toThrow(/already carried/);
+  });
+
+  it('refuses another subledger’s control account, and keeps offering the plain ones', async () => {
+    // The live mistake this rule exists for (2026-09-29): three cash accounts
+    // had been pointed at Accounts Receivable, Inventory and Equipment, and a
+    // 5,000,000 customer receipt posted through one of them.
+    const receivable = await account('A000001', 'Accounts Receivable', 'customer');
+
+    await expect(
+      withScope(scope(manager), (tx) =>
+        banks.create(tx, manager, 'cash', {
+          name: 'Petty cash',
+          glAccountId: receivable,
+          currency: 'IQD',
+        }),
+      ),
+    ).rejects.toThrow(/customer control account/);
+
+    // And it is not offered in the first place, so nobody reaches that refusal
+    // by choosing from the list.
+    const offered = await withScope(scope(manager), (tx) => banks.availableGlAccounts(tx));
+    expect(offered.map((row) => row.id)).not.toContain(receivable);
+    // A `bank` control account is the one that does belong here, and an
+    // unflagged asset account still does: most charts never set the flag.
+    expect(offered.map((row) => row.id)).toContain(bankGl);
   });
 });
 
@@ -249,10 +302,10 @@ describe('ops 6 · the bank statement', () => {
   beforeEach(async () => {
     await ownerPool.query(
       `insert into bank_cash_account
-         (code, name, account_type, gl_account_id, branch_code, currency, bank_name, account_number)
-       values ($1,'Al Rafidain — Current','bank',$2,$3,'IQD','Al Rafidain','0011-22334455')
+         (code, name, account_type, gl_account_id, currency, bank_name, account_number)
+       values ($1,'Al Rafidain — Current','bank',$2,'IQD','Al Rafidain','0011-22334455')
        on conflict do nothing`,
-      [BANK, bankGl, BAGHDAD],
+      [BANK, bankGl],
     );
   });
 
@@ -297,9 +350,9 @@ describe('ops 6 · the bank statement', () => {
     const otherGl = await account('A000001', 'Bank — Second', 'bank');
     await ownerPool.query(
       `insert into bank_cash_account
-         (code, name, account_type, gl_account_id, branch_code, currency, bank_name, account_number)
-       values ('BANK-SECOND','Second','bank',$1,$2,'IQD','Al Rafidain','0011-99')`,
-      [otherGl, BAGHDAD],
+         (code, name, account_type, gl_account_id, currency, bank_name, account_number)
+       values ('BANK-SECOND','Second','bank',$1,'IQD','Al Rafidain','0011-99')`,
+      [otherGl],
     );
 
     await post('2026-03-01', 'Into the first', [

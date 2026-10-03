@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the bundled boot page may do. The ERP itself is loaded from the server as ordinary web content and receives none of this: Tauri keeps IPC to the application's own origin, and `dangerousRemoteDomainIpcAccess` is deliberately not set anywhere in this project.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "dialog:default",
+    "opener:default",
+    "process:default",
+    "updater:default"
+  ]
+}

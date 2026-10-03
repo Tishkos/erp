@@ -2,15 +2,19 @@ import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, admin as s } from './index';
 import { ReportFilter, ReportWindow, currencyFrom } from './report-filter';
-import { SearchablePicker } from './searchable-picker';
 import { SectionTabs } from './section-tabs';
 import type { SearchParams } from './params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { formatBusinessDate, formatStatementAmount, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
+import { pickOne, pickOutcome } from '@domain/pick';
+import * as openItems from '@/server/services/open-items';
+import { daysBetween } from '@domain/ageing';
 import * as partners from '@/server/services/partners';
 import * as statement from '@/server/services/partner-statement';
+import { businessToday } from '@/server/domain/business-date';
 
 /**
  * The Account Statement — Operations build, blocks 2 and 3.
@@ -39,12 +43,12 @@ const SIDE = {
   customer: {
     route: '/sales/customer-statements',
     page: 'ar_statements',
-    back: '/master-data/customers',
+    back: '/sales/customers',
   },
   supplier: {
-    route: '/purchasing/supplier-statements',
+    route: '/payables/supplier-statements',
     page: 'ap_statements',
-    back: '/master-data/suppliers',
+    back: '/payables/suppliers',
   },
 } as const;
 
@@ -55,13 +59,22 @@ const SIDE = {
  * linked — an address that refuses is worse than plain text. The line is on the
  * statement either way, because the money moved either way.
  */
+/** One wording for the buckets, shared with the dashboard and the ageing screens. */
+const BUCKET_KEY: Record<string, string> = {
+  current: 'bucket_current',
+  '1-30': 'bucket_1_30',
+  '31-60': 'bucket_31_60',
+  '61-90': 'bucket_61_90',
+  '90+': 'bucket_over_90',
+};
+
 const DOCUMENT_ROUTE: Readonly<Record<statement.DocumentKind, string | null>> = {
   ar_invoice: '/sales/ar-invoices',
   customer_receipt: '/sales/customer-receipts',
   customer_credit_memo: null,
-  ap_invoice: '/purchasing/ap-invoices',
-  supplier_payment: '/purchasing/supplier-payments',
-  goods_return: '/purchasing/goods-returns',
+  ap_invoice: '/payables/invoices',
+  supplier_payment: '/payables/supplier-payments',
+  goods_return: '/payables/goods-returns',
 };
 
 export async function AccountStatement({
@@ -72,9 +85,10 @@ export async function AccountStatement({
   readonly searchParams: SearchParams;
 }) {
   const screen = SIDE[side];
-  const [t, page, locale, context, query] = await Promise.all([
+  const [t, page, column, locale, context, query] = await Promise.all([
     getTranslations('admin'),
     getTranslations('page'),
+    getTranslations('column'),
     getLocale(),
     requireContext(),
     searchParams,
@@ -88,26 +102,107 @@ export async function AccountStatement({
   const to = typeof query.to === 'string' ? query.to : `${year}-12-31`;
   const currency = currencyFrom(query.currency);
   const asked = typeof query.code === 'string' ? query.code : '';
+  /*
+   * What to show of the account besides its movements.
+   *
+   * `all` is the default and the useful one: a statement screen that insists on
+   * a customer before it will say anything cannot answer "who owes us money",
+   * which is the question somebody actually opens it with. Choosing a partner
+   * narrows to their statement; leaving it blank now lists everybody's
+   * position instead of an empty table.
+   */
+  const view = openItems.viewFrom(query.due);
+
+  /*
+   * The day the open items are aged against.
+   *
+   * The statement's own closing date, so a copy printed for August ages its
+   * lines as at August and still says the same thing when it is re-printed in
+   * November — a statement in a file has to keep agreeing with itself.
+   *
+   * But never later than today. A statement run to the end of the year would
+   * otherwise declare an invoice due three days ago "95 days overdue", which
+   * is a fact about a future that has not happened.
+   */
+  const today = businessToday();
+  const agedAt = to > today ? today : to;
 
   // The whole role, not only the active part of it: a partner stops trading
   // long before their account stops needing to be read.
-  const { roll, chosen, account } = await withCurrentUser(async (tx) => {
+  const { roll, chosen, account, items, everyItem, balances } = await withCurrentUser(async (tx) => {
     const roll = await partners.listByRole(tx, side);
-    const chosen = roll.find((row) => row.code === asked) ?? null;
+    /* Resolved from what was typed, not matched against the whole label.
+       The box used to carry the partner's code in a hidden field, set only when
+       the text matched "CODE · Legal Name" exactly — so typing the name, or the
+       code, or picking from the list and then editing it, left nothing to submit
+       and the screen said "choose a customer" with no reason given. A code wins
+       outright; short of that, anything that can only be one partner names them. */
+    const chosen =
+      pickOne(roll, asked, (row) => row.code, (row) => [row.code, row.legalName, row.tradeName]) ??
+      null;
     return {
       roll,
       chosen,
       account: chosen
         ? await statement.statementFor(tx, side, chosen.code, { from, to, currency })
         : null,
+      /*
+       * The open items behind the same account, read through the service the
+       * ageing reports use. The statement shows what *moved*; this shows what
+       * is still owed and when it fell due — two different questions about one
+       * account, and the reason a reader used to need two screens.
+       */
+      items: await openItems
+        .openItems(tx, context.principal, side, agedAt, {
+          branchCode: context.scope.branchCode,
+          ...(chosen ? { partyCode: chosen.code } : {}),
+          outstandingOnly: true,
+          ...openItems.viewFilter(view),
+        })
+        .catch(() => []),
+      /*
+       * Every invoice and the control account behind them.
+       *
+       * The panel used to read only the document layer, so a customer whose
+       * debt had been journalled in showed nothing owing while the closing
+       * balance under it said otherwise — the same disagreement the Ageing
+       * screens had, on the one screen where both figures are in view at once.
+       */
+      everyItem: await openItems
+        .openItems(tx, context.principal, side, agedAt, {
+          branchCode: context.scope.branchCode,
+          ...(chosen ? { partyCode: chosen.code } : {}),
+        })
+        .catch(() => []),
+      balances: await openItems
+        .ledgerBalances(tx, context.principal, side, agedAt, {
+          branchCode: context.scope.branchCode,
+          ...(chosen ? { partyCode: chosen.code } : {}),
+        })
+        .catch(() => []),
     };
   });
+
+  const outcome = pickOutcome(
+    roll,
+    asked,
+    (row) => row.code,
+    (row) => [row.code, row.legalName, row.tradeName],
+  );
+
+  const reconciled = openItems.reconcile(everyItem, balances);
+  const tie = openItems.reconciliationTotals(reconciled);
+  const creditRows = reconciled.filter((row) => Number(row.unappliedCreditsIqd) > 0);
+  const nonInvoiceDebitRows = reconciled.filter((row) => Number(row.otherNonInvoiceDebitIqd) > 0);
+  const position = openItems.invoicePositionTotals(everyItem);
+  const byParty = new Map(openItems.byParty(everyItem).map((row) => [row.partyCode, row]));
 
   const money = (amount: string) => formatStatementAmount(amount, currency, locale as Locale);
   const day = (date: string) => formatBusinessDate(date, locale as Locale);
 
   return (
     <AdminPage
+      actions={chosen ? <ExportMenu exportKey={`${side}_statement`} query={query} /> : undefined}
       back={{ href: screen.back, label: t('back') }}
       subtitle={t(`partners.statement_subtitle_${side}`)}
       tabs={<SectionTabs route={screen.route} />}
@@ -119,16 +214,30 @@ export async function AccountStatement({
           <ReportFilter action={screen.route} currency={currency} from={from} to={to}>
             <label className={s.sapFilterField}>
               <span className={s.sapLabel}>{t(`partners.role_${side}`)}</span>
-              <SearchablePicker
-                bare
-                label={t(`partners.role_${side}`)}
+              <input
+                aria-label={t(`partners.role_${side}`)}
+                autoComplete="off"
+                defaultValue={asked}
+                list={`${side}-statement-parties`}
                 name="code"
-                options={roll.map((row) => ({
-                  value: row.code,
-                  label: `${row.code} · ${row.legalName}`,
-                }))}
-                {...(chosen ? { defaultValue: chosen.code } : {})}
               />
+              <datalist id={`${side}-statement-parties`}>
+                {roll.map((row) => (
+                  <option key={row.code} value={row.code}>
+                    {row.legalName}
+                  </option>
+                ))}
+              </datalist>
+            </label>
+            <label className={s.sapFilterField}>
+              <span className={s.sapLabel}>{t('open_items.show')}</span>
+              <select defaultValue={view} name="due">
+                <option value="all">{t('statement_outstanding.show_all')}</option>
+                <option value="soon">{t('statement_outstanding.due_soon')}</option>
+                <option value="overdue">{t('open_items.show_overdue')}</option>
+                <option value="unpaid">{t('statement_outstanding.show_unpaid')}</option>
+                <option value="part_paid">{t('statement_outstanding.show_part_paid')}</option>
+              </select>
             </label>
           </ReportFilter>
         }
@@ -157,6 +266,8 @@ export async function AccountStatement({
             <tr>
               <th scope="col">{t('partners.statement_date')}</th>
               <th scope="col">{t('partners.statement_document')}</th>
+              <th scope="col">{column('due_date')}</th>
+              <th scope="col">{t('open_items.ageing')}</th>
               <th scope="col">{t('journals.description')}</th>
               <th className={s.sapNum} scope="col">
                 {`${t('partners.statement_debit')} · ${currency}`}
@@ -172,8 +283,16 @@ export async function AccountStatement({
           <tbody>
             {account === null ? (
               <tr>
-                <td className={s.sapEmptyRow} colSpan={6}>
-                  {t(`partners.statement_choose_${side}`)}
+                <td className={s.sapEmptyRow} colSpan={8}>
+                  {/* Which of the three it is: nothing typed, nothing found, or
+                      too much found. "Choose a customer" for a name that was
+                      typed and not recognised reads as though the box had been
+                      ignored. */}
+                  {outcome === 'none'
+                    ? t('partners.statement_party_unknown', { side: t(`partners.role_${side}`) })
+                    : outcome === 'ambiguous'
+                      ? t('partners.statement_party_ambiguous', { side: t(`partners.role_${side}`) })
+                      : t(`partners.statement_choose_${side}`)}
                 </td>
               </tr>
             ) : (
@@ -182,7 +301,7 @@ export async function AccountStatement({
                     earlier is folded into it rather than dropped, so a window
                     closes where the whole account does. */}
                 <tr>
-                  <td colSpan={3}>{t('partners.statement_opening')}</td>
+                  <td colSpan={5}>{t('partners.statement_opening')}</td>
                   <td className={s.sapNum} />
                   <td className={s.sapNum} />
                   <td className={s.sapNum}>
@@ -191,7 +310,7 @@ export async function AccountStatement({
                 </tr>
                 {account.lines.length === 0 ? (
                   <tr>
-                    <td className={s.sapEmptyRow} colSpan={6}>
+                    <td className={s.sapEmptyRow} colSpan={8}>
                       {t('partners.statement_empty')}
                     </td>
                   </tr>
@@ -223,6 +342,32 @@ export async function AccountStatement({
                         )}
                       </td>
                       <td>
+                        <bdi dir="ltr">
+                          {line.document?.dueDate ? day(line.document.dueDate) : '—'}
+                        </bdi>
+                      </td>
+                      <td>
+                        {/* How old the document is as at the statement's own
+                            closing date — not today's. A statement printed for
+                            August must age its lines as at August, or a copy
+                            re-printed in November would quietly disagree with
+                            the one already in the file. */}
+                        {line.document?.dueDate ? (
+                          (() => {
+                            const late = daysBetween(line.document.dueDate, agedAt);
+                            return late > 0 ? (
+                              <span className={s.sapWarn}>
+                                {t('open_items.overdue_by', { days: late })}
+                              </span>
+                            ) : (
+                              <span className="muted">{t('open_items.due_in', { days: -late })}</span>
+                            );
+                          })()
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>
                         <bdi dir="auto">{line.description ?? '—'}</bdi>
                       </td>
                       <td className={s.sapNum}>
@@ -240,7 +385,7 @@ export async function AccountStatement({
                 {/* The two totals and what the account stands at — ruled twice,
                     the way a statement ends. */}
                 <tr data-rule="double">
-                  <td colSpan={3}>{t('partners.statement_closing')}</td>
+                  <td colSpan={5}>{t('partners.statement_closing')}</td>
                   <td className={s.sapNum}>
                     <bdi dir="ltr">{money(account.totalDebit)}</bdi>
                   </td>
@@ -256,6 +401,198 @@ export async function AccountStatement({
           </tbody>
         </table>
       </ReportWindow>
+
+      {/* ── What is still owed ────────────────────────────────────────────
+          Under the movements, where a reader arrives having read them: the
+          statement says what happened, and this says what is left of it. With
+          nobody chosen it lists every partner's position, so "who owes us
+          money" is still answerable without picking a name first; with a
+          partner chosen it lists their open invoices and when each fell due.
+
+          Both read `open-items.ts`, the same service the Ageing screens use,
+          so a figure here and a figure there cannot disagree.
+
+          Kept on screen while a narrowing is in force even when it matches
+          nothing: a panel that disappears when "Overdue" is chosen looks like
+          a fault, where "nothing overdue" is the answer somebody wanted. */}
+      {reconciled.length > 0 || view !== 'all' ? (
+        <ReportWindow
+          meta={t('statement_outstanding.as_at', { date: day(agedAt) })}
+          title={t('statement_outstanding.title')}
+          {...{
+            foot: (
+              <div className={s.sapFootTotals}>
+                {([
+                  [side === 'customer' ? 'open_items.gross_customer' : 'open_items.gross_supplier', position.grossIqd],
+                  ['open_items.not_yet_due', position.notYetDueIqd],
+                  ['open_items.overdue_total', position.overdueIqd],
+                  [side === 'customer' ? 'open_items.customer_credits' : 'open_items.supplier_credits', tie.unappliedCreditsIqd],
+                  ['open_items.other_noninvoice_debits', tie.otherNonInvoiceDebitsIqd],
+                  [side === 'customer' ? 'open_items.net_customer_position' : 'open_items.net_supplier_position', tie.ledgerIqd],
+                ] as [string, string][]).map(([label, amount]) => (
+                  <div className={s.sapFootTotal} key={label}>
+                    <span>{t(label)}</span>
+                    <strong><bdi dir="ltr">{money(amount)}</bdi></strong>
+                  </div>
+                ))}
+                {openItems.ageing(everyItem).map((bucket) => (
+                  <div className={s.sapFootTotal} key={bucket.bucket}>
+                    <span>{t(`dashboard.${BUCKET_KEY[bucket.bucket] ?? 'bucket_current'}`)}</span>
+                    <strong>
+                      <bdi dir="ltr">{money(bucket.amountIqd)}</bdi>
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            ),
+          }}
+        >
+          <table className={`${s.sapTable} ${s.sapReportTable}`}>
+            <thead>
+              {chosen ? (
+                <tr>
+                  <th scope="col">{column('invoice_no')}</th>
+                  <th scope="col">{column('invoice_date')}</th>
+                  <th scope="col">{column('due_date')}</th>
+                  <th scope="col">{t('open_items.terms')}</th>
+                  <th className={s.sapNum} scope="col">{column('total_price')}</th>
+                  <th className={s.sapNum} scope="col">{side === 'customer' ? t('open_items.allocated_payments') : t('open_items.paid')}</th>
+                  {side === 'customer' ? (
+                    <>
+                      <th className={s.sapNum} scope="col">{t('open_items.credits_applied')}</th>
+                      <th className={s.sapNum} scope="col">{t('open_items.other_adjustments_applied')}</th>
+                    </>
+                  ) : null}
+                  <th className={s.sapNum} scope="col">{t('open_items.outstanding')}</th>
+                  <th scope="col">{t('open_items.lateness')}</th>
+                </tr>
+              ) : (
+                <tr>
+                  <th scope="col">{t(`partners.role_${side}`)}</th>
+                  <th className={s.sapNum} scope="col">{column('document')}</th>
+                  <th className={s.sapNum} scope="col">{t(side === 'customer' ? 'open_items.gross_customer' : 'open_items.gross_supplier')}</th>
+                  <th className={s.sapNum} scope="col">{t('open_items.overdue_total')}</th>
+                  <th className={s.sapNum} scope="col">{t(side === 'customer' ? 'open_items.customer_credits' : 'open_items.supplier_credits')}</th>
+                  <th className={s.sapNum} scope="col">{t('open_items.other_noninvoice_debits')}</th>
+                  <th className={s.sapNum} scope="col">{t(side === 'customer' ? 'open_items.net_customer_position' : 'open_items.net_supplier_position')}</th>
+                </tr>
+              )}
+            </thead>
+            <tbody>
+              {items.length === 0 && creditRows.length === 0 && nonInvoiceDebitRows.length === 0 ? (
+                <tr>
+                  <td className={s.sapEmptyRow} colSpan={chosen ? (side === 'customer' ? 10 : 8) : 7}>
+                    {t('statement_outstanding.nothing')}
+                  </td>
+                </tr>
+              ) : chosen
+                ? items.map((item) => (
+                    <tr key={item.invoiceId}>
+                      <td className={s.sapAccountCell}>
+                        <Link
+                          className={s.sapLink}
+                          href={`${DOCUMENT_ROUTE[side === 'customer' ? 'ar_invoice' : 'ap_invoice']}/${encodeURIComponent(item.invoiceNo)}`}
+                        >
+                          <bdi dir="ltr">{item.invoiceNo}</bdi>
+                        </Link>
+                      </td>
+                      <td><bdi dir="ltr">{day(item.invoiceDate)}</bdi></td>
+                      <td><bdi dir="ltr">{day(item.dueDate)}</bdi></td>
+                      <td><bdi dir="auto">{item.paymentTermsName ?? item.paymentTermsCode ?? '—'}</bdi></td>
+                      <td className={s.sapNum}><bdi dir="ltr">{money(item.totalIqd)}</bdi></td>
+                      <td className={s.sapNum}><bdi dir="ltr">{money(item.paidIqd)}</bdi></td>
+                      {side === 'customer' ? (
+                        <>
+                          <td className={s.sapNum}><bdi dir="ltr">{money(item.creditsAppliedIqd)}</bdi></td>
+                          <td className={s.sapNum}><bdi dir="ltr">{money(item.otherAppliedIqd)}</bdi></td>
+                        </>
+                      ) : null}
+                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(item.outstandingIqd)}</bdi></strong></td>
+                      <td>
+                        {Number(item.outstandingIqd) <= 0 ? (
+                          <span className="muted">{t('open_items.settled')}</span>
+                        ) : item.daysOverdue > 0 ? (
+                          <span className={s.sapWarn}>{t('open_items.overdue_by', { days: item.daysOverdue })}</span>
+                        ) : (
+                          <span>{t('open_items.due_in', { days: item.daysUntilDue })}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                :
+                  reconciled.map((row) => {
+                    const party = byParty.get(row.partyCode);
+                    return (
+                    <tr key={row.partyCode}>
+                      <td className={s.sapAccountCell}>
+                        <Link className={s.sapLink} href={`${screen.route}?code=${encodeURIComponent(row.partyCode)}&from=${from}&to=${to}&currency=${currency}`}>
+                          <bdi dir="auto">{row.partyName}</bdi>
+                        </Link>{' '}
+                        <span className="muted"><bdi dir="ltr">{row.partyCode}</bdi></span>
+                      </td>
+                      <td className={s.sapNum}>{party?.invoices ?? 0}</td>
+                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(party?.outstandingIqd ?? '0')}</bdi></strong></td>
+                      <td className={s.sapNum}>
+                        {Number(party?.overdueIqd ?? 0) > 0 ? (
+                          <span className={s.sapWarn}><bdi dir="ltr">{money(party?.overdueIqd ?? '0')}</bdi></span>
+                        ) : (
+                          <bdi dir="ltr">{money('0')}</bdi>
+                        )}
+                      </td>
+                      <td className={s.sapNum}><bdi dir="ltr">{money(row.unappliedCreditsIqd)}</bdi></td>
+                      <td className={s.sapNum}><bdi dir="ltr">{money(row.otherNonInvoiceDebitIqd)}</bdi></td>
+                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(row.ledgerIqd)}</bdi></strong></td>
+                    </tr>
+                    );
+                  })}
+            </tbody>
+          </table>
+          {creditRows.length > 0 ? (
+            <>
+              <h2 style={{ padding: '0 1rem' }}>
+                {t(side === 'customer' ? 'open_items.credit_advance_title' : 'open_items.supplier_credit_advance_title')}
+              </h2>
+              <table className={`${s.sapTable} ${s.sapReportTable}`}>
+                <thead><tr>
+                  <th scope="col">{t(`partners.role_${side}`)}</th>
+                  <th scope="col">{t('open_items.on_account_since')}</th>
+                  <th className={s.sapNum} scope="col">{t('open_items.credit_advance_balance')}</th>
+                </tr></thead>
+                <tbody>
+                  {creditRows.map((row) => (
+                    <tr key={`credit-${row.partyCode}`}>
+                      <td>{row.partyName} <span className="muted">{row.partyCode}</span></td>
+                      <td><bdi dir="ltr">{row.oldestDate ? day(row.oldestDate) : '—'}</bdi></td>
+                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(row.unappliedCreditsIqd)}</bdi></strong></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          ) : null}
+          {nonInvoiceDebitRows.length > 0 ? (
+            <>
+              <h2 style={{ padding: '0 1rem' }}>{t('open_items.noninvoice_debit_title')}</h2>
+              <table className={`${s.sapTable} ${s.sapReportTable}`}>
+                <thead><tr>
+                  <th scope="col">{t(`partners.role_${side}`)}</th>
+                  <th scope="col">{t('open_items.on_account_since')}</th>
+                  <th className={s.sapNum} scope="col">{t('open_items.noninvoice_debit_balance')}</th>
+                </tr></thead>
+                <tbody>
+                  {nonInvoiceDebitRows.map((row) => (
+                    <tr key={`debit-${row.partyCode}`}>
+                      <td>{row.partyName} <span className="muted">{row.partyCode}</span></td>
+                      <td><bdi dir="ltr">{row.oldestDate ? day(row.oldestDate) : '—'}</bdi></td>
+                      <td className={s.sapNum}><strong><bdi dir="ltr">{money(row.otherNonInvoiceDebitIqd)}</bdi></strong></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          ) : null}
+        </ReportWindow>
+      ) : null}
     </AdminPage>
   );
 }

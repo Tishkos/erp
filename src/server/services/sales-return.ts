@@ -59,6 +59,7 @@ import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
 import * as inventory from './inventory';
+import * as creditMemos from './customer-credit-memo';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
 
@@ -346,26 +347,36 @@ async function invoicedUnitCost(
   tx: Tx,
   line: { itemCode: string; arInvoiceLineId: string },
 ): Promise<bigint> {
-  const [movement] = await tx
+  // Every movement the line made, not the first. A direct sale issues one
+  // movement per FIFO layer it drew on (see `ar-invoice.post`), so a line that
+  // sold five at 100 and three at 120 has two — and its cost is 860 for eight,
+  // not whatever the first layer happened to cost. Block 9: the returned
+  // item's cost is "the original Sales Invoice item cost", which is the line's.
+  const movements = await tx
     .select({ id: inventoryMovement.id })
     .from(inventoryMovement)
     .where(
       and(
         eq(inventoryMovement.sourceDocumentType, 'ar_invoice'),
         eq(inventoryMovement.sourceLineId, line.arInvoiceLineId),
+        sql`${inventoryMovement.quantity} < 0`,
       ),
-    )
-    .limit(1);
+    );
 
-  if (!movement) {
+  if (movements.length === 0) {
     throw new Error(
       `Invoice line ${line.arInvoiceLineId} moved no stock, so a return of ${line.itemCode} has no cost to take.`,
     );
   }
 
-  const consumed = await inventory.consumptionsOf(tx, movement.id);
-  const quantity = consumed.reduce((total, row) => total + parseQuantity(row.quantity), 0n);
-  const cost = consumed.reduce((total, row) => total + parseDecimal(row.costIqd, 4n), 0n);
+  let quantity = 0n;
+  let cost = 0n;
+  for (const movement of movements) {
+    for (const row of await inventory.consumptionsOf(tx, movement.id)) {
+      quantity += parseQuantity(row.quantity);
+      cost += parseDecimal(row.costIqd, 4n);
+    }
+  }
   return quantity === 0n ? 0n : (cost * 1_000_000n) / quantity;
 }
 
@@ -680,7 +691,7 @@ export async function accept(
   ctx: ActorContext,
   id: string,
 ): Promise<{ movementIds: string[]; valueIqd: bigint }> {
-  const returnDoc = await load(tx, id);
+  const returnDoc = await load(tx, id, { lock: true });
 
   await authz.authorize(ctx.principal, 'approve', PERMISSION_OBJECT, {
     branchCode: returnDoc.branchCode,
@@ -732,6 +743,9 @@ export async function accept(
         branchCode: returnDoc.branchCode,
         quantity: accepted,
         unitCostIqd: unitCost,
+        // Whose stock it was when it was sold (block 5), so a later sale that
+        // names that supplier can sell it again.
+        supplierId: await soldSupplierOf(tx, line.arInvoiceLineId),
         movementDate: returnDoc.receivedOn ?? returnDoc.requestedOn,
         kind: 'sales_return',
         serialNumber: line.serialNumber,
@@ -790,6 +804,56 @@ export async function accept(
 }
 
 /**
+ * Accepts the goods and settles the customer, in one act — Operations block 9.
+ *
+ *   Journal  Sales Return Dr. / Accounts Receivable or Bank Cr. /
+ *            Inventory Dr. / COGS Cr.
+ *
+ * `accept` is the stock half (Inventory Dr / COGS Cr, at the original
+ * invoice's cost). The money half was a Customer Credit Memo that no screen
+ * ever raised, so a return taken back from the screen put the goods on the
+ * shelf and left the customer owing for them. Here the memo is raised,
+ * approved and posted with the goods (Sales Return Dr / AR or Bank Cr, at the
+ * invoice's net price), and — when it went against the receivable — applied
+ * to the invoice it returns against, so the invoice's outstanding amount
+ * falls with the customer's balance rather than staying open beside it.
+ */
+export async function acceptAndSettle(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+): Promise<{ movementIds: string[]; valueIqd: bigint; creditMemoNo: string }> {
+  const accepted = await accept(tx, ctx, id);
+  const returnDoc = await load(tx, id);
+
+  const memo = await creditMemos.create(tx, ctx, {
+    salesReturnId: id,
+    memoDate: returnDoc.receivedOn ?? returnDoc.requestedOn,
+  });
+  await creditMemos.approve(tx, ctx, memo.id);
+  await creditMemos.post(tx, ctx, memo.id);
+
+  if (returnDoc.offsetKind !== 'bank') {
+    const [invoice] = await tx
+      .select({ netIqd: arInvoice.netIqd, allocatedIqd: arInvoice.allocatedIqd })
+      .from(arInvoice)
+      .where(eq(arInvoice.id, returnDoc.arInvoiceId))
+      .limit(1);
+    const outstanding = invoice
+      ? parseDecimal(invoice.netIqd, 4n) - parseDecimal(invoice.allocatedIqd, 4n)
+      : 0n;
+    // Never more than is still open: a credit beyond it is money the customer
+    // is owed back, and stays on their statement as a credit.
+    const apply = memo.amountIqd < outstanding ? memo.amountIqd : outstanding;
+    if (apply > 0n) {
+      await creditMemos.applyTo(tx, ctx, memo.id, returnDoc.arInvoiceId, apply);
+    }
+  }
+
+  return { ...accepted, movementIds: [...accepted.movementIds], creditMemoNo: memo.memoNo };
+}
+
+/**
  * Refuses a return — Appendix B's *Rejected*.
  *
  * Nothing has moved, so nothing is undone: the goods were never company stock.
@@ -836,6 +900,12 @@ export async function reject(
 
 export async function close(tx: Tx, ctx: ActorContext, id: string): Promise<void> {
   const returnDoc = await load(tx, id);
+  // HD6 — closing a return is an act on it, authorised as the acceptance was.
+  await authz.authorize(ctx.principal, 'execute', PERMISSION_OBJECT, {
+    branchCode: returnDoc.branchCode,
+    objectId: id,
+    requestId: ctx.requestId ?? null,
+  });
 
   await statuses.assertTransitionAllowed(tx, DOCUMENT_TYPE, returnDoc.status, 'closed');
 
@@ -860,12 +930,14 @@ export async function close(tx: Tx, ctx: ActorContext, id: string): Promise<void
 // Reading
 // ---------------------------------------------------------------------------
 
-async function load(tx: Tx, id: string) {
-  const [returnDoc] = await tx
-    .select()
-    .from(salesReturn)
-    .where(eq(salesReturn.id, id))
-    .limit(1);
+/**
+ * The return. `lock` holds its row `for update` so that two acceptances of one
+ * return serialise: the second reads `approved` and is refused by the status
+ * machine, rather than putting the goods back on the shelf a second time.
+ */
+async function load(tx: Tx, id: string, options: { lock?: boolean } = {}) {
+  const header = tx.select().from(salesReturn).where(eq(salesReturn.id, id)).limit(1);
+  const [returnDoc] = await (options.lock ? header.for('update') : header);
   if (!returnDoc) throw new Error(`No sales return with id '${id}'.`);
   return returnDoc;
 }
@@ -899,6 +971,43 @@ export async function viewByNo(tx: Tx, returnNo: string) {
     .limit(1);
   if (!row) return null;
   return view(tx, row.id);
+}
+
+/**
+ * The supplier whose stock an invoice line sold: the one the line named, or —
+ * when it named none — the supplier of the first layer it consumed.
+ */
+async function soldSupplierOf(tx: Tx, arInvoiceLineId: string): Promise<string | null> {
+  const [line] = await tx
+    .select({ supplierId: arInvoiceLine.supplierId })
+    .from(arInvoiceLine)
+    .where(eq(arInvoiceLine.id, arInvoiceLineId))
+    .limit(1);
+  if (line?.supplierId) return line.supplierId;
+
+  const result = await tx.execute(sql`
+    select l.supplier_id
+      from inventory_movement m
+      join cost_layer_consumption c on c.movement_id = m.id
+      join cost_layer l on l.id = c.layer_id
+     where m.source_document_type = 'ar_invoice' and m.source_line_id = ${arInvoiceLineId}
+     order by m.created_at
+     limit 1
+  `);
+  return (result.rows[0] as { supplier_id: string | null } | undefined)?.supplier_id ?? null;
+}
+
+/** Where each invoice line took its stock from — a returned line's default home. */
+export async function soldFromWarehouses(
+  tx: Tx,
+  arInvoiceLineIds: readonly string[],
+): Promise<Map<string, string | null>> {
+  if (arInvoiceLineIds.length === 0) return new Map();
+  const rows = await tx
+    .select({ id: arInvoiceLine.id, warehouseCode: arInvoiceLine.warehouseCode })
+    .from(arInvoiceLine)
+    .where(inArray(arInvoiceLine.id, [...arInvoiceLineIds]));
+  return new Map(rows.map((row) => [row.id, row.warehouseCode]));
 }
 
 /** Posted invoices a return can be raised against, newest first. */

@@ -156,7 +156,7 @@ export class DimensionNotAvailableError extends Error {
   constructor(readonly dimension: DimensionType) {
     super(
       `The ${labelOf(dimension)} dimension has no master data yet, so it cannot be required or supplied. ` +
-        'It becomes available when the phase that delivers its master data registers it.',
+        'It becomes available when the module that delivers its master data registers it.',
     );
     this.name = 'DimensionNotAvailableError';
   }
@@ -286,7 +286,7 @@ export function assertDerivedDimensionsUnchanged(
 export interface DimensionDefinition {
   readonly dimension: DimensionType;
   readonly label: string;
-  /** Null until the phase that delivers this dimension's master data lands. */
+  /** Null until the module that delivers this dimension's master data lands. */
   readonly sourceTable: string | null;
   readonly isActive: boolean;
 }

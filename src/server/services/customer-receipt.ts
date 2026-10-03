@@ -35,6 +35,7 @@ import { assertWithinBalance, openBalance } from '../domain/ar-invoicing';
 import {
   assertWithinReceipt,
   creditRoleFor,
+  oldestFirst,
   proposeAllocation,
   receiptStatusFor,
   unapplied,
@@ -44,6 +45,7 @@ import type { PostingLineRequest } from '../domain/posting';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
+import * as dueNotices from './due-notices';
 import * as arInvoiceService from './ar-invoice';
 import * as posting from './posting';
 import * as statuses from './statuses';
@@ -68,6 +70,18 @@ export class ReceiptNotPostedError extends Error {
   }
 }
 
+export class NothingToAllocateError extends Error {
+  readonly code = 'RECEIPT_NOTHING_TO_ALLOCATE';
+
+  constructor(readonly receiptNo: string) {
+    super(
+      `Receipt ${receiptNo} has nothing left to apply, or the customer has no invoice still owing. ` +
+        'Money with no debt to settle stays unapplied and appears on the unapplied report (§16).',
+    );
+    this.name = 'NothingToAllocateError';
+  }
+}
+
 export class WrongCustomerError extends Error {
   readonly code = 'RECEIPT_WRONG_CUSTOMER';
 
@@ -81,6 +95,20 @@ export class WrongCustomerError extends Error {
         'it is a transfer between the two accounts and then an allocation (§16).',
     );
     this.name = 'WrongCustomerError';
+  }
+}
+
+export class PayerNotACustomerError extends Error {
+  readonly code = 'PAYER_NOT_A_CUSTOMER';
+
+  constructor(readonly partnerCode: string) {
+    super(
+      `${partnerCode} does not hold the Customer role, so money cannot be received against their ` +
+        'customer account (§6). A supplier who also buys from us is one record with both roles — ' +
+        'grant the Customer role on the partner record. Money from a supplier that is not a sale ' +
+        'is a refund, and belongs on an Other Receipt.',
+    );
+    this.name = 'PayerNotACustomerError';
   }
 }
 
@@ -115,6 +143,23 @@ export async function create(
     throw new RangeError(
       'A receipt records money that arrived, so its amount is positive. Money going out is a payment or a refund.',
     );
+  }
+
+  /*
+   * §6 — a named payer is being credited on their customer account, and only
+   * a Customer has one. Left unchecked, a posted receipt put a supplier-only
+   * partner on the customer subledger, which is the same gap the Sales
+   * Invoice had. Money with no payer yet is still allowed: that is what the
+   * nullable column is for.
+   */
+  if (input.customerId) {
+    const [payer] = await tx
+      .select({ code: businessPartner.code, isCustomer: businessPartner.isCustomer })
+      .from(businessPartner)
+      .where(eq(businessPartner.id, input.customerId))
+      .limit(1);
+    if (!payer) throw new Error(`No business partner with id '${input.customerId}'.`);
+    if (!payer.isCustomer) throw new PayerNotACustomerError(payer.code);
   }
 
   const allocated = await allocateDocumentNumber(
@@ -243,6 +288,9 @@ export async function post(
       // the bank subledger; putting it in the ledger as an eighth dimension
       // would create one no account can require and nothing can report on.
       dimensions,
+      // The bank subledger's party (§1.2). Without it a G/L account flagged as
+      // a bank control account refuses the whole posting.
+      bankAccountCode: account?.code ?? null,
       description: account?.code ? `Received into ${account.code}` : null,
     },
     {
@@ -289,6 +337,21 @@ export async function post(
       creditRole,
       amountIqd: receipt.amountIqd,
     },
+  });
+
+  // §21 — money in is news, and it is news now rather than on tomorrow's
+  // sweep: a receipt banked at ten o'clock should not wait until the morning
+  // to be mentioned. The party is read from the receipt, so a receipt whose
+  // payer is unknown (§16) still announces itself, with a dash.
+  const parties = await partiesOf(tx, id);
+  await dueNotices.announceSettlement(tx, {
+    side: 'customer',
+    documentId: id,
+    documentNo: receipt.receiptNo,
+    partyName: parties.customerName,
+    amountIqd: receipt.amountIqd,
+    branchCode: receipt.branchCode,
+    link: `/sales/customer-receipts/${receipt.receiptNo}`,
   });
 
   return { journalEntryId: result.journalEntryId };
@@ -339,6 +402,7 @@ export async function allocate(
     throw new UnidentifiedReceiptError(receipt.receiptNo);
   }
 
+  const customerName = (await partiesOf(tx, id)).customerName;
   let applied = parseDecimal(receipt.allocatedIqd, 4n);
   const amount = parseDecimal(receipt.amountIqd, 4n);
 
@@ -383,7 +447,29 @@ export async function allocate(
     // The invoice's own rule — Appendix B's Partially Paid and Paid — lives in
     // `ar-invoice.applyAllocation`, so a credit memo (06.9) moves an invoice
     // exactly the way a receipt does.
-    await arInvoiceService.applyAllocation(tx, ctx, allocation.arInvoiceId, allocation.amountIqd);
+    const settledNow = await arInvoiceService.applyAllocation(
+      tx,
+      ctx,
+      allocation.arInvoiceId,
+      allocation.amountIqd,
+    );
+
+    // §21 — the customer's side of the same record. Announced when the invoice
+    // reaches zero, and only then: a partial payment is not a settlement, and
+    // a notice on every instalment would say nothing about how the account
+    // behaves.
+    if (settledNow.status === 'settled') {
+      await dueNotices.announcePaidLate(tx, {
+        side: 'customer',
+        invoiceId: invoice.id,
+        invoiceNo: invoice.invoiceNo,
+        partyName: customerName,
+        dueDate: invoice.dueDate,
+        paidOn: receipt.receiptDate,
+        branchCode: receipt.branchCode,
+        link: `/sales/ar-invoices/${invoice.invoiceNo}`,
+      });
+    }
 
     applied += allocation.amountIqd;
   }
@@ -559,6 +645,42 @@ export async function list(tx: Tx) {
     .orderBy(desc(customerReceipt.receiptDate), desc(customerReceipt.receiptNo));
 }
 
+/**
+ * Who paid and into which account — the build's Customer Name and Code and
+ * Bank/Cash Name and Code. The customer is null while the money is
+ * unidentified (§16).
+ */
+export async function partiesOf(tx: Tx, customerReceiptId: string) {
+  const [row] = await tx
+    .select({
+      customerCode: businessPartner.code,
+      customerName: businessPartner.legalName,
+      bankCode: bankCashAccount.code,
+      bankName: bankCashAccount.name,
+    })
+    .from(customerReceipt)
+    .leftJoin(businessPartner, eq(businessPartner.id, customerReceipt.customerId))
+    .leftJoin(bankCashAccount, eq(bankCashAccount.id, customerReceipt.bankCashAccountId))
+    .where(eq(customerReceipt.id, customerReceiptId))
+    .limit(1);
+  return row ?? { customerCode: null, customerName: null, bankCode: null, bankName: null };
+}
+
+/** The invoices this receipt settles, with what it put against each. */
+export async function allocationsOf(tx: Tx, customerReceiptId: string) {
+  return tx
+    .select({
+      invoiceNo: arInvoice.invoiceNo,
+      dueDate: arInvoice.dueDate,
+      amountIqd: customerReceiptAllocation.amountIqd,
+      allocatedAt: customerReceiptAllocation.allocatedAt,
+    })
+    .from(customerReceiptAllocation)
+    .innerJoin(arInvoice, eq(arInvoice.id, customerReceiptAllocation.arInvoiceId))
+    .where(eq(customerReceiptAllocation.customerReceiptId, customerReceiptId))
+    .orderBy(customerReceiptAllocation.allocatedAt);
+}
+
 export async function viewByNo(tx: Tx, receiptNo: string) {
   const [row] = await tx
     .select({ id: customerReceipt.id })
@@ -569,26 +691,108 @@ export async function viewByNo(tx: Tx, receiptNo: string) {
   return view(tx, row.id);
 }
 
-/** A customer's invoices with something still owed on them, oldest first. */
+/**
+ * A customer's invoices with something still owed on them, oldest first.
+ *
+ * Ordered by `oldestFirst`, the same rule the allocation plan uses, so the
+ * order a clerk reads down the screen is the order the money would be applied
+ * in if they pressed the button. A list in one order and a plan in another is
+ * how somebody comes to believe the plan skipped an invoice.
+ */
 export async function openInvoicesFor(tx: Tx, customerId: string) {
   const rows = await tx
     .select({
       id: arInvoice.id,
       invoiceNo: arInvoice.invoiceNo,
+      invoiceDate: arInvoice.invoiceDate,
       dueDate: arInvoice.dueDate,
       netIqd: arInvoice.netIqd,
       allocatedIqd: arInvoice.allocatedIqd,
     })
     .from(arInvoice)
-    .where(and(eq(arInvoice.customerId, customerId), inArray(arInvoice.status, ['posted', 'settled'])))
+    .where(and(eq(arInvoice.customerId, customerId), // Part-paid invoices too: block 6 allocates partial payments, and the rest
+      // of a part-paid invoice is still owed.
+      inArray(arInvoice.status, ['posted', 'partially_executed', 'settled'])))
     .orderBy(asc(arInvoice.dueDate));
 
-  return rows
+  const open = rows
     .map((invoice) => ({
       ...invoice,
       outstanding: parseDecimal(invoice.netIqd, 4n) - parseDecimal(invoice.allocatedIqd, 4n),
     }))
     .filter((invoice) => invoice.outstanding > 0n);
+
+  const order = new Map(
+    oldestFirst(
+      open.map((invoice) => ({
+        id: invoice.id,
+        dueDate: invoice.dueDate,
+        invoiceDate: invoice.invoiceDate,
+        invoiceNo: invoice.invoiceNo,
+        openIqd: invoice.outstanding,
+      })),
+    ).map((invoice, index) => [invoice.id, index]),
+  );
+
+  return open.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+}
+
+/**
+ * What oldest-first would do with what is left of this receipt.
+ *
+ * Read by the screen to fill each invoice's box with its share, so the amounts
+ * offered add up to the receipt rather than each offering the whole of it —
+ * which is what the boxes used to do, and it invited an over-allocation the
+ * service then had to refuse.
+ */
+export async function planFor(
+  tx: Tx,
+  receipt: { readonly customerId: string | null; readonly amountIqd: string; readonly allocatedIqd: string },
+): Promise<Map<string, bigint>> {
+  if (!receipt.customerId) return new Map();
+  const open = await openInvoicesFor(tx, receipt.customerId);
+  const plan = proposeAllocation(
+    {
+      amountIqd: parseDecimal(receipt.amountIqd, 4n),
+      allocatedIqd: parseDecimal(receipt.allocatedIqd, 4n),
+    },
+    open.map((invoice) => ({
+      id: invoice.id,
+      dueDate: invoice.dueDate,
+      invoiceDate: invoice.invoiceDate,
+      invoiceNo: invoice.invoiceNo,
+      openIqd: invoice.outstanding,
+    })),
+  );
+  return new Map(plan.map((line) => [line.arInvoiceId, line.amountIqd]));
+}
+
+/**
+ * Apply what is left of a receipt to the oldest invoices first — one act.
+ *
+ * The whole plan in one transaction, because that is what the clerk meant: a
+ * run that settled two invoices and then refused the third would leave them
+ * working out by hand which of the three it was.
+ */
+export async function allocateOldestFirst(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+): Promise<{ allocatedIqd: bigint; status: string; invoices: number }> {
+  const receipt = await load(tx, id);
+  if (!receipt.customerId) throw new UnidentifiedReceiptError(receipt.receiptNo);
+
+  const plan = [...(await planFor(tx, receipt))].map(([arInvoiceId, amountIqd]) => ({
+    arInvoiceId,
+    amountIqd,
+  }));
+
+  if (plan.length === 0) {
+    throw new NothingToAllocateError(receipt.receiptNo);
+  }
+
+  const outcome = await allocate(tx, ctx, id, plan);
+  return { ...outcome, invoices: plan.length };
 }
 
 export async function view(tx: Tx, id: string) {
@@ -670,6 +874,8 @@ export async function proposeFor(tx: Tx, id: string) {
     open.map((invoice) => ({
       id: invoice.id,
       dueDate: invoice.dueDate,
+      invoiceDate: invoice.invoiceDate,
+      invoiceNo: invoice.invoiceNo,
       openIqd: openBalance({
         totalIqd: parseDecimal(invoice.netIqd, 4n),
         allocatedIqd: parseDecimal(invoice.allocatedIqd, 4n),

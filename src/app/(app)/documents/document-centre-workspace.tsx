@@ -32,8 +32,7 @@ export interface DocumentWorkspaceItem {
   readonly key: string;
   readonly label: string;
   readonly href: string | null;
-  readonly phase: string;
-  readonly phaseHint: string;
+  readonly pendingHint: string;
 }
 
 export interface DocumentCentreLabels {
@@ -60,7 +59,7 @@ export interface DocumentCentreLabels {
   readonly noResults: string;
   readonly noResultsHint: string;
   readonly pending: string;
-  readonly phaseExplanation: string;
+  readonly pendingExplanation: string;
   readonly noAccessTitle: string;
   readonly noAccessDescription: string;
   readonly close: string;
@@ -125,7 +124,7 @@ function WorkspaceCard({
       </div>
       <div className={styles.cardCopy}>
         <h3>{item.label}</h3>
-        <p>{available ? labels.workspacesHint : item.phaseHint}</p>
+        <p>{available ? labels.workspacesHint : item.pendingHint}</p>
       </div>
       <span className={styles.cardFooter}>
         {available ? (
@@ -302,7 +301,7 @@ export function DocumentCentreWorkspace({
         {items.some((item) => item.href === null) ? (
           <aside className={styles.roadmapNote}>
             <Clock3 aria-hidden="true" />
-            <p>{labels.phaseExplanation}</p>
+            <p>{labels.pendingExplanation}</p>
           </aside>
         ) : null}
       </section>

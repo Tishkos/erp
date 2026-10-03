@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
@@ -21,12 +22,13 @@ import { AuditLogButton, RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatTimestamp, type Locale } from '@/i18n/config';
-import { can } from '@domain/permissions';
+import { can, isCeo } from '@domain/permissions';
 import { FLASH_COOKIE } from '@/server/admin-action';
 import { AdminNotFoundError } from '@/server/services/administration';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as branches from '@/server/services/branches';
 import * as departments from '@/server/services/departments';
+import * as employees from '@/server/services/employees';
 import * as roles from '@/server/services/roles';
 import * as users from '@/server/services/users';
 import {
@@ -73,6 +75,7 @@ export default async function UserPage({
     return <Denied object={page('users')} />;
   }
   const mayEdit = can(principal, 'configure', users.PERMISSION_OBJECT);
+  const mayAssignRoles = isCeo(principal) && mayEdit;
   const mayAdminister = can(principal, 'administer', users.PERMISSION_OBJECT);
   const secret = outcome.saved ? (jar.get(FLASH_COOKIE)?.value ?? null) : null;
   const mailed = query.mailed === '1';
@@ -82,9 +85,10 @@ export default async function UserPage({
     try {
       return {
         ...(await users.detail(tx, id)),
-        allRoles: mayEdit ? await roles.listAll(tx) : [],
+        allRoles: mayAssignRoles ? await roles.listAll(tx) : [],
         allBranches: mayEdit ? await branches.listAll(tx) : [],
         allDepartments: mayEdit ? await departments.listAll(tx) : [],
+        employee: await employees.ofUser(tx, id),
       };
     } catch (error) {
       if (error instanceof AdminNotFoundError) return null;
@@ -159,6 +163,19 @@ export default async function UserPage({
                 <span>{t('updated_at')}</span>
                 <span>{fmt(user.updatedAt)}</span>
               </li>
+              {/* REQ-FIX-001 FIX-5 — the person behind the account. */}
+              <li>
+                <span>{t('users.employee')}</span>
+                <span>
+                  {data.employee ? (
+                    <Link className={s.sapLink} href={`/hr/employees/${encodeURIComponent(data.employee.employeeNo)}`}>
+                      <bdi dir="ltr">{data.employee.employeeNo}</bdi>
+                    </Link>
+                  ) : (
+                    t('users.no_employee')
+                  )}
+                </span>
+              </li>
               <li>
                 <span>{column('key')}</span>
                 <span className={s.mono}>{user.id.slice(0, 8)}</span>
@@ -197,7 +214,7 @@ export default async function UserPage({
           <div className={s.assignGrid}>
             <AssignCard
               add={
-                mayEdit && otherRoles.length > 0
+                mayAssignRoles && otherRoles.length > 0
                   ? {
                       action: setUserRole,
                       hidden: { id: user.id, on: '1' },
@@ -213,7 +230,7 @@ export default async function UserPage({
                 key: r.code,
                 label: r.name,
                 sub: r.code,
-                remove: mayEdit ? { action: setUserRole, hidden: { id: user.id, roleCode: r.code } } : null,
+                remove: mayAssignRoles ? { action: setUserRole, hidden: { id: user.id, roleCode: r.code } } : null,
               }))}
               revokeLabel={t('users.revoke')}
               title={t('users.roles')}

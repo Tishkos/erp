@@ -31,6 +31,7 @@
  */
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
+  NoPostingRuleError,
   assertRequestWellFormed,
   resolveLineAccount,
   resolveRule,
@@ -39,11 +40,13 @@ import {
   type PostingRequest,
   type PostingRule,
 } from '../domain/posting';
+import { logger } from '../logging';
 import { assertCurrencyAllowed, assertPostable } from '../domain/chart-of-accounts';
 import { assertMappedAccount } from '../domain/posting-map';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 import type { DimensionType, SuppliedDimensions } from '../domain/dimensions';
 import {
+  bankCashAccount,
   chartOfAccount,
   journalEntry,
   journalLine,
@@ -60,6 +63,26 @@ import * as periodService from './periods';
 import * as rateService from './exchange-rates';
 import * as subledgerService from './subledger';
 import { allocateDocumentNumber } from './numbering';
+
+/**
+ * Which bank or cash account a G/L account belongs to, if any.
+ *
+ * Only asked for an account flagged as a `bank` control account — every other
+ * account has no bank subledger and wants no party. One row at most, by
+ * `bank_cash_account_gl_uniq`.
+ */
+async function bankAccountCodeFor(
+  tx: Tx,
+  account: { readonly id: string; readonly controlAccount: string | null },
+): Promise<string | null> {
+  if (account.controlAccount !== 'bank') return null;
+  const [row] = await tx
+    .select({ code: bankCashAccount.code })
+    .from(bankCashAccount)
+    .where(eq(bankCashAccount.glAccountId, account.id))
+    .limit(1);
+  return row?.code ?? null;
+}
 
 export const PERMISSION_OBJECT = 'posting_rule';
 const SEQUENCE_KEY = 'JOURNAL_ENTRY';
@@ -183,6 +206,25 @@ export async function plan(
       dimensions,
       sourceLineId: line.sourceLineId ?? null,
       description: line.description ?? null,
+      /*
+       * The bank subledger's party.
+       *
+       * Taken from the line when the document named it, and otherwise derived
+       * from the account itself: `bank_cash_account_gl_uniq` guarantees that at
+       * most one bank or cash account carries a given G/L account, so the
+       * mapping back is unambiguous — a constraint doing the work an argument
+       * would otherwise have to.
+       *
+       * Deriving it rather than requiring it is deliberate. Eleven services
+       * post to a bank role, and a rule that every one of them must remember
+       * an extra field is a rule the twelfth will break; the symptom would be
+       * a refusal to post, discovered by whoever was trying to bank a receipt.
+       * Until 2026-09-29 none of them supplied it and the refusal was real —
+       * it simply had not been met yet, because no live G/L account carried
+       * the `bank` control flag.
+       */
+      bankAccountCode: line.bankAccountCode ?? (await bankAccountCodeFor(tx, account)),
+      loanNo: line.loanNo ?? null,
     });
   }
 
@@ -329,6 +371,8 @@ export async function post(
       sourceLineId: line.sourceLineId,
       postingRuleId: line.postingRuleId,
       lineRole: line.role,
+      bankAccountCode: line.bankAccountCode,
+      loanNo: line.loanNo,
     });
   }
 
@@ -432,10 +476,11 @@ async function emitPosted(event: PostedEvent): Promise<void> {
     try {
       await subscriber(event);
     } catch (error) {
-      console.error(
-        `[posting] subscriber failed for ${event.entryNo} (${event.eventType}); the posting stands.`,
+      logger.error('posting subscriber failed; the posting stands', {
         error,
-      );
+        entryNo: event.entryNo,
+        eventType: event.eventType,
+      });
     }
   }
 }
@@ -771,8 +816,11 @@ export async function mappedAccountFor(
   const rules = await rulesForEvent(tx, eventType);
   try {
     return resolveRule(rules, eventType, lineRole, { branchCode }).accountId;
-  } catch {
-    return null;
+  } catch (error) {
+    // E3 — "nothing mapped" is null; an ambiguous mapping is a configuration
+    // fault the form must not hide behind an empty choice.
+    if (error instanceof NoPostingRuleError) return null;
+    throw error;
   }
 }
 

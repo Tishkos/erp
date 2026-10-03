@@ -1,17 +1,29 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Flash, Grid, Select, Submit, SubmitRow, admin as s, matches } from '@/components/admin';
+import {
+  AdminPage,
+  FilterRow,
+  Flash,
+  Select,
+  Submit,
+  SubmitRow,
+  admin as s,
+  matches,
+} from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ExportMenu } from '@/components/print/export-menu';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
-import { visibleRoute } from '@/server/phase-gate';
+import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as shipments from '@/server/services/supplier-shipment';
+import { CONTAINER_OBJECT } from '@/server/services/shipments';
 import * as warehouses from '@/server/services/warehouses';
-import { advanceShipment } from './actions';
+import * as users from '@/server/services/users';
+import { advanceShipment, setShipmentWatchers } from './actions';
 
 /**
  * Invoice Status Tracking — Operations build, block 8.
@@ -59,6 +71,9 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
     return <Denied object={page('in_transit')} />;
   }
   const mayMove = can(principal, 'execute', shipments.PERMISSION_OBJECT);
+  // REQ-AP-001 §17.4 / D38 — imports are tracked container by container now;
+  // this page keeps the shipments of invoices that are not imports.
+  const seesContainers = visibleRoute('/payables/containers') && can(principal, 'view', CONTAINER_OBJECT);
 
   const status =
     typeof params.status === 'string' &&
@@ -66,9 +81,14 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
       ? (params.status as shipments.ShipmentStatus)
       : undefined;
 
-  const { rows, houses } = await withCurrentUser(async (tx) => ({
+  const mayChooseWatchers = can(principal, 'configure', shipments.PERMISSION_OBJECT);
+  const { rows, houses, people, watching } = await withCurrentUser(async (tx) => ({
     rows: await shipments.list(tx, status ? { status } : {}),
     houses: await warehouses.listActive(tx),
+    people: mayChooseWatchers ? (await users.listAll(tx)).filter((user) => user.isActive) : [],
+    watching: new Set(
+      (await shipments.watchers(tx, context.scope.branchCode)).map((row) => row.userId),
+    ),
   }));
 
   const shown = rows.filter((row) => matches(row, outcome.q));
@@ -77,6 +97,7 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
 
   return (
     <AdminPage
+      actions={<ExportMenu exportKey="invoice_status_tracking" query={params} />}
       back={{ href: '/', label: t('dashboard_label') }}
       tabs={<SectionTabs route="/inventory/in-transit" />}
       subtitle={t('in_transit.subtitle')}
@@ -89,12 +110,25 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
         saved={outcome.saved}
         savedLabel={t('saved')}
       />
+      {seesContainers ? (
+        <p className={s.sapNote}>
+          {t('in_transit.containers_note')}{' '}
+          <Link className={s.sapLink} href="/payables/containers">
+            {page('containers')}
+          </Link>
+        </p>
+      ) : null}
 
       {/* One picker rather than five links. Four stages is a list, and a list
           belongs in a control the reader already knows — the same Select every
-          other screen filters with. */}
+          other screen filters with.
+
+          In a `Grid` that one picker was given a whole grid column and its
+          button a line of its own, so a single filter was the widest thing on
+          the screen. A filter is one line to set: the box at its own width and
+          the button beside it. */}
       <form method="get">
-        <Grid>
+        <FilterRow>
           <Select
             defaultValue={status ?? ''}
             emptyLabel={t('in_transit.all')}
@@ -105,10 +139,10 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
               label: label(value),
             }))}
           />
-        </Grid>
-        <SubmitRow>
-          <Submit label={list('search')} />
-        </SubmitRow>
+          <SubmitRow>
+            <Submit label={list('search')} />
+          </SubmitRow>
+        </FilterRow>
       </form>
 
       <div className={s.sapTableWrap}>
@@ -142,7 +176,7 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
                   <td>
                     <Link
                       className={s.sapLink}
-                      href={`/purchasing/ap-invoices/${encodeURIComponent(row.invoiceNo)}`}
+                      href={`/payables/invoices/${encodeURIComponent(row.invoiceNo)}`}
                     >
                       <bdi dir="ltr">{row.invoiceNo}</bdi>
                     </Link>
@@ -170,7 +204,7 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
                   {mayMove ? (
                     <td>
                       {next === null ? null : (
-                        <form action={advanceShipment} className="row-form">
+                        <form action={advanceShipment} className={s.fieldWithAction}>
                           <input name="id" type="hidden" value={row.id} />
                           <input name="to" type="hidden" value={next} />
                           {next === 'in_bounded' ? (
@@ -179,7 +213,7 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
                             // there is exactly one of each.
                             <select
                               aria-label={column('warehouse_name')}
-                              className="list__search"
+                              className={s.sapCellField}
                               name="warehouse_code"
                               required
                             >
@@ -190,9 +224,7 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
                               ))}
                             </select>
                           ) : null}
-                          <button className="action" type="submit">
-                            {t('in_transit.advance')} {label(next)}
-                          </button>
+                          <Submit label={`${t('in_transit.advance')} ${label(next)}`} tone="secondary" variant="document" />
                         </form>
                       )}
                     </td>
@@ -203,6 +235,28 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
           </tbody>
         </table>
       </div>
+
+      {/* Block 8 — "Every status change sends a notification to the selected
+          system users." These are the users selected, for this branch. */}
+      {mayChooseWatchers ? (
+        <form action={setShipmentWatchers} className={s.toolbar}>
+          <fieldset>
+            <legend>{t('in_transit.notify_title')}</legend>
+            {people.map((user) => (
+              <label key={user.id} style={{ marginInlineEnd: '1rem' }}>
+                <input
+                  defaultChecked={watching.has(user.id)}
+                  name="watcher"
+                  type="checkbox"
+                  value={user.id}
+                />{' '}
+                <bdi dir="auto">{user.displayName}</bdi>
+              </label>
+            ))}
+          </fieldset>
+          <Submit label={t('in_transit.notify_save')} tone="secondary" variant="document" />
+        </form>
+      ) : null}
     </AdminPage>
   );
 }

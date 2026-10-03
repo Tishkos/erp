@@ -21,7 +21,7 @@
  * also wanted is D11, open, and not something this service may decide by writing
  * a journal.
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   purchaseOrder,
@@ -37,6 +37,9 @@ import * as authz from './authorization';
 import * as audit from './audit';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
+import { countOf, registerPage, whereOf, type RegisterPage, type RegisterPaging } from './register-page';
+import * as payableEvents from './payable-events';
+import * as payables from './payables';
 
 /** The Appendix B document type this service manages. */
 export const DOCUMENT_TYPE = 'service_receipt';
@@ -317,6 +320,83 @@ export async function create(
   return { id: created!.id, receiptNo: allocated.documentNo };
 }
 
+/**
+ * REQ-AP-001 §9.2 — the confirmation of a payable that has no order: rent, a
+ * consultant's month, a metered bill. One free line ("done", a period, a
+ * quantity); the department that benefits raises it; its approval is the
+ * evidence the invoice approval will ask for (A9).
+ */
+export async function createForPayable(
+  tx: Tx,
+  ctx: ActorContext,
+  input: {
+    payableId: string;
+    departmentCode: string;
+    branchCode: string;
+    serviceDate: string;
+    description: string;
+    note?: string | null;
+  },
+): Promise<{ id: string; receiptNo: string }> {
+  await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, {
+    branchCode: input.branchCode,
+  });
+
+  const parent = await payables.load(tx, input.payableId);
+
+  const allocated = await allocateDocumentNumber(
+    tx,
+    SEQUENCE_KEY,
+    { branchCode: input.branchCode, year: Number(input.serviceDate.slice(0, 4)) },
+    ctx.principal.userId,
+  );
+
+  const [created] = await tx
+    .insert(serviceReceipt)
+    .values({
+      receiptNo: allocated.documentNo,
+      purchaseOrderId: parent.purchaseOrderId ?? null,
+      payableId: parent.id,
+      departmentCode: input.departmentCode,
+      branchCode: input.branchCode,
+      serviceDate: input.serviceDate,
+      note: input.note ?? null,
+      createdBy: ctx.principal.userId,
+    })
+    .returning({ id: serviceReceipt.id });
+
+  await tx.insert(serviceReceiptLine).values({
+    serviceReceiptId: created!.id,
+    lineNo: 1,
+    purchaseOrderLineId: null,
+    description: input.description.trim(),
+    quantity: '1.000000',
+    uomCode: 'EA',
+  });
+
+  await payableEvents.record(tx, {
+    payableId: parent.id,
+    eventCode: 'SERVICE_RECEIPT_CREATED',
+    summary: `Confirmation ${allocated.documentNo} raised — ${input.description.trim()}`,
+    sourceType: 'service_receipt',
+    sourceId: created!.id,
+    sourceNo: allocated.documentNo,
+    actorUserId: ctx.principal.userId,
+  });
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'service_receipt.created',
+    objectType: PERMISSION_OBJECT,
+    objectId: created!.id,
+    branchCode: input.branchCode,
+    after: { receiptNo: allocated.documentNo, payableId: parent.id },
+    outcome: 'success',
+  });
+
+  return { id: created!.id, receiptNo: allocated.documentNo };
+}
+
 export async function submit(tx: Tx, ctx: ActorContext, id: string): Promise<void> {
   const { receipt } = await load(tx, id);
 
@@ -362,7 +442,7 @@ export async function approve(
   tx: Tx,
   ctx: ActorContext,
   id: string,
-): Promise<{ orderStatus: string }> {
+): Promise<{ orderStatus: string | null }> {
   const { receipt } = await load(tx, id);
 
   await authz.authorize(ctx.principal, 'approve', PERMISSION_OBJECT, {
@@ -384,7 +464,8 @@ export async function approve(
     throw new NotTheBenefitingDepartmentError(receipt.departmentCode, receipt.receiptNo);
   }
 
-  if (receipt.createdBy === ctx.principal.userId) {
+  // the super user approves alone, by direction 2026-10-03 — the company has one approver and a rule nobody can satisfy approves nothing.
+  if (receipt.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) {
     throw new ServiceReceiptStateError(
       receipt.receiptNo,
       receipt.status,
@@ -404,7 +485,23 @@ export async function approve(
     })
     .where(eq(serviceReceipt.id, id));
 
-  const orderStatus = await refreshOrderStatus(tx, receipt.purchaseOrderId);
+  const orderStatus = receipt.purchaseOrderId
+    ? await refreshOrderStatus(tx, receipt.purchaseOrderId)
+    : null;
+
+  // REQ-AP-001 §9.2 — the approval is the moment the payable is confirmed.
+  if (receipt.payableId) {
+    await payableEvents.record(tx, {
+      payableId: receipt.payableId,
+      eventCode: 'SERVICE_CONFIRMED',
+      summary: `Confirmed by ${receipt.departmentCode} — ${receipt.receiptNo}`,
+      sourceType: 'service_receipt',
+      sourceId: receipt.id,
+      sourceNo: receipt.receiptNo,
+      actorUserId: ctx.principal.userId,
+    });
+    await payables.recomputeStage(tx, receipt.payableId, ctx.principal.userId);
+  }
 
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
@@ -474,7 +571,22 @@ export async function reverse(
     })
     .where(eq(serviceReceipt.id, id));
 
-  const orderStatus = await refreshOrderStatus(tx, receipt.purchaseOrderId);
+  const orderStatus = receipt.purchaseOrderId
+    ? await refreshOrderStatus(tx, receipt.purchaseOrderId)
+    : null;
+
+  if (receipt.payableId) {
+    await payableEvents.record(tx, {
+      payableId: receipt.payableId,
+      eventCode: 'SERVICE_RECEIPT_REVERSED',
+      summary: `Confirmation ${receipt.receiptNo} reversed — ${reason.trim()}`,
+      sourceType: 'service_receipt',
+      sourceId: receipt.id,
+      sourceNo: receipt.receiptNo,
+      actorUserId: ctx.principal.userId,
+    });
+    await payables.recomputeStage(tx, receipt.payableId, ctx.principal.userId);
+  }
 
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
@@ -523,6 +635,8 @@ export async function refreshOrderStatus(tx: Tx, purchaseOrderId: string): Promi
       );
 
     for (const row of rows) {
+      // Lines of a payable-born confirmation reference no ordered line.
+      if (!row.lineId) continue;
       confirmed.set(row.lineId, (confirmed.get(row.lineId) ?? 0n) + parseQuantity(row.quantity));
     }
   }
@@ -614,4 +728,71 @@ export async function awaitingDepartment(tx: Tx, departmentCode: string) {
       ),
     )
     .orderBy(serviceReceipt.serviceDate);
+}
+
+/** §21.5 — the list: every confirmation, whichever department owns it. */
+export interface ServiceReceiptListRow {
+  readonly id: string;
+  readonly receiptNo: string;
+  readonly status: string;
+  readonly departmentCode: string;
+  readonly serviceDate: string;
+  readonly supplierName: string | null;
+  readonly orderNo: string | null;
+  readonly payableNo: string | null;
+  readonly description: string | null;
+}
+
+export interface ServiceReceiptListFilter extends RegisterPaging {
+  /** The inbox reads `submitted`; the full list reads every status. */
+  readonly status?: string | null;
+}
+
+/** HD15 — one page of fifty, newest first, with the true count. */
+export async function listForScreen(
+  tx: Tx,
+  filter: ServiceReceiptListFilter = {},
+): Promise<RegisterPage<ServiceReceiptListRow>> {
+  const where = whereOf([filter.status ? sql`r.status::text = ${filter.status}` : null]);
+  return registerPage({
+    paging: filter,
+    count: () => countOf(tx, sql`from service_receipt r ${where}`),
+    rows: async ({ limit, offset }) => {
+      const result = await tx.execute(sql`
+        select r.id,
+               r.receipt_no as "receiptNo",
+               r.status::text as status,
+               r.department_code as "departmentCode",
+               r.service_date::text as "serviceDate",
+               coalesce(bpo.legal_name, bpp.legal_name) as "supplierName",
+               o.order_no as "orderNo",
+               p.payable_no as "payableNo",
+               r.note as description
+          from service_receipt r
+          left join purchase_order o on o.id = r.purchase_order_id
+          left join business_partner bpo on bpo.id = o.supplier_id
+          left join payable p on p.id = r.payable_id
+          left join business_partner bpp on bpp.id = p.supplier_id
+         ${where}
+         order by r.created_at desc, r.id desc
+         limit ${limit} offset ${offset}`);
+      return result.rows as unknown as ServiceReceiptListRow[];
+    },
+  });
+}
+
+/** §21.3 — the payable page's Service lane: this payable's confirmations. */
+export async function listForPayable(tx: Tx, payableId: string) {
+  return tx
+    .select({
+      id: serviceReceipt.id,
+      receiptNo: serviceReceipt.receiptNo,
+      status: serviceReceipt.status,
+      serviceDate: serviceReceipt.serviceDate,
+      departmentCode: serviceReceipt.departmentCode,
+      note: serviceReceipt.note,
+    })
+    .from(serviceReceipt)
+    .where(eq(serviceReceipt.payableId, payableId))
+    .orderBy(asc(serviceReceipt.createdAt));
 }

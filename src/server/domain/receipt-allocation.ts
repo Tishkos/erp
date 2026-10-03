@@ -116,26 +116,65 @@ export function creditRoleFor(customerId: string | null | undefined):
   return customerId ? 'customer_receivable' : 'customer_clearing';
 }
 
+/** What the plan needs to know about an invoice. Both sides supply the same. */
+export interface AllocatableInvoice {
+  readonly id: string;
+  readonly dueDate: string;
+  /** The invoice's own date, which breaks a tie between two due on one day. */
+  readonly invoiceDate?: string | undefined;
+  /** Its number, which breaks the tie after that. Two never share one. */
+  readonly invoiceNo?: string | undefined;
+  readonly openIqd: bigint;
+}
+
+/**
+ * Oldest first, and the same order every time.
+ *
+ * Due date, then the invoice's own date, then its number. The first is the
+ * rule; the other two exist because two invoices raised on one day fall due on
+ * one day, and a plan that put a different one first depending on the order
+ * the database happened to return them is a plan nobody can check twice.
+ */
+export function oldestFirst(
+  invoices: readonly AllocatableInvoice[],
+): AllocatableInvoice[] {
+  const rank = (a: string | undefined, b: string | undefined) =>
+    a === b ? 0 : (a ?? '') < (b ?? '') ? -1 : 1;
+  return [...invoices]
+    .filter((invoice) => invoice.openIqd > 0n)
+    .sort(
+      (a, b) =>
+        rank(a.dueDate, b.dueDate) ||
+        rank(a.invoiceDate, b.invoiceDate) ||
+        rank(a.invoiceNo, b.invoiceNo),
+    );
+}
+
 /**
  * A plan for spreading one receipt across several invoices, oldest first.
  *
- * Offered rather than imposed: §16 supports many-to-one and one-to-many
- * matching, and a customer who says *"this pays March's invoice"* must be able
- * to say so. This is the default a clerk starts from, which is oldest-first
- * because that is what an ageing report is for.
+ * ── Why oldest first ──────────────────────────────────────────────────────
+ * It is what the money means. A customer with a 50,000 invoice from Monday and
+ * a 100,000 from Tuesday who pays 50,000 has paid Monday's; pay 100,000 and
+ * Monday is settled and Tuesday is half done. Applying it any other way leaves
+ * the oldest debt ageing on a report while a newer one is marked paid, and the
+ * ageing is then a description of the allocation rather than of the account.
+ *
+ * ── Why it is still a proposal ────────────────────────────────────────────
+ * §16 supports many-to-one and one-to-many matching, and a customer who says
+ * *"this pays March's invoice"* must be able to say so. So this is what the
+ * screen offers and what one button applies — not something the posting does
+ * behind the clerk's back, because an allocation cannot be taken back a row at
+ * a time.
  */
 export function proposeAllocation(
   receipt: ReceiptPosition,
-  invoices: readonly { readonly id: string; readonly dueDate: string; readonly openIqd: bigint }[],
+  invoices: readonly AllocatableInvoice[],
 ): { readonly arInvoiceId: string; readonly amountIqd: bigint }[] {
   let remaining = unapplied(receipt);
   const plan: { arInvoiceId: string; amountIqd: bigint }[] = [];
 
-  const oldestFirst = [...invoices]
-    .filter((invoice) => invoice.openIqd > 0n)
-    .sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0));
-
-  for (const invoice of oldestFirst) {
+  for (const invoice of oldestFirst(invoices)) {
     if (remaining <= 0n) break;
     const amount = invoice.openIqd < remaining ? invoice.openIqd : remaining;
     plan.push({ arInvoiceId: invoice.id, amountIqd: amount });

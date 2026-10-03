@@ -74,7 +74,7 @@ describe('normal balance by account type', () => {
 
 describe('the account code carries its own type', () => {
   it('maps each received group code to its type', () => {
-    // The five groups from phases/chartsofaccount.md.
+    // The five account groups in the imported extract.
     expect(accountTypeFromCode('A000001')).toBe('asset');
     expect(accountTypeFromCode('L000001')).toBe('liability');
     expect(accountTypeFromCode('E000001')).toBe('equity');

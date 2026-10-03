@@ -20,7 +20,6 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { MENU, allMenuItems } from '@domain/menu';
-import { ENTITY_COLUMNS, specFor } from '@/sample/specs';
 import {
   SCREENS,
   SCREEN_ARCHETYPES,
@@ -29,7 +28,6 @@ import {
   routeFor,
   screenCount,
   screenRoutes,
-  screensByPhase,
 } from '@domain/screens';
 
 const APP = join(process.cwd(), 'src', 'app');
@@ -81,9 +79,9 @@ describe('the screen catalogue covers the approved tree', () => {
   // Balance Sheet, Changes in Equity and Cash Flow Statement each on its own
   // screen (2026-08-31), which is grouping refined, not function added.
   //
-  // Plus two for Phase 2: Cash Accounts beside Bank Accounts, because the
+  // Plus two beside the accounting master data: Cash Accounts beside Bank Accounts, because the
   // questions each kind asks are different; and Payment Methods, which the
-  // phase requires and Appendix A did not list at all.
+  // books require and Appendix A did not list at all.
   //
   // Less five, by direction (2026-08-31): no screen appears under two
   // headings. Appendix A listed the partners under CRM *and* Master Data,
@@ -94,9 +92,19 @@ describe('the screen catalogue covers the approved tree', () => {
   // one of them is still reachable, once.
   // Plus one more, by direction (2026-09-03): the Statement Mapping, where
   // Finance defines the headers and lines of its own reports.
-  it('classifies all 221 items in the approved tree', () => {
-    expect(allMenuItems()).toHaveLength(221);
-    expect(Object.keys(SCREENS)).toHaveLength(221);
+  it('classifies all 242 items in the approved tree', () => {
+    // 221 from the approved tree, plus the Stock Ledger (2026-09-27), plus
+    // REQ-AP-001 §21.1: the Payables workbench, recurring contracts, payment
+    // applications, PDs, B/Ls, containers, loans and the module settings —
+    // eight new items — less the module-settings placeholder they replace;
+    // plus REQ-AP-001 Stage 8's Sheet Migration (§24.3); plus REQ-LEGACY-001's
+    // Legacy Books Import and REQ-HR-001's HR Settings (2026-10-02); plus
+    // REQ-FIX-001 FIX-1's Bank Deposits and the ASYCUDA list as its own item;
+    // plus FIX-5's HR menu in the sponsor's order — Dashboard, Departments,
+    // Positions, Recruitment, Performance, Employee Requests and Documents in,
+    // Organisation, Payslips, Expense Claims, Travel and Asset Assignment out.
+    expect(allMenuItems()).toHaveLength(242);
+    expect(Object.keys(SCREENS)).toHaveLength(242);
   });
 
   it('uses only declared archetypes', () => {
@@ -113,7 +121,9 @@ describe('the screen catalogue covers the approved tree', () => {
       (sum, item) => sum + screenCount(archetypeOf(item.key)!),
       0,
     );
-    expect(total).toBe(328);
+    // + Bank Deposits (a document, two) + the ASYCUDA list (a workspace, one);
+    // FIX-5: + 1 + 2 + 2 + 2 + 2 + 2 + 1 in, − 1 − 1 − 2 − 2 − 2 out.
+    expect(total).toBe(357);
   });
 });
 
@@ -166,7 +176,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(221);
+    expect(screenRoutes().size).toBe(242);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -174,15 +184,26 @@ describe('every screen has one address', () => {
     expect(wired.map((screen) => screen.route).sort()).toEqual([
       '/',
       '/administration/audit',
+      '/administration/backup-health',
       '/administration/company',
+      '/administration/hr-settings',
+      '/administration/jobs',
+      '/administration/legacy-import',
       '/administration/managers',
       '/administration/numbering',
+      // REQ-AP-001 Stage 8 — the sheet import.
+      '/administration/payables-migration',
+      '/administration/payables-settings',
       '/administration/permissions',
+      // REQ-PM-001 — project types, tolerance profiles, cost codes.
+      '/administration/project-settings',
       '/administration/roles',
       '/administration/users',
+      // REQ-WA-001 — the WhatsApp bridge.
+      '/administration/whatsapp',
       '/approvals',
       '/documents',
-      // Phase 1 — the accounting core.
+      // The accounting core.
       '/finance/balance-sheet',
       '/finance/cash-flow',
       '/finance/changes-in-equity',
@@ -195,42 +216,116 @@ describe('every screen has one address', () => {
       '/finance/posting-mappings',
       '/finance/reversals',
       '/finance/trial-balance',
+      '/hr/advances',
+      '/hr/attendance',
+      '/hr/dashboard',
+      '/hr/departments',
+      '/hr/documents',
+      '/hr/employees',
+      '/hr/leave',
+      '/hr/payroll',
+      '/hr/performance',
+      '/hr/positions',
+      '/hr/recruitment',
+      '/hr/reports',
+      '/hr/requests',
       '/inventory/availability',
       // Operations build — block 7's Warehouses Report.
       '/inventory/fifo-valuation',
       // Block 8 — Invoice Status Tracking.
       '/inventory/in-transit',
+      '/inventory/items',
+      // Block 7 — Opening Stock, Item Reconciliation, Stock Movement, Transfer.
+      '/inventory/opening-stock',
+      // The Stock Ledger (2026-09-27).
+      '/inventory/stock-ledger',
+      '/inventory/stock-movements',
+      '/inventory/stock-reconciliation',
+      '/inventory/transfers',
+      '/inventory/uom',
       '/master-data/bank-accounts',
+      // REQ-AP-001 Stage 3 — the bank master.
+      '/master-data/banks',
       '/master-data/branches',
       '/master-data/cash-accounts',
       '/master-data/chart-of-accounts',
-      // Phase 2 — the accounting master data.
+      // The accounting master data.
       '/master-data/cost-centres',
-      '/master-data/customers',
       '/master-data/departments',
       '/master-data/exchange-rates',
-      '/master-data/items',
       '/master-data/payment-methods',
       '/master-data/payment-terms',
       '/master-data/statement-mapping',
-      '/master-data/suppliers',
-      '/master-data/uom',
       '/master-data/warehouses',
+      /*
+       * Monitoring — by direction, 2026-10-03.
+       *
+       * Reachable and deliberately empty: each says "coming soon" and reads
+       * nothing. They are in this list because `wired` is what `visibleRoute`
+       * answers on, and a route that is not here is refused on the URL — so
+       * leaving them out would mean three tabs that 404, which is the opposite
+       * of what was asked. The badge overstates them until they have figures.
+       */
+      '/monitoring/customer-list',
+      '/monitoring/history',
+      '/monitoring/reports',
+      // REQ-AP-001 Stage 1 — the Payables workbench.
+      '/payables',
+      // REQ-AP-001 Stage 3 — the advances' register.
+      '/payables/advances',
+      '/payables/containers',
+      '/payables/contracts',
+      '/payables/goods-receipts',
       // Operations build — block 4's Purchase Invoice.
-      '/purchasing/ap-invoices',
+      '/payables/goods-returns',
       // Block 10 — Purchase Returns.
-      '/purchasing/goods-returns',
+      '/payables/invoices',
+      // REQ-AP-001 Stage 6 — bank loans.
+      // §15 — what we owe, invoice by invoice.
+      '/payables/open-items',
+      // REQ-AP-001 Stage 3 — payment applications (§21.7).
+      '/payables/payment-applications',
+      // REQ-AP-001 Stage 4 — PD / ASYCUDA.
+      '/payables/pd',
+      '/payables/pd/asycuda',
+      '/payables/purchase-orders',
+      '/payables/service-receipts',
+      // REQ-AP-001 Stage 5 — B/Ls.
+      '/payables/shipments',
       // Block 6 — Payments and Receipts.
-      '/purchasing/supplier-payments',
+      '/payables/supplier-payments',
       // Blocks 2 and 3 — the Account Statement, one screen on each side.
-      '/purchasing/supplier-statements',
+      '/payables/supplier-statements',
+      '/payables/suppliers',
+      // REQ-PM-001 PM-1 — the Project System's structure.
+      '/projects',
+      '/projects/billing',
+      '/projects/budgets',
+      '/projects/change-orders',
+      '/projects/close',
+      '/projects/contracts',
+      '/projects/costs',
+      '/projects/forecast',
+      '/projects/material-issues',
+      '/projects/plan',
+      '/projects/procurement',
+      '/projects/progress',
+      '/projects/reports',
+      '/projects/wbs',
       // Block 5 — the Sales Invoice.
       '/sales/ar-invoices',
       // Block 6 — Receipts.
       '/sales/customer-receipts',
       '/sales/customer-statements',
+      '/sales/customers',
+      // §16 — what is owed to us, invoice by invoice.
+      '/sales/receivables',
       // Block 9 — Sales Returns.
       '/sales/sales-returns',
+      // §17 — Bank and Cash Reporting, beside the accounts it reports on.
+      '/treasury/deposits',
+      '/treasury/loans',
+      '/treasury/reporting',
     ]);
   });
 });
@@ -256,15 +351,6 @@ describe('the navigation offers no page that does not exist', () => {
   });
 });
 
-describe('the build tracker reports what each phase owes the frontend', () => {
-  it('attributes every screen to the phase that delivers it', () => {
-    const byPhase = screensByPhase();
-    const counted = [...byPhase.values()].reduce((sum, screens) => sum + screens.length, 0);
-    expect(counted).toBe(221);
-    for (const phase of byPhase.keys()) expect(phase).toMatch(/^\d\d$/);
-  });
-});
-
 /**
  * The keys the catalogue test cannot see.
  *
@@ -285,20 +371,9 @@ describe('§25 · the keys built at render time all resolve', () => {
     readFileSync(join(process.cwd(), 'messages', 'ar.json'), 'utf8'),
   ) as Record<string, Record<string, Record<string, unknown>>>;
 
-  const METRIC_KEYS = [
-    ...new Set(
-      MENU.flatMap((section) =>
-        section.items.flatMap((item) => specFor(item.key, section.key).metrics),
-      ),
-    ),
-  ];
-
   const cases: readonly (readonly [string, readonly string[]])[] = [
-    ['screen.purpose', MENU.map((section) => section.key)],
     ['screen.about', [...SCREEN_ARCHETYPES]],
     ['screen.archetype', [...SCREEN_ARCHETYPES]],
-    ['screen.metric', METRIC_KEYS],
-    ['column', [...new Set(Object.values(ENTITY_COLUMNS).flatMap((set) => set.map((c) => c.key)))]],
   ];
 
   for (const [namespace, keys] of cases) {

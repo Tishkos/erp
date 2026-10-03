@@ -62,8 +62,12 @@ export interface AccountBalance {
  * a payment approved this morning and executed tomorrow is money the company has
  * promised and not yet moved. §17 calls the pair *"cleared and book balances"*.
  *
- * Two things commit money — an approved transfer out, and an approved payment
- * batch's unsent lines. Both have to count, and the second is why: without it,
+ * Branch filters scope journal and document activity. Bank/cash accounts are
+ * company-wide masters.
+ *
+ * Three things commit money — an approved transfer out, an approved payment
+ * batch's unsent lines, and (REQ-AP-001 §15.1) a payment application approved
+ * or sent to the bank and not yet confirmed. Both have to count, and the second is why: without it,
  * two payment runs approved on the same morning would each see the whole balance
  * and between them promise it twice (§15, *"available cash"*).
  */
@@ -76,7 +80,41 @@ export async function balances(
   await authz.authorize(ctx.principal, 'view', PERMISSION_OBJECT, {
     branchCode: ctx.branchCode,
   });
+  return balancesQuery(tx, asOf, filter);
+}
 
+/**
+ * REQ-AP-001 §15.1 — one account's Booked / Reserved / Available, for a
+ * document that has already authorised its own action (the payment
+ * application's funds check). The figures are the same query as `balances`.
+ */
+export async function accountPosition(
+  tx: Tx,
+  bankCashAccountId: string,
+): Promise<{ accountCode: string; currency: string; balanceIqd: bigint; committedIqd: bigint; availableIqd: bigint }> {
+  const [account] = await tx
+    .select({ code: bankCashAccount.code })
+    .from(bankCashAccount)
+    .where(eq(bankCashAccount.id, bankCashAccountId))
+    .limit(1);
+  if (!account) throw new Error(`No bank or cash account with id '${bankCashAccountId}'.`);
+  const [row] = await balancesQuery(tx, '9999-12-31', { accountCode: account.code });
+  const balanceIqd = parseDecimal(row?.balanceIqd ?? '0', 4n);
+  const committedIqd = parseDecimal(row?.committedIqd ?? '0', 4n);
+  return {
+    accountCode: account.code,
+    currency: row?.currency ?? 'IQD',
+    balanceIqd,
+    committedIqd,
+    availableIqd: balanceIqd - committedIqd,
+  };
+}
+
+async function balancesQuery(
+  tx: Tx,
+  asOf: string,
+  filter: { branchCode?: string | null; accountCode?: string | null },
+): Promise<AccountBalance[]> {
   const result = await tx.execute(sql`
     select b.code                                  as "accountCode",
            b.name                                  as "accountName",
@@ -89,12 +127,14 @@ export async function balances(
               where l.account_id = b.gl_account_id
                 and e.posting_date <= ${asOf}::date
                 and e.status in ('posted', 'reversed')
+                and (${filter.branchCode ?? null}::text is null or e.branch_code = ${filter.branchCode ?? null})
            ), 0::numeric(19,4))::text              as "balanceIqd",
            (coalesce((
              select sum(t.amount)
                from bank_transfer t
               where t.from_account_id = b.id
                 and t.status = 'approved'
+                and (${filter.branchCode ?? null}::text is null or t.branch_code = ${filter.branchCode ?? null})
            ), 0::numeric(19,4))
             + coalesce((
              select sum(l.amount_iqd)
@@ -103,11 +143,15 @@ export async function balances(
               where p.bank_cash_account_id = b.id
                 and p.status = 'approved'
                 and l.status = 'pending'
-           ), 0::numeric(19,4)))::text             as "committedIqd"
+                and (${filter.branchCode ?? null}::text is null or p.branch_code = ${filter.branchCode ?? null})
+           ), 0::numeric(19,4))
+            -- REQ-AP-001 §15.1 — money held for payment applications approved
+            -- or sent to the bank and not yet confirmed.
+            -- (company-wide, like the account: see migration 0232).
+            + payment_application_reserved_iqd(b.id))::text as "committedIqd"
       from bank_cash_account b
       join chart_of_account a on a.id = b.gl_account_id
      where b.active
-       and (${filter.branchCode ?? null}::text is null or b.branch_code = ${filter.branchCode ?? null})
        and (${filter.accountCode ?? null}::text is null or b.code = ${filter.accountCode ?? null})
      order by b.code
   `);
@@ -234,13 +278,16 @@ export async function countCash(
   if (!account) throw new Error(`No bank or cash account with id '${input.bankCashAccountId}'.`);
 
   await authz.authorize(ctx.principal, 'execute', PERMISSION_OBJECT, {
-    branchCode: account.branchCode,
+    branchCode: ctx.branchCode,
   });
 
   // The book figure is read at the moment of the count and stored with it. Read
   // again later it would have moved, and the count would be comparing a drawer
   // on Tuesday with a ledger on Friday.
-  const [position] = await balances(tx, ctx, input.countDate, { accountCode: account.code });
+  const [position] = await balances(tx, ctx, input.countDate, {
+    accountCode: account.code,
+    branchCode: ctx.branchCode,
+  });
   const bookIqd = parseDecimal(position?.balanceIqd ?? '0', 4n);
 
   const variance = cashCountVariance({ countedIqd: input.countedIqd, bookIqd });
@@ -248,7 +295,7 @@ export async function countCash(
   const allocated = await allocateDocumentNumber(
     tx,
     'CASH_COUNT',
-    { branchCode: account.branchCode, year: Number(input.countDate.slice(0, 4)) },
+    { branchCode: ctx.branchCode, year: Number(input.countDate.slice(0, 4)) },
     ctx.principal.userId,
   );
 
@@ -257,7 +304,7 @@ export async function countCash(
     .values({
       countNo: allocated.documentNo,
       bankCashAccountId: input.bankCashAccountId,
-      branchCode: account.branchCode,
+      branchCode: ctx.branchCode,
       countDate: input.countDate,
       countedIqd: toDecimalString(input.countedIqd, 4n),
       bookIqd: toDecimalString(bookIqd, 4n),
@@ -274,7 +321,7 @@ export async function countCash(
     action: 'cash_count.counted',
     objectType: CASH_COUNT_TYPE,
     objectId: created!.id,
-    branchCode: account.branchCode,
+    branchCode: ctx.branchCode,
     outcome: 'success',
     after: {
       countNo: allocated.documentNo,
@@ -476,7 +523,7 @@ export async function createTransfer(
   if (!from || !to) throw new Error('Both accounts must exist to transfer between them.');
 
   await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, {
-    branchCode: from.branchCode,
+    branchCode: ctx.branchCode,
   });
 
   const crossCurrency = from.currency !== to.currency;
@@ -521,7 +568,7 @@ export async function createTransfer(
   const allocated = await allocateDocumentNumber(
     tx,
     'BANK_TRANSFER',
-    { branchCode: from.branchCode, year: Number(input.transferDate.slice(0, 4)) },
+    { branchCode: ctx.branchCode, year: Number(input.transferDate.slice(0, 4)) },
     ctx.principal.userId,
   );
 
@@ -531,7 +578,7 @@ export async function createTransfer(
       transferNo: allocated.documentNo,
       fromAccountId: input.fromAccountId,
       toAccountId: input.toAccountId,
-      branchCode: from.branchCode,
+      branchCode: ctx.branchCode,
       transferDate: input.transferDate,
       amount: toDecimalString(input.amountIqd, 4n),
       fromCurrency: from.currency,
@@ -549,7 +596,7 @@ export async function createTransfer(
     action: 'bank_transfer.created',
     objectType: TRANSFER_TYPE,
     objectId: created!.id,
-    branchCode: from.branchCode,
+    branchCode: ctx.branchCode,
     outcome: 'success',
     after: {
       transferNo: allocated.documentNo,
@@ -643,6 +690,7 @@ export async function postTransfer(
       debit: transfer.receivedAmount,
       criteria,
       dimensions,
+      bankAccountCode: to!.code,
       description: `Into ${to!.code}`,
     },
     {
@@ -651,6 +699,7 @@ export async function postTransfer(
       credit: transfer.amount,
       criteria,
       dimensions,
+      bankAccountCode: from!.code,
       description: `Out of ${from!.code}`,
     },
   ];
