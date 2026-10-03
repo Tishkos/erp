@@ -24,11 +24,12 @@ import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
-import { MONEY_SCALE, toDecimalString } from '@domain/money';
+import { divideHalfUp, MONEY_SCALE, parseDecimal, toDecimalString } from '@domain/money';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as loans from '@/server/services/loans';
+import * as rates from '@/server/services/exchange-rates';
 import {
   approveLoan,
   attachToLoan,
@@ -36,6 +37,8 @@ import {
   disburseLoan,
   payCommissionAction,
   payInstalmentAction,
+  returnLoanToDraft,
+  submitLoan,
   settleLoanEarly,
   setScheduleAction,
   setSharesAction,
@@ -109,9 +112,35 @@ export default async function LoanPage({
   const today = businessToday();
   const hidden = { loan_no: loan.loanNo };
 
+  /*
+   * A figure at the number of places its own money has (2026-10-03). A dinar
+   * has none and a dollar has two, and Finance says which on Currencies &
+   * Rates. Rounded on the stored bigint and written from it — these boxes go
+   * back to a service that holds the typed schedule to repaying the principal
+   * exactly, and a figure that went through a double might not.
+   */
+  const places = BigInt(
+    (await withCurrentUser((tx) => rates.currencies(tx))).find((row) => row.code === loan.currency)?.decimals ?? 2,
+  );
+  const atPlaces = (value: string): string => {
+    const scaled = parseDecimal(value, MONEY_SCALE);
+    if (places >= MONEY_SCALE) return toDecimalString(scaled, MONEY_SCALE);
+    return toDecimalString(divideHalfUp(scaled, 10n ** (MONEY_SCALE - places)), places);
+  };
+
   const mine = loan.createdBy === principal.userId;
   const mayEdit = loan.status === 'draft' && can(principal, 'edit_draft', loans.PERMISSION_OBJECT);
-  const mayApprove = loan.status === 'draft' && !mine && can(principal, 'approve', loans.PERMISSION_OBJECT);
+  /*
+   * Sent for approval by whoever may enter a loan — including the person who
+   * entered it, since sending is not agreeing. Approval is a different grant
+   * and still refuses them (0273).
+   */
+  const maySubmit = loan.status === 'draft' && can(principal, 'create', loans.PERMISSION_OBJECT);
+  const mayApprove =
+    (loan.status === 'draft' || loan.status === 'submitted') &&
+    !mine &&
+    can(principal, 'approve', loans.PERMISSION_OBJECT);
+  const mayReturn = loan.status === 'submitted' && can(principal, 'approve', loans.PERMISSION_OBJECT);
   const mayPost = can(principal, 'post', loans.PERMISSION_OBJECT);
   const mayDisburse = loan.status === 'approved' && mayPost;
   const unpaid = schedule.filter((row) => row.status !== 'paid');
@@ -196,7 +225,13 @@ export default async function LoanPage({
       : []),
   ];
 
-  const scheduleRows = [...schedule.map((row) => row), ...Array.from({ length: Math.max(0, 8 - schedule.length) }, () => null)];
+  /*
+   * The instalments there are, and no blank rows after them (2026-10-03). It
+   * used to pad to eight, so a loan of four showed four empty dates nobody had
+   * asked for — and the padding was the only way to lengthen a schedule, which
+   * is a regeneration rather than four empty boxes.
+   */
+  const scheduleRows = schedule;
 
   // What the paperclip says it holds.
   const attachedCount = await withCurrentUser((tx) =>
@@ -216,6 +251,22 @@ export default async function LoanPage({
       <DocumentWindow
         actions={
           <>
+            {maySubmit ? (
+              <form action={submitLoan}>
+                <Hidden name="loan_no" value={loan.loanNo} />
+                {/* The accent button: sending a loan for approval is what the
+                    draft is for, and the company chose gold for the action a
+                    screen exists to take (2026-10-03). */}
+                <Submit label={t('submit')} variant="document" />
+              </form>
+            ) : null}
+            {mayReturn ? (
+              <form action={returnLoanToDraft} title={t('return_hint')}>
+                <Hidden name="loan_no" value={loan.loanNo} />
+                <input aria-label={t('return_reason')} name="reason" placeholder={t('return_reason')} required type="text" />
+                <Submit label={t('return_to_draft')} tone="secondary" variant="document" />
+              </form>
+            ) : null}
             {mayApprove ? (
               <form action={approveLoan}>
                 <Hidden name="loan_no" value={loan.loanNo} />
@@ -297,9 +348,15 @@ export default async function LoanPage({
                         <tr>
                           <th scope="col">#</th>
                           <th scope="col">{t('due_date')}</th>
-                          <th scope="col">{t('principal_part')}</th>
-                          <th scope="col">{t('interest_part')}</th>
-                          <th scope="col">{t('commission_part')}</th>
+                          <th className={s.sapNum} scope="col">
+                            {`${t('principal_part')} (${loan.currency})`}
+                          </th>
+                          <th className={s.sapNum} scope="col">
+                            {`${t('interest_part')} (${loan.currency})`}
+                          </th>
+                          <th className={s.sapNum} scope="col">
+                            {`${t('commission_part')} (${loan.currency})`}
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -319,7 +376,7 @@ export default async function LoanPage({
                               <input
                                 aria-label={`${t('principal_part')} ${index + 1}`}
                                 className={s.input}
-                                defaultValue={row ? Number(row.principalTxn).toFixed(2) : ''}
+                                defaultValue={row ? atPlaces(row.principalTxn) : ''}
                                 inputMode="decimal"
                                 name={`principal_${index}`}
                               />
@@ -328,7 +385,7 @@ export default async function LoanPage({
                               <input
                                 aria-label={`${t('interest_part')} ${index + 1}`}
                                 className={s.input}
-                                defaultValue={row ? Number(row.interestTxn).toFixed(2) : ''}
+                                defaultValue={row ? atPlaces(row.interestTxn) : ''}
                                 inputMode="decimal"
                                 name={`interest_${index}`}
                               />
@@ -337,7 +394,7 @@ export default async function LoanPage({
                               <input
                                 aria-label={`${t('commission_part')} ${index + 1}`}
                                 className={s.input}
-                                defaultValue={row ? Number(row.commissionTxn).toFixed(2) : ''}
+                                defaultValue={row ? atPlaces(row.commissionTxn) : ''}
                                 inputMode="decimal"
                                 name={`commission_${index}`}
                               />
@@ -345,6 +402,19 @@ export default async function LoanPage({
                           </tr>
                         ))}
                       </tbody>
+                      {/* What the rows come to, against what the loan is.
+                          `setSchedule` refuses a schedule that does not repay
+                          the principal exactly; this says so before it is
+                          pressed (2026-10-03). */}
+                      <tfoot>
+                        <tr className={s.sapTotalRow}>
+                          <td colSpan={2}>{t('principal_total')}</td>
+                          <td className={s.sapNum}>
+                            <bdi dir="ltr">{money(loan.principalTxn)}</bdi>
+                          </td>
+                          <td colSpan={2} />
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                   <SubmitRow>
@@ -570,7 +640,7 @@ export default async function LoanPage({
                               <input
                                 aria-label={`${t('col_share')} ${row.applicationNo}`}
                                 className={s.input}
-                                defaultValue={Number(row.commissionShareTxn).toFixed(2)}
+                                defaultValue={atPlaces(row.commissionShareTxn)}
                                 inputMode="decimal"
                                 name={`share_${index}`}
                               />

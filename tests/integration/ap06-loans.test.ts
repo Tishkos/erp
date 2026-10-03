@@ -891,3 +891,71 @@ describe('§15.7 · a loan in one currency, an account in another', () => {
     expect(amountOf(outflow!.outflowIqd)).toBe(iqd('75000000'));
   });
 });
+
+/**
+ * Nothing is sent for approval that an approver could not act on —
+ * by direction, 2026-10-03.
+ */
+describe('§15.7 · send for approval', () => {
+  const submit = (id: string, by = world.clerk) =>
+    withScope(scope(by), (tx) => loans.submit(tx, by, id));
+
+  it('sends a sound draft on, and leaves it where an approver can act', async () => {
+    const loan = await createLoan();
+    await submit(loan.id);
+    const row = await loanRow(loan.id);
+    expect(row.status).toBe('submitted');
+    expect(row.submitted_by).toBeTruthy();
+
+    // The approver may now agree to it — and is still not its author.
+    await approveLoan(loan.id);
+    expect((await loanRow(loan.id)).status).toBe('approved');
+  });
+
+  it('refuses a schedule that does not repay the principal, and says so', async () => {
+    const loan = await createLoan();
+    const rows = await scheduleOf(loan.id);
+    // A thousand short: the schedule no longer adds up to the loan.
+    await ownerPool.query(
+      `update bank_loan_instalment
+          set principal_txn = principal_txn - 1000,
+              total_txn = total_txn - 1000
+        where id = $1`,
+      [rows[0].id],
+    );
+    expect(await rejection(submit(loan.id))).toMatch(/repay|principal/i);
+    // And the status did not move.
+    expect((await loanRow(loan.id)).status).toBe('draft');
+  });
+
+  it('refuses dates that run backwards, and a count that disagrees with the schedule', async () => {
+    const loan = await createLoan();
+    const rows = await scheduleOf(loan.id);
+    await ownerPool.query(`update bank_loan_instalment set due_date = $2 where id = $1`, [
+      rows[1].id,
+      '2026-01-01',
+    ]);
+    expect(await rejection(submit(loan.id))).toMatch(/run forward|not after/i);
+    expect((await loanRow(loan.id)).status).toBe('draft');
+
+    await ownerPool.query(`update bank_loan set instalment_count = 9 where id = $1`, [loan.id]);
+    expect(await rejection(submit(loan.id))).toMatch(/instalments and its schedule has/);
+  });
+
+  it('a submitted loan goes back to the accountant with a reason, and no reason is refused', async () => {
+    const loan = await createLoan();
+    await submit(loan.id);
+    expect(
+      await rejection(
+        withScope(scope(world.manager), (tx) => loans.returnToDraft(tx, world.manager, loan.id, '  ')),
+      ),
+    ).toMatch(/Say what should be changed/);
+
+    await withScope(scope(world.manager), (tx) =>
+      loans.returnToDraft(tx, world.manager, loan.id, 'The bank quoted 2.5%, not 2%.'),
+    );
+    const row = await loanRow(loan.id);
+    expect(row.status).toBe('draft');
+    expect(row.submitted_by).toBeNull();
+  });
+});

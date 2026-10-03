@@ -3584,7 +3584,13 @@
       "settle_date": "Paid on",
       "settle_reference": "Bank reference",
       "loan_currency": "Loan currency",
-      "expected_proceeds": "Expected proceeds"
+      "expected_proceeds": "Expected proceeds",
+      "submit": "Send for approval",
+      "return_to_draft": "Return to draft",
+      "return_reason": "What should be changed",
+      "return_hint": "Sends the offer back to be retyped. Nothing has been posted.",
+      "status_submitted": "Pending approval",
+      "principal_total": "Principal total"
     },
     "landed_cost": {
       "section_title": "Landed cost",

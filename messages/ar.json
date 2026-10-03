@@ -3584,7 +3584,13 @@
       "settle_date": "تاريخ الدفع",
       "settle_reference": "مرجع المصرف",
       "loan_currency": "عملة القرض",
-      "expected_proceeds": "المبلغ المتوقع"
+      "expected_proceeds": "المبلغ المتوقع",
+      "submit": "إرسال للموافقة",
+      "return_to_draft": "إعادة إلى المسودة",
+      "return_reason": "ما الذي يجب تعديله",
+      "return_hint": "يعيد العرض لإعادة إدخاله. لم يُرحّل شيء.",
+      "status_submitted": "بانتظار الموافقة",
+      "principal_total": "إجمالي الأصل"
     },
     "landed_cost": {
       "section_title": "الكلفة الواصلة",

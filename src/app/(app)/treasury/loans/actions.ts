@@ -133,6 +133,25 @@ export async function setScheduleAction(formData: FormData): Promise<void> {
   }, record(loanNo));
 }
 
+/** Sent for approval: the offer as the bank wrote it, put in front of somebody else. */
+export async function submitLoan(formData: FormData): Promise<void> {
+  const loanNo = text(formData, 'loan_no');
+  await runAdminAndReturn(
+    async (tx, ctx) => loans.submit(tx, ctx, (await loans.loadByNo(tx, loanNo)).id),
+    record(loanNo),
+  );
+}
+
+/** Back to the accountant, with what should be changed. */
+export async function returnLoanToDraft(formData: FormData): Promise<void> {
+  const loanNo = text(formData, 'loan_no');
+  await runAdminAndReturn(
+    async (tx, ctx) =>
+      loans.returnToDraft(tx, ctx, (await loans.loadByNo(tx, loanNo)).id, text(formData, 'reason')),
+    record(loanNo),
+  );
+}
+
 export async function approveLoan(formData: FormData): Promise<void> {
   const loanNo = text(formData, 'loan_no');
   await runAdminAndReturn(

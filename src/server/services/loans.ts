@@ -814,9 +814,7 @@ export async function submit(tx: Tx, ctx: ActorContext, loanId: string) {
   assertMove(loan.loanNo, loan.status, 'submitted');
 
   const schedule = await scheduleOf(tx, loan.id);
-  if (schedule.length === 0) {
-    throw new LoanError(`${loan.loanNo} has no schedule to approve. Lay the instalments out first.`);
-  }
+  await assertReadyToApprove(tx, loan, schedule);
 
   await tx
     .update(bankLoan)
@@ -839,6 +837,92 @@ export async function submit(tx: Tx, ctx: ActorContext, loanId: string) {
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });
+}
+
+/**
+ * What an approver must be able to rely on — by direction, 2026-10-03.
+ *
+ * Each of these is a thing somebody would otherwise discover after agreeing to
+ * it: a schedule that does not add up to the loan, a date missing from the
+ * middle of it, an instalment running backwards, a principal of nothing, an
+ * account that was closed since the offer was entered. The first one that fails
+ * stops the submission and says what it is; the status does not move.
+ *
+ * `assertScheduleRepays` is the rule `setSchedule` already holds a typed
+ * schedule to — the same one, read here before anybody is asked to agree.
+ */
+async function assertReadyToApprove(
+  tx: Tx,
+  loan: { readonly id: string; readonly loanNo: string; readonly currency: string; readonly bankCashAccountId: string;
+          readonly principalTxn: string; readonly commissionTxn: string; readonly instalmentCount: number;
+          readonly commissionTreatmentCode: string },
+  schedule: readonly { readonly dueDate: string; readonly principalTxn: string; readonly interestTxn: string;
+                       readonly commissionTxn: string }[],
+): Promise<void> {
+  const principal = amountOf(loan.principalTxn);
+  if (principal <= 0n) {
+    throw new LoanError(`${loan.loanNo} has no principal. State what the bank lends before sending it on.`);
+  }
+
+  if (schedule.length === 0) {
+    throw new LoanError(`${loan.loanNo} has no schedule to approve. Lay the instalments out first.`);
+  }
+  if (schedule.length !== loan.instalmentCount) {
+    throw new LoanError(
+      `${loan.loanNo} says ${loan.instalmentCount} instalments and its schedule has ${schedule.length}. ` +
+        'Lay the schedule out again, or change the count.',
+    );
+  }
+
+  for (const [index, row] of schedule.entries()) {
+    const at = index + 1;
+    if (!row.dueDate) throw new LoanError(`Instalment ${at} of ${loan.loanNo} has no due date.`);
+    if (index > 0 && row.dueDate <= schedule[index - 1]!.dueDate) {
+      throw new LoanError(
+        `Instalment ${at} of ${loan.loanNo} falls due on ${row.dueDate}, which is not after instalment ${index}. ` +
+          'Due dates run forward.',
+      );
+    }
+    for (const [what, value] of [
+      ['principal', row.principalTxn],
+      ['interest', row.interestTxn],
+      ['commission', row.commissionTxn],
+    ] as const) {
+      if (amountOf(value) < 0n) {
+        throw new LoanError(`Instalment ${at} of ${loan.loanNo} has a negative ${what}.`);
+      }
+    }
+  }
+
+  // The schedule repays the principal exactly, and carries the commission the
+  // treatment spreads — the rule a typed schedule is already held to.
+  const treatment = await treatmentOf(tx, loan.commissionTreatmentCode);
+  assertScheduleRepays(
+    loan.loanNo,
+    schedule.map((row) => ({
+      dueDate: row.dueDate,
+      principal: amountOf(row.principalTxn),
+      commission: amountOf(row.commissionTxn),
+      interest: amountOf(row.interestTxn),
+    })),
+    principal,
+    treatment.spread ? amountOf(loan.commissionTxn) : 0n,
+  );
+
+  // The currency is one Finance still has, and the money still has somewhere
+  // to land: either may have been closed since the offer was entered.
+  const defined = await rateService.currencies(tx);
+  const money_ = defined.find((row) => row.code === loan.currency);
+  if (!money_ || !money_.isActive) {
+    throw new LoanError(
+      `${loan.loanNo} is in ${loan.currency}, which Finance no longer offers. Choose a currency on Currencies & Rates.`,
+    );
+  }
+
+  const account = await accountOf(tx, loan.bankCashAccountId);
+  if (!account.active) {
+    throw new LoanError(`${account.code} is closed; name an open account for the proceeds before sending this on.`);
+  }
 }
 
 /** Back to draft, to be retyped — a submitted loan nobody has approved yet. */
