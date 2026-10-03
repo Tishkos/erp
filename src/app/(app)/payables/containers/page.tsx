@@ -29,7 +29,8 @@ import { containerChip } from './status';
  */
 export const dynamic = 'force-dynamic';
 
-const VIEWS = ['in_transit', 'late', 'received', 'all'] as const;
+// IM2 — `exceptions`: what arrived short or damaged, to follow up and claim.
+const VIEWS = ['in_transit', 'late', 'received', 'exceptions', 'cancelled', 'all'] as const;
 
 export default async function ContainersPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/payables/containers')) notFound();
@@ -111,12 +112,15 @@ export default async function ContainersPage({ searchParams }: { searchParams: S
                   <th className={s.sapNum} scope="col">
                     {t('planned_received')}
                   </th>
+                  <th className={s.sapNum} scope="col">
+                    {t('damaged_short')}
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {shown.length === 0 ? (
                   <tr>
-                    <td className={s.sapEmptyRow} colSpan={10}>
+                    <td className={s.sapEmptyRow} colSpan={11}>
                       {t('no_containers')}
                     </td>
                   </tr>
@@ -126,7 +130,7 @@ export default async function ContainersPage({ searchParams }: { searchParams: S
                     <td>
                       <Link
                         className={s.sapLink}
-                        href={`/payables/containers/${encodeURIComponent(row.containerNo)}${row.receivedOn ? `?id=${row.id}` : ''}`}
+                        href={`/payables/containers/${encodeURIComponent(row.containerNo)}${row.receivedOn || row.cancelledAt ? `?id=${row.id}` : ''}`}
                       >
                         <bdi dir="ltr">{row.containerNo}</bdi>
                       </Link>
@@ -165,12 +169,18 @@ export default async function ContainersPage({ searchParams }: { searchParams: S
                       )}
                     </td>
                     <td>
-                      <span
-                        className={`status status--${containerChip(row)} ${s.sapRegisterStatus}`}
-                        data-status={containerChip(row)}
-                      >
-                        {cs(row.statusCode, row.statusName)}
-                      </span>
+                      {row.cancelledAt ? (
+                        <span className={`status status--cancelled ${s.sapRegisterStatus}`} data-status="cancelled" title={row.cancelReason ?? undefined}>
+                          {t('cancelled')}
+                        </span>
+                      ) : (
+                        <span
+                          className={`status status--${containerChip(row)} ${s.sapRegisterStatus}`}
+                          data-status={containerChip(row)}
+                        >
+                          {cs(row.statusCode, row.statusName)}
+                        </span>
+                      )}
                     </td>
                     <td>
                       <bdi dir="ltr">{row.warehouseCode ?? '—'}</bdi>
@@ -179,6 +189,11 @@ export default async function ContainersPage({ searchParams }: { searchParams: S
                       <bdi dir="ltr">
                         {formatQuantity(row.planned, locale as Locale)} /{' '}
                         {row.receivedOn ? formatQuantity(row.received, locale as Locale) : '—'}
+                      </bdi>
+                    </td>
+                    <td className={s.sapNum}>
+                      <bdi dir="ltr">
+                        {row.receivedOn ? `${formatQuantity(row.damaged, locale as Locale)} / ${formatQuantity(row.short, locale as Locale)}` : '—'}
                       </bdi>
                     </td>
                   </tr>

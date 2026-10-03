@@ -80,6 +80,8 @@ export async function loadPayableRecord(tx: Tx, input: PayableRecordInput) {
     // §17 — the Shipment & containers section.
     const shipment = isImport && may.viewShipment ? await shipmentsService.forPayable(tx, view.payable.id) : null;
     const blPorts = isImport && may.createBl && open ? await shipmentsService.ports(tx) : null;
+    // IM2 — the B/L's table: each model of the import with what is left to ship of it.
+    const blModels = blPorts ? await shipmentsService.modelsToShip(tx, view.payable.id) : [];
     // §20.2 — the landed cost: its charges, the locks, what a lock would do.
     let landed = null;
     if (isImport && may.viewLanded && !view.payable.cancelledAt) {
@@ -107,6 +109,7 @@ export async function loadPayableRecord(tx: Tx, input: PayableRecordInput) {
       landed,
       shipment,
       blPorts,
+      blModels,
       log,
       reasons,
       people,

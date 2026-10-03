@@ -1,4 +1,5 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
+import { containerNo } from '../support/container-number';
 import writeXlsxFile from 'write-excel-file/node';
 
 import { PALETTES as palettes, ACCENTS as accents } from '../../src/server/domain/appearance';
@@ -261,7 +262,8 @@ async function raiseOneOfEach(browser: Browser) {
     const bl = page.getByRole('dialog');
     await bl.getByRole('textbox', { name: 'B/L no.' }).fill(`BL-THEME-${run}`);
     await bl.getByLabel('B/L date').fill('2026-09-20');
-    await bl.getByRole('textbox', { name: 'Containers' }).fill(`TEMU${digits}5`);
+    await bl.getByLabel('ETA').fill('2026-10-20');
+    await bl.getByLabel('Container no. 1').fill(containerNo('TEMU', `${digits}5`));
     await bl.getByRole('button', { name: 'New B/L' }).click();
     await expect(page.getByRole('link', { name: `BL-THEME-${run}` })).toBeVisible({ timeout: 30_000 });
 

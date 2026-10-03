@@ -63,7 +63,8 @@ describe('HD14 · the payable record — one transaction, a bounded number of re
     expect(statements.filter((s) => /from "supplier_advance"/i.test(s))).toHaveLength(1);
     // The measured figure, recorded in REQ-HARDEN-001 §3.G: 50 statements in one session on 2026-10-02
     // (about 70 across three sessions before). A read added later has to be paid for here.
-    expect(statements.length).toBeLessThanOrEqual(52);
+    // IM2 (2026-10-03): +1 — the New B/L table reads what is left to ship of each model.
+    expect(statements.length).toBeLessThanOrEqual(53);
   });
 
   it('a reader who may not stop the payable reads neither the reasons nor the owners', async () => {

@@ -3194,7 +3194,7 @@
       "size_type": "Size / type",
       "size_type_hint": "20GP, 40HC …",
       "containers": "Containers",
-      "containers_hint": "Paste the container numbers from the B/L — one per line, or separated by commas. MSCU1234565.",
+      "containers_hint": "Paste the container numbers from the B/L — one per line, or separated by commas. MSCU1234566.",
       "spread_lines": "Spread the import's lines equally over these containers (estimated — the warehouse confirms)",
       "supplier": "Supplier",
       "received_x_of_y": "Received",
@@ -3283,8 +3283,34 @@
       "claim_date": "Claim date",
       "supplier_reference": "Supplier's reference",
       "claim_reason": "What is claimed",
-      "claim_reason_hint": "For example: 40 cartons short in MSCU1234565, seal intact; 6 damaged.",
-      "short_hint": "Short is worked out when left empty: planned − received − damaged."
+      "claim_reason_hint": "For example: 40 cartons short in MSCU1234566, seal intact; 6 damaged.",
+      "short_hint": "Short is worked out when left empty: planned − received − damaged.",
+      "seal_no": "Seal no.",
+      "unit": "Unit",
+      "remove_container": "Remove this container",
+      "grid_left": "Left:",
+      "grid_typed": "In these containers",
+      "grid_divided": "divided",
+      "grid_too_many": "More than the {left} left",
+      "grid_not_a_number": "Not a container number (4 letters, 7 digits)",
+      "grid_check_digit": "Check digit should be {digit}",
+      "containers_caption": "One row per container, as the B/L lists them. Type how many of each model a container carries, or leave a model's column empty to divide what is left of it equally. Never more than was ordered. Pasting several numbers into one box fills a row each.",
+      "eta_hint": "Required: it is what tells you a container is late.",
+      "edit_bl": "Edit B/L",
+      "edit_bl_title": "Edit B/L {blNo}",
+      "save_bl": "Save",
+      "cancel_bl": "Cancel B/L",
+      "cancel_bl_reason": "Why the B/L is cancelled",
+      "cancel_reason": "Why it was cancelled",
+      "edit_container": "Edit container",
+      "edit_container_title": "Edit {containerNo}",
+      "save_container": "Save",
+      "cancel_container": "Cancel container",
+      "cancel_container_reason": "Why the container is cancelled",
+      "container_no_hint": "Four letters and seven digits; the last digit is checked.",
+      "damaged_short": "Damaged / short",
+      "view_exceptions": "Short or damaged",
+      "view_cancelled": "Cancelled"
     },
     "loans": {
       "subtitle": "Every bank loan in one register: what it lends, what it costs, what it funded and what is still owed.",
@@ -5638,7 +5664,8 @@
       "hr_headcount": "Headcount",
       "hr_leave_balances": "Leave Balances",
       "hr_payroll_register": "Payroll Register",
-      "hr_unsettled_advances": "Unsettled Advances"
+      "hr_unsettled_advances": "Unsettled Advances",
+      "bill_of_lading": "Bill of Lading"
     }
   }
 }

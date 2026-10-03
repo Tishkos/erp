@@ -44,6 +44,9 @@ import {
 import {
   ShipmentValidationError,
   STAGE_DATE,
+  assertContainerNumber,
+  isSizeType,
+  planContainers,
   assertReceiptLines,
   assertStatusMove,
   lineVariance,
@@ -132,15 +135,42 @@ export interface CreateBlInput {
   readonly portOfLoading?: string | null;
   readonly portOfDischargeCode?: string | null;
   readonly eta?: string | null;
-  /** Pasted container numbers. */
+  /** Pasted container numbers (the legacy sheet's way; screens send `containerRows`). */
   readonly containers?: string | null;
   readonly sizeType?: string | null;
+  /**
+   * IM2 — the containers as the B/L's table lists them: each its number, its
+   * own size/type and seal, and what it carries of each model (the PI's order
+   * lines by id). A model left empty in every row is divided equally.
+   */
+  readonly containerRows?: readonly ContainerRowInput[] | null;
   /**
    * Spread the import's lines equally over these containers (flagged
    * estimated, for the warehouse to confirm — §24.3). Only when this B/L
    * carries the whole order; otherwise load each container's plan.
    */
   readonly spreadLines?: boolean;
+}
+
+export interface ContainerRowInput {
+  readonly containerNo: string;
+  readonly sizeType?: string | null;
+  readonly sealNo?: string | null;
+  /** Order line id → quantity in the PI's unit; null or absent: not typed. */
+  readonly quantities?: Readonly<Record<string, bigint | null>>;
+}
+
+/** The rows of a B/L's table, read and checked: numbers by ISO 6346, size/type from the standard's list. */
+function readRows(rows: readonly ContainerRowInput[]) {
+  const seen = new Set<string>();
+  return rows.map((row) => {
+    const containerNo = assertContainerNumber(row.containerNo);
+    if (seen.has(containerNo)) throw new ShipmentValidationError(`${containerNo} is listed twice.`);
+    seen.add(containerNo);
+    const sizeType = row.sizeType?.trim().toUpperCase() || null;
+    if (sizeType && !isSizeType(sizeType)) throw new ShipmentValidationError(`'${sizeType}' is not a container size/type.`);
+    return { containerNo, sizeType, sealNo: row.sealNo?.trim() || null, quantities: row.quantities ?? {} };
+  });
 }
 
 export async function createBl(tx: Tx, ctx: ActorContext, input: CreateBlInput) {
@@ -150,22 +180,33 @@ export async function createBl(tx: Tx, ctx: ActorContext, input: CreateBlInput) 
   const blNo = input.blNo.trim().toUpperCase();
   if (!blNo) throw new ShipmentValidationError('Give the B/L number as the shipping line issued it.');
   if (!input.blDate) throw new ShipmentValidationError('Give the B/L date.');
+  // IM2 — the ETA is the only thing that tells the system a container is late;
+  // a B/L without one would let its containers go overdue unseen.
+  if (input.containerRows && !input.eta) {
+    throw new ShipmentValidationError('Give the ETA: without it nobody is told when the containers are late.');
+  }
   if (input.eta && input.eta < input.blDate) {
     throw new ShipmentValidationError(`An ETA of ${input.eta} is before the B/L was issued on ${input.blDate}.`);
   }
-  const [existing] = await tx.select({ id: billOfLading.id }).from(billOfLading).where(eq(billOfLading.blNo, blNo)).limit(1);
-  if (existing) throw new ShipmentValidationError(`B/L ${blNo} is already recorded. One B/L, one record.`);
+  const [existing] = await tx
+    .select({ id: billOfLading.id })
+    .from(billOfLading)
+    .where(and(eq(billOfLading.blNo, blNo), isNull(billOfLading.cancelledAt)))
+    .limit(1);
+  if (existing) throw new ShipmentValidationError(`B/L ${blNo} is already recorded. One B/L, one record — cancel the wrong one to enter it again.`);
   if (input.portOfDischargeCode) {
     const [known] = await tx.select().from(port).where(eq(port.code, input.portOfDischargeCode)).limit(1);
     if (!known) throw new ShipmentValidationError(`'${input.portOfDischargeCode}' is not a port.`);
   }
 
-  const parsed = parseContainerList(input.containers ?? '');
+  const rows = input.containerRows ? readRows(input.containerRows.filter((row) => row.containerNo.trim() !== '')) : null;
+  const parsed = rows ? { numbers: rows.map((row) => row.containerNo), invalid: [] as string[] } : parseContainerList(input.containers ?? '');
   if (parsed.invalid.length > 0) {
     throw new ShipmentValidationError(
-      `Not container numbers: ${parsed.invalid.join(', ')}. A container number is four letters and seven digits (MSKU1234567).`,
+      `Not container numbers: ${parsed.invalid.join(', ')}. A container number is four letters and seven digits (MSCU1234566).`,
     );
   }
+  if (!rows) for (const number of parsed.numbers) assertContainerNumber(number);
 
   const [firstBl] = await tx
     .select({ id: billOfLading.id })
@@ -204,7 +245,9 @@ export async function createBl(tx: Tx, ctx: ActorContext, input: CreateBlInput) 
     actorUserId: ctx.principal.userId,
   });
 
-  if (parsed.numbers.length > 0) {
+  if (rows && rows.length > 0) {
+    await addContainerRows(tx, ctx, { bl: { id: created!.id, blNo, eta: input.eta || null }, owner, rows });
+  } else if (parsed.numbers.length > 0) {
     await addContainersTo(tx, ctx, {
       bl: { id: created!.id, blNo, eta: input.eta || null },
       owner,
@@ -260,14 +303,22 @@ export async function addContainers(
   tx: Tx,
   ctx: ActorContext,
   blId: string,
-  input: { containers: string; sizeType?: string | null },
+  input: { containers?: string; sizeType?: string | null; rows?: readonly ContainerRowInput[] | null },
 ) {
-  const [bl] = await tx.select().from(billOfLading).where(eq(billOfLading.id, blId)).limit(1);
+  const [bl] = await tx.select().from(billOfLading).where(eq(billOfLading.id, blId)).limit(1).for('update');
   if (!bl) throw new ShipmentNotFoundError(blId);
   const owner = await openImport(tx, bl.payableId);
   await authz.authorize(ctx.principal, 'edit_draft', BL_OBJECT, { branchCode: owner.branchCode });
   if (bl.cancelledAt) throw new ShipmentValidationError(`B/L ${bl.blNo} is cancelled.`);
-  const parsed = parseContainerList(input.containers);
+  if (input.rows) {
+    const rows = readRows(input.rows.filter((row) => row.containerNo.trim() !== ''));
+    if (rows.length === 0) throw new ShipmentValidationError('Enter at least one container.');
+    await addContainerRows(tx, ctx, { bl: { id: bl.id, blNo: bl.blNo, eta: bl.eta }, owner, rows });
+    await payables.recomputeStage(tx, owner.id, ctx.principal.userId);
+    return;
+  }
+  const parsed = parseContainerList(input.containers ?? '');
+  for (const number of parsed.numbers) assertContainerNumber(number);
   if (parsed.invalid.length > 0) {
     throw new ShipmentValidationError(`Not container numbers: ${parsed.invalid.join(', ')}.`);
   }
@@ -280,6 +331,119 @@ export async function addContainers(
     spreadLines: false,
   });
   await payables.recomputeStage(tx, owner.id, ctx.principal.userId);
+}
+
+/** What of each order line is still to be put in a container: ordered less what live containers plan. */
+async function leftToShip(tx: Tx, payableId: string, exceptContainerId?: string) {
+  // A container carries goods: the order's item lines, not its charges.
+  const lines = (await orderLinesOf(tx, payableId)).filter((line) => Boolean(line.itemCode));
+  const planned = await tx.execute(sql`
+    select l.item_code as "itemCode", coalesce(l.uom_code, '') as "uomCode", coalesce(sum(l.planned_qty), 0)::text as planned
+      from shipment_container_line l join shipment_container c on c.id = l.container_id
+     where c.payable_id = ${payableId} and c.cancelled_at is null and l.superseded_at is null
+       ${exceptContainerId ? sql`and c.id <> ${exceptContainerId}` : sql``}
+     group by l.item_code, l.uom_code`);
+  const used = new Map(
+    (planned.rows as { itemCode: string | null; uomCode: string; planned: string }[]).map((row) => [`${row.itemCode ?? ''}|${row.uomCode}`, parseQuantity(row.planned)]),
+  );
+  // Two order lines of one model share what is planned of it, the first first.
+  const models = lines.map((line) => {
+    const key = `${line.itemCode ?? ''}|${line.uomCode ?? ''}`;
+    const ordered = line.quantity ? parseQuantity(line.quantity) : 0n;
+    const taken = used.get(key) ?? 0n;
+    const share = taken > ordered ? ordered : taken;
+    used.set(key, taken - share);
+    return { line, available: ordered - share };
+  });
+  return models;
+}
+
+async function addContainerRows(
+  tx: Tx,
+  ctx: ActorContext,
+  input: {
+    bl: { id: string; blNo: string; eta: string | null };
+    owner: typeof payable.$inferSelect;
+    rows: readonly { containerNo: string; sizeType: string | null; sealNo: string | null; quantities: Readonly<Record<string, bigint | null>> }[];
+  },
+) {
+  const live = await tx
+    .select({ containerNo: shipmentContainer.containerNo })
+    .from(shipmentContainer)
+    .where(and(inArray(shipmentContainer.containerNo, input.rows.map((row) => row.containerNo)), isNull(shipmentContainer.receivedOn), isNull(shipmentContainer.cancelledAt)));
+  if (live.length > 0) {
+    throw new ShipmentValidationError(
+      `Already on a live B/L: ${live.map((row) => row.containerNo).join(', ')}. A number recurs only after its container has been received (§17.2).`,
+    );
+  }
+  const models = await leftToShip(tx, input.owner.id);
+  const { plan, estimated } = planContainers(
+    models.map(({ line, available }) => ({ key: line.id, label: `${line.itemCode ?? line.description}${line.uomCode ? ` (${line.uomCode})` : ''}`, available })),
+    input.rows,
+  );
+  for (const [index, row] of input.rows.entries()) {
+    const [container] = await tx
+      .insert(shipmentContainer)
+      .values({
+        blId: input.bl.id,
+        payableId: input.owner.id,
+        branchCode: input.owner.branchCode,
+        containerNo: row.containerNo,
+        sizeType: row.sizeType,
+        sealNo: row.sealNo,
+        eta: input.bl.eta,
+        linesEstimated: estimated,
+        createdBy: ctx.principal.userId,
+      })
+      .returning({ id: shipmentContainer.id });
+    await tx.insert(shipmentContainerStatusHistory).values({
+      containerId: container!.id,
+      statusCode: 'not_loaded',
+      effectiveDate: today(),
+      source: 'user',
+      note: `On B/L ${input.bl.blNo}`,
+      recordedBy: ctx.principal.userId,
+    });
+    let lineNo = 0;
+    for (const [m, { line }] of models.entries()) {
+      const planned = plan[index]![m]!;
+      if (planned <= 0n) continue;
+      lineNo += 1;
+      await tx.insert(shipmentContainerLine).values({
+        containerId: container!.id,
+        lineNo,
+        itemCode: line.itemCode,
+        description: line.description,
+        plannedQty: qty(planned),
+        uomCode: line.uomCode,
+        createdBy: ctx.principal.userId,
+      });
+    }
+  }
+  await events.record(tx, {
+    payableId: input.owner.id,
+    eventCode: 'CONTAINER_ADDED',
+    summary:
+      `${input.rows.length} container${input.rows.length === 1 ? '' : 's'} on B/L ${input.bl.blNo}: ` +
+      input.rows.map((row) => `${row.containerNo}${row.sizeType ? ` ${row.sizeType}` : ''}`).join(', ') +
+      (estimated ? ' — a model left empty divided equally (the warehouse confirms)' : ''),
+    sourceType: BL_OBJECT,
+    sourceId: input.bl.id,
+    sourceNo: input.bl.blNo,
+    actorUserId: ctx.principal.userId,
+  });
+}
+
+/** The B/L's models for its table: each order line with what is left to ship of it. */
+export async function modelsToShip(tx: Tx, payableId: string) {
+  return (await leftToShip(tx, payableId)).map(({ line, available }) => ({
+    key: line.id,
+    itemCode: line.itemCode,
+    description: line.description,
+    uomCode: line.uomCode,
+    ordered: line.quantity ? qty(parseQuantity(line.quantity)) : '0',
+    left: qty(available),
+  }));
 }
 
 async function addContainersTo(
@@ -368,6 +532,259 @@ async function addContainersTo(
   await checkPlannedTotal(tx, ctx, input.owner);
 }
 
+// ---------------------------------------------------------------------------
+// IM2 — a B/L or a container typed wrong is corrected, or cancelled with its reason
+// ---------------------------------------------------------------------------
+
+export interface UpdateBlInput {
+  readonly blNo: string;
+  readonly blDate: string;
+  readonly eta: string;
+  readonly shippingLine?: string | null;
+  readonly vessel?: string | null;
+  readonly voyage?: string | null;
+  readonly portOfLoading?: string | null;
+  readonly portOfDischargeCode?: string | null;
+}
+
+async function lockBl(tx: Tx, blId: string) {
+  const [bl] = await tx.select().from(billOfLading).where(eq(billOfLading.id, blId)).limit(1).for('update');
+  if (!bl) throw new ShipmentNotFoundError(blId);
+  return bl;
+}
+
+async function receivedOn(tx: Tx, blId: string) {
+  return tx
+    .select({ containerNo: shipmentContainer.containerNo })
+    .from(shipmentContainer)
+    .where(and(eq(shipmentContainer.blId, blId), isNull(shipmentContainer.cancelledAt), sql`${shipmentContainer.receivedOn} is not null`));
+}
+
+/** The B/L's boxes, corrected while nothing on it has been received. Every change is in the log. */
+export async function updateBl(tx: Tx, ctx: ActorContext, blId: string, input: UpdateBlInput) {
+  const bl = await lockBl(tx, blId);
+  const owner = await openImport(tx, bl.payableId);
+  await authz.authorize(ctx.principal, 'edit_draft', BL_OBJECT, { branchCode: owner.branchCode });
+  if (bl.cancelledAt) throw new ShipmentValidationError(`B/L ${bl.blNo} is cancelled.`);
+  const received = await receivedOn(tx, bl.id);
+  if (received.length > 0) {
+    throw new ShipmentValidationError(`B/L ${bl.blNo} has received containers (${received.map((r) => r.containerNo).join(', ')}); it is the record now and is corrected by a note.`);
+  }
+  const blNo = input.blNo.trim().toUpperCase();
+  if (!blNo) throw new ShipmentValidationError('Give the B/L number as the shipping line issued it.');
+  if (!input.blDate) throw new ShipmentValidationError('Give the B/L date.');
+  if (!input.eta) throw new ShipmentValidationError('Give the ETA: without it nobody is told when the containers are late.');
+  if (input.eta < input.blDate) throw new ShipmentValidationError(`An ETA of ${input.eta} is before the B/L was issued on ${input.blDate}.`);
+  if (blNo !== bl.blNo) {
+    const [other] = await tx
+      .select({ id: billOfLading.id })
+      .from(billOfLading)
+      .where(and(eq(billOfLading.blNo, blNo), isNull(billOfLading.cancelledAt)))
+      .limit(1);
+    if (other) throw new ShipmentValidationError(`B/L ${blNo} is already recorded.`);
+  }
+  if (input.portOfDischargeCode) {
+    const [known] = await tx.select().from(port).where(eq(port.code, input.portOfDischargeCode)).limit(1);
+    if (!known) throw new ShipmentValidationError(`'${input.portOfDischargeCode}' is not a port.`);
+  }
+  const next = {
+    blNo,
+    blDate: input.blDate,
+    eta: input.eta,
+    shippingLine: input.shippingLine?.trim() || null,
+    vessel: input.vessel?.trim() || null,
+    voyage: input.voyage?.trim() || null,
+    portOfLoading: input.portOfLoading?.trim() || null,
+    portOfDischargeCode: input.portOfDischargeCode || null,
+  };
+  const before = {
+    blNo: bl.blNo,
+    blDate: bl.blDate,
+    eta: bl.eta,
+    shippingLine: bl.shippingLine,
+    vessel: bl.vessel,
+    voyage: bl.voyage,
+    portOfLoading: bl.portOfLoading,
+    portOfDischargeCode: bl.portOfDischargeCode,
+  };
+  const changed = (Object.keys(next) as (keyof typeof next)[]).filter((key) => (next[key] ?? null) !== (before[key] ?? null));
+  if (changed.length === 0) return { blNo };
+  await tx.update(billOfLading).set({ ...next, updatedAt: new Date() }).where(eq(billOfLading.id, bl.id));
+  // A container still on the B/L's ETA moves with it; one given its own ETA keeps it.
+  if (next.eta !== bl.eta) {
+    await tx
+      .update(shipmentContainer)
+      .set({ eta: next.eta, updatedAt: new Date() })
+      .where(
+        and(
+          eq(shipmentContainer.blId, bl.id),
+          isNull(shipmentContainer.cancelledAt),
+          isNull(shipmentContainer.receivedOn),
+          bl.eta ? eq(shipmentContainer.eta, bl.eta) : isNull(shipmentContainer.eta),
+        ),
+      );
+  }
+  await events.record(tx, {
+    payableId: owner.id,
+    eventCode: 'FIELD_CHANGED',
+    summary: `B/L ${bl.blNo} corrected: ${changed.map((key) => `${key} ${before[key] ?? '—'} → ${next[key] ?? '—'}`).join('; ')}`,
+    sourceType: BL_OBJECT,
+    sourceId: bl.id,
+    sourceNo: blNo,
+    before: Object.fromEntries(changed.map((key) => [key, before[key] ?? null])),
+    after: Object.fromEntries(changed.map((key) => [key, next[key] ?? null])),
+    actorUserId: ctx.principal.userId,
+  });
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'bill_of_lading.updated',
+    objectType: BL_OBJECT,
+    objectId: bl.id,
+    branchCode: owner.branchCode,
+    before: Object.fromEntries(changed.map((key) => [key, before[key] ?? null])),
+    after: Object.fromEntries(changed.map((key) => [key, next[key] ?? null])),
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+  if (next.blDate !== bl.blDate) await dateInstalmentsFromBl(tx, ctx, owner.id, next.blDate, blNo);
+  return { blNo };
+}
+
+/**
+ * A B/L entered by mistake: cancelled with its reason, and every container on
+ * it with it — refused once a container on it has been received. Its number
+ * may then be entered again. Nothing is deleted.
+ */
+export async function cancelBl(tx: Tx, ctx: ActorContext, blId: string, reason: string) {
+  const bl = await lockBl(tx, blId);
+  const owner = await payables.load(tx, bl.payableId);
+  await authz.authorize(ctx.principal, 'reverse_cancel', BL_OBJECT, { branchCode: owner.branchCode });
+  if (bl.cancelledAt) throw new ShipmentValidationError(`B/L ${bl.blNo} is already cancelled.`);
+  const why = reason.trim();
+  if (!why) throw new ShipmentValidationError('Say why the B/L is cancelled.');
+  const received = await receivedOn(tx, bl.id);
+  if (received.length > 0) {
+    throw new ShipmentValidationError(`B/L ${bl.blNo} has received containers (${received.map((r) => r.containerNo).join(', ')}); it cannot be cancelled.`);
+  }
+  const now = new Date();
+  const cancelled = await tx
+    .update(shipmentContainer)
+    .set({ cancelledAt: now, cancelledBy: ctx.principal.userId, cancelReason: `With B/L ${bl.blNo}: ${why}`, updatedAt: now })
+    .where(and(eq(shipmentContainer.blId, bl.id), isNull(shipmentContainer.cancelledAt)))
+    .returning({ containerNo: shipmentContainer.containerNo });
+  await tx.update(billOfLading).set({ cancelledAt: now, cancelledBy: ctx.principal.userId, cancelReason: why, updatedAt: now }).where(eq(billOfLading.id, bl.id));
+  await events.record(tx, {
+    payableId: owner.id,
+    eventCode: 'CORRECTION',
+    summary: `B/L ${bl.blNo} cancelled${cancelled.length ? ` with ${cancelled.map((c) => c.containerNo).join(', ')}` : ''} — ${why}`,
+    sourceType: BL_OBJECT,
+    sourceId: bl.id,
+    sourceNo: bl.blNo,
+    actorUserId: ctx.principal.userId,
+  });
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'bill_of_lading.cancelled',
+    objectType: BL_OBJECT,
+    objectId: bl.id,
+    branchCode: owner.branchCode,
+    after: { blNo: bl.blNo, containers: cancelled.map((c) => c.containerNo) },
+    reason: why,
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+  await payables.recomputeStage(tx, owner.id, ctx.principal.userId);
+  return { blNo: bl.blNo, payableId: owner.id };
+}
+
+/** A container's number, size/type and seal, corrected until it is received. */
+export async function updateContainer(
+  tx: Tx,
+  ctx: ActorContext,
+  containerId: string,
+  input: { containerNo: string; sizeType?: string | null; sealNo?: string | null },
+) {
+  const container = await loadContainer(tx, containerId);
+  await authz.authorize(ctx.principal, 'edit_draft', CONTAINER_OBJECT, { branchCode: container.branchCode });
+  if (container.cancelledAt) throw new ShipmentValidationError(`${container.containerNo} is cancelled.`);
+  if (container.receivedOn) throw new ShipmentValidationError(`${container.containerNo} has been received; it is the record now.`);
+  const containerNo = assertContainerNumber(input.containerNo);
+  const sizeType = input.sizeType?.trim().toUpperCase() || null;
+  if (sizeType && !isSizeType(sizeType)) throw new ShipmentValidationError(`'${sizeType}' is not a container size/type.`);
+  const sealNo = input.sealNo?.trim() || null;
+  if (containerNo !== container.containerNo) {
+    const [other] = await tx
+      .select({ id: shipmentContainer.id })
+      .from(shipmentContainer)
+      .where(and(eq(shipmentContainer.containerNo, containerNo), isNull(shipmentContainer.receivedOn), isNull(shipmentContainer.cancelledAt)))
+      .limit(1);
+    if (other) throw new ShipmentValidationError(`${containerNo} is already on a live B/L.`);
+  }
+  const before = { containerNo: container.containerNo, sizeType: container.sizeType, sealNo: container.sealNo };
+  const after = { containerNo, sizeType, sealNo };
+  const changed = (Object.keys(after) as (keyof typeof after)[]).filter((key) => (after[key] ?? null) !== (before[key] ?? null));
+  if (changed.length === 0) return { containerNo };
+  await tx.update(shipmentContainer).set({ ...after, updatedAt: new Date() }).where(eq(shipmentContainer.id, container.id));
+  await events.record(tx, {
+    payableId: container.payableId,
+    eventCode: 'FIELD_CHANGED',
+    summary: `${container.containerNo} corrected: ${changed.map((key) => `${key} ${before[key] ?? '—'} → ${after[key] ?? '—'}`).join('; ')}`,
+    sourceType: CONTAINER_OBJECT,
+    sourceId: container.id,
+    sourceNo: containerNo,
+    actorUserId: ctx.principal.userId,
+  });
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'shipment_container.updated',
+    objectType: CONTAINER_OBJECT,
+    objectId: container.id,
+    branchCode: container.branchCode,
+    before: Object.fromEntries(changed.map((key) => [key, before[key] ?? null])),
+    after: Object.fromEntries(changed.map((key) => [key, after[key] ?? null])),
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+  return { containerNo };
+}
+
+/** A container that is not on the ship after all: cancelled with its reason, never deleted. */
+export async function cancelContainer(tx: Tx, ctx: ActorContext, containerId: string, reason: string) {
+  const container = await loadContainer(tx, containerId);
+  await authz.authorize(ctx.principal, 'reverse_cancel', CONTAINER_OBJECT, { branchCode: container.branchCode });
+  if (container.cancelledAt) throw new ShipmentValidationError(`${container.containerNo} is already cancelled.`);
+  if (container.receivedOn) throw new ShipmentValidationError(`${container.containerNo} has been received; it cannot be cancelled.`);
+  const why = reason.trim();
+  if (!why) throw new ShipmentValidationError('Say why the container is cancelled.');
+  const now = new Date();
+  await tx
+    .update(shipmentContainer)
+    .set({ cancelledAt: now, cancelledBy: ctx.principal.userId, cancelReason: why, updatedAt: now })
+    .where(eq(shipmentContainer.id, container.id));
+  await events.record(tx, {
+    payableId: container.payableId,
+    eventCode: 'CORRECTION',
+    summary: `${container.containerNo} cancelled — ${why}`,
+    sourceType: CONTAINER_OBJECT,
+    sourceId: container.id,
+    sourceNo: container.containerNo,
+    actorUserId: ctx.principal.userId,
+  });
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'shipment_container.cancelled',
+    objectType: CONTAINER_OBJECT,
+    objectId: container.id,
+    branchCode: container.branchCode,
+    after: { containerNo: container.containerNo },
+    reason: why,
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+  await payables.recomputeStage(tx, container.payableId, ctx.principal.userId);
+  return { containerNo: container.containerNo };
+}
+
 /** §17.1 — the containers' plan against the PI: a warning, never a block. */
 async function checkPlannedTotal(tx: Tx, ctx: ActorContext, owner: typeof payable.$inferSelect) {
   if (!owner.quantity) return;
@@ -400,6 +817,27 @@ export async function setContainerLines(
   if (container.receivedOn) throw new ShipmentValidationError(`${container.containerNo} has been received; its plan is closed.`);
   const clean = lines.filter((line) => line.plannedQty.trim() !== '');
   if (clean.length === 0) throw new ShipmentValidationError('A container carries at least one model.');
+  // IM2 — never more of a model than is left of the order beside the other containers.
+  const left = await leftToShip(tx, container.payableId, container.id);
+  const byModel = new Map<string, bigint>();
+  for (const { line, available } of left) {
+    const key = `${line.itemCode ?? ''}|${line.uomCode ?? ''}`;
+    byModel.set(key, (byModel.get(key) ?? 0n) + available);
+  }
+  const asked = new Map<string, bigint>();
+  for (const line of clean) {
+    if (!line.itemCode) continue;
+    const key = `${line.itemCode}|${line.uomCode ?? ''}`;
+    asked.set(key, (asked.get(key) ?? 0n) + parseQuantity(line.plannedQty.trim()));
+  }
+  for (const [key, quantity] of asked) {
+    const available = byModel.get(key);
+    if (available !== undefined && quantity > available) {
+      throw new ShipmentValidationError(
+        `${key.split('|')[0]}: ${qty(quantity)} in this container, but only ${qty(available)} is left of what was ordered beside the other containers.`,
+      );
+    }
+  }
   const current = await liveLines(tx, containerId);
   if (current.length > 0) {
     await tx
@@ -1172,7 +1610,7 @@ export async function listBlsForScreen(tx: Tx, filter: BlRegisterFilter = {}) {
 }
 
 export interface ContainerFilter {
-  readonly view?: 'in_transit' | 'late' | 'received' | 'all' | null;
+  readonly view?: 'in_transit' | 'late' | 'received' | 'exceptions' | 'cancelled' | 'all' | 'every' | null;
   readonly payableId?: string | null;
   readonly blId?: string | null;
 }
@@ -1203,6 +1641,12 @@ export async function listContainers(tx: Tx, filter: ContainerFilter = {}) {
                               where l.container_id = ${shipmentContainer.id} and l.superseded_at is null)`,
       received: sql<string>`(select coalesce(sum(l.received_qty), 0)::text from shipment_container_line l
                               where l.container_id = ${shipmentContainer.id} and l.superseded_at is null)`,
+      damaged: sql<string>`(select coalesce(sum(l.damaged_qty), 0)::text from shipment_container_line l
+                              where l.container_id = ${shipmentContainer.id} and l.superseded_at is null)`,
+      short: sql<string>`(select coalesce(sum(l.short_qty), 0)::text from shipment_container_line l
+                              where l.container_id = ${shipmentContainer.id} and l.superseded_at is null)`,
+      sealNo: shipmentContainer.sealNo,
+      cancelReason: shipmentContainer.cancelReason,
     })
     .from(shipmentContainer)
     .innerJoin(containerStatus, eq(containerStatus.code, shipmentContainer.statusCode))
@@ -1232,13 +1676,27 @@ export async function listContainers(tx: Tx, filter: ContainerFilter = {}) {
       return withDays.filter((row) => row.statusCode === 'late');
     case 'received':
       return withDays.filter((row) => Boolean(row.receivedOn));
-    default:
+    // IM2 — what arrived short or damaged: the exceptions to follow up.
+    case 'exceptions':
+      return withDays.filter((row) => row.statusCode === 'missing_damaged' && !row.cancelledAt);
+    case 'cancelled':
+      return withDays.filter((row) => Boolean(row.cancelledAt));
+    // A B/L's own page shows every container it ever listed, cancelled ones marked.
+    case 'every':
       return withDays;
+    default:
+      return withDays.filter((row) => !row.cancelledAt);
   }
 }
 
 export async function viewBl(tx: Tx, blNo: string) {
-  const [bl] = await tx.select().from(billOfLading).where(eq(billOfLading.blNo, blNo.toUpperCase())).limit(1);
+  // A number entered again after its first B/L was cancelled: the live one first.
+  const [bl] = await tx
+    .select()
+    .from(billOfLading)
+    .where(eq(billOfLading.blNo, blNo.toUpperCase()))
+    .orderBy(sql`${billOfLading.cancelledAt} desc nulls first`)
+    .limit(1);
   if (!bl) throw new ShipmentNotFoundError(blNo);
   const owner = await payables.load(tx, bl.payableId);
   const [supplier] = await tx
@@ -1249,7 +1707,7 @@ export async function viewBl(tx: Tx, blNo: string) {
   const [discharge] = bl.portOfDischargeCode
     ? await tx.select().from(port).where(eq(port.code, bl.portOfDischargeCode)).limit(1)
     : [];
-  const containers = await listContainers(tx, { blId: bl.id });
+  const containers = await listContainers(tx, { blId: bl.id, view: 'every' });
   return { bl, owner, supplier: supplier ?? null, port: discharge ?? null, containers, progress: progress(containers.map((c) => ({ countsAsReceived: c.countsAsReceived, cancelled: Boolean(c.cancelledAt) }))) };
 }
 
@@ -1258,7 +1716,7 @@ export async function viewContainer(tx: Tx, containerNo: string, id?: string | n
     .select()
     .from(shipmentContainer)
     .where(id ? eq(shipmentContainer.id, id) : eq(shipmentContainer.containerNo, containerNo.toUpperCase()))
-    .orderBy(sql`${shipmentContainer.receivedOn} desc nulls first`, desc(shipmentContainer.createdAt));
+    .orderBy(sql`${shipmentContainer.cancelledAt} desc nulls first`, sql`${shipmentContainer.receivedOn} desc nulls first`, desc(shipmentContainer.createdAt));
   const container = candidates[0];
   if (!container) throw new ShipmentNotFoundError(containerNo);
   const [bl] = await tx.select().from(billOfLading).where(eq(billOfLading.id, container.blId)).limit(1);

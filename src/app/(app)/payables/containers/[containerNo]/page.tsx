@@ -2,27 +2,30 @@ import { randomUUID } from 'node:crypto';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Field, Flash, Form, Grid, Hidden, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { AdminPage, Field, Flash, Form, Grid, Hidden, ReasonForm, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
-import { Attachments } from '@/components/admin/attachments';
+import { Attachments, readAttachments } from '@/components/admin/attachments';
+import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
 import { RecordHistory } from '@/components/admin/history';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatQuantity, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
-import { CONTAINER_PATH } from '@domain/shipments';
+import { CONTAINER_PATH, SIZE_TYPES } from '@domain/shipments';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as shipments from '@/server/services/shipments';
 import {
   attachToContainer,
+  cancelContainerAction,
   containerEtaAction,
   containerLinesAction,
   containerStatusAction,
   portFileAction,
   receiveContainerAction,
+  updateContainerAction,
 } from '../../shipments/actions';
 import { containerChip } from '../status';
 import { windowTone } from '../../window-tone';
@@ -65,10 +68,12 @@ export default async function ContainerPage({
   }
   const mayEdit = can(principal, 'edit_draft', shipments.CONTAINER_OBJECT);
   const mayReceive = can(principal, 'execute', shipments.CONTAINER_OBJECT);
+  const mayCancel = can(principal, 'reverse_cancel', shipments.CONTAINER_OBJECT);
 
   const found = await withCurrentUser(async (tx) => {
     try {
-      return { ...(await shipments.viewContainer(tx, containerNo, id)), statuses: await shipments.statuses(tx) };
+      const view = await shipments.viewContainer(tx, containerNo, id);
+      return { ...view, statuses: await shipments.statuses(tx), files: await readAttachments(tx, shipments.CONTAINER_OBJECT, view.container.id) };
     } catch (error) {
       // E1 — a missing record is a 404; anything else reaches the error boundary.
       if (isNotFoundError(error)) return null;
@@ -113,7 +118,9 @@ export default async function ContainerPage({
       ),
     },
     { label: t('supplier'), value: <bdi dir="auto">{found.supplier?.name ?? '—'}</bdi> },
-    { label: t('size_type'), value: container.sizeType ?? '—' },
+    { label: t('size_type'), value: <bdi dir="ltr">{container.sizeType ?? '—'}</bdi> },
+    { label: t('seal_no'), value: <bdi dir="ltr">{container.sealNo ?? '—'}</bdi> },
+    ...(container.cancelledAt ? [{ label: t('cancel_reason'), value: <bdi dir="auto">{container.cancelReason ?? '—'}</bdi>, status: 'cancelled', wide: true }] : []),
     { label: t('eta'), value: <bdi dir="ltr">{day(container.eta)}</bdi> },
     { label: t('departed_on'), value: <bdi dir="ltr">{day(container.departedOn)}</bdi> },
     { label: t('arrived_port_on'), value: <bdi dir="ltr">{day(container.arrivedPortOn)}</bdi> },
@@ -362,13 +369,54 @@ export default async function ContainerPage({
                 </Form>
               </NewRecordDialog>
             ) : null}
+            {mayEdit && open ? (
+              <NewRecordDialog buttonLabel={t('edit_container')} closeLabel={admin('close')} title={t('edit_container_title', { containerNo: container.containerNo })}>
+                <Form action={updateContainerAction}>
+                  {Object.entries(hidden).map(([name, value]) => (
+                    <Hidden key={name} name={name} value={value} />
+                  ))}
+                  <Grid>
+                    <Field defaultValue={container.containerNo} hint={t('container_no_hint')} id="container-edit-no" label={t('container_no')} name="new_container_no" required />
+                    <Select
+                      defaultValue={container.sizeType ?? ''}
+                      emptyLabel="—"
+                      label={t('size_type')}
+                      name="size_type"
+                      options={SIZE_TYPES.map((type) => ({ value: type.code, label: `${type.code} (${type.iso})` }))}
+                    />
+                    <Field defaultValue={container.sealNo ?? ''} id="container-edit-seal" label={t('seal_no')} name="seal_no" />
+                  </Grid>
+                  <SubmitRow>
+                    <Submit label={t('save_container')} />
+                  </SubmitRow>
+                </Form>
+              </NewRecordDialog>
+            ) : null}
+            {mayCancel && open ? (
+              <ReasonForm action={cancelContainerAction} hidden={hidden} label={t('cancel_container')} reasonLabel={t('cancel_container_reason')} />
+            ) : null}
             <Link className="action" href={`/payables/${encodeURIComponent(owner.payableNo)}`}>
               {t('import_tracking')}
             </Link>
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={admin('history')}
+        titleActions={
+          <>
+            <AttachmentsButton closeLabel={admin('close')} count={found.files.rows.length} label={admin('attachments.title')} title={admin('attachments.title')}>
+              <Attachments
+                action={attachToContainer}
+                hidden={hidden}
+                mayAttach={mayEdit}
+                objectId={container.id}
+                objectType={shipments.CONTAINER_OBJECT}
+                preloaded={found.files}
+              />
+            </AttachmentsButton>
+            <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
+              <RecordHistory objectId={container.id} objectType={shipments.CONTAINER_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         documentType={t('container')}
         fields={fields}
         id="container-document"
@@ -469,18 +517,6 @@ export default async function ContainerPage({
         </div>
       </section>
 
-      <section aria-label={t('attachments')} className={s.sapDoc}>
-        <div className={s.sapWindow}>
-          <Attachments
-            action={attachToContainer}
-            hidden={hidden}
-            mayAttach={mayEdit}
-            objectId={container.id}
-            objectType={shipments.CONTAINER_OBJECT}
-          />
-        </div>
-      </section>
-      <RecordHistory objectId={container.id} objectType={shipments.CONTAINER_OBJECT} />
     </AdminPage>
   );
 }

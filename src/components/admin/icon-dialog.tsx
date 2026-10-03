@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, useRef, type ReactNode } from 'react';
-import { History, Paperclip, X } from 'lucide-react';
+import { History, Paperclip, Printer, X } from 'lucide-react';
 import styles from './admin.module.css';
 
 /**
@@ -102,4 +102,19 @@ export function HistoryButton(props: {
   readonly children: ReactNode;
 }) {
   return <IconDialog icon={<History aria-hidden="true" />} {...props} />;
+}
+
+/**
+ * The printer: the document's copies — PDF, Excel and Word, in English and in
+ * Arabic — behind the third door in the title bar, beside the paperclip and
+ * the clock (by direction, 2026-10-03: "attachment, print and audit icon as
+ * other pages"). The links are the Print / Export menu's own.
+ */
+export function PrintButton(props: {
+  readonly label: string;
+  readonly title: string;
+  readonly closeLabel: string;
+  readonly children: ReactNode;
+}) {
+  return <IconDialog icon={<Printer aria-hidden="true" />} {...props} />;
 }

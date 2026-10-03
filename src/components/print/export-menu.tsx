@@ -1,4 +1,5 @@
 import { FileDown } from 'lucide-react';
+import { PrintButton } from '@/components/admin/icon-dialog';
 import { getTranslations } from 'next-intl/server';
 import { exportHref, mayExport, type ExportKey } from '@/server/print/access';
 import { FORMATS, type ExportFormat } from '@/server/print/model';
@@ -83,5 +84,55 @@ export async function ExportMenu({
         ))}
       </div>
     </details>
+  );
+}
+
+/**
+ * The same copies as a title-bar icon (IMPROVEMENT-002): the printer opens a
+ * window with the formats in each language. Shown only when the reader may
+ * have at least one copy, like the menu.
+ */
+export async function ExportIcon({
+  exportKey,
+  id,
+  title,
+}: {
+  readonly exportKey: ExportKey;
+  readonly id: string;
+  /** The window's heading: the document and its number. */
+  readonly title: string;
+}) {
+  const [reader, t, admin] = await Promise.all([
+    requireContext().then((context) => context.principal),
+    getTranslations('print'),
+    getTranslations('admin'),
+  ]);
+  const formats = FORMATS.filter((format) => mayExport(reader, exportKey, format));
+  if (formats.length === 0) return null;
+  const names: Record<ExportFormat, string> = { pdf: t('pdf'), xlsx: t('excel'), docx: t('word') };
+  return (
+    <PrintButton closeLabel={admin('close')} label={t('menu')} title={title}>
+      <div data-export-menu={exportKey}>
+        {(['en', 'ar'] as const).map((lang) => (
+          <div className={styles.language} key={lang} lang={lang}>
+            <span className={styles.languageName}>{lang === 'ar' ? t('arabic') : t('english')}</span>
+            <span className={styles.formats}>
+              {formats.map((format) => (
+                <a
+                  className={styles.format}
+                  data-format={format}
+                  data-lang={lang}
+                  download
+                  href={`${exportHref(exportKey, id)}?format=${format}&lang=${lang}`}
+                  key={format}
+                >
+                  {names[format]}
+                </a>
+              ))}
+            </span>
+          </div>
+        ))}
+      </div>
+    </PrintButton>
   );
 }

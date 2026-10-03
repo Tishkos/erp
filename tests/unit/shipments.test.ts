@@ -3,9 +3,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  assertContainerNumber,
   assertReceiptLines,
   assertStatusMove,
   checkDigitOk,
+  expectedCheckDigit,
+  planContainers,
   isContainerNo,
   parseContainerList,
   progress,
@@ -77,5 +80,42 @@ describe('§18 · the receipt', () => {
     expect(() => assertReceiptLines(short, 'Seal broken')).not.toThrow();
     expect(() => assertReceiptLines([], null)).toThrow(/no lines/);
     expect(() => assertReceiptLines([{ planned: 1n, received: -1n, damaged: 0n, short: 0n }], 'x')).toThrow(/never below zero/);
+  });
+});
+
+describe('IM2 · a container number typed on a screen', () => {
+  it('is refused when its check digit is wrong, naming the right one', () => {
+    expect(assertContainerNumber('mscu 123456-6')).toBe('MSCU1234566');
+    expect(expectedCheckDigit('MSCU1234565')).toBe(6);
+    expect(() => assertContainerNumber('MSCU1234565')).toThrow(/should be 6/);
+    expect(() => assertContainerNumber('MSC1234566')).toThrow(/not a container number/);
+  });
+});
+
+describe('IM2 · what each container of a B/L carries', () => {
+  const models = [
+    { key: 'a', label: 'PANEL', available: 100n * U },
+    { key: 'b', label: 'INVERTER', available: 10n * U },
+  ];
+  it('divides a model left empty in every row equally, the last taking the rest', () => {
+    const { plan, estimated } = planContainers(models, [{ quantities: {} }, { quantities: {} }, { quantities: {} }]);
+    expect(plan.map((row) => row[0])).toEqual([33n * U, 33n * U, 34n * U]);
+    expect(plan.map((row) => row[1])).toEqual([3n * U, 3n * U, 4n * U]);
+    expect(estimated).toBe(true);
+  });
+  it('takes typed quantities as typed, an empty cell beside them meaning none', () => {
+    const { plan, estimated } = planContainers(models, [
+      { quantities: { a: 60n * U, b: null } },
+      { quantities: { a: 40n * U, b: 10n * U } },
+    ]);
+    expect(plan).toEqual([
+      [60n * U, 0n],
+      [40n * U, 10n * U],
+    ]);
+    expect(estimated).toBe(false);
+  });
+  it('never plans more than is left of what was ordered', () => {
+    expect(() => planContainers(models, [{ quantities: { a: 60n * U } }, { quantities: { a: 41n * U } }])).toThrow(/PANEL: 101 in these containers, but only 100/);
+    expect(() => planContainers(models, [{ quantities: { a: -1n } }])).toThrow(/never less than none/);
   });
 });

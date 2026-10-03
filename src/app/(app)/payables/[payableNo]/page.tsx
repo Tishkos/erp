@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import {
   AdminPage,
-  Checkbox,
   Field,
   FilterRow,
   Flash,
@@ -59,6 +58,8 @@ import { createApplication } from '../payment-applications/actions';
 import { registerPd } from '../pd/actions';
 import { pdChip } from '../pd/status';
 import { claimShortageAction, createBlAction } from '../shipments/actions';
+import { ContainerRowsGrid } from '@/components/admin/container-rows-grid';
+import { SIZE_TYPES } from '@/server/domain/shipments';
 import { addLandedCharge, lockLandedCost, settleExchangeDifference, withdrawLandedCharge } from '../actions';
 import { containerChip } from '../containers/status';
 import { STATUS_CHIP, statusKey } from '../payment-applications/status';
@@ -123,6 +124,19 @@ export default async function PayablePage({
   const mayCreateBl = can(principal, 'create', shipmentsService.BL_OBJECT);
   // IM2-1 — a shortage is claimed with a goods return.
   const mayClaim = can(principal, 'create', 'goods_return');
+  // IM2 — the B/L's containers table, its words in the reader's language.
+  const containerGridLabels = {
+    containerNo: sh('container_no'),
+    sizeType: sh('size_type'),
+    sealNo: sh('seal_no'),
+    remove: sh('remove_container'),
+    left: sh('grid_left'),
+    typed: sh('grid_typed'),
+    divided: sh('grid_divided'),
+    tooMany: sh('grid_too_many', { left: '{left}' }),
+    notANumber: sh('grid_not_a_number'),
+    checkDigit: sh('grid_check_digit', { digit: '{digit}' }),
+  };
 
   const laneFilter = typeof query.lane === 'string' && query.lane ? query.lane : null;
 
@@ -161,6 +175,7 @@ export default async function PayablePage({
     pdPickers,
     shipment,
     blPorts,
+    blModels,
     landed,
   } = found;
   const openPay = query.pay === '1';
@@ -1084,26 +1099,29 @@ export default async function PayablePage({
                       <Grid>
                         <Field label={sh('bl_no')} name="bl_no" required />
                         <Field label={sh('bl_date')} name="bl_date" required type="date" />
-                        <Field label={sh('eta')} name="eta" type="date" />
+                        <Field hint={sh('eta_hint')} label={sh('eta')} name="eta" required type="date" />
                         <Field label={sh('vessel')} name="vessel" />
                         <Field label={sh('voyage')} name="voyage" />
+                        <Field label={sh('shipping_line')} name="shipping_line" />
+                        <Field label={sh('port_of_loading')} name="port_of_loading" />
                         <Select
                           emptyLabel="—"
                           label={sh('port_of_discharge')}
                           name="port_of_discharge"
                           options={blPorts.map((port) => ({ value: port.code, label: port.name }))}
                         />
-                        <Field hint={sh('size_type_hint')} label={sh('size_type')} name="size_type" />
                       </Grid>
-                      <Field
-                        hint={sh('containers_hint')}
-                        id="bl-containers"
-                        label={sh('containers')}
-                        name="containers"
-                        type="textarea"
-                        wide
+                      <p className={s.sapGridCaption}>{sh('containers_caption')}</p>
+                      <ContainerRowsGrid
+                        labels={containerGridLabels}
+                        models={blModels.map((model) => ({
+                          key: model.key,
+                          label: model.itemCode ?? model.description,
+                          unit: model.uomCode,
+                          left: model.left,
+                        }))}
+                        sizeTypes={SIZE_TYPES.map((type) => ({ code: type.code, label: `${type.code} (${type.iso})` }))}
                       />
-                      <Checkbox defaultChecked={shipment.bls.length === 0} label={sh('spread_lines')} name="spread_lines" />
                       <SubmitRow>
                         <Submit label={sh('new_bl')} />
                       </SubmitRow>

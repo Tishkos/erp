@@ -14,6 +14,7 @@
  *   * **The receipt's variance (§18).** What was planned against what came:
  *     received, damaged, short.
  */
+import { checkDigitFor } from '../../lib/container-number';
 import { QUANTITY_SCALE } from './uom';
 
 export class ShipmentValidationError extends Error {
@@ -38,23 +39,53 @@ export function isContainerNo(value: string): boolean {
 /** ISO 6346 check digit — the seventh digit computed from the first ten characters. */
 export function checkDigitOk(value: string): boolean {
   if (!isContainerNo(value)) return false;
-  const letterValue = (c: string) => {
-    // A=10 … skipping multiples of 11 (11, 22, 33).
-    let v = 10;
-    for (let code = 65; code < c.charCodeAt(0); code += 1) {
-      v += 1;
-      if (v % 11 === 0) v += 1;
-    }
-    return v;
-  };
-  let sum = 0;
-  for (let i = 0; i < 10; i += 1) {
-    const c = value[i]!;
-    const v = /[A-Z]/.test(c) ? letterValue(c) : Number(c);
-    sum += v * 2 ** i;
-  }
-  return (sum % 11) % 10 === Number(value[10]);
+  return checkDigitFor(value.slice(0, 10)) === Number(value[10]);
 }
+
+/** The check digit a container number's first ten characters call for (ISO 6346). */
+export function expectedCheckDigit(value: string): number | null {
+  return checkDigitFor(value.slice(0, 10));
+}
+
+/**
+ * A container number typed on a screen: the ISO 6346 shape *and* its check
+ * digit (IM2, 2026-10-03). A typo in the last digit used to be stored, and a
+ * shipping line cannot find a box by a wrong number. The legacy sheet keeps to
+ * the shape alone (its numbers are history, not typing).
+ */
+export function assertContainerNumber(value: string): string {
+  const number = value.replace(/[\s-]+/g, '').toUpperCase();
+  if (!isContainerNo(number)) {
+    throw new ShipmentValidationError(
+      `'${value.trim()}' is not a container number: four letters (the owner code and U, J, Z or R) and seven digits, e.g. MSCU1234566.`,
+    );
+  }
+  if (!checkDigitOk(number)) {
+    throw new ShipmentValidationError(
+      `${number}: its last digit is the check digit and should be ${expectedCheckDigit(number)} — check the number on the B/L.`,
+    );
+  }
+  return number;
+}
+
+/**
+ * The usual ISO 6346 size and type codes, as the B/L writes them. A fixed
+ * list: it is the standard's, not the company's (the ISO code is kept with it).
+ */
+export const SIZE_TYPES = [
+  { code: '20GP', iso: '22G1' },
+  { code: '40GP', iso: '42G1' },
+  { code: '40HC', iso: '45G1' },
+  { code: '45HC', iso: 'L5G1' },
+  { code: '20RF', iso: '22R1' },
+  { code: '40RH', iso: '45R1' },
+  { code: '20OT', iso: '22U1' },
+  { code: '40OT', iso: '42U1' },
+  { code: '20FR', iso: '22P1' },
+  { code: '40FR', iso: '42P1' },
+  { code: '20TK', iso: '22T1' },
+] as const;
+export const isSizeType = (value: string) => SIZE_TYPES.some((type) => type.code === value);
 
 /**
  * Reads pasted container numbers: one per line, or separated by commas,
@@ -158,6 +189,58 @@ export function spreadEqually(total: bigint, n: number): bigint[] {
   const out = Array.from({ length: n }, () => base);
   out[n - 1] = total - base * (count - 1n);
   return out;
+}
+
+/**
+ * IM2 — the containers of a B/L and what each carries, model by model.
+ *
+ * `available` is what of a model is still to be put in a container: ordered,
+ * less what live containers already plan. A model whose column is left empty
+ * in every row is divided equally over the new containers (whole units, the
+ * last taking the rest — §24.3, flagged estimated). Typed quantities are taken
+ * as typed, an empty cell beside them meaning none of it in that container.
+ * Never more than is available: a B/L does not ship what was not ordered.
+ */
+export interface PlanModel {
+  readonly key: string;
+  readonly label: string;
+  readonly available: bigint;
+}
+
+export function planContainers(
+  models: readonly PlanModel[],
+  rows: readonly { readonly quantities: Readonly<Record<string, bigint | null>> }[],
+): { plan: bigint[][]; estimated: boolean } {
+  const plan = rows.map(() => models.map(() => 0n));
+  let estimated = false;
+  for (const [m, model] of models.entries()) {
+    const typed = rows.map((row) => row.quantities[model.key] ?? null);
+    if (typed.some((value) => value !== null && value < 0n)) {
+      throw new ShipmentValidationError(`${model.label}: a container carries none or more, never less than none.`);
+    }
+    if (typed.every((value) => value === null)) {
+      if (model.available <= 0n || rows.length === 0) continue;
+      const shares = spreadEqually(model.available, rows.length);
+      for (const [r, share] of shares.entries()) plan[r]![m] = share;
+      estimated = true;
+      continue;
+    }
+    const total = typed.reduce<bigint>((sum, value) => sum + (value ?? 0n), 0n);
+    if (total > model.available) {
+      throw new ShipmentValidationError(
+        `${model.label}: ${formatPlain(total)} in these containers, but only ${formatPlain(model.available)} is left to ship of what was ordered.`,
+      );
+    }
+    for (const [r, value] of typed.entries()) plan[r]![m] = value ?? 0n;
+  }
+  return { plan, estimated };
+}
+
+/** A scaled quantity as plain digits (no grouping) — for messages. */
+function formatPlain(value: bigint): string {
+  const whole = value / UNIT;
+  const fraction = value % UNIT;
+  return fraction === 0n ? whole.toString() : `${whole}.${fraction.toString().padStart(Number(QUANTITY_SCALE), '0').replace(/0+$/, '')}`;
 }
 
 // ---------------------------------------------------------------------------
