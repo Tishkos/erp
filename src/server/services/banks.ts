@@ -8,7 +8,7 @@
  * lent by one (Stage 6). Nothing is deleted — a bank the company stopped
  * using is deactivated, with a reason.
  */
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { bank, bankCashAccount } from '../db/schema';
 import {
@@ -48,6 +48,28 @@ export async function listActive(tx: Tx) {
     .select({ code: bank.code, name: bank.name, swiftBic: bank.swiftBic })
     .from(bank)
     .where(eq(bank.active, true))
+    .orderBy(asc(bank.name));
+}
+
+/**
+ * The banks we actually hold an account at.
+ *
+ * For anywhere that asks which bank a thing goes through, rather than which
+ * banks exist. A customs PD is the case it was written for: one registered
+ * against a bank we do not bank with can never be paid, because
+ * `customs-pd.paymentReadiness` requires the paying account's bank to be the
+ * PD's (2026-10-03).
+ *
+ * Joined on `bank_cash_account.bank_code`, which is a foreign key — not on the
+ * bank's name, which is free text on the account and would quietly drop a bank
+ * whose name had been typed a second way.
+ */
+export async function listWeBankWith(tx: Tx) {
+  return tx
+    .selectDistinct({ code: bank.code, name: bank.name, swiftBic: bank.swiftBic })
+    .from(bank)
+    .innerJoin(bankCashAccount, eq(bankCashAccount.bankCode, bank.code))
+    .where(and(eq(bank.active, true), eq(bankCashAccount.active, true)))
     .orderBy(asc(bank.name));
 }
 
