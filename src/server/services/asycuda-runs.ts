@@ -19,9 +19,9 @@
  * text as read can answer the first half.
  */
 import { createHash } from 'node:crypto';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
-import { asycudaRun } from '../db/schema';
+import { appUser, asycudaRun, customsPd } from '../db/schema';
 import {
   AsycudaFileError,
   chooseSheet,
@@ -34,10 +34,14 @@ import {
 } from '../domain/asycuda-file';
 import { isCompoundFile, readXlsWorkbook } from '../xls-read';
 import { readWorkbook } from '../xlsx-read';
+import { businessToday } from '../domain/business-date';
+import { can } from '../domain/permissions';
+import * as attachments from './attachments';
 import * as audit from './audit';
 import * as authz from './authorization';
 import type { ActorContext } from './chart-of-accounts';
 import * as customs from './customs-pd';
+import { allocateDocumentNumber } from './numbering';
 
 export interface UploadedFile {
   readonly fileName: string;
@@ -122,8 +126,14 @@ export function listSha(text: string): string {
 export async function startRun(
   tx: Tx,
   ctx: ActorContext,
-  input: { readonly source: 'file' | 'paste'; readonly fileNames: readonly string[]; readonly text: string },
-): Promise<{ readonly id: string; readonly changeCount: number }> {
+  input: {
+    readonly source: 'file' | 'paste';
+    readonly fileNames: readonly string[];
+    readonly text: string;
+    /** IMPROVEMENT-002 — the files read, filed on the reading as its attachments. */
+    readonly files?: readonly UploadedFile[];
+  },
+): Promise<{ readonly id: string; readonly runNo: string; readonly changeCount: number }> {
   await authz.authorize(ctx.principal, 'import', customs.PERMISSION_OBJECT, { branchCode: ctx.branchCode });
 
   const text = input.text.trim();
@@ -132,9 +142,12 @@ export async function startRun(
   const diff = await customs.asycudaDiff(tx, text);
   const changeCount = diff.rows.filter((row) => row.outcome === 'change').length;
 
+  // IMPROVEMENT-002 — a reading is a document with its own number.
+  const allocated = await allocateDocumentNumber(tx, 'ASYCUDA_RUN', { year: Number(businessToday().slice(0, 4)) }, ctx.principal.userId);
   const [row] = await tx
     .insert(asycudaRun)
     .values({
+      runNo: allocated.documentNo,
       source: input.source,
       fileNames: [...input.fileNames],
       textSha256: listSha(text),
@@ -149,6 +162,13 @@ export async function startRun(
     .returning({ id: asycudaRun.id });
 
   const id = row!.id;
+  // The export it was read from stays with it: "which file did we act on?"
+  // is answered by opening the document. Filed by whoever may file paperwork.
+  if (input.files && input.files.length > 0 && can(ctx.principal, 'create', attachments.PERMISSION_OBJECT)) {
+    for (const file of input.files) {
+      await attachments.upload(tx, ctx, { objectType: RUN_OBJECT, objectId: id, fileName: file.fileName, content: file.content });
+    }
+  }
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
     action: 'asycuda.list_read',
@@ -163,9 +183,136 @@ export async function startRun(
       changes: changeCount,
       unreadable: diff.unreadable.length,
       sha256: listSha(text),
+      runNo: allocated.documentNo,
     },
   });
-  return { id, changeCount };
+  return { id, runNo: allocated.documentNo, changeCount };
+}
+
+/** The object a reading's attachments and history are filed under. */
+export const RUN_OBJECT = 'asycuda_run';
+
+/**
+ * IMPROVEMENT-002 — the readings as a register, newest first, searched by
+ * number or file name and filtered by status.
+ */
+export async function listRuns(tx: Tx, filter: { readonly search?: string | null; readonly status?: 'previewed' | 'applied' | null; readonly page?: number }) {
+  const search = filter.search?.trim() ? `%${filter.search.trim()}%` : null;
+  const where = and(
+    filter.status ? eq(asycudaRun.status, filter.status) : undefined,
+    search ? or(ilike(asycudaRun.runNo, search), sql`${asycudaRun.fileNames}::text ilike ${search}`) : undefined,
+  );
+  const pageSize = 50;
+  const page = Math.max(1, filter.page ?? 1);
+  const [count] = await tx.select({ n: sql<number>`count(*)::int` }).from(asycudaRun).where(where);
+  const rows = await tx
+    .select({
+      id: asycudaRun.id,
+      runNo: asycudaRun.runNo,
+      source: asycudaRun.source,
+      fileNames: asycudaRun.fileNames,
+      lineCount: asycudaRun.lineCount,
+      changeCount: asycudaRun.changeCount,
+      unreadableCount: asycudaRun.unreadableCount,
+      status: asycudaRun.status,
+      readAt: asycudaRun.readAt,
+      readBy: appUser.displayName,
+      appliedAt: asycudaRun.appliedAt,
+      files: sql<number>`(select count(*)::int from attachment a where a.object_type = ${RUN_OBJECT} and a.object_id = ${asycudaRun.id}::text and a.superseded_by_id is null)`,
+    })
+    .from(asycudaRun)
+    .leftJoin(appUser, eq(appUser.id, asycudaRun.readBy))
+    .where(where)
+    .orderBy(desc(asycudaRun.readAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
+  const total = count?.n ?? 0;
+  return { rows, total, page, pageSize, pages: Math.max(1, Math.ceil(total / pageSize)) };
+}
+
+/** One line of a reading as the document shows it. */
+export interface RunLine {
+  readonly line: number;
+  /** The line exactly as ASYCUDA gave it, its fields in order. */
+  readonly fields: readonly string[];
+  readonly pdNo: string | null;
+  readonly effectiveDate: string | null;
+  /** What ASYCUDA says, as one of our status codes (null when the line was not read). */
+  readonly asycudaStatus: string | null;
+  /** What the PD was when the list was read. */
+  readonly wasStatus: string | null;
+  readonly outcome: 'change' | 'same' | 'not_found' | 'ambiguous' | 'final' | 'unreadable';
+  readonly why: string | null;
+  readonly payableNo: string | null;
+  /** The PD as it stands now, for the link and the "now" column. */
+  readonly pd: { readonly pdNo: string; readonly year: number; readonly statusCode: string } | null;
+}
+
+/**
+ * IMPROVEMENT-002 — the reading's lines in the order ASYCUDA listed them:
+ * each line's own fields as they were in the export, what was read from it,
+ * what the PD was then, and what it is now. Read lines and unread ones are one
+ * list, so a line nobody could read sits where it was in the file.
+ */
+export async function runLines(tx: Tx, run: { readonly lineText: string; readonly report: unknown }): Promise<RunLine[]> {
+  const report = (run.report ?? {}) as {
+    rows?: { line: number; pdNo: string; pdId: string | null; payableNo: string | null; currentStatus: string | null; newStatus: string; effectiveDate: string | null; outcome: RunLine['outcome'] }[];
+    unreadable?: { line: number; text: string; why: string }[];
+  };
+  const raw = run.lineText.split(/\r?\n/);
+  const fieldsOf = (line: number, fallback: string) =>
+    (raw[line - 1] ?? fallback)
+      .split(/\t|,|;|\s{2,}/)
+      .map((field) => field.trim())
+      .filter((field) => field !== '');
+  const ids = [...new Set((report.rows ?? []).map((row) => row.pdId).filter((id): id is string => Boolean(id)))];
+  const live = ids.length
+    ? await tx
+        .select({ id: customsPd.id, pdNo: customsPd.pdNo, year: customsPd.registrationYear, statusCode: customsPd.statusCode })
+        .from(customsPd)
+        .where(inArray(customsPd.id, ids))
+    : [];
+  const byId = new Map(live.map((pd) => [pd.id, pd]));
+  const read: RunLine[] = (report.rows ?? []).map((row) => {
+    const pd = row.pdId ? byId.get(row.pdId) : undefined;
+    return {
+      line: row.line,
+      fields: fieldsOf(row.line, row.pdNo),
+      pdNo: row.pdNo,
+      effectiveDate: row.effectiveDate,
+      asycudaStatus: row.newStatus,
+      wasStatus: row.currentStatus,
+      outcome: row.outcome,
+      why: null,
+      payableNo: row.payableNo,
+      pd: pd ? { pdNo: pd.pdNo, year: Number(pd.year), statusCode: pd.statusCode } : null,
+    };
+  });
+  const unread: RunLine[] = (report.unreadable ?? []).map((row) => ({
+    line: row.line,
+    fields: fieldsOf(row.line, row.text),
+    pdNo: null,
+    effectiveDate: null,
+    asycudaStatus: null,
+    wasStatus: null,
+    outcome: 'unreadable',
+    why: row.why,
+    payableNo: null,
+    pd: null,
+  }));
+  return [...read, ...unread].sort((a, b) => a.line - b.line);
+}
+
+/** One reading by its number, with who read and applied it. */
+export async function runByNo(tx: Tx, runNo: string) {
+  const [row] = await tx.select().from(asycudaRun).where(eq(asycudaRun.runNo, runNo.trim().toUpperCase())).limit(1);
+  if (!row) return null;
+  const people = await tx
+    .select({ id: appUser.id, name: appUser.displayName })
+    .from(appUser)
+    .where(inArray(appUser.id, [row.readBy, ...(row.appliedBy ? [row.appliedBy] : [])]));
+  const nameOf = (id: string | null) => (id ? (people.find((p) => p.id === id)?.name ?? null) : null);
+  return { run: row, readByName: nameOf(row.readBy), appliedByName: nameOf(row.appliedBy) };
 }
 
 /** The runs so far, newest first. */

@@ -1,6 +1,7 @@
 import { EXPORT_ACCESS, type ExportKey } from './access';
 import * as documents from './documents';
 import * as shipmentDocuments from './shipment-documents';
+import * as customsDocuments from './customs-documents';
 import type { BuildContext, Built } from './documents';
 import * as reports from './reports';
 import * as projectReports from './project-reports';
@@ -46,6 +47,7 @@ const BUILDERS = {
   journal_entry: byId(documents.journalEntry),
   item_reconciliation: byId(documents.itemReconciliation),
   bill_of_lading: byId(shipmentDocuments.billOfLading),
+  asycuda_reading: byId(customsDocuments.asycudaReading),
   customer_statement: (ctx, input) => reports.partnerStatement(ctx, 'customer', input.query),
   supplier_statement: (ctx, input) => reports.partnerStatement(ctx, 'supplier', input.query),
   bank_statement: (ctx, input) => (input.id ? reports.bankStatement(ctx, input.id, input.query, 'bank') : Promise.resolve(null)),

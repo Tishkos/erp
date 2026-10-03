@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { runAdminAndReturn, text } from '@/server/admin-action';
+import { registerAllRecords } from '@/server/records';
 import { parseDecimal } from '@/server/domain/money';
 import type { InstalmentDraft } from '@/server/domain/payment-applications';
 import * as applications from '@/server/services/payment-applications';
@@ -171,6 +172,8 @@ export async function attachToApplication(formData: FormData): Promise<void> {
   }
   const upload = file as File;
   const content = Buffer.from(await upload.arrayBuffer());
+  // Where files go and who may read them back — registered before the first upload of a cold process.
+  registerAllRecords();
   await runAdminAndReturn(async (tx, ctx) => {
     const row = await applications.loadByNo(tx, applicationNo);
     await attachments.upload(tx, ctx, {

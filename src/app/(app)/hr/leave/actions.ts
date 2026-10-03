@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { flag, runAdmin, runAdminAndReturn, text } from '@/server/admin-action';
+import { registerAllRecords } from '@/server/records';
 import * as attachments from '@/server/services/attachments';
 import * as leave from '@/server/services/leave';
 
@@ -71,6 +72,8 @@ export async function attachToLeave(form: FormData): Promise<void> {
   if (!(file instanceof File) || file.size === 0) redirect(`${record(requestNo)}?error=attachment_missing`);
   const upload = file as File;
   const content = Buffer.from(await upload.arrayBuffer());
+  // Where files go and who may read them back — registered before the first upload of a cold process.
+  registerAllRecords();
   await runAdminAndReturn(async (tx, ctx) => {
     await attachments.upload(tx, ctx, { objectType: leave.PERMISSION_OBJECT, objectId: text(form, 'id'), fileName: upload.name, content });
   }, record(requestNo));

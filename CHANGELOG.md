@@ -7,6 +7,13 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+### Changed — ASYCUDA readings are documents (IMPROVEMENT-002, sponsor 2026-10-03)
+- **Update from ASYCUDA is a register.** It lists every reading of the ASYCUDA document list, like the other lists: search, a status filter (Not applied / Applied), number, read on, read by, file, lines, changes, not read, applied on. "Read the ASYCUDA list" in the header takes the export (Excel/CSV, several files read as one) or a pasted list. Where the declarations stand stays on the PD register ("Expiring within N days"), so this screen no longer repeats it.
+- **Each reading is a numbered document**, ASY-YYYY-NNNNN (migration 0268; earlier readings are numbered by date). It opens on its own page with its boxes and its lines in ASYCUDA's order: each line as ASYCUDA wrote it, the PD (linked), what ASYCUDA says, the date, the import, the status when read, the status now, and what applying does. Apply is the action at its foot, once.
+- **The export it was read from is filed on the reading.** The page carries the paperclip, the clock and the printer in its title bar. The reading prints (PDF, Excel, Word × EN/AR). Whoever may read the list into the PDs may print it, and the customs and logistics officers may now file paperwork.
+- **The PD page** moved its attachments and history into the same title-bar doors.
+- **Uploads on the payables screens** (import, invoice, B/L, container, PD, reading, application, loan) and on leave now register the attachment rules first. A server that had just started refused the first file.
+
 ### Changed — the B/L, written properly (IMPROVEMENT-002, sponsor 2026-10-03)
 - **Containers are a table, not a comma-separated paste.** One row per container: number, size/type, seal no., and the quantity it carries of each model of the import. Leave a model's column empty and what is left of it is divided equally. The grid's foot shows what is typed against what is left; never more than was ordered. Pasting several numbers into one box fills a row each.
 - **Container numbers are checked against ISO 6346, check digit included.** The grid points out a wrong last digit as it is typed, and the service refuses it, naming the right digit. The hint's example is now MSCU1234566.

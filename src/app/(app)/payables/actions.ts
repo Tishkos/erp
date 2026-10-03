@@ -9,6 +9,7 @@
  * sentence. The services hold every rule.
  */
 import { runAdminAndReturn, rowCount, text } from '@/server/admin-action';
+import { registerAllRecords } from '@/server/records';
 import * as attachments from '@/server/services/attachments';
 import * as events from '@/server/services/payable-events';
 import * as holds from '@/server/services/payable-holds';
@@ -239,6 +240,8 @@ export async function attachToPayable(form: FormData): Promise<void> {
   }
   const upload = file as File;
   const content = Buffer.from(await upload.arrayBuffer());
+  // Where files go and who may read them back — registered before the first upload of a cold process.
+  registerAllRecords();
   await runAdminAndReturn(async (tx, ctx) => {
     const row = await payables.loadByNo(tx, payableNo);
     await attachments.upload(tx, ctx, {

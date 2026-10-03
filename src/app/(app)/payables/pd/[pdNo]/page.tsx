@@ -15,8 +15,9 @@ import {
 } from '@/components/admin';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
-import { Attachments } from '@/components/admin/attachments';
+import { Attachments, readAttachments } from '@/components/admin/attachments';
 import { RecordHistory } from '@/components/admin/history';
+import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -78,6 +79,7 @@ export default async function PdPage({
         statuses: await customs.statuses(tx),
         bankRows: await banks.listActive(tx),
         imports: !view.owner && mayEdit ? await customs.importChoices(tx) : [],
+        files: await readAttachments(tx, customs.PERMISSION_OBJECT, view.pd.id),
       };
     } catch (error) {
       // E1 — a missing record is a 404; anything else reaches the error boundary.
@@ -199,6 +201,23 @@ export default async function PdPage({
       ) : null}
 
       <DocumentWindow
+        titleActions={
+          <>
+            <AttachmentsButton closeLabel={admin('close')} count={found.files.rows.length} label={admin('attachments.title')} title={admin('attachments.title')}>
+              <Attachments
+                action={attachToPd}
+                hidden={hidden}
+                mayAttach={mayEdit && can(principal, 'create', 'attachment')}
+                objectId={pd.id}
+                objectType={customs.PERMISSION_OBJECT}
+                preloaded={found.files}
+              />
+            </AttachmentsButton>
+            <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
+              <RecordHistory objectId={pd.id} objectType={customs.PERMISSION_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         actions={
           <>
             {mayEdit && !status.isTerminal ? (
@@ -298,8 +317,6 @@ export default async function PdPage({
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={admin('history')}
         documentType={t('document_type')}
         fields={fields}
         id="pd-document"
@@ -336,19 +353,6 @@ export default async function PdPage({
           </tbody>
         </table>
       </DocumentWindow>
-
-      <section aria-label={t('attachments')} className={s.sapDoc}>
-        <div className={s.sapWindow}>
-          <Attachments
-            action={attachToPd}
-            hidden={hidden}
-            mayAttach={mayEdit}
-            objectId={pd.id}
-            objectType={customs.PERMISSION_OBJECT}
-          />
-        </div>
-      </section>
-      <RecordHistory objectId={pd.id} objectType={customs.PERMISSION_OBJECT} />
     </AdminPage>
   );
 }

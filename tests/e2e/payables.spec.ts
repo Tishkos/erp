@@ -13,8 +13,8 @@ import writeXlsxFile from 'write-excel-file/node';
  *        screen (moved there from Purchase Invoices, 2026-10-03), a note on
  *        the invoice, Unpaid / Paid / Overdue on the invoice register.
  *   §16  Stage 4: a PD registered on the import, validated on its record,
- *        listed in the ASYCUDA screen's register of declarations, and the
- *        ASYCUDA list read into a kept reading before it is applied.
+ *        and the ASYCUDA list read into a numbered reading (its own page)
+ *        before it is applied.
  *   §15  Stage 3: a payment application for a part of what is owed, from the
  *        import's Payments lane (the instalment plan left the import on
  *        2026-10-03 — the application asks for the account and the amount);
@@ -294,24 +294,28 @@ test.describe('A22 · payables in a browser', () => {
     const change = page.getByRole('dialog');
     await change.getByLabel('New status').selectOption('validated');
     await change.getByRole('button', { name: 'Change status' }).click();
-    await expect(page.getByText('Validated ·').first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/^Validated · /).first()).toBeVisible({ timeout: 30_000 });
 
-    // §21.8 — the ASYCUDA screen is the register of declarations first: the
-    // new PD is listed with its import before anything is read.
+    // §21.8 — the list pasted (a file works the same way) becomes a numbered
+    // reading: its lines as ASYCUDA gave them and what each does, applied
+    // once, then listed among the readings.
     await page.goto('/payables/pd/asycuda');
-    const standing = page.getByRole('table', { name: 'Where the declarations stand' });
-    await expect(standing.getByRole('link', { name: pdNo })).toBeVisible();
-    // The list pasted (a file works the same way): the difference first, kept
-    // as a reading, then applied.
-    await page.getByRole('textbox', { name: 'List' }).fill(`${pdNo}\tTotally Written Off\n12345 Lost`);
-    await page.getByRole('button', { name: 'Show the difference' }).click();
-    await page.waitForURL(/\/payables\/pd\/asycuda\?run=/);
-    await expect(page.getByText('Will be updated')).toBeVisible();
-    await expect(page.getByText('Not read')).toBeVisible();
+    await page.getByRole('button', { name: 'Read the ASYCUDA list' }).click();
+    const read = page.getByRole('dialog');
+    await read.getByRole('textbox', { name: 'List' }).fill(`${pdNo}\tTotally Written Off\n12345 Lost`);
+    await read.getByRole('button', { name: 'Show the difference' }).click();
+    await page.waitForURL(/\/payables\/pd\/asycuda\/ASY-\d{4}-\d+/);
+    const runNo = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!);
+    const lines = page.locator('#asycuda-document table').first();
+    await expect(lines.getByRole('row', { name: new RegExp(pdNo) })).toContainText('Will be updated');
+    await expect(lines.getByText('Not read', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Apply 1 changes' }).click();
-    await page.waitForURL(/\/payables\/pd\/asycuda\?run=.*applied=1/);
-    await expect(page.getByText(/^Applied on /)).toBeVisible();
-    await expect(page.getByRole('table', { name: 'Readings so far' }).getByText('Applied', { exact: true }).first()).toBeVisible();
+    await page.waitForURL(/saved=1/);
+    await expect(lines.getByRole('row', { name: new RegExp(pdNo) })).toContainText('Updated');
+    await expect(lines.getByRole('row', { name: new RegExp(pdNo) })).toContainText('Totally written off');
+    await expect(page.getByRole('button', { name: /^Apply / })).toHaveCount(0);
+    await page.goto('/payables/pd/asycuda');
+    await expect(page.getByRole('row', { name: new RegExp(runNo) })).toContainText('Applied');
     await page.goto(`/payables/pd?view=final&q=${pdNo}`);
     await expect(page.getByRole('row', { name: new RegExp(pdNo) })).toContainText('Totally written off');
   });

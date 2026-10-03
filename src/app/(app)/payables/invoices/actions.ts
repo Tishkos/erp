@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { rowCount, runAdmin, runAdminAndReturn, text, withQuery } from '@/server/admin-action';
+import { registerAllRecords } from '@/server/records';
 import { parseDecimal } from '@domain/money';
 import { parseQuantity } from '@domain/uom';
 import { businessToday } from '@/server/domain/business-date';
@@ -297,6 +298,8 @@ export async function attachToInvoice(formData: FormData): Promise<void> {
   }
   const upload = file as File;
   const content = Buffer.from(await upload.arrayBuffer());
+  // Where files go and who may read them back — registered before the first upload of a cold process.
+  registerAllRecords();
   await runAdminAndReturn(
     async (tx, ctx) => {
       const found = await ap.viewByNo(tx, invoiceNo);
@@ -331,6 +334,8 @@ export async function draftFromDocumentAction(formData: FormData): Promise<void>
   const upload = file as File;
   const content = Buffer.from(await upload.arrayBuffer());
 
+  // Where files go and who may read them back — registered before the first upload of a cold process.
+  registerAllRecords();
   await runAdminAndReturn(
     async (tx, ctx) => {
       const [catalogue, suppliers, settings] = await Promise.all([
