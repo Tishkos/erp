@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { ArrowDownLeft, ArrowUpRight, Banknote, Landmark, Wallet } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Banknote, Hourglass, Landmark, Wallet } from 'lucide-react';
 import { Panel } from '@/components/ui';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import {
@@ -488,6 +488,29 @@ export async function AccountRecord({
                     </strong>
                   </div>
 
+                  {/*
+                    REQ-AP-001 §15.1 — what payment applications hold on this
+                    account, and have not yet sent.
+
+                    Between the money that arrived and the money that left,
+                    because that is what it is: the same fact one moment
+                    earlier. Always drawn, including at nought (2026-10-03) —
+                    it used to appear only when something was held, which hid
+                    it exactly when a person most needs to know that nothing
+                    is holding the balance back.
+                  */}
+                  {reserved ? (
+                    <div className={`${s.holdingsFlow} ${s.holdingsPending}`}>
+                      <span>
+                        <Hourglass aria-hidden="true" />
+                        {t('accounts_shared.reserved')}
+                      </span>
+                      <strong>
+                        <bdi dir="ltr">{money(toDecimalString(reserved.committedIqd, 4n))}</bdi>
+                      </strong>
+                    </div>
+                  ) : null}
+
                   <div className={`${s.holdingsFlow} ${s.holdingsOut}`}>
                     <span>
                       <ArrowUpRight aria-hidden="true" />
@@ -505,6 +528,15 @@ export async function AccountRecord({
                     </strong>
                   </div>
 
+                  {reserved ? (
+                    <div className={s.holdingsFlow}>
+                      <span>{t('accounts_shared.available')}</span>
+                      <strong>
+                        <bdi dir="ltr">{money(toDecimalString(reserved.availableIqd, 4n))}</bdi>
+                      </strong>
+                    </div>
+                  ) : null}
+
                   <div className={s.holdingsFlow}>
                     <span>{t('accounts_shared.last_movement')}</span>
                     <strong>
@@ -517,33 +549,6 @@ export async function AccountRecord({
                       )}
                     </strong>
                   </div>
-
-                  {/*
-                    REQ-AP-001 §15.1 — what payment applications hold on this
-                    account, and what is left to promise.
-
-                    Always drawn, including at nought (2026-10-03). It used to
-                    appear only when something was held, which hid it exactly
-                    when a person most needs to know that nothing is holding
-                    the balance back — and a figure that comes and goes
-                    teaches nobody what it means.
-                  */}
-                  {reserved ? (
-                    <>
-                      <div className={s.holdingsFlow}>
-                        <span>{t('accounts_shared.reserved')}</span>
-                        <strong>
-                          <bdi dir="ltr">{money(toDecimalString(reserved.committedIqd, 4n))}</bdi>
-                        </strong>
-                      </div>
-                      <div className={s.holdingsFlow}>
-                        <span>{t('accounts_shared.available')}</span>
-                        <strong>
-                          <bdi dir="ltr">{money(toDecimalString(reserved.availableIqd, 4n))}</bdi>
-                        </strong>
-                      </div>
-                    </>
-                  ) : null}
 
                   {/* Only when there are any: a till that has never been part
                       of a transfer should not carry two empty tiles. */}

@@ -1901,7 +1901,7 @@
       "last_movement": "آخر حركة",
       "never_moved": "لم تحدث أي حركة بعد",
       "see_transactions": "عرض كل الحركات",
-      "reserved": "مدين معلّق — محجوز لطلبات الدفع",
+      "reserved": "مدين معلّق",
       "available": "المتاح للدفع"
     },
     "bank_accounts": {
@@ -3270,8 +3270,6 @@
       "freq_quarterly": "كل ثلاثة أشهر",
       "freq_custom": "في تواريخ أحددها",
       "first_due": "استحقاق القسط الأول",
-      "custom_dates": "تواريخ الاستحقاق",
-      "custom_dates_hint": "للجدول المخصص: تاريخ واحد في كل سطر (YYYY-MM-DD).",
       "purpose": "الغرض",
       "create": "إنشاء القرض",
       "view": "العرض",
@@ -3354,7 +3352,14 @@
         "deducted_at_disbursement": "تُخصم عند الصرف",
         "paid_separately": "تُدفع منفصلة",
         "spread_over_instalments": "موزعة على الأقساط"
-      }
+      },
+      "another_bank": "مصرف آخر — سأكتب اسمه",
+      "bank_name": "اسم المصرف",
+      "bank_name_hint": "يُضاف إلى سجل المصارف مع هذا القرض.",
+      "bank_swift": "سويفت / BIC",
+      "due_nth": "استحقاق القسط {position}",
+      "final_due": "استحقاق القسط الأخير",
+      "rhythm_hint": "يملأ التواريخ أدناه. أعد كتابة أي تاريخ حدّده المصرف بخلافه."
     },
     "landed_cost": {
       "section_title": "الكلفة الواصلة",

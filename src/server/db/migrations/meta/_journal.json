@@ -1310,6 +1310,13 @@
       "when": 1795900000069,
       "tag": "0259_bank_never_negative",
       "breakpoints": true
+    },
+    {
+      "idx": 187,
+      "version": "7",
+      "when": 1795900000070,
+      "tag": "0260_payable_stage_notification",
+      "breakpoints": true
     }
   ]
 }

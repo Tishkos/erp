@@ -785,15 +785,6 @@ export default async function PayablePage({
               <div className={s.sapBody}>
                 <SubmitRow>
                   <NewRecordDialog
-                    buttonLabel={pa('plan')}
-                    closeLabel={admin('close')}
-                    title={pa('plan_title', { payableNo: row.payableNo })}
-                    wide
-                  >
-                    <p className="muted">{pa('plan_note', { amount: money(row.amountTxn) })}</p>
-                  </NewRecordDialog>
-
-                  <NewRecordDialog
                     buttonLabel={pa('new')}
                     closeLabel={admin('close')}
                     openOnLoad={openPay}

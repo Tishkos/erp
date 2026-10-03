@@ -1901,7 +1901,7 @@
       "last_movement": "Last movement",
       "never_moved": "Nothing has moved yet",
       "see_transactions": "See every transaction",
-      "reserved": "Pending debit — promised to payment applications",
+      "reserved": "Pending debit",
       "available": "Available to pay with"
     },
     "bank_accounts": {
@@ -3270,8 +3270,6 @@
       "freq_quarterly": "Quarterly",
       "freq_custom": "On dates I type",
       "first_due": "First instalment due",
-      "custom_dates": "Due dates",
-      "custom_dates_hint": "For a custom schedule: one date per line (YYYY-MM-DD).",
       "purpose": "Purpose",
       "create": "Create loan",
       "view": "View",
@@ -3354,7 +3352,14 @@
         "deducted_at_disbursement": "Deducted at disbursement",
         "paid_separately": "Paid separately",
         "spread_over_instalments": "Spread over instalments"
-      }
+      },
+      "another_bank": "Another bank — I will type its name",
+      "bank_name": "Bank name",
+      "bank_name_hint": "Added to the bank register with this loan.",
+      "bank_swift": "SWIFT / BIC",
+      "due_nth": "Instalment {position} due",
+      "final_due": "Final instalment due",
+      "rhythm_hint": "Fills the dates below. Retype any the bank set differently."
     },
     "landed_cost": {
       "section_title": "Landed cost",
