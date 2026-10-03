@@ -3582,7 +3582,9 @@
       "settle_fee": "رسم السداد المبكر",
       "settle_total": "إجمالي السداد",
       "settle_date": "تاريخ الدفع",
-      "settle_reference": "مرجع المصرف"
+      "settle_reference": "مرجع المصرف",
+      "loan_currency": "عملة القرض",
+      "expected_proceeds": "المبلغ المتوقع"
     },
     "landed_cost": {
       "section_title": "الكلفة الواصلة",

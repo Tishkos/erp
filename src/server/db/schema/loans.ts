@@ -33,7 +33,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { appUser, branch } from './platform';
 import { bank, bankCashAccount } from './item';
-import { exchangeRate } from './fiscal';
+import { currency, exchangeRate } from './fiscal';
 import { journalEntry } from './journal';
 import { payable } from './payables';
 import { paymentApplication } from './payments';
@@ -68,7 +68,14 @@ export const bankLoan = pgTable(
       .notNull()
       .references(() => branch.code),
 
-    currency: char('currency', { length: 3 }).notNull(),
+    /**
+     * What the loan is owed in — the bank's currency, not the receiving
+     * account's (0276). A 50,000 dollar facility paid into a dinar account is
+     * a dollar debt, and stays one however the rate moves.
+     */
+    currency: char('currency', { length: 3 })
+      .notNull()
+      .references(() => currency.code),
     principalTxn: numeric('principal_txn', { precision: 19, scale: 4 }).notNull(),
     principalIqd: numeric('principal_iqd', { precision: 19, scale: 4 }).notNull(),
     rateId: uuid('rate_id').references(() => exchangeRate.id),
@@ -119,6 +126,8 @@ export const bankLoan = pgTable(
     status: text('status').notNull().default('draft'),
     /** The day the loan came to nothing (0275). Null while anything is owed. */
     repaidOn: date('repaid_on', { mode: 'string' }),
+    /** When its dinar carrying value was last moved to the rate of the day. */
+    revaluedOn: date('revalued_on', { mode: 'string' }),
     /** What ending it early cost beyond principal and interest, if it did. */
     settlementFeeTxn: numeric('settlement_fee_txn', { precision: 19, scale: 4 }),
     purpose: text('purpose'),
@@ -189,6 +198,43 @@ export const bankLoanRepayment = pgTable(
       'bank_loan_repayment_kind',
       sql`${t.kind} in ('instalment', 'extra_principal', 'settlement')`,
     ),
+  ],
+);
+
+/**
+ * What a foreign-currency loan was worth in dinars when the rate moved (0276).
+ *
+ * The debt is unchanged — 50,000 dollars is 50,000 dollars — and what the books
+ * carry for it is not. Each row is one revaluation: the outstanding in the
+ * loan's own currency, the rate of the day from Currencies & Rates, the dinar
+ * carrying value before and after, and the gain or loss that made up the
+ * difference. Append-only; a revaluation that was wrong is corrected by a later
+ * one.
+ */
+export const bankLoanRevaluation = pgTable(
+  'bank_loan_revaluation',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    loanId: uuid('loan_id')
+      .notNull()
+      .references(() => bankLoan.id),
+    onDate: date('on_date', { mode: 'string' }).notNull(),
+    rateId: uuid('rate_id').references(() => exchangeRate.id),
+    outstandingTxn: numeric('outstanding_txn', { precision: 19, scale: 4 }).notNull(),
+    iqdPerUnit: numeric('iqd_per_unit', { precision: 18, scale: 8 }).notNull(),
+    carryingBeforeIqd: numeric('carrying_before_iqd', { precision: 19, scale: 4 }).notNull(),
+    carryingAfterIqd: numeric('carrying_after_iqd', { precision: 19, scale: 4 }).notNull(),
+    /** Positive: the debt grew in dinars, which is a loss. Negative: a gain. */
+    differenceIqd: numeric('difference_iqd', { precision: 19, scale: 4 }).notNull(),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('bank_loan_revaluation_loan_idx').on(t.loanId, t.onDate),
+    uniqueIndex('bank_loan_revaluation_once_a_day').on(t.loanId, t.onDate),
   ],
 );
 

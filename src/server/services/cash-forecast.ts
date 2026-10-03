@@ -456,7 +456,8 @@ async function loanRepayments(
 ): Promise<{ date: string; source: ForecastSource; amountIqd: bigint }[]> {
   const result = (await tx.execute(sql`
     select s.due_date::text as "date",
-           (s.total_txn * coalesce(r.iqd_per_unit, 1))::text as "amountIqd"
+           -- Rounded here: a rate carries eight places and money four.
+           round(s.total_txn * coalesce(r.iqd_per_unit, 1), 4)::text as "amountIqd"
       from bank_loan_instalment s
       join bank_loan l on l.id = s.loan_id
       left join lateral (
@@ -500,7 +501,7 @@ async function loanDrawdowns(
 ): Promise<{ date: string; source: ForecastSource; amountIqd: bigint }[]> {
   const result = (await tx.execute(sql`
     select l.expected_disbursement_date::text as "date",
-           (l.net_proceeds_txn * coalesce(r.iqd_per_unit, 1))::text as "amountIqd"
+           round(l.net_proceeds_txn * coalesce(r.iqd_per_unit, 1), 4)::text as "amountIqd"
       from bank_loan l
       left join lateral (
         select x.iqd_per_unit

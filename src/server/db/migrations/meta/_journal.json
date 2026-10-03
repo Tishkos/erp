@@ -1422,6 +1422,13 @@
       "when": 1795900000085,
       "tag": "0275_loan_repayments",
       "breakpoints": true
+    },
+    {
+      "idx": 203,
+      "version": "7",
+      "when": 1795900000086,
+      "tag": "0276_loan_currency",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as loans from '@/server/services/loans';
+import * as rates from '@/server/services/exchange-rates';
 import {
   buildSchedule,
   commissionOf,
@@ -23,7 +24,7 @@ import {
   type Frequency,
   type ScheduleRow,
 } from '@domain/loans';
-import { MONEY_SCALE, parseDecimal, toDecimalString } from '@domain/money';
+import { MONEY_SCALE, parseDecimal, toDecimalString, toIqd } from '@domain/money';
 import { formatMoney, type Locale } from '@/i18n/config';
 import { businessToday } from '@/server/domain/business-date';
 import { NEW_BANK } from '../form';
@@ -137,7 +138,20 @@ export default async function NewLoanPage({ searchParams }: { readonly searchPar
   }
 
   const account = pickers.accounts.find((row) => row.id === said('bank_cash_account_id')) ?? pickers.accounts[0];
-  const currency = account?.currency ?? 'IQD';
+  /*
+   * What the money comes to in the account's own currency (0276). A dollar
+   * facility paid into a dinar account arrives as dinars, and the person
+   * entering the offer should see how many before they commit to it. The rate
+   * is read from Currencies & Rates on the day the bank says it will send —
+   * never typed here, and never stored.
+   */
+  const loanCurrency = said('currency', account?.currency ?? 'IQD');
+  const applied =
+    loanCurrency === (account?.currency ?? 'IQD')
+      ? null
+      : await withCurrentUser((tx) => rates.rateOn(tx, loanCurrency, disbursementDate)).catch(() => null);
+  // The figures on this page are the loan's own money, not the account's.
+  const currency = said('currency', account?.currency ?? 'IQD');
   const money = (value: bigint) => formatMoney(toDecimalString(value, MONEY_SCALE), currency, locale as Locale);
   const options = (values: readonly string[], prefix: string) =>
     values.map((value) => ({ value, label: t(`${prefix}${value}`) }));
@@ -199,6 +213,20 @@ export default async function NewLoanPage({ searchParams }: { readonly searchPar
       ),
     },
     {
+      /*
+       * What the loan is owed in — the bank's currency, not the receiving
+       * account's (0276). The list is Finance's own, from Currencies & Rates.
+       */
+      label: t('loan_currency'),
+      control: true,
+      value: select(
+        'currency',
+        said('currency', account?.currency ?? 'IQD'),
+        pickers.currencies.map((row) => ({ value: row.code, label: `${row.code} · ${row.name}` })),
+        t('loan_currency'),
+      ),
+    },
+    {
       label: t('principal'),
       control: true,
       value: (
@@ -232,6 +260,34 @@ export default async function NewLoanPage({ searchParams }: { readonly searchPar
         />
       ),
     },
+    ...(applied
+      ? [
+          {
+            label: t('expected_proceeds'),
+            wide: true,
+            value: (
+              <bdi dir="ltr">
+                {/* The rate as published, without the zeroes nobody reads. */}
+                {`1 ${loanCurrency} = ${toDecimalString(applied.iqdPerUnit, 8n).replace(/\.?0+$/, '')} ${
+                  account?.currency ?? 'IQD'
+                }`}
+                {' · '}
+                {formatMoney(
+                  toDecimalString(
+                    toIqd(
+                      amount > 0n ? netProceeds(amount, commission, Boolean(treatment?.deducted)) : 0n,
+                      applied.iqdPerUnit,
+                    ),
+                    MONEY_SCALE,
+                  ),
+                  account?.currency ?? 'IQD',
+                  locale as Locale,
+                )}
+              </bdi>
+            ),
+          },
+        ]
+      : []),
     {
       label: t('expected_disbursement'),
       control: true,

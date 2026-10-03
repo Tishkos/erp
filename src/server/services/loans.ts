@@ -36,6 +36,7 @@ import {
   bankLoanAllocation,
   bankLoanInstalment,
   bankLoanRepayment,
+  bankLoanRevaluation,
   landedCostCharge,
   loanCommissionTreatment,
   payable,
@@ -70,7 +71,14 @@ import {
 import { addDays, formatAmount as shown } from '../domain/payment-applications';
 import { limitInForce } from '../domain/payables';
 import { requiresHigherApproval } from '../domain/treasury';
-import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
+import {
+  divideHalfUp,
+  LEDGER_CURRENCY,
+  MONEY_SCALE,
+  parseDecimal,
+  toDecimalString,
+  toIqd,
+} from '../domain/money';
 import type { ActorContext } from './chart-of-accounts';
 import * as audit from './audit';
 import * as authz from './authorization';
@@ -225,6 +233,11 @@ export interface CreateLoanInput {
   readonly commissionTxn?: bigint | null;
   readonly commissionTreatmentCode: string;
   /**
+   * What the loan is owed in (0276). Left out, the receiving account's — which
+   * is what a loan in one currency always was.
+   */
+  readonly currency?: string | null;
+  /**
    * The bank's own terms (0273). Each is optional and each default is what the
    * register did before them: equal principal, interest on the reducing
    * balance, a fixed rate, no grace.
@@ -277,6 +290,19 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateLoanInput) 
   const count = Math.trunc(input.instalmentCount);
   if (!Number.isFinite(count) || count <= 0) throw new LoanError('A loan is repaid in at least one instalment.');
   if (!input.firstDueDate) throw new LoanError('Give the first instalment’s due date.');
+
+  /*
+   * The loan's own currency (0276), which is the bank's and not the receiving
+   * account's: a dollar facility paid into a dinar account is a dollar debt.
+   * Left unsaid it is the account's, which is what every loan entered before
+   * this was and what an ordinary single-currency loan still is.
+   */
+  const loanCurrency = ((input.currency ?? '').trim().toUpperCase() || account.currency);
+  const defined = await rateService.currencies(tx);
+  const chosen = defined.find((row) => row.code === loanCurrency);
+  if (!chosen || !chosen.isActive) {
+    throw new LoanError(`'${loanCurrency}' is not a currency Finance has defined. Add it on Currencies & Rates.`);
+  }
 
   const treatment = await treatmentOf(tx, input.commissionTreatmentCode);
   if (!treatment.active) throw new LoanError(`${treatment.name} is no longer offered.`);
@@ -337,7 +363,9 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateLoanInput) 
   });
 
   const onDate = input.onDate || today();
-  const converted = await rateService.convertOn(tx, input.principalTxn, account.currency, onDate);
+  // The principal in the loan's currency, for the books — `convertOn` reads
+  // the rate in force on the day from Currencies & Rates.
+  const converted = await rateService.convertOn(tx, input.principalTxn, loanCurrency, onDate);
   const allocated = await allocateDocumentNumber(
     tx,
     SEQUENCE_KEY,
@@ -352,7 +380,7 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateLoanInput) 
       bankCode: lender.code,
       bankCashAccountId: account.id,
       branchCode: ctx.branchCode,
-      currency: account.currency,
+      currency: loanCurrency,
       principalTxn: money(input.principalTxn),
       principalIqd: money(converted.amountIqd),
       rateId: converted.txnRateId ?? null,
@@ -459,6 +487,161 @@ export async function setSchedule(tx: Tx, ctx: ActorContext, loanId: string, row
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });
+}
+
+// ---------------------------------------------------------------------------
+// The two currencies — the loan's, and the account the money moves through
+// ---------------------------------------------------------------------------
+
+/**
+ * What the books carry for this loan, in dinars (0276).
+ *
+ * The balance of the loan control account for this loan — `journal_line` holds
+ * the loan number as its subledger party and every posting puts it there. Not
+ * stored anywhere: a copy would be a second answer to a question the ledger
+ * already answers, and the two would part company the first time anything was
+ * posted by hand.
+ */
+export async function carryingIqdOf(tx: Tx, loanNo: string): Promise<bigint> {
+  const result = (await tx.execute(sql`
+    select coalesce(sum(l.credit_iqd - l.debit_iqd), 0)::text as "carrying"
+      from journal_line l
+      join journal_entry e on e.id = l.journal_entry_id
+     where l.loan_no = ${loanNo}
+       and e.status = 'posted'
+  `)) as unknown as { rows: { carrying: string }[] };
+  return amountOf(result.rows[0]?.carrying ?? '0');
+}
+
+/**
+ * What one unit of the loan's currency is worth in the books right now — the
+ * carrying value over the outstanding. Used to take the principal off the
+ * liability at the rate it went on at, so the difference against today's rate
+ * is the gain or the loss rather than a silent restatement.
+ *
+ * Nothing outstanding and there is nothing to carry: the caller uses the day's
+ * rate, which is what a fresh conversion would give anyway.
+ */
+function carryingShare(carryingIqd: bigint, outstandingTxn: bigint, portionTxn: bigint): bigint {
+  if (outstandingTxn <= 0n || portionTxn <= 0n) return 0n;
+  if (portionTxn >= outstandingTxn) return carryingIqd;
+  return divideHalfUp(carryingIqd * portionTxn, outstandingTxn);
+}
+
+/**
+ * Move the dinar value of a foreign-currency loan to the rate of the day —
+ * by direction, 2026-10-03.
+ *
+ * The debt is unchanged; what the books carry for it is not. The difference
+ * goes through the exchange gain and loss accounts Finance already maps, by
+ * the same rule an import's exchange difference uses.
+ *
+ * A loan in the ledger's own currency has nothing to revalue, and a day on
+ * which nothing moved writes nothing: a revaluation of nought is not a fact
+ * worth a journal.
+ */
+export async function revalue(
+  tx: Tx,
+  ctx: ActorContext,
+  loanId: string,
+  input: { readonly onDate: string },
+) {
+  const loan = await lock(tx, loanId);
+  await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, { branchCode: loan.branchCode });
+  if (loan.status !== 'active') {
+    throw new LoanError(`${loan.loanNo} is ${loan.status.replace('_', ' ')}; only a disbursed loan is revalued.`);
+  }
+  if (loan.currency === LEDGER_CURRENCY) {
+    throw new LoanError(`${loan.loanNo} is owed in ${LEDGER_CURRENCY}; there is nothing to revalue.`);
+  }
+
+  const position = await positionOf(tx, loanId);
+  if (position.outstanding <= 0n) {
+    throw new LoanError(`${loan.loanNo} owes nothing; there is nothing to revalue.`);
+  }
+
+  const rate = await rateService.rateOn(tx, loan.currency, input.onDate);
+  const carrying = await carryingIqdOf(tx, loan.loanNo);
+  const target = toIqd(position.outstanding, rate.iqdPerUnit);
+  const difference = target - carrying;
+  if (difference === 0n) {
+    throw new LoanError(
+      `${loan.loanNo} is already carried at ${shown(target)} on ${input.onDate}; nothing to post.`,
+    );
+  }
+
+  const criteria = { branchCode: loan.branchCode };
+  const dimensions = { branch: loan.branchCode };
+  const grew = difference > 0n;
+  const amount = grew ? difference : -difference;
+  const result = await posting.post(tx, ctx, {
+    eventType: 'treasury.loan_revaluation',
+    documentTypeCode: PERMISSION_OBJECT,
+    source: { module: 'treasury', documentId: loan.id, event: 'revalued' },
+    branchCode: loan.branchCode,
+    documentDate: input.onDate,
+    postingDate: input.onDate,
+    description:
+      `Loan ${loan.loanNo} revalued at ${input.onDate} — ${loan.currency} ${shown(position.outstanding)} ` +
+      `at ${toDecimalString(rate.iqdPerUnit, 8n)}`,
+    lines: grew
+      ? [
+          // The debt grew in dinars: more liability, and a loss.
+          { role: 'loan_liability', credit: money(amount), criteria, dimensions, loanNo: loan.loanNo },
+          { role: 'exchange_loss', debit: money(amount), criteria, dimensions },
+        ]
+      : [
+          { role: 'loan_liability', debit: money(amount), criteria, dimensions, loanNo: loan.loanNo },
+          { role: 'exchange_gain', credit: money(amount), criteria, dimensions },
+        ],
+  });
+
+  await tx.insert(bankLoanRevaluation).values({
+    loanId: loan.id,
+    onDate: input.onDate,
+    rateId: rate.id,
+    outstandingTxn: money(position.outstanding),
+    iqdPerUnit: toDecimalString(rate.iqdPerUnit, 8n),
+    carryingBeforeIqd: money(carrying),
+    carryingAfterIqd: money(target),
+    differenceIqd: money(difference),
+    journalEntryId: result.journalEntryId,
+    createdBy: ctx.principal.userId,
+  });
+
+  await tx
+    .update(bankLoan)
+    .set({ revaluedOn: input.onDate, principalIqd: money(target), updatedAt: new Date() })
+    .where(eq(bankLoan.id, loan.id));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'bank_loan.revalued',
+    objectType: PERMISSION_OBJECT,
+    objectId: loan.id,
+    branchCode: loan.branchCode,
+    before: { carryingIqd: money(carrying) },
+    after: {
+      onDate: input.onDate,
+      outstandingTxn: money(position.outstanding),
+      carryingIqd: money(target),
+      differenceIqd: money(difference),
+      iqdPerUnit: toDecimalString(rate.iqdPerUnit, 8n),
+    },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+
+  return { carryingBefore: carrying, carryingAfter: target, difference, journalEntryId: result.journalEntryId };
+}
+
+/** Every revaluation of a loan, newest first. */
+export async function revaluationsOf(tx: Tx, loanId: string) {
+  return tx
+    .select()
+    .from(bankLoanRevaluation)
+    .where(eq(bankLoanRevaluation.loanId, loanId))
+    .orderBy(desc(bankLoanRevaluation.onDate));
 }
 
 // ---------------------------------------------------------------------------
@@ -859,10 +1042,27 @@ export async function payInstalment(
   const account = await accountOf(tx, loan.bankCashAccountId);
   const convert = async (value: bigint) =>
     value > 0n ? (await rateService.convertOn(tx, value, loan.currency, input.paidDate)).amountIqd : 0n;
-  const principalIqd = await convert(amountOf(instalment.principalTxn));
+  const principalTxn = amountOf(instalment.principalTxn);
+  // What the cash costs today, in the books' own currency.
+  const principalIqd = await convert(principalTxn);
   const interestIqd = await convert(amountOf(instalment.interestTxn));
   const commissionIqd = await convert(amountOf(instalment.commissionTxn));
   const totalIqd = principalIqd + interestIqd + commissionIqd;
+
+  /*
+   * And what the books have been carrying that principal at (0276). For a loan
+   * in the ledger's currency the two are the same and everything below adds up
+   * to nothing; for a dollar loan repaid from a dinar account they differ by
+   * exactly the rate movement since the money arrived.
+   */
+  const carryingIqd = await carryingIqdOf(tx, loan.loanNo);
+  const outstandingBefore = (await positionOf(tx, loan.id)).outstanding;
+  const principalCarriedIqd =
+    loan.currency === LEDGER_CURRENCY
+      ? principalIqd
+      : carryingShare(carryingIqd, outstandingBefore, principalTxn);
+  // Paying more dinars than the books carried is a loss; fewer, a gain.
+  const fxIqd = principalIqd - principalCarriedIqd;
 
   const criteria = { branchCode: loan.branchCode };
   const dimensions = { branch: loan.branchCode };
@@ -875,13 +1075,17 @@ export async function payInstalment(
     postingDate: input.paidDate,
     description: `Loan ${loan.loanNo} instalment ${instalment.sequence} repaid (${reference})`,
     lines: [
-      ...(principalIqd > 0n
-        ? [{ role: 'loan_liability', debit: money(principalIqd), criteria, dimensions, loanNo: loan.loanNo }]
+      // The liability comes off at what it was carried at, not at today's rate.
+      ...(principalCarriedIqd > 0n
+        ? [{ role: 'loan_liability', debit: money(principalCarriedIqd), criteria, dimensions, loanNo: loan.loanNo }]
         : []),
       ...(interestIqd > 0n ? [{ role: 'loan_interest', debit: money(interestIqd), criteria, dimensions }] : []),
       ...(commissionIqd > 0n
         ? [{ role: commissionRole(loan.commissionCapitalised), debit: money(commissionIqd), criteria, dimensions }]
         : []),
+      // What the rate did between the two — nothing at all on a dinar loan.
+      ...(fxIqd > 0n ? [{ role: 'exchange_loss', debit: money(fxIqd), criteria, dimensions }] : []),
+      ...(fxIqd < 0n ? [{ role: 'exchange_gain', credit: money(-fxIqd), criteria, dimensions }] : []),
       {
         role: 'bank',
         accountId: account.glAccountId,
@@ -1132,6 +1336,15 @@ export async function settleEarly(
   const feeIqd = await convert(fee);
   const totalIqd = principalIqd + interestIqd + feeIqd;
 
+  /*
+   * The whole of what is left comes off the liability at what the books carry
+   * it at (0276); the cash leaves at today's rate. The difference is the gain
+   * or the loss, as it is on any other repayment.
+   */
+  const carryingIqd = await carryingIqdOf(tx, loan.loanNo);
+  const principalCarriedIqd = loan.currency === LEDGER_CURRENCY ? principalIqd : carryingIqd;
+  const fxIqd = principalIqd - principalCarriedIqd;
+
   const criteria = { branchCode: loan.branchCode };
   const dimensions = { branch: loan.branchCode };
   const result = await posting.post(tx, ctx, {
@@ -1143,11 +1356,13 @@ export async function settleEarly(
     postingDate: input.onDate,
     description: `Loan ${loan.loanNo} settled early — ${loan.currency} ${shown(total)} (${reference})`,
     lines: [
-      { role: 'loan_liability', debit: money(principalIqd), criteria, dimensions, loanNo: loan.loanNo },
+      { role: 'loan_liability', debit: money(principalCarriedIqd), criteria, dimensions, loanNo: loan.loanNo },
       ...(interestIqd > 0n ? [{ role: 'loan_interest', debit: money(interestIqd), criteria, dimensions }] : []),
       ...(feeIqd > 0n
         ? [{ role: commissionRole(false), debit: money(feeIqd), criteria, dimensions }]
         : []),
+      ...(fxIqd > 0n ? [{ role: 'exchange_loss', debit: money(fxIqd), criteria, dimensions }] : []),
+      ...(fxIqd < 0n ? [{ role: 'exchange_gain', credit: money(-fxIqd), criteria, dimensions }] : []),
       {
         role: 'bank',
         accountId: account.glAccountId,
@@ -1775,7 +1990,13 @@ export async function pickers(tx: Tx) {
     .from(loanCommissionTreatment)
     .where(eq(loanCommissionTreatment.active, true))
     .orderBy(asc(loanCommissionTreatment.sortOrder));
-  return { banks, accounts, treatments };
+  /*
+   * The currencies a loan may be owed in — Finance's own list, from Currencies
+   * & Rates (0276). The loan's currency is not the account's: a dollar
+   * facility may be paid into a dinar account.
+   */
+  const monies = (await rateService.currencies(tx)).filter((row) => row.isActive);
+  return { banks, accounts, treatments, currencies: monies };
 }
 
 /** The loans a payment application may name: approved or disbursed, in its currency, with room. */

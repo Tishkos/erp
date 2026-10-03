@@ -82,6 +82,9 @@ export async function createLoan(formData: FormData): Promise<void> {
             : text(formData, 'commission_basis') === 'none'
               ? 0n
               : null,
+        // What the loan is owed in (0276) — independent of the account it
+        // lands in.
+        currency: text(formData, 'currency') || null,
         commissionBasis: text(formData, 'commission_basis') || null,
         facilityReference: text(formData, 'facility_reference') || null,
         principalMethod: text(formData, 'principal_method') || null,

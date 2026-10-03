@@ -31,6 +31,8 @@ import { parseDecimal } from '@/server/domain/money';
 import { parseQuantity } from '@/server/domain/uom';
 import { BAGHDAD, PANEL, WAREHOUSE, buildTradingWorld, scope, type TradingWorld } from './trading-fixture';
 import { fundBank } from './hr-funds';
+import * as rates from '@/server/services/exchange-rates';
+import * as cash from '@/server/services/cash-forecast';
 
 let world: TradingWorld;
 let payableId: string;
@@ -38,8 +40,16 @@ let payeeId: string;
 const SWIFT = 'PM-T001';
 const RAFIDAIN = 'BNK-0005';
 const iqd = (value: string) => parseDecimal(value, 4n);
+/** A decimal string from the database, at the money scale. */
+const amountOf = (value: string) => parseDecimal(value, 4n);
 
-const LOAN_EVENTS = ['treasury.loan_disbursement', 'treasury.loan_repayment', 'treasury.loan_commission'];
+const LOAN_EVENTS = [
+  'treasury.loan_disbursement',
+  'treasury.loan_repayment',
+  'treasury.loan_commission',
+  // A foreign-currency loan moves in dinars when the rate does (0276).
+  'treasury.loan_revaluation',
+];
 
 /** The loan accounts and their mappings, as an administrator sets them. */
 async function loanAccounts() {
@@ -49,6 +59,11 @@ async function loanAccounts() {
     ['landed_cost_clearing', 'A000001', 'Landed Cost Clearing', null],
     ['bank_commission', 'X000001', 'Bank Commission', null],
     ['loan_interest', 'X000001', 'Loan Interest', null],
+    // Where the rate movement lands — the same pair an import's exchange
+    // difference uses, mapped here because a loan can now be owed in a
+    // currency the account does not hold (0276).
+    ['exchange_gain', 'R000001', 'Realised Exchange Gain', null],
+    ['exchange_loss', 'X000001', 'Realised Exchange Loss', null],
   ] as const) {
     const { rows: parents } = await ownerPool.query(`select id, account_type from chart_of_account where code = $1`, [parent]);
     const { rows } = await ownerPool.query(
@@ -638,5 +653,241 @@ describe('§15.6 · fully repaid is read from what was posted', () => {
         loans.settleEarly(tx, world.manager, loan.id, { onDate: '2026-11-30', reference: 'X' }),
       );
     expect(await rejection(settle())).toMatch(/only a disbursed loan is settled/);
+  });
+});
+
+/**
+ * A loan owed in one currency, paid into an account that holds another —
+ * by direction, 2026-10-03.
+ *
+ * "Loan principal: 50,000 USD · Receiving account: Rafidain, IQD · The ERP must
+ * preserve Principal: 50,000 USD and separately Disbursed cash: calculated IQD
+ * amount", and "Do not convert the loan itself permanently into IQD just
+ * because the receiving account is IQD."
+ *
+ * Every rate here comes from Currencies & Rates through `rates.publishRate` and
+ * is read back by the loan services through `rateOn`/`convertOn`. Nothing in
+ * the loan module holds a rate of its own.
+ */
+describe('§15.7 · a loan in one currency, an account in another', () => {
+  const usdLoan = (input: Partial<loans.CreateLoanInput> = {}) =>
+    createLoan({
+      currency: 'USD',
+      principalTxn: iqd('50000'),
+      commissionPct: '0',
+      commissionTreatmentCode: 'paid_separately',
+      instalmentCount: 4,
+      frequency: 'monthly',
+      firstDueDate: '2026-09-30',
+      onDate: '2026-09-01',
+      ...input,
+    });
+
+  /** The dinars the books hold for this loan, from the ledger itself. */
+  const carrying = (loanNo: string) =>
+    withScope(scope(world.manager), (tx) => loans.carryingIqdOf(tx, loanNo));
+
+  const publish = (iqdPerUnit: string, from: string) =>
+    withScope(scope(world.manager), (tx) =>
+      rates.publishRate(tx, world.manager, { currency: 'USD', iqdPerUnit, effectiveFrom: from }),
+    );
+
+  it('keeps the debt in dollars and the cash in dinars, at the published rate', async () => {
+    await publish('1460.00000000', '2026-09-01');
+    const loan = await usdLoan();
+
+    // The register holds the loan's own currency, not the account's.
+    const row = await loanRow(loan.id);
+    expect(row.currency).toBe('USD');
+    expect(amountOf(row.principal_txn)).toBe(iqd('50000'));
+
+    await approveLoan(loan.id);
+    await disburse(loan.id, '2026-09-05');
+
+    /*
+     * 50,000 at 1,460 is 73,000,000 dinars — the cash that reached Rafidain and
+     * the dinars the liability is carried at. The debt itself is still 50,000
+     * dollars.
+     */
+    const after = await loanRow(loan.id);
+    expect(amountOf(after.principal_iqd)).toBe(iqd('73000000'));
+    expect(await carrying(after.loan_no)).toBe(iqd('73000000'));
+
+    const position = await withScope(scope(world.manager), (tx) => loans.positionOf(tx, loan.id));
+    expect(position.principal).toBe(iqd('50000'));
+    expect(position.outstanding).toBe(iqd('50000'));
+
+    // The bank account was credited in dinars by the journal, as it holds dinars.
+    const { rows: bankLines } = await ownerPool.query(
+      `select l.debit_iqd::text as debit
+         from journal_line l
+        where l.journal_entry_id = $1 and l.bank_account_code is not null`,
+      [after.disbursement_journal_entry_id],
+    );
+    expect(bankLines).toHaveLength(1);
+    expect(amountOf(bankLines[0].debit)).toBe(iqd('73000000'));
+  });
+
+  it('revalues the dinar carrying value when the rate moves, and leaves the debt alone', async () => {
+    await publish('1460.00000000', '2026-09-01');
+    const loan = await usdLoan();
+    await approveLoan(loan.id);
+    await disburse(loan.id, '2026-09-05');
+    expect(await carrying(loan.loanNo)).toBe(iqd('73000000'));
+
+    // The Central Bank publishes a new rate; nothing about the loan changes.
+    await publish('1520.00000000', '2026-09-20');
+    const moved = await withScope(scope(world.manager), (tx) =>
+      loans.revalue(tx, world.manager, loan.id, { onDate: '2026-09-25' }),
+    );
+
+    // 50,000 × 1,520 = 76,000,000: three million more owed in dinars, a loss.
+    expect(moved.carryingBefore).toBe(iqd('73000000'));
+    expect(moved.carryingAfter).toBe(iqd('76000000'));
+    expect(moved.difference).toBe(iqd('3000000'));
+    expect(await carrying(loan.loanNo)).toBe(iqd('76000000'));
+
+    // The debt is still fifty thousand dollars.
+    const position = await withScope(scope(world.manager), (tx) => loans.positionOf(tx, loan.id));
+    expect(position.outstanding).toBe(iqd('50000'));
+
+    // And the difference went to the exchange loss account, not anywhere else.
+    const { rows: lines } = await ownerPool.query(
+      `select r.line_role as role, l.debit_iqd::text as debit, l.credit_iqd::text as credit
+         from journal_line l
+         left join posting_rule r on r.id = l.posting_rule_id
+        where l.journal_entry_id = $1`,
+      [moved.journalEntryId],
+    );
+    const loss = lines.find((line: { role: string }) => line.role === 'exchange_loss');
+    expect(loss).toBeTruthy();
+    expect(amountOf(loss.debit)).toBe(iqd('3000000'));
+
+    // A second revaluation at the same rate has nothing to say.
+    expect(
+      await rejection(
+        withScope(scope(world.manager), (tx) => loans.revalue(tx, world.manager, loan.id, { onDate: '2026-09-26' })),
+      ),
+    ).toMatch(/already carried/);
+  });
+
+  it('repays from the dinar account: the dollars come off, the rate movement is a loss', async () => {
+    await fundBank(world, '200000000.0000');
+    await publish('1460.00000000', '2026-09-01');
+    const loan = await usdLoan();
+    await approveLoan(loan.id);
+    await disburse(loan.id, '2026-09-05');
+
+    // The dollar costs more dinars when the first instalment falls due.
+    await publish('1520.00000000', '2026-09-20');
+    const schedule = await scheduleOf(loan.id);
+    await withScope(scope(world.manager), (tx) =>
+      loans.payInstalment(tx, world.manager, schedule[0].id, { paidDate: '2026-09-30', reference: 'RAF-FX-1' }),
+    );
+
+    /*
+     * A quarter of the principal — 12,500 dollars — is off the debt, and what
+     * the books carried for it (12,500 × 1,460 = 18,250,000) left the liability
+     * while 12,500 × 1,520 = 19,000,000 left the bank. The 750,000 between them
+     * is the loss.
+     */
+    const position = await withScope(scope(world.manager), (tx) => loans.positionOf(tx, loan.id));
+    expect(position.principalRepaid).toBe(iqd('12500'));
+    expect(position.outstanding).toBe(iqd('37500'));
+    expect(await carrying(loan.loanNo)).toBe(iqd('54750000')); // 37,500 × 1,460
+
+    const { rows: paid } = await ownerPool.query(
+      `select journal_entry_id from bank_loan_instalment where id = $1`,
+      [schedule[0].id],
+    );
+    const { rows: lines } = await ownerPool.query(
+      `select r.line_role as role, l.debit_iqd::text as debit, l.credit_iqd::text as credit
+         from journal_line l
+         left join posting_rule r on r.id = l.posting_rule_id
+        where l.journal_entry_id = $1`,
+      [paid[0].journal_entry_id],
+    );
+    const role = (name: string) => lines.find((line: { role: string }) => line.role === name);
+    expect(amountOf(role('loan_liability').debit)).toBe(iqd('18250000'));
+    expect(amountOf(role('exchange_loss').debit)).toBe(iqd('750000'));
+
+    // The ledger of repayments keeps the dollars, not the dinars.
+    const repayments = await withScope(scope(world.manager), (tx) => loans.repaymentsOf(tx, loan.id));
+    expect(amountOf(repayments[0]!.principalTxn)).toBe(iqd('12500'));
+  });
+
+  it('a falling rate is a gain', async () => {
+    await fundBank(world, '200000000.0000');
+    await publish('1520.00000000', '2026-09-01');
+    const loan = await usdLoan();
+    await approveLoan(loan.id);
+    await disburse(loan.id, '2026-09-05');
+    await publish('1460.00000000', '2026-09-20');
+
+    const schedule = await scheduleOf(loan.id);
+    await withScope(scope(world.manager), (tx) =>
+      loans.payInstalment(tx, world.manager, schedule[0].id, { paidDate: '2026-09-30', reference: 'RAF-FX-G' }),
+    );
+    const { rows: paid } = await ownerPool.query(
+      `select journal_entry_id from bank_loan_instalment where id = $1`,
+      [schedule[0].id],
+    );
+    const { rows: lines } = await ownerPool.query(
+      `select r.line_role as role, l.credit_iqd::text as credit
+         from journal_line l
+         left join posting_rule r on r.id = l.posting_rule_id
+        where l.journal_entry_id = $1`,
+      [paid[0].journal_entry_id],
+    );
+    const gain = lines.find((line: { role: string }) => line.role === 'exchange_gain');
+    expect(gain).toBeTruthy();
+    // 12,500 × (1,520 − 1,460) = 750,000 less than the books carried.
+    expect(amountOf(gain.credit)).toBe(iqd('750000'));
+  });
+
+  it('settles a dollar loan early from the dinar account, and is fully repaid', async () => {
+    await fundBank(world, '200000000.0000');
+    await publish('1460.00000000', '2026-09-01');
+    const loan = await usdLoan();
+    await approveLoan(loan.id);
+    await disburse(loan.id, '2026-09-05');
+    await publish('1500.00000000', '2026-09-20');
+
+    const quote = await withScope(scope(world.manager), (tx) =>
+      loans.settlementQuote(tx, loan.id, '2026-09-30'),
+    );
+    expect(quote.outstanding).toBe(iqd('50000'));
+
+    await withScope(scope(world.manager), (tx) =>
+      loans.settleEarly(tx, world.manager, loan.id, { onDate: '2026-09-30', reference: 'RAF-FX-SETTLE' }),
+    );
+
+    const position = await withScope(scope(world.manager), (tx) => loans.positionOf(tx, loan.id));
+    expect(position.outstanding).toBe(0n);
+    expect(position.principalRepaid).toBe(iqd('50000'));
+    expect((await loanRow(loan.id)).status).toBe('fully_repaid');
+
+    // Nothing is left on the liability: what was carried came off it exactly.
+    expect(await carrying(loan.loanNo)).toBe(0n);
+  });
+
+  it('the forecast reads the loan in its own currency at the rate of the due date', async () => {
+    await publish('1460.00000000', '2026-09-01');
+    const loan = await usdLoan({ instalmentCount: 1, firstDueDate: '2026-09-30' });
+    await approveLoan(loan.id);
+    await disburse(loan.id, '2026-09-05');
+    await publish('1500.00000000', '2026-09-25');
+
+    const forecast = await withScope(scope(world.manager), (tx) =>
+      cash.forecast(tx, world.manager, { from: '2026-09-06', to: '2026-10-31' }),
+    );
+    const outflow = forecast.lines.find((row) => row.source === 'loan_repayments');
+    expect(outflow).toBeTruthy();
+    /*
+     * The instalment is 50,000 dollars of principal; at the 1,500 in force on
+     * its due date that is 75,000,000 dinars. The forecast converts through the
+     * same Currencies & Rates the posting does — it does not assume dinars.
+     */
+    expect(amountOf(outflow!.outflowIqd)).toBe(iqd('75000000'));
   });
 });

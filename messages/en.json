@@ -3582,7 +3582,9 @@
       "settle_fee": "Early settlement fee",
       "settle_total": "Settlement total",
       "settle_date": "Paid on",
-      "settle_reference": "Bank reference"
+      "settle_reference": "Bank reference",
+      "loan_currency": "Loan currency",
+      "expected_proceeds": "Expected proceeds"
     },
     "landed_cost": {
       "section_title": "Landed cost",
