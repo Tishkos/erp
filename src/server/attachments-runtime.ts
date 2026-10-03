@@ -11,7 +11,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
-import { applicant, bankLoan, customsPd, employeeDocument, employeeRequest, journalEntry, payable, paymentApplication, shipmentContainer } from './db/schema';
+import { applicant, bankLoan, billOfLading, customsPd, employeeDocument, employeeRequest, journalEntry, payable, paymentApplication, shipmentContainer } from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -140,6 +140,12 @@ const containerParentAccess = async (tx: Tx, principal: Principal, objectId: str
   return Boolean(row);
 };
 
+const blParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'bill_of_lading')) return false;
+  const [row] = await tx.select({ id: billOfLading.id }).from(billOfLading).where(eq(billOfLading.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
 const loanParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
   if (!can(principal, 'view', 'bank_loan')) return false;
   const [row] = await tx.select({ id: bankLoan.id }).from(bankLoan).where(eq(bankLoan.id, objectId)).limit(1);
@@ -187,6 +193,7 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('payment_application', paymentApplicationParentAccess);
   attachments.registerParentAccessCheck('customs_pd', customsPdParentAccess);
   attachments.registerParentAccessCheck('shipment_container', containerParentAccess);
+  attachments.registerParentAccessCheck('bill_of_lading', blParentAccess);
   attachments.registerParentAccessCheck('bank_loan', loanParentAccess);
   attachments.registerParentAccessCheck('applicant', applicantParentAccess);
   attachments.registerParentAccessCheck('employee_request', employeeRequestParentAccess);

@@ -21,6 +21,35 @@ const quantity = (value: string) => {
   return parseQuantity(cleaned);
 };
 
+/**
+ * IM2 — the B/L's containers table: a row per container (number, size/type,
+ * seal) and per model what it carries; a cell left empty is not typed.
+ */
+function containerRows(formData: FormData): shipments.ContainerRowInput[] {
+  const rowCount = Number(text(formData, 'row_count')) || 0;
+  const modelCount = Number(text(formData, 'model_count')) || 0;
+  const models = Array.from({ length: modelCount }, (_, m) => text(formData, `model_${m}`));
+  const rows: shipments.ContainerRowInput[] = [];
+  for (let index = 0; index < rowCount; index += 1) {
+    const containerNo = text(formData, `container_no_${index}`).trim();
+    const quantities: Record<string, bigint | null> = {};
+    let any = false;
+    for (const [m, key] of models.entries()) {
+      const raw = text(formData, `qty_${index}_${m}`).trim();
+      quantities[key] = raw ? quantity(raw) : null;
+      if (raw) any = true;
+    }
+    if (!containerNo && !any && !text(formData, `seal_no_${index}`).trim()) continue;
+    rows.push({
+      containerNo,
+      sizeType: text(formData, `size_type_${index}`) || null,
+      sealNo: text(formData, `seal_no_${index}`) || null,
+      quantities,
+    });
+  }
+  return rows;
+}
+
 export async function createBlAction(formData: FormData): Promise<void> {
   const back = text(formData, 'back');
   await runAdminAndReturn(
@@ -37,9 +66,7 @@ export async function createBlAction(formData: FormData): Promise<void> {
         portOfLoading: text(formData, 'port_of_loading') || null,
         portOfDischargeCode: text(formData, 'port_of_discharge') || null,
         eta: text(formData, 'eta') || null,
-        containers: text(formData, 'containers') || null,
-        sizeType: text(formData, 'size_type') || null,
-        spreadLines: formData.get('spread_lines') !== null,
+        containerRows: containerRows(formData),
       });
     },
     (value) => {
@@ -54,13 +81,65 @@ export async function addContainersAction(formData: FormData): Promise<void> {
   await runAdminAndReturn(
     async (tx, ctx) => {
       const view = await shipments.viewBl(tx, blNo);
-      return shipments.addContainers(tx, ctx, view.bl.id, {
-        containers: text(formData, 'containers'),
-        sizeType: text(formData, 'size_type') || null,
-      });
+      return shipments.addContainers(tx, ctx, view.bl.id, { rows: containerRows(formData) });
     },
     blRecord(blNo),
   );
+}
+
+/** IM2 — the B/L's boxes corrected (while nothing on it is received). */
+export async function updateBlAction(formData: FormData): Promise<void> {
+  const blNo = text(formData, 'bl_no');
+  await runAdminAndReturn(
+    async (tx, ctx) => {
+      const view = await shipments.viewBl(tx, blNo);
+      return shipments.updateBl(tx, ctx, view.bl.id, {
+        blNo: text(formData, 'new_bl_no'),
+        blDate: text(formData, 'bl_date'),
+        eta: text(formData, 'eta'),
+        shippingLine: text(formData, 'shipping_line') || null,
+        vessel: text(formData, 'vessel') || null,
+        voyage: text(formData, 'voyage') || null,
+        portOfLoading: text(formData, 'port_of_loading') || null,
+        portOfDischargeCode: text(formData, 'port_of_discharge') || null,
+      });
+    },
+    (value) => blRecord((value as { blNo?: string } | null | undefined)?.blNo ?? blNo),
+  );
+}
+
+/** IM2 — a B/L entered by mistake, cancelled with its reason (and its containers with it). */
+export async function cancelBlAction(formData: FormData): Promise<void> {
+  const blNo = text(formData, 'bl_no');
+  await runAdminAndReturn(
+    async (tx, ctx) => {
+      const view = await shipments.viewBl(tx, blNo);
+      return shipments.cancelBl(tx, ctx, view.bl.id, text(formData, 'reason'));
+    },
+    blRecord(blNo),
+  );
+}
+
+/** The B/L's own paperwork: the scanned B/L, the packing list. */
+export async function attachToBl(formData: FormData): Promise<void> {
+  const blNo = text(formData, 'bl_no');
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) redirect(`${blRecord(blNo)}?error=attachment_missing`);
+  const upload = file as File;
+  const content = Buffer.from(await upload.arrayBuffer());
+  await runAdminAndReturn(async (tx, ctx) => {
+    const view = await shipments.viewBl(tx, blNo);
+    await attachments.upload(tx, ctx, { objectType: shipments.BL_OBJECT, objectId: view.bl.id, fileName: upload.name, content });
+    await events.record(tx, {
+      payableId: view.bl.payableId,
+      eventCode: 'ATTACHMENT_ADDED',
+      summary: `${upload.name} attached to B/L ${view.bl.blNo}`,
+      sourceType: shipments.BL_OBJECT,
+      sourceId: view.bl.id,
+      sourceNo: view.bl.blNo,
+      actorUserId: ctx.principal.userId,
+    });
+  }, blRecord(blNo));
 }
 
 export async function blStatusAction(formData: FormData): Promise<void> {
@@ -165,6 +244,29 @@ export async function receiveContainerAction(formData: FormData): Promise<void> 
         note: text(formData, 'note') || null,
       });
     },
+    containerRecord(containerNo),
+  );
+}
+
+/** IM2 — a container's number, size/type and seal, corrected until it is received. */
+export async function updateContainerAction(formData: FormData): Promise<void> {
+  const containerNo = text(formData, 'container_no');
+  await runAdminAndReturn(
+    async (tx, ctx) =>
+      shipments.updateContainer(tx, ctx, await containerIdOf(tx, formData), {
+        containerNo: text(formData, 'new_container_no'),
+        sizeType: text(formData, 'size_type') || null,
+        sealNo: text(formData, 'seal_no') || null,
+      }),
+    (value) => containerRecord((value as { containerNo?: string } | null | undefined)?.containerNo ?? containerNo),
+  );
+}
+
+/** IM2 — a container that is not on the ship after all, cancelled with its reason. */
+export async function cancelContainerAction(formData: FormData): Promise<void> {
+  const containerNo = text(formData, 'container_no');
+  await runAdminAndReturn(
+    async (tx, ctx) => shipments.cancelContainer(tx, ctx, await containerIdOf(tx, formData), text(formData, 'reason')),
     containerRecord(containerNo),
   );
 }

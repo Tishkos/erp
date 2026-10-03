@@ -82,7 +82,7 @@ const createBl = (input: Partial<shipments.CreateBlInput> = {}) =>
       vessel: 'MSC Aurora',
       eta: '2026-10-25',
       portOfDischargeCode: 'PRT-0001',
-      containers: 'MSCU1234565\nTGHU7654321, CAIU2345678\nFSCU 345678-9',
+      containers: 'MSCU1234566\nTGHU7654320, CAIU2345678\nFSCU 345678-1',
       sizeType: '40HC',
       spreadLines: true,
       ...input,
@@ -174,9 +174,9 @@ describe('§17.1 · B/Ls and containers', () => {
     );
     expect(rows.map((r) => [r.container_no, r.planned, r.lines_estimated, r.eta])).toEqual([
       ['CAIU2345678', '250.000000', true, '2026-10-25'],
-      ['FSCU3456789', '250.000000', true, '2026-10-25'],
-      ['MSCU1234565', '250.000000', true, '2026-10-25'],
-      ['TGHU7654321', '250.000000', true, '2026-10-25'],
+      ['FSCU3456781', '250.000000', true, '2026-10-25'],
+      ['MSCU1234566', '250.000000', true, '2026-10-25'],
+      ['TGHU7654320', '250.000000', true, '2026-10-25'],
     ]);
     expect(await codes()).toEqual(expect.arrayContaining(['BL_ISSUED', 'CONTAINER_ADDED']));
     expect(await stageOf()).toBe('shipped');
@@ -187,10 +187,10 @@ describe('§17.1 · B/Ls and containers', () => {
     await createBl();
     const other = await importOf('10', 'CSA-SHIP-0002');
     payableId = other.payableId;
-    expect(await rejection(createBl({ blNo: 'MEDU0000002', containers: 'MSCU1234565' }))).toMatch(
-      /Already on a live B\/L: MSCU1234565/,
+    expect(await rejection(createBl({ blNo: 'MEDU0000003', containers: 'MSCU1234566' }))).toMatch(
+      /Already on a live B\/L: MSCU1234566/,
     );
-    expect(await rejection(createBl({ containers: 'TEMU1111111' }))).toMatch(/already recorded/);
+    expect(await rejection(createBl({ containers: 'TEMU1111112' }))).toMatch(/already recorded/);
   });
 
   it('dates the B/L instalments, and the B/L trigger refuses Send until there is a B/L', async () => {
@@ -253,7 +253,7 @@ describe('§17.3 · stages, ETA, Late and the port file', () => {
   });
 
   it('an ETA that passes makes the container Late and stops the import once; a new ETA is logged', async () => {
-    await createBl({ containers: 'MSCU1234565', eta: '2026-10-05' });
+    await createBl({ containers: 'MSCU1234566', eta: '2026-10-05' });
     const [only] = await containerIds();
     await withScope(scope(world.clerk), (tx) =>
       shipments.changeEta(tx, world.clerk, only!.id, { eta: '2026-10-10', note: 'Transshipment at Jebel Ali' }),
@@ -342,7 +342,7 @@ describe('A13 / A14 · container by container into the warehouse', () => {
 
   it('a short container is Missing / damaged, logged, and opens the claim; the reason is required', async () => {
     await postInvoice();
-    await createBl({ containers: 'MSCU1234565' });
+    await createBl({ containers: 'MSCU1234566' });
     const [only] = await containerIds();
     expect(await rejection(receiveAll(only!.id, randomUUID(), { received: '990', short: '10' }))).toMatch(/Say what happened/);
     await receiveAll(only!.id, randomUUID(), { received: '990', short: '10' }, '10 cartons missing, seal intact');
@@ -365,7 +365,7 @@ describe('A13 / A14 · container by container into the warehouse', () => {
   });
 
   it('refuses before the invoice posts, into another branch, or into transit', async () => {
-    await createBl({ containers: 'MSCU1234565' });
+    await createBl({ containers: 'MSCU1234566' });
     const [only] = await containerIds();
     expect(await rejection(receiveAll(only!.id))).toMatch(/invoice is not posted yet/);
     await postInvoice();
@@ -395,7 +395,7 @@ describe('A13 / A14 · container by container into the warehouse', () => {
 
   it('the history of a container is append-only, and so is its receipt', async () => {
     await postInvoice();
-    await createBl({ containers: 'MSCU1234565' });
+    await createBl({ containers: 'MSCU1234566' });
     const [only] = await containerIds();
     await receiveAll(only!.id);
     for (const table of ['shipment_container_status_history', 'container_receipt', 'container_receipt_line']) {

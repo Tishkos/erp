@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { containerNo } from '../support/container-number';
 
 /**
  * IMPROVEMENT-002 IM2-1 — a container that arrived short, on the screens.
@@ -53,8 +54,8 @@ test.describe('IM2-1 · a short container, worked out and claimed', () => {
     await signIn(page);
     await itemAccounts(page);
     const digits = String(Date.now()).slice(-6);
-    const first = `SHRU${digits}1`;
-    const second = `SHRU${digits}2`;
+    const first = containerNo('SHRU', `${digits.slice(-5)}1`);
+    const second = containerNo('SHRU', `${digits.slice(-5)}2`);
 
     // The import of ten, born at its invoice and posted.
     await page.goto('/payables/invoices/new');
@@ -79,7 +80,9 @@ test.describe('IM2-1 · a short container, worked out and claimed', () => {
     const create = page.getByRole('dialog');
     await create.getByRole('textbox', { name: 'B/L no.' }).fill(`BL-SHORT-${RUN}`);
     await create.getByLabel('B/L date').fill('2026-09-20');
-    await create.getByRole('textbox', { name: 'Containers' }).fill(`${first}\n${second}`);
+    await create.getByLabel('ETA').fill('2026-10-20');
+    await create.getByLabel('Container no. 1').fill(first);
+    await create.getByLabel('Container no. 2').fill(second);
     await create.getByRole('button', { name: 'New B/L' }).click();
     await expect(page.getByText('0 of 2 received').first()).toBeVisible({ timeout: 30_000 });
     const quantities = page.getByRole('table', { name: 'Quantities by model' });

@@ -217,7 +217,8 @@ Each stage below is one branch and one PR. Its tests are named before it is buil
 |---|---|---|---|
 | 2026-10-03 | IM2-0 | #32 `fix/hr-migration-order` | merged |
 | 2026-10-03 | IM2-0 | #33 `fix/c20-test-fixtures`, #34 HR-6, #35 `test/e2e-current-ui` | merged — integration 2,420/2,420, e2e 133/133 |
-| 2026-10-03 | IM2-1 | `improve2/stage-1-import` | built — integration 2,427/2,427 (148 files); e2e `im2-import-shortage` 2/2 |
+| 2026-10-03 | IM2-1 | #37 `improve2/stage-1-import` | merged — integration 2,427/2,427 (148 files); e2e `im2-import-shortage` 2/2 |
+| 2026-10-03 | IM2-1b | `improve2/bl-rewrite` | the B/L rewrite (table, check digit, ETA, edit/cancel, print and doors) — integration ap0*, im2-*, hd09, hd14, wa02 green; e2e im2-bl 3/3, payables + theme 15/15 |
 
 ---
 

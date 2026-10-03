@@ -63,7 +63,7 @@ export const billOfLading = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex('bill_of_lading_no_uniq').on(t.blNo), index('bill_of_lading_payable_idx').on(t.payableId)],
+  (t) => [uniqueIndex('bill_of_lading_no_live_uniq').on(t.blNo).where(sql`${t.cancelledAt} is null`), index('bill_of_lading_payable_idx').on(t.payableId)],
 );
 
 export const shipmentContainer = pgTable(
@@ -81,6 +81,8 @@ export const shipmentContainer = pgTable(
       .references(() => branch.code),
     containerNo: text('container_no').notNull(),
     sizeType: text('size_type'),
+    /** IM2 — the seal number the receipt reads 'seal intact' against. */
+    sealNo: text('seal_no'),
     statusCode: text('status_code')
       .notNull()
       .default('not_loaded')

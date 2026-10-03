@@ -21,6 +21,8 @@ export const EXPORT_ACCESS = {
   opening_stock: { kind: 'document', route: '/inventory/opening-stock', object: 'opening_stock' },
   journal_entry: { kind: 'document', route: '/finance/journals', object: 'journal_entry' },
   item_reconciliation: { kind: 'document', route: '/inventory/stock-reconciliation', object: 'stock_reconciliation' },
+  // IMPROVEMENT-002 — the B/L, printed from its own page (its boxes, containers and what each carries).
+  bill_of_lading: { kind: 'document', route: '/payables/shipments', object: 'bill_of_lading' },
   customer_statement: { kind: 'report', route: '/sales/customer-statements', object: 'business_partner' },
   supplier_statement: { kind: 'report', route: '/payables/supplier-statements', object: 'business_partner' },
   bank_statement: { kind: 'report', route: '/master-data/bank-accounts', object: 'bank_account' },

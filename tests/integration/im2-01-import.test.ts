@@ -155,7 +155,7 @@ describe('short · what did not arrive is worked out, shown and claimed', () => 
   beforeEach(async () => {
     ({ invoiceId, payableId } = await importOf('1000'));
     await postInvoice();
-    await createBl('MSCU1234565\nTGHU7654321');
+    await createBl('MSCU1234566\nTGHU7654320');
   });
 
   it('works out the short quantity, refuses one that does not add up, and lets more than planned arrive with nothing short', async () => {
@@ -186,7 +186,7 @@ describe('short · what did not arrive is worked out, shown and claimed', () => 
     expect(openHolds).toEqual([{ status: 'open' }]);
 
     const claimed = await withScope(scope(world.manager), (tx) =>
-      shipments.claimShortage(tx, world.manager, { payableId, returnDate: '2026-10-29', reason: '30 cartons missing in TGHU7654321', supplierReference: 'CLM-7' }),
+      shipments.claimShortage(tx, world.manager, { payableId, returnDate: '2026-10-29', reason: '30 cartons missing in TGHU7654320', supplierReference: 'CLM-7' }),
     );
     expect(claimed.returns).toHaveLength(1);
     const { rows: lines } = await ownerPool.query(
@@ -213,7 +213,7 @@ describe('short · what did not arrive is worked out, shown and claimed', () => 
   });
 
   it('a balance shipment is just another container: the board says what is not yet shipped', async () => {
-    const first = (await containers()).find((c) => c.container_no === 'MSCU1234565');
+    const first = (await containers()).find((c) => c.container_no === 'MSCU1234566');
     // Re-plan the first container down to 300 of its 500.
     await withScope(scope(world.clerk), (tx) =>
       shipments.setContainerLines(tx, world.clerk, first!.id, [{ itemCode: PANEL, description: 'Solar Panel 550W', plannedQty: '300', uomCode: 'EA' }]),
@@ -234,7 +234,7 @@ describe('units · an import bought in boxes', () => {
     ({ invoiceId, payableId } = await importOf('10', { uomCode: 'BOX', price: '240000' }));
     await postInvoice();
     expect(await onHand(IN_PROCESS)).toBe('240.000000');
-    await createBl('MSCU1234565');
+    await createBl('MSCU1234566');
     const [only] = await containers();
     expect(await lineOf(only!.id)).toMatchObject({ planned: '10.000000', uom_code: 'BOX' });
     await receive(only!.id, { received: '10' });

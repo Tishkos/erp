@@ -201,6 +201,7 @@ Standing rule (by direction, 2026-10-01; see also docs/notes/newsettings.md: "DO
 * `shipments.claimShortage` (all containers in, something in transit) raises one goods return per invoice through `goods-return.createFromInvoice` from the transit warehouse, offset `payable`; posting it recomputes the import's stage. Never write stock out of transit any other way.
 * Direct supplier payments against an import's invoices are `payables.directPayments`; the totals and the application cap add them. Landed cost locks only when `containersIn` too.
 * Tests: `tests/integration/im2-01-import.test.ts`, `tests/e2e/im2-import-shortage.spec.ts`.
+* **The B/L (IM2, 2026-10-03).** Screens send `containerRows` (number, size/type from `domain/shipments.SIZE_TYPES`, seal, quantity per order line); `planContainers` divides a model left empty and refuses more than `leftToShip`. Numbers typed on a screen go through `assertContainerNumber` (ISO 6346 with check digit, shared with the grid as `src/lib/container-number.ts`); the legacy sheet keeps the shape-only `parseContainerList`. Tests make numbers with `tests/support/container-number.ts`. A B/L is unique among live ones (0267); `updateBl`/`cancelBl`/`updateContainer`/`cancelContainer` refuse once a container is received. Record pages put `AttachmentsButton`, `HistoryButton` and `ExportIcon` (the print door) in `DocumentWindow.titleActions`. Tests: `tests/integration/im2-02-bl.test.ts`, `tests/e2e/im2-bl.spec.ts`.
 
 ## Units of measure (REQ-FIX-001 FIX-4)
 

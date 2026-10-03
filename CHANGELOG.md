@@ -7,6 +7,17 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+### Changed — the B/L, written properly (IMPROVEMENT-002, sponsor 2026-10-03)
+- **Containers are a table, not a comma-separated paste.** One row per container: number, size/type, seal no., and the quantity it carries of each model of the import. Leave a model's column empty and what is left of it is divided equally. The grid's foot shows what is typed against what is left; never more than was ordered. Pasting several numbers into one box fills a row each.
+- **Container numbers are checked against ISO 6346, check digit included.** The grid points out a wrong last digit as it is typed, and the service refuses it, naming the right digit. The hint's example is now MSCU1234566.
+- **The ETA is required on a B/L** — it is what makes a container late.
+- **Edit a B/L** (number, date, ETA, vessel, voyage, shipping line, ports) while nothing on it is received. Containers still on its ETA follow the new one.
+- **Edit a container** (number, size/type, seal) until it is received.
+- **Cancel a B/L or a container** with a reason, never deleted. A cancelled B/L's number may be entered again (migration 0267: unique among live B/Ls; containers gain a seal no.).
+- **A container's plan changed by hand** is held to what is left of the order.
+- **The B/L page carries the paperclip, the clock and the printer** in its title bar, like the Import Application. The B/L prints (PDF, Excel, Word × EN/AR): its boxes, its containers and what each carries. The container page has the same paperclip and clock.
+- **Containers register:** a "Short or damaged" view — the exceptions to follow up, with damaged / short per container — and a "Cancelled" view.
+
 ### Changed — IMPROVEMENT-002 IM2-1, the Import Application (the sponsor's workflow kept as it is)
 - **Short containers.** The receipt works out what is short: planned − received − damaged, with Short left empty. A count that does not add up is refused. More than planned may arrive, with nothing short. The plan is in the unit the PI bought in, and the stock moves in base units, so an import bought in BOX clears.
 - **Quantities by model.** A full-width register on the import shows, for each model: ordered, in containers, received, damaged, short, claimed, still in transit, and not yet shipped (the balance shipment).

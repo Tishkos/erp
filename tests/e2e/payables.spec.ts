@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { containerNo } from '../support/container-number';
 import writeXlsxFile from 'write-excel-file/node';
 
 /**
@@ -320,8 +321,8 @@ test.describe('A22 · payables in a browser', () => {
     await signIn(page);
     // Container numbers are unique while in transit; this run's are its own.
     const digits = String(Date.now()).slice(-6);
-    const first = `EEXU${digits}1`;
-    const second = `EEXU${digits}2`;
+    const first = containerNo('EEXU', `${digits.slice(-5)}1`);
+    const second = containerNo('EEXU', `${digits.slice(-5)}2`);
     const blNo = `BL-E2E-${RUN}`;
     await itemAccounts(page);
 
@@ -352,7 +353,9 @@ test.describe('A22 · payables in a browser', () => {
     await create.getByRole('textbox', { name: 'B/L no.' }).fill(blNo);
     await create.getByLabel('B/L date').fill('2026-09-20');
     await create.getByLabel('ETA').fill('2026-10-20');
-    await create.getByRole('textbox', { name: 'Containers' }).fill(`${first}\n${second}`);
+    // A row per container in the B/L's table; the quantity left empty is divided.
+    await create.getByLabel('Container no. 1').fill(first);
+    await create.getByLabel('Container no. 2').fill(second);
     await create.getByRole('button', { name: 'New B/L' }).click();
     await expect(page.getByRole('link', { name: blNo })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText('0 of 2 received').first()).toBeVisible();
@@ -448,7 +451,7 @@ test.describe('A22 · payables in a browser', () => {
     test.setTimeout(300_000);
     await signIn(page);
     await itemAccounts(page);
-    const container = `EEXU${String(Date.now()).slice(-6)}7`;
+    const container = containerNo('EEXU', `${String(Date.now()).slice(-5)}7`);
     const pdNo = `7${RUN}`;
 
     // An import, posted, its one container received.
@@ -476,7 +479,8 @@ test.describe('A22 · payables in a browser', () => {
     const bl = page.getByRole('dialog');
     await bl.getByRole('textbox', { name: 'B/L no.' }).fill(`BL-LC-${RUN}`);
     await bl.getByLabel('B/L date').fill('2026-09-20');
-    await bl.getByRole('textbox', { name: 'Containers' }).fill(container);
+    await bl.getByLabel('ETA').fill('2026-10-20');
+    await bl.getByLabel('Container no. 1').fill(container);
     await bl.getByRole('button', { name: 'New B/L' }).click();
     await page.getByRole('link', { name: container }).click();
     await page.getByRole('button', { name: 'Receive container' }).click();
