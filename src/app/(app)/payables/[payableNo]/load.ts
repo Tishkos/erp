@@ -99,7 +99,14 @@ export async function loadPayableRecord(tx: Tx, input: PayableRecordInput) {
       const lockForm = may.lock && state.ready && state.unlocked > 0;
       const bases = lockForm ? (await landedService.bases(tx)).filter((basis) => basis.active) : [];
       const types = may.addCharge || lockForm ? (await landedService.chargeTypes(tx)).filter((type) => type.code !== 'purchase') : [];
-      landed = { charges, locks, state, preview, bases, types };
+      /*
+       * What each model finally cost (2026-10-03). The preview above is the
+       * forecast and stops the moment the cost is locked; this is the figure
+       * the lock left behind, read from the layers and the adjustments it
+       * wrote. Nothing to read until there is a lock.
+       */
+      const finalCost = locks.length > 0 ? await landedService.finalCost(tx, view.payable.id) : [];
+      landed = { charges, locks, state, preview, bases, types, finalCost };
     }
     // G3 — the attachments and the history, in this same transaction.
     const attachments = await readAttachments(tx, payables.PERMISSION_OBJECT, view.payable.id);

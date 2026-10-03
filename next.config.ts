@@ -39,6 +39,14 @@ const config: NextConfig = {
   // gets a reload instead of a 404 after an atomic swap. deploy.sh exports it;
   // /healthz reports it.
   ...(process.env.DEPLOYMENT_ID ? { deploymentId: process.env.DEPLOYMENT_ID } : {}),
+  /*
+   * A second development server, for looking at a scratch database without
+   * disturbing the one somebody is working in (2026-10-03). `next dev` keeps
+   * one lock per build directory, so moving the directory is what lets two
+   * run: `NEXT_DIST_DIR=.next-cycle PORT=3200 npm run dev`. Unset in every
+   * ordinary run, which is every run but that one.
+   */
+  ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
 
   experimental: {
     // The domain layer is plain TypeScript and must never be bundled into a

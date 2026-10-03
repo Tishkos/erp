@@ -23,6 +23,7 @@ export function IconDialog({
   label,
   title,
   closeLabel,
+  wide,
   children,
 }: {
   readonly icon: ReactNode;
@@ -31,6 +32,12 @@ export function IconDialog({
   readonly label: string;
   readonly title: string;
   readonly closeLabel: string;
+  /**
+   * A table behind the door rather than a column of fields — the same
+   * `dialogWide` the line-grid dialogs wear. Narrow, a table of notes had to
+   * be scrolled sideways to be read (2026-10-03).
+   */
+  readonly wide?: boolean;
   readonly children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -53,7 +60,7 @@ export function IconDialog({
       </button>
       <dialog
         aria-labelledby={headingId}
-        className={styles.dialog}
+        className={wide ? `${styles.dialog} ${styles.dialogWide}` : styles.dialog}
         onClick={(event) => {
           if (event.target === ref.current) ref.current?.close();
         }}
@@ -101,7 +108,7 @@ export function HistoryButton(props: {
   readonly closeLabel: string;
   readonly children: ReactNode;
 }) {
-  return <IconDialog icon={<History aria-hidden="true" />} {...props} />;
+  return <IconDialog icon={<History aria-hidden="true" />} wide {...props} />;
 }
 
 /**
@@ -119,7 +126,7 @@ export function NotesButton(props: {
   readonly closeLabel: string;
   readonly children: ReactNode;
 }) {
-  return <IconDialog icon={<MessageSquare aria-hidden="true" />} {...props} />;
+  return <IconDialog icon={<MessageSquare aria-hidden="true" />} wide {...props} />;
 }
 
 /**

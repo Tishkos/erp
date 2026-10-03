@@ -20,6 +20,7 @@ import * as applications from '@/server/services/payment-applications';
 import * as customs from '@/server/services/customs-pd';
 import * as inventory from '@/server/services/inventory';
 import * as landed from '@/server/services/landed-cost';
+import * as inventoryReports from '@/server/services/inventory-reports';
 import * as payables from '@/server/services/payables';
 import * as shipments from '@/server/services/shipments';
 import { parseDecimal } from '@/server/domain/money';
@@ -380,5 +381,93 @@ describe('A19 · cleared by nobody, re-opened with a reason', () => {
     expect(rows.map((row) => row.summary)).toEqual([expect.stringMatching(/re-opened: a PD is no longer totally written off/)]);
     // …and the clearing stays in the story.
     expect((await codes()).filter((code) => code === 'CLEARED')).toHaveLength(1);
+  });
+});
+
+/**
+ * A20 — the whole cycle, and what the goods finally cost.
+ *
+ * Everything A18 and A19 prove separately, in the order a person does it, and
+ * then the question the sponsor asked of the finished thing: where is the final
+ * item cost, and is it in the warehouse's value.
+ */
+describe('A20 \u00b7 the cycle end to end, and the final item cost', () => {
+  it('pays, clears, locks the cost, and the warehouse carries the final cost per unit', async () => {
+    // ── Paid in full, by somebody other than whoever asked ────────────────
+    await ownerPool.query(
+      `insert into payment_method (code, name, kind, confirmation_kind) values ($1,'SWIFT','bank','swift')
+       on conflict (code) do nothing`,
+      [SWIFT],
+    );
+    const { rows: payee } = await ownerPool.query(
+      `insert into partner_bank_account (partner_id, bank_name, account_number, swift, currency, approval_status, is_active)
+       values ($1,'Bank of China','CN-A20','BKCHCNBJ','IQD','approved',true) returning id`,
+      [world.supplierId],
+    );
+    await journal(world.accounts.bank!, world.accounts.grni!, '5000000', '2026-09-01');
+
+    const app = await withScope(scope(world.clerk), (tx) =>
+      applications.create(tx, world.clerk, {
+        payableId,
+        paymentMethodCode: SWIFT,
+        bankCashAccountId: world.bankAccountId,
+        payeeBankAccountId: payee[0].id,
+        amountTxn: iqd('1000000'),
+        onDate: '2026-10-01',
+      }),
+    );
+    // The clerk cannot approve their own application — §19's second pair of eyes.
+    expect(await rejection(withScope(scope(world.clerk), (tx) => applications.approve(tx, world.clerk, app.id)))).toMatch(
+      /approve|another|same/i,
+    );
+    await withScope(scope(world.manager), (tx) => applications.approve(tx, world.manager, app.id));
+    await withScope(scope(world.clerk), (tx) =>
+      applications.send(tx, world.clerk, app.id, { applicationDate: '2026-10-01', bankReference: 'B-A20', overrideReason: null }),
+    );
+    await withScope(scope(world.manager), (tx) =>
+      applications.confirm(tx, world.manager, app.id, { confirmedOn: '2026-10-03', reference: 'MT103-A20' }),
+    );
+
+    // ── The declaration written off is the last condition: it clears ──────
+    await pdTo('totally_written_off', '2026-10-25');
+    const cleared = await withScope(scope(world.manager), (tx) => payables.load(tx, payableId));
+    expect(cleared.stageCode).toBe('cleared');
+    expect(cleared.closedAt).not.toBeNull();
+
+    // ── Freight and duty, locked onto the goods ───────────────────────────
+    await charge('freight', '20000');
+    await charge('customs_asycuda', '10000');
+    const done = await lock({ basisCode: 'by_value' });
+    // Nothing was sold or moved on this import, so every dinar goes to stock.
+    expect([done.totalIqd, done.inventoryIqd, done.cogsIqd]).toEqual(['30000.0000', '30000.0000', '0.0000']);
+
+    /*
+     * ── The answer ───────────────────────────────────────────────────────
+     * 100 panels invoiced at 10,000 each; 30,000 of charges over them is 300
+     * a panel; so each panel finally cost 10,300 and the hundred are worth
+     * 1,030,000.
+     */
+    const final = await withScope(scope(world.manager), (tx) => landed.finalCost(tx, payableId));
+    expect(final).toHaveLength(1);
+    expect(final[0]).toMatchObject({
+      itemCode: PANEL,
+      invoicedUnitIqd: '10000.0000',
+      chargesUnitIqd: '300.0000',
+      finalUnitIqd: '10300.0000',
+      finalValueIqd: '1030000.0000',
+    });
+
+    /*
+     * And the Warehouses Report says the same, through the service the screen
+     * and the export both read — not an arithmetic of this test's own.
+     */
+    const valuation = await withScope(scope(world.manager), (tx) =>
+      inventoryReports.valuation(tx, world.manager.principal, {}),
+    );
+    const panel = valuation.find((row) => row.itemCode === PANEL && row.warehouseCode === WAREHOUSE);
+    expect(panel?.averageUnitCostIqd).toBe('10300.0000');
+    // The sum comes back at the database's own scale, so the comparison is of
+    // the figure rather than of how many zeroes it was written with.
+    expect(panel?.valueIqd).toMatch(/^1030000\.0+$/);
   });
 });

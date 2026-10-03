@@ -1394,6 +1394,60 @@ export default async function PayablePage({
               </div>
             ) : null}
 
+            {/*
+              What each model finally cost, once the cost is locked — the
+              figure the warehouse holds and the Warehouses Report multiplies
+              out (2026-10-03). The preview above answers "what will this do";
+              this answers "what did it come to".
+            */}
+            {landed.finalCost.length > 0 ? (
+              <div className={s.sapTableWrap}>
+                <table aria-label={lc('final_title')} className={s.sapTable}>
+                  <caption className={s.sapTitleMeta}>{lc('final_title')}</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">{lc('col_model')}</th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_received')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_on_hand')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_invoiced_unit')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_charges_unit')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_final_unit')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_final_value')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {landed.finalCost.map((model) => (
+                      <tr key={model.itemCode}>
+                        <td>
+                          <bdi dir="ltr">{model.itemCode}</bdi>
+                        </td>
+                        <td className={s.sapNum}>{model.receivedQty}</td>
+                        <td className={s.sapNum}>{model.onHandQty}</td>
+                        <td className={s.sapNum}>{money(model.invoicedUnitIqd, 'IQD')}</td>
+                        <td className={s.sapNum}>{money(model.chargesUnitIqd, 'IQD')}</td>
+                        <td className={s.sapNum}>
+                          <strong>{money(model.finalUnitIqd, 'IQD')}</strong>
+                        </td>
+                        <td className={s.sapNum}>{money(model.finalValueIqd, 'IQD')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+
             {landed.locks.length > 0 ? (
               <div className={s.sapTableWrap}>
                 <table aria-label={lc('locks_title')} className={s.sapTable}>

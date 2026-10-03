@@ -352,6 +352,84 @@ function safeAllocate(basis: Basis, total: bigint, layers: readonly ReceivedLaye
   }
 }
 
+/**
+ * What each model finally cost, once the charges are in it — by direction,
+ * 2026-10-03: "where i can find final item cost please it should show final
+ * item cost per quantity".
+ *
+ * Read, not recomputed. The layers carry what the import's goods cost now —
+ * `lock` restates `unit_cost_iqd` in place — and
+ * `landed_cost_layer_adjustment` carries what each lock added, which is the
+ * difference between the invoice price and the cost the warehouse now holds.
+ * Working it out a second time here would be a second arithmetic to keep in
+ * step with the first.
+ *
+ * Empty until something is locked: before that the figure is a forecast, and
+ * the preview above is where a forecast belongs.
+ */
+export async function finalCost(tx: Tx, payableId: string) {
+  const layers = await receivedLayers(tx, payableId);
+  if (layers.length === 0) return [];
+
+  /*
+   * What the goods cost before any charge was locked onto them — the
+   * `unit_cost_before` of the *first* lock that touched each layer, ordered by
+   * the lock's own sequence. Everything between that and what the layer costs
+   * now is what the charges added, which is the figure being asked for.
+   */
+  const first = await tx.execute(sql`
+    select a.cost_layer_id as "layerId",
+           (array_agg(a.unit_cost_before order by k.sequence))[1] as "unitCostBefore"
+      from landed_cost_layer_adjustment a
+      join landed_cost_lock k on k.id = a.lock_id
+     where a.cost_layer_id in (${sql.join(layers.map((layer) => sql`${layer.id}`), sql`, `)})
+     group by a.cost_layer_id
+  `);
+  const byLayer = new Map(
+    (first.rows as { layerId: string; unitCostBefore: string }[]).map((row) => [row.layerId, row]),
+  );
+  if (byLayer.size === 0) return [];
+
+  const byModel = new Map<
+    string,
+    { quantity: bigint; onHand: bigint; invoiced: bigint; added: bigint; value: bigint }
+  >();
+  for (const layer of layers) {
+    const row = byLayer.get(layer.id);
+    const entry = byModel.get(layer.itemCode) ?? {
+      quantity: 0n,
+      onHand: 0n,
+      invoiced: 0n,
+      added: 0n,
+      value: 0n,
+    };
+    const before = row ? amountOf(row.unitCostBefore) : layer.unitCost;
+    entry.quantity += layer.originalQuantity;
+    entry.onHand += layer.remainingQuantity;
+    entry.invoiced += valueOf(layer.originalQuantity, before);
+    entry.added += valueOf(layer.originalQuantity, layer.unitCost - before);
+    // What the layer is worth now, which is what the Warehouses Report sums.
+    entry.value += valueOf(layer.originalQuantity, layer.unitCost);
+    byModel.set(layer.itemCode, entry);
+  }
+
+  return [...byModel.entries()]
+    .map(([itemCode, entry]) => ({
+      itemCode,
+      receivedQty: formatQuantity(entry.quantity),
+      onHandQty: formatQuantity(entry.onHand),
+      /** What the supplier's invoice priced these units at, per unit. */
+      invoicedUnitIqd: entry.quantity > 0n ? money((entry.invoiced * 1_000_000n) / entry.quantity) : '0',
+      /** What freight, duty and clearance added, per unit. */
+      chargesUnitIqd: entry.quantity > 0n ? money((entry.added * 1_000_000n) / entry.quantity) : '0',
+      /** What one unit finally cost — the figure the warehouse holds. */
+      finalUnitIqd: entry.quantity > 0n ? money((entry.value * 1_000_000n) / entry.quantity) : '0',
+      chargesIqd: money(entry.added),
+      finalValueIqd: money(entry.value),
+    }))
+    .sort((a, b) => a.itemCode.localeCompare(b.itemCode));
+}
+
 function summarise(layers: readonly ReceivedLayer[], amounts: bigint[] | null) {
   const byModel = new Map<string, { quantity: bigint; value: bigint; onHand: bigint; allocated: bigint }>();
   layers.forEach((layer, index) => {

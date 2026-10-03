@@ -3524,7 +3524,7 @@
       "withdrawn": "مسحوب",
       "none": "لم تُحمَّل أي كلفة على هذا الاستيراد بعد.",
       "preview_title": "معاينة التوزيع",
-      "col_model": "الموديل",
+      "col_model": "الصنف",
       "col_received": "المستلم",
       "col_on_hand": "المتوفر",
       "col_value": "القيمة (د.ع)",
@@ -3578,7 +3578,12 @@
         "customs_asycuda": "جمارك / أسيكودا",
         "port_forwarding": "ميناء وتخليص",
         "other": "أخرى"
-      }
+      },
+      "final_title": "الكلفة النهائية للصنف",
+      "col_invoiced_unit": "سعر الفاتورة / وحدة",
+      "col_charges_unit": "المصاريف / وحدة",
+      "col_final_unit": "الكلفة النهائية / وحدة",
+      "col_final_value": "قيمة المخزون"
     },
     "employees": {
       "title": "الموظفون",

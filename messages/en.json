@@ -3578,7 +3578,12 @@
         "customs_asycuda": "Customs / ASYCUDA",
         "port_forwarding": "Port & forwarding",
         "other": "Other"
-      }
+      },
+      "final_title": "Final item cost",
+      "col_invoiced_unit": "Invoiced / unit",
+      "col_charges_unit": "Charges / unit",
+      "col_final_unit": "Final cost / unit",
+      "col_final_value": "Value in stock"
     },
     "employees": {
       "title": "Employees",
