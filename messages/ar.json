@@ -30,7 +30,8 @@
     "payables_suppliers": "الموردون والأرصدة",
     "payables_setup": "الإعداد",
     "logistics_customs": "الجمارك (أسيكودا)",
-    "logistics_shipping": "الشحن"
+    "logistics_shipping": "الشحن",
+    "monitoring": "المتابعة"
   },
   "page": {
     "my_dashboard": "لوحة معلوماتي",
@@ -284,7 +285,10 @@
     "recruitment": "التوظيف",
     "performance": "الأداء",
     "employee_requests": "طلبات الموظفين",
-    "hr_documents": "المستندات"
+    "hr_documents": "المستندات",
+    "customer_list": "قائمة العملاء",
+    "history": "السجل",
+    "reports": "التقارير"
   },
   "auth": {
     "email": "البريد الإلكتروني",
@@ -997,7 +1001,8 @@
       "hr": "HR",
       "documents": "المستندات",
       "reports": "التقارير",
-      "settings": "الإعدادات"
+      "settings": "الإعدادات",
+      "monitoring": "المتابعة"
     },
     "profile_settings": "إعدادات الملف الشخصي",
     "my_profile": "ملفي الشخصي",
@@ -5368,6 +5373,9 @@
       "behind_since": "متأخر منذ",
       "bucket": "أيام التأخر",
       "no_advances": "لا توجد سلفة متبقية."
+    },
+    "monitoring": {
+      "soon": "قريباً"
     }
   },
   "profile": {

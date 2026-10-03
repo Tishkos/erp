@@ -30,7 +30,8 @@
     "payables_suppliers": "Suppliers & Balances",
     "payables_setup": "Setup",
     "logistics_customs": "Customs (ASYCUDA)",
-    "logistics_shipping": "Shipping"
+    "logistics_shipping": "Shipping",
+    "monitoring": "Monitoring"
   },
   "page": {
     "my_dashboard": "My Dashboard",
@@ -284,7 +285,10 @@
     "recruitment": "Recruitment",
     "performance": "Performance",
     "employee_requests": "Employee Requests",
-    "hr_documents": "Documents"
+    "hr_documents": "Documents",
+    "customer_list": "List of customers",
+    "history": "History",
+    "reports": "Reports"
   },
   "auth": {
     "email": "Email",
@@ -997,7 +1001,8 @@
       "hr": "HR",
       "documents": "Documents",
       "reports": "Reports",
-      "settings": "Settings"
+      "settings": "Settings",
+      "monitoring": "Monitoring"
     },
     "profile_settings": "Profile settings",
     "my_profile": "My profile",
@@ -5368,6 +5373,9 @@
       "behind_since": "Behind since",
       "bucket": "Days behind",
       "no_advances": "No advance is still owing."
+    },
+    "monitoring": {
+      "soon": "Coming soon"
     }
   },
   "profile": {

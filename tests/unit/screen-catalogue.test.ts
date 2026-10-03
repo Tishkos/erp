@@ -92,7 +92,7 @@ describe('the screen catalogue covers the approved tree', () => {
   // one of them is still reachable, once.
   // Plus one more, by direction (2026-09-03): the Statement Mapping, where
   // Finance defines the headers and lines of its own reports.
-  it('classifies all 235 items in the approved tree', () => {
+  it('classifies all 242 items in the approved tree', () => {
     // 221 from the approved tree, plus the Stock Ledger (2026-09-27), plus
     // REQ-AP-001 §21.1: the Payables workbench, recurring contracts, payment
     // applications, PDs, B/Ls, containers, loans and the module settings —
@@ -103,8 +103,8 @@ describe('the screen catalogue covers the approved tree', () => {
     // plus FIX-5's HR menu in the sponsor's order — Dashboard, Departments,
     // Positions, Recruitment, Performance, Employee Requests and Documents in,
     // Organisation, Payslips, Expense Claims, Travel and Asset Assignment out.
-    expect(allMenuItems()).toHaveLength(239);
-    expect(Object.keys(SCREENS)).toHaveLength(239);
+    expect(allMenuItems()).toHaveLength(242);
+    expect(Object.keys(SCREENS)).toHaveLength(242);
   });
 
   it('uses only declared archetypes', () => {
@@ -123,7 +123,7 @@ describe('the screen catalogue covers the approved tree', () => {
     );
     // + Bank Deposits (a document, two) + the ASYCUDA list (a workspace, one);
     // FIX-5: + 1 + 2 + 2 + 2 + 2 + 2 + 1 in, − 1 − 1 − 2 − 2 − 2 out.
-    expect(total).toBe(354);
+    expect(total).toBe(357);
   });
 });
 
@@ -176,7 +176,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(239);
+    expect(screenRoutes().size).toBe(242);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -257,6 +257,18 @@ describe('every screen has one address', () => {
       '/master-data/payment-terms',
       '/master-data/statement-mapping',
       '/master-data/warehouses',
+      /*
+       * Monitoring — by direction, 2026-10-03.
+       *
+       * Reachable and deliberately empty: each says "coming soon" and reads
+       * nothing. They are in this list because `wired` is what `visibleRoute`
+       * answers on, and a route that is not here is refused on the URL — so
+       * leaving them out would mean three tabs that 404, which is the opposite
+       * of what was asked. The badge overstates them until they have figures.
+       */
+      '/monitoring/customer-list',
+      '/monitoring/history',
+      '/monitoring/reports',
       // REQ-AP-001 Stage 1 — the Payables workbench.
       '/payables',
       // REQ-AP-001 Stage 3 — the advances' register.

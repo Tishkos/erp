@@ -509,6 +509,23 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('project_settings', 'project_setting', '/administration/project-settings'),
     ],
   },
+  /*
+   * Monitoring — by direction, 2026-10-03.
+   *
+   * Its three screens are drawn and read nothing yet. They are in the tree all
+   * the same, because a menu item that is not in the tree has no route, no
+   * permission object and no place in the roles that hold every section — and
+   * adding it later would mean doing all three again.
+   */
+  {
+    key: 'monitoring',
+    ordinal: 25,
+    items: [
+      page('customer_list', 'monitoring'),
+      page('history', 'monitoring'),
+      page('reports', 'monitoring'),
+    ],
+  },
   {
     key: 'integrations',
     ordinal: 20,

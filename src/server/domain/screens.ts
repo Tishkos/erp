@@ -330,6 +330,12 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   change_requests: 'document',
   uat_evidence: 'list',
   support_runbooks: 'list',
+
+  // 22 — Monitoring (by direction, 2026-10-03). Drawn, reading nothing yet:
+  // a list of customers, the history behind it, and its reports.
+  customer_list: 'list',
+  history: 'report',
+  reports: 'report',
 };
 
 export function archetypeOf(key: string): ScreenArchetype | undefined {
@@ -383,6 +389,10 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/master-data/chart-of-accounts',
   '/inventory/availability',
   '/documents',
+  // Monitoring — drawn, reading nothing yet (2026-10-03).
+  '/monitoring/customer-list',
+  '/monitoring/history',
+  '/monitoring/reports',
   // Administration.
   '/administration/company',
   '/administration/users',
