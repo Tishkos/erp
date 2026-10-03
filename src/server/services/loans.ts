@@ -1931,7 +1931,11 @@ export async function listForScreen(tx: Tx, filter: LoanListFilter = {}) {
   const unpaidPastDue = sql`exists (select 1 from bank_loan_instalment i
                                where i.loan_id = ${bankLoan.id} and i.superseded_at is null and i.status <> 'paid'
                                  and i.due_date < ${asOf}::date)`;
-  const view = filter.view ?? 'open';
+  // No view asked for is every loan, repaid ones included (2026-10-04, by
+  // direction): the register is the whole book of what the company borrowed,
+  // and a settled loan shows its own chip and a nil outstanding rather than
+  // leaving the only screen that lists loans.
+  const view = filter.view ?? 'all';
   const where = and(
     view === 'open'
       // Open means not finished with: a loan waiting for approval is as open

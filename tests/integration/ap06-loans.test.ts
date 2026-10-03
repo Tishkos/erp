@@ -644,6 +644,26 @@ describe('§15.6 · fully repaid is read from what was posted', () => {
     // And the ledger says what actually happened: one instalment, one settlement.
     const repayments = await withScope(scope(world.manager), (tx) => loans.repaymentsOf(tx, loan.id));
     expect(repayments.map((row) => row.kind).sort()).toEqual(['instalment', 'settlement']);
+
+    /*
+     * And it stays in the register. Asked for nothing in particular the
+     * register answers with every loan, settled ones included (2026-10-04, by
+     * direction) — a loan paid off early was still borrowed, and the screen
+     * that lists loans is the only place it can be seen. The chip and a nil
+     * outstanding say what became of it; `open` is what somebody narrows to.
+     */
+    const register = async (view?: 'open' | 'closed' | 'all') =>
+      withScope(scope(world.manager), (tx) => loans.listForScreen(tx, view ? { view } : {}));
+    const held = (rows: { loanNo: string }[]) => rows.some((row) => row.loanNo === loan.loanNo);
+    const byDefault = await register();
+    expect(held(byDefault.rows)).toBe(true);
+    const settledRow = byDefault.rows.find((row) => row.loanNo === loan.loanNo)!;
+    expect(settledRow.status).toBe('fully_repaid');
+    expect(settledRow.outstandingTxn).toBe('0.0000');
+    expect(settledRow.nextDue).toBeNull();
+    expect(held((await register('all')).rows)).toBe(true);
+    expect(held((await register('closed')).rows)).toBe(true);
+    expect(held((await register('open')).rows)).toBe(false);
   });
 
   it('refuses to settle a loan that owes nothing, and one that is not active', async () => {

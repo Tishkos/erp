@@ -19,6 +19,7 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { Attachments } from '@/components/admin/attachments';
 import { RecordHistory } from '@/components/admin/history';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { LoanSettlementTotal } from '@/components/admin/loan-settlement-total';
 import * as attachmentsService from '@/server/services/attachments';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
@@ -489,11 +490,19 @@ export default async function LoanPage({
                     <Field label={t('settle_fee')} name="fee" />
                     <Field label={t('settle_reference')} name="reference" required />
                   </Grid>
-                  <p className="muted">
-                    {t('settle_outstanding')} {money(toDecimalString(quote.outstanding, MONEY_SCALE))}
-                    {' · '}
-                    {t('settle_total')} {money(toDecimalString(quote.total, MONEY_SCALE))}
-                  </p>
+                  {/*
+                    Said again as the interest and the fee are typed, because
+                    the quote was worked out before either was (2026-10-04).
+                  */}
+                  <LoanSettlementTotal
+                    currency={loan.currency}
+                    feeField="fee"
+                    interestField="interest"
+                    labels={{ outstanding: t('settle_outstanding'), total: t('settle_total') }}
+                    locale={locale as Locale}
+                    outstandingTxn={toDecimalString(quote.outstanding, MONEY_SCALE)}
+                    totalTxn={toDecimalString(quote.total, MONEY_SCALE)}
+                  />
                   <SubmitRow>
                     <Submit label={t('settle_early')} />
                   </SubmitRow>
