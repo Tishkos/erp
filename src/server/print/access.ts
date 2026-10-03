@@ -48,6 +48,14 @@ export const EXPORT_ACCESS = {
   // by the person it pays (R5), whom row security alone lets through.
   payroll_run: { kind: 'document', route: '/hr/payroll', object: 'payroll_run' },
   payslip: { kind: 'document', route: '/hr/payroll', object: 'payroll_run', selfService: true },
+  // REQ-HR-001 HR-6 — an issued letter, which the person it is about may print
+  // (row security returns only theirs); the four HR reports, each under the
+  // grant its figures need (pay under payroll's, advances under theirs).
+  hr_letter: { kind: 'document', route: '/hr/requests', object: 'employee_request', selfService: true },
+  hr_headcount: { kind: 'report', route: '/hr/reports', object: 'hr_report' },
+  hr_leave_balances: { kind: 'report', route: '/hr/reports', object: 'hr_report' },
+  hr_payroll_register: { kind: 'report', route: '/hr/reports', object: 'payroll_run' },
+  hr_unsettled_advances: { kind: 'report', route: '/hr/reports', object: 'employee_advance' },
 } as const satisfies Record<
   string,
   { readonly kind: 'document' | 'report'; readonly route: string; readonly object: string; readonly selfService?: boolean }

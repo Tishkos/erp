@@ -259,6 +259,8 @@ beforeAll(async () => {
     ['net_pay', 'L000001', 'Salaries Payable', null],
     // REQ-HR-001 HR-4 — what people owe on advances and loans.
     ['employee_advance', 'A000001', 'Employee Advances and Loans', null],
+    // REQ-HR-001 HR-6 — what people spent for the company and are reimbursed.
+    ['employee_expense', 'X000001', 'Staff Expenses', null],
   ] as const) {
     const { rows: parents } = await ownerPool.query(`select id, account_type from chart_of_account where code = $1`, [
       parent,
@@ -841,7 +843,9 @@ describe('who may take a copy', () => {
     // REQ-HR-001 HR-3 — the payroll run is a sheet of salaries: the clerk,
     // who reads no compensation (D-HR-7), has no copy of it; a payslip goes to
     // whoever row security lets read it.
-    const COMPENSATION_GATED: readonly ExportKey[] = ['payroll_run'];
+    // REQ-HR-001 HR-6 — the HR reports are HR's, Finance's and the CEO's: the
+    // clerk reads none of them (an issued letter goes to whom it is about).
+    const COMPENSATION_GATED: readonly ExportKey[] = ['payroll_run', 'hr_headcount', 'hr_leave_balances', 'hr_payroll_register', 'hr_unsettled_advances'];
     for (const key of EXPORT_KEYS) {
       expect(mayExport(manager.principal, key, 'pdf')).toBe(true);
       expect(mayExport(manager.principal, key, 'xlsx')).toBe(true);

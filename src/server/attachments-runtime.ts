@@ -10,8 +10,8 @@
 import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
-import { eq } from 'drizzle-orm';
-import { applicant, bankLoan, customsPd, journalEntry, payable, paymentApplication, shipmentContainer } from './db/schema';
+import { eq, sql } from 'drizzle-orm';
+import { applicant, bankLoan, customsPd, employeeDocument, employeeRequest, journalEntry, payable, paymentApplication, shipmentContainer } from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -156,6 +156,24 @@ const applicantParentAccess = async (tx: Tx, principal: Principal, objectId: str
   return Boolean(row);
 };
 
+/**
+ * REQ-HR-001 HR-6 — a request's receipts and papers: HR by its grant, or the
+ * person and their manager (the link), as the request itself is read.
+ */
+const employeeRequestParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  const [row] = await tx.select({ employeeId: employeeRequest.employeeId }).from(employeeRequest).where(eq(employeeRequest.id, objectId)).limit(1);
+  if (!row) return false;
+  if (can(principal, 'view', 'employee_request')) return true;
+  const reach = await tx.execute(sql`select app_employee_reach(${row.employeeId}) as ok`);
+  return Boolean((reach.rows[0] as { ok: boolean } | undefined)?.ok);
+};
+
+/** HR-6 — a person's document's scan: HR by its grant, or the person (the row policy decides which rows exist). */
+const employeeDocumentParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  const [row] = await tx.select({ employeeId: employeeDocument.employeeId }).from(employeeDocument).where(eq(employeeDocument.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -171,6 +189,8 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('shipment_container', containerParentAccess);
   attachments.registerParentAccessCheck('bank_loan', loanParentAccess);
   attachments.registerParentAccessCheck('applicant', applicantParentAccess);
+  attachments.registerParentAccessCheck('employee_request', employeeRequestParentAccess);
+  attachments.registerParentAccessCheck('employee_document', employeeDocumentParentAccess);
 }
 
 /** Streams a stored file, for a route handler that has already checked access. */

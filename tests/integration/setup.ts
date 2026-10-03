@@ -546,6 +546,10 @@ export async function resetTestData(): Promise<void> {
     // REQ-HR-001 HR-3 — the runs name their journals; their lines and payments
     // hang off them; a person's own component figures are dated rows like pay.
     // REQ-HR-001 HR-4 — the recoveries name the runs and the advances; the equipment the people.
+    // REQ-HR-001 HR-6 — a claim's lines hang off it; a recovery may name the claim; the papers the person.
+    await client.query('delete from employee_request_line');
+    await client.query('delete from employee_request');
+    await client.query('delete from employee_document');
     // REQ-HR-001 HR-5 — applicants name their vacancy and the employee a hire made; reviews the
     // person and their cycle (a test's own: no cycle is seeded).
     await client.query('delete from review_goal');
@@ -569,6 +573,7 @@ export async function resetTestData(): Promise<void> {
         when 'contract_expiry_warning_days' then 30
         when 'leave_pending_reminder_days' then 3
         when 'leave_lapse_warning_days' then 45
+        when 'document_expiry_warning_days' then 30
         else value end`);
     await client.query('delete from employee_compensation');
     await client.query('delete from employee_history');
@@ -918,7 +923,7 @@ export async function resetTestData(): Promise<void> {
                          -- REQ-AP-001 Stage 6, migration 0235.
                          'LOAN',
                          -- REQ-HR-001 Stage HR-1, migration 0241.
-                         'EMPLOYEE', 'POSITION_CODE', 'LEAVE_REQUEST', 'PAYROLL_RUN', 'PAYSLIP', 'EMPLOYEE_ADVANCE', 'VACANCY', 'APPLICANT', 'PERFORMANCE_REVIEW', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
+                         'EMPLOYEE', 'POSITION_CODE', 'LEAVE_REQUEST', 'PAYROLL_RUN', 'PAYSLIP', 'EMPLOYEE_ADVANCE', 'VACANCY', 'APPLICANT', 'PERFORMANCE_REVIEW', 'EXPENSE_CLAIM', 'TRAVEL_REQUEST', 'HR_LETTER', 'EMPLOYEE_REQUEST', 'EMPLOYEE_DOCUMENT', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

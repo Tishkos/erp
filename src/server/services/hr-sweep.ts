@@ -17,6 +17,9 @@
  *                       HR managers, once per advance per month
  *   vacancy overdue     HR-5: an open vacancy past its closing day → the HR
  *                       managers, once per vacancy per closing day
+ *   document expiring   HR-6: a person's valid document expiring within the
+ *                       limit, or expired → the HR managers and the person,
+ *                       once per document per expiry date
  *
  * The limits are `hr_parameter` rows (R4), edited on HR Settings.
  */
@@ -27,6 +30,7 @@ import { HUNDRED, daysFrom, showDays, yearOf } from '../domain/hr-time';
 import type { Principal } from '../domain/permissions';
 import type { ActorContext } from './chart-of-accounts';
 import * as advances from './employee-advances';
+import * as documents from './employee-documents';
 import * as hrSettings from './hr-settings';
 import * as leave from './leave';
 import * as notifications from './notifications';
@@ -39,6 +43,7 @@ export interface SweepRun {
   readonly leaveLapsing: number;
   readonly advancesBehind: number;
   readonly vacanciesOverdue: number;
+  readonly documentsExpiring: number;
   readonly created: number;
 }
 
@@ -178,7 +183,20 @@ export async function run(tx: Tx, principal: Principal, asOf: string): Promise<S
     created += raised.created;
   }
 
-  return { asOf, contractsExpiring: ending.length, leaveWaiting: waiting.rows.length, leaveLapsing: lapsing, advancesBehind: behind.length, vacanciesOverdue: overdue.length, created };
+  // HR-6 — documents about to expire (or expired) while their holder still works here.
+  const papers = await documents.raiseExpiring(tx, principal.userId, asOf);
+  created += papers.created;
+
+  return {
+    asOf,
+    contractsExpiring: ending.length,
+    leaveWaiting: waiting.rows.length,
+    leaveLapsing: lapsing,
+    advancesBehind: behind.length,
+    vacanciesOverdue: overdue.length,
+    documentsExpiring: papers.expiring,
+    created,
+  };
 }
 
 export type { ActorContext };

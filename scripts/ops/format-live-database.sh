@@ -84,12 +84,15 @@ fi
 # them costs nothing, and the day one of them fills is not the day anybody
 # wants to discover this list was written before it existed.
 read -r -d '' DOCUMENT_TABLES <<'TABLES' || true
+employee_request_line
+employee_document
 review_goal
 performance_review
 applicant_stage
 applicant
 vacancy
 employee_advance_recovery
+employee_request
 employee_advance
 employee_asset
 payroll_line_component

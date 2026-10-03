@@ -419,9 +419,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ordinal: 15,
     items: [
       // REQ-FIX-001 FIX-5 — the sponsor's order (2026-10-02). The screens
-      // live under /hr; the ones not built yet keep their derived address
-      // until their REQ-HR-001 stage (HR-2 to HR-6).
-      page('hr_dashboard', 'hr_report'),
+      // live under /hr; with REQ-HR-001 HR-6 every one of them is built.
+      page('hr_dashboard', 'hr_report', '/hr/dashboard'),
       page('employees', 'employee', '/hr/employees'),
       page('hr_departments', 'org_structure', '/hr/departments'),
       page('hr_positions', 'org_structure', '/hr/positions'),
@@ -431,9 +430,9 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('employee_advances', 'employee_advance', '/hr/advances'),
       page('recruitment', 'recruitment', '/hr/recruitment'),
       page('performance', 'performance_review', '/hr/performance'),
-      page('employee_requests', 'employee_request'),
-      page('hr_documents', 'employee_document'),
-      page('hr_reports', 'hr_report'),
+      page('employee_requests', 'employee_request', '/hr/requests'),
+      page('hr_documents', 'employee_document', '/hr/documents'),
+      page('hr_reports', 'hr_report', '/hr/reports'),
     ],
   },
   {

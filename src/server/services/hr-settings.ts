@@ -374,13 +374,15 @@ export async function calendars(tx: Tx) {
 // The sweep's limits (HR-2, R4)
 // ---------------------------------------------------------------------------
 
-export const PARAMETER_KEYS = ['contract_expiry_warning_days', 'leave_pending_reminder_days', 'leave_lapse_warning_days'] as const;
+// HR-6 — how long before a document's expiry the sweep raises it.
+export const PARAMETER_KEYS = ['contract_expiry_warning_days', 'leave_pending_reminder_days', 'leave_lapse_warning_days', 'document_expiry_warning_days'] as const;
 export type ParameterKey = (typeof PARAMETER_KEYS)[number];
 
 const PARAMETER_DEFAULTS: Readonly<Record<ParameterKey, number>> = {
   contract_expiry_warning_days: 30,
   leave_pending_reminder_days: 3,
   leave_lapse_warning_days: 45,
+  document_expiry_warning_days: 30,
 };
 
 export async function parameters(tx: Tx): Promise<Record<ParameterKey, number>> {

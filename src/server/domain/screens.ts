@@ -492,6 +492,11 @@ const DELIVERED: ReadonlySet<string> = new Set([
   // REQ-HR-001 Stage HR-5 — recruitment and performance.
   '/hr/recruitment',
   '/hr/performance',
+  // REQ-HR-001 Stage HR-6 — requests, documents, the HR dashboard and reports.
+  '/hr/dashboard',
+  '/hr/requests',
+  '/hr/documents',
+  '/hr/reports',
   '/administration/hr-settings',
   // REQ-WA-001 WA-1/WA-2 — the WhatsApp bridge.
   '/administration/whatsapp',

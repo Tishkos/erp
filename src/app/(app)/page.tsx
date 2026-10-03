@@ -318,6 +318,7 @@ export default async function Home() {
         waiting.advancesAwaiting.length > 0 ||
         waiting.reviewsAwaiting.length > 0 ||
         waiting.hiresAwaiting.length > 0 ||
+        waiting.requestsAwaiting.length > 0 ||
         waiting.holdsNeedingReason.length > 0) ? (
         <Band
           count={
@@ -329,7 +330,8 @@ export default async function Home() {
             waiting.payrollAwaiting.length +
             waiting.advancesAwaiting.length +
             waiting.reviewsAwaiting.length +
-            waiting.hiresAwaiting.length
+            waiting.hiresAwaiting.length +
+            waiting.requestsAwaiting.length
           }
           href="/approvals"
           hrefLabel={t('dashboard.open_approvals')}
@@ -514,6 +516,26 @@ export default async function Home() {
                   </td>
                   <td>
                     <Link href={`/hr/recruitment/applicants/${encodeURIComponent(offer.applicantNo)}`}>{t('dashboard.open_applicant')}</Link>
+                  </td>
+                </tr>
+              ))}
+            </BandTable>
+          ) : null}
+
+          {/* REQ-HR-001 HR-6 — employee requests waiting for me: to decide, to reimburse, to issue. */}
+          {waiting.requestsAwaiting.length > 0 ? (
+            <BandTable headings={[t('dashboard.requests_awaiting'), column('amount'), '']}>
+              {waiting.requestsAwaiting.map((request) => (
+                <tr key={`rq:${request.requestNo}`}>
+                  <td className={s.sapAccountCell}>
+                    <Link href={`/hr/requests/${encodeURIComponent(request.requestNo)}`}>
+                      <bdi dir="ltr">{request.requestNo}</bdi>
+                    </Link>{' '}
+                    · <bdi dir="auto">{request.fullNameEn}</bdi> · {t(`dashboard.request_action_${request.action}`)}
+                  </td>
+                  <td>{request.kind === 'expense_claim' ? <bdi dir="ltr">{formatMoney(request.amountIqd, 'IQD', locale as Locale)}</bdi> : <bdi dir="auto">{request.subject}</bdi>}</td>
+                  <td>
+                    <Link href={`/hr/requests/${encodeURIComponent(request.requestNo)}`}>{t('dashboard.open_request')}</Link>
                   </td>
                 </tr>
               ))}
