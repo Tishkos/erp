@@ -13,6 +13,7 @@
  *        invoice; a note is dated, signed and never edited.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { fundBank } from './hr-funds';
 import { ownerPool, rejection } from './setup';
 import { withScope } from '@/server/db/client';
 import * as ap from '@/server/services/ap-invoice';
@@ -181,6 +182,7 @@ describe('D12 · expenses are purchase invoices', () => {
   });
 
   it('the raiser cannot post it; the CEO posts; Mark paid settles it; the register says Paid', async () => {
+    await fundBank(world, '1500000.0000'); // C-20: Mark paid takes the rent out of a bank that holds it
     const made = await rentBill();
     await withScope(scope(world.clerk), (tx) => ap.submit(tx, world.clerk, made.id));
 

@@ -20,6 +20,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { ownerPool, resetTestData, seedBranch } from './setup';
+import { fundLedger, openingFundsAccount } from './funds';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
 import * as po from '@/server/services/purchase-order';
@@ -352,6 +353,19 @@ describe('Phase 05 exit gate · the §26 scenario, end to end', () => {
     expect(proposal.blocked).toHaveLength(0);
 
     // ── 7 · Payment ────────────────────────────────────────────────────────
+    // C-20: the account the payment names holds money before it leaves.
+    const { rows: paying } = await ownerPool.query(
+      `select gl_account_id from bank_cash_account where id = $1`,
+      [bankAccountId],
+    );
+    await fundLedger({
+      glAccountId: paying[0].gl_account_id,
+      contraAccountId: await openingFundsAccount(),
+      amountIqd: '10000.0000',
+      branchCode: BAGHDAD,
+      userId: finance.principal.userId,
+      on: '2026-02-01',
+    });
     const payment = await withScope(scope(finance), (tx) =>
       pay.create(tx, finance, {
         supplierId,
@@ -378,7 +392,7 @@ describe('Phase 05 exit gate · the §26 scenario, end to end', () => {
     // The money left the account the payment named, so that is where the credit
     // is — not the `bank` mapping, which a payment from a second account would
     // credit just as wrongly (§17).
-    expect(await payingAccountBalance()).toBe(-1650);
+    expect(await payingAccountBalance()).toBe(10_000 - 1650); // the opening funds, less the payment
     expect(await balanceOf('inventory')).toBe(1650);
     expect(await balanceOf('grni')).toBe(0);
 

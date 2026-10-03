@@ -22,7 +22,7 @@ import * as imports from '@/server/services/client-import';
 import * as inventory from '@/server/services/inventory';
 import { AVAILABILITY_BUCKETS, availableQuantity } from '@domain/inventory';
 import { parseDecimal, toDecimalString } from '@domain/money';
-import { BRANCH, buildWorld, scopeOf, type MoneyTransferWorld } from './money-transfer-fixture';
+import { BRANCH, buildWorld, fundBank, scopeOf, type MoneyTransferWorld } from './money-transfer-fixture';
 
 const iqd = (value: string) => parseDecimal(value, 4n);
 const show = (value: bigint) => toDecimalString(value, 4n);
@@ -37,6 +37,8 @@ let clientAccountId: string;
 beforeEach(async () => {
   await resetTestData();
   world = await buildWorld();
+  // C-20: the company bank pays for the client's goods, so it holds money first.
+  await fundBank(world, '10000000.0000');
 
   // An item and a warehouse that *could* hold stock, so "zero company inventory"
   // is a measured result rather than the absence of anything to measure.

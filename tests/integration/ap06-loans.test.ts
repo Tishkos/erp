@@ -30,6 +30,7 @@ import type { ActorContext } from '@/server/services/chart-of-accounts';
 import { parseDecimal } from '@/server/domain/money';
 import { parseQuantity } from '@/server/domain/uom';
 import { BAGHDAD, PANEL, WAREHOUSE, buildTradingWorld, scope, type TradingWorld } from './trading-fixture';
+import { fundBank } from './hr-funds';
 
 let world: TradingWorld;
 let payableId: string;
@@ -357,6 +358,9 @@ describe('§15.7 · what a loan may fund', () => {
 
 describe('§15.6 · repayment', () => {
   it('in order, Dr liability Cr bank; the last instalment repays the loan in full', async () => {
+    // C-20: the bank received 980,000 net of the 20,000 commission and repays
+    // 1,000,000; the difference is money it already held.
+    await fundBank(world, '20000.0000');
     const made = await readyLoan();
     const app = await draft('500000', made.id);
     await approveApp(app.id);

@@ -877,7 +877,9 @@ export async function confirm(tx: Tx, ctx: ActorContext, id: string, input: Conf
       await payments.allocate(tx, ctx, { supplierPaymentId: created.id, apInvoiceId: invoice.id, amountIqd: share });
       left -= share;
     }
-    await payments.post(tx, ctx, created.id);
+    // The application's own reservation is the money that pays it (§15.1).
+    const reserved = isReserved(row.status) ? parseDecimal(row.amountIqd, MONEY_SCALE) : 0n;
+    await payments.post(tx, ctx, created.id, { drawsReservedIqd: reserved });
     await tx.update(supplierPayment).set({ amountTxn: money(amountTxn) }).where(eq(supplierPayment.id, created.id));
     supplierPaymentId = created.id;
     documentNo = created.paymentNo;

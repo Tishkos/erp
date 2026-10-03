@@ -47,6 +47,7 @@ import type { ExportFormat, PrintModel } from '@/server/print/model';
 import { renderPdf } from '@/server/print/pdf';
 import { letterheadFor } from '@/server/print/letterhead';
 import { evaluateSum, readPdf, readWord, readWorkbook, type Workbook } from '../support/export-files';
+import { fundLedger } from './funds';
 
 const BAGHDAD = 'BGW';
 const BASRA = 'BSR';
@@ -353,6 +354,8 @@ beforeAll(async () => {
      values ($1,4,'April 2026','2026-04-01','2026-04-30') on conflict do nothing`,
     [years[0].id],
   );
+  // C-20: the bank holds money before the payment below leaves it.
+  await fundLedger({ glAccountId: accounts.bank!, contraAccountId: accounts.return_clearing!, amountIqd: '10000000.0000', branchCode: BAGHDAD, userId: manager.principal.userId, on: ON });
   await ownerPool.query(
     `insert into exchange_rate (currency_code, rate_type, iqd_per_unit, effective_from, entered_by)
      values ('USD','accounting',1310.00000000,'2026-01-01',$1) on conflict do nothing`,
@@ -691,9 +694,11 @@ describe('statements · the export closes where the screen does', () => {
     const screen = await withScope(scope(manager), (tx) =>
       statement.ledgerStatementFor(tx, { code: bankCode, glAccountCode: 'A800002' }, { ...YEAR, currency: 'IQD' }),
     );
-    expect(Number(screen.closing)).toBe(6_000_000 - 10_000_000);
+    // The opening funds (C-20), the receipt in, the payment out.
+    expect(Number(screen.closing)).toBe(10_000_000 + 6_000_000 - 10_000_000);
+    expect(screen.lines.filter((line) => !line.document).map((line) => [Number(line.debit), Number(line.credit)])).toEqual([[10_000_000, 0]]);
     // The receipt in as Debit, the payment out as Credit, each by its number.
-    expect(screen.lines.map((line) => [line.document?.number, Number(line.debit), Number(line.credit)])).toEqual([
+    expect(screen.lines.filter((line) => line.document).map((line) => [line.document?.number, Number(line.debit), Number(line.credit)])).toEqual([
       [doc.payment!.no, 0, 10_000_000],
       [doc.receipt!.no, 6_000_000, 0],
     ]);

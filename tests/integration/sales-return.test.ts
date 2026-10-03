@@ -354,8 +354,10 @@ describe('06.9 gate · no exchange mechanism exists (§7.5)', () => {
   });
 
   it('has no exchange document type and no exchange status', async () => {
+    // A payable's exchange difference (FX-3) is currency, not a product swap.
     const { rows: types } = await ownerPool.query(
-      `select code from document_type where code ilike '%exchange%' or name ilike '%exchange%'`,
+      `select code from document_type
+        where (code ilike '%exchange%' or name ilike '%exchange%') and code not like 'payable\\_%'`,
     );
     expect(types).toEqual([]);
 

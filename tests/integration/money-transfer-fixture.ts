@@ -13,6 +13,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { ownerPool, seedBranch } from './setup';
+import { fundLedger, openingFundsAccount } from './funds';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
@@ -299,4 +300,20 @@ export async function approveKycFor(
   );
 
   return raised.id;
+}
+
+/**
+ * C-20: money in the branch's bank before a suite pays out of it — one posted
+ * journal, Dr the bank Cr "Opening Funds", an equity account no Phase 09 test
+ * reads. Dated in February, the fixture's first period.
+ */
+export async function fundBank(world: MoneyTransferWorld, amountIqd: string, on = '2026-02-01'): Promise<void> {
+  await fundLedger({
+    glAccountId: world.accounts.bank,
+    contraAccountId: await openingFundsAccount(),
+    amountIqd,
+    branchCode: BRANCH,
+    userId: world.manager.principal.userId,
+    on,
+  });
 }

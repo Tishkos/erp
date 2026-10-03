@@ -25,6 +25,7 @@ import * as shipments from '@/server/services/shipments';
 import { parseDecimal } from '@/server/domain/money';
 import { parseQuantity } from '@/server/domain/uom';
 import { BAGHDAD, PANEL, WAREHOUSE, buildTradingWorld, scope, type TradingWorld } from './trading-fixture';
+import { fundBank } from './hr-funds';
 
 const IN_PROCESS = 'WH-AP07-INPROC';
 const SECOND = 'WH-AP07-ERBIL';
@@ -134,6 +135,8 @@ async function receiptLayers() {
 
 beforeEach(async () => {
   world = await buildTradingWorld();
+  // C-20: the charges below are paid out of the bank, so it holds money first.
+  await fundBank(world, '1000000.0000');
   await ownerPool.query(
     `insert into warehouse (code, name, branch_code, warehouse_type, is_transit, shipment_stage)
      values ($1,'In Process',$2,'transit',true,'in_process'), ($3,'Erbil Store',$2,'branch',false,null)`,

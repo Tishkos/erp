@@ -18,6 +18,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { ownerPool, rejection, resetTestData, seedBranch } from './setup';
+import { fundLedger } from './funds';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
 import * as po from '@/server/services/purchase-order';
@@ -183,6 +184,20 @@ beforeEach(async () => {
   await withScope({ userId: manager.principal.userId, branchCode: BAGHDAD }, (tx) =>
     coa.setRequiredDimensions(tx, manager, accounts.purchase_variance!, []),
   );
+
+  // C-20: the seeded bank the payments leave holds money first — opening funds
+  // from return clearing, which no test here reads.
+  const { rows: paying } = await ownerPool.query(
+    `select gl_account_id from bank_cash_account where id = $1`,
+    [bankAccountId],
+  );
+  await fundLedger({
+    glAccountId: paying[0].gl_account_id,
+    contraAccountId: accounts.return_clearing!,
+    amountIqd: '1000000.0000',
+    branchCode: BAGHDAD,
+    userId: manager.principal.userId,
+  });
 });
 
 let seq = 0;
