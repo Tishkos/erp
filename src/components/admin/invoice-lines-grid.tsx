@@ -10,6 +10,7 @@ import {
   useState,
   useTransition,
 } from 'react';
+import { inLedger as inLedgerCurrency } from './invoice-currency';
 import styles from './admin.module.css';
 import { ColumnGrip, useColumnWidths } from './column-widths';
 import { PAIRED_CHOICE } from './paired-picker';
@@ -267,6 +268,8 @@ export function InvoiceLinesGrid({
   labels,
   currency,
   currencyField,
+  ledgerRates,
+  ledgerCurrency,
   locale,
   headingId,
   live,
@@ -309,6 +312,15 @@ export function InvoiceLinesGrid({
    * (2026-10-03). Omitted, the grid stays in `currency` exactly as before.
    */
   readonly currencyField?: string | undefined;
+  /**
+   * The ledger's currency and what one unit of each other is worth in it, so
+   * the totals row can say the dinars beside the agreed figure (2026-10-03).
+   *
+   * Keyed by currency code, each a decimal string at the rate scale. Omitted,
+   * the row shows one figure exactly as it always did.
+   */
+  readonly ledgerRates?: Readonly<Record<string, string>> | undefined;
+  readonly ledgerCurrency?: string | undefined;
   readonly locale: string;
   readonly headingId: string;
   /** Present on a draft that already exists: each row saves itself. */
@@ -1021,6 +1033,24 @@ export function InvoiceLinesGrid({
             </td>
             <td aria-live="polite" className={styles.sapNum}>
               <bdi dir="ltr">{money.format(toNumber(total, MONEY_PLACES))}</bdi>
+              {/*
+                And what the ledger will carry. For a dollar invoice the figure
+                above is what the supplier is owed and this is what posts, and
+                the totals row is the last line read before Create
+                (2026-10-03).
+              */}
+              {ledgerRates && ledgerCurrency && agreed !== ledgerCurrency && ledgerRates[agreed] ? (
+                <>
+                  <br />
+                  <bdi className={styles.sapGridCaption} dir="ltr">
+                    {ledgerCurrency}{' '}
+                    {toNumber(inLedgerCurrency(total, ledgerRates[agreed]!), MONEY_PLACES).toLocaleString(
+                      locale === 'ar' ? 'ar' : 'en-US',
+                      { maximumFractionDigits: 0, minimumFractionDigits: 0 },
+                    )}
+                  </bdi>
+                </>
+              ) : null}
             </td>
             <td colSpan={showSupplier ? 3 : 2} />
           </tr>

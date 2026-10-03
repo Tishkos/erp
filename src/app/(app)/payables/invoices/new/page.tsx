@@ -24,6 +24,7 @@ import * as warehouses from '@/server/services/warehouses';
 import { gapsFor } from '@domain/setup-gaps';
 import { createApInvoice, invoiceLineAvailability } from '../actions';
 import { businessToday } from '@/server/domain/business-date';
+import { RATE_SCALE, toDecimalString } from '@domain/money';
 
 /**
  * Raising a Purchase Invoice — Operations build, block 4.
@@ -82,7 +83,16 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
         (await rates.currencies(tx)).map(async (row) => ({
           code: row.code,
           name: row.name,
-          iqdPerUnit: (await rates.rateOn(tx, row.code, today)).iqdPerUnit.toString(),
+          /*
+           * As a decimal string, not the bigint's digits.
+           *
+           * `rateOn` answers at the rate scale — eight places — so 1,307 comes
+           * back as 130700000000, and handing those digits to a component that
+           * parses a decimal showed "1 USD = 130,700,000,000 IQD"
+           * (2026-10-03). `toDecimalString` at `RATE_SCALE` is the same figure
+           * written the way the component reads it.
+           */
+          iqdPerUnit: toDecimalString((await rates.rateOn(tx, row.code, today)).iqdPerUnit, RATE_SCALE),
         })),
       ),
       // The whole list too, so an empty picker can say which of the two things is
@@ -328,6 +338,9 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
               // totals and the money headings say what the invoice is agreed
               // in rather than what the page was rendered with (2026-10-03).
               currencyField="currency"
+              // So the totals row can say what the ledger will carry.
+              ledgerCurrency="IQD"
+              ledgerRates={Object.fromEntries(moneys.map((m) => [m.code, m.iqdPerUnit]))}
               unitColumn
               purchaseSupplierField="supplier_id"
               widthsKey={`erp.lines.ap.${context.principal.userId}`}

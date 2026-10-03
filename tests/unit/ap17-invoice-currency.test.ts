@@ -18,7 +18,7 @@
  * eight decimal places, a total with fils in it, and the Shenzhen invoice.
  */
 import { describe, expect, it } from 'vitest';
-import { toIqd } from '@/server/domain/money';
+import { RATE_SCALE, toDecimalString, toIqd } from '@/server/domain/money';
 import { inLedger } from '@/components/admin/invoice-currency';
 
 /** The money scale: 265,720.0000 as the books hold it. */
@@ -85,5 +85,45 @@ describe('AP-17 · the screen and the journal convert alike', () => {
     // 9,199,874.5 dollars at 1,470 is more than a double can hold to the fils.
     const big = money('9199874.5');
     expect(inLedger(big, '1470.00000000')).toBe(toIqd(big, rate('1470.00000000')));
+  });
+});
+
+/**
+ * The rate reaches the screen as a decimal, not as the bigint's digits.
+ *
+ * This is the hole the tests above left. They built their rates from decimal
+ * strings and proved the two conversions agree — which was true — while the
+ * page handed the component `iqdPerUnit.toString()`, the raw digits of a bigint
+ * at the rate scale. 1,307 dinars to the dollar arrived as "130700000000" and
+ * the header read "1 USD = 130,700,000,000 IQD" (2026-10-03).
+ *
+ * So what is under test here is the hand-over itself: what `rateOn` answers,
+ * written by `toDecimalString` at `RATE_SCALE`, is what the component reads as
+ * the same rate.
+ */
+describe('AP-17 \u00b7 the rate survives the hand-over to the screen', () => {
+  const RATES_AS_STORED = [
+    // What the Central Bank published and the ERP has in force.
+    { scaled: 130_700_000_000n, dinars: 1307 },
+    // What the old books implied.
+    { scaled: 147_000_000_000n, dinars: 1470 },
+    // The ledger currency itself.
+    { scaled: 100_000_000n, dinars: 1 },
+  ] as const;
+
+  it.each(RATES_AS_STORED)('reads $dinars dinars from the stored $scaled', ({ scaled, dinars }) => {
+    expect(inLedger(money('1'), toDecimalString(scaled, RATE_SCALE))).toBe(money(String(dinars)));
+  });
+
+  it('would have caught the digits being passed raw', () => {
+    // The bug, written down: a bigint's digits read as a decimal are the rate
+    // multiplied by a hundred million.
+    expect(inLedger(money('1'), '130700000000')).not.toBe(money('1307'));
+  });
+
+  it('agrees with the server on the rate as stored', () => {
+    const scaled = 130_700_000_000n;
+    const usd = money('265720');
+    expect(inLedger(usd, toDecimalString(scaled, RATE_SCALE))).toBe(toIqd(usd, scaled));
   });
 });

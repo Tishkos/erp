@@ -2920,7 +2920,7 @@
       "project_element_none": "لا شيء — ليس لمشروع",
       "project_cost_code": "رمز تكلفة المشروع",
       "payment_terms_text": "الدفعة المقدمة",
-      "payment_terms_placeholder": "مثال: 20% مقدماً، 80% قبل الاستلام",
+      "payment_terms_placeholder": "مثال: 20% مقدماً، 80% عند الوصول",
       "import_application_new": "جديدة — تفتحها هذه الفاتورة",
       "state_part_paid": "مدفوعة جزئيًا",
       "set_due_date": "تحديد تاريخ الاستحقاق",
