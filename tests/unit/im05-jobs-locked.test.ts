@@ -60,8 +60,8 @@ describe.skipIf(!hasFlock)('IM5 · run-job.sh', () => {
 describe('IM5 · crontab.erp', () => {
   const jobs = parseCrontab(readFileSync(join(ROOT, 'scripts/ops/crontab.erp'), 'utf8'));
 
-  it('schedules the six jobs the requirement names and the delivery job (WA-1), each through the wrapper with a timeout', () => {
-    expect(jobs.map((j) => j.name).sort()).toEqual(['backup', 'closing-checks', 'deliver-notifications', 'due-notices', 'health-check', 'inventory-integrity', 'payables-sweep', 'restore-drill']);
+  it('schedules the six jobs the requirement names, the delivery job (WA-1) and the HR sweep (HR-2), each through the wrapper with a timeout', () => {
+    expect(jobs.map((j) => j.name).sort()).toEqual(['backup', 'closing-checks', 'deliver-notifications', 'due-notices', 'health-check', 'hr-sweep', 'inventory-integrity', 'payables-sweep', 'restore-drill']);
     for (const job of jobs) expect(job.timeoutSeconds, job.name).toBeGreaterThan(0);
   });
 

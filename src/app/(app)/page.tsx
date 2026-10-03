@@ -313,13 +313,15 @@ export default async function Home() {
         waiting.holdsIOwn.length > 0 ||
         waiting.receiptsAwaiting.length > 0 ||
         waiting.dueThisWeek.length > 0 ||
+        waiting.leaveAwaiting.length > 0 ||
         waiting.holdsNeedingReason.length > 0) ? (
         <Band
           count={
             waiting.approvals.length +
             waiting.holdsIOwn.length +
             waiting.holdsNeedingReason.length +
-            waiting.receiptsAwaiting.length
+            waiting.receiptsAwaiting.length +
+            waiting.leaveAwaiting.length
           }
           href="/approvals"
           hrefLabel={t('dashboard.open_approvals')}
@@ -394,6 +396,28 @@ export default async function Home() {
                     <Link href="/payables/service-receipts">
                       {t('dashboard.open_service_receipts')}
                     </Link>
+                  </td>
+                </tr>
+              ))}
+            </BandTable>
+          ) : null}
+
+          {/* REQ-HR-001 HR-2 — leave waiting for my decision. */}
+          {waiting.leaveAwaiting.length > 0 ? (
+            <BandTable headings={[t('dashboard.leave_awaiting'), column('date'), '']}>
+              {waiting.leaveAwaiting.map((request) => (
+                <tr key={`lv:${request.requestNo}`}>
+                  <td className={s.sapAccountCell}>
+                    <Link href={`/hr/leave/${encodeURIComponent(request.requestNo)}`}>
+                      <bdi dir="ltr">{request.requestNo}</bdi>
+                    </Link>{' '}
+                    · <bdi dir="auto">{request.fullNameEn}</bdi>
+                  </td>
+                  <td>
+                    <bdi dir="ltr">{`${request.fromDate} → ${request.toDate}`}</bdi>
+                  </td>
+                  <td>
+                    <Link href={`/hr/leave/${encodeURIComponent(request.requestNo)}`}>{t('dashboard.open_leave')}</Link>
                   </td>
                 </tr>
               ))}

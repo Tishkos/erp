@@ -8,6 +8,19 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-HR-001 HR-2 — time. **Leave Management**: requests counted on the
+  year's working calendar (rest days and holidays not taken, half days at the
+  ends), held to the balance of their type (entitlement by months served,
+  carry-over capped, opening balances and corrections as dated rows), a sick
+  note required where the type says so, decided by the person's manager or
+  the HR manager — never by whoever asked, never by the person — with
+  notices both ways and a band on the dashboard. **Attendance**: the day
+  sheet per branch and department, present or absent with in and out times,
+  never over an approved leave, every correction audited. The employee page
+  shows the year's balances, the requests and the month day by day. A
+  contract's end date; the morning `hr-sweep` warns of contracts ending,
+  requests waiting and annual leave about to lapse (limits on HR Settings).
+  Migration 0261.
 - The sponsor's WhatsApp configuration (`whatsapp-configuration`) on top of
   main: Noah on Opus 5.5 working the question out (WA-3), answering in the
   group only, reading what is sent to him, the claude-CLI brain, the

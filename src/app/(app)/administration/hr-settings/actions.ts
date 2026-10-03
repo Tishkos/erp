@@ -42,6 +42,7 @@ export async function saveLeaveType(form: FormData): Promise<void> {
     paid: flag(form, 'paid'),
     requiresAttachment: flag(form, 'requires_attachment'),
     allowedNegativeDays: text(form, 'allowed_negative_days') || null,
+    warnBeforeLapse: flag(form, 'warn_before_lapse'),
   };
   await runAdminAndReturn(
     (tx, ctx) => (existing ? settings.updateLeaveType(tx, ctx, code, input) : settings.createLeaveType(tx, ctx, { code, ...input })),
@@ -74,4 +75,14 @@ export async function addCalendarHoliday(form: FormData): Promise<void> {
 
 export async function removeCalendarHoliday(form: FormData): Promise<void> {
   await runAdminAndReturn((tx, ctx) => settings.removeHoliday(tx, ctx, text(form, 'calendar_code'), text(form, 'holiday_date')), BACK);
+}
+
+/** HR-2 — the sweep's limits, each a row (R4). */
+export async function saveHrParameters(form: FormData): Promise<void> {
+  await runAdminAndReturn(async (tx, ctx) => {
+    for (const key of settings.PARAMETER_KEYS) {
+      const value = text(form, key);
+      if (value.trim() !== '') await settings.setParameter(tx, ctx, key, value);
+    }
+  }, BACK);
 }

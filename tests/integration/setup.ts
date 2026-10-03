@@ -541,6 +541,16 @@ export async function resetTestData(): Promise<void> {
     await client.query(`delete from whatsapp_setting where key = 'digest_last_sent_day'`);
     // REQ-HR-001 — people and their dated rows; the seeded masters stay, a
     // test's own masters (created_by set) go.
+    // REQ-HR-001 HR-2 — leave, balances and the day sheet hang off the person;
+    // the limits go back to their seeds.
+    await client.query('delete from leave_request');
+    await client.query('delete from leave_balance_entry');
+    await client.query('delete from attendance_day');
+    await client.query(`update hr_parameter set updated_by = null, value = case key
+        when 'contract_expiry_warning_days' then 30
+        when 'leave_pending_reminder_days' then 3
+        when 'leave_lapse_warning_days' then 45
+        else value end`);
     await client.query('delete from employee_compensation');
     await client.query('delete from employee_history');
     await client.query('delete from employee');
@@ -885,7 +895,7 @@ export async function resetTestData(): Promise<void> {
                          -- REQ-AP-001 Stage 6, migration 0235.
                          'LOAN',
                          -- REQ-HR-001 Stage HR-1, migration 0241.
-                         'EMPLOYEE', 'POSITION_CODE', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
+                         'EMPLOYEE', 'POSITION_CODE', 'LEAVE_REQUEST', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

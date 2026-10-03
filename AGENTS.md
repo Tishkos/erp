@@ -202,3 +202,13 @@ Standing rule (by direction, 2026-10-01; see also docs/notes/newsettings.md: "DO
 * A new user is also an employee unless the form's *Also an employee* is unticked: `users.create` → `employees.createForUser` in the same transaction (the user grant suffices — D-FX-9), the user's default branch, the chosen or first ticked department, hired today. `employees.ensureForUsers` / `scripts/ops/ensure-user-employees.ts [--apply]` backfills existing active users once; `deploy.sh` runs it after the migrations.
 * HR menu order is the sponsor's (`tests/unit/fx5-hr-menu.test.ts`); unbuilt items keep derived routes until their stage (REQ-HR-001 §11a lists what is left — set aside by the sponsor for now). `/hr/departments` and `/hr/positions` read `services/hr-structure.ts`; positions are written by `hr-settings.ts`, code minted from `POSITION_CODE` (0255). `/hr/organisation` redirects to Departments.
 * Tests: `tests/integration/fx5-hr-structure.test.ts`, `tests/e2e/fx5-hr.spec.ts`.
+
+## HR time — leave and attendance (REQ-HR-001 Stage HR-2)
+
+* `services/leave.ts` writes `leave_request` and `leave_balance_entry`; `services/attendance.ts` writes `attendance_day`; `domain/hr-time.ts` is the pure arithmetic (days in hundredths as bigints, the calendar, entitlement by months served, carry-over, the day's status). `tests/unit/hr02-time.test.ts` holds the arithmetic.
+* A day reads approved leave over the sheet over the calendar (B-HR-9) — approval writes no attendance rows, so nothing is deleted on a cancellation. The year's calendar is the year's active `working_calendar` (first by code), else Sunday–Thursday.
+* A leave is decided by the person's manager through `employee.manager_employee_id` → the manager's `app_user_id` (no grant needed), or by `approve` on `leave_request`; never by `requested_by` (also a check constraint) nor the person. `app_employee_reach(employee_id)` (definer) lets the person and their manager read the request under RLS.
+* In a one-table Drizzle select a column inside a `sql` subquery prints bare (`"manager_employee_id"`), which the subquery then reads as its own alias's column: qualify it by hand (`"employee"."manager_employee_id"`).
+* The sweep is `scripts/ops/hr-sweep.ts` (crontab 06:30); its limits are `hr_parameter` rows on HR Settings. `leave_request`, `leave_balance_entry`, `attendance_day` are in `resetTestData` and `format-live-database.sh`; the series `LEAVE_REQUEST` (LVE) is kept.
+* Payroll (HR-3) reads `attendance.summary(employeeId, from, to)`.
+* Tests: `tests/integration/hr02-time.test.ts`, `tests/unit/hr02-time.test.ts`, `tests/e2e/hr-time.spec.ts`.

@@ -8,7 +8,7 @@
  */
 import { and, asc, eq } from 'drizzle-orm';
 import type { Tx } from '../db/client';
-import { department, leaveType, payComponent, position, workingCalendar, workingCalendarHoliday } from '../db/schema';
+import { department, hrParameter, leaveType, payComponent, position, workingCalendar, workingCalendarHoliday } from '../db/schema';
 import { HrValidationError, assertDay, assertWorkingDays, isPayCalculation, isPayComponentKind } from '../domain/hr';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 import { AdminNotFoundError, normaliseCode, optionalText, permit, recordChange, requireText } from './administration';
@@ -168,6 +168,8 @@ export interface LeaveTypeInput {
   readonly paid: boolean;
   readonly requiresAttachment: boolean;
   readonly allowedNegativeDays?: string | null;
+  /** HR-2 — the year-end sweep warns when unused days of this type will not carry. */
+  readonly warnBeforeLapse?: boolean;
 }
 
 const days = (value: string | null | undefined, field: string): string => {
@@ -185,6 +187,7 @@ function leaveValues(input: Omit<LeaveTypeInput, 'code'>) {
     paid: input.paid,
     requiresAttachment: input.requiresAttachment,
     allowedNegativeDays: days(input.allowedNegativeDays, 'allowed_negative_days'),
+    warnBeforeLapse: Boolean(input.warnBeforeLapse),
   };
 }
 
@@ -283,4 +286,37 @@ export async function calendars(tx: Tx) {
   const rows = await tx.select().from(workingCalendar).orderBy(asc(workingCalendar.year), asc(workingCalendar.code));
   const holidays = await tx.select().from(workingCalendarHoliday).orderBy(asc(workingCalendarHoliday.holidayDate));
   return rows.map((row) => ({ ...row, holidays: holidays.filter((h) => h.calendarCode === row.code) }));
+}
+
+// ---------------------------------------------------------------------------
+// The sweep's limits (HR-2, R4)
+// ---------------------------------------------------------------------------
+
+export const PARAMETER_KEYS = ['contract_expiry_warning_days', 'leave_pending_reminder_days', 'leave_lapse_warning_days'] as const;
+export type ParameterKey = (typeof PARAMETER_KEYS)[number];
+
+const PARAMETER_DEFAULTS: Readonly<Record<ParameterKey, number>> = {
+  contract_expiry_warning_days: 30,
+  leave_pending_reminder_days: 3,
+  leave_lapse_warning_days: 45,
+};
+
+export async function parameters(tx: Tx): Promise<Record<ParameterKey, number>> {
+  const rows = await tx.select().from(hrParameter);
+  const out = { ...PARAMETER_DEFAULTS };
+  for (const row of rows) if ((PARAMETER_KEYS as readonly string[]).includes(row.key)) out[row.key as ParameterKey] = row.value;
+  return out;
+}
+
+export async function setParameter(tx: Tx, ctx: ActorContext, key: string, value: string): Promise<void> {
+  await permit(ctx, 'configure', PERMISSION_OBJECT, key);
+  if (!(PARAMETER_KEYS as readonly string[]).includes(key)) throw new HrValidationError('key', `names no HR limit '${key}'`);
+  const days = Number(value.trim());
+  if (!Number.isInteger(days) || days < 0 || days > 366) throw new HrValidationError(key, 'must be a whole number of days, 0 to 366');
+  const before = (await parameters(tx))[key as ParameterKey];
+  await tx
+    .insert(hrParameter)
+    .values({ key, value: days, updatedBy: ctx.principal.userId, updatedAt: new Date() })
+    .onConflictDoUpdate({ target: hrParameter.key, set: { value: days, updatedBy: ctx.principal.userId, updatedAt: new Date() } });
+  await recordChange(tx, ctx, { action: 'hr_parameter.updated', objectType: PERMISSION_OBJECT, objectId: key, before: { value: before }, after: { value: days } });
 }

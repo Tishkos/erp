@@ -34,6 +34,7 @@ RUN=/opt/qs-erp-next/scripts/ops/run-job.sh
 30 2 * * *   $RUN closing-checks      1800 npx tsx $APP/scripts/ops/closing-checks.ts
 10 6 * * *   $RUN payables-sweep      1800 npx tsx $APP/scripts/ops/payables-sweep.ts
 20 6 * * *   $RUN due-notices         1800 npx tsx $APP/scripts/ops/due-notices.ts
+30 6 * * *   $RUN hr-sweep            1800 npx tsx $APP/scripts/ops/hr-sweep.ts
 40 6 * * *   $RUN health-check        900  npx tsx $APP/scripts/ops/health-check.ts
 */5 * * * *  $RUN deliver-notifications 240 npx tsx $APP/scripts/ops/deliver-notifications.ts
 0  3 * * 0   $RUN restore-drill       5400 $APP/scripts/ops/restore-drill.sh --local

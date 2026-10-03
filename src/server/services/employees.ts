@@ -54,6 +54,8 @@ export interface EmployeeInput {
   readonly managerEmployeeId?: string | null;
   readonly hireDate: string;
   readonly employmentKind: string;
+  /** HR-2 — when a contract or daily engagement ends. */
+  readonly contractEndDate?: string | null;
 }
 
 export interface MoveInput {
@@ -64,6 +66,8 @@ export interface MoveInput {
   readonly positionCode?: string | null;
   readonly managerEmployeeId?: string | null;
   readonly employmentKind?: string | null;
+  /** HR-2 — a contract's end; empty clears it (a permanent hire). */
+  readonly contractEndDate?: string | null;
 }
 
 export interface IdentityInput {
@@ -268,6 +272,8 @@ async function insertEmployee(
   const managerEmployeeId = await assertManager(tx, input.managerEmployeeId, null);
   const employmentKind = kindOf(input.employmentKind);
   const dateOfBirth = input.dateOfBirth ? assertDay(input.dateOfBirth, 'date_of_birth') : null;
+  const contractEndDate = input.contractEndDate ? assertDay(input.contractEndDate, 'contract_end_date') : null;
+  if (contractEndDate && contractEndDate < hireDate) throw new HrValidationError('contract_end_date', `cannot be before the hire date ${hireDate}`);
 
   // EMP-{BRANCH}-{SERIAL}: minted, never typed (§4).
   const allocated = await allocateDocumentNumber(tx, SEQUENCE_KEY, { branchCode }, ctx.principal.userId);
@@ -288,6 +294,7 @@ async function insertEmployee(
       managerEmployeeId,
       hireDate,
       employmentKind,
+      contractEndDate,
       status: 'active',
       appUserId: link.appUserId,
       createdBy: ctx.principal.userId,
@@ -302,6 +309,7 @@ async function insertEmployee(
     ...(positionCode ? [{ field: 'position_code', before: null, after: positionCode, effectiveFrom: hireDate }] : []),
     ...(managerEmployeeId ? [{ field: 'manager_employee_id', before: null, after: managerEmployeeId, effectiveFrom: hireDate }] : []),
     { field: 'employment_kind', before: null, after: employmentKind, effectiveFrom: hireDate },
+    ...(contractEndDate ? [{ field: 'contract_end_date', before: null, after: contractEndDate, effectiveFrom: hireDate }] : []),
     { field: 'status', before: null, after: 'active', effectiveFrom: hireDate },
   ]);
   await recordChange(tx, ctx, {
@@ -375,6 +383,14 @@ export async function move(tx: Tx, ctx: ActorContext, id: string, input: MoveInp
     if (kind !== before.employmentKind) {
       rows.push({ field: 'employment_kind', before: before.employmentKind, after: kind, effectiveFrom, reason });
       set.employmentKind = kind;
+    }
+  }
+  if (input.contractEndDate !== undefined) {
+    const end = input.contractEndDate && input.contractEndDate.trim() ? assertDay(input.contractEndDate.trim(), 'contract_end_date') : null;
+    if (end && end < before.hireDate) throw new HrValidationError('contract_end_date', `cannot be before the hire date ${before.hireDate}`);
+    if (end !== before.contractEndDate) {
+      rows.push({ field: 'contract_end_date', before: before.contractEndDate, after: end, effectiveFrom, reason });
+      set.contractEndDate = end;
     }
   }
   if (rows.length === 0) return 0;
@@ -544,6 +560,7 @@ export async function byNo(tx: Tx, employeeNo: string) {
       status: employee.status,
       endDate: employee.endDate,
       endReason: employee.endReason,
+      contractEndDate: employee.contractEndDate,
       appUserId: employee.appUserId,
       userEmail: appUser.email,
       createdAt: employee.createdAt,
