@@ -623,6 +623,7 @@ export async function resetTestData(): Promise<void> {
     await client.query('truncate recurring_contract_amendment');
     // Stage 7 (0236) — the locks and what they did to each layer (append-
     // only in production); the charges name their lock, so they go between.
+    await client.query('delete from landed_cost_departure');
     await client.query('delete from landed_cost_layer_adjustment');
     await client.query('delete from landed_cost_charge');
     await client.query('delete from landed_cost_lock');

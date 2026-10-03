@@ -18,6 +18,7 @@ import { randomUUID } from 'node:crypto';
 
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
+import { businessToday } from '../domain/business-date';
 import {
   costLayer,
   costLayerConsumption,
@@ -1038,6 +1039,12 @@ export async function postMovement(
 // Reversal — §9.2
 // ---------------------------------------------------------------------------
 
+/** The reversal's date: the day asked (today by default), never before the original. */
+export function reversalDateOf(originalDate: string, requested?: string | null): string {
+  const asked = requested?.trim() || businessToday();
+  return asked < originalDate ? originalDate : asked;
+}
+
 /**
  * Undoes a movement, restoring the exact layers it consumed.
  *
@@ -1049,6 +1056,16 @@ export async function reverseMovement(
   ctx: ActorContext,
   movementId: string,
   reason: string,
+  options: {
+    /**
+     * The day the reversal happens — the same day as the journal reversal
+     * beside it (IMPROVEMENT-002). The stock goes back on the day it is put
+     * back; the original movement keeps its own date, so a past position stays
+     * what it was and a movement in a closed month can still be undone in the
+     * open one. Never earlier than the original.
+     */
+    readonly reversalDate?: string;
+  } = {},
 ): Promise<MovementResult> {
   const [original] = await tx
     .select()
@@ -1099,7 +1116,7 @@ export async function reverseMovement(
       branchCode: original.branchCode,
       kind: 'reversal',
       quantity: formatQuantity(-parseQuantity(original.quantity)),
-      movementDate: original.movementDate,
+      movementDate: reversalDateOf(original.movementDate, options.reversalDate),
       sourceDocumentType: original.sourceDocumentType,
       sourceDocumentId: original.sourceDocumentId,
       sourceLineId: original.sourceLineId,

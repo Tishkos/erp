@@ -18,6 +18,7 @@ import {
   check,
   date,
   index,
+  jsonb,
   numeric,
   pgTable,
   smallint,
@@ -106,5 +107,59 @@ export const landedCostLayerAdjustment = pgTable(
   (t) => [
     index('landed_cost_layer_adjustment_lock_idx').on(t.lockId),
     index('landed_cost_layer_adjustment_layer_idx').on(t.costLayerId),
+  ],
+);
+
+/**
+ * IMPROVEMENT-002 (0280) — where every dinar of a lock went that did not stay
+ * in stock: one row per lock × layer × departed movement, posted to the
+ * destination of the business event that took the units (a sale's cost of
+ * sales, a project issue's project cost, a write-off's loss …). A unit that
+ * comes back writes a negative `return` row pointing at the departure it
+ * undoes; a rounding residue with no movement behind it is a `rounding` row.
+ * Generic: it names the inventory movement, never the business module.
+ */
+export const landedCostDeparture = pgTable(
+  'landed_cost_departure',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    lockId: uuid('lock_id')
+      .notNull()
+      .references(() => landedCostLock.id),
+    payableId: uuid('payable_id')
+      .notNull()
+      .references(() => payable.id),
+    kind: text('kind').$type<'departure' | 'return' | 'rounding'>().notNull(),
+    costLayerId: uuid('cost_layer_id')
+      .notNull()
+      .references(() => costLayer.id),
+    movementId: uuid('movement_id'),
+    movementKind: text('movement_kind'),
+    sourceDocumentType: text('source_document_type'),
+    sourceDocumentId: text('source_document_id'),
+    sourceLineId: text('source_line_id'),
+    quantity: numeric('quantity', { precision: 24, scale: 6 }).notNull(),
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+    destinationRole: text('destination_role').notNull(),
+    accountId: uuid('account_id').notNull(),
+    dimensions: jsonb('dimensions').$type<Record<string, string | null>>().notNull().default({}),
+    journalEntryId: uuid('journal_entry_id')
+      .notNull()
+      .references(() => journalEntry.id),
+    returnsDepartureId: uuid('returns_departure_id'),
+    toLayerId: uuid('to_layer_id'),
+    postSettlement: boolean('post_settlement').notNull().default(false),
+    departedOn: date('departed_on', { mode: 'string' }).notNull(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('landed_cost_departure_lock_idx').on(t.lockId),
+    index('landed_cost_departure_payable_idx').on(t.payableId),
+    index('landed_cost_departure_movement_idx').on(t.movementId),
+    index('landed_cost_departure_returns_idx').on(t.returnsDepartureId),
+    index('landed_cost_departure_layer_idx').on(t.costLayerId),
   ],
 );

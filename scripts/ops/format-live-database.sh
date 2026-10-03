@@ -148,6 +148,7 @@ legacy_document
 legacy_import_run
 payables_migration_run
 payable_exchange_difference
+landed_cost_departure
 landed_cost_layer_adjustment
 landed_cost_charge
 landed_cost_lock

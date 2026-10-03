@@ -1450,6 +1450,13 @@
       "when": 1795900000089,
       "tag": "0279_loan_document_dimensions",
       "breakpoints": true
+    },
+    {
+      "idx": 207,
+      "version": "7",
+      "when": 1795900000090,
+      "tag": "0280_landed_cost_departure",
+      "breakpoints": true
     }
   ]
 }
