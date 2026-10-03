@@ -20,10 +20,20 @@
  *                           entitlement and carry-over derive (R2)
  *   attendance_day          what the day sheet recorded: present or absent
  *   hr_parameter            the sweep's limits as rows (R4)
+ *
+ * Stage HR-3 (0257) — payroll:
+ *   employee_pay_component  a person's own figure for a component, or its stop —
+ *                           dated, append-only, under the compensation grant
+ *   payroll_run             PAY-…: one live run per branch per month
+ *   payroll_line            one person's month, its payslip once posted
+ *   payroll_line_component  each component of the line, computed or typed
+ *   payroll_payment         one pay method's net pay leaving a bank or cash account
  */
 import { sql } from 'drizzle-orm';
 import { boolean, check, date, index, integer, numeric, pgTable, smallint, text, time, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
-import { bank } from './item';
+import { chartOfAccount } from './accounting';
+import { bank, bankCashAccount } from './item';
+import { journalEntry } from './journal';
 import { appUser, branch, department } from './platform';
 
 export const position = pgTable(
@@ -159,6 +169,10 @@ export const payComponent = pgTable(
     /** A fixed amount in IQD, or a percentage of the base, by `calculation`. */
     defaultValue: numeric('default_value', { precision: 20, scale: 4 }).notNull().default('0'),
     taxable: boolean('taxable').notNull().default(true),
+    /** HR-3 (0257) — where an earning or an employer cost is expensed; empty, the posting mapping decides. */
+    expenseAccountId: uuid('expense_account_id').references(() => chartOfAccount.id),
+    /** HR-3 (0257) — where a deduction or an employer cost is owed; empty, the posting mapping decides. */
+    liabilityAccountId: uuid('liability_account_id').references(() => chartOfAccount.id),
     active: boolean('active').notNull().default(true),
     sortOrder: smallint('sort_order').notNull().default(100),
     createdBy: uuid('created_by').references(() => appUser.id),
@@ -167,7 +181,8 @@ export const payComponent = pgTable(
   },
   (t) => [
     check('pay_component_kind', sql`${t.kind} in ('earning', 'deduction', 'employer_cost')`),
-    check('pay_component_calculation', sql`${t.calculation} in ('fixed', 'percent_of_base', 'manual')`),
+    check('pay_component_calculation', sql`${t.calculation} in ('base_salary', 'fixed', 'percent_of_base', 'manual', 'absence')`),
+    check('pay_component_calculation_kind', sql`(${t.calculation} <> 'base_salary' or ${t.kind} = 'earning') and (${t.calculation} <> 'absence' or ${t.kind} = 'deduction')`),
   ],
 );
 
@@ -342,4 +357,191 @@ export const hrParameter = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [check('hr_parameter_value', sql`${t.value} >= 0 and ${t.value} <= 366`)],
+);
+
+// ---------------------------------------------------------------------------
+// Stage HR-3 (0257) — payroll
+// ---------------------------------------------------------------------------
+
+export const employeePayComponent = pgTable(
+  'employee_pay_component',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    employeeId: uuid('employee_id')
+      .notNull()
+      .references(() => employee.id),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    componentCode: text('component_code')
+      .notNull()
+      .references(() => payComponent.code),
+    effectiveFrom: date('effective_from').notNull(),
+    /** IQD a month for a fixed component, a percentage for a percent one; null with a stop. */
+    amount: numeric('amount', { precision: 20, scale: 4 }),
+    stopped: boolean('stopped').notNull().default(false),
+    note: text('note'),
+    recordedBy: uuid('recorded_by')
+      .notNull()
+      .references(() => appUser.id),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('employee_pay_component_idx').on(t.employeeId, t.componentCode, t.effectiveFrom),
+    check('employee_pay_component_amount_or_stop', sql`${t.stopped} = (${t.amount} is null)`),
+    check('employee_pay_component_not_negative', sql`${t.amount} is null or ${t.amount} >= 0`),
+  ],
+);
+
+export const payrollRun = pgTable(
+  'payroll_run',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    runNo: text('run_no').notNull(),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    periodMonth: date('period_month').notNull(),
+    periodEnd: date('period_end').notNull(),
+    payDate: date('pay_date').notNull(),
+    status: text('status').notNull().default('draft'),
+    workingDays: smallint('working_days').notNull(),
+    employees: integer('employees').notNull().default(0),
+    grossIqd: numeric('gross_iqd', { precision: 20, scale: 4 }).notNull().default('0'),
+    deductionsIqd: numeric('deductions_iqd', { precision: 20, scale: 4 }).notNull().default('0'),
+    netIqd: numeric('net_iqd', { precision: 20, scale: 4 }).notNull().default('0'),
+    employerCostIqd: numeric('employer_cost_iqd', { precision: 20, scale: 4 }).notNull().default('0'),
+    paidIqd: numeric('paid_iqd', { precision: 20, scale: 4 }).notNull().default('0'),
+    note: text('note'),
+    computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    submittedBy: uuid('submitted_by').references(() => appUser.id),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    returnedBy: uuid('returned_by').references(() => appUser.id),
+    returnedAt: timestamp('returned_at', { withTimezone: true }),
+    returnNote: text('return_note'),
+    approvedBy: uuid('approved_by').references(() => appUser.id),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    postedBy: uuid('posted_by').references(() => appUser.id),
+    postedAt: timestamp('posted_at', { withTimezone: true }),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    reversedBy: uuid('reversed_by').references(() => appUser.id),
+    reversedAt: timestamp('reversed_at', { withTimezone: true }),
+    reversalReason: text('reversal_reason'),
+    reversalJournalEntryId: uuid('reversal_journal_entry_id').references(() => journalEntry.id),
+    cancelledBy: uuid('cancelled_by').references(() => appUser.id),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+  },
+  (t) => [
+    uniqueIndex('payroll_run_no_uniq').on(t.runNo),
+    uniqueIndex('payroll_run_live_uniq').on(t.branchCode, t.periodMonth).where(sql`${t.status} not in ('reversed', 'cancelled')`),
+    index('payroll_run_status_idx').on(t.status, t.branchCode),
+    check('payroll_run_status', sql`${t.status} in ('draft', 'submitted', 'approved', 'posted', 'paid', 'reversed', 'cancelled')`),
+    check('payroll_run_approver_not_preparer', sql`${t.approvedBy} is null or (${t.approvedBy} <> ${t.createdBy} and ${t.approvedBy} is distinct from ${t.submittedBy})`),
+  ],
+);
+
+export const payrollPayment = pgTable(
+  'payroll_payment',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => payrollRun.id),
+    payMethod: text('pay_method').notNull(),
+    bankCashAccountId: uuid('bank_cash_account_id')
+      .notNull()
+      .references(() => bankCashAccount.id),
+    paidOn: date('paid_on').notNull(),
+    reference: text('reference'),
+    amountIqd: numeric('amount_iqd', { precision: 20, scale: 4 }).notNull(),
+    lines: integer('lines').notNull(),
+    journalEntryId: uuid('journal_entry_id')
+      .notNull()
+      .references(() => journalEntry.id),
+    paidBy: uuid('paid_by')
+      .notNull()
+      .references(() => appUser.id),
+    paidAt: timestamp('paid_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('payroll_payment_run_method_uniq').on(t.runId, t.payMethod), check('payroll_payment_method', sql`${t.payMethod} in ('bank', 'cash')`)],
+);
+
+export const payrollLine = pgTable(
+  'payroll_line',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => payrollRun.id),
+    employeeId: uuid('employee_id')
+      .notNull()
+      .references(() => employee.id),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    employeeNo: text('employee_no').notNull(),
+    fullNameEn: text('full_name_en').notNull(),
+    fullNameAr: text('full_name_ar'),
+    departmentCode: text('department_code')
+      .notNull()
+      .references(() => department.code),
+    positionTitle: text('position_title'),
+    compensationId: uuid('compensation_id').references(() => employeeCompensation.id),
+    payMethod: text('pay_method').notNull().default('bank'),
+    bankCode: text('bank_code'),
+    accountNumber: text('account_number'),
+    iban: text('iban'),
+    workingDays: smallint('working_days').notNull(),
+    employedDays: smallint('employed_days').notNull(),
+    presentDays: smallint('present_days').notNull().default(0),
+    absentDays: smallint('absent_days').notNull().default(0),
+    unrecordedDays: smallint('unrecorded_days').notNull().default(0),
+    paidLeaveDays: numeric('paid_leave_days', { precision: 6, scale: 2 }).notNull().default('0'),
+    unpaidLeaveDays: numeric('unpaid_leave_days', { precision: 6, scale: 2 }).notNull().default('0'),
+    baseSalaryIqd: numeric('base_salary_iqd', { precision: 20, scale: 4 }).notNull().default('0'),
+    grossIqd: numeric('gross_iqd', { precision: 20, scale: 4 }).notNull().default('0'),
+    deductionsIqd: numeric('deductions_iqd', { precision: 20, scale: 4 }).notNull().default('0'),
+    netIqd: numeric('net_iqd', { precision: 20, scale: 4 }).notNull().default('0'),
+    employerCostIqd: numeric('employer_cost_iqd', { precision: 20, scale: 4 }).notNull().default('0'),
+    payslipNo: text('payslip_no'),
+    issuedAt: timestamp('issued_at', { withTimezone: true }),
+    paymentId: uuid('payment_id').references(() => payrollPayment.id),
+  },
+  (t) => [
+    uniqueIndex('payroll_line_run_employee_uniq').on(t.runId, t.employeeId),
+    uniqueIndex('payroll_line_payslip_uniq').on(t.payslipNo).where(sql`${t.payslipNo} is not null`),
+    index('payroll_line_employee_idx').on(t.employeeId),
+    check('payroll_line_method', sql`${t.payMethod} in ('bank', 'cash')`),
+  ],
+);
+
+export const payrollLineComponent = pgTable(
+  'payroll_line_component',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    lineId: uuid('line_id')
+      .notNull()
+      .references(() => payrollLine.id),
+    componentCode: text('component_code')
+      .notNull()
+      .references(() => payComponent.code),
+    nameEn: text('name_en').notNull(),
+    nameAr: text('name_ar'),
+    kind: text('kind').notNull(),
+    calculation: text('calculation').notNull(),
+    /** The percentage a percent component applied. */
+    rate: numeric('rate', { precision: 9, scale: 4 }),
+    /** The days (hundredths as a decimal) a base or an absence counted. */
+    quantity: numeric('quantity', { precision: 8, scale: 2 }),
+    amountIqd: numeric('amount_iqd', { precision: 20, scale: 4 }).notNull().default('0'),
+    note: text('note'),
+    sortOrder: smallint('sort_order').notNull().default(100),
+  },
+  (t) => [uniqueIndex('payroll_line_component_uniq').on(t.lineId, t.componentCode)],
 );

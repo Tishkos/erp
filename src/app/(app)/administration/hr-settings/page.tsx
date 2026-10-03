@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Checkbox, Field, Flash, Form, Grid, Hidden, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { NewRecordDialog } from '@/components/admin/dialog';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -46,9 +47,11 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
   }
   const mayConfigure = can(principal, 'configure', settings.PERMISSION_OBJECT);
 
-  const { components, leaveTypes, calendars, limits } = await withCurrentUser(async (tx) => ({
+  const { components, leaveTypes, calendars, limits, accountChoices } = await withCurrentUser(async (tx) => ({
     limits: await settings.parameters(tx),
     components: await settings.payComponents(tx),
+    // HR-3 — the accounts a component may post to: an expense, a plain liability.
+    accountChoices: mayConfigure ? await settings.componentAccountChoices(tx) : { expense: [], liability: [] },
     leaveTypes: await settings.leaveTypes(tx),
     calendars: await settings.calendars(tx),
   }));
@@ -96,7 +99,9 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
                     {t('default_value')}
                   </th>
                   <th scope="col">{t('taxable')}</th>
+                  <th scope="col">{t('posts_to')}</th>
                   <th scope="col">{t('active')}</th>
+                  {mayConfigure ? <th scope="col">{admin('actions')}</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -117,7 +122,53 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
                       <bdi dir="ltr">{row.calculation === 'percent_of_base' ? `${Number(row.defaultValue)} %` : iqd(row.defaultValue)}</bdi>
                     </td>
                     <td>{row.taxable ? '✓' : '—'}</td>
+                    <td>
+                      <bdi dir="ltr">{row.expenseAccountCode || row.liabilityAccountCode ? [row.expenseAccountCode, row.liabilityAccountCode].filter(Boolean).join(' / ') : '—'}</bdi>
+                    </td>
                     <td>{activeForm(setPayComponentActive, row.code, row.active)}</td>
+                    {mayConfigure ? (
+                      <td>
+                        <NewRecordDialog buttonLabel={t('edit')} closeLabel={admin('close')} title={t('edit_component', { code: row.code })}>
+                          <Form action={savePayComponent}>
+                            <Hidden name="code" value={row.code} />
+                            <Hidden name="existing" value="1" />
+                            <Grid>
+                              <Field defaultValue={row.nameEn} label={t('name_en')} name="name_en" required />
+                              <Field defaultValue={row.nameAr ?? ''} label={t('name_ar')} name="name_ar" />
+                              <Select defaultValue={row.kind} label={t('kind')} name="kind" options={PAY_COMPONENT_KINDS.map((value) => ({ value, label: t(`kind_${value}`) }))} required />
+                              <Select
+                                defaultValue={row.calculation}
+                                label={t('calculation')}
+                                name="calculation"
+                                options={PAY_CALCULATIONS.map((value) => ({ value, label: t(`calc_${value}`) }))}
+                                required
+                              />
+                              <Field defaultValue={row.defaultValue.replace(/\.0+$/, '')} label={t('default_value')} name="default_value" />
+                              <Select
+                                defaultValue={row.expenseAccountId ?? ''}
+                                emptyLabel={t('account_mapping')}
+                                hint={t('accounts_hint')}
+                                label={t('expense_account')}
+                                name="expense_account_id"
+                                options={accountChoices.expense.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
+                              />
+                              <Select
+                                defaultValue={row.liabilityAccountId ?? ''}
+                                emptyLabel={t('account_mapping')}
+                                hint={t('accounts_hint')}
+                                label={t('liability_account')}
+                                name="liability_account_id"
+                                options={accountChoices.liability.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
+                              />
+                            </Grid>
+                            <Checkbox defaultChecked={row.taxable} label={t('taxable')} name="taxable" />
+                            <SubmitRow>
+                              <Submit label={t('save')} />
+                            </SubmitRow>
+                          </Form>
+                        </NewRecordDialog>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -133,6 +184,20 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
                 <Select label={t('kind')} name="kind" options={PAY_COMPONENT_KINDS.map((value) => ({ value, label: t(`kind_${value}`) }))} required />
                 <Select label={t('calculation')} name="calculation" options={PAY_CALCULATIONS.map((value) => ({ value, label: t(`calc_${value}`) }))} required />
                 <Field defaultValue="0" label={t('default_value')} name="default_value" />
+                <Select
+                  emptyLabel={t('account_mapping')}
+                  hint={t('accounts_hint')}
+                  label={t('expense_account')}
+                  name="expense_account_id"
+                  options={accountChoices.expense.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
+                />
+                <Select
+                  emptyLabel={t('account_mapping')}
+                  hint={t('accounts_hint')}
+                  label={t('liability_account')}
+                  name="liability_account_id"
+                  options={accountChoices.liability.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
+                />
               </Grid>
               <Checkbox defaultChecked label={t('taxable')} name="taxable" />
               <SubmitRow>

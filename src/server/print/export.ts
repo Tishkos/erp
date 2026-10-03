@@ -1,5 +1,5 @@
 import { can, canAccessBranch, type Principal } from '@domain/permissions';
-import { verbFor } from './access';
+import { isSelfService, verbFor } from './access';
 import type { Locale } from '@/i18n/config';
 import type { Tx } from '../db/client';
 import * as audit from '../services/audit';
@@ -75,11 +75,13 @@ export async function prepareExport(
 ): Promise<PreparedExport> {
   const definition = exportable(request.key);
   const { principal } = reader;
-  if (!can(principal, 'view', definition.object)) return { status: 404 };
+  // REQ-HR-001 R5 — the person's own payslip: row security decides, not the grant.
+  const self = isSelfService(request.key) && !can(principal, 'view', definition.object);
+  if (!self && !can(principal, 'view', definition.object)) return { status: 404 };
 
   const at = request.at ?? new Date().toISOString();
   const verb = verbFor(request.format);
-  if (!can(principal, verb, definition.object)) {
+  if (!self && !can(principal, verb, definition.object)) {
     await audit.record(tx, {
       actorUserId: principal.userId,
       action: `${definition.object}.exported`,
@@ -98,7 +100,7 @@ export async function prepareExport(
     request.input,
   );
   if (!built) return { status: 404 };
-  if (definition.kind === 'document' && !canAccessBranch(principal, built.branchCode)) return { status: 404 };
+  if (definition.kind === 'document' && !self && !canAccessBranch(principal, built.branchCode)) return { status: 404 };
 
   const head = await letterheadFor(tx, {
     locale: request.locale,

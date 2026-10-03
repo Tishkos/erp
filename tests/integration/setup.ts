@@ -543,6 +543,13 @@ export async function resetTestData(): Promise<void> {
     // test's own masters (created_by set) go.
     // REQ-HR-001 HR-2 — leave, balances and the day sheet hang off the person;
     // the limits go back to their seeds.
+    // REQ-HR-001 HR-3 — the runs name their journals; their lines and payments
+    // hang off them; a person's own component figures are dated rows like pay.
+    await client.query('delete from payroll_line_component');
+    await client.query('delete from payroll_line');
+    await client.query('delete from payroll_payment');
+    await client.query('delete from payroll_run');
+    await client.query('delete from employee_pay_component');
     await client.query('delete from leave_request');
     await client.query('delete from leave_balance_entry');
     await client.query('delete from attendance_day');
@@ -561,6 +568,10 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from working_calendar where created_by is not null');
     await client.query('delete from leave_type where created_by is not null');
     await client.query('delete from pay_component where created_by is not null');
+    // REQ-HR-001 HR-3 — the seeded components back to their seeds: no accounts
+    // of their own (a test's accounts go), active, the D-HR-3 rates.
+    await client.query(`update pay_component set expense_account_id = null, liability_account_id = null, active = true, taxable = code in ('BASE', 'HOUSING', 'TRANSPORT', 'OVERTIME'),
+        default_value = case code when 'SS_EMPLOYEE' then 5 when 'SS_EMPLOYER' then 12 else 0 end`);
     // Stage 6 (0235) — what the loans funded, their schedules, the loans.
     await client.query('delete from bank_loan_allocation');
     await client.query('delete from bank_loan_instalment');
@@ -895,7 +906,7 @@ export async function resetTestData(): Promise<void> {
                          -- REQ-AP-001 Stage 6, migration 0235.
                          'LOAN',
                          -- REQ-HR-001 Stage HR-1, migration 0241.
-                         'EMPLOYEE', 'POSITION_CODE', 'LEAVE_REQUEST', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
+                         'EMPLOYEE', 'POSITION_CODE', 'LEAVE_REQUEST', 'PAYROLL_RUN', 'PAYSLIP', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

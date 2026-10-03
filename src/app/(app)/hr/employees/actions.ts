@@ -1,7 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { runAdmin, runAdminAndReturn, text } from '@/server/admin-action';
+import { flag, runAdmin, runAdminAndReturn, text } from '@/server/admin-action';
 import * as employees from '@/server/services/employees';
 import * as leave from '@/server/services/leave';
 
@@ -98,6 +98,22 @@ export async function setEmployeeCompensation(form: FormData): Promise<void> {
         bankCode: text(form, 'bank_code') || null,
         accountNumber: text(form, 'account_number') || null,
         iban: text(form, 'iban') || null,
+        note: text(form, 'note') || null,
+      }),
+    record(employeeNo),
+  );
+}
+
+/** HR-3 — a person's own figure for a pay component, or its stop: a dated row. */
+export async function setEmployeePayFigure(form: FormData): Promise<void> {
+  const employeeNo = text(form, 'employee_no');
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      employees.setPayFigure(tx, ctx, text(form, 'id'), {
+        componentCode: text(form, 'component_code'),
+        effectiveFrom: text(form, 'effective_from'),
+        amount: text(form, 'amount') || null,
+        stopped: flag(form, 'stopped'),
         note: text(form, 'note') || null,
       }),
     record(employeeNo),

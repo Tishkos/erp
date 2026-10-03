@@ -8,6 +8,20 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-HR-001 HR-3 — **Payroll**. One run per branch per month, computed from
+  the facts: the salary in force, each person's own component figures
+  (allowances, an exemption — dated rows on the employee page), the
+  components' defaults, and the month as the day sheet and the leave read it
+  (absences and unpaid leave at the day's rate, part months by working days
+  employed); overtime and income tax typed on the draft with their notes.
+  Prepared and sent by the HR manager, approved by the accounting manager or
+  the CEO (never the preparer), posted by Finance as one journal by
+  department through mapped roles or the components' own accounts, every line
+  a payslip (PSL-…) the person can open and print. The net pay is paid by
+  bank transfer and in cash from the treasury's accounts; a run nothing was
+  paid from is reversed whole and run again. The dashboard shows runs waiting
+  on me; the cash forecast's payroll source is live; the period-close
+  checklist warns of a month without a posted payroll. Migration 0257.
 - REQ-HR-001 HR-2 — time. **Leave Management**: requests counted on the
   year's working calendar (rest days and holidays not taken, half days at the
   ends), held to the balance of their type (entitlement by months served,

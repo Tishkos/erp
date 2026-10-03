@@ -372,11 +372,12 @@ describe('07.8 gate · the forecast and its five sources (§17)', () => {
       'investment_calls',
     ]);
 
-    // Three of §17's five belong to phases that do not exist yet, and the
-    // report says so rather than reporting them as nil.
+    // Two of §17's five are not wired yet, and the report says so rather than
+    // reporting them as nil. Payroll is, since REQ-HR-001 HR-3.
     expect(result.sources.filter((s) => s.available).map((s) => s.source)).toEqual([
       'ap_due',
       'ar_expected',
+      'payroll',
       'investment_calls',
     ]);
     for (const source of result.sources.filter((s) => !s.available)) {

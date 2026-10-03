@@ -154,8 +154,8 @@ export const SOURCE_STATUS: readonly SourceStatus[] = [
   },
   {
     source: 'payroll',
-    available: false,
-    note: 'Awaits Phase 15, itself blocked on D3: payroll shall not be programmed from assumptions (§20).',
+    available: true,
+    note: 'Approved and posted payroll runs still to be paid, on their pay date (REQ-HR-001 HR-3) — totals only, never a salary.',
   },
   {
     source: 'transfer_funding',
@@ -168,6 +168,30 @@ export const SOURCE_STATUS: readonly SourceStatus[] = [
     note: 'Unmet capital calls, by due date (§13.7). Committed money with a date on it, which is exactly what a forecast is for.',
   },
 ];
+
+/**
+ * REQ-HR-001 HR-3 — the net pay of approved and posted payroll runs not yet
+ * paid, on the run's pay date. Read through `app_payroll_outflows`, which
+ * returns totals by day for the reader's branches: a treasurer forecasting
+ * cash needs the month's pay, not who earns what, so no salary leaves the
+ * payroll's own grant. A draft is not here — nobody has agreed to it yet.
+ */
+async function payrollDue(
+  tx: Tx,
+  from: string,
+  to: string,
+  branchCode: string | null,
+): Promise<{ date: string; source: ForecastSource; amountIqd: bigint }[]> {
+  const result = (await tx.execute(sql`
+    select pay_date::text as "date", amount_iqd::text as "amountIqd"
+      from app_payroll_outflows(${from}::date, ${to}::date, ${branchCode}::text)
+  `)) as unknown as { rows: { date: string; amountIqd: string }[] };
+  return result.rows.map((row) => ({
+    date: row.date,
+    source: 'payroll' as const,
+    amountIqd: -parseDecimal(row.amountIqd, 4n),
+  }));
+}
 
 /**
  * §13.7 — unmet capital calls, by the date they fall due.
@@ -283,8 +307,11 @@ export async function forecast(
   if (!excluded.includes('investment_calls')) {
     movements.push(...(await investmentCalls(tx, input.from, input.to, branchCode)));
   }
-  // project_commitments, payroll and transfer_funding contribute nothing until
-  // their modules exist. They appear in `sources` either way, so the report says
+  if (!excluded.includes('payroll')) {
+    movements.push(...(await payrollDue(tx, input.from, input.to, branchCode)));
+  }
+  // project_commitments and transfer_funding contribute nothing until their
+  // modules are wired (payroll is, since REQ-HR-001 HR-3). They appear in `sources` either way, so the report says
   // what it drew on rather than leaving the reader to assume.
   //
   // Two of those three phases now exist — Phase 11 built project commitments and

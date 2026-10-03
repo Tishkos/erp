@@ -84,6 +84,10 @@ fi
 # them costs nothing, and the day one of them fills is not the day anybody
 # wants to discover this list was written before it existed.
 read -r -d '' DOCUMENT_TABLES <<'TABLES' || true
+payroll_line_component
+payroll_line
+payroll_payment
+payroll_run
 leave_request
 attendance_day
 proof_of_delivery_photo
