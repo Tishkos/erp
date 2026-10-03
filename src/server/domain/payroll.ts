@@ -22,7 +22,8 @@
  * The journal (§9 "Posting") is planned here too, so the screen, the test and
  * the posting read one function: Dr each earning's expense by department —
  * the base less its absence — and each employer cost; Cr each deduction and
- * employer cost where it is owed; Cr the net to salaries payable.
+ * employer cost where it is owed, an advance recovered to the advances
+ * account (HR-4); Cr the net to salaries payable.
  */
 import type { PayCalculation, PayComponentKind } from './hr';
 import { MONEY_SCALE, divideHalfUp } from './money';
@@ -114,6 +115,8 @@ export interface MonthFacts {
   readonly absentDays: number;
   /** Approved unpaid leave in the month, in hundredths of a day. */
   readonly unpaidLeave: bigint;
+  /** HR-4 — what the person's advances and loans have due by the month (scaled by 10⁴). */
+  readonly advanceRecovery?: bigint;
 }
 
 export interface TypedEntry {
@@ -215,10 +218,23 @@ export function computeLine(facts: MonthFacts, rules: readonly ComponentRule[], 
         push(rule, amount, { note: entry?.note ?? null });
         break;
       }
+      case 'advance_recovery':
+        // Taken once everything else is known, below.
+        break;
     }
   }
 
   const sum = (kind: PayComponentKind) => components.filter((c) => c.kind === kind).reduce((total, c) => total + c.amount, 0n);
+  // HR-4 — the advances' recovery comes last: what is due, never so much that the net goes below nothing;
+  // what it cannot take stays owed and is due again next month.
+  const recoveryRule = sorted.find((r) => r.calculation === 'advance_recovery') ?? null;
+  const due = facts.advanceRecovery ?? 0n;
+  if (recoveryRule && due > 0n) {
+    const room = sum('earning') - sum('deduction');
+    const take = room <= 0n ? 0n : due < room ? due : room;
+    if (take > 0n) push(recoveryRule, take);
+    components.sort((a, b) => a.sortOrder - b.sortOrder || a.code.localeCompare(b.code));
+  }
   const gross = sum('earning');
   const deductions = sum('deduction');
   return { components, basePaid, absence, baseEarned, gross, deductions, net: gross - deductions, employerCost: sum('employer_cost') };
@@ -244,7 +260,7 @@ const toDecimal = (scaled: bigint) => {
 // The journal
 // ---------------------------------------------------------------------------
 
-export type PayrollRole = 'salary_expense' | 'payroll_employer_cost' | 'payroll_withholding' | 'net_pay';
+export type PayrollRole = 'salary_expense' | 'payroll_employer_cost' | 'payroll_withholding' | 'employee_advance' | 'net_pay';
 
 export interface ComponentAccounts {
   readonly expenseAccountId: string | null;
@@ -276,7 +292,7 @@ export interface PlannedPayrollLine {
  */
 export function journalPlan(lines: readonly PlannedPayrollLine[], accounts: ReadonlyMap<string, ComponentAccounts>): JournalLinePlan[] {
   const debits = new Map<string, { role: PayrollRole; accountId: string | null; departmentCode: string; componentCode: string; amount: bigint }>();
-  const credits = new Map<string, { accountId: string | null; componentCode: string; amount: bigint }>();
+  const credits = new Map<string, { role: PayrollRole; accountId: string | null; componentCode: string; amount: bigint }>();
   let net = 0n;
   const account = (code: string) => accounts.get(code) ?? { expenseAccountId: null, liabilityAccountId: null };
   const debit = (role: PayrollRole, code: string, departmentCode: string, amount: bigint) => {
@@ -284,9 +300,10 @@ export function journalPlan(lines: readonly PlannedPayrollLine[], accounts: Read
     const prior = debits.get(key);
     debits.set(key, { role, accountId: account(code).expenseAccountId, departmentCode, componentCode: code, amount: (prior?.amount ?? 0n) + amount });
   };
-  const credit = (code: string, amount: bigint) => {
+  const credit = (code: string, amount: bigint, role: PayrollRole = 'payroll_withholding') => {
     const prior = credits.get(code);
-    credits.set(code, { accountId: account(code).liabilityAccountId, componentCode: code, amount: (prior?.amount ?? 0n) + amount });
+    // An advance recovered is the person's debt repaid: it credits the advances account, not a liability.
+    credits.set(code, { role, accountId: role === 'employee_advance' ? null : account(code).liabilityAccountId, componentCode: code, amount: (prior?.amount ?? 0n) + amount });
   };
 
   for (const line of lines) {
@@ -302,7 +319,8 @@ export function journalPlan(lines: readonly PlannedPayrollLine[], accounts: Read
         // Pay not earned is cost not incurred: it comes off the base's expense.
         if (base) debit('salary_expense', base.code, line.departmentCode, -c.amount);
         else credit(c.code, c.amount);
-      } else credit(c.code, c.amount);
+      } else if (c.calculation === 'advance_recovery') credit(c.code, c.amount, 'employee_advance');
+      else credit(c.code, c.amount);
     }
   }
 
@@ -313,7 +331,7 @@ export function journalPlan(lines: readonly PlannedPayrollLine[], accounts: Read
     if (d.amount !== 0n) plan.push({ role: d.role, accountId: d.accountId, departmentCode: d.departmentCode, side: 'debit', amount: d.amount, componentCode: d.componentCode });
   }
   for (const c of [...credits.values()].sort((a, b) => a.componentCode.localeCompare(b.componentCode))) {
-    if (c.amount !== 0n) plan.push({ role: 'payroll_withholding', accountId: c.accountId, departmentCode: null, side: 'credit', amount: c.amount, componentCode: c.componentCode });
+    if (c.amount !== 0n) plan.push({ role: c.role, accountId: c.accountId, departmentCode: null, side: 'credit', amount: c.amount, componentCode: c.componentCode });
   }
   if (net !== 0n) plan.push({ role: 'net_pay', accountId: null, departmentCode: null, side: 'credit', amount: net, componentCode: null });
   return plan;

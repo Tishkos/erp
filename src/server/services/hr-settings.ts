@@ -136,9 +136,10 @@ async function componentAccounts(tx: Tx, kind: string, input: Pick<PayComponentI
 
 function componentValues(input: Omit<PayComponentInput, 'code'>) {
   if (!isPayComponentKind(input.kind)) throw new HrValidationError('kind', 'must be earning, deduction or employer_cost');
-  if (!isPayCalculation(input.calculation)) throw new HrValidationError('calculation', 'must be base_salary, fixed, percent_of_base, manual or absence');
+  if (!isPayCalculation(input.calculation)) throw new HrValidationError('calculation', 'must be base_salary, fixed, percent_of_base, manual, absence or advance_recovery');
   if (input.calculation === 'base_salary' && input.kind !== 'earning') throw new HrValidationError('calculation', 'the base salary is an earning');
   if (input.calculation === 'absence' && input.kind !== 'deduction') throw new HrValidationError('calculation', 'an absence deduction is a deduction');
+  if (input.calculation === 'advance_recovery' && input.kind !== 'deduction') throw new HrValidationError('calculation', 'an advance recovered is a deduction');
   const value = parseDecimal((input.defaultValue ?? '').trim() || '0', MONEY_SCALE);
   if (value < 0n) throw new HrValidationError('default_value', 'cannot be negative');
   if (input.calculation === 'percent_of_base' && value > 100n * 10n ** MONEY_SCALE) throw new HrValidationError('default_value', 'a percentage of the base cannot exceed 100');
@@ -154,13 +155,13 @@ function componentValues(input: Omit<PayComponentInput, 'code'>) {
 
 /** One active base salary and one active absence deduction: two would pay or take twice. */
 async function assertOneOfItsKind(tx: Tx, calculation: string, code: string): Promise<void> {
-  if (calculation !== 'base_salary' && calculation !== 'absence') return;
+  if (calculation !== 'base_salary' && calculation !== 'absence' && calculation !== 'advance_recovery') return;
   const [other] = await tx
     .select({ code: payComponent.code })
     .from(payComponent)
     .where(and(eq(payComponent.calculation, calculation), eq(payComponent.active, true)))
     .limit(1);
-  if (other && other.code !== code) throw new HrValidationError('calculation', `${other.code} is already the ${calculation === 'base_salary' ? 'base salary' : 'absence deduction'}; deactivate it first`);
+  if (other && other.code !== code) throw new HrValidationError('calculation', `${other.code} is already the ${calculation === 'base_salary' ? 'base salary' : calculation === 'absence' ? 'absence deduction' : 'advance recovery'}; deactivate it first`);
 }
 
 export async function createPayComponent(tx: Tx, ctx: ActorContext, input: PayComponentInput): Promise<{ code: string }> {

@@ -27,9 +27,10 @@ export type PayComponentKind = (typeof PAY_COMPONENT_KINDS)[number];
 /**
  * How a component's figure is reached (§6). HR-3: `base_salary` reads the
  * compensation row in force and `absence` the day sheet — facts, never typed
- * (R2); `manual` is typed on the run's line with a note (§9).
+ * (R2); `manual` is typed on the run's line with a note (§9). HR-4:
+ * `advance_recovery` reads what the person's advances and loans have due.
  */
-export const PAY_CALCULATIONS = ['base_salary', 'fixed', 'percent_of_base', 'manual', 'absence'] as const;
+export const PAY_CALCULATIONS = ['base_salary', 'fixed', 'percent_of_base', 'manual', 'absence', 'advance_recovery'] as const;
 export type PayCalculation = (typeof PAY_CALCULATIONS)[number];
 
 export const PAY_METHODS = ['bank', 'cash'] as const;

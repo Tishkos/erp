@@ -28,10 +28,16 @@
  *   payroll_line            one person's month, its payslip once posted
  *   payroll_line_component  each component of the line, computed or typed
  *   payroll_payment         one pay method's net pay leaving a bank or cash account
+ *
+ * Stage HR-4 (0258) — advances & loans, equipment:
+ *   employee_advance           EADV-…: money lent, recovered from pay or cash
+ *   employee_advance_recovery  what came back — append-only
+ *   employee_asset             what a person holds, handed out and returned
  */
 import { sql } from 'drizzle-orm';
 import { boolean, check, date, index, integer, numeric, pgTable, smallint, text, time, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { chartOfAccount } from './accounting';
+import { fixedAsset } from './fixed-assets';
 import { bank, bankCashAccount } from './item';
 import { journalEntry } from './journal';
 import { appUser, branch, department } from './platform';
@@ -181,8 +187,8 @@ export const payComponent = pgTable(
   },
   (t) => [
     check('pay_component_kind', sql`${t.kind} in ('earning', 'deduction', 'employer_cost')`),
-    check('pay_component_calculation', sql`${t.calculation} in ('base_salary', 'fixed', 'percent_of_base', 'manual', 'absence')`),
-    check('pay_component_calculation_kind', sql`(${t.calculation} <> 'base_salary' or ${t.kind} = 'earning') and (${t.calculation} <> 'absence' or ${t.kind} = 'deduction')`),
+    check('pay_component_calculation', sql`${t.calculation} in ('base_salary', 'fixed', 'percent_of_base', 'manual', 'absence', 'advance_recovery')`),
+    check('pay_component_calculation_kind', sql`(${t.calculation} <> 'base_salary' or ${t.kind} = 'earning') and (${t.calculation} not in ('absence', 'advance_recovery') or ${t.kind} = 'deduction')`),
   ],
 );
 
@@ -544,4 +550,109 @@ export const payrollLineComponent = pgTable(
     sortOrder: smallint('sort_order').notNull().default(100),
   },
   (t) => [uniqueIndex('payroll_line_component_uniq').on(t.lineId, t.componentCode)],
+);
+
+// ---------------------------------------------------------------------------
+// Stage HR-4 (0258) — advances & loans, equipment
+// ---------------------------------------------------------------------------
+
+export const employeeAdvance = pgTable(
+  'employee_advance',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    advanceNo: text('advance_no').notNull(),
+    employeeId: uuid('employee_id')
+      .notNull()
+      .references(() => employee.id),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    kind: text('kind').notNull(),
+    amountIqd: numeric('amount_iqd', { precision: 20, scale: 4 }).notNull(),
+    instalments: smallint('instalments').notNull().default(1),
+    firstRecoveryMonth: date('first_recovery_month').notNull(),
+    reason: text('reason').notNull(),
+    status: text('status').notNull().default('draft'),
+    recoveredIqd: numeric('recovered_iqd', { precision: 20, scale: 4 }).notNull().default('0'),
+    requestedBy: uuid('requested_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    endorsedBy: uuid('endorsed_by').references(() => appUser.id),
+    endorsedAt: timestamp('endorsed_at', { withTimezone: true }),
+    approvedBy: uuid('approved_by').references(() => appUser.id),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    decisionNote: text('decision_note'),
+    refusedBy: uuid('refused_by').references(() => appUser.id),
+    refusedAt: timestamp('refused_at', { withTimezone: true }),
+    paidBy: uuid('paid_by').references(() => appUser.id),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    paidOn: date('paid_on'),
+    bankCashAccountId: uuid('bank_cash_account_id').references(() => bankCashAccount.id),
+    paymentReference: text('payment_reference'),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    settledAt: timestamp('settled_at', { withTimezone: true }),
+    cancelledBy: uuid('cancelled_by').references(() => appUser.id),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+  },
+  (t) => [
+    uniqueIndex('employee_advance_no_uniq').on(t.advanceNo),
+    index('employee_advance_employee_idx').on(t.employeeId, t.status),
+    index('employee_advance_status_idx').on(t.status, t.branchCode),
+    check('employee_advance_kind', sql`${t.kind} in ('advance', 'loan')`),
+    check('employee_advance_endorser_not_requester', sql`${t.endorsedBy} is null or ${t.endorsedBy} <> ${t.requestedBy}`),
+  ],
+);
+
+export const employeeAdvanceRecovery = pgTable(
+  'employee_advance_recovery',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    advanceId: uuid('advance_id')
+      .notNull()
+      .references(() => employeeAdvance.id),
+    source: text('source').notNull(),
+    month: date('month').notNull(),
+    amountIqd: numeric('amount_iqd', { precision: 20, scale: 4 }).notNull(),
+    runId: uuid('run_id').references(() => payrollRun.id),
+    lineId: uuid('line_id').references(() => payrollLine.id),
+    bankCashAccountId: uuid('bank_cash_account_id').references(() => bankCashAccount.id),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    reference: text('reference'),
+    recordedBy: uuid('recorded_by')
+      .notNull()
+      .references(() => appUser.id),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('employee_advance_recovery_advance_idx').on(t.advanceId, t.month), index('employee_advance_recovery_run_idx').on(t.runId)],
+);
+
+export const employeeAsset = pgTable(
+  'employee_asset',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    employeeId: uuid('employee_id')
+      .notNull()
+      .references(() => employee.id),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    assetKind: text('asset_kind').notNull(),
+    fixedAssetId: uuid('fixed_asset_id').references(() => fixedAsset.id),
+    description: text('description').notNull(),
+    serialNo: text('serial_no'),
+    handedOutOn: date('handed_out_on').notNull(),
+    outCondition: text('out_condition'),
+    handedOutBy: uuid('handed_out_by')
+      .notNull()
+      .references(() => appUser.id),
+    returnedOn: date('returned_on'),
+    returnCondition: text('return_condition'),
+    returnedBy: uuid('returned_by').references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('employee_asset_employee_idx').on(t.employeeId, t.returnedOn), check('employee_asset_kind', sql`${t.assetKind} in ('fixed_asset', 'item')`)],
 );

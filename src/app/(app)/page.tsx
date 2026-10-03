@@ -315,6 +315,7 @@ export default async function Home() {
         waiting.dueThisWeek.length > 0 ||
         waiting.leaveAwaiting.length > 0 ||
         waiting.payrollAwaiting.length > 0 ||
+        waiting.advancesAwaiting.length > 0 ||
         waiting.holdsNeedingReason.length > 0) ? (
         <Band
           count={
@@ -323,7 +324,8 @@ export default async function Home() {
             waiting.holdsNeedingReason.length +
             waiting.receiptsAwaiting.length +
             waiting.leaveAwaiting.length +
-            waiting.payrollAwaiting.length
+            waiting.payrollAwaiting.length +
+            waiting.advancesAwaiting.length
           }
           href="/approvals"
           hrefLabel={t('dashboard.open_approvals')}
@@ -442,6 +444,28 @@ export default async function Home() {
                   </td>
                   <td>
                     <Link href={`/hr/payroll/${encodeURIComponent(run.runNo)}`}>{t('dashboard.open_payroll')}</Link>
+                  </td>
+                </tr>
+              ))}
+            </BandTable>
+          ) : null}
+
+          {/* REQ-HR-001 HR-4 — advances and loans waiting for me: to endorse, to approve, to pay. */}
+          {waiting.advancesAwaiting.length > 0 ? (
+            <BandTable headings={[t('dashboard.advances_awaiting'), column('amount'), '']}>
+              {waiting.advancesAwaiting.map((advance) => (
+                <tr key={`ea:${advance.advanceNo}`}>
+                  <td className={s.sapAccountCell}>
+                    <Link href={`/hr/advances/${encodeURIComponent(advance.advanceNo)}`}>
+                      <bdi dir="ltr">{advance.advanceNo}</bdi>
+                    </Link>{' '}
+                    · <bdi dir="auto">{advance.fullNameEn}</bdi> · {t(`dashboard.advance_action_${advance.action}`)}
+                  </td>
+                  <td>
+                    <bdi dir="ltr">{formatMoney(advance.amountIqd, 'IQD', locale as Locale)}</bdi>
+                  </td>
+                  <td>
+                    <Link href={`/hr/advances/${encodeURIComponent(advance.advanceNo)}`}>{t('dashboard.open_advance')}</Link>
                   </td>
                 </tr>
               ))}

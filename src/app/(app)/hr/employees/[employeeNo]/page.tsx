@@ -20,6 +20,8 @@ import * as hrSettings from '@/server/services/hr-settings';
 import * as attendance from '@/server/services/attendance';
 import * as leave from '@/server/services/leave';
 import * as payroll from '@/server/services/payroll';
+import * as advances from '@/server/services/employee-advances';
+import * as equipment from '@/server/services/employee-assets';
 import { showDays, daysFrom, weekdayOf } from '@/server/domain/hr-time';
 import {
   adjustLeaveBalance,
@@ -27,6 +29,8 @@ import {
   moveEmployee,
   setEmployeeCompensation,
   setEmployeePayFigure,
+  handOutEmployeeAsset,
+  returnEmployeeAsset,
   setEmployeeStatus,
   updateEmployeeIdentity,
 } from '../actions';
@@ -66,6 +70,10 @@ export default async function EmployeePage({ params, searchParams }: { params: P
   const mayAdjustLeave = can(principal, 'administer', leave.PERMISSION_OBJECT);
   const maySeeAttendance = can(principal, 'view', attendance.PERMISSION_OBJECT);
   const maySeePayslips = can(principal, 'view', payroll.PERMISSION_OBJECT);
+  const maySeeAdvances = can(principal, 'view', advances.PERMISSION_OBJECT);
+  const maySeeEquipment = can(principal, 'view', equipment.PERMISSION_OBJECT);
+  const mayHandOut = can(principal, 'create', equipment.PERMISSION_OBJECT);
+  const mayTakeBack = can(principal, 'edit_draft', equipment.PERMISSION_OBJECT);
   const query = await searchParams;
   const today = businessToday();
   const monthParam = typeof query.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(query.month) ? query.month : today.slice(0, 7);
@@ -99,8 +107,13 @@ export default async function EmployeePage({ params, searchParams }: { params: P
       month: maySeeAttendance ? await attendance.daysOf(tx, row.id, attendance.monthSpan(monthParam).fromDate, attendance.monthSpan(monthParam).toDate) : [],
       // HR-3 — the person's own component figures (under the compensation grant) and their payslips.
       figures: maySeePay ? await employees.payFiguresOf(tx, actor, row.id) : [],
-      settable: maySetPay ? (await hrSettings.payComponents(tx)).filter((c) => c.active && c.calculation !== 'base_salary' && c.calculation !== 'absence') : [],
+      settable: maySetPay ? (await hrSettings.payComponents(tx)).filter((c) => c.active && !['base_salary', 'absence', 'advance_recovery'].includes(c.calculation)) : [],
       payslips: maySeePayslips ? await payroll.payslipsOf(tx, row.id) : [],
+      // HR-4 — what the person owes on advances and what they hold; the clearance is the two together.
+      advances: maySeeAdvances ? await advances.ofEmployee(tx, row.id) : [],
+      equipment: maySeeEquipment ? await equipment.ofEmployee(tx, row.id) : [],
+      freeAssets: mayHandOut ? await equipment.available(tx) : [],
+      clearance: maySeeAdvances || maySeeEquipment ? await equipment.clearanceOf(tx, row.id) : null,
     };
   });
   if (!found) notFound();
@@ -160,6 +173,10 @@ export default async function EmployeePage({ params, searchParams }: { params: P
       variant="sap"
     >
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
+      {/* REQ-HR-001 HR-4 — a leaver's clearance: what is still out, what is still owed. */}
+      {found.clearance && !found.clearance.clear && row.status === 'ended' ? (
+        <p className={s.sapNote}>{x('clearance_open', { assets: found.clearance.assetsOut, owed: formatMoney(found.clearance.advancesOwedIqd, 'IQD', locale as Locale) })}</p>
+      ) : null}
 
       <DocumentWindow
         actions={
@@ -589,6 +606,165 @@ export default async function EmployeePage({ params, searchParams }: { params: P
                 </tbody>
               </table>
             </div>
+          </div>
+        </section>
+      ) : null}
+
+      {/* REQ-HR-001 HR-4 — the person's advances and loans, what each still owes. */}
+      {maySeeAdvances ? (
+        <section aria-labelledby="employee-advances-title" className={s.sapDoc}>
+          <div className={s.sapWindow}>
+            <h2 className={s.sapTitle} id="employee-advances-title">
+              <span>{x('advances_title')}</span>
+              <span className={s.sapTitleMeta}>{t('rows_shown', { count: found.advances.length })}</span>
+            </h2>
+            <div className={s.sapTableWrap}>
+              <table aria-labelledby="employee-advances-title" className={s.sapTable}>
+                <thead>
+                  <tr>
+                    <th scope="col">{column('reference')}</th>
+                    <th scope="col">{x('advance_kind')}</th>
+                    <th className={s.sapNum} scope="col">
+                      {x('advance_amount')}
+                    </th>
+                    <th className={s.sapNum} scope="col">
+                      {x('advance_owed')}
+                    </th>
+                    <th scope="col">{column('status')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {found.advances.length === 0 ? (
+                    <tr>
+                      <td className={s.sapEmptyRow} colSpan={5}>
+                        {x('advances_none')}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {found.advances.map((a) => {
+                    const tone = { draft: 'draft', submitted: 'submitted', endorsed: 'submitted', approved: 'approved', paid: 'posted', settled: 'settled', refused: 'rejected', cancelled: 'cancelled' }[a.status] ?? 'draft';
+                    return (
+                      <tr key={a.advanceNo}>
+                        <td>
+                          <Link className={s.sapLink} href={`/hr/advances/${encodeURIComponent(a.advanceNo)}`}>
+                            <bdi dir="ltr">{a.advanceNo}</bdi>
+                          </Link>
+                        </td>
+                        <td>{x(`advance_kind_${a.kind}`)}</td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{formatMoney(a.amountIqd, 'IQD', locale as Locale)}</bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{formatMoney(a.owedIqd, 'IQD', locale as Locale)}</bdi>
+                        </td>
+                        <td>
+                          <span className={`status status--${tone} ${s.sapRegisterStatus}`} data-status={tone}>
+                            {x(`advance_status_${a.status}`)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {/* REQ-HR-001 HR-4 — what the person holds: handed out and returned, the condition each way. */}
+      {maySeeEquipment ? (
+        <section aria-labelledby="employee-equipment-title" className={s.sapDoc}>
+          <div className={s.sapWindow}>
+            <h2 className={s.sapTitle} id="employee-equipment-title">
+              <span>{x('equipment_title')}</span>
+              <span className={s.sapTitleMeta}>{x('equipment_out', { count: found.equipment.filter((e) => !e.returnedOn).length })}</span>
+            </h2>
+            <div className={s.sapTableWrap}>
+              <table aria-labelledby="employee-equipment-title" className={s.sapTable}>
+                <thead>
+                  <tr>
+                    <th scope="col">{x('equipment_item')}</th>
+                    <th scope="col">{x('equipment_serial')}</th>
+                    <th scope="col">{x('equipment_out_on')}</th>
+                    <th scope="col">{x('equipment_out_condition')}</th>
+                    <th scope="col">{x('equipment_returned_on')}</th>
+                    <th scope="col">{x('equipment_return_condition')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {found.equipment.length === 0 ? (
+                    <tr>
+                      <td className={s.sapEmptyRow} colSpan={6}>
+                        {x('equipment_none')}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {found.equipment.map((e) => (
+                    <tr key={e.id}>
+                      <td>
+                        <bdi dir="auto">{e.description}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{e.serialNo ?? '—'}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{day(e.handedOutOn)}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="auto">{e.outCondition ?? '—'}</bdi>
+                      </td>
+                      <td>
+                        {e.returnedOn ? (
+                          <bdi dir="ltr">{day(e.returnedOn)}</bdi>
+                        ) : mayTakeBack ? (
+                          <Form action={returnEmployeeAsset}>
+                            {hidden}
+                            <input name="asset_id" type="hidden" value={e.id} />
+                            <input aria-label={`${x('equipment_returned_on')} ${e.description}`} className={s.sapCellField} defaultValue={today} name="returned_on" type="date" />
+                            <input aria-label={`${x('equipment_return_condition')} ${e.description}`} className={s.sapCellField} name="condition" placeholder={x('equipment_return_condition')} />
+                            <Submit label={x('equipment_return')} small tone="secondary" />
+                          </Form>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>
+                        <bdi dir="auto">{e.returnCondition ?? '—'}</bdi>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {mayHandOut && row.status !== 'ended' ? (
+              <div className={s.sapBody}>
+                <Form action={handOutEmployeeAsset}>
+                  {hidden}
+                  <p className={s.sapGridCaption}>{x('equipment_new')}</p>
+                  <p className="muted">{x('equipment_hint')}</p>
+                  <Grid>
+                    <Select
+                      defaultValue="item"
+                      label={x('equipment_kind')}
+                      name="kind"
+                      options={[
+                        { value: 'item', label: x('equipment_kind_item') },
+                        { value: 'fixed_asset', label: x('equipment_kind_fixed_asset') },
+                      ]}
+                    />
+                    <Select emptyLabel="—" label={x('equipment_fixed_asset')} name="fixed_asset_code" options={found.freeAssets.map((a) => ({ value: a.code, label: `${a.code} · ${a.description}` }))} />
+                    <Field label={x('equipment_item')} name="description" />
+                    <Field label={x('equipment_serial')} name="serial_no" />
+                    <Field defaultValue={today} label={x('equipment_out_on')} name="handed_out_on" required type="date" />
+                    <Field label={x('equipment_out_condition')} name="condition" wide />
+                  </Grid>
+                  <SubmitRow>
+                    <Submit label={x('equipment_hand_out')} small tone="secondary" />
+                  </SubmitRow>
+                </Form>
+              </div>
+            ) : null}
           </div>
         </section>
       ) : null}

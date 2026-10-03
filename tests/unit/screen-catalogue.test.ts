@@ -216,6 +216,7 @@ describe('every screen has one address', () => {
       '/finance/posting-mappings',
       '/finance/reversals',
       '/finance/trial-balance',
+      '/hr/advances',
       '/hr/attendance',
       '/hr/departments',
       '/hr/employees',

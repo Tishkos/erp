@@ -261,6 +261,8 @@ async function main() {
       ['X100080', 'Employer Social Security', 'X000001', null],
       ['L100050', 'Salaries Payable', 'L000001', null],
       ['L100060', 'Payroll Deductions Payable', 'L000001', null],
+      // REQ-HR-001 HR-4 — what people owe on advances and loans.
+      ['A100050', 'Employee Advances and Loans', 'A000001', null],
     ];
     for (const [code, name, parent, control] of accounts) {
       await tx.execute(sql`
@@ -309,6 +311,9 @@ async function main() {
       ['hr.payroll_run', 'payroll_withholding', 'L100060'],
       ['hr.payroll_run', 'net_pay', 'L100050'],
       ['hr.payroll_payment', 'net_pay', 'L100050'],
+      ['hr.payroll_run', 'employee_advance', 'A100050'],
+      ['hr.employee_advance', 'employee_advance', 'A100050'],
+      ['hr.employee_advance_repayment', 'employee_advance', 'A100050'],
     ];
     for (const [event, role, code] of mappings) {
       await tx.execute(sql`

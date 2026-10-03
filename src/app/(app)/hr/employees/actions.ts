@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { flag, runAdmin, runAdminAndReturn, text } from '@/server/admin-action';
 import * as employees from '@/server/services/employees';
+import * as equipment from '@/server/services/employee-assets';
 import * as leave from '@/server/services/leave';
 
 /**
@@ -135,4 +136,28 @@ export async function adjustLeaveBalance(form: FormData): Promise<void> {
       }),
     record(employeeNo),
   );
+}
+
+/** HR-4 — equipment handed out to the person, with the condition it went out in. */
+export async function handOutEmployeeAsset(form: FormData): Promise<void> {
+  const employeeNo = text(form, 'employee_no');
+  await runAdminAndReturn(
+    async (tx, ctx) => {
+      await equipment.handOut(tx, ctx, text(form, 'id'), {
+        kind: text(form, 'kind'),
+        fixedAssetCode: text(form, 'fixed_asset_code') || null,
+        description: text(form, 'description') || null,
+        serialNo: text(form, 'serial_no') || null,
+        handedOutOn: text(form, 'handed_out_on'),
+        condition: text(form, 'condition') || null,
+      });
+    },
+    record(employeeNo),
+  );
+}
+
+/** HR-4 — equipment back, with the day and the condition it came back in. */
+export async function returnEmployeeAsset(form: FormData): Promise<void> {
+  const employeeNo = text(form, 'employee_no');
+  await runAdminAndReturn((tx, ctx) => equipment.returnAsset(tx, ctx, text(form, 'asset_id'), { returnedOn: text(form, 'returned_on'), condition: text(form, 'condition') || null }), record(employeeNo));
 }

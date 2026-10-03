@@ -545,6 +545,10 @@ export async function resetTestData(): Promise<void> {
     // the limits go back to their seeds.
     // REQ-HR-001 HR-3 — the runs name their journals; their lines and payments
     // hang off them; a person's own component figures are dated rows like pay.
+    // REQ-HR-001 HR-4 — the recoveries name the runs and the advances; the equipment the people.
+    await client.query('delete from employee_advance_recovery');
+    await client.query('delete from employee_advance');
+    await client.query('delete from employee_asset');
     await client.query('delete from payroll_line_component');
     await client.query('delete from payroll_line');
     await client.query('delete from payroll_payment');
@@ -906,7 +910,7 @@ export async function resetTestData(): Promise<void> {
                          -- REQ-AP-001 Stage 6, migration 0235.
                          'LOAN',
                          -- REQ-HR-001 Stage HR-1, migration 0241.
-                         'EMPLOYEE', 'POSITION_CODE', 'LEAVE_REQUEST', 'PAYROLL_RUN', 'PAYSLIP', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
+                         'EMPLOYEE', 'POSITION_CODE', 'LEAVE_REQUEST', 'PAYROLL_RUN', 'PAYSLIP', 'EMPLOYEE_ADVANCE', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

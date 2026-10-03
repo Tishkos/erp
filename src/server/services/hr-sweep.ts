@@ -12,6 +12,9 @@
  *                       of a type marked *warn before lapse* (annual leave)
  *                       above what carries over → the HR managers and the
  *                       person, once per person per type per year
+ *   advance behind      HR-4: a paid advance or loan whose recoveries are
+ *                       behind its schedule at the end of last month → the
+ *                       HR managers, once per advance per month
  *
  * The limits are `hr_parameter` rows (R4), edited on HR Settings.
  */
@@ -21,6 +24,7 @@ import { employee, leaveType } from '../db/schema';
 import { HUNDRED, daysFrom, showDays, yearOf } from '../domain/hr-time';
 import type { Principal } from '../domain/permissions';
 import type { ActorContext } from './chart-of-accounts';
+import * as advances from './employee-advances';
 import * as hrSettings from './hr-settings';
 import * as leave from './leave';
 import * as notifications from './notifications';
@@ -30,6 +34,7 @@ export interface SweepRun {
   readonly contractsExpiring: number;
   readonly leaveWaiting: number;
   readonly leaveLapsing: number;
+  readonly advancesBehind: number;
   readonly created: number;
 }
 
@@ -145,7 +150,19 @@ export async function run(tx: Tx, principal: Principal, asOf: string): Promise<S
     }
   }
 
-  return { asOf, contractsExpiring: ending.length, leaveWaiting: waiting.rows.length, leaveLapsing: lapsing, created };
+  // HR-4 — advances and loans behind their schedule, aged from the instalment that is missing.
+  const behind = await advances.behindAsOf(tx, asOf);
+  for (const advance of behind) {
+    const raised = await notifications.raise(
+      tx,
+      { eventType: 'hr.advance_behind', objectType: 'employee_advance', objectId: advance.advanceNo, occurrence: asOf.slice(0, 7) },
+      { advanceNo: advance.advanceNo, behindIqd: advance.behindIqd, since: advance.since.slice(0, 7), bucket: advance.bucket },
+      { branchCode: advance.branchCode, actorUserId: principal.userId },
+    );
+    created += raised.created;
+  }
+
+  return { asOf, contractsExpiring: ending.length, leaveWaiting: waiting.rows.length, leaveLapsing: lapsing, advancesBehind: behind.length, created };
 }
 
 export type { ActorContext };

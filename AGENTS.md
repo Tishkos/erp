@@ -222,3 +222,12 @@ Standing rule (by direction, 2026-10-01; see also docs/notes/newsettings.md: "DO
 * RLS: runs and lines need `payroll_run` view by branch (`app_has_grant`); the person reads their own posted payslip (`app_own_payslip`) and of the run only `app_payslip_header`. The cash forecast (`app_payroll_outflows`) and the close check `payroll_posted` (`app_payroll_month_gaps`) read through definer functions, totals only. The `payslip` export is `selfService` in `print/access.ts`.
 * `employee_pay_component` is written only by `services/employees.ts` (`setPayFigure`, held by `hr01-event-coverage`), append-only. `payroll_*` are in `resetTestData` and `format-live-database.sh`; the series `PAYROLL_RUN` (PAY) and `PAYSLIP` (PSL) are kept; `resetTestData` puts the seeded components back (no accounts, the D-HR-3 rates).
 * Tests: `tests/integration/hr03-payroll.test.ts`, `tests/unit/hr03-payroll.test.ts`, `tests/e2e/hr-payroll.spec.ts`.
+
+## HR advances, loans and equipment (REQ-HR-001 Stage HR-4)
+
+* `services/employee-advances.ts` writes `employee_advance` and `employee_advance_recovery` (append-only); `domain/advances.ts` is the pure schedule (`instalmentPlan`, `dueBy`, `recoveryFor`, `allocateRecovery`, `behindSince`). It is **not** `cash_advance` (petty cash, B-HR-18). `services/payroll.ts` imports it; it never imports payroll.
+* Endorse: the person's manager by the link or `approve`; approve: `post` (Finance); pay and cash repayment: `execute`. Check constraints keep the asker, the person and the endorser off the later steps.
+* Payroll: the `advance_recovery` component (seeded ADVANCE) reads `dueForMonth`; `computeLine` takes it last and caps it at the net; `journalPlan` credits `employee_advance`. `payroll.post` calls `recordPayrollRecovery` (refuses if the advances moved since the run was computed); `payroll.reverse` calls `reversePayrollRecovery`.
+* `services/employee-assets.ts` writes `employee_asset` (equipment; one holder per fixed asset) and reads the clearance. `employee` is in ops16's `NOT_DOCUMENTS`: `employee_advance` would otherwise make it a header.
+* Events `hr.employee_advance`, `hr.employee_advance_repayment`; the role `employee_advance` is in the ops13–15 fixtures. Series `EMPLOYEE_ADVANCE` (EADV) kept by `resetTestData`. The sweep's `advancesBehind`.
+* Tests: `tests/integration/hr04-advances.test.ts`, `tests/unit/hr04-advances.test.ts`, `tests/e2e/hr-advances.spec.ts`.

@@ -8,6 +8,17 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-HR-001 HR-4 — **Advances & Loans**. A salary advance or a loan
+  (EADV-…) asked for by HR or by the person, endorsed by their manager,
+  approved by Finance (never by the asker, the person or the endorser), paid
+  from a bank or cash account; recovered by payroll month by month from its
+  first recovery month (a missed month caught up, never more than is owed,
+  never below a net of nothing), given back when a run is reversed, settled
+  in cash for what remains and never more. The morning sweep raises a loan
+  behind its schedule; the dashboard shows advances waiting on me. The
+  employee page shows the person's advances and the **equipment** they hold
+  (a fixed asset or an item, handed out and returned with its condition) —
+  a leaver's clearance. Migration 0258.
 - REQ-HR-001 HR-3 — **Payroll**. One run per branch per month, computed from
   the facts: the salary in force, each person's own component figures
   (allowances, an exemption — dated rows on the employee page), the
