@@ -1252,7 +1252,13 @@ export async function pickers(tx: Tx) {
     .where(and(eq(bankCashAccount.active, true), eq(bankCashAccount.accountType, 'bank')))
     .orderBy(asc(bankCashAccount.code));
   const treatments = await tx
-    .select({ code: loanCommissionTreatment.code, name: loanCommissionTreatment.name })
+    .select({
+      code: loanCommissionTreatment.code,
+      name: loanCommissionTreatment.name,
+      // Whether the bank keeps it out of the money it sends — so the form can
+      // say what will land in the account (2026-10-03).
+      deducted: loanCommissionTreatment.deducted,
+    })
     .from(loanCommissionTreatment)
     .where(eq(loanCommissionTreatment.active, true))
     .orderBy(asc(loanCommissionTreatment.sortOrder));

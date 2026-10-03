@@ -71,7 +71,9 @@ export async function createLoan(formData: FormData): Promise<void> {
         bankCashAccountId: text(formData, 'bank_cash_account_id'),
         principalTxn: amountOf(text(formData, 'principal')) ?? 0n,
         commissionPct: text(formData, 'commission_pct') || null,
-        commissionTxn: amountOf(text(formData, 'commission_amount')),
+        // The percentage is the only figure the letter is entered with
+        // (2026-10-03); the service works the commission out from it.
+        commissionTxn: null,
         commissionTreatmentCode: text(formData, 'commission_treatment'),
         commissionCapitalised: formData.get('commission_capitalised') !== null,
         interestPctPa: text(formData, 'interest_pct') || null,

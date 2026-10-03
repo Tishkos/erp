@@ -3506,7 +3506,10 @@
       "bank_swift": "SWIFT / BIC",
       "due_nth": "Instalment {position} due",
       "final_due": "Final instalment due",
-      "rhythm_hint": "Fills the dates below. Retype any the bank set differently."
+      "rhythm_hint": "Fills the dates below. Retype any the bank set differently.",
+      "proceeds_lands": "Lands in the account",
+      "proceeds_owed": "Owed to the bank",
+      "proceeds_commission": "Commission kept"
     },
     "landed_cost": {
       "section_title": "Landed cost",

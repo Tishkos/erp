@@ -18,6 +18,7 @@ import {
 import { Pagination } from '@/components/ui';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { LoanBankField, LoanScheduleFields } from '@/components/admin/loan-terms-fields';
+import { LoanProceeds } from '@/components/admin/loan-proceeds';
 import { NEW_BANK } from './form';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -114,13 +115,26 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
                   required
                 />
                 <Field label={t('principal')} name="principal" required />
-                <Field defaultValue="0" label={t('commission_pct')} name="commission_pct" />
-                <Field
-                  hint={t('commission_amount_hint')}
-                 
-                  label={t('commission_amount')}
-                  name="commission_amount"
+                {/*
+                  What the bank will put in the account, and what is owed —
+                  worked out as the letter is typed (2026-10-03). Shown, never
+                  submitted: `disburse` works it out again from the stored loan
+                  when the money actually arrives.
+                */}
+                <LoanProceeds
+                  deductedCodes={pickers.treatments.filter((row) => row.deducted).map((row) => row.code)}
+                  labels={{
+                    lands: t('proceeds_lands'),
+                    owed: t('proceeds_owed'),
+                    commission: t('proceeds_commission'),
+                  }}
+                  locale={locale}
+                  percentField="commission_pct"
+                  principalField="principal"
+                  treatmentField="commission_treatment"
                 />
+
+                <Field defaultValue="0" label={t('commission_pct')} name="commission_pct" />
                 <Select
                   label={t('treatment')}
                   name="commission_treatment"
