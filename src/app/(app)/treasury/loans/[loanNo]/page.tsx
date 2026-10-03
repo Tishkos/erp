@@ -482,6 +482,13 @@ export default async function LoanPage({
                       required
                     />
                     <Field defaultValue={today} label={t('settle_date')} name="paid_date" required type="date" />
+                    {/* Less than the outstanding is a part-payment (2026-10-04). */}
+                    <Field
+                      defaultValue={toDecimalString(quote.outstanding, MONEY_SCALE)}
+                      label={t('settle_principal')}
+                      name="principal"
+                      required
+                    />
                     <Field
                       defaultValue={toDecimalString(quote.accruedInterest, MONEY_SCALE)}
                       label={t('settle_interest')}
@@ -498,6 +505,7 @@ export default async function LoanPage({
                     currency={loan.currency}
                     feeField="fee"
                     interestField="interest"
+                    principalField="principal"
                     labels={{ outstanding: t('settle_outstanding'), total: t('settle_total') }}
                     locale={locale as Locale}
                     outstandingTxn={toDecimalString(quote.outstanding, MONEY_SCALE)}

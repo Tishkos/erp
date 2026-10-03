@@ -24,6 +24,7 @@ export function LoanSettlementTotal({
   totalTxn,
   interestField,
   feeField,
+  principalField,
   currency,
   labels,
   locale,
@@ -34,6 +35,8 @@ export function LoanSettlementTotal({
   readonly totalTxn: string;
   readonly interestField: string;
   readonly feeField: string;
+  /** The principal paid, when the form lets less than all of it be paid. */
+  readonly principalField?: string;
   readonly currency: string;
   readonly labels: {
     readonly outstanding: string;
@@ -49,7 +52,9 @@ export function LoanSettlementTotal({
     if (!form) return;
 
     const read = () => {
-      const outstanding = scaled(outstandingTxn, MONEY_PLACES);
+      const left = scaled(outstandingTxn, MONEY_PLACES);
+      // The principal typed, or all of it when the box is empty or half-typed.
+      const outstanding = (principalField ? scaled(value(form, principalField), MONEY_PLACES) : null) ?? left;
       if (outstanding === null) {
         setTyped(null);
         return;
@@ -68,7 +73,7 @@ export function LoanSettlementTotal({
       form.removeEventListener('input', read);
       form.removeEventListener('change', read);
     };
-  }, [outstandingTxn, interestField, feeField]);
+  }, [outstandingTxn, interestField, feeField, principalField]);
 
   const money = (amount: string) => formatMoney(amount, currency, locale);
 
