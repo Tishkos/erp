@@ -41,6 +41,7 @@ import { mappedLines } from '@/server/domain/posting-map';
 import { parseDecimal } from '@/server/domain/money';
 import { parseQuantity } from '@/server/domain/uom';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
+import { fundLedger } from './funds';
 
 const BAGHDAD = 'BGW';
 const PANEL = 'ITM-PANEL';
@@ -767,8 +768,10 @@ describe('block 9 · a sales return settles the customer and restores stock at t
   it('credits the bank when the money went back to the customer', async () => {
     await buy(supplierA, '5', '100');
     const sale = await sell('5', '300');
+    // C-20: the money goes back out of a bank that holds it.
+    await fundLedger({ glAccountId: accounts.bank!, contraAccountId: accounts.opening_balance!, amountIqd: '1000.0000', branchCode: BAGHDAD, userId: manager.principal.userId, on: ON });
     await returnGoods(sale, '2', { offsetKind: 'bank', offsetBankAccountId: bankAccountId });
-    expect(await ledger('bank')).toBe(-600);
+    expect(await ledger('bank')).toBe(400);
     expect(await ledger('customer_receivable')).toBe(1_500);
   });
 

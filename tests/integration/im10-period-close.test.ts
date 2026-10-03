@@ -9,6 +9,7 @@
  * says so; a bogus sub-ledger row makes it say otherwise.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
+import { fundAccount } from './hr-funds';
 import { ownerPool, rejection } from './setup';
 import { withScope } from '@/server/db/client';
 import * as ap from '@/server/services/ap-invoice';
@@ -110,6 +111,7 @@ describe('IM10 · im10-period-close — the close is refused while a check fails
   });
 
   it('a journal dated in the month that has not posted blocks the close, and clears it when posted', async () => {
+    await fundAccount(world, world.accounts.bank!, '5000.0000'); // C-20: the bank pays what it holds
     await close('2026-01');
     const draft = await withScope(scope(world.manager), (tx) =>
       journal.createDraft(tx, world.manager, { branchCode: BAGHDAD, documentDate: '2026-02-10', postingDate: '2026-02-10', description: 'February accrual' }),

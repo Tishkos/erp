@@ -32,8 +32,9 @@
 import 'dotenv/config';
 import { sql } from 'drizzle-orm';
 import { applyScope, db } from '../../src/server/db/client';
+import { businessToday } from '../../src/server/domain/business-date';
 
-const cutOver = (process.argv[2] ?? '').trim() || new Date().toISOString().slice(0, 10);
+const cutOver = (process.argv[2] ?? '').trim() || businessToday();
 const usdRate = (process.argv[3] ?? '').trim() || '1470';
 const year = Number(cutOver.slice(0, 4));
 

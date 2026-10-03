@@ -8,6 +8,12 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Fixed
+- A fresh database migrates to head in one run again: `migrate.ts` commits
+  after each migration that adds an enum value before running what uses it
+  (0260 used `whatsapp`, added by 0242, in the same transaction). The
+  im10, ops13 and ops14 integration suites fund their fixture banks before
+  paying from them (C-20); the legacy-import preparation script reads the
+  business day, not UTC's (hd07).
 - REQ-HR-001 — the payroll, advances and recruitment/performance migrations
   had reached the journal at times earlier than main's newest, so a database
   that had already run those would have passed them over. They run after

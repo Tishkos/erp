@@ -15,7 +15,10 @@ import 'dotenv/config';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
-import { readFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { Pool, type PoolClient } from 'pg';
 
 const MIGRATIONS = './src/server/db/migrations';
@@ -81,6 +84,7 @@ async function repairLineage(client: PoolClient): Promise<void> {
  * tables meets nothing here and runs them in their turn.
  */
 const RENAMED: readonly { readonly tag: string; readonly table: string }[] = [
+  { tag: '0261_hr_time', table: 'leave_request' },
   { tag: '0262_hr_payroll', table: 'payroll_run' },
   { tag: '0263_hr_advances', table: 'employee_advance' },
   { tag: '0264_hr_talent', table: 'vacancy' },
@@ -127,6 +131,43 @@ async function recordRenamed(client: PoolClient): Promise<void> {
   }
 }
 
+/**
+ * PostgreSQL refuses a new enum value in the transaction that added it
+ * ("unsafe use of new value"), and drizzle runs everything pending in one
+ * transaction. A fresh database met that at 0260, which uses `whatsapp`
+ * (added by 0242) — so pending migrations are run in steps, each step ending
+ * with a migration that adds an enum value; the next step sees it committed.
+ * Each step is the migrator itself over a copy of the folder whose journal
+ * ends at the step: same files, same hashes, same times as one run would
+ * record. A database with nothing of that kind pending takes one step.
+ */
+async function lastRecorded(client: PoolClient): Promise<number> {
+  const tracked = await client.query(`select to_regclass('drizzle.__drizzle_migrations') is not null as present`);
+  if (!tracked.rows[0].present) return 0;
+  return Number((await client.query(`select coalesce(max(created_at), 0)::text as last from drizzle.__drizzle_migrations`)).rows[0].last);
+}
+
+async function migrateInSteps(db: NodePgDatabase, lastAt: number): Promise<void> {
+  const journal = JSON.parse(readFileSync(`${MIGRATIONS}/meta/_journal.json`, 'utf8'));
+  const files = readMigrationFiles({ migrationsFolder: MIGRATIONS });
+  const cuts = files
+    .map((file, index) => ({ file, index }))
+    .filter(({ file, index }) => file.folderMillis > lastAt && index < files.length - 1 && file.sql.some((statement) => /\bADD\s+VALUE\b/i.test(statement)))
+    .map(({ index }) => index);
+  for (const cut of cuts) {
+    const folder = mkdtempSync(join(tmpdir(), 'erp-migrate-'));
+    try {
+      cpSync(MIGRATIONS, folder, { recursive: true });
+      writeFileSync(join(folder, 'meta', '_journal.json'), JSON.stringify({ ...journal, entries: journal.entries.slice(0, cut + 1) }));
+      await migrate(db, { migrationsFolder: folder });
+      console.log(`migrated through ${journal.entries[cut].tag} (an enum value, committed before what uses it)`);
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
+  }
+  await migrate(db, { migrationsFolder: MIGRATIONS });
+}
+
 const url = process.argv.includes('--test')
   ? process.env.DATABASE_URL_TEST
   : process.env.DATABASE_URL_OWNER;
@@ -145,13 +186,15 @@ try {
   const db = drizzle(pool);
   const started = Date.now();
   const client = await pool.connect();
+  let lastAt: number;
   try {
     await repairLineage(client);
     await recordRenamed(client);
+    lastAt = await lastRecorded(client);
   } finally {
-    client.release();
+    client.release(); // the pool holds one connection; the migrator needs it
   }
-  await migrate(db, { migrationsFolder: MIGRATIONS });
+  await migrateInSteps(db, lastAt);
   console.log(`migrations applied in ${Date.now() - started}ms`);
 } catch (error) {
   console.error('migration failed:', error);
