@@ -46,6 +46,7 @@ import * as authz from './authorization';
 import * as audit from './audit';
 import * as units from './item-units';
 import * as inventory from './inventory';
+import * as payables from './payables';
 import * as posting from './posting';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
@@ -858,6 +859,13 @@ export async function post(
     },
     outcome: 'success',
   });
+
+  // IM2-1 — a return against an import's invoice takes its goods out of
+  // transit: the import's stage (and whether it can clear) moves with it.
+  if (document.apInvoiceId) {
+    const [owner] = await tx.select({ payableId: apInvoice.payableId }).from(apInvoice).where(eq(apInvoice.id, document.apInvoiceId)).limit(1);
+    if (owner?.payableId) await payables.recomputeStage(tx, owner.payableId, ctx.principal.userId);
+  }
 
   return { movementIds, costIqd };
 }

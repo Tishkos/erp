@@ -202,7 +202,8 @@ export async function run(tx: Tx, id: string) {
  * person who said yes.
  */
 export async function applyRun(tx: Tx, ctx: ActorContext, id: string) {
-  const existing = await run(tx, id);
+  // HD9 — locked before its status is read: two clicks apply it once.
+  const [existing] = await tx.select().from(asycudaRun).where(eq(asycudaRun.id, id)).limit(1).for('update');
   if (!existing) throw new AsycudaFileError('That reading is not on the system.');
   if (existing.status === 'applied') {
     throw new AsycudaFileError('That reading has already been applied. Read the list again to see what is left.');

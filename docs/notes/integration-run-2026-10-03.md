@@ -177,3 +177,32 @@ The split changes nothing about what was tested. Each file resets the database f
 
 *Raw output, should you want it — these live in the session's temporary directory and will go when the job is deleted:*
 `full-integration.log` (files 1–54), `chunks.log` (files 55–142), `chunk-*.json` (machine-readable per slice).
+
+---
+
+## Resolution — the same day (PR #33, then IM2-1)
+
+Every finding above is closed on `main`. The suite was run whole, serially, on a database migrated from scratch each time.
+
+**Results**
+
+| Run | Revision | Files | Tests |
+|---|---|---|---|
+| 1 | #33 | 146 | 2,415 passed, 0 failed |
+| 2 | HR-6 + the e2e work | 147 | 2,420 passed |
+| 3 | IM2-1 | 148 | 2,427 passed |
+
+**What closed each finding**
+
+| Finding | Closed by |
+|---|---|
+| 1 — tests paying from empty accounts | Every fixture now funds its bank or till before it pays. The helper is `tests/integration/funds.ts` › `fundLedger`, with HR's `hr-funds.ts`. Balance expectations add the funding explicitly, e.g. `10_000_000 + 6_000_000 - 10_000_000`. |
+| 2 — loan-funded payment refused | The cause was not the loan. A loan's disbursement already posts `Dr Bank / Cr Loan liability`; the `hd09` fixture's bank holds the 980,000 the loan put there. The real fault was `payment-applications.confirm`: it posted the supplier payment while the application was still `sent`, and the funds check subtracted **the application's own reservation** from what was available. In effect, an account had to hold twice the amount to confirm. `supplier-payment.post` now takes `drawsReservedIqd`, and `confirm` passes its own reservation. `hd09` passes again: two concurrent confirms post one payment and draw the loan once. Since IM2-1, the form's loan alone selects the loan funding source; "Funded by" was removed from the screen. |
+| 3 — UTC date in a script | `prepare-legacy-import.ts` uses `businessToday()`. |
+| 4 — "exchange" gate | It ignores `payable_%` codes. FX-3's `payable_exchange_difference` is a rate difference, not a goods exchange. |
+| 5 — 113-byte PDF difference | Test-induced. The reply's statement is dated at the fixed instant `at` (2 Oct). The test exported the ERP's copy for the real today (3 Oct), so the dates and the "days overdue" figures differed. The test now exports for `businessToday(at)`, and the two files are byte-identical. |
+| 6 — `pg_dump` missing | Environment only, as noted. |
+
+**Also found and fixed:** a fresh database could not migrate in one run. Migration 0260 uses the enum value `whatsapp`, which 0242 adds. `migrate.ts` now commits after each migration that adds an enum value.
+
+**Still open on the live database:** `BANK-000001` at −10,000 IQD, posted before the control existed. It needs a deposit, or the reversal of the payment that caused it, entered on the server.

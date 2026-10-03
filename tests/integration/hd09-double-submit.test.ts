@@ -164,7 +164,8 @@ const draft = (amount: string, loanId: string | null, onPayable = payableId) =>
       payeeBankAccountId: payeeId,
       amountTxn: iqd(amount),
       onDate: '2026-09-10',
-      ...(loanId ? { fundingSourceCode: 'loan', loanId } : {}),
+      // The form names the loan alone ("Funded by" was removed): the loan is the funding source.
+      ...(loanId ? { loanId } : {}),
     }),
   );
 const approveApp = (id: string) => withScope(scope(world.manager), (tx) => applications.approve(tx, world.manager, id));

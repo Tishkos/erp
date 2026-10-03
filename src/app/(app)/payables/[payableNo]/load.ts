@@ -88,12 +88,13 @@ export async function loadPayableRecord(tx: Tx, input: PayableRecordInput) {
       // The stage facts the view already read, the charges and the locks just read: no second pass.
       const state = landedService.lockableState({
         allPdsWrittenOff: view.facts.allPdsWrittenOff,
+        containersIn: view.facts.containerCount > 0 && view.facts.containersReceived === view.facts.containerCount,
         unlocked: charges.filter((charge) => !charge.lockId && !charge.cancelledAt).length,
         lastSequence: locks.length ? Math.max(...locks.map((l) => l.sequence)) : null,
       });
       // G3 — the preview only while something is unlocked; the lists only for the forms that use them.
       const preview = state.unlocked > 0 ? await landedService.preview(tx, { payableId: view.payable.id }) : { models: [], total: '0' };
-      const lockForm = may.lock && state.pdsWrittenOff && state.unlocked > 0;
+      const lockForm = may.lock && state.ready && state.unlocked > 0;
       const bases = lockForm ? (await landedService.bases(tx)).filter((basis) => basis.active) : [];
       const types = may.addCharge || lockForm ? (await landedService.chargeTypes(tx)).filter((type) => type.code !== 'purchase') : [];
       landed = { charges, locks, state, preview, bases, types };

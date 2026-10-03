@@ -68,6 +68,8 @@ export interface StageFacts {
   /** Payment lane (build stage 3). */
   readonly instalmentPlanSet: boolean;
   readonly firstInstalmentFunded: boolean;
+  /** Applications past draft, rejected and cancelled set aside — money asked of the bank. */
+  readonly liveApplicationCount: number;
   readonly paymentSentCount: number;
   readonly fullyPaid: boolean;
   readonly allPaymentsConfirmed: boolean;
@@ -95,6 +97,7 @@ export const NO_FACTS: StageFacts = Object.freeze({
   approvedInvoiceCount: 0,
   instalmentPlanSet: false,
   firstInstalmentFunded: false,
+  liveApplicationCount: 0,
   paymentSentCount: 0,
   fullyPaid: false,
   allPaymentsConfirmed: false,
@@ -131,8 +134,12 @@ export const STAGE_RULES: Readonly<Record<string, StageRule>> = Object.freeze({
   fully_paid: (f) => f.fullyPaid,
   closed_matched: (f) => f.fullyPaid && f.statementMatched,
 
+  // Funded: the first instalment applied for when the import has a plan;
+  // without one (the sponsor took the plan off the screen, 2026-10-02), any
+  // application asked of the bank — or the import already paid in full.
   import_invoiced_funded: (f) =>
-    f.postedInvoiceCount > 0 && f.instalmentPlanSet && f.firstInstalmentFunded,
+    f.postedInvoiceCount > 0 &&
+    (f.instalmentPlanSet ? f.firstInstalmentFunded : f.liveApplicationCount > 0 || f.fullyPaid),
   import_pd_registered: (f) => f.livePdCount > 0,
   import_shipped: (f) => f.containerCount > 0,
   import_partly_received: (f) =>

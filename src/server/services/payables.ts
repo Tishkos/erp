@@ -20,10 +20,11 @@
  * `STAGE_CHANGED` when the answer moved. Later build stages extend the fact
  * gathering; the rails and rules do not change shape.
  */
-import { and, asc, desc, eq, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   apInvoice,
+  apInvoiceLine,
   branch,
   businessPartner,
   expenseCategory,
@@ -157,6 +158,165 @@ export async function loadByNo(tx: Tx, payableNo: string) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Supplier payments made straight against the import's invoices — on the
+ * Supplier Payments screen, not through a payment application. They pay the
+ * import as surely as an application does, so they count towards *paid*,
+ * *fully paid* and the cap on new applications (otherwise the import could
+ * be paid twice). A payment an application confirmed is the application's,
+ * counted there once. In the import's currency: dinars as allocated; another
+ * currency in the share of the payment's own amount the allocation is.
+ */
+export async function directPayments(
+  tx: Tx,
+  payableId: string,
+): Promise<{ status: 'confirmed'; amountTxn: bigint; amountIqd: bigint; paymentNo: string }[]> {
+  const result = await tx.execute(sql`
+    select p.payment_no as "paymentNo", a.amount_iqd::text as "allocIqd", p.amount_iqd::text as "paymentIqd",
+           p.amount_txn::text as "paymentTxn", p.currency, pb.currency as "importCurrency"
+      from supplier_payment_allocation a
+      join supplier_payment p on p.id = a.supplier_payment_id
+      join ap_invoice i on i.id = a.ap_invoice_id
+      join payable pb on pb.id = i.payable_id
+     where i.payable_id = ${payableId} and i.reversed_at is null
+       and a.reversed_at is null and p.reversed_at is null and p.status = 'posted'
+       and not exists (select 1 from payment_application pa where pa.supplier_payment_id = p.id)`);
+  return (
+    result.rows as { paymentNo: string; allocIqd: string; paymentIqd: string; paymentTxn: string | null; currency: string; importCurrency: string }[]
+  ).map((row) => {
+    const allocIqd = parseDecimal(row.allocIqd, MONEY_SCALE);
+    const paymentIqd = parseDecimal(row.paymentIqd, MONEY_SCALE);
+    let amountTxn = 0n;
+    if (row.importCurrency === 'IQD') amountTxn = allocIqd;
+    else if (row.currency === row.importCurrency && row.paymentTxn && paymentIqd > 0n) {
+      // Half up, at the money scale: the allocation's share of the payment.
+      const paymentTxn = parseDecimal(row.paymentTxn, MONEY_SCALE);
+      amountTxn = (allocIqd * paymentTxn * 2n + paymentIqd) / (paymentIqd * 2n);
+    }
+    return { status: 'confirmed' as const, amountTxn, amountIqd: allocIqd, paymentNo: row.paymentNo };
+  });
+}
+
+/**
+ * Where the import's goods stand, item by item, in base units (§17–§18):
+ * what the posted invoices bought, what the containers plan, what arrived in
+ * good order, damaged or short, what went back to the supplier as a claim,
+ * and what is still in transit. *In transit* is the invoices' own layers in a
+ * transit warehouse — the goods are owned and not yet received or returned.
+ * `transitEver` is false for an import whose invoice booked its goods
+ * straight into a warehouse (before the transit rule), which then clears on
+ * the received quantity alone.
+ */
+export interface QuantityLine {
+  readonly itemCode: string;
+  readonly itemName: string | null;
+  readonly ordered: bigint;
+  readonly planned: bigint;
+  readonly received: bigint;
+  readonly damaged: bigint;
+  readonly short: bigint;
+  readonly claimed: bigint;
+  readonly inTransit: bigint;
+  /** Ordered less what the live containers plan: still to be loaded (a balance shipment). */
+  readonly notYetShipped: bigint;
+}
+
+/** One unit at the quantity scale (6). */
+const ONE_UNIT = 1_000_000n;
+
+export async function quantityPosition(tx: Tx, payableId: string): Promise<{ lines: QuantityLine[]; transitEver: boolean }> {
+  const result = await tx.execute(sql`
+    with inv_lines as (
+      select l.id, l.item_code, l.quantity, l.uom_code
+        from ap_invoice_line l join ap_invoice i on i.id = l.ap_invoice_id
+       where i.payable_id = ${payableId} and i.reversed_at is null
+         and i.status in ('posted', 'partially_executed', 'settled') and l.item_code is not null
+    ), layers as (
+      select cl.item_code, sum(cl.remaining_quantity) as remaining, sum(cl.original_quantity) as original
+        from cost_layer cl
+        join inventory_movement m on m.id = cl.created_by_movement_id
+        join warehouse w on w.code = cl.warehouse_code
+       where (w.is_transit or w.shipment_stage is not null)
+         and m.source_line_id::text in (select id::text from inv_lines)
+       group by cl.item_code
+    ), plan as (
+      select cl.item_code, cl.uom_code, coalesce(sum(cl.planned_qty), 0) as planned, coalesce(sum(cl.received_qty), 0) as received,
+             coalesce(sum(cl.damaged_qty), 0) as damaged, coalesce(sum(cl.short_qty), 0) as short
+        from shipment_container_line cl join shipment_container c on c.id = cl.container_id
+       where c.payable_id = ${payableId} and c.cancelled_at is null and cl.superseded_at is null and cl.item_code is not null
+       group by cl.item_code, cl.uom_code
+    ), moved as (
+      select rl.item_code, sum(rl.moved_qty) as moved
+        from container_receipt_line rl join container_receipt r on r.id = rl.receipt_id
+       where r.payable_id = ${payableId}
+       group by rl.item_code
+    ), claims as (
+      select gl.item_code, gl.uom_code, sum(gl.quantity) as claimed
+        from goods_return_line gl join goods_return g on g.id = gl.goods_return_id
+       where g.status <> 'cancelled' and gl.ap_invoice_line_id in (select id from inv_lines)
+       group by gl.item_code, gl.uom_code
+    )
+    select x.code as "itemCode", it.name as "itemName",
+           (select coalesce(json_agg(json_build_object('q', il.quantity::text, 'u', il.uom_code)), '[]') from inv_lines il where il.item_code = x.code) as ordered,
+           (select coalesce(json_agg(json_build_object('p', p.planned::text, 'r', p.received::text, 'd', p.damaged::text, 's', p.short::text, 'u', p.uom_code)), '[]') from plan p where p.item_code = x.code) as plan,
+           (select coalesce(json_agg(json_build_object('q', c.claimed::text, 'u', c.uom_code)), '[]') from claims c where c.item_code = x.code) as claims,
+           coalesce((select m.moved::text from moved m where m.item_code = x.code), '0') as moved,
+           coalesce((select l.remaining::text from layers l where l.item_code = x.code), '0') as "inTransit",
+           coalesce((select l.original::text from layers l where l.item_code = x.code), '0') as "transitOriginal"
+      from (select item_code as code from inv_lines union select item_code from plan) x
+      left join item it on it.code = x.code
+     order by x.code`);
+  const lines: QuantityLine[] = [];
+  let transitEver = false;
+  // One conversion per item and unit, however many lines name it.
+  const conversions = new Map<string, Promise<bigint>>();
+  const factor = (itemCode: string, uom: string) => {
+    const key = `${itemCode}\u0000${uom}`;
+    if (!conversions.has(key)) conversions.set(key, units.toBaseQuantity(tx, itemCode, uom, ONE_UNIT));
+    return conversions.get(key)!;
+  };
+  for (const row of result.rows as {
+    itemCode: string;
+    itemName: string | null;
+    ordered: { q: string; u: string | null }[];
+    plan: { p: string; r: string; d: string; s: string; u: string | null }[];
+    claims: { q: string; u: string | null }[];
+    moved: string;
+    inTransit: string;
+    transitOriginal: string;
+  }[]) {
+    // Base units: a whole number of the line's unit times its factor (FIX-4).
+    const base = async (quantity: string, uom: string | null) =>
+      uom ? (parseQuantity(quantity) * (await factor(row.itemCode, uom))) / ONE_UNIT : parseQuantity(quantity);
+    let ordered = 0n;
+    for (const line of row.ordered) ordered += await base(line.q, line.u);
+    let planned = 0n;
+    let damaged = 0n;
+    let short = 0n;
+    for (const line of row.plan) {
+      planned += await base(line.p, line.u);
+      damaged += await base(line.d, line.u);
+      short += await base(line.s, line.u);
+    }
+    let claimed = 0n;
+    for (const line of row.claims) claimed += await base(line.q, line.u);
+    if (parseQuantity(row.transitOriginal) > 0n) transitEver = true;
+    lines.push({
+      itemCode: row.itemCode,
+      itemName: row.itemName,
+      ordered,
+      planned,
+      received: parseQuantity(row.moved),
+      damaged,
+      short,
+      claimed,
+      inTransit: parseQuantity(row.inTransit),
+      notYetShipped: ordered > planned ? ordered - planned : 0n,
+    });
+  }
+  return { lines, transitEver };
+}
+
+/**
  * The lane facts this build can know. Stage 1 reads the order lane — the
  * linked invoices; every later lane's facts stay at their empty value until
  * its build stage lands, which is R2 applied to the build itself.
@@ -225,14 +385,15 @@ export async function gatherFacts(tx: Tx, payableId: string): Promise<StageFacts
   const applications = (
     applied.rows as { status: string; instalmentId: string | null; amountTxn: string; amountIqd: string }[]
   ).filter((a) => a.status !== 'rejected' && a.status !== 'cancelled');
-  const paymentTotals = paymentTotalsOf(
-    parseDecimal(row.amountTxn, MONEY_SCALE),
-    applications.map((a) => ({
+  const direct = await directPayments(tx, payableId);
+  const paymentTotals = paymentTotalsOf(parseDecimal(row.amountTxn, MONEY_SCALE), [
+    ...applications.map((a) => ({
       status: a.status,
       amountTxn: parseDecimal(a.amountTxn, MONEY_SCALE),
       amountIqd: parseDecimal(a.amountIqd, MONEY_SCALE),
     })),
-  );
+    ...direct,
+  ]);
   const paidApplications = applications.filter((a) => a.status === 'confirmed' || a.status === 'debited');
 
   // PD lane (build Stage 4, §16) — the standing registrations: not
@@ -262,8 +423,22 @@ export async function gatherFacts(tx: Tx, payableId: string): Promise<StageFacts
       from shipment_container c join container_status s on s.code = c.status_code
      where c.payable_id = ${payableId} and c.cancelled_at is null`);
   const shipment = shipped.rows[0] as { total: number; received: number; receivedQty: string; receipts: number };
-  const receivedQuantityMatches =
-    row.quantity !== null && parseQuantity(shipment.receivedQty) === parseQuantity(row.quantity);
+  // Everything the invoices bought is accounted for: received in good order,
+  // or settled with the supplier as a claim (a goods return from transit) —
+  // nothing of it left in transit (IM2-1). An import whose invoice booked its
+  // goods straight into a warehouse compares the received quantity, as before.
+  const position = shipment.total > 0 ? await quantityPosition(tx, payableId) : { lines: [], transitEver: false };
+  const nothingInTransit = position.lines.every((line) => line.inTransit === 0n);
+  const receivedQuantityMatches = position.transitEver
+    ? nothingInTransit && position.lines.some((line) => line.received > 0n)
+    : row.quantity !== null && parseQuantity(shipment.receivedQty) === parseQuantity(row.quantity);
+  // A PD that expired part written off is done once the shortage that left it
+  // part-used is settled: nothing is left in transit to clear against it.
+  const pdsDone =
+    standingPds.length > 0 &&
+    standingPds.every(
+      (pd) => pd.statusCode === 'totally_written_off' || (pd.statusCode === 'expired_part_written_off' && position.transitEver && nothingInTransit),
+    );
 
   return {
     ...NO_FACTS,
@@ -271,15 +446,16 @@ export async function gatherFacts(tx: Tx, payableId: string): Promise<StageFacts
     containersReceived: shipment.received,
     receivedQuantityMatches,
     livePdCount,
-    allPdsWrittenOff,
+    allPdsWrittenOff: allPdsWrittenOff || pdsDone,
     instalmentPlanSet: instalmentIds.length > 0,
+    liveApplicationCount: applications.filter((a) => a.status !== 'draft').length,
     firstInstalmentFunded:
       instalmentIds.length > 0 &&
       applications.some((a) => a.instalmentId === instalmentIds[0] && a.status !== 'draft'),
     paymentSentCount: applications.filter((a) => ['sent', 'confirmed', 'debited'].includes(a.status)).length,
     fullyPaid: paymentTotals.fullyPaid,
     allPaymentsConfirmed:
-      paidApplications.length > 0 &&
+      (paidApplications.length > 0 || direct.length > 0) &&
       applications.every((a) => a.status === 'confirmed' || a.status === 'debited'),
     statementMatched: paidApplications.length > 0 && paidApplications.every((a) => a.status === 'debited'),
     postedInvoiceCount: invoices?.posted ?? 0,
@@ -1033,11 +1209,33 @@ async function refreshFromInvoices(tx: Tx, payableId: string): Promise<void> {
     .where(and(eq(apInvoice.payableId, payableId), isNull(apInvoice.reversedAt)));
 
   if ((sums?.posted ?? 0) > 0) {
+    // The quantity follows the posted invoices too, in base units (FIX-4): a
+    // second or corrected invoice moves what the containers are measured by.
+    const stockLines = await tx
+      .select({ itemCode: apInvoiceLine.itemCode, quantity: apInvoiceLine.quantity, uomCode: apInvoiceLine.uomCode })
+      .from(apInvoiceLine)
+      .innerJoin(apInvoice, eq(apInvoice.id, apInvoiceLine.apInvoiceId))
+      .where(
+        and(
+          eq(apInvoice.payableId, payableId),
+          isNull(apInvoice.reversedAt),
+          inArray(apInvoice.status, ['posted', 'partially_executed', 'settled']),
+          isNotNull(apInvoiceLine.itemCode),
+          isNotNull(apInvoiceLine.warehouseCode),
+        ),
+      );
+    let quantity = 0n;
+    for (const line of stockLines) {
+      quantity += line.uomCode
+        ? await units.toBaseQuantity(tx, line.itemCode!, line.uomCode, parseQuantity(line.quantity))
+        : parseQuantity(line.quantity);
+    }
     await tx
       .update(payable)
       .set({
         amountIqd: sums!.totalIqd,
         amountTxn: sql`case when ${payable.currency} = 'IQD' then ${sums!.totalIqd}::numeric else ${payable.amountTxn} end`,
+        ...(stockLines.length > 0 ? { quantity: formatQuantity(quantity) } : {}),
         updatedAt: new Date(),
       })
       .where(eq(payable.id, payableId));

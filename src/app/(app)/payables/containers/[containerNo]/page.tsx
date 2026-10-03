@@ -79,6 +79,8 @@ export default async function ContainerPage({
   const { container, bl, owner, status, lines } = found;
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
   const amount = (value: string | null) => (value === null ? '—' : formatQuantity(value, locale as Locale));
+  // A form's default as typed: the stored decimal without its trailing zeros (never through a float).
+  const plain = (value: string) => (value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value);
   const today = businessToday();
   const hidden = { container_no: container.containerNo, container_id: container.id };
   const open = !container.receivedOn && !container.cancelledAt;
@@ -212,7 +214,7 @@ export default async function ContainerPage({
                               <input
                                 aria-label={`${t('received')} ${index + 1}`}
                                 className={s.input}
-                                defaultValue={Number(line.plannedQty).toString()}
+                                defaultValue={plain(line.plannedQty)}
                                 inputMode="decimal"
                                 name={`received_${index}`}
                               />
@@ -230,9 +232,9 @@ export default async function ContainerPage({
                               <input
                                 aria-label={`${t('short')} ${index + 1}`}
                                 className={s.input}
-                                defaultValue="0"
                                 inputMode="decimal"
                                 name={`short_${index}`}
+                                placeholder={t('short')}
                               />
                             </td>
                           </tr>
@@ -240,6 +242,7 @@ export default async function ContainerPage({
                       </tbody>
                     </table>
                   </div>
+                  <p className={s.sapNote}>{t('short_hint')}</p>
                   <Field hint={t('variance_hint')} id="receive-variance" label={t('variance_reason')} name="variance_reason" wide />
                   <Field id="receive-note" label={t('note')} name="note" wide />
                   <SubmitRow>
@@ -342,7 +345,7 @@ export default async function ContainerPage({
                                 <input
                                   aria-label={`${t('planned')} ${index + 1}`}
                                   className={s.input}
-                                  defaultValue={line ? Number(line.plannedQty).toString() : ''}
+                                  defaultValue={line ? plain(line.plannedQty) : ''}
                                   inputMode="decimal"
                                   name={`planned_${index}`}
                                 />

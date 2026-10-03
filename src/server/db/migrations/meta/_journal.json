@@ -1352,6 +1352,13 @@
       "when": 1795900000075,
       "tag": "0265_hr_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 193,
+      "version": "7",
+      "when": 1795900000076,
+      "tag": "0266_import_shortage",
+      "breakpoints": true
     }
   ]
 }

@@ -58,7 +58,7 @@ import {
 import { createApplication } from '../payment-applications/actions';
 import { registerPd } from '../pd/actions';
 import { pdChip } from '../pd/status';
-import { createBlAction } from '../shipments/actions';
+import { claimShortageAction, createBlAction } from '../shipments/actions';
 import { addLandedCharge, lockLandedCost, settleExchangeDifference, withdrawLandedCharge } from '../actions';
 import { containerChip } from '../containers/status';
 import { STATUS_CHIP, statusKey } from '../payment-applications/status';
@@ -121,6 +121,8 @@ export default async function PayablePage({
   const mayLock = can(principal, 'post', landedService.PERMISSION_OBJECT);
   const mayWithdraw = can(principal, 'reverse_cancel', landedService.PERMISSION_OBJECT);
   const mayCreateBl = can(principal, 'create', shipmentsService.BL_OBJECT);
+  // IM2-1 — a shortage is claimed with a goods return.
+  const mayClaim = can(principal, 'create', 'goods_return');
 
   const laneFilter = typeof query.lane === 'string' && query.lane ? query.lane : null;
 
@@ -1316,11 +1318,11 @@ export default async function PayablePage({
               </div>
             ) : null}
 
-            {!landed.state.pdsWrittenOff && landed.state.unlocked > 0 ? (
+            {!landed.state.ready && landed.state.unlocked > 0 ? (
               <p className={s.sapNote}>{lc('not_lockable')}</p>
             ) : null}
 
-            {mayAddCharge || (mayLock && landed.state.pdsWrittenOff && landed.state.unlocked > 0) ? (
+            {mayAddCharge || (mayLock && landed.state.ready && landed.state.unlocked > 0) ? (
               <div className={s.sapBody}>
                 <SubmitRow>
                   {mayAddCharge ? (
@@ -1353,7 +1355,7 @@ export default async function PayablePage({
                       </Form>
                     </NewRecordDialog>
                   ) : null}
-                  {mayLock && landed.state.pdsWrittenOff && landed.state.unlocked > 0 ? (
+                  {mayLock && landed.state.ready && landed.state.unlocked > 0 ? (
                     <NewRecordDialog
                       buttonLabel={landed.state.locked ? lc('lock_again') : lc('lock')}
                       closeLabel={admin('close')}
@@ -1444,6 +1446,78 @@ export default async function PayablePage({
         </section>
       ) : null}
       </div>
+
+      {/* ── Quantities by model (IM2-1): where every unit the invoices
+          bought stands — in containers, arrived, claimed, still in transit.
+          Full width under the lanes, the supplier-statement manner. ── */}
+      {shipment && shipment.quantities.length > 0 ? (
+        <section aria-labelledby="payable-quantities-title" className={s.sapDoc} id="quantities">
+          <div className={s.sapWindow}>
+            <h2 className={s.sapTitle} id="payable-quantities-title">
+              <span>{sh('quantities')}</span>
+              <span className={s.sapTitleMeta}>
+                {sh('x_of_y', { received: shipment.progress.received, total: shipment.progress.total })}
+              </span>
+            </h2>
+            {shipment.quantities.length > 0 ? (
+              <div className={s.sapTableWrap}>
+                <table aria-label={sh('quantities')} className={s.sapTable}>
+                  <thead>
+                    <tr>
+                      <th scope="col">{sh('model')}</th>
+                      <th className={s.sapNum} scope="col">{sh('q_ordered')}</th>
+                      <th className={s.sapNum} scope="col">{sh('q_planned')}</th>
+                      <th className={s.sapNum} scope="col">{sh('received')}</th>
+                      <th className={s.sapNum} scope="col">{sh('damaged')}</th>
+                      <th className={s.sapNum} scope="col">{sh('short')}</th>
+                      <th className={s.sapNum} scope="col">{sh('q_claimed')}</th>
+                      <th className={s.sapNum} scope="col">{sh('q_in_transit')}</th>
+                      <th className={s.sapNum} scope="col">{sh('q_not_shipped')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shipment.quantities.map((line) => (
+                      <tr key={line.itemCode}>
+                        <td>
+                          <bdi dir="ltr">{line.itemCode}</bdi> {line.itemName ?? ''}
+                        </td>
+                        {[line.ordered, line.planned, line.received, line.damaged, line.short, line.claimed, line.inTransit, line.notYetShipped].map((value, index) => (
+                          <td className={s.sapNum} key={index}>
+                            <bdi dir="ltr">{formatQuantity(value, locale as Locale)}</bdi>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            {shipment.shortageOpen ? (
+              <div className={s.sapBody}>
+                <p className={s.sapNote}>{sh('shortage_note')}</p>
+                {mayClaim && !row.cancelledAt && !row.closedAt ? (
+                  <SubmitRow>
+                    <NewRecordDialog buttonLabel={sh('claim_shortage')} closeLabel={admin('close')} title={sh('claim_title', { payableNo: row.payableNo })}>
+                      <Form action={claimShortageAction}>
+                        <Hidden name="payable_no" value={row.payableNo} />
+                        <p className={s.sapGridCaption}>{sh('claim_caption')}</p>
+                        <Grid>
+                          <Field defaultValue={businessToday()} id="claim-date" label={sh('claim_date')} name="return_date" required type="date" />
+                          <Field id="claim-reference" label={sh('supplier_reference')} name="supplier_reference" />
+                          <Field hint={sh('claim_reason_hint')} id="claim-reason" label={sh('claim_reason')} name="reason" required wide />
+                        </Grid>
+                        <SubmitRow>
+                          <Submit label={sh('claim_shortage')} />
+                        </SubmitRow>
+                      </Form>
+                    </NewRecordDialog>
+                  </SubmitRow>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       {/* ── The service lane: confirmations and the contract (§21.3) ──── */}
       {receipts.length > 0 || contract || type.code === 'service' || type.code === 'recurring' ? (

@@ -32,6 +32,7 @@ import {
   costLayer,
   inventoryMovement,
   payable,
+  payableHold,
   payableInstalment,
   payableOrderLine,
   port,
@@ -52,18 +53,21 @@ import {
   spreadEqually,
 } from '../domain/shipments';
 import { addDays } from '../domain/payment-applications';
-import { formatQuantity, parseQuantity } from '../domain/uom';
+import { formatQuantity, fromBase, parseQuantity, toBaseExact } from '../domain/uom';
 import { parseDecimal, toDecimalString } from '../domain/money';
 import type { ActorContext } from './chart-of-accounts';
 import * as audit from './audit';
 import * as authz from './authorization';
 import * as events from './payable-events';
+import * as goodsReturns from './goods-return';
 import * as holds from './payable-holds';
 import * as inventory from './inventory';
+import * as units from './item-units';
 import * as payables from './payables';
 import { allocateDocumentNumber } from './numbering';
 import { registerPage, searchOf, type RegisterPaging } from './register-page';
 import { businessToday } from '../domain/business-date';
+import { can } from '../domain/permissions';
 
 export const BL_OBJECT = 'bill_of_lading';
 export const CONTAINER_OBJECT = 'shipment_container';
@@ -90,8 +94,9 @@ async function openImport(tx: Tx, payableId: string) {
   return row;
 }
 
+/** A container for a write: locked, so a plan, a stage or an ETA never races its receipt (HD9). */
 async function loadContainer(tx: Tx, id: string) {
-  const [row] = await tx.select().from(shipmentContainer).where(eq(shipmentContainer.id, id)).limit(1);
+  const [row] = await tx.select().from(shipmentContainer).where(eq(shipmentContainer.id, id)).limit(1).for('update');
   if (!row) throw new ShipmentNotFoundError(id);
   return row;
 }
@@ -658,12 +663,18 @@ export async function receive(tx: Tx, ctx: ActorContext, input: ReceiveInput) {
   const given = new Map(input.lines.map((line) => [line.containerLineId, line]));
   const counted = planned.map((line) => {
     const entry = given.get(line.id);
+    const plannedQty = parseQuantity(line.plannedQty);
+    const received = entry?.receivedQty ?? 0n;
+    const damaged = entry?.damagedQty ?? 0n;
+    // IM2-1 — short is what the plan said and the container did not hold:
+    // worked out when the form leaves it empty, never typed into a mismatch.
+    const shortfall = plannedQty - received - damaged;
     return {
       line,
-      planned: parseQuantity(line.plannedQty),
-      received: entry?.receivedQty ?? 0n,
-      damaged: entry?.damagedQty ?? 0n,
-      short: entry?.shortQty ?? 0n,
+      planned: plannedQty,
+      received,
+      damaged,
+      short: entry?.shortQty ?? (shortfall > 0n ? shortfall : 0n),
     };
   });
   for (const id of given.keys()) {
@@ -709,7 +720,12 @@ export async function receive(tx: Tx, ctx: ActorContext, input: ReceiveInput) {
       }
       const lineIds = invoiceLines.filter((line) => line.itemCode === entry.line.itemCode).map((line) => line.id);
       const layers = await invoiceLayers(tx, lineIds, posted.map((invoice) => invoice.id), house.code);
-      let outstanding = entry.received;
+      // REQ-FIX-001 FIX-4 — the plan is in the unit the PI bought in (a BOX of
+      // 24); stock and its layers are in the base unit.
+      const receivedBase = entry.line.uomCode
+        ? await units.toBaseQuantity(tx, entry.line.itemCode, entry.line.uomCode, entry.received)
+        : entry.received;
+      let outstanding = receivedBase;
       const byWarehouse = new Map<string, typeof layers>();
       for (const layer of layers) {
         byWarehouse.set(layer.warehouseCode, [...(byWarehouse.get(layer.warehouseCode) ?? []), layer]);
@@ -739,7 +755,7 @@ export async function receive(tx: Tx, ctx: ActorContext, input: ReceiveInput) {
       }
       if (outstanding > 0n) {
         throw new ShipmentValidationError(
-          `${entry.line.itemCode}: ${qty(entry.received)} received, but the invoice's goods still in transit hold only ` +
+          `${entry.line.itemCode}: ${qty(receivedBase)} received, but the invoice's goods still in transit hold only ` +
             `${qty(moved)}. Receive what the invoice bought; an excess is the supplier's to invoice.`,
         );
       }
@@ -879,6 +895,133 @@ export async function receive(tx: Tx, ctx: ActorContext, input: ReceiveInput) {
   });
   await payables.recomputeStage(tx, owner.id, ctx.principal.userId);
   return { id: input.documentId, receiptNo: allocated.documentNo, repeated: false };
+}
+
+// ---------------------------------------------------------------------------
+// IM2-1 — what did not arrive: the shortage claimed from the supplier
+// ---------------------------------------------------------------------------
+
+export interface ClaimShortageInput {
+  readonly payableId: string;
+  readonly returnDate: string;
+  readonly reason: string;
+  readonly supplierReference?: string | null;
+}
+
+/**
+ * Once every container of the import is in, whatever the invoices bought and
+ * is still in transit did not arrive in good order — short, or damaged and
+ * not received. It is claimed from the supplier with the documents that
+ * already do that: a goods return against the invoice line, out of the
+ * transit warehouse the goods have stood in since the invoice, offset to
+ * what the company owes the supplier (Return Clearing until their credit
+ * memo). One return per invoice, its usual approval and posting; the import
+ * clears when they have taken the goods out of transit. A goods return from a
+ * transit warehouse goes back to the supplier and never touches the
+ * warehouses stock is sold from.
+ */
+export async function claimShortage(tx: Tx, ctx: ActorContext, input: ClaimShortageInput) {
+  await payables.lock(tx, input.payableId);
+  const owner = await openImport(tx, input.payableId);
+  if (!input.reason.trim()) throw new ShipmentValidationError('Say what is claimed and why — the supplier will ask.');
+  if (!input.returnDate) throw new ShipmentValidationError('Give the date of the claim.');
+
+  const all = await containersOf(tx, owner.id);
+  const state = progress(all);
+  if (state.total === 0 || !state.all) {
+    throw new ShipmentValidationError(
+      `${owner.payableNo} has ${state.total - state.received} container${state.total - state.received === 1 ? '' : 's'} still to arrive. ` +
+        'A shortage is claimed once every container is in — or add the balance shipment as another container.',
+    );
+  }
+
+  const position = await payables.quantityPosition(tx, owner.id);
+  const missing = position.lines.filter((line) => line.inTransit > 0n);
+  if (missing.length === 0) throw new ShipmentValidationError(`Nothing of ${owner.payableNo} is left in transit: there is no shortage to claim.`);
+
+  // The invoice lines whose goods still stand in transit, with how much each holds.
+  const standing = await tx.execute(sql`
+    select l.id as "lineId", l.ap_invoice_id as "invoiceId", l.item_code as "itemCode", l.uom_code as "uomCode",
+           sum(cl.remaining_quantity)::text as remaining
+      from ap_invoice_line l
+      join ap_invoice i on i.id = l.ap_invoice_id
+      join inventory_movement m on m.source_line_id::text = l.id::text
+      join cost_layer cl on cl.created_by_movement_id = m.id
+      join warehouse w on w.code = cl.warehouse_code
+     where i.payable_id = ${owner.id} and i.reversed_at is null
+       and i.status in ('posted', 'partially_executed', 'settled')
+       and (w.is_transit or w.shipment_stage is not null)
+       and cl.remaining_quantity > 0
+     group by l.id, l.ap_invoice_id, l.item_code, l.uom_code, l.line_no
+     order by l.ap_invoice_id, l.line_no`);
+  const byInvoice = new Map<string, { apInvoiceLineId: string; quantity: bigint }[]>();
+  const claimedLines: string[] = [];
+  for (const row of standing.rows as { lineId: string; invoiceId: string; itemCode: string; uomCode: string | null; remaining: string }[]) {
+    const remainingBase = parseQuantity(row.remaining);
+    // A return is written in the unit the line was bought in; the layers in the base.
+    let quantity = remainingBase;
+    if (row.uomCode) {
+      const conversion = await units.conversionOf(tx, row.itemCode, row.uomCode);
+      const inUnit = fromBase(remainingBase, conversion);
+      if (toBaseExact(inUnit, conversion) !== remainingBase) {
+        throw new ShipmentValidationError(
+          `${row.itemCode}: ${qty(remainingBase)} base units are still in transit, which is not a whole number of ${row.uomCode}. ` +
+            'Claim it from the Purchase Returns screen, line by line.',
+        );
+      }
+      quantity = inUnit;
+    }
+    byInvoice.set(row.invoiceId, [...(byInvoice.get(row.invoiceId) ?? []), { apInvoiceLineId: row.lineId, quantity }]);
+    claimedLines.push(`${row.itemCode} ${qty(quantity)}${row.uomCode ? ` ${row.uomCode}` : ''}`);
+  }
+
+  const created: { id: string; returnNo: string }[] = [];
+  for (const [apInvoiceId, lines] of byInvoice) {
+    created.push(
+      await goodsReturns.createFromInvoice(tx, ctx, {
+        apInvoiceId,
+        returnDate: input.returnDate,
+        reason: input.reason.trim(),
+        supplierReference: input.supplierReference?.trim() || null,
+        offsetKind: 'payable',
+        lines,
+      }),
+    );
+  }
+  const numbers = created.map((r) => r.returnNo).join(', ');
+
+  await events.record(tx, {
+    payableId: owner.id,
+    eventCode: 'SHORTAGE_CLAIMED',
+    summary: `Claimed from the supplier: ${claimedLines.join(', ')} — ${numbers} (${input.reason.trim()})`,
+    sourceType: goodsReturns.PERMISSION_OBJECT,
+    sourceId: created[0]!.id,
+    sourceNo: created[0]!.returnNo,
+    actorUserId: ctx.principal.userId,
+  });
+  // The receipt's hold asked purchasing for exactly this claim.
+  const [open] = await tx
+    .select({ id: payableHold.id })
+    .from(payableHold)
+    .where(and(eq(payableHold.payableId, owner.id), eq(payableHold.checkCode, 'receipt_variance'), eq(payableHold.status, 'open')))
+    .limit(1);
+  // Resolved by whoever may change the import; otherwise it waits for its owner.
+  if (open && can(ctx.principal, 'edit_draft', payables.PERMISSION_OBJECT)) {
+    await holds.resolve(tx, ctx, { holdId: open.id, resolution: `Claimed from the supplier: ${numbers}` });
+  }
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'payable.shortage_claimed',
+    objectType: payables.PERMISSION_OBJECT,
+    objectId: owner.id,
+    branchCode: owner.branchCode,
+    after: { payableNo: owner.payableNo, returns: created.map((r) => r.returnNo), lines: claimedLines },
+    reason: input.reason.trim(),
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+  return { returns: created };
 }
 
 // ---------------------------------------------------------------------------
@@ -1183,7 +1326,23 @@ export async function forPayable(tx: Tx, payableId: string) {
   const bls = await listBls(tx, { payableId });
   const containers = await listContainers(tx, { payableId });
   const state = progress(containers.map((c) => ({ countsAsReceived: c.countsAsReceived, cancelled: Boolean(c.cancelledAt) })));
-  return { bls, containers, progress: state };
+  // IM2-1 — item by item: ordered, in containers, arrived, claimed, still in transit.
+  const position = containers.length > 0 ? await payables.quantityPosition(tx, payableId) : { lines: [], transitEver: false };
+  const quantities = position.lines.map((line) => ({
+    itemCode: line.itemCode,
+    itemName: line.itemName,
+    ordered: qty(line.ordered),
+    planned: qty(line.planned),
+    received: qty(line.received),
+    damaged: qty(line.damaged),
+    short: qty(line.short),
+    claimed: qty(line.claimed),
+    inTransit: qty(line.inTransit),
+    notYetShipped: qty(line.notYetShipped),
+  }));
+  // Claimable once every container is in and something is still in transit.
+  const shortageOpen = state.total > 0 && state.all && position.lines.some((line) => line.inTransit > 0n);
+  return { bls, containers, progress: state, quantities, shortageOpen };
 }
 
 /** §18 — the received quantity of an import is Σ received over container lines. */

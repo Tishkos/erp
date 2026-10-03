@@ -3269,7 +3269,22 @@
         "received": "Received",
         "late": "Late — ETA passed",
         "missing_damaged": "Missing / damaged"
-      }
+      },
+      "quantities": "Quantities by model",
+      "q_ordered": "Ordered",
+      "q_planned": "In containers",
+      "q_claimed": "Claimed",
+      "q_in_transit": "Still in transit",
+      "q_not_shipped": "Not yet shipped",
+      "shortage_note": "Every container is in, and some of what the invoice bought is still in transit: it arrived short or damaged. Claim it from the supplier — a purchase return out of transit — or add the balance shipment as another container.",
+      "claim_shortage": "Claim the shortage",
+      "claim_title": "Claim the shortage of {payableNo}",
+      "claim_caption": "Everything still in transit is returned to the supplier against its invoice line, out of the transit warehouse, and offset to what we owe them until their credit memo. The return is approved and posted on its own page.",
+      "claim_date": "Claim date",
+      "supplier_reference": "Supplier's reference",
+      "claim_reason": "What is claimed",
+      "claim_reason_hint": "For example: 40 cartons short in MSCU1234565, seal intact; 6 damaged.",
+      "short_hint": "Short is worked out when left empty: planned − received − damaged."
     },
     "loans": {
       "subtitle": "Every bank loan in one register: what it lends, what it costs, what it funded and what is still owed.",
@@ -3442,7 +3457,7 @@
       "basis": "Allocate",
       "lock_date": "Date",
       "manual_hint": "Manual only: the amount each model carries; they must add up to the charges.",
-      "not_lockable": "The landed cost is locked once every PD is totally written off (§20.1, condition 3).",
+      "not_lockable": "The landed cost is locked once every PD is totally written off and every container is received (§20.1, condition 3).",
       "basis_name": {
         "by_value": "By value",
         "by_quantity": "By quantity",

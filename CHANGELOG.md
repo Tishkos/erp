@@ -7,6 +7,19 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+### Changed — IMPROVEMENT-002 IM2-1, the Import Application (the sponsor's workflow kept as it is)
+- **Short containers.** The receipt works out what is short: planned − received − damaged, with Short left empty. A count that does not add up is refused. More than planned may arrive, with nothing short. The plan is in the unit the PI bought in, and the stock moves in base units, so an import bought in BOX clears.
+- **Quantities by model.** A full-width register on the import shows, for each model: ordered, in containers, received, damaged, short, claimed, still in transit, and not yet shipped (the balance shipment).
+- **Claim the shortage.** Once every container is in, the claim takes what is still in transit back to the supplier as a purchase return against the invoice line, offset to what we owe. It resolves the receipt's hold and logs `SHORTAGE_CLAIMED` (migration 0266). The import clears when nothing of it is left in transit. A PD that expired part written off then counts as done.
+- **Landed cost** is locked only once every container is received, because it is spread over what the receipts brought in.
+- **A loan named on a payment application is its funding source.** "Funded by" left the screen, and the application had been refused ever since.
+- **An application with no amount** asks for everything that is left.
+- **Stage 2 "Invoiced + funded"** is reached with any application asked of the bank, or with the import paid. The instalment plan left the screen.
+- **Supplier payments made straight against an import's invoices** count towards Paid, Fully paid and the cap on new applications.
+- **An import read from a supplier's document in another currency.** The invoice is booked in dinars at the invoice date's rate, and the import keeps the agreed currency. Its stock lines land in transit, although the document names no warehouse.
+- **The import's quantity follows its posted invoices.**
+- **Locks** on payment-application create, ASYCUDA apply, and container plan, stage and ETA changes. Each now locks its row before checking its status.
+
 ### Fixed
 - Confirming a payment application no longer counts its own reservation
   against it: the supplier payment it posts is drawn from the money the
