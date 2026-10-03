@@ -156,15 +156,42 @@ const LANE_DEFAULT_ROLE: Readonly<Record<string, string>> = {
   cost: 'accounting_officer',
 };
 
+/**
+ * Each in turn.
+ *
+ * Everything on this screen reads through one `tx`, which is one PostgreSQL
+ * client, and a client executes one query at a time however many the caller
+ * starts. `Promise.all` therefore never overlapped anything here — it queued
+ * the queries inside the driver, which warns about it and removes it in pg@9
+ * (reported on Home, 2026-10-03).
+ *
+ * So the waiting is explicit. Nothing is slower than it was; what changes is
+ * that the next version of the driver will not break the home page, and that
+ * the order is visible to whoever reads this next.
+ */
+async function inTurn<T, R>(items: readonly T[], run: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = [];
+  for (const item of items) out.push(await run(item));
+  return out;
+}
+
+
 export async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting> {
   const maySeePayables = can(principal, 'view', 'payable');
-  const [inbox, unread, holdRows] = await Promise.all([
-    can(principal, 'view', approvals.PERMISSION_OBJECT)
-      ? approvals.inbox(tx, principal)
-      : Promise.resolve([]),
-    notifications.inboxFor(tx, principal.userId, { unreadOnly: true }),
-    maySeePayables
-      ? tx.execute(sql`
+  /*
+   * One at a time, on purpose.
+   *
+   * These three query the same `tx` — one PostgreSQL client — and a client
+   * runs one query at a time whatever the caller asks for. `Promise.all` only
+   * queued them inside the driver, which warns about it and drops it in pg@9
+   * (2026-10-03). Serial costs nothing that was ever being saved.
+   */
+  const inbox = can(principal, 'view', approvals.PERMISSION_OBJECT)
+    ? await approvals.inbox(tx, principal)
+    : [];
+  const unread = await notifications.inboxFor(tx, principal.userId, { unreadOnly: true });
+  const holdRows = maySeePayables
+    ? await tx.execute(sql`
           select p.payable_no      as "payableNo",
                  p.department_code as "departmentCode",
                  h.lane_code       as "laneCode",
@@ -179,8 +206,7 @@ export async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting>
            order by h.started_at
            limit 200
         `)
-      : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
-  ]);
+    : { rows: [] as Record<string, unknown>[] };
 
   type HoldRow = WaitingHold & { departmentCode: string | null; ownerUserId: string | null };
   const holds = holdRows.rows as unknown as HoldRow[];
@@ -399,8 +425,7 @@ async function balances(tx: Tx, asOf: string): Promise<readonly AccountBalance[]
     ...(await banks.listOfKind(tx, 'cash')).map((row) => ({ ...row, kind: 'cash' as const })),
   ].filter((account) => account.active && account.glAccountCode);
 
-  return Promise.all(
-    accounts.map(async (account) => {
+  return inTurn(accounts, async (account) => {
       const ledger = await statement.ledgerStatementFor(
         tx,
         { code: account.code, glAccountCode: account.glAccountCode },
@@ -412,8 +437,7 @@ async function balances(tx: Tx, asOf: string): Promise<readonly AccountBalance[]
         kind: account.kind,
         balanceIqd: ledger.closing,
       };
-    }),
-  );
+  });
 }
 
 // ------------------------------------------------------------- attention
@@ -506,8 +530,7 @@ async function monthlyResult(
     windows.push({ month: iso(first).slice(0, 7), from: iso(first), to: iso(last) });
   }
 
-  return Promise.all(
-    windows.map(async (window) => {
+  return inTurn(windows, async (window) => {
       const pl = await statements.profitOrLoss(tx, {
         from: window.from,
         to: window.to,
@@ -520,8 +543,7 @@ async function monthlyResult(
         expensesIqd: pl.totalExpenses,
         resultIqd: pl.result,
       };
-    }),
-  );
+  });
 }
 
 export interface NamedAmount {
@@ -646,26 +668,38 @@ export async function forPrincipal(
   const asOf = today();
   const yearStart = `${asOf.slice(0, 4)}-01-01`;
 
-  const [waiting, accountBalances, receivable, payable, result, activity, attention, monthly, stock, customers] =
-    await Promise.all([
-      band('waiting', () => waitingFor(tx, principal)),
+  /*
+   * One band at a time.
+   *
+   * They all read the same `tx`, which is one PostgreSQL client, and a
+   * client executes one query at a time however many are started. So the
+   * `Promise.all` these were gathered with never overlapped anything — it
+   * queued them inside the driver, which warns about it and removes it in
+   * pg@9 (reported on Home, 2026-10-03).
+   *
+   * Written as statements rather than gathered by a helper because the
+   * helper has to take thunks to be worth anything, and once it does, ten
+   * statements say the same thing with nothing to infer. `band()` catches
+   * per band, so one that fails still fails alone.
+   */
+  const waiting = await (band('waiting', () => waitingFor(tx, principal)));
 
-      can(principal, 'view', 'bank_account')
+  const accountBalances = await (can(principal, 'view', 'bank_account')
         ? band('balances', () => balances(tx, asOf))
-        : Promise.resolve(null),
+        : Promise.resolve(null));
 
-      can(principal, 'view', 'ar_invoice')
+  const receivable = await (can(principal, 'view', 'ar_invoice')
         ? band('receivable', () => receivableAgeing(tx, branchCode, asOf))
-        : Promise.resolve(null),
+        : Promise.resolve(null));
 
-      can(principal, 'view', 'ap_invoice')
+  const payable = await (can(principal, 'view', 'ap_invoice')
         ? band('payable', () => payableAgeing(tx, branchCode, asOf))
-        : Promise.resolve(null),
+        : Promise.resolve(null));
 
       // Income and what it cost, for the year so far. `profitOrLoss` is the
       // Income Statement's own figure, so the dashboard and the statement
       // cannot disagree.
-      can(principal, 'view', 'financial_statement')
+  const result = await (can(principal, 'view', 'financial_statement')
         ? band('result', async () => {
             const pl = await statements.profitOrLoss(tx, {
               from: yearStart,
@@ -681,12 +715,12 @@ export async function forPrincipal(
               to: pl.to,
             };
           })
-        : Promise.resolve(null),
+        : Promise.resolve(null));
 
       // Who did what. `audit_event` is held by the CEO and the system
       // administrator and by nobody else, so this band is the clearest thing
       // that distinguishes one person's dashboard from another's.
-      can(principal, 'view', 'audit_event')
+  const activity = await (can(principal, 'view', 'audit_event')
         ? band('activity', async () => {
             const page = await listRows(
               tx,
@@ -703,24 +737,24 @@ export async function forPrincipal(
               outcome: String(row.outcome ?? ''),
             }));
           })
-        : Promise.resolve(null),
+        : Promise.resolve(null));
 
-      band('attention', () => attentionFor(tx, principal, branchCode)),
+  const attention = await (band('attention', () => attentionFor(tx, principal, branchCode)));
 
       // The charts. Twelve months of the Income Statement's own figure, what
       // the warehouses hold, and who we sold the most to this year.
-      can(principal, 'view', 'financial_statement')
+  const monthly = await (can(principal, 'view', 'financial_statement')
         ? band('monthly', () => monthlyResult(tx, branchCode, asOf))
-        : Promise.resolve(null),
+        : Promise.resolve(null));
 
-      can(principal, 'view', 'inventory_movement')
+  const stock = await (can(principal, 'view', 'inventory_movement')
         ? band('stock', () => stockByWarehouse(tx, principal))
-        : Promise.resolve(null),
+        : Promise.resolve(null));
 
-      can(principal, 'view', 'ar_invoice')
+  const customers = await (can(principal, 'view', 'ar_invoice')
         ? band('customers', () => topCustomers(tx, branchCode, yearStart, asOf))
-        : Promise.resolve(null),
-    ]);
+        : Promise.resolve(null));
+
 
   return {
     branchCode,
