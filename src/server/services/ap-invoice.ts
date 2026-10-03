@@ -249,6 +249,12 @@ export interface CreateApInvoiceInput {
    */
   readonly advancePercent?: string | null;
   /**
+   * What the invoice was agreed in and the rate its dinars were worked out at
+   * — the caller's own conversion, written down (0272). Both or neither.
+   */
+  readonly agreedCurrency?: string | null;
+  readonly agreedRate?: string | null;
+  /**
    * The currency the import is agreed in, when it is not the invoice's
    * dinars (a supplier's document in dollars). The lines carry their price in
    * it as `unitPriceTxn`. Left out, the import is in the invoice's currency.
@@ -629,6 +635,8 @@ export async function create(
       dueDate,
       currency: input.currency ?? 'IQD',
       advancePercent: input.advancePercent ?? null,
+      agreedCurrency: input.agreedCurrency ?? null,
+      agreedRate: input.agreedCurrency ? (input.agreedRate ?? null) : null,
       note: input.note ?? null,
       // The route this invoice took, recorded on the header so the §15 CHECK
       // can read one field rather than trust the application to have looked at
@@ -1396,10 +1404,20 @@ export async function setDueDate(
       `${dueDate} is before the invoice's own date (${invoice.invoiceDate}).`,
     );
   }
-  if (dueDate === invoice.dueDate) return;
+  /*
+   * An unchanged date is still an answer the first time (0272): the column
+   * carries the entry day by default, so somebody confirming that day as the
+   * due date is telling the record something it did not know.
+   */
+  if (dueDate === invoice.dueDate && invoice.dueDateSetAt) return;
 
   const before = invoice.dueDate;
-  await tx.update(apInvoice).set({ dueDate, updatedAt: new Date() }).where(eq(apInvoice.id, id));
+  await tx
+    .update(apInvoice)
+    // Stamped here and nowhere else — it is what makes the date a decision
+    // rather than a default, and the record shows no due date without it.
+    .set({ dueDate, dueDateSetAt: new Date(), updatedAt: new Date() })
+    .where(eq(apInvoice.id, id));
   if (invoice.payableId) {
     await tx.update(payable).set({ dueDate, updatedAt: new Date() }).where(eq(payable.id, invoice.payableId));
     await payableEvents.record(tx, {

@@ -10,7 +10,8 @@ import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Attachments } from '@/components/admin/attachments';
 import * as attachmentsService from '@/server/services/attachments';
-import { AttachmentsButton } from '@/components/admin/icon-dialog';
+import { AttachmentsButton, HistoryButton, NotesButton } from '@/components/admin/icon-dialog';
+import { ExportIcon } from '@/components/print/export-menu';
 import { Denied } from '@/components/denied';
 import { ExportMenu } from '@/components/print/export-menu';
 import { PrintSheet } from '@/components/print/print-sheet';
@@ -29,7 +30,8 @@ import * as bankCash from '@/server/services/bank-cash-accounts';
 import * as payables from '@/server/services/payables';
 import { addInvoiceNoteAction, attachToInvoice, invoiceLineAvailability, markPaidAction, postApInvoice, removeApInvoiceLine, reverseApInvoice, saveApInvoiceAccounts, saveApInvoiceLine, setDueDateAction, submitApInvoice } from '../actions';
 import { businessToday } from '@/server/domain/business-date';
-import { MONEY_SCALE, parseDecimal, toDecimalString } from '@/server/domain/money';
+import { MONEY_SCALE, parseDecimal, RATE_SCALE, toDecimalString, toIqd } from '@/server/domain/money';
+import { advanceOf } from '@/server/domain/payment-applications';
 import { QUANTITY_FACTOR, parseQuantity } from '@/server/domain/uom';
 
 /**
@@ -241,6 +243,16 @@ export default async function ApInvoicePage({
   );
   const mayAttach = can(context.principal, 'create', 'attachment');
 
+  /*
+   * The advance, by `advanceOf` — the same arithmetic the posting uses to
+   * raise the payment application, so the record and the request to the bank
+   * cannot differ. Against the total summed from the lines, because
+   * `total_iqd` is written at posting and is zero before it.
+   */
+  const advanceIqd = advanceOf(total, invoice.advancePercent);
+  /** "20.0000" is 20; "20.5000" is 20.5. Trailing zeroes say nothing. */
+  const trimPercent = (percent: string) => percent.replace(/\.?0+$/, '');
+
   const fields: DocumentField[] = [
     { label: column('invoice_no'), value: <bdi dir="ltr">{invoice.invoiceNo}</bdi> },
     ...(importApplication
@@ -280,10 +292,68 @@ export default async function ApInvoicePage({
       label: column('posting_date'),
       value: <bdi dir="ltr">{formatBusinessDate(invoice.invoiceDate, locale as Locale)}</bdi>,
     },
-    {
-      label: column('due_date'),
-      value: <bdi dir="ltr">{formatBusinessDate(invoice.dueDate, locale as Locale)}</bdi>,
-    },
+    /*
+     * The due date, only once there is one (0272).
+     *
+     * `due_date` cannot be empty, so an invoice entered on advance terms
+     * carries the day it was entered; showing that reads as a promise nobody
+     * made. `due_date_set_at` is stamped when somebody sets it on purpose.
+     */
+    ...(invoice.dueDateSetAt
+      ? [
+          {
+            label: column('due_date'),
+            value: <bdi dir="ltr">{formatBusinessDate(invoice.dueDate, locale as Locale)}</bdi>,
+          },
+        ]
+      : []),
+    /*
+     * What the supplier's invoice was agreed in, and the rate its dinars were
+     * worked out at — "the purchase invoice orignallay issued in usd"
+     * (2026-10-03). Nothing to say when it was agreed in dinars.
+     */
+    ...(invoice.agreedCurrency && invoice.agreedRate
+      ? [
+          {
+            label: x('agreed_in'),
+            value: (
+              <bdi dir="ltr">
+                {/*
+                  The rate is published at eight decimal places and the money
+                  scale is four, so it is read at its own scale and said as
+                  what one unit is worth — `toIqd`, the same step the new
+                  invoice's header takes. Parsing it as money threw
+                  (2026-10-03).
+                */}
+                {`${invoice.agreedCurrency} · 1 ${invoice.agreedCurrency} = ${money(
+                  toDecimalString(
+                    toIqd(parseDecimal('1', MONEY_SCALE), parseDecimal(invoice.agreedRate, RATE_SCALE)),
+                    MONEY_SCALE,
+                  ),
+                )}`}
+              </bdi>
+            ),
+          },
+        ]
+      : []),
+    /*
+     * What was agreed to be paid in front, and what that comes to — the figure
+     * the payment application is raised for when the account is named (§15.3).
+     */
+    ...(invoice.advancePercent && advanceIqd !== null
+      ? [
+          {
+            label: x('advance_percent'),
+            value: (
+              <bdi dir="ltr">
+                {`${trimPercent(invoice.advancePercent)}% · ${money(
+                  toDecimalString(advanceIqd, MONEY_SCALE),
+                )}`}
+              </bdi>
+            ),
+          },
+        ]
+      : []),
 
     // Who the document passed through. An empty box is an answer too: it says
     // that step has not happened.
@@ -309,7 +379,6 @@ export default async function ApInvoicePage({
 
   return (
     <AdminPage
-      actions={<ExportMenu exportKey="purchase_invoice" id={invoice.invoiceNo} />}
       back={{ href: '/payables/invoices', label: t('back') }}
       title={invoice.invoiceNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -355,65 +424,14 @@ export default async function ApInvoicePage({
                 {x('import_tracking')}
               </Link>
             ) : null}
-            {mayMarkPaid ? (
-              <NewRecordDialog
-                buttonLabel={x('mark_paid')}
-                closeLabel={t('close')}
-                title={x('mark_paid_title', { invoiceNo: invoice.invoiceNo })}
-              >
-                <Form action={markPaidAction}>
-                  <input name="id" type="hidden" value={invoice.id} />
-                  <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-                  <Grid>
-                    <Select
-                      label={x('paid_from')}
-                      name="bank_cash_account_id"
-                      options={found.payFrom.map((account) => ({
-                        value: account.id,
-                        label: `${account.name} (${account.code}) · ${account.currency}`,
-                      }))}
-                      required
-                    />
-                    <Field defaultValue={today} label={x('payment_date')} name="payment_date" required type="date" />
-                    <Field hint={x('reference_hint')} label={x('reference')} name="reference" />
-                  </Grid>
-                  <SubmitRow>
-                    <Submit label={x('mark_paid')} />
-                  </SubmitRow>
-                </Form>
-              </NewRecordDialog>
-            ) : null}
             {/*
-              The due date, told to the invoice after the fact (2026-10-03).
-              Nothing is owed on a date when an advance-terms invoice is
-              entered, so the form asks for none and this says it once the bank
-              has confirmed and the supplier has named the day.
+              Set due date is hidden (2026-10-03, by direction). The invoice is
+              entered without one because the company buys on advance, and the
+              moment the date becomes known — the bank confirms the transfer and
+              the supplier names the day for the balance — has not been settled.
+              `setDueDateAction` and `ap.setDueDate` stay where they are for
+              when it is.
             */}
-            {mayMarkPaid ? (
-              <NewRecordDialog
-                buttonLabel={x('set_due_date')}
-                closeLabel={t('close')}
-                title={x('set_due_date_title', { invoiceNo: invoice.invoiceNo })}
-              >
-                <p className="muted">{x('set_due_date_note')}</p>
-                <Form action={setDueDateAction}>
-                  <input name="id" type="hidden" value={invoice.id} />
-                  <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-                  <Grid>
-                    <Field
-                      defaultValue={invoice.dueDate}
-                      label={column('due_date')}
-                      name="due_date"
-                      required
-                      type="date"
-                    />
-                  </Grid>
-                  <SubmitRow>
-                    <Submit label={x('set_due_date')} />
-                  </SubmitRow>
-                </Form>
-              </NewRecordDialog>
-            ) : null}
             {mayReverse ? (
               <form action={reverseApInvoice} title={t('invoices.reverse_hint')}>
                 <input name="id" type="hidden" value={invoice.id} />
@@ -425,23 +443,81 @@ export default async function ApInvoicePage({
           </>
         }
         titleActions={
-          <AttachmentsButton
-            closeLabel={t('close')}
-            count={attached.length}
-            label={t('attachments.title')}
-            title={t('attachments.title')}
-          >
-            <Attachments
-              action={attachToInvoice}
-              hidden={{ invoice_no: invoice.invoiceNo }}
-              mayAttach={mayAttach}
-              objectId={invoice.id}
-              objectType={ap.PERMISSION_OBJECT}
+          <>
+            {/* Printer, paperclip, notes, clock — the printer first, as asked
+                (2026-10-03). The document is what is left underneath. */}
+            <ExportIcon
+              exportKey="purchase_invoice"
+              id={invoice.invoiceNo}
+              title={`${page('ap_invoice')} ${invoice.invoiceNo}`}
             />
-          </AttachmentsButton>
+            <AttachmentsButton
+              closeLabel={t('close')}
+              count={attached.length}
+              label={t('attachments.title')}
+              title={t('attachments.title')}
+            >
+              <Attachments
+                action={attachToInvoice}
+                hidden={{ invoice_no: invoice.invoiceNo }}
+                mayAttach={mayAttach}
+                objectId={invoice.id}
+                objectType={ap.PERMISSION_OBJECT}
+              />
+            </AttachmentsButton>
+            <NotesButton
+              closeLabel={t('close')}
+              count={found.notes.length}
+              label={x('notes')}
+              title={x('notes')}
+            >
+              <div className={s.sapTableWrap}>
+                <table className={s.sapTable}>
+                  <thead>
+                    <tr>
+                      <th scope="col">{x('note_when')}</th>
+                      <th scope="col">{x('note_who')}</th>
+                      <th scope="col">{x('note')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {found.notes.length === 0 ? (
+                      <tr>
+                        <td className={s.sapEmptyRow} colSpan={3}>
+                          {x('no_notes')}
+                        </td>
+                      </tr>
+                    ) : null}
+                    {found.notes.map((note) => (
+                      <tr key={note.id}>
+                        <td>
+                          <bdi dir="ltr">{note.createdAt.slice(0, 16)}</bdi>
+                        </td>
+                        <td>
+                          <bdi dir="auto">{note.author ?? '—'}</bdi>
+                        </td>
+                        <td>
+                          <bdi dir="auto">{note.note}</bdi>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Form action={addInvoiceNoteAction}>
+                <input name="id" type="hidden" value={invoice.id} />
+                <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
+                <Field hint={x('note_hint')} label={x('add_note')} name="note" required wide />
+                <SubmitRow>
+                  <Submit label={x('add_note')} small tone="secondary" />
+                </SubmitRow>
+              </Form>
+            </NotesButton>
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={invoice.id} objectType={ap.PERMISSION_OBJECT} />
+            </HistoryButton>
+          </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
         documentType={page('ap_invoice')}
         fields={fields}
         id="ap-invoice-document"
@@ -580,60 +656,6 @@ export default async function ApInvoicePage({
           the report listing it cannot disagree about its own due date. */}
       <InvoiceSettlement invoiceNo={invoice.invoiceNo} side="supplier" />
 
-      {/* D12 — "Overdue — add a note": dated, signed, never edited. */}
-      <section aria-labelledby="ap-notes-title" className={s.sapDoc}>
-        <div className={s.sapWindow}>
-          <h2 className={s.sapTitle} id="ap-notes-title">
-            <span>{x('notes')}</span>
-            <span className={s.sapTitleMeta}>{t('rows_shown', { count: found.notes.length })}</span>
-          </h2>
-          <div className={s.sapTableWrap}>
-            <table aria-labelledby="ap-notes-title" className={s.sapTable}>
-              <thead>
-                <tr>
-                  <th scope="col">{x('note_when')}</th>
-                  <th scope="col">{x('note_who')}</th>
-                  <th scope="col">{x('note')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {found.notes.length === 0 ? (
-                  <tr>
-                    <td className={s.sapEmptyRow} colSpan={3}>
-                      {x('no_notes')}
-                    </td>
-                  </tr>
-                ) : null}
-                {found.notes.map((note) => (
-                  <tr key={note.id}>
-                    <td>
-                      <bdi dir="ltr">{note.createdAt.slice(0, 16)}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="auto">{note.author ?? '—'}</bdi>
-                    </td>
-                    <td>
-                      <bdi dir="auto">{note.note}</bdi>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className={s.sapBody}>
-            <Form action={addInvoiceNoteAction}>
-              <input name="id" type="hidden" value={invoice.id} />
-              <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-              <Field hint={x('note_hint')} label={x('add_note')} name="note" required wide />
-              <SubmitRow>
-                <Submit label={x('add_note')} small tone="secondary" />
-              </SubmitRow>
-            </Form>
-          </div>
-        </div>
-      </section>
-
-      <RecordHistory objectId={invoice.id} objectType={ap.PERMISSION_OBJECT} />
       {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>
   );

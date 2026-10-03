@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, useRef, type ReactNode } from 'react';
-import { History, Paperclip, Printer, X } from 'lucide-react';
+import { History, MessageSquare, Paperclip, Printer, X } from 'lucide-react';
 import styles from './admin.module.css';
 
 /**
@@ -102,6 +102,24 @@ export function HistoryButton(props: {
   readonly children: ReactNode;
 }) {
   return <IconDialog icon={<History aria-hidden="true" />} {...props} />;
+}
+
+/**
+ * The speech mark: what people have said about this document.
+ *
+ * A bill's notes are a conversation beside it — who said what, and when — and
+ * like its paperwork and its history they belong behind a door rather than
+ * under the lines (by direction, 2026-10-03). The count is how many have been
+ * written.
+ */
+export function NotesButton(props: {
+  readonly count: number;
+  readonly label: string;
+  readonly title: string;
+  readonly closeLabel: string;
+  readonly children: ReactNode;
+}) {
+  return <IconDialog icon={<MessageSquare aria-hidden="true" />} {...props} />;
 }
 
 /**

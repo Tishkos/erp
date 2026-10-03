@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { rowCount, runAdmin, runAdminAndReturn, text, withQuery } from '@/server/admin-action';
 import { registerAllRecords } from '@/server/records';
 import { parseDecimal } from '@domain/money';
-import { toIqd } from '@domain/money';
+import { RATE_SCALE, toDecimalString, toIqd } from '@domain/money';
 import { parseQuantity } from '@domain/uom';
 import { businessToday } from '@/server/domain/business-date';
 import { matchSupplier } from '@/server/domain/invoice-draft';
@@ -106,11 +106,14 @@ export async function createApInvoice(formData: FormData): Promise<void> {
      */
     const invoiceDate = text(formData, 'invoice_date');
     const currency = text(formData, 'currency').trim().toUpperCase() || 'IQD';
+    // What it was converted at, kept so the invoice can say so afterwards.
+    let agreedRate: string | null = null;
     const priced =
       currency === 'IQD'
         ? lines
         : await (async () => {
             const rate = await rates.rateOn(tx, currency, invoiceDate);
+            agreedRate = toDecimalString(rate.iqdPerUnit, RATE_SCALE);
             return lines.map((line) => ({
               ...line,
               // What was typed is the agreed currency; the dinars are derived.
@@ -121,7 +124,8 @@ export async function createApInvoice(formData: FormData): Promise<void> {
                 : { discountIqd: toIqd(line.discountIqd, rate.iqdPerUnit) }),
             }));
           })();
-    return ap.create(tx, ctx, {
+    const typedNote = text(formData, 'note').trim();
+    const made = await ap.create(tx, ctx, {
       supplierId: text(formData, 'supplier_id'),
       // Block 4's header is the invoice number, the two dates and the
       // supplier. The supplier's own number is not among them, and the column
@@ -145,16 +149,34 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       ...(currency === 'IQD' ? {} : { importCurrency: currency }),
       // §24.3 — ticked Import and naming an open import: the invoice joins it.
       payableId: text(formData, 'is_import') === '1' ? text(formData, 'payable_id').trim() || null : null,
-      note: text(formData, 'note').trim() || null,
       // §15.3 — what the supplier is paid in front, as a percentage of this
       // invoice. The account it comes from is chosen later (0271).
       advancePercent: text(formData, 'advance_percent').trim() || null,
+      // Where the dinars came from (0272): an invoice agreed in dollars says
+      // so on its own face, and at what rate, rather than presenting the
+      // converted figures as though somebody typed them.
+      agreedCurrency: currency === 'IQD' ? null : currency,
+      agreedRate,
       // REQ-PM-001 §8 — the element is "project|element"; the three together or none.
       projectCode: text(formData, 'project_element').split('|')[0]?.trim() || null,
       wbsCode: text(formData, 'project_element').split('|')[1]?.trim() || null,
       costCode: text(formData, 'project_cost_code').trim() || null,
       lines: priced,
     });
+
+    /*
+     * The note, as the invoice's first note rather than as a column nobody
+     * reads (2026-10-03).
+     *
+     * `ap_invoice.note` is a header field the record page does not draw; the
+     * Notes panel under the lines is what a person reads and adds to, and it
+     * is made of `ap_invoice_note` rows — each dated and signed and never
+     * edited. A note typed while raising the invoice is the same kind of thing
+     * as a note added an hour later, so it is written the same way and shows
+     * in the same list.
+     */
+    if (typedNote) await expenses.addNote(tx, ctx, made.id, typedNote);
+    return made;
   });
 
   if (!outcome.ok) redirect(withQuery(`${LIST}/new`, 'error', outcome.error!));

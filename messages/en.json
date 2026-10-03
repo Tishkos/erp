@@ -2597,7 +2597,7 @@
       "link_invoice": "Link an existing invoice",
       "link_invoice_hint": "The invoice id of a posted invoice of this supplier.",
       "link_save": "Link",
-      "cancel": "Cancel payable",
+      "cancel": "Cancel application",
       "cancel_reason": "Why it is cancelled",
       "cancelled_banner": "Cancelled",
       "rail": "Stage",
@@ -2682,7 +2682,8 @@
       "papers_source": "Kept on",
       "papers_added": "Added",
       "rail_done": "this is true of the import now",
-      "rail_todo": "not yet"
+      "rail_todo": "not yet",
+      "rate_applied": "Rate applied"
     },
     "payables_settings": {
       "title": "Payables Settings",
@@ -2894,7 +2895,7 @@
       "filter": "Show",
       "col_payment": "Payment",
       "state_draft": "Not posted",
-      "state_unpaid": "Unpaid",
+      "state_unpaid": "Not started",
       "state_paid": "Paid",
       "state_overdue": "Overdue",
       "state_overdue_days": "Overdue — {days} days",
@@ -2926,7 +2927,8 @@
       "set_due_date_note": "The company buys on advance, so an invoice is entered without a due date. Set it once the bank has confirmed the transfer and the supplier has named the day for the balance. It moves the import application with it, and the change is kept on the record.",
       "rate_on_date": "1 {currency} = {rate} IQD",
       "total_in": "Total {currency} {amount}",
-      "advance_percent": "Advance payment %"
+      "advance_percent": "Advance payment %",
+      "agreed_in": "Issued in"
     },
     "payment_applications": {
       "subtitle": "The company’s requests to its banks and cashier to pay a supplier — longest waiting first.",

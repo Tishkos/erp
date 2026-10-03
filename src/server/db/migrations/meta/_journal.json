@@ -1394,6 +1394,13 @@
       "when": 1795900000081,
       "tag": "0271_advance_percent_alone",
       "breakpoints": true
+    },
+    {
+      "idx": 199,
+      "version": "7",
+      "when": 1795900000082,
+      "tag": "0272_invoice_agreed_currency",
+      "breakpoints": true
     }
   ]
 }

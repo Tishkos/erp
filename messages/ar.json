@@ -2597,7 +2597,7 @@
       "link_invoice": "ربط فاتورة موجودة",
       "link_invoice_hint": "معرّف فاتورة مرحّلة لهذا المورد.",
       "link_save": "ربط",
-      "cancel": "إلغاء الذمة",
+      "cancel": "إلغاء الطلب",
       "cancel_reason": "سبب الإلغاء",
       "cancelled_banner": "ملغاة",
       "rail": "المرحلة",
@@ -2682,7 +2682,8 @@
       "papers_source": "محفوظ على",
       "papers_added": "أُضيف",
       "rail_done": "هذا صحيح على الاستيراد الآن",
-      "rail_todo": "لم يحدث بعد"
+      "rail_todo": "لم يحدث بعد",
+      "rate_applied": "سعر الصرف المطبّق"
     },
     "payables_settings": {
       "title": "إعدادات الذمم الدائنة",
@@ -2894,7 +2895,7 @@
       "filter": "عرض",
       "col_payment": "الدفع",
       "state_draft": "غير مرحّلة",
-      "state_unpaid": "غير مدفوعة",
+      "state_unpaid": "لم تبدأ",
       "state_paid": "مدفوعة",
       "state_overdue": "متأخرة",
       "state_overdue_days": "متأخرة — {days} يوم",
@@ -2926,7 +2927,8 @@
       "set_due_date_note": "الشركة تشتري بدفعة مقدمة، لذلك تُدخل الفاتورة بدون تاريخ استحقاق. حدّده بعد أن يؤكّد المصرف الحوالة ويحدّد المورّد يوم سداد الباقي. ينتقل مع طلب الاستيراد، ويُحفظ التغيير في السجل.",
       "rate_on_date": "1 {currency} = {rate} د.ع",
       "total_in": "الإجمالي {currency} {amount}",
-      "advance_percent": "نسبة الدفعة المقدمة %"
+      "advance_percent": "نسبة الدفعة المقدمة %",
+      "agreed_in": "محررة بـ"
     },
     "payment_applications": {
       "subtitle": "طلبات الشركة إلى بنوكها وأمين الصندوق للدفع إلى المورد — الأطول انتظارًا أولًا.",
