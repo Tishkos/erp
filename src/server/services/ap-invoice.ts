@@ -196,6 +196,13 @@ export interface InvoiceLineInput {
    * file in the same transaction (A10).
    */
   readonly chargedToPayableId?: string | null;
+  /**
+   * An import agreed in another currency: the line's price in that currency,
+   * as the supplier's document states it. `unitPriceIqd` is the same price in
+   * dinars at the invoice date — the invoice and its journal are in dinars;
+   * the import (and so what is paid, FX7/FX8) keeps the agreed currency.
+   */
+  readonly unitPriceTxn?: bigint;
 }
 
 export interface CreateApInvoiceInput {
@@ -229,6 +236,12 @@ export interface CreateApInvoiceInput {
   readonly isImport?: boolean;
   /** D13 — the supplier's terms as written on the PDF, kept verbatim on the application. */
   readonly paymentTermsText?: string | null;
+  /**
+   * The currency the import is agreed in, when it is not the invoice's
+   * dinars (a supplier's document in dollars). The lines carry their price in
+   * it as `unitPriceTxn`. Left out, the import is in the invoice's currency.
+   */
+  readonly importCurrency?: string | null;
   /**
    * D12 — an expense is a purchase invoice. The type of fee; its default
    * expense account is used when the form names none, and it stands as the
@@ -385,14 +398,31 @@ export async function create(
         ),
       )
       .limit(1);
+    // A stock line lands in transit whether or not the form named a
+    // warehouse: the import raised from the supplier's document names none on
+    // purpose (the containers choose it), and its goods are at sea all the same.
+    const stockCodes = [...new Set(input.lines.filter((line) => line.itemCode && !line.chargedToPayableId).map((line) => line.itemCode!))];
+    const stocked = new Set(
+      (stockCodes.length > 0
+        ? await tx.select({ code: item.code }).from(item).where(and(inArray(item.code, stockCodes), eq(item.isStock, true)))
+        : []
+      ).map((row) => row.code),
+    );
+    const isStockLine = (line: InvoiceLineInput) =>
+      Boolean(line.warehouseCode) || (Boolean(line.itemCode) && stocked.has(line.itemCode!) && !line.chargedToPayableId);
     if (transit) {
       destinationWarehouse =
         input.lines.find((line) => line.warehouseCode && line.warehouseCode !== transit.code)?.warehouseCode ??
         null;
       input = {
         ...input,
-        lines: input.lines.map((line) => (line.warehouseCode ? { ...line, warehouseCode: transit.code } : line)),
+        lines: input.lines.map((line) => (isStockLine(line) ? { ...line, warehouseCode: transit.code } : line)),
       };
+    } else if (input.lines.some((line) => !line.warehouseCode && isStockLine(line))) {
+      throw new Error(
+        `${input.branchCode} has no In Process warehouse, so an import's goods have nowhere to be while at sea. ` +
+          'Create the branch’s transit warehouses (Warehouses) first.',
+      );
     }
   }
 
@@ -698,7 +728,7 @@ export async function create(
         supplierReference: supplierNumber || allocated.documentNo,
         supplierId: input.supplierId,
         branchCode: input.branchCode,
-        currency: input.currency ?? 'IQD',
+        currency: input.importCurrency || input.currency || 'IQD',
         documentDate: input.invoiceDate,
         description: `Purchase invoice ${allocated.documentNo}`,
         paymentTermsText: input.paymentTermsText ?? null,
@@ -712,7 +742,7 @@ export async function create(
           description: line.description ?? (line.itemCode ? names.get(line.itemCode) : undefined) ?? line.itemCode ?? 'Charge',
           quantity: formatQuantity(line.quantity),
           uomCode: line.uomCode ?? null,
-          unitPrice: toDecimalString(line.unitPriceIqd, 4n),
+          unitPrice: toDecimalString(line.unitPriceTxn ?? line.unitPriceIqd, 4n),
         })),
         defaultWarehouseCode:
           destinationWarehouse ?? input.lines.find((line) => line.warehouseCode)?.warehouseCode ?? null,

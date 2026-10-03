@@ -396,7 +396,12 @@ export async function lockable(tx: Tx, payableId: string) {
     .where(eq(landedCostLock.payableId, payableId))
     .orderBy(desc(landedCostLock.sequence))
     .limit(1);
-  return lockableState({ allPdsWrittenOff: facts.allPdsWrittenOff, unlocked: charges.length, lastSequence: last?.sequence ?? null });
+  return lockableState({
+    allPdsWrittenOff: facts.allPdsWrittenOff,
+    containersIn: facts.containerCount > 0 && facts.containersReceived === facts.containerCount,
+    unlocked: charges.length,
+    lastSequence: last?.sequence ?? null,
+  });
 }
 
 /**
@@ -404,9 +409,15 @@ export async function lockable(tx: Tx, payableId: string) {
  * the payable record has the stage facts, the charges and the locks in hand,
  * and `lockable` would read all three again. One rule for both.
  */
-export function lockableState(input: { allPdsWrittenOff: boolean; unlocked: number; lastSequence: number | null }) {
+export function lockableState(input: { allPdsWrittenOff: boolean; containersIn: boolean; unlocked: number; lastSequence: number | null }) {
   return {
     pdsWrittenOff: input.allPdsWrittenOff,
+    /**
+     * IM2-1 — every container received: the cost is spread over the layers the
+     * receipts created, so a container still at sea would get no share of it.
+     */
+    containersIn: input.containersIn,
+    ready: input.allPdsWrittenOff && input.containersIn,
     unlocked: input.unlocked,
     locked: input.lastSequence !== null,
     nextSequence: (input.lastSequence ?? 0) + 1,
@@ -424,6 +435,12 @@ export async function lock(tx: Tx, ctx: ActorContext, input: LockInput) {
   if (!state.pdsWrittenOff) {
     throw new LandedCostError(
       `${row.payableNo}'s landed cost is locked once every PD is totally written off (§20.1, condition 3).`,
+    );
+  }
+  if (!state.containersIn) {
+    throw new LandedCostError(
+      `${row.payableNo}'s landed cost is locked once every container is received: it is spread over what the receipts brought in, ` +
+        'and a container still to come would get no share of it.',
     );
   }
   const charges = await unlockedCharges(tx, row.id);

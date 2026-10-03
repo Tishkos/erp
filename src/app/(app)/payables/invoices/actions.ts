@@ -16,6 +16,7 @@ import * as attachments from '@/server/services/attachments';
 import * as ap from '@/server/services/ap-invoice';
 import * as inventory from '@/server/services/inventory';
 import * as expenses from '@/server/services/expenses';
+import * as rates from '@/server/services/exchange-rates';
 import { LINE_ROWS } from './lines';
 
 const LIST = '/payables/invoices';
@@ -387,21 +388,34 @@ export async function draftFromDocumentAction(formData: FormData): Promise<void>
         .join(' · ')
         .slice(0, 2000);
 
+      // The invoice and its journal are in dinars; a document in another
+      // currency is converted at the invoice date's rate (refused when there
+      // is none), and the import keeps the currency it was agreed in.
+      const invoiceDate = draft.invoiceDate ?? businessToday();
+      const foreign = draft.currency && draft.currency.toUpperCase() !== 'IQD' ? draft.currency.toUpperCase() : null;
+      const priced = await Promise.all(
+        draft.lines.map(async (line) => {
+          const price = parseDecimal(line.unitPrice ?? '0', 4n);
+          return foreign ? { txn: price, iqd: (await rates.convertOn(tx, price, foreign, invoiceDate)).amountIqd } : { txn: price, iqd: price };
+        }),
+      );
+
       const created = await ap.create(tx, ctx, {
         supplierId: supplier.id,
         supplierInvoiceNo: draft.invoiceNo ?? upload.name,
         branchCode: ctx.branchCode,
-        invoiceDate: draft.invoiceDate ?? businessToday(),
-        ...(draft.currency ? { currency: draft.currency } : {}),
+        invoiceDate,
+        ...(foreign ? { importCurrency: foreign } : {}),
         note,
         // By direction: this door is for imports, and the goods are in
         // process — no warehouse is named, and the containers choose it.
         isImport: true,
         nonPoJustification: `Raised from the supplier's own document (${upload.name}).`,
-        lines: draft.lines.map((line) => ({
+        lines: draft.lines.map((line, index) => ({
           description: line.description,
           quantity: parseQuantity(line.quantity ?? '0'),
-          unitPriceIqd: parseDecimal(line.unitPrice ?? '0', 4n),
+          unitPriceIqd: priced[index]!.iqd,
+          ...(foreign ? { unitPriceTxn: priced[index]!.txn } : {}),
           ...(line.itemCode ? { itemCode: line.itemCode, isInventory: true } : {}),
           ...(line.uom ? { uomCode: line.uom } : {}),
         })),

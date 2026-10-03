@@ -151,7 +151,8 @@ export async function receiveContainerAction(formData: FormData): Promise<void> 
           containerLineId: text(formData, `line_${index}`),
           receivedQty: quantity(text(formData, `received_${index}`)),
           damagedQty: quantity(text(formData, `damaged_${index}`)),
-          shortQty: quantity(text(formData, `short_${index}`)),
+          // Left empty, the service works it out: planned − received − damaged.
+          ...(text(formData, `short_${index}`).trim() ? { shortQty: quantity(text(formData, `short_${index}`)) } : {}),
         });
       }
       return shipments.receive(tx, ctx, {
@@ -195,4 +196,29 @@ export async function attachToContainer(formData: FormData): Promise<void> {
       actorUserId: ctx.principal.userId,
     });
   }, containerRecord(containerNo));
+}
+
+/**
+ * IM2-1 — what did not arrive, claimed from the supplier: a goods return per
+ * invoice out of transit. It opens on the first return, to be approved and
+ * posted there; the import's page shows the claim against each item.
+ */
+export async function claimShortageAction(formData: FormData): Promise<void> {
+  const payableNo = text(formData, 'payable_no');
+  await runAdminAndReturn(
+    async (tx, ctx) => {
+      const owner = await payables.loadByNo(tx, payableNo);
+      return shipments.claimShortage(tx, ctx, {
+        payableId: owner.id,
+        returnDate: text(formData, 'return_date'),
+        reason: text(formData, 'reason'),
+        supplierReference: text(formData, 'supplier_reference') || null,
+      });
+    },
+    (value) => {
+      const claimed = value as { returns?: { returnNo: string }[] } | null | undefined;
+      const first = claimed?.returns?.[0]?.returnNo;
+      return first ? `/payables/goods-returns/${encodeURIComponent(first)}` : `/payables/${encodeURIComponent(payableNo)}`;
+    },
+  );
 }

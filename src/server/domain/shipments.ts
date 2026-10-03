@@ -189,6 +189,16 @@ export function assertReceiptLines(lines: readonly ReceiptLineInput[], varianceR
     if (line.received < 0n || line.damaged < 0n || line.short < 0n) {
       throw new ShipmentValidationError('Quantities received, damaged and short are counted, so never below zero.');
     }
+    // IM2-1 — the three account for the plan: what arrived whole, what arrived
+    // damaged, what was not there. More than planned arrives with nothing short.
+    const arrived = line.received + line.damaged;
+    if (arrived >= line.planned ? line.short !== 0n : arrived + line.short !== line.planned) {
+      throw new ShipmentValidationError(
+        arrived >= line.planned
+          ? 'More than planned arrived, so nothing on that line is short. Leave Short empty.'
+          : 'Received, damaged and short together make the planned quantity. Leave Short empty and it is worked out.',
+      );
+    }
   }
   if (receiptOutcome(lines) === 'missing_damaged' && !varianceReason?.trim()) {
     throw new ShipmentValidationError(

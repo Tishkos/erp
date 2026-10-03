@@ -330,10 +330,15 @@ async function unappliedOf(tx: Tx, payableRow: { id: string; amountTxn: string }
   const live = rows
     .filter((r) => isLive(r.status) && r.id !== exceptId)
     .reduce((sum, r) => sum + parseDecimal(r.amountTxn, MONEY_SCALE), 0n);
-  return parseDecimal(payableRow.amountTxn, MONEY_SCALE) - live;
+  // A supplier payment made straight against the import's invoices paid it too.
+  const direct = (await payables.directPayments(tx, payableRow.id)).reduce((sum, r) => sum + r.amountTxn, 0n);
+  return parseDecimal(payableRow.amountTxn, MONEY_SCALE) - live - direct;
 }
 
 export async function create(tx: Tx, ctx: ActorContext, input: CreateInput) {
+  // HD9 — locked: two applications made together are weighed one after the
+  // other against what is left to ask for, so they cannot both pass the cap.
+  await payables.lock(tx, input.payableId);
   const row = await openPayable(tx, input.payableId);
   await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, { branchCode: row.branchCode });
   await payables.assertLaneEditable(tx, ctx, row, 'payment');
@@ -372,7 +377,9 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateInput) {
     payeeId = payee.id;
   }
 
-  const fundingCode = input.fundingSourceCode || 'own_funds';
+  // The form names the loan, not the funding source (the sponsor removed
+  // "Funded by", 2026-10-02): a loan named is the loan funding source.
+  const fundingCode = input.fundingSourceCode || (input.loanId ? 'loan' : 'own_funds');
   const [funding] = await tx.select().from(fundingSource).where(eq(fundingSource.code, fundingCode)).limit(1);
   if (!funding || !funding.active) {
     throw new PaymentApplicationError(`'${fundingCode}' is not an active funding source.`);
@@ -414,11 +421,20 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateInput) {
     instalmentId = instalment.id;
     amountTxn = amountTxn ?? parseDecimal(instalment.amountTxn, MONEY_SCALE);
   }
+  const owed = parseDecimal(row.amountTxn, MONEY_SCALE);
+  // Left empty, the application asks for all that is left (the form says so).
+  if (amountTxn === null && owed > 0n) {
+    const left = await unappliedOf(tx, row);
+    if (left > 0n) amountTxn = left;
+  }
   if (!amountTxn || amountTxn <= 0n) {
-    throw new PaymentApplicationError('State the amount to pay, in the import’s currency.');
+    throw new PaymentApplicationError(
+      owed > 0n
+        ? `Nothing is left to ask the bank for on ${row.payableNo}: live applications already cover what is owed.`
+        : 'State the amount to pay, in the import’s currency.',
+    );
   }
 
-  const owed = parseDecimal(row.amountTxn, MONEY_SCALE);
   if (owed > 0n) {
     const unapplied = await unappliedOf(tx, row);
     if (amountTxn > unapplied) {
@@ -1253,14 +1269,14 @@ export async function totalsFor(tx: Tx, payableId: string) {
     .select({ status: paymentApplication.status, amountTxn: paymentApplication.amountTxn, amountIqd: paymentApplication.amountIqd })
     .from(paymentApplication)
     .where(eq(paymentApplication.payableId, payableId));
-  return totals(
-    parseDecimal(owner?.amountTxn ?? '0', MONEY_SCALE),
-    rows.map((row) => ({
+  return totals(parseDecimal(owner?.amountTxn ?? '0', MONEY_SCALE), [
+    ...rows.map((row) => ({
       status: row.status,
       amountTxn: parseDecimal(row.amountTxn, MONEY_SCALE),
       amountIqd: parseDecimal(row.amountIqd, MONEY_SCALE),
     })),
-  );
+    ...(await payables.directPayments(tx, payableId)),
+  ]);
 }
 
 // ---------------------------------------------------------------------------

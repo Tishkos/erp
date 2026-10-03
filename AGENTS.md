@@ -194,6 +194,14 @@ Standing rule (by direction, 2026-10-01; see also docs/notes/newsettings.md: "DO
 * Invoice Status Tracking (`supplier-shipment`) excludes `is_import` invoices and refuses to advance one.
 
 
+## The import's goods: short containers and the claim (IMPROVEMENT-002 IM2-1)
+
+* `payables.quantityPosition` is the one reading of where an import's goods stand, per item in base units: ordered (posted invoice lines), in containers (live plans), received (receipt `moved_qty`), damaged/short (container lines), claimed (goods returns against the invoice lines), in transit (the invoices' own layers left in transit warehouses). The import page's *Quantities by model* and `gatherFacts` both read it; `receivedQuantityMatches` is "nothing left in transit" for an import whose invoice booked into transit (else the old received = quantity).
+* A receipt line is received + damaged + short = planned (or more arrived, nothing short); left empty, short is worked out. Container plans are in the PI's unit; `receive` converts to base before moving layers.
+* `shipments.claimShortage` (all containers in, something in transit) raises one goods return per invoice through `goods-return.createFromInvoice` from the transit warehouse, offset `payable`; posting it recomputes the import's stage. Never write stock out of transit any other way.
+* Direct supplier payments against an import's invoices are `payables.directPayments`; the totals and the application cap add them. Landed cost locks only when `containersIn` too.
+* Tests: `tests/integration/im2-01-import.test.ts`, `tests/e2e/im2-import-shortage.spec.ts`.
+
 ## Units of measure (REQ-FIX-001 FIX-4)
 
 * `services/item-units.ts` is the only writer of `item_uom` (add, defaults, deactivate with a reason — never deleted). The base unit is kept active by the service and by the `item_uom_base_stays_active` trigger (0254); one active purchase default and one sales default per item (partial unique indexes); with none flagged, the base unit is the default.
