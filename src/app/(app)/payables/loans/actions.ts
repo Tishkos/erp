@@ -2,9 +2,11 @@
 
 import { redirect } from 'next/navigation';
 import { runAdminAndReturn, text } from '@/server/admin-action';
+import * as banks from '@/server/services/banks';
 import { parseDecimal } from '@/server/domain/money';
 import * as attachments from '@/server/services/attachments';
 import * as loans from '@/server/services/loans';
+import { DUE_ROWS, NEW_BANK } from './form';
 
 /**
  * Bank loans — REQ-AP-001 §15.7, §21.10. Every verb is the service's; these
@@ -23,11 +25,48 @@ function amountOf(value: string): bigint | null {
   return parseDecimal(cleaned, 4n);
 }
 
+/**
+ * The due dates the form asked about, in order.
+ *
+ * One field per instalment, so the count travels with the form — the grid of
+ * dates grows and shrinks as the instalment count is typed and the two sides
+ * cannot agree it in advance. A date the person cleared is dropped here and
+ * refused by the domain, which counts them against the instalments.
+ */
+function dueDatesFrom(formData: FormData): string[] {
+  const claimed = Number(text(formData, 'due_count'));
+  const rows = Number.isInteger(claimed) && claimed > 0 ? Math.min(claimed, 60) : DUE_ROWS;
+  const dates: string[] = [];
+  for (let row = 0; row < rows; row += 1) {
+    const date = text(formData, `due_${row}`).trim();
+    if (date) dates.push(date);
+  }
+  return dates;
+}
+
+/**
+ * The bank the loan is with: the one chosen, or the one named.
+ *
+ * A bank named on this form is created inside the loan's transaction, so a
+ * loan the service goes on to refuse leaves no bank behind it.
+ */
+async function bankCodeFor(tx: Parameters<typeof banks.create>[0], ctx: Parameters<typeof banks.create>[1], formData: FormData): Promise<string> {
+  const chosen = text(formData, 'bank_code');
+  if (chosen !== NEW_BANK) return chosen;
+  const name = text(formData, 'bank_name').trim();
+  if (!name) throw new loans.LoanError('Name the bank, or choose one already in the register.');
+  const made = await banks.create(tx, ctx, {
+    name,
+    swiftBic: text(formData, 'bank_swift').trim() || null,
+  });
+  return made.code;
+}
+
 export async function createLoan(formData: FormData): Promise<void> {
   await runAdminAndReturn(
     async (tx, ctx) =>
       loans.create(tx, ctx, {
-        bankCode: text(formData, 'bank_code'),
+        bankCode: await bankCodeFor(tx, ctx, formData),
         bankCashAccountId: text(formData, 'bank_cash_account_id'),
         principalTxn: amountOf(text(formData, 'principal')) ?? 0n,
         commissionPct: text(formData, 'commission_pct') || null,
@@ -39,10 +78,7 @@ export async function createLoan(formData: FormData): Promise<void> {
         instalmentCount: Number(text(formData, 'instalment_count')) || 0,
         frequency: text(formData, 'frequency'),
         firstDueDate: text(formData, 'first_due_date'),
-        customDates: text(formData, 'custom_dates')
-          .split(/[\s,;]+/)
-          .map((date) => date.trim())
-          .filter(Boolean),
+        customDates: dueDatesFrom(formData),
         purpose: text(formData, 'purpose') || null,
       }),
     (value) => {

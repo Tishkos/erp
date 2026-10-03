@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { runAdminAndReturn, text } from '@/server/admin-action';
+import * as asycuda from '@/server/services/asycuda-runs';
 import * as attachments from '@/server/services/attachments';
 import * as customs from '@/server/services/customs-pd';
 import * as events from '@/server/services/payable-events';
@@ -9,6 +10,7 @@ import * as payables from '@/server/services/payables';
 
 /** PD / ASYCUDA — REQ-AP-001 §16, §21.8. Every verb is the service's. */
 const LIST = '/payables/pd';
+const ASYCUDA = '/payables/pd/asycuda';
 const record = (pdNo: string, year?: string | number | null) =>
   `${LIST}/${encodeURIComponent(pdNo)}${year ? `?year=${year}` : ''}`;
 
@@ -98,6 +100,57 @@ export async function applyAsycudaList(formData: FormData): Promise<void> {
     (value) => {
       const result = value as { changed?: number } | null | undefined;
       return `${LIST}?applied=${result?.changed ?? 0}`;
+    },
+  );
+}
+
+/**
+ * Reads the ASYCUDA report, and keeps the reading — §21.8.
+ *
+ * The file the officer exported, or the list they pasted, becomes one run:
+ * the lines as read, the difference at that moment, and their name against
+ * it. Nothing in the books moves here, which is the whole point of the step —
+ * the run's id goes back in the address so the difference can be looked at,
+ * left, and come back to.
+ */
+export async function readAsycudaList(formData: FormData): Promise<void> {
+  const uploads = formData
+    .getAll('files')
+    .filter((entry): entry is File => entry instanceof File && entry.size > 0);
+  const pasted = text(formData, 'list');
+
+  if (uploads.length === 0 && pasted.trim() === '') {
+    redirect(`${ASYCUDA}?error=asycuda_nothing_given`);
+  }
+
+  const files = await Promise.all(
+    uploads.map(async (file) => ({ fileName: file.name, content: Buffer.from(await file.arrayBuffer()) })),
+  );
+
+  await runAdminAndReturn(
+    async (tx, ctx) => {
+      const read = files.length > 0 ? asycuda.readFiles(files) : null;
+      return asycuda.startRun(tx, ctx, {
+        source: read ? 'file' : 'paste',
+        fileNames: files.map((file) => file.fileName),
+        text: read ? read.text : pasted,
+      });
+    },
+    (value) => {
+      const started = value as { id?: string } | null | undefined;
+      return started?.id ? `${ASYCUDA}?run=${encodeURIComponent(started.id)}` : ASYCUDA;
+    },
+  );
+}
+
+/** Applies a reading that was looked at first. */
+export async function applyAsycudaRun(formData: FormData): Promise<void> {
+  const id = text(formData, 'run');
+  await runAdminAndReturn(
+    async (tx, ctx) => asycuda.applyRun(tx, ctx, id),
+    (value) => {
+      const result = value as { changed?: number } | null | undefined;
+      return `${ASYCUDA}?run=${encodeURIComponent(id)}&applied=${result?.changed ?? 0}`;
     },
   );
 }

@@ -107,14 +107,32 @@ export interface QualifyingEvent {
  * key — which is the only way a unique index can recognise a repeat. Job
  * delivery is at-least-once (01.10), so a repeat is not an edge case: it is the
  * normal consequence of a retry.
+ *
+ * Per event and recipient, not per rule. The rules are written per role and a
+ * person may hold two that cover one event; keyed by the rule, one supplier
+ * payment told the same person twice (live, 2026-10-02).
  */
-export function dedupeKeyFor(
-  rule: Pick<NotificationRule, 'code'>,
-  event: QualifyingEvent,
-  recipientUserId: string,
-): string {
+/**
+ * The event a dedupe key names, without the person it was for.
+ *
+ * For anything that must happen once per event rather than once per recipient
+ * — the copy into the WhatsApp group, on 2026-10-03. The occurrence stays in
+ * it, so a daily notice is one copy a day and not one copy ever.
+ *
+ * The recipient is a UUID and carries no separator, so the last one is where
+ * it begins.
+ */
+export function eventKeyOf(dedupeKey: string): string {
+  const cut = dedupeKey.lastIndexOf('|');
+  return cut === -1 ? dedupeKey : dedupeKey.slice(0, cut);
+}
+
+export function dedupeKeyFor(event: QualifyingEvent, recipientUserId: string): string {
   return [
-    rule.code,
+    // The event type, which the rule's code used to carry implicitly. Without
+    // it `payable.held` and `payable.released` would share a key on one
+    // payable and the second would be suppressed as a repeat of the first.
+    event.eventType,
     event.objectType,
     event.objectId,
     event.occurrence ?? '',

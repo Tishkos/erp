@@ -21,6 +21,7 @@ import { and, asc, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 import {
   assertRule,
   dedupeKeyFor,
+  eventKeyOf,
   isDeliveryDue,
   isEscalationDue,
   renderNotification,
@@ -73,6 +74,21 @@ async function recipientsOf(tx: Tx, roleCode: string): Promise<string[]> {
     .where(eq(userRole.roleCode, roleCode));
 
   return rows.map((r) => r.userId);
+}
+
+/**
+ * Of the rules that reached one person, the one whose window is shortest.
+ *
+ * A rule that escalates beats one that does not, and the sooner of two that
+ * do; failing that, the first by code, so the choice does not depend on the
+ * order the rules happened to be read in.
+ */
+function strictest(rules: readonly NotificationRule[]): NotificationRule {
+  return [...rules].sort((a, b) => {
+    const left = a.escalateAfterSeconds ?? Number.POSITIVE_INFINITY;
+    const right = b.escalateAfterSeconds ?? Number.POSITIVE_INFINITY;
+    return left === right ? a.code.localeCompare(b.code) : left - right;
+  })[0]!;
 }
 
 export interface RaiseResult {
@@ -130,52 +146,75 @@ export async function raise(
   options: { branchCode?: string | null; actorUserId?: string | null } = {},
 ): Promise<RaiseResult> {
   const rules = await rulesFor(tx, event.eventType);
+  for (const rule of rules) assertRule(rule);
+
+  // Who the event reaches, and by what means.
+  //
+  // The rules are written per role and a person may hold two of them: on
+  // 2026-10-02 one supplier payment told the same person twice, once by the
+  // accounting manager's rule and once by the CEO's, because the dedupe key
+  // began with the rule's code and so only ever suppressed a repeat of the
+  // same rule. §21 generates a notification once per qualifying event, so the
+  // rules that reach somebody are merged here: the text is the event's — it
+  // never came from the rule — and the channels are the union of theirs, so
+  // nobody loses a channel because another rule reached them first.
+  const reached = new Map<string, { rules: NotificationRule[]; channels: NotificationChannel[] }>();
+  for (const rule of rules) {
+    for (const recipientUserId of await recipientsOf(tx, rule.recipientRole)) {
+      const entry = reached.get(recipientUserId) ?? { rules: [], channels: [] };
+      entry.rules.push(rule);
+      for (const channel of rule.channels) {
+        if (!entry.channels.includes(channel)) entry.channels.push(channel);
+      }
+      reached.set(recipientUserId, entry);
+    }
+  }
+
+  const { subject, body } = renderNotification(event, context);
 
   let created = 0;
   let suppressed = 0;
 
-  for (const rule of rules) {
-    assertRule(rule);
+  for (const [recipientUserId, { rules: reaching, channels }] of reached) {
+    const dedupeKey = dedupeKeyFor(event, recipientUserId);
 
-    const recipients = await recipientsOf(tx, rule.recipientRole);
-    const { subject, body } = renderNotification(event, context);
+    const notificationId = await insertNotification(tx, {
+      // A notification carries one rule, which escalation reads for its
+      // window. Of the rules that reached this person the strictest is
+      // recorded — the one that escalates soonest — because a merged
+      // notification should escalate no later than the earliest rule that
+      // asked for it.
+      ruleCode: strictest(reaching).code,
+      eventType: event.eventType,
+      objectType: event.objectType,
+      objectId: event.objectId,
+      recipientUserId,
+      subject,
+      body,
+      context: context as Record<string, unknown>,
+      dedupeKey,
+      branchCode: options.branchCode ?? null,
+    });
 
-    for (const recipientUserId of recipients) {
-      const dedupeKey = dedupeKeyFor(rule, event, recipientUserId);
-
-      const notificationId = await insertNotification(tx, {
-        ruleCode: rule.code,
-        eventType: event.eventType,
-        objectType: event.objectType,
-        objectId: event.objectId,
-        recipientUserId,
-        subject,
-        body,
-        context: context as Record<string, unknown>,
-        dedupeKey,
-        branchCode: options.branchCode ?? null,
-      });
-
-      if (notificationId === null) {
-        suppressed += 1;
-        continue;
-      }
-
-      created += 1;
-
-      for (const channel of rule.channels) {
-        await tx.insert(notificationDelivery).values({ notificationId, channel });
-      }
-
-      // Handed to the queue through the outbox, so it commits with the event
-      // that caused it and is delivered after (§24).
-      await jobs.enqueue(tx, options.actorUserId ?? null, {
-        queueName: DELIVERY_QUEUE,
-        payload: { notificationId: notificationId.toString() },
-        idempotencyKey: dedupeKey,
-        branchCode: options.branchCode ?? null,
-      });
+    if (notificationId === null) {
+      suppressed += 1;
+      continue;
     }
+
+    created += 1;
+
+    for (const channel of channels) {
+      await tx.insert(notificationDelivery).values({ notificationId, channel });
+    }
+
+    // Handed to the queue through the outbox, so it commits with the event
+    // that caused it and is delivered after (§24).
+    await jobs.enqueue(tx, options.actorUserId ?? null, {
+      queueName: DELIVERY_QUEUE,
+      payload: { notificationId: notificationId.toString() },
+      idempotencyKey: dedupeKey,
+      branchCode: options.branchCode ?? null,
+    });
   }
 
   return { created, suppressed };
@@ -195,6 +234,12 @@ export type ChannelSender = (message: {
   eventType: string;
   objectType: string;
   objectId: string;
+  /**
+   * The event, without the recipient — the same for every person this event
+   * notified. A channel that must act once per event rather than once per
+   * recipient keys on this (`whatsapp.ts`, the copy into the group).
+   */
+  eventKey: string;
 }, tx: Tx) => Promise<void> | void;
 
 /**
@@ -265,6 +310,7 @@ async function attempt(tx: Tx, delivery: DeliveryRow, row: NotificationRow): Pro
         eventType: row.eventType,
         objectType: row.objectType,
         objectId: row.objectId,
+        eventKey: eventKeyOf(row.dedupeKey),
       }, tx);
     }
     await tx

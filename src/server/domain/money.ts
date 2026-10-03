@@ -234,3 +234,21 @@ export function parseDecimal(input: string, scale: bigint): bigint {
   const scaled = BigInt(`${whole}${padded}`);
   return sign === '-' ? -scaled : scaled;
 }
+
+/**
+ * A figure in a sentence somebody reads: thousands separated, trailing zeros
+ * dropped, the currency said.
+ *
+ * `toDecimalString` is the ledger's form — four decimal places, no
+ * separators, exact — and it is right everywhere a figure is stored,
+ * compared or summed. It is wrong in an event log, a notification or a
+ * message, where "250000.0000 IQD" costs the reader a moment of counting and
+ * "250,000 IQD" costs none (2026-10-03).
+ *
+ * Never parse this back. It is for saying, not for keeping.
+ */
+export function say(amount: string | number, currencyCode = 'IQD'): string {
+  const value = typeof amount === 'number' ? amount : Number(amount);
+  if (!Number.isFinite(value)) return `${String(amount)} ${currencyCode}`;
+  return `${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${currencyCode}`;
+}

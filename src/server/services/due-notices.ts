@@ -1,5 +1,6 @@
 import type { Tx } from '../db/client';
 import { daysBetween } from '../domain/ageing';
+import { say } from '../domain/money';
 import type { Principal } from '../domain/permissions';
 import * as notifications from './notifications';
 import * as openItems from './open-items';
@@ -166,7 +167,7 @@ export async function announceSettlement(
     {
       reference: input.documentNo,
       party: input.partyName ?? '—',
-      amount: input.amountIqd,
+      amount: say(input.amountIqd),
       link: input.link,
     },
     { branchCode: input.branchCode },

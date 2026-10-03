@@ -46,7 +46,7 @@ import {
   serviceReceiptLine,
 } from '../db/schema';
 import { formatQuantity, parseQuantity } from '../domain/uom';
-import { parseDecimal, toDecimalString } from '../domain/money';
+import { parseDecimal, say, toDecimalString } from '../domain/money';
 import {
   NO_TOLERANCE,
   describeVariance,
@@ -1577,7 +1577,7 @@ export async function post(
       eventCode: 'INVOICE_POSTED',
       invoiceId: id,
       invoiceNo: invoice.invoiceNo,
-      summary: `Purchase invoice ${invoice.invoiceNo} posted — ${toDecimalString(payableIqd, 4n)} IQD`,
+      summary: `Purchase invoice ${invoice.invoiceNo} posted — ${say(toDecimalString(payableIqd, 4n))}`,
       actorUserId: ctx.principal.userId,
     });
   }

@@ -2,15 +2,21 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Pagination } from '@/components/ui';
-import { AdminPage, Flash, Form, Hidden, Submit, admin as s } from '@/components/admin';
+import { AdminPage, Field, Flash, Form, Grid, Hidden, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { NewRecordDialog } from '@/components/admin/dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { SectionTabs } from '@/components/admin/section-tabs';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
+import * as expenses from '@/server/services/expenses';
+import * as partners from '@/server/services/partners';
 import * as receipts from '@/server/services/service-receipt';
+import { businessToday } from '@/server/domain/business-date';
 import { approveReceipt, submitReceipt } from './actions';
+import { addExpenseAction } from '../invoices/actions';
 
 /**
  * Service receipts — REQ-AP-001 §21.5, the department's inbox.
@@ -30,8 +36,9 @@ export default async function ServiceReceiptsPage({
 }) {
   if (!visibleRoute('/payables/service-receipts')) notFound();
 
-  const [t, admin, page, locale, context, outcome] = await Promise.all([
+  const [t, x, admin, page, locale, context, outcome] = await Promise.all([
     getTranslations('admin.payables_receipts'),
+    getTranslations('admin.expenses'),
     getTranslations('admin'),
     getTranslations('page'),
     getLocale(),
@@ -47,14 +54,21 @@ export default async function ServiceReceiptsPage({
   }
   const mayApprove = can(principal, 'approve', receipts.PERMISSION_OBJECT);
   const maySubmit = can(principal, 'submit', receipts.PERMISSION_OBJECT);
+  // An expense is confirmed here, so it is raised here (2026-10-03). The
+  // permission is the invoice's, because underneath an expense is one.
+  const mayCreate = can(principal, 'create', 'ap_invoice');
+  const today = businessToday();
 
   // HD15 — the inbox and the full list page separately, each at fifty with
   // its own true count; each pager keeps the other's page in its links.
   const params = await searchParams;
   const awaitingParam = Math.max(1, Number(params.awaiting_page) || 1);
-  const { waiting, all } = await withCurrentUser(async (tx) => ({
+  const { waiting, all, suppliers, categories, imports } = await withCurrentUser(async (tx) => ({
     waiting: await receipts.listForScreen(tx, { status: 'submitted', page: awaitingParam }),
     all: await receipts.listForScreen(tx, { page: outcome.page }),
+    suppliers: mayCreate ? await partners.listActiveInRole(tx, 'supplier') : [],
+    categories: mayCreate ? await expenses.categories(tx) : [],
+    imports: mayCreate ? await expenses.openImports(tx) : [],
   }));
   const query = (awaitingPage: number, allPage: number) =>
     [awaitingPage > 1 ? `awaiting_page=${awaitingPage}` : '', `page=${allPage}`].filter(Boolean).join('&');
@@ -157,8 +171,53 @@ export default async function ServiceReceiptsPage({
 
   return (
     <AdminPage
+      actions={
+        mayCreate ? (
+          <NewRecordDialog
+            buttonLabel={x('add')}
+            closeLabel={t('close')}
+            openOnLoad={params.expense === '1' && Boolean(outcome.error)}
+            title={x('add_title')}
+          >
+            <Form action={addExpenseAction}>
+              <Grid>
+                <Select
+                  label={x('category')}
+                  name="expense_category"
+                  options={categories.map((c) => ({ value: c.code, label: c.name }))}
+                  required
+                />
+                <Select
+                  label={x('supplier')}
+                  name="supplier_id"
+                  options={suppliers.map((p) => ({ value: p.id, label: `${p.name} (${p.code})` }))}
+                  required
+                />
+                <Field label={x('amount')} name="amount" required />
+                <Field defaultValue={today} label={x('invoice_date')} name="invoice_date" required type="date" />
+                <Field label={x('due_date')} name="due_date" required type="date" />
+                <Field label={x('supplier_invoice_no')} name="supplier_invoice_no" />
+                <Select
+                  emptyLabel="—"
+                  label={x('charged_to')}
+                  name="charged_to"
+                  options={imports.map((i) => ({
+                    value: i.id,
+                    label: `${i.payableNo} · ${i.reference} · ${i.supplierName}`,
+                  }))}
+                />
+              </Grid>
+              <Field hint={x('name_hint')} label={x('name')} name="name" required wide />
+              <SubmitRow>
+                <Submit label={x('save')} />
+              </SubmitRow>
+            </Form>
+          </NewRecordDialog>
+        ) : undefined
+      }
       back={{ href: '/payables', label: t('payables') }}
       subtitle={t('subtitle')}
+      tabs={<SectionTabs route="/payables/service-receipts" />}
       title={t('title')}
       variant="sap"
     >
