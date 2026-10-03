@@ -3,6 +3,7 @@ import * as documents from './documents';
 import type { BuildContext, Built } from './documents';
 import * as reports from './reports';
 import * as projectReports from './project-reports';
+import * as hrReports from './hr-reports';
 
 export type { ExportKey } from './access';
 
@@ -67,6 +68,11 @@ const BUILDERS = {
   project_earned_value: (ctx, input) => projectReports.earnedValue(ctx, input.query),
   payroll_run: byId(documents.payrollRun),
   payslip: byId(documents.payslip),
+  hr_letter: byId(hrReports.letter),
+  hr_headcount: (ctx, input) => hrReports.headcount(ctx, input.query),
+  hr_leave_balances: (ctx, input) => hrReports.leaveBalances(ctx, input.query),
+  hr_payroll_register: (ctx, input) => hrReports.payrollRegister(ctx, input.query),
+  hr_unsettled_advances: (ctx, input) => hrReports.unsettledAdvances(ctx, input.query),
 } satisfies Record<ExportKey, Builder>;
 
 export function exportable(key: ExportKey): Exportable {

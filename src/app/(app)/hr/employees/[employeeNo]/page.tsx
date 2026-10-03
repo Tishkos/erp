@@ -24,6 +24,8 @@ import * as advances from '@/server/services/employee-advances';
 import * as equipment from '@/server/services/employee-assets';
 import * as performance from '@/server/services/performance';
 import * as recruitment from '@/server/services/recruitment';
+import * as employeeRequests from '@/server/services/employee-requests';
+import * as employeeDocuments from '@/server/services/employee-documents';
 import { showDays, daysFrom, weekdayOf } from '@/server/domain/hr-time';
 import {
   adjustLeaveBalance,
@@ -78,6 +80,8 @@ export default async function EmployeePage({ params, searchParams }: { params: P
   const mayTakeBack = can(principal, 'edit_draft', equipment.PERMISSION_OBJECT);
   const maySeeReviews = can(principal, 'view', performance.PERMISSION_OBJECT);
   const maySeeRecruitment = can(principal, 'view', recruitment.PERMISSION_OBJECT);
+  const maySeeRequests = can(principal, 'view', employeeRequests.PERMISSION_OBJECT);
+  const maySeeDocuments = can(principal, 'view', employeeDocuments.PERMISSION_OBJECT);
   const query = await searchParams;
   const today = businessToday();
   const monthParam = typeof query.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(query.month) ? query.month : today.slice(0, 7);
@@ -121,6 +125,9 @@ export default async function EmployeePage({ params, searchParams }: { params: P
       // HR-5 — the application the person was hired from, and their reviews.
       hiredFrom: maySeeRecruitment ? await recruitment.hiredFrom(tx, row.id) : null,
       reviews: maySeeReviews ? await performance.ofEmployee(tx, row.id) : [],
+      // HR-6 — what the person asked for, and their papers with their expiry.
+      hrRequests: maySeeRequests ? await employeeRequests.ofEmployee(tx, row.id) : [],
+      papers: maySeeDocuments ? await employeeDocuments.ofEmployee(tx, row.id) : [],
     };
   });
   if (!found) notFound();
@@ -838,6 +845,128 @@ export default async function EmployeePage({ params, searchParams }: { params: P
                         <td>
                           <span className={`status status--${tone} ${s.sapRegisterStatus}`} data-status={tone}>
                             {x(`review_status_${r.status}`)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {/* REQ-HR-001 HR-6 — the person's papers: what is on file and when it expires. */}
+      {maySeeDocuments ? (
+        <section aria-labelledby="employee-documents-title" className={s.sapDoc}>
+          <div className={s.sapWindow}>
+            <h2 className={s.sapTitle} id="employee-documents-title">
+              <span>{x('documents_title')}</span>
+              <span className={s.sapTitleMeta}>{t('rows_shown', { count: found.papers.length })}</span>
+            </h2>
+            <div className={s.sapTableWrap}>
+              <table aria-labelledby="employee-documents-title" className={s.sapTable}>
+                <thead>
+                  <tr>
+                    <th scope="col">{column('reference')}</th>
+                    <th scope="col">{x('document_type')}</th>
+                    <th scope="col">{x('document_title')}</th>
+                    <th scope="col">{x('document_expires')}</th>
+                    <th scope="col">{column('status')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {found.papers.length === 0 ? (
+                    <tr>
+                      <td className={s.sapEmptyRow} colSpan={5}>
+                        {x('documents_none')}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {found.papers.map((d) => {
+                    const tone = d.expiry
+                      ? ({ no_expiry: 'approved', valid: 'approved', expiring: 'submitted', expired: 'rejected' } as Record<string, string>)[d.expiry]!
+                      : d.status === 'withdrawn'
+                        ? 'cancelled'
+                        : 'closed';
+                    return (
+                      <tr key={d.documentNo}>
+                        <td>
+                          <Link className={s.sapLink} href={`/hr/documents/${encodeURIComponent(d.documentNo)}`}>
+                            <bdi dir="ltr">{d.documentNo}</bdi>
+                          </Link>
+                        </td>
+                        <td>{x(`document_type_${d.docType}`)}</td>
+                        <td>
+                          <bdi dir="auto">{d.title}</bdi>
+                        </td>
+                        <td>
+                          <bdi dir="ltr">{day(d.expiresOn)}</bdi>
+                        </td>
+                        <td>
+                          <span className={`status status--${tone} ${s.sapRegisterStatus}`} data-status={tone}>
+                            {d.expiry ? x(`document_expiry_${d.expiry}`) : x(`document_status_${d.status}`)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {/* REQ-HR-001 HR-6 — what the person asked for: claims, trips, letters and the rest. */}
+      {maySeeRequests ? (
+        <section aria-labelledby="employee-requests-title" className={s.sapDoc}>
+          <div className={s.sapWindow}>
+            <h2 className={s.sapTitle} id="employee-requests-title">
+              <span>{x('hr_requests_title')}</span>
+              <span className={s.sapTitleMeta}>{t('rows_shown', { count: found.hrRequests.length })}</span>
+            </h2>
+            <div className={s.sapTableWrap}>
+              <table aria-labelledby="employee-requests-title" className={s.sapTable}>
+                <thead>
+                  <tr>
+                    <th scope="col">{column('reference')}</th>
+                    <th scope="col">{x('request_kind')}</th>
+                    <th scope="col">{x('request_subject')}</th>
+                    <th className={s.sapNum} scope="col">
+                      {column('amount')}
+                    </th>
+                    <th scope="col">{column('status')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {found.hrRequests.length === 0 ? (
+                    <tr>
+                      <td className={s.sapEmptyRow} colSpan={5}>
+                        {x('hr_requests_none')}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {found.hrRequests.map((r) => {
+                    const tone = { draft: 'draft', submitted: 'submitted', approved: 'approved', refused: 'rejected', paid: 'posted', issued: 'posted', cancelled: 'cancelled' }[r.status] ?? 'draft';
+                    return (
+                      <tr key={r.requestNo}>
+                        <td>
+                          <Link className={s.sapLink} href={`/hr/requests/${encodeURIComponent(r.requestNo)}`}>
+                            <bdi dir="ltr">{r.requestNo}</bdi>
+                          </Link>
+                        </td>
+                        <td>{x(`request_kind_${r.kind}`)}</td>
+                        <td>
+                          <bdi dir="auto">{r.subject}</bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{r.kind === 'expense_claim' ? formatMoney(r.amountIqd, 'IQD', locale as Locale) : '—'}</bdi>
+                        </td>
+                        <td>
+                          <span className={`status status--${tone} ${s.sapRegisterStatus}`} data-status={tone}>
+                            {x(`request_status_${r.status}`)}
                           </span>
                         </td>
                       </tr>

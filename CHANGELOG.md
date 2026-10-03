@@ -29,6 +29,25 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
   payroll and advances tests fund the bank before paying from it (C-20).
 
 ### Added
+- REQ-HR-001 HR-6 — **Employee Requests**, **Documents**, the **HR
+  Dashboard** and **HR Reports**; the HR section is complete. One register
+  for an expense claim (ECLM-…), a trip (TRV-…), a letter (LTR-…) or
+  anything else (ERQ-…), asked by HR or by the person and decided by their
+  manager or the HR manager — never by the asker or the person. A claim's
+  lines name the expense categories (a receipt filed where the category
+  wants one); Finance reimburses it from a bank or cash account
+  (`hr.expense_claim`), and a claim naming its trip settles the trip's
+  advance first. An approved trip opens its advance; a letter is drafted
+  from the employee record, issued with its text and printed as issued.
+  A person's papers (EDOC-…: contract, ID, passport, permits, certificates,
+  hand-over) are filed with their scan, renewed by a new row, withdrawn with
+  a reason, never deleted; the sweep raises one about to expire. The HR
+  dashboard counts headcount, movement, leave, requests, vacancies,
+  reviews, expiring documents and — under their grants — payroll cost and
+  advances owed; four reports (headcount, leave balances, payroll register,
+  unsettled advances) on screen, PDF and Excel. The employee page shows the
+  person's requests and papers; the main dashboard the requests waiting on
+  me. Migration 0265; controls C-36 to C-39.
 - REQ-HR-001 HR-5 — **Recruitment** and **Performance**. A vacancy (VAC-…)
   for a position, drafted by HR and opened by the HR manager; its applicants
   (APL-…, CV filed on their record) move forward through screening,

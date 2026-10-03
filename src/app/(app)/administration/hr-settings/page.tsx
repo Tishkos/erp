@@ -493,6 +493,7 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
                 <Field defaultValue={String(limits.contract_expiry_warning_days)} label={t('limit_contract_expiry_warning_days')} name="contract_expiry_warning_days" />
                 <Field defaultValue={String(limits.leave_pending_reminder_days)} label={t('limit_leave_pending_reminder_days')} name="leave_pending_reminder_days" />
                 <Field defaultValue={String(limits.leave_lapse_warning_days)} label={t('limit_leave_lapse_warning_days')} name="leave_lapse_warning_days" />
+                <Field defaultValue={String(limits.document_expiry_warning_days)} label={t('limit_document_expiry_warning_days')} name="document_expiry_warning_days" />
               </Grid>
               <SubmitRow>
                 <Submit label={t('save')} />

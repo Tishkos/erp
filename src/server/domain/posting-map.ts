@@ -300,6 +300,14 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     event: 'hr.employee_advance_repayment',
     lines: [line('employee_advance', 'credit', true)],
   },
+  {
+    // REQ-HR-001 HR-6 (§10) — an expense claim reimbursed: what was spent, by
+    // the person's department (a category may name its own account; this role
+    // answers for every one that does not), the trip's advance it settles, and
+    // the bank or cash account the rest left.
+    event: 'hr.expense_claim',
+    lines: [line('employee_expense', 'debit', true), line('employee_advance', 'credit')],
+  },
 ]);
 
 /** The catalogue as flat (event, role) pairs, in the order shown. */

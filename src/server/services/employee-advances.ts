@@ -575,6 +575,51 @@ export async function recordPayrollRecovery(
   return written;
 }
 
+/**
+ * HR-6 — what a trip's advance still owes, locked for the claim that may
+ * settle it. Only a paid advance owes anything; one not yet paid out (or
+ * cancelled) is settled by nothing.
+ */
+export async function owedForClaim(tx: Tx, advanceId: string): Promise<{ advanceNo: string; owed: bigint }> {
+  const [row] = await tx.select().from(employeeAdvance).where(eq(employeeAdvance.id, advanceId)).for('update');
+  if (!row) throw new AdminNotFoundError('advance', advanceId);
+  return { advanceNo: row.advanceNo, owed: row.status === 'paid' ? scaled(row.amountIqd) - scaled(row.recoveredIqd) : 0n };
+}
+
+/** HR-6 — a reimbursed claim settles part or all of its trip's advance: a recovery row naming the claim and its journal. */
+export async function recordClaimRecovery(
+  tx: Tx,
+  ctx: ActorContext,
+  advanceId: string,
+  amount: bigint,
+  claim: { readonly id: string; readonly requestNo: string; readonly journalEntryId: string; readonly paidOn: string },
+): Promise<AdvanceStatus> {
+  const [row] = await tx.select().from(employeeAdvance).where(eq(employeeAdvance.id, advanceId)).for('update');
+  if (!row) throw new AdminNotFoundError('advance', advanceId);
+  const owed = scaled(row.amountIqd) - scaled(row.recoveredIqd);
+  if (row.status !== 'paid' || amount <= 0n || amount > owed) throw new AdvanceError(`${row.advanceNo} owes ${money(owed)} IQD; ${claim.requestNo} cannot settle ${money(amount)} IQD of it.`);
+  await tx.insert(employeeAdvanceRecovery).values({
+    advanceId: row.id,
+    source: 'claim',
+    month: `${claim.paidOn.slice(0, 7)}-01`,
+    amountIqd: money(amount),
+    requestId: claim.id,
+    journalEntryId: claim.journalEntryId,
+    reference: claim.requestNo,
+    recordedBy: ctx.principal.userId,
+  });
+  const status = await settleIfDone(tx, row, scaled(row.recoveredIqd) + amount);
+  await recordChange(tx, ctx, {
+    action: 'employee_advance.claim_settled',
+    objectType: PERMISSION_OBJECT,
+    objectId: row.advanceNo,
+    branchCode: row.branchCode,
+    before: { recoveredIqd: row.recoveredIqd, status: row.status },
+    after: { recoveredIqd: money(scaled(row.recoveredIqd) + amount), status, claim: claim.requestNo },
+  });
+  return status;
+}
+
 /** A reversed run gives back what it recovered: a negative row for each, the advance owed again. */
 export async function reversePayrollRecovery(tx: Tx, ctx: ActorContext, run: { id: string; runNo: string }): Promise<number> {
   const rows = await tx

@@ -263,6 +263,8 @@ async function main() {
       ['L100060', 'Payroll Deductions Payable', 'L000001', null],
       // REQ-HR-001 HR-4 — what people owe on advances and loans.
       ['A100050', 'Employee Advances and Loans', 'A000001', null],
+      // REQ-HR-001 HR-6 — what people spent for the company and are reimbursed.
+      ['X100090', 'Staff Expenses', 'X000001', null],
     ];
     for (const [code, name, parent, control] of accounts) {
       await tx.execute(sql`
@@ -314,6 +316,8 @@ async function main() {
       ['hr.payroll_run', 'employee_advance', 'A100050'],
       ['hr.employee_advance', 'employee_advance', 'A100050'],
       ['hr.employee_advance_repayment', 'employee_advance', 'A100050'],
+      ['hr.expense_claim', 'employee_expense', 'X100090'],
+      ['hr.expense_claim', 'employee_advance', 'A100050'],
     ];
     for (const [event, role, code] of mappings) {
       await tx.execute(sql`
@@ -347,6 +351,31 @@ async function main() {
         FROM app_user WHERE lower(email) = ${MANAGER_EMAIL}
       ON CONFLICT DO NOTHING
     `);
+
+    // The money a company starts with (C-20): a bank or cash account cannot
+    // pay what it does not hold, so a seeded company with an empty till
+    // could pay nobody. One opening journal into CASH-HQ against Opening
+    // Balance Equity, posted on the year's first day — what the accountant's
+    // opening balances would be on a real install. Once, by its number.
+    const opening = `OPEN-DEV-${year}`;
+    const exists = await tx.execute(sql`SELECT 1 FROM journal_entry WHERE entry_no = ${opening}`);
+    if (exists.rows.length === 0) {
+      const entry = await tx.execute(sql`
+        INSERT INTO journal_entry (entry_no, document_date, posting_date, fiscal_period_id, branch_code, description, status, total_debit_iqd, total_credit_iqd, created_by)
+        SELECT ${opening}, ${`${year}-01-01`}::date, ${`${year}-01-01`}::date, p.id, 'HQ', 'Opening cash (development seed)', 'draft', 1000000000, 1000000000, u.id
+          FROM fiscal_period p JOIN fiscal_year y ON y.id = p.fiscal_year_id, app_user u
+         WHERE y.code = ${`FY${year}`} AND p.period_no = 1 AND lower(u.email) = ${MANAGER_EMAIL}
+        RETURNING id, created_by
+      `);
+      const { id: entryId, created_by: managerId } = entry.rows[0] as { id: string; created_by: string };
+      await tx.execute(sql`
+        INSERT INTO journal_line (journal_entry_id, line_no, account_id, debit_txn, credit_txn, debit_iqd, credit_iqd, debit_usd, credit_usd, currency, branch_code)
+        SELECT ${entryId}::uuid, 1, gl_account_id, 1000000000, 0, 1000000000, 0, 0, 0, 'IQD', 'HQ' FROM bank_cash_account WHERE code = 'CASH-HQ'
+        UNION ALL
+        SELECT ${entryId}::uuid, 2, id, 0, 1000000000, 0, 1000000000, 0, 0, 'IQD', 'HQ' FROM chart_of_account WHERE code = 'E100010'
+      `);
+      await tx.execute(sql`UPDATE journal_entry SET status = 'posted', approved_by = ${managerId}, posted_at = now() WHERE id = ${entryId}`);
+    }
 
     // Block 8's three stages, each a warehouse of its own — transit since
     // REQ-AP-001 §17.4: goods at sea are owned, not available for sale.

@@ -41,13 +41,20 @@
  *   review_cycle        a period people are reviewed for (master data)
  *   performance_review  REV-…: one person, one cycle, their reviewer; rated, signed off
  *   review_goal         the review's goals: weight, target, rating
+ *
+ * Stage HR-6 (0265) — requests & documents:
+ *   employee_request       ECLM- / TRV- / LTR- / ERQ-…: an expense claim, a trip, a
+ *                          letter or anything else, approved and then reimbursed or issued
+ *   employee_request_line  a claim's lines, by expense category
+ *   employee_document      EDOC-…: a person's papers, their expiry, renewed or withdrawn
  */
 import { sql } from 'drizzle-orm';
-import { boolean, check, date, index, integer, numeric, pgTable, smallint, text, time, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, date, index, integer, numeric, pgTable, smallint, text, time, timestamp, uniqueIndex, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { chartOfAccount } from './accounting';
 import { fixedAsset } from './fixed-assets';
 import { bank, bankCashAccount } from './item';
 import { journalEntry } from './journal';
+import { expenseCategory } from './payables';
 import { appUser, branch, department } from './platform';
 
 export const position = pgTable(
@@ -627,6 +634,8 @@ export const employeeAdvanceRecovery = pgTable(
     amountIqd: numeric('amount_iqd', { precision: 20, scale: 4 }).notNull(),
     runId: uuid('run_id').references(() => payrollRun.id),
     lineId: uuid('line_id').references(() => payrollLine.id),
+    /** HR-6 — the expense claim that settled it (`source = 'claim'`). */
+    requestId: uuid('request_id').references((): AnyPgColumn => employeeRequest.id),
     bankCashAccountId: uuid('bank_cash_account_id').references(() => bankCashAccount.id),
     journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
     reference: text('reference'),
@@ -829,4 +838,114 @@ export const reviewGoal = pgTable(
     comment: text('comment'),
   },
   (t) => [uniqueIndex('review_goal_line_uniq').on(t.reviewId, t.lineNo), check('review_goal_weight', sql`${t.weight} between 1 and 100`)],
+);
+
+export const employeeRequest = pgTable(
+  'employee_request',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    requestNo: text('request_no').notNull(),
+    kind: text('kind').notNull(),
+    employeeId: uuid('employee_id')
+      .notNull()
+      .references(() => employee.id),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    subject: text('subject').notNull(),
+    details: text('details'),
+    destination: text('destination'),
+    travelFrom: date('travel_from'),
+    travelTo: date('travel_to'),
+    estimatedIqd: numeric('estimated_iqd', { precision: 20, scale: 4 }),
+    letterType: text('letter_type'),
+    addressedTo: text('addressed_to'),
+    amountIqd: numeric('amount_iqd', { precision: 20, scale: 4 }).notNull().default('0'),
+    travelRequestId: uuid('travel_request_id').references((): AnyPgColumn => employeeRequest.id),
+    advanceId: uuid('advance_id').references(() => employeeAdvance.id),
+    status: text('status').notNull().default('draft'),
+    requestedBy: uuid('requested_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    decidedBy: uuid('decided_by').references(() => appUser.id),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    decisionNote: text('decision_note'),
+    paidBy: uuid('paid_by').references(() => appUser.id),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    paidOn: date('paid_on'),
+    bankCashAccountId: uuid('bank_cash_account_id').references(() => bankCashAccount.id),
+    paymentReference: text('payment_reference'),
+    advanceOffsetIqd: numeric('advance_offset_iqd', { precision: 20, scale: 4 }).notNull().default('0'),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    issuedBy: uuid('issued_by').references(() => appUser.id),
+    issuedAt: timestamp('issued_at', { withTimezone: true }),
+    issuedText: text('issued_text'),
+    cancelledBy: uuid('cancelled_by').references(() => appUser.id),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+  },
+  (t) => [
+    uniqueIndex('employee_request_no_uniq').on(t.requestNo),
+    index('employee_request_employee_idx').on(t.employeeId, t.status),
+    index('employee_request_status_idx').on(t.status, t.branchCode),
+    check('employee_request_kind', sql`${t.kind} in ('expense_claim', 'travel', 'letter', 'other')`),
+    check('employee_request_decider_not_requester', sql`${t.decidedBy} is null or ${t.decidedBy} <> ${t.requestedBy}`),
+  ],
+);
+
+export const employeeRequestLine = pgTable(
+  'employee_request_line',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    requestId: uuid('request_id')
+      .notNull()
+      .references(() => employeeRequest.id),
+    lineNo: smallint('line_no').notNull(),
+    spentOn: date('spent_on').notNull(),
+    expenseCategoryCode: text('expense_category_code')
+      .notNull()
+      .references(() => expenseCategory.code),
+    description: text('description').notNull(),
+    amountIqd: numeric('amount_iqd', { precision: 20, scale: 4 }).notNull(),
+  },
+  (t) => [uniqueIndex('employee_request_line_uniq').on(t.requestId, t.lineNo)],
+);
+
+export const employeeDocument = pgTable(
+  'employee_document',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    documentNo: text('document_no').notNull(),
+    employeeId: uuid('employee_id')
+      .notNull()
+      .references(() => employee.id),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    docType: text('doc_type').notNull(),
+    title: text('title').notNull(),
+    referenceNo: text('reference_no'),
+    issuedOn: date('issued_on'),
+    expiresOn: date('expires_on'),
+    note: text('note'),
+    status: text('status').notNull().default('valid'),
+    replacesId: uuid('replaces_id').references((): AnyPgColumn => employeeDocument.id),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    withdrawnBy: uuid('withdrawn_by').references(() => appUser.id),
+    withdrawnAt: timestamp('withdrawn_at', { withTimezone: true }),
+    withdrawReason: text('withdraw_reason'),
+  },
+  (t) => [
+    uniqueIndex('employee_document_no_uniq').on(t.documentNo),
+    index('employee_document_employee_idx').on(t.employeeId, t.status),
+    check('employee_document_type', sql`${t.docType} in ('contract', 'national_id', 'passport', 'residence', 'work_permit', 'certificate', 'licence', 'handover', 'other')`),
+    check('employee_document_status', sql`${t.status} in ('valid', 'superseded', 'withdrawn')`),
+  ],
 );
