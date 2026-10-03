@@ -468,6 +468,15 @@ export async function post(
   tx: Tx,
   ctx: ActorContext,
   id: string,
+  options: {
+    /**
+     * Money already reserved on the account for this very payment — a payment
+     * application being confirmed (§15.1). It is part of what `availableIqd`
+     * subtracts, so it is given back for the check: the application's own
+     * reservation is what pays it, not a rival for the same money.
+     */
+    readonly drawsReservedIqd?: bigint;
+  } = {},
 ): Promise<{ journalEntryId: string }> {
   const payment = await load(tx, id);
 
@@ -488,12 +497,14 @@ export async function post(
    *
    * `availableIqd` is the balance less what other approved payments have
    * already committed, so two payments that each fit the balance cannot both
-   * go out against the same money.
+   * go out against the same money. A payment drawn from its own reservation
+   * counts that reservation back in.
    */
   const position = await treasury.accountPosition(tx, payment.bankCashAccountId);
   const amount = parseDecimal(payment.amountIqd, 4n);
-  if (position.availableIqd < amount) {
-    throw new InsufficientFundsError(position.accountCode, position.availableIqd, amount);
+  const available = position.availableIqd + (options.drawsReservedIqd ?? 0n);
+  if (available < amount) {
+    throw new InsufficientFundsError(position.accountCode, available, amount);
   }
 
   const [supplier] = await tx

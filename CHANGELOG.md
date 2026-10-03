@@ -8,6 +8,12 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Fixed
+- Confirming a payment application no longer counts its own reservation
+  against it: the supplier payment it posts is drawn from the money the
+  approval reserved (§15.1), so an account holding the amount — not twice
+  it — can confirm. The older integration suites fund their fixture banks
+  before paying (C-20); the sales-exchange gate ignores FX-3's
+  `payable_exchange_difference`.
 - A fresh database migrates to head in one run again: `migrate.ts` commits
   after each migration that adds an enum value before running what uses it
   (0260 used `whatsapp`, added by 0242, in the same transaction). The
