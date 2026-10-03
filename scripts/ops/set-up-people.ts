@@ -214,6 +214,25 @@ const NEW_ROLES = [
     ),
   },
   {
+    code: 'developer',
+    name: 'Developer',
+    description:
+      'The settings and the plumbing — health, parameters, interfaces, releases. No business data at all. Tishko.',
+    grants: grants(
+      [
+        // The technical half of Administration.
+        'system_health',
+        'system_parameter',
+        'number_series',
+        'job',
+        'whatsapp',
+        // Integrations, in full: this is the developer's own section.
+        ...objectsOf('integrations'),
+      ],
+      FULL,
+    ),
+  },
+  {
     code: 'import_officer',
     name: 'Import officer',
     description:
@@ -242,6 +261,16 @@ const PEOPLE = [
   { email: 'zhyar@qs-groups.com', name: 'Zhyar', roles: ['sales_inventory_clerk'], superUser: false },
   { email: 'rawezh@qs-groups.com', name: 'Rawezh Jalil', roles: ['sales_inventory_clerk'], superUser: false },
   { email: 'info@qs-groups.com', name: 'Manar', roles: ['accountant'], superUser: false },
+  /*
+   * The developer. Settings and plumbing, and no business data — by direction,
+   * 2026-10-03: "he is developer but cannot see anything".
+   *
+   * Deliberately not `app_user`, `role` or `permission`: whoever administers
+   * those can grant themselves every section, so holding them would undo the
+   * sentence that asked for this. Nor `audit_event`, which names documents and
+   * their amounts, nor `legacy_import`, which is the books themselves.
+   */
+  { email: 'sabirtiishko@gmail.com', name: 'Tishko', roles: ['developer'], superUser: false },
 ] as const;
 
 async function main(): Promise<void> {
