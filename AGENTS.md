@@ -76,6 +76,29 @@ The active appearance belongs to `.erp-root[data-palette][data-accent]`. Palette
 
 Run `npx playwright test tests/e2e/theme-readability.spec.ts --workers=1` against the seeded local development server. It checks all 90 palette/accent combinations without saving appearance settings, along with checkbox keyboard behavior, notifications, shared route-state styling, and the export menu at mobile LTR/RTL widths. Pearl (`pearl`) and Deep Ocean (`ocean`) require migration 0216. Migration 0217 adds Obsidian Plum, Evergreen, Espresso, Lunar Slate, Ivory Linen, Glacier, Sage White, Porcelain Rose, Dune Bronze, and Harbor Mist; `tests/integration/appearance-palettes.test.ts` checks personal and company persistence for every palette and rejection of unknown names.
 
+## Every record wears the same four doors (standing, 2026-10-03)
+
+By direction: "attachment print notes button and status as icons please for it
+dont forget these this must be our standard". A record screen carries them in
+`DocumentWindow.titleActions`, in this order, and nothing else:
+
+* **Printer** — `ExportIcon` (`@/components/print/export-menu`) with the
+  record's export key. A record with no print model does not get an empty door;
+  it gets a print model (`src/server/print/`, `EXPORT_ACCESS`, `registry.ts`).
+* **Paperclip** — `AttachmentsButton` with the count and the `Attachments` form.
+* **Notes** — `NotesButton` with the record's own notes and the box to add one,
+  where the record has notes.
+* **Clock** — `HistoryButton` with `RecordHistory`.
+
+The long blocks those replace — an attachments panel, a notes table, an audit
+log under the lines — come off the page. The document is the document; what it
+*has* lives behind the doors. `icon-dialog.tsx` holds all four; the notes and
+history doors open `wide`, because a table in a narrow dialog is read sideways.
+
+Done so far: the purchase invoice, the import application, the B/L, the PD, the
+ASYCUDA reading, the loan (no printer — no print model yet). A new record screen
+starts with them.
+
 ## Screens copy existing models — the design must not change
 
 Standing rule (by direction, 2026-10-01; see also docs/notes/newsettings.md: "DO NOT CHANGE THE CURRENT DESIGN"). A new or changed screen must be indistinguishable in style from the existing ones:

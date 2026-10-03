@@ -28,6 +28,8 @@ export function Submit({
   tone = 'primary',
   small,
   variant = 'admin',
+  formAction,
+  formMethod,
 }: {
   readonly label: string;
   /**
@@ -40,6 +42,13 @@ export function Submit({
   readonly small?: boolean;
   /** Which chrome: the application's forms, or a document window's actions. */
   readonly variant?: 'admin' | 'document';
+  /**
+   * Where this button sends the form, when it is not where the form itself
+   * points (2026-10-03). The New Loan page has two: one asks this same page to
+   * lay the schedule out again, the other creates the loan.
+   */
+  readonly formAction?: string | ((formData: FormData) => void | Promise<void>);
+  readonly formMethod?: 'get' | 'post';
 }) {
   const [ready, setReady] = useState(false);
   const { pending } = useFormStatus();
@@ -61,6 +70,8 @@ export function Submit({
       className={cls}
       disabled={!ready || pending}
       type="submit"
+      {...(formAction ? { formAction } : {})}
+      {...(formMethod ? { formMethod } : {})}
       {...(name ? { 'aria-label': name, title: name } : {})}
     >
       {label}

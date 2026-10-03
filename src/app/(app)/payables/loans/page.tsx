@@ -9,6 +9,7 @@ import {
   Flash,
   Form,
   Grid,
+  LinkButton,
   ListToolbar,
   Select,
   Submit,
@@ -79,106 +80,13 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
 
   return (
     <AdminPage
-      actions={
-        pickers ? (
-          <NewRecordDialog
-            buttonLabel={t('new')}
-            closeLabel={admin('close')}
-            openOnLoad={Boolean(outcome.error)}
-            title={t('new')}
-            wide
-          >
-            <p className="muted">{t('new_note')}</p>
-            <Form action={createLoan}>
-              <Grid>
-                <LoanBankField
-                  banks={pickers.banks.map((bank) => ({
-                    value: bank.code,
-                    label: bank.swift ? `${bank.name} · ${bank.swift}` : bank.name,
-                  }))}
-                  labels={{
-                    bank: t('bank'),
-                    another: t('another_bank'),
-                    name: t('bank_name'),
-                    nameHint: t('bank_name_hint'),
-                    swift: t('bank_swift'),
-                  }}
-                  newBankValue={NEW_BANK}
-                />
-                <Select
-                  label={t('account')}
-                  name="bank_cash_account_id"
-                  options={pickers.accounts.map((account) => ({
-                    value: account.id,
-                    label: `${account.code} · ${account.name} · ${account.currency}`,
-                  }))}
-                  required
-                />
-                <Field label={t('principal')} name="principal" required />
-                {/*
-                  What the bank will put in the account, and what is owed —
-                  worked out as the letter is typed (2026-10-03). Shown, never
-                  submitted: `disburse` works it out again from the stored loan
-                  when the money actually arrives.
-                */}
-                <LoanProceeds
-                  deductedCodes={pickers.treatments.filter((row) => row.deducted).map((row) => row.code)}
-                  labels={{
-                    lands: t('proceeds_lands'),
-                    owed: t('proceeds_owed'),
-                    commission: t('proceeds_commission'),
-                  }}
-                  locale={locale}
-                  percentField="commission_pct"
-                  principalField="principal"
-                  treatmentField="commission_treatment"
-                />
-
-                <Field defaultValue="0" label={t('commission_pct')} name="commission_pct" />
-                <Select
-                  label={t('treatment')}
-                  name="commission_treatment"
-                  options={pickers.treatments.map((treatment) => ({
-                    value: treatment.code,
-                    label: locale !== 'en' && t.has(`tr.${treatment.code}`) ? t(`tr.${treatment.code}`) : treatment.name,
-                  }))}
-                  required
-                />
-                <Field hint={t('interest_hint')} label={t('interest')} name="interest_pct" />
-                <Select
-                  defaultValue="by_amount_used"
-                  label={t('allocation_method')}
-                  name="allocation_method"
-                  options={['by_amount_used', 'equal', 'manual'].map((method) => ({
-                    value: method,
-                    label: t(`method_${method}`),
-                  }))}
-                />
-                <LoanScheduleFields
-                  labels={{
-                    count: t('instalments'),
-                    frequency: t('frequency'),
-                    frequencies: ['monthly', 'quarterly', 'custom'].map((frequency) => ({
-                      value: frequency,
-                      label: t(`freq_${frequency}`),
-                    })),
-                    first: t('first_due'),
-                    nth: t('due_nth', { position: '{position}' }),
-                    final: t('final_due'),
-                    hint: t('rhythm_hint'),
-                  }}
-                  today={today}
-                />
-              </Grid>
-              <Field id="loan-purpose" label={t('purpose')} name="purpose" wide />
-              <Checkbox defaultChecked label={t('capitalised')} name="commission_capitalised" />
-              <SubmitRow>
-                <Submit label={t('create')} />
-              </SubmitRow>
-            </Form>
-          </NewRecordDialog>
-        ) : null
-      }
+      /*
+        The offer is a document now, not a dialog (2026-10-03): a facility has a
+        currency, a reference, a commission the bank may state either way, a
+        rate that may follow a published one, a grace period and a schedule of
+        several rows. None of that fits in a window over a list.
+      */
+      actions={pickers ? <LinkButton href="/payables/loans/new" label={t('new')} tone="primary" /> : null}
       back={{ href: '/', label: admin('dashboard_label') }}
       tabs={<SectionTabs route="/payables/loans" />}
       subtitle={t('subtitle')}

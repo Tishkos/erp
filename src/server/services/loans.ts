@@ -1401,9 +1401,11 @@ export async function pickers(tx: Tx) {
     .select({
       code: loanCommissionTreatment.code,
       name: loanCommissionTreatment.name,
-      // Whether the bank keeps it out of the money it sends — so the form can
-      // say what will land in the account (2026-10-03).
+      // Whether the bank keeps it out of the money it sends, and whether it
+      // rides on the instalments — so the form can say what will land in the
+      // account and lay the schedule out (2026-10-03).
       deducted: loanCommissionTreatment.deducted,
+      spread: loanCommissionTreatment.spread,
     })
     .from(loanCommissionTreatment)
     .where(eq(loanCommissionTreatment.active, true))

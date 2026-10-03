@@ -71,9 +71,29 @@ export async function createLoan(formData: FormData): Promise<void> {
         bankCashAccountId: text(formData, 'bank_cash_account_id'),
         principalTxn: amountOf(text(formData, 'principal')) ?? 0n,
         commissionPct: text(formData, 'commission_pct') || null,
-        // The percentage is the only figure the letter is entered with
-        // (2026-10-03); the service works the commission out from it.
-        commissionTxn: null,
+        /*
+         * The commission as the letter states it (2026-10-03): a percentage,
+         * or the bank's own figure, or none at all. The service works out what
+         * the basis does not give it.
+         */
+        commissionTxn:
+          text(formData, 'commission_basis') === 'fixed'
+            ? amountOf(text(formData, 'commission_fixed'))
+            : text(formData, 'commission_basis') === 'none'
+              ? 0n
+              : null,
+        commissionBasis: text(formData, 'commission_basis') || null,
+        facilityReference: text(formData, 'facility_reference') || null,
+        principalMethod: text(formData, 'principal_method') || null,
+        interestBasis: text(formData, 'interest_basis') || null,
+        interestType: text(formData, 'interest_type') || null,
+        interestReferenceRate: text(formData, 'interest_reference') || null,
+        interestSpreadPct: text(formData, 'interest_spread') || null,
+        otherFeesTxn: amountOf(text(formData, 'other_fees')) ?? 0n,
+        graceKind: text(formData, 'grace_kind') || null,
+        graceUntil: text(formData, 'grace_until') || null,
+        purposeCode: text(formData, 'purpose_code') || null,
+        expectedDisbursementDate: text(formData, 'expected_disbursement_date') || null,
         commissionTreatmentCode: text(formData, 'commission_treatment'),
         commissionCapitalised: formData.get('commission_capitalised') !== null,
         interestPctPa: text(formData, 'interest_pct') || null,

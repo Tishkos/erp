@@ -18,6 +18,8 @@ import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { Attachments } from '@/components/admin/attachments';
 import { RecordHistory } from '@/components/admin/history';
+import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import * as attachmentsService from '@/server/services/attachments';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -183,6 +185,11 @@ export default async function LoanPage({
 
   const scheduleRows = [...schedule.map((row) => row), ...Array.from({ length: Math.max(0, 8 - schedule.length) }, () => null)];
 
+  // What the paperclip says it holds.
+  const attachedCount = await withCurrentUser((tx) =>
+    attachmentsService.currentFor(tx, loans.PERMISSION_OBJECT, loan.id),
+  ).then((rows) => rows.length);
+
   return (
     <AdminPage
       back={{ href: '/payables/loans', label: page('loans') }}
@@ -344,8 +351,30 @@ export default async function LoanPage({
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={admin('history')}
+        titleActions={
+          <>
+            {/* The paperclip and the clock, as every record wears them
+                (2026-10-03). The loan has no print model yet, so it has no
+                printer: a door onto nothing is worse than no door. */}
+            <AttachmentsButton
+              closeLabel={admin('close')}
+              count={attachedCount}
+              label={t('attachments')}
+              title={t('attachments')}
+            >
+              <Attachments
+                action={attachToLoan}
+                hidden={hidden}
+                mayAttach={can(principal, 'edit_draft', loans.PERMISSION_OBJECT)}
+                objectId={loan.id}
+                objectType={loans.PERMISSION_OBJECT}
+              />
+            </AttachmentsButton>
+            <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
+              <RecordHistory objectId={loan.id} objectType={loans.PERMISSION_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         documentType={t('record')}
         fields={fields}
         id="loan-document"
@@ -532,19 +561,6 @@ export default async function LoanPage({
         </div>
       </section>
 
-      {/* ── The contract, the schedule the bank sent, its letters ───── */}
-      <section aria-label={t('attachments')} className={s.sapDoc}>
-        <div className={s.sapWindow}>
-          <Attachments
-            action={attachToLoan}
-            hidden={hidden}
-            mayAttach={can(principal, 'edit_draft', loans.PERMISSION_OBJECT)}
-            objectId={loan.id}
-            objectType={loans.PERMISSION_OBJECT}
-          />
-        </div>
-      </section>
-      <RecordHistory objectId={loan.id} objectType={loans.PERMISSION_OBJECT} />
     </AdminPage>
   );
 }
