@@ -4,6 +4,9 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, Hidden, Submit, admin as s } from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { Attachments } from '@/components/admin/attachments';
+import * as attachmentsService from '@/server/services/attachments';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -13,7 +16,7 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { isNotFoundError } from '@/server/not-found';
 import * as deposits from '@/server/services/bank-deposits';
-import { approveDeposit, postDeposit } from '../actions';
+import { approveDeposit, attachToDeposit, postDeposit } from '../actions';
 
 /**
  * One bank deposit — REQ-FIX-001 FIX-1. The Purchase Invoice's window: the
@@ -53,6 +56,11 @@ export default async function DepositPage({ params, searchParams }: { params: Pr
   if (!deposit) notFound();
 
   const object = deposit.source === 'cash' ? deposits.PERMISSION_OBJECT : deposits.RECEIPT_PERMISSION_OBJECT;
+  // What the paperclip says it holds — the slip, on whichever document the
+  // deposit actually is.
+  const attached = await withCurrentUser((tx) =>
+    attachmentsService.currentFor(tx, deposit.source === 'cash' ? 'bank_transfer' : 'other_receipt', deposit.id),
+  );
   const historyType = deposit.source === 'cash' ? 'bank_transfer' : 'other_receipt';
   const money = (amount: string) => formatMoney(amount, deposit.currency, locale as Locale);
   const mayApprove = deposit.status === 'draft' && can(principal, 'approve', object) && deposit.createdBy !== principal.userId;
@@ -108,8 +116,29 @@ export default async function DepositPage({ params, searchParams }: { params: Pr
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={admin('history')}
+        titleActions={
+          <>
+            {/* The slip the bank gave, and what happened to the deposit —
+                behind the doors every record wears (2026-10-04). */}
+            <AttachmentsButton
+              closeLabel={admin('close')}
+              count={attached.length}
+              label={admin('attachments.title')}
+              title={admin('attachments.title')}
+            >
+              <Attachments
+                action={attachToDeposit}
+                hidden={{ deposit_no: deposit.no }}
+                mayAttach={can(principal, 'create', 'attachment')}
+                objectId={deposit.id}
+                objectType={historyType}
+              />
+            </AttachmentsButton>
+            <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
+              <RecordHistory objectId={deposit.id} objectType={historyType} />
+            </HistoryButton>
+          </>
+        }
         documentType={t(`document_type_${deposit.source}`)}
         fields={fields}
         id="bank-deposit-document"
