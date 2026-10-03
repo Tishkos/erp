@@ -60,6 +60,9 @@ import type { PostingLineRequest } from '../domain/posting';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
+import { advanceOf } from '../domain/payment-applications';
+import * as payableEvents from './payable-events';
+import * as applications from './payment-applications';
 import * as payables from './payables';
 import * as posting from './posting';
 import * as inventory from './inventory';
@@ -1616,6 +1619,88 @@ export async function post(
   // its purchase order) is applied to it now, so the invoice, the import and
   // the supplier's account agree on what is still owed.
   await advances.applyToPostedInvoice(tx, ctx, id);
+
+  /*
+   * §15.3 — the advance this invoice is paid in front, raised and approved
+   * (2026-10-03, by direction).
+   *
+   * The accountant wrote a percentage on the invoice; the share of the total
+   * just committed is what the bank is asked for, against this invoice's own
+   * import, and the request carries the invoice's approval rather than waiting
+   * for another. Send is untouched: the PD, the funds, the verified supplier
+   * account and the instalment trigger are all still asked there, so this
+   * moves no money.
+   */
+  const advanceIqd = advanceOf(payableIqd, invoice.advancePercent);
+  if (advanceIqd !== null && !invoice.advanceApplicationId) {
+    if (!invoice.payableId) {
+      // A payment application belongs to an import application; an invoice
+      // with none has nowhere to hang the request.
+      await audit.record(tx, {
+        actorUserId: ctx.principal.userId,
+        action: 'ap_invoice.advance_not_raised',
+        objectType: PERMISSION_OBJECT,
+        objectId: id,
+        branchCode: invoice.branchCode,
+        after: { why: 'the invoice names no import application', percent: invoice.advancePercent },
+        outcome: 'success',
+      });
+    } else {
+      const owner = await payables.load(tx, invoice.payableId);
+      if (owner.currency !== 'IQD') {
+        /*
+         * The invoice's total is held in dinars and the import is not. The
+         * rate that should turn one into the other on this day is the
+         * accountant's to choose — the books' own, the bank's, or the one the
+         * supplier's letter implies — and converting on a default here would
+         * put a figure nobody chose in front of a bank.
+         */
+        await payableEvents.record(tx, {
+          payableId: invoice.payableId,
+          eventCode: 'ADVANCE_NOT_RAISED',
+          sourceType: PERMISSION_OBJECT,
+          sourceId: id,
+          sourceNo: invoice.invoiceNo,
+          summary:
+            `${invoice.invoiceNo} asks for ${invoice.advancePercent}% in front — ` +
+            `${say(toDecimalString(advanceIqd, 4n))} — but ${owner.payableNo} is in ${owner.currency}. ` +
+            'Raise the payment application by hand at the rate you mean to use.',
+          actorUserId: ctx.principal.userId,
+        });
+      } else {
+        const made = await applications.create(tx, ctx, {
+          payableId: invoice.payableId,
+          paymentMethodCode: invoice.advancePaymentMethodCode!,
+          bankCashAccountId: invoice.advancePaidFromAccountId!,
+          amountTxn: advanceIqd,
+          note:
+            `${invoice.advancePercent}% advance on ${invoice.invoiceNo}, ` +
+            `raised when it posted (${say(toDecimalString(payableIqd, 4n))} total).`,
+        });
+        // "not drafts": approved on the invoice's own approval, which a second
+        // person gave when they posted it.
+        await applications.approve(tx, ctx, made.id, { inheritedFrom: invoice.invoiceNo });
+        await tx
+          .update(apInvoice)
+          .set({ advanceApplicationId: made.id, updatedAt: new Date() })
+          .where(eq(apInvoice.id, id));
+
+        // On the import's own log, where somebody watching the payment lane
+        // will see it without being told to look.
+        await payableEvents.record(tx, {
+          payableId: invoice.payableId,
+          eventCode: 'ADVANCE_RAISED',
+          sourceType: PERMISSION_OBJECT,
+          sourceId: id,
+          sourceNo: invoice.invoiceNo,
+          summary:
+            `${made.applicationNo} raised for ${invoice.advancePercent}% of ${invoice.invoiceNo} — ` +
+            `${say(toDecimalString(advanceIqd, 4n))}, approved on the invoice's own approval.`,
+          actorUserId: ctx.principal.userId,
+        });
+      }
+    }
+  }
 
   // §9.2 / A10 — each charged line becomes a landed-cost charge of its
   // import, in this same transaction, typed by this invoice's own category.

@@ -388,3 +388,58 @@ function formatMinor(value: bigint): string {
   const cents = (absolute % 10_000n) / 100n;
   return `${negative ? '-' : ''}${whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${cents.toString().padStart(2, '0')}`;
 }
+
+/**
+ * The advance a percentage asks for, out of an invoice's total.
+ *
+ * By direction (2026-10-03): "if accountant writes 20 percentage of advances
+ * it automatically takes 20 percent of the whole invoice".
+ *
+ * On bigints throughout and rounded half-up at the money scale. A percentage
+ * that does not divide — a third of the goods — lands on the nearest dinar
+ * rather than drifting, and the figure the screen shows beside the percentage
+ * is the figure the bank is asked for, because both come from here.
+ *
+ * Null when there is nothing to ask for: no percentage, nought per cent, or an
+ * invoice that totals nothing. Null is "raise nothing", which is different
+ * from zero and is why it is not zero.
+ */
+export function advanceOf(totalIqd: bigint, percent: string | null | undefined): bigint | null {
+  const text = (percent ?? '').trim();
+  if (text === '') return null;
+  if (!/^\d+(\.\d+)?$/.test(text)) return null;
+
+  /*
+   * The percentage at four places, as a bigint: "20.5" → 205000.
+   *
+   * Scaled here rather than through `parseDecimal` because this module has no
+   * imports at all and is the better for it — every rule in it is decidable
+   * from its arguments, which is what lets the tests run without a database or
+   * a money library. Four places is the money scale, and a percentage written
+   * to more than four is truncated rather than rounded: nobody means the fifth
+   * decimal of a percent, and refusing it would be worse than ignoring it.
+   */
+  const [whole = '0', fraction = ''] = text.split('.');
+  const places = (fraction + '0000').slice(0, 4);
+  const parsed = BigInt(whole) * 10000n + BigInt(places);
+  if (parsed <= 0n) return null;
+  if (totalIqd <= 0n) return null;
+
+  // total × percent / 100, half-up on the last place.
+  const scale = 10n ** 4n;
+  const numerator = totalIqd * parsed;
+  const denominator = 100n * scale;
+  const share = numerator / denominator;
+  const remainder = numerator % denominator;
+  const rounded = remainder * 2n >= denominator ? share + 1n : share;
+
+  /*
+   * A share that rounds away to nothing is nothing to ask for.
+   *
+   * A hundredth of a per cent of a small invoice is less than a fils, and
+   * without this the caller would raise a payment application for zero — a
+   * request to the bank to send no money, needing approval and a signature.
+   * Null is already this function's word for "raise nothing" (2026-10-03).
+   */
+  return rounded <= 0n ? null : rounded;
+}

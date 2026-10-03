@@ -45,7 +45,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { appUser, branch } from './platform';
 import { businessPartner, costCentre, warehouse } from './organisation';
-import { item, unitOfMeasure } from './item';
+import { bankCashAccount, item, unitOfMeasure } from './item';
 import { documentStatus } from './workflow';
 import { chartOfAccount } from './accounting';
 import { journalEntry } from './journal';
@@ -197,6 +197,26 @@ export const apInvoice = pgTable(
      * all three disagree, so the lines are frozen at the same moment.
      */
     totalIqd: numeric('total_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+
+    /**
+     * The advance paid in front, as a percentage of this invoice — §15.3, by
+     * direction 2026-10-03.
+     *
+     * Not a commission: a commission is what a bank charges for its own
+     * service, an advance is part of the price of the goods paid early, and
+     * they post to different places. The field the sponsor described was
+     * called the wrong thing and the name was worth correcting.
+     *
+     * The account and the method are here for the same reason the percent is:
+     * a payment application cannot exist without saying where the money
+     * leaves from and how it travels, so the invoice asks once and the
+     * application is raised without a second form.
+     */
+    advancePercent: numeric('advance_percent', { precision: 9, scale: 4 }),
+    advancePaidFromAccountId: uuid('advance_paid_from_account_id').references(() => bankCashAccount.id),
+    advancePaymentMethodCode: text('advance_payment_method_code'),
+    /** The application it raised, so a second posting raises no second advance. */
+    advanceApplicationId: uuid('advance_application_id'),
 
     /**
      * How much of the total has been discharged — by supplier advances (§8.5)

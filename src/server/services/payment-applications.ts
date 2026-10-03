@@ -525,11 +525,30 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateInput) {
 // §15.3 — approve: the money is reserved
 // ---------------------------------------------------------------------------
 
-export async function approve(tx: Tx, ctx: ActorContext, id: string) {
+export async function approve(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  options: {
+    /**
+     * The document whose own approval stands in for the second pair of eyes.
+     *
+     * One caller passes it: an advance raised by posting a purchase invoice
+     * (2026-10-03, by direction). Posting an invoice is already somebody other
+     * than its raiser, and that person approved the invoice, its total and its
+     * advance percentage — so requiring a further approval of the figure that
+     * follows arithmetically from all three would be ceremony, not control.
+     *
+     * Named rather than boolean so the audit row says which document, and so
+     * a future caller cannot switch the rule off without saying why.
+     */
+    readonly inheritedFrom?: string;
+  } = {},
+) {
   const row = await lock(tx, id);
   await authz.authorize(ctx.principal, 'approve', PERMISSION_OBJECT, { branchCode: row.branchCode });
   await move(tx, row, 'approved');
-  if (row.createdBy === ctx.principal.userId) {
+  if (row.createdBy === ctx.principal.userId && !options.inheritedFrom) {
     throw new PaymentApplicationError(
       `${row.applicationNo}: the person who prepared a payment application cannot approve it — ` +
         'approving it reserves company money (§5.2).',
@@ -567,7 +586,12 @@ export async function approve(tx: Tx, ctx: ActorContext, id: string) {
     objectId: id,
     branchCode: row.branchCode,
     before: { status: row.status },
-    after: { status: 'approved', reservedIqd: row.amountIqd },
+    after: {
+      status: 'approved',
+      reservedIqd: row.amountIqd,
+      // The exception, on the record. Absent for every ordinary approval.
+      ...(options.inheritedFrom ? { approvalInheritedFrom: options.inheritedFrom } : {}),
+    },
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });
