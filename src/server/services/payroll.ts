@@ -557,7 +557,8 @@ export async function returnToDraft(tx: Tx, ctx: ActorContext, runNo: string, no
 export function approvalRefusal(ctx: ActorContext, run: { status: string; createdBy: string; submittedBy: string | null; branchCode: string }): string | null {
   if (run.status !== 'submitted') return 'status';
   if (!can(ctx.principal, 'approve', PERMISSION_OBJECT)) return 'grant';
-  if (run.createdBy === ctx.principal.userId || run.submittedBy === ctx.principal.userId) return 'maker';
+  // the super user approves alone, by direction 2026-10-03.
+  if (!ctx.principal.isSuperUser && (run.createdBy === ctx.principal.userId || run.submittedBy === ctx.principal.userId)) return 'maker';
   return null;
 }
 
@@ -566,7 +567,8 @@ export async function approve(tx: Tx, ctx: ActorContext, runNo: string): Promise
   const run = await load(tx, runNo, { lock: true });
   await authorize(ctx, 'approve', run);
   assertPayrollTransition(run.runNo, run.status, 'approved');
-  if (run.createdBy === ctx.principal.userId || run.submittedBy === ctx.principal.userId) {
+  // the super user approves alone, by direction 2026-10-03.
+  if (!ctx.principal.isSuperUser && (run.createdBy === ctx.principal.userId || run.submittedBy === ctx.principal.userId)) {
     throw new PayrollError(`You prepared ${run.runNo}; somebody else approves it (maker-checker).`);
   }
   const now = new Date();

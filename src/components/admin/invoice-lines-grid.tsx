@@ -10,6 +10,7 @@ import {
   useState,
   useTransition,
 } from 'react';
+import { inLedger as inLedgerCurrency } from './invoice-currency';
 import styles from './admin.module.css';
 import { ColumnGrip, useColumnWidths } from './column-widths';
 import { PAIRED_CHOICE } from './paired-picker';
@@ -96,6 +97,15 @@ export interface LiveLines {
 }
 
 export interface InvoiceLineLabels {
+  /**
+   * "Unit Price ({currency})" and "Total Price ({currency})", raw.
+   *
+   * The plain keys have "(IQD)" written into them and are shared with the
+   * sales grid, so these are passed instead of editing those — a screen that
+   * gives neither keeps the labels it had (2026-10-03).
+   */
+  readonly unitPriceIn?: string | undefined;
+  readonly totalIn?: string | undefined;
   readonly itemCode: string;
   readonly itemName: string;
   readonly quantity: string;
@@ -257,6 +267,9 @@ export function InvoiceLinesGrid({
   widthsKey,
   labels,
   currency,
+  currencyField,
+  ledgerRates,
+  ledgerCurrency,
   locale,
   headingId,
   live,
@@ -289,7 +302,25 @@ export function InvoiceLinesGrid({
    */
   readonly widthsKey?: string;
   readonly labels: InvoiceLineLabels;
+  /** The currency it starts in; `currencyField` may change it as a person types. */
   readonly currency: string;
+  /**
+   * The form field holding the currency the document is agreed in.
+   *
+   * Given, the grid follows it: the totals and the money headings change with
+   * the selection rather than keeping the currency the page was rendered with
+   * (2026-10-03). Omitted, the grid stays in `currency` exactly as before.
+   */
+  readonly currencyField?: string | undefined;
+  /**
+   * The ledger's currency and what one unit of each other is worth in it, so
+   * the totals row can say the dinars beside the agreed figure (2026-10-03).
+   *
+   * Keyed by currency code, each a decimal string at the rate scale. Omitted,
+   * the row shows one figure exactly as it always did.
+   */
+  readonly ledgerRates?: Readonly<Record<string, string>> | undefined;
+  readonly ledgerCurrency?: string | undefined;
   readonly locale: string;
   readonly headingId: string;
   /** Present on a draft that already exists: each row saves itself. */
@@ -485,17 +516,40 @@ export function InvoiceLinesGrid({
     }
   }, [loadAvailability, mode, rows]);
 
+  /*
+   * The currency the document is agreed in, followed rather than fixed.
+   *
+   * Server-rendered as a prop it could not change, so choosing USD at the top
+   * of the header left every column headed IQD and the totals formatted as
+   * dinars (2026-10-03).
+   */
+  const [agreed, setAgreed] = useState(currency);
+  useEffect(() => {
+    if (!currencyField) return;
+    const form = table.current?.closest('form');
+    if (!form) return;
+    const follow = () => {
+      const field = form.elements.namedItem(currencyField);
+      const chosen =
+        field instanceof HTMLSelectElement || field instanceof HTMLInputElement ? field.value : '';
+      if (chosen) setAgreed(chosen);
+    };
+    follow();
+    form.addEventListener('input', follow);
+    return () => form.removeEventListener('input', follow);
+  }, [currencyField]);
+
   const money = useMemo(
     () =>
       new Intl.NumberFormat(locale, {
         style: 'currency',
-        currency,
+        currency: agreed,
         currencyDisplay: 'code',
         // The dinar has no subunit in practice: IQD 2,000, never IQD 2,000.00.
-        minimumFractionDigits: currency === 'IQD' ? 0 : 2,
-        maximumFractionDigits: currency === 'IQD' ? 0 : 2,
+        minimumFractionDigits: agreed === 'IQD' ? 0 : 2,
+        maximumFractionDigits: agreed === 'IQD' ? 0 : 2,
       }),
-    [locale, currency],
+    [locale, agreed],
   );
 
   /** One empty row at the foot, always. Filling the last one opens the next. */
@@ -701,7 +755,7 @@ export function InvoiceLinesGrid({
               </th>
             ) : null}
             <th className={styles.sapNum} scope="col">
-              {labels.unitPrice}
+              {labels.unitPriceIn ? labels.unitPriceIn.replace('{currency}', agreed) : labels.unitPrice}
               <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('price')} />
             </th>
             <th className={styles.sapNum} scope="col">
@@ -709,7 +763,7 @@ export function InvoiceLinesGrid({
               <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('discount')} />
             </th>
             <th className={styles.sapNum} scope="col">
-              {labels.total}
+              {labels.totalIn ? labels.totalIn.replace('{currency}', agreed) : labels.total}
               <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('total')} />
             </th>
             {showSupplier ? (
@@ -979,6 +1033,28 @@ export function InvoiceLinesGrid({
             </td>
             <td aria-live="polite" className={styles.sapNum}>
               <bdi dir="ltr">{money.format(toNumber(total, MONEY_PLACES))}</bdi>
+              {/*
+                And what the ledger will carry. For a dollar invoice the figure
+                above is what the supplier is owed and this is what posts, and
+                the totals row is the last line read before Create
+                (2026-10-03).
+              */}
+              {/*
+                `sapEnteredNote` because the Journal Entry record already says a
+                figure in another currency this way — under the dinar amount of
+                a debit, in the currency it was entered in. A muted block with
+                no padding of its own, so the two figures share the cell's right
+                edge (2026-10-03).
+              */}
+              {ledgerRates && ledgerCurrency && agreed !== ledgerCurrency && ledgerRates[agreed] ? (
+                <bdi className={styles.sapEnteredNote} dir="ltr">
+                  {ledgerCurrency}{' '}
+                  {toNumber(inLedgerCurrency(total, ledgerRates[agreed]!), MONEY_PLACES).toLocaleString(
+                    locale === 'ar' ? 'ar' : 'en-US',
+                    { maximumFractionDigits: 0, minimumFractionDigits: 0 },
+                  )}
+                </bdi>
+              ) : null}
             </td>
             <td colSpan={showSupplier ? 3 : 2} />
           </tr>

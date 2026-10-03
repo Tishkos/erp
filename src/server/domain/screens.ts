@@ -330,6 +330,12 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   change_requests: 'document',
   uat_evidence: 'list',
   support_runbooks: 'list',
+
+  // 22 — Monitoring (by direction, 2026-10-03). Drawn, reading nothing yet:
+  // a list of customers, the history behind it, and its reports.
+  customer_list: 'list',
+  history: 'report',
+  reports: 'report',
 };
 
 export function archetypeOf(key: string): ScreenArchetype | undefined {
@@ -383,6 +389,10 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/master-data/chart-of-accounts',
   '/inventory/availability',
   '/documents',
+  // Monitoring — drawn, reading nothing yet (2026-10-03).
+  '/monitoring/customer-list',
+  '/monitoring/history',
+  '/monitoring/reports',
   // Administration.
   '/administration/company',
   '/administration/users',
@@ -473,7 +483,7 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/payables/shipments',
   '/payables/containers',
   // REQ-AP-001 Stage 6 — bank loans (§15.7, §21.10).
-  '/payables/loans',
+  '/treasury/loans',
   // REQ-AP-001 Stage 8 — the sheet import and its sign-off (§24.3).
   '/administration/payables-migration',
   // REQ-IMPROVE-001 Stage 1 — the two screens the menu promised (OP-4).

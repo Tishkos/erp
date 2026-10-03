@@ -23,7 +23,7 @@ const ROUTES = [
   '/payables/pd',
   '/payables/shipments',
   '/payables/containers',
-  '/payables/loans',
+  '/treasury/loans',
   '/master-data/banks',
   '/administration/payables-settings',
   '/administration/payables-migration',

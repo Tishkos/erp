@@ -218,7 +218,8 @@ export async function approve(
     objectId: id,
   });
 
-  if (proposal.createdBy === ctx.principal.userId) {
+  // the super user approves alone, by direction 2026-10-03 — the company has one approver and a rule nobody can satisfy approves nothing.
+  if (proposal.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) {
     throw new Error(
       `${proposal.proposalNo} was raised by you, so somebody else approves it (§5.2). ` +
         'An investment approved by the person proposing it has one signature, not two.',

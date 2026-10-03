@@ -140,9 +140,13 @@ bank_loan_instalment
 bank_loan
 payment_application
 payable_instalment
+asycuda_run
 customs_pd_status_history
 customs_pd
 ap_invoice_note
+legacy_document
+legacy_import_run
+payables_migration_run
 payable_exchange_difference
 landed_cost_layer_adjustment
 landed_cost_charge

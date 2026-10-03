@@ -9,6 +9,7 @@ import {
   Flash,
   Form,
   Grid,
+  LinkButton,
   ListToolbar,
   Select,
   Submit,
@@ -18,6 +19,7 @@ import {
 import { Pagination } from '@/components/ui';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { LoanBankField, LoanScheduleFields } from '@/components/admin/loan-terms-fields';
+import { LoanProceeds } from '@/components/admin/loan-proceeds';
 import { NEW_BANK } from './form';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -44,7 +46,7 @@ export const dynamic = 'force-dynamic';
 const VIEWS = ['open', 'overdue', 'closed', 'all'] as const;
 
 export default async function LoansPage({ searchParams }: { searchParams: SearchParams }) {
-  if (!visibleRoute('/payables/loans')) notFound();
+  if (!visibleRoute('/treasury/loans')) notFound();
 
   const [t, admin, page, locale, context, outcome] = await Promise.all([
     getTranslations('admin.loans'),
@@ -78,95 +80,15 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
 
   return (
     <AdminPage
-      actions={
-        pickers ? (
-          <NewRecordDialog
-            buttonLabel={t('new')}
-            closeLabel={admin('close')}
-            openOnLoad={Boolean(outcome.error)}
-            title={t('new')}
-            wide
-          >
-            <p className="muted">{t('new_note')}</p>
-            <Form action={createLoan}>
-              <Grid>
-                <LoanBankField
-                  banks={pickers.banks.map((bank) => ({
-                    value: bank.code,
-                    label: bank.swift ? `${bank.name} · ${bank.swift}` : bank.name,
-                  }))}
-                  labels={{
-                    bank: t('bank'),
-                    another: t('another_bank'),
-                    name: t('bank_name'),
-                    nameHint: t('bank_name_hint'),
-                    swift: t('bank_swift'),
-                  }}
-                  newBankValue={NEW_BANK}
-                />
-                <Select
-                  label={t('account')}
-                  name="bank_cash_account_id"
-                  options={pickers.accounts.map((account) => ({
-                    value: account.id,
-                    label: `${account.code} · ${account.name} · ${account.currency}`,
-                  }))}
-                  required
-                />
-                <Field label={t('principal')} name="principal" required />
-                <Field defaultValue="0" label={t('commission_pct')} name="commission_pct" />
-                <Field
-                  hint={t('commission_amount_hint')}
-                 
-                  label={t('commission_amount')}
-                  name="commission_amount"
-                />
-                <Select
-                  label={t('treatment')}
-                  name="commission_treatment"
-                  options={pickers.treatments.map((treatment) => ({
-                    value: treatment.code,
-                    label: locale !== 'en' && t.has(`tr.${treatment.code}`) ? t(`tr.${treatment.code}`) : treatment.name,
-                  }))}
-                  required
-                />
-                <Field hint={t('interest_hint')} label={t('interest')} name="interest_pct" />
-                <Select
-                  defaultValue="by_amount_used"
-                  label={t('allocation_method')}
-                  name="allocation_method"
-                  options={['by_amount_used', 'equal', 'manual'].map((method) => ({
-                    value: method,
-                    label: t(`method_${method}`),
-                  }))}
-                />
-                <LoanScheduleFields
-                  labels={{
-                    count: t('instalments'),
-                    frequency: t('frequency'),
-                    frequencies: ['monthly', 'quarterly', 'custom'].map((frequency) => ({
-                      value: frequency,
-                      label: t(`freq_${frequency}`),
-                    })),
-                    first: t('first_due'),
-                    nth: t('due_nth', { position: '{position}' }),
-                    final: t('final_due'),
-                    hint: t('rhythm_hint'),
-                  }}
-                  today={today}
-                />
-              </Grid>
-              <Field id="loan-purpose" label={t('purpose')} name="purpose" wide />
-              <Checkbox defaultChecked label={t('capitalised')} name="commission_capitalised" />
-              <SubmitRow>
-                <Submit label={t('create')} />
-              </SubmitRow>
-            </Form>
-          </NewRecordDialog>
-        ) : null
-      }
+      /*
+        The offer is a document now, not a dialog (2026-10-03): a facility has a
+        currency, a reference, a commission the bank may state either way, a
+        rate that may follow a published one, a grace period and a schedule of
+        several rows. None of that fits in a window over a list.
+      */
+      actions={pickers ? <LinkButton href="/treasury/loans/new" label={t('new')} tone="primary" /> : null}
       back={{ href: '/', label: admin('dashboard_label') }}
-      tabs={<SectionTabs route="/payables/loans" />}
+      tabs={<SectionTabs route="/treasury/loans" />}
       subtitle={t('subtitle')}
       title={page('loans')}
       variant="sap"
@@ -180,7 +102,7 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
             <span className={s.sapTitleMeta}>{admin('rows_shown', { count: result.total })}</span>
           </h2>
           <ListToolbar
-            clearHref="/payables/loans"
+            clearHref="/treasury/loans"
             clearLabel={admin('clear_search')}
             countLabel={admin('rows_shown', { count: result.total })}
             placeholder={admin('search_placeholder')}
@@ -228,7 +150,7 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
                 {shown.map((row) => (
                   <tr key={row.id}>
                     <td>
-                      <Link className={s.sapLink} href={`/payables/loans/${encodeURIComponent(row.loanNo)}`}>
+                      <Link className={s.sapLink} href={`/treasury/loans/${encodeURIComponent(row.loanNo)}`}>
                         <bdi dir="ltr">{row.loanNo}</bdi>
                       </Link>
                     </td>
@@ -273,7 +195,7 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
             </table>
           </div>
           {result.pages > 1 ? (
-            <Pagination count={result.pages} current={result.page} hrefFor={(p) => `/payables/loans?${query(p)}`} labels={{ label: admin('pagination'), previous: admin('previous'), next: admin('next'), page: (p) => admin('page_n', { page: p }) }} locale={locale} />
+            <Pagination count={result.pages} current={result.page} hrefFor={(p) => `/treasury/loans?${query(p)}`} labels={{ label: admin('pagination'), previous: admin('previous'), next: admin('next'), page: (p) => admin('page_n', { page: p }) }} locale={locale} />
           ) : null}
         </div>
       </section>

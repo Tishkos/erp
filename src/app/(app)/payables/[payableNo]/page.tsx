@@ -19,7 +19,8 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { Attachments } from '@/components/admin/attachments';
 import { RecordHistory } from '@/components/admin/history';
-import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { AttachmentsButton, HistoryButton, NotesButton } from '@/components/admin/icon-dialog';
+import { ExportIcon } from '@/components/print/export-menu';
 import * as papers from '@/server/services/payable-papers';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { StopDialog } from '@/components/admin/stop-dialog';
@@ -64,7 +65,7 @@ import { addLandedCharge, lockLandedCost, settleExchangeDifference, withdrawLand
 import { containerChip } from '../containers/status';
 import { STATUS_CHIP, statusKey } from '../payment-applications/status';
 import { businessDateOf, businessToday } from '@/server/domain/business-date';
-import { MONEY_SCALE, parseDecimal, toDecimalString } from '@domain/money';
+import { divideHalfUp, MONEY_SCALE, parseDecimal, toDecimalString } from '@domain/money';
 import { isNotFoundError } from '@/server/not-found';
 
 /**
@@ -263,6 +264,13 @@ export default async function PayablePage({
         ? 'rejected'
         : 'submitted';
 
+  /*
+   * The notes somebody wrote, off the log that is loaded (2026-10-03). The
+   * status log below the document is the complete record and stays that way;
+   * this is the door for "what did we say about this one".
+   */
+  const written = log.rows.filter((event) => event.eventCode === 'NOTE_ADDED');
+
   const fields: DocumentField[] = [
     { label: t('col_no'), value: <bdi dir="ltr">{row.payableNo}</bdi> },
     {
@@ -276,6 +284,36 @@ export default async function PayablePage({
       value: <bdi dir="auto">{supplier ? `${supplier.name} (${supplier.code})` : '—'}</bdi>,
     },
     { label: t('reference'), value: <bdi dir="ltr">{row.supplierReference}</bdi> },
+    /*
+     * The rate these dinars were worked out at (2026-10-03).
+     *
+     * Not stored as a rate and not needed to be: the import holds what was
+     * agreed and what it came to, and the one implies the other. Dividing them
+     * gives the rate that was actually applied on the day — which is the point
+     * the question was really about. A rate published next week converts
+     * nothing here, because the lines of a posted invoice are dinars already.
+     */
+    ...(row.currency !== 'IQD' && parseDecimal(row.amountTxn, MONEY_SCALE) > 0n
+      ? [
+          {
+            label: t('rate_applied'),
+            value: (
+              <bdi dir="ltr">
+                {`1 ${row.currency} = ${money(
+                  toDecimalString(
+                    divideHalfUp(
+                      parseDecimal(row.amountIqd, MONEY_SCALE) * 10_000n,
+                      parseDecimal(row.amountTxn, MONEY_SCALE),
+                    ),
+                    MONEY_SCALE,
+                  ),
+                  'IQD',
+                )}`}
+              </bdi>
+            ),
+          },
+        ]
+      : []),
     {
       label: t('col_amount'),
       value: (
@@ -335,6 +373,66 @@ export default async function PayablePage({
                 objectType={payables.PERMISSION_OBJECT}
               />
             </AttachmentsButton>
+            {/* The printer, first — the import application's own copy
+                (2026-10-03). */}
+            <ExportIcon
+              exportKey="import_application"
+              id={row.payableNo}
+              title={`${type.name} ${row.payableNo}`}
+            />
+            {/*
+              The notes somebody wrote on this import, behind the same door the
+              purchase invoice uses (2026-10-03). They are `NOTE_ADDED` events
+              on its own log — the status log below still shows every event of
+              every kind; this is the ones a person wrote.
+            */}
+            <NotesButton
+              closeLabel={admin('close')}
+              count={written.length}
+              label={t('add_note')}
+              title={t('add_note')}
+            >
+              <div className={s.sapTableWrap}>
+                <table className={s.sapTable}>
+                  <thead>
+                    <tr>
+                      <th scope="col">{t('log_when')}</th>
+                      <th scope="col">{t('log_who')}</th>
+                      <th scope="col">{t('add_note')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {written.length === 0 ? (
+                      <tr>
+                        <td className={s.sapEmptyRow} colSpan={3}>
+                          {t('no_events')}
+                        </td>
+                      </tr>
+                    ) : null}
+                    {written.map((event) => (
+                      <tr key={event.id}>
+                        <td>
+                          <bdi dir="ltr">{day(event.occurredAt)}</bdi>
+                        </td>
+                        <td>
+                          <bdi dir="auto">{event.actorUserId ? (event.actorName ?? '—') : t('system')}</bdi>
+                        </td>
+                        <td>
+                          <bdi dir="auto">{event.summary}</bdi>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Form action={addNote}>
+                <Hidden name="payable_no" value={row.payableNo} />
+                <Field id="note-door" label={t('add_note')} name="note" required wide />
+                <SubmitRow>
+                  <Submit label={t('note_save')} small tone="secondary" />
+                </SubmitRow>
+              </Form>
+            </NotesButton>
             <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
               <RecordHistory objectId={row.id} objectType={payables.PERMISSION_OBJECT} preloaded={found.history} />
             </HistoryButton>
@@ -357,7 +455,15 @@ export default async function PayablePage({
         linesTitle={t('tab_order')}
         number={row.payableNo}
         totals={[
-          { label: t('col_amount'), value: money(row.amountTxn) },
+          {
+            label: t('col_amount'),
+            // Both, as the header field says them: what the supplier is owed,
+            // and what the books carry for it (2026-10-03).
+            value:
+              row.currency === 'IQD'
+                ? money(row.amountIqd, 'IQD')
+                : `${money(row.amountTxn)} · ${money(row.amountIqd, 'IQD')}`,
+          },
           ...(paymentTotals
             ? [
                 { label: pa('paid'), value: money(toDecimalString(paymentTotals.paidTxn, 4n)) },
@@ -764,7 +870,7 @@ export default async function PayablePage({
                     {funding.map((draw) => (
                       <tr key={draw.id}>
                         <td>
-                          <Link className={s.sapLink} href={`/payables/loans/${encodeURIComponent(draw.loanNo)}`}>
+                          <Link className={s.sapLink} href={`/treasury/loans/${encodeURIComponent(draw.loanNo)}`}>
                             <bdi dir="ltr">{draw.loanNo}</bdi>
                           </Link>
                         </td>
@@ -1281,6 +1387,60 @@ export default async function PayablePage({
                         <td className={s.sapNum}>
                           <bdi dir="ltr">{model.unitCostAfterIqd ? money(model.unitCostAfterIqd, 'IQD') : '—'}</bdi>
                         </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+
+            {/*
+              What each model finally cost, once the cost is locked — the
+              figure the warehouse holds and the Warehouses Report multiplies
+              out (2026-10-03). The preview above answers "what will this do";
+              this answers "what did it come to".
+            */}
+            {landed.finalCost.length > 0 ? (
+              <div className={s.sapTableWrap}>
+                <table aria-label={lc('final_title')} className={s.sapTable}>
+                  <caption className={s.sapTitleMeta}>{lc('final_title')}</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">{lc('col_model')}</th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_received')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_on_hand')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_invoiced_unit')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_charges_unit')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_final_unit')}
+                      </th>
+                      <th className={s.sapNum} scope="col">
+                        {lc('col_final_value')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {landed.finalCost.map((model) => (
+                      <tr key={model.itemCode}>
+                        <td>
+                          <bdi dir="ltr">{model.itemCode}</bdi>
+                        </td>
+                        <td className={s.sapNum}>{model.receivedQty}</td>
+                        <td className={s.sapNum}>{model.onHandQty}</td>
+                        <td className={s.sapNum}>{money(model.invoicedUnitIqd, 'IQD')}</td>
+                        <td className={s.sapNum}>{money(model.chargesUnitIqd, 'IQD')}</td>
+                        <td className={s.sapNum}>
+                          <strong>{money(model.finalUnitIqd, 'IQD')}</strong>
+                        </td>
+                        <td className={s.sapNum}>{money(model.finalValueIqd, 'IQD')}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -190,14 +190,38 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     ],
   },
   {
-    // An instalment leaves the account: the principal off the liability, the
-    // interest as a cost, a spread commission as at disbursement.
+    /*
+     * An instalment leaves the account: the principal off the liability, the
+     * interest as a cost, a spread commission as at disbursement.
+     *
+     * A loan owed in one currency and repaid from an account in another
+     * settles at a different rate from the one it was carried at, and the
+     * difference is a gain or a loss (2026-10-03) — through the same accounts
+     * an import's exchange difference uses, because it is the same thing
+     * happening to a different kind of debt.
+     */
     event: 'treasury.loan_repayment',
     lines: [
       line('loan_liability', 'debit', true, 'loan'),
       line('loan_interest', 'debit'),
       line('landed_cost_clearing', 'debit'),
       line('bank_commission', 'debit'),
+      line('exchange_gain', 'credit'),
+      line('exchange_loss', 'debit'),
+    ],
+  },
+  {
+    /*
+     * What a foreign-currency loan is worth in dinars when the rate has moved
+     * (2026-10-03). The debt is unchanged — 50,000 dollars is 50,000 dollars —
+     * and what the books carry for it is not. The liability moves either way
+     * against the exchange gain or loss.
+     */
+    event: 'treasury.loan_revaluation',
+    lines: [
+      line('loan_liability', 'either', true, 'loan'),
+      line('exchange_gain', 'credit'),
+      line('exchange_loss', 'debit'),
     ],
   },
   {

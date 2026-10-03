@@ -4,6 +4,8 @@ import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { DueDateField } from '@/components/admin/due-date-field';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
+import { AdvanceField } from '@/components/admin/advance-field';
+import { InvoiceCurrency } from '@/components/admin/invoice-currency';
 import { PairedPicker } from '@/components/admin/paired-picker';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -14,6 +16,7 @@ import * as ap from '@/server/services/ap-invoice';
 import * as items from '@/server/services/items';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as partners from '@/server/services/partners';
+import * as rates from '@/server/services/exchange-rates';
 import * as payables from '@/server/services/payables';
 import * as posting from '@/server/services/posting';
 import * as execution from '@/server/services/project-execution';
@@ -22,6 +25,7 @@ import * as warehouses from '@/server/services/warehouses';
 import { gapsFor } from '@domain/setup-gaps';
 import { createApInvoice, invoiceLineAvailability } from '../actions';
 import { businessToday } from '@/server/domain/business-date';
+import { RATE_SCALE, toDecimalString } from '@domain/money';
 
 /**
  * Raising a Purchase Invoice — Operations build, block 4.
@@ -61,11 +65,37 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
     return <Denied object={page('ap_invoices')} />;
   }
 
-  const { suppliers, allSuppliers, stockItems, allItems, houses, schedules, accounts, mapped, imports, assignment } =
+  // Declared before the reads below: the currency rates are fetched for this
+  // date, and it used to be declared after them.
+  const today = businessToday();
+
+  const { suppliers, allSuppliers, stockItems, allItems, houses, schedules, accounts, mapped, imports, assignment, moneys } =
     await withCurrentUser(async (tx) => ({
       // REQ-PM-001 §8 — the project elements a purchase may be assigned to.
       assignment: await execution.assignmentPickers(tx),
       suppliers: await partners.listActiveInRole(tx, 'supplier'),
+      /*
+       * The currencies an invoice may be agreed in, each with the rate in
+       * force on its date (2026-10-03). Read here so the header can show both
+       * totals as the lines are typed; the action converts again on the server,
+       * which is what the journal receives.
+       */
+      moneys: await Promise.all(
+        (await rates.currencies(tx)).map(async (row) => ({
+          code: row.code,
+          name: row.name,
+          /*
+           * As a decimal string, not the bigint's digits.
+           *
+           * `rateOn` answers at the rate scale — eight places — so 1,307 comes
+           * back as 130700000000, and handing those digits to a component that
+           * parses a decimal showed "1 USD = 130,700,000,000 IQD"
+           * (2026-10-03). `toDecimalString` at `RATE_SCALE` is the same figure
+           * written the way the component reads it.
+           */
+          iqdPerUnit: toDecimalString((await rates.rateOn(tx, row.code, today)).iqdPerUnit, RATE_SCALE),
+        })),
+      ),
       // The whole list too, so an empty picker can say which of the two things is
       // wrong: nobody has been added, or nobody added is active.
       allSuppliers: await partners.listByRole(tx, 'supplier'),
@@ -96,7 +126,6 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
   );
 
   const sellable = stockItems;
-  const today = businessToday();
 
   // Each supplier beside the terms they are on, which is all the due date
   // needs: the partner chosen in the header decides which schedule applies.
@@ -132,6 +161,29 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
       ),
     },
     {
+      label: column('currency'),
+      control: true,
+      value: (
+        <InvoiceCurrency
+          choices={moneys}
+          labels={{
+            /*
+             * `raw`, not `t()`: these carry `{currency}` and `{amount}` for the
+             * client to fill as the lines are typed, and `t()` demands every
+             * placeholder at call time — given none it throws a FORMATTING_ERROR
+             * and renders the key itself, which is what the screen showed
+             * (2026-10-03).
+             */
+            rate: x.raw('rate_on_date'),
+          }}
+          label={column('currency')}
+          ledger="IQD"
+          locale={locale}
+          name="currency"
+        />
+      ),
+    },
+    {
       label: column('posting_date'),
       control: true,
       value: (
@@ -141,22 +193,6 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
           name="invoice_date"
           required
           type="date"
-        />
-      ),
-    },
-    {
-      label: column('due_date'),
-      control: true,
-      // Filled from the supplier's payment terms the moment the supplier is
-      // chosen, and editable after that — §16's default, not a lock.
-      value: (
-        <DueDateField
-          dateField="invoice_date"
-          label={column('due_date')}
-          name="due_date"
-          partnerField="supplier_id"
-          required
-          terms={supplierTerms}
         />
       ),
     },
@@ -218,14 +254,17 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
       ),
     },
     {
-      label: x('payment_terms_text'),
+      // The percentage, which computes what it comes to as the lines are typed.
+      label: x('advance_percent'),
       control: true,
       value: (
-        <input
-          aria-label={x('payment_terms_text')}
-          name="payment_terms_text"
-          placeholder={x('payment_terms_placeholder')}
-          type="text"
+        <AdvanceField
+          currencyField="currency"
+          label={x('advance_percent')}
+          ledgerCurrency="IQD"
+          ledgerRates={Object.fromEntries(moneys.map((m) => [m.code, m.iqdPerUnit]))}
+          locale={locale}
+          name="advance_percent"
         />
       ),
     },
@@ -290,6 +329,17 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
             id="ap-invoice-new"
             linesTitle={t('ap_invoices.lines')}
             number=""
+            fieldsAfterLines={[
+              {
+                // After the totals, where it was asked for: the last thing
+                // before Create, for whatever about this invoice no field
+                // anticipated.
+                label: x('note'),
+                control: true,
+                wide: true,
+                value: <input aria-label={x('note')} name="note" type="text" />,
+              },
+            ]}
           >
             <InvoiceLinesGrid
               currency="IQD"
@@ -297,6 +347,13 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
               items={sellable}
               loadAvailability={invoiceLineAvailability}
               mode="purchase"
+              // The table follows the currency chosen in the header, so the
+              // totals and the money headings say what the invoice is agreed
+              // in rather than what the page was rendered with (2026-10-03).
+              currencyField="currency"
+              // So the totals row can say what the ledger will carry.
+              ledgerCurrency="IQD"
+              ledgerRates={Object.fromEntries(moneys.map((m) => [m.code, m.iqdPerUnit]))}
               unitColumn
               purchaseSupplierField="supplier_id"
               widthsKey={`erp.lines.ap.${context.principal.userId}`}
@@ -306,6 +363,8 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
                 quantity: column('quantity'),
               unit: column('unit'),
                 unitPrice: column('unit_price'),
+                unitPriceIn: column.raw('unit_price_in'),
+                totalIn: column.raw('total_price_in'),
                 discount: column('discount'),
                 total: column('total_price'),
                 supplier: column('supplier'),

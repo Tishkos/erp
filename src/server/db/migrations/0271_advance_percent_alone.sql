@@ -1,0 +1,21 @@
+-- A percentage may be written down before anybody knows which account pays it.
+--
+-- 0270 refused `advance_percent` unless `advance_paid_from_account_id` and
+-- `advance_payment_method_code` were named with it. The reasoning was that an
+-- advance with nowhere to pay from is a promise the system cannot keep, and
+-- that is true of *raising* a payment application — it is not true of
+-- recording what was agreed with the supplier.
+--
+-- By direction (2026-10-03): "in advance payment if i write 10 percentage
+-- calculates in total pay in advance". Somebody entering an invoice knows the
+-- percentage from the supplier's document; which of the company's accounts
+-- will send the money is a separate decision, often a later one.
+--
+-- So the percentage stands alone. `ap-invoice.post` raises the advance only
+-- when the account and the method are both there, and writes
+-- ADVANCE_NOT_RAISED on the import's own log when they are not — visible, and
+-- not a refusal of the invoice itself.
+--
+-- The range check stays: a percentage is still nought to a hundred.
+
+ALTER TABLE "ap_invoice" DROP CONSTRAINT IF EXISTS "ap_invoice_advance_needs_an_account";

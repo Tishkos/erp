@@ -58,9 +58,10 @@ describe('Appendix A · the approved menu tree', () => {
     // payments, suppliers and setup, Logistics' customs and shipping —
     // numbered after Appendix A's twenty. The payments heading was folded
     // back into Payables on 2026-10-03, by direction: a payment is the end of
-    // the same job as the invoice, so it reads beside it.
-    expect(MENU).toHaveLength(24);
-    expect([...MENU.map((s) => s.ordinal)].sort((a, b) => a - b)).toEqual(Array.from({ length: 24 }, (_, i) => i + 1));
+    // the same job as the invoice, so it reads beside it. Monitoring was added
+    // the same day and is the twenty-fifth.
+    expect(MENU).toHaveLength(25);
+    expect([...MENU.map((s) => s.ordinal)].sort((a, b) => a - b)).toEqual(Array.from({ length: 25 }, (_, i) => i + 1));
   });
 
   it('names every required submenu of Finance — General Ledger', () => {
@@ -117,7 +118,8 @@ describe('Appendix A · the approved menu tree', () => {
 
 describe('§25 · navigation reflects permission, and is not the control', () => {
   it('shows a Super User everything', () => {
-    expect(visibleMenu(superUser)).toHaveLength(24);
+    // Twenty-five since Monitoring was added (2026-10-03).
+    expect(visibleMenu(superUser)).toHaveLength(25);
   });
 
   it('shows a user only the sections they hold a grant in', () => {

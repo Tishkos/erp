@@ -68,7 +68,9 @@ export default async function PdListPage({ searchParams }: { searchParams: Searc
     result: await customs.listForScreen(tx, { view, search: outcome.q, page: outcome.page }),
     warning: await customs.warningDays(tx),
     imports: mayCreate ? await customs.importChoices(tx) : [],
-    bankRows: mayCreate ? await banks.listActive(tx) : [],
+    // The banks we bank with, not every bank there is: a PD against a bank we
+    // hold no account at can never be paid (2026-10-03).
+    bankRows: mayCreate ? await banks.listWeBankWith(tx) : [],
     statuses: mayCreate ? await customs.statuses(tx) : [],
   }));
   const shown = result.rows;

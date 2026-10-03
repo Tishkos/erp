@@ -30,7 +30,8 @@
     "payables_suppliers": "Suppliers & Balances",
     "payables_setup": "Setup",
     "logistics_customs": "Customs (ASYCUDA)",
-    "logistics_shipping": "Shipping"
+    "logistics_shipping": "Shipping",
+    "monitoring": "Monitoring"
   },
   "page": {
     "my_dashboard": "My Dashboard",
@@ -277,14 +278,17 @@
     "whatsapp": "WhatsApp",
     "project_settings": "Project Settings",
     "asycuda_update": "Update from ASYCUDA",
-    "bank_deposits": "Bank Deposits",
+    "bank_deposits": "Manual Deposits",
     "hr_dashboard": "Dashboard",
     "hr_departments": "Departments",
     "hr_positions": "Positions",
     "recruitment": "Recruitment",
     "performance": "Performance",
     "employee_requests": "Employee Requests",
-    "hr_documents": "Documents"
+    "hr_documents": "Documents",
+    "customer_list": "List of customers",
+    "history": "History",
+    "reports": "Reports"
   },
   "auth": {
     "email": "Email",
@@ -476,7 +480,9 @@
     "sent_by": "Sent by",
     "stage": "Stage",
     "owner": "Owner",
-    "since": "Since"
+    "since": "Since",
+    "unit_price_in": "Unit Price ({currency})",
+    "total_price_in": "Total Price ({currency})"
   },
   "list": {
     "search": "Search",
@@ -997,7 +1003,8 @@
       "hr": "HR",
       "documents": "Documents",
       "reports": "Reports",
-      "settings": "Settings"
+      "settings": "Settings",
+      "monitoring": "Monitoring"
     },
     "profile_settings": "Profile settings",
     "my_profile": "My profile",
@@ -2406,7 +2413,7 @@
       "none": "No opening stock yet.",
       "created_note": "The system gives the document its number. Save sends it for approval; approval brings the stock in.",
       "approve": "Approve and post",
-      "awaiting": "Waiting for approval by someone other than the person who entered it.",
+      "awaiting": "Waiting for approval.",
       "approved_by": "Approved by",
       "lines": "Lines",
       "total": "Total"
@@ -2590,7 +2597,7 @@
       "link_invoice": "Link an existing invoice",
       "link_invoice_hint": "The invoice id of a posted invoice of this supplier.",
       "link_save": "Link",
-      "cancel": "Cancel payable",
+      "cancel": "Cancel application",
       "cancel_reason": "Why it is cancelled",
       "cancelled_banner": "Cancelled",
       "rail": "Stage",
@@ -2675,7 +2682,17 @@
       "papers_source": "Kept on",
       "papers_added": "Added",
       "rail_done": "this is true of the import now",
-      "rail_todo": "not yet"
+      "rail_todo": "not yet",
+      "rate_applied": "Rate applied",
+      "col_invoice_no": "Invoice no.",
+      "col_supplier_invoice_no": "Supplier invoice no.",
+      "col_total_iqd": "Total (IQD)",
+      "col_settled_iqd": "Settled (IQD)",
+      "col_item": "Item",
+      "col_description": "Description",
+      "col_qty": "Qty",
+      "col_unit_price": "Unit price",
+      "col_date": "Date"
     },
     "payables_settings": {
       "title": "Payables Settings",
@@ -2887,7 +2904,7 @@
       "filter": "Show",
       "col_payment": "Payment",
       "state_draft": "Not posted",
-      "state_unpaid": "Unpaid",
+      "state_unpaid": "Not started",
       "state_paid": "Paid",
       "state_overdue": "Overdue",
       "state_overdue_days": "Overdue — {days} days",
@@ -2912,10 +2929,15 @@
       "project_element": "Project element",
       "project_element_none": "None — not for a project",
       "project_cost_code": "Project cost code",
-      "payment_terms_text": "Payment terms (as on the PDF)",
-      "payment_terms_placeholder": "e.g. 30% deposit, 70% against B/L",
       "import_application_new": "New — opened by this invoice",
-      "state_part_paid": "Part paid"
+      "state_part_paid": "Part paid",
+      "set_due_date": "Set due date",
+      "set_due_date_title": "Due date of {invoiceNo}",
+      "set_due_date_note": "The company buys on advance, so an invoice is entered without a due date. Set it once the bank has confirmed the transfer and the supplier has named the day for the balance. It moves the import application with it, and the change is kept on the record.",
+      "rate_on_date": "1 {currency} = {rate} IQD",
+      "total_in": "Total {currency} {amount}",
+      "advance_percent": "Advance payment %",
+      "agreed_in": "Issued in"
     },
     "payment_applications": {
       "subtitle": "The company’s requests to its banks and cashier to pay a supplier — longest waiting first.",
@@ -3430,8 +3452,8 @@
       "entered_by": "Entered by",
       "approved_by": "Approved by",
       "not_yet": "Not yet",
-      "schedule": "Schedule",
-      "due_date": "Due",
+      "schedule": "Repayment schedule",
+      "due_date": "Due date",
       "principal_part": "Principal",
       "commission_part": "Commission",
       "interest_part": "Interest",
@@ -3484,7 +3506,92 @@
       "bank_swift": "SWIFT / BIC",
       "due_nth": "Instalment {position} due",
       "final_due": "Final instalment due",
-      "rhythm_hint": "Fills the dates below. Retype any the bank set differently."
+      "rhythm_hint": "Fills the dates below. Retype any the bank set differently.",
+      "proceeds_lands": "Lands in the account",
+      "proceeds_owed": "Owed to the bank",
+      "proceeds_commission": "Commission kept",
+      "facility_reference": "Loan / facility reference",
+      "proceeds": "Proceeds",
+      "expected_disbursement": "Expected disbursement",
+      "commission_basis": "Commission stated as",
+      "commission_fixed": "Commission amount",
+      "other_fees": "Other bank fees",
+      "interest_type": "Interest type",
+      "interest_reference": "Reference rate",
+      "interest_reference_hint": "e.g. SOFR",
+      "interest_spread": "Spread %",
+      "interest_basis": "Interest calculated",
+      "principal_method": "Principal repayment",
+      "grace_kind": "Grace period",
+      "grace_until": "Grace period until",
+      "schedule_empty": "Give the principal and the first due date, then press Update schedule.",
+      "schedule_totals": "Totals",
+      "update_schedule": "Update schedule",
+      "col_interest": "Interest",
+      "col_total": "Total",
+      "capitalise": "Commission treatment",
+      "capitalise_note": "Capitalise the commission into the imports the loan funds",
+      "cb_percentage": "A percentage of the principal",
+      "cb_fixed": "A fixed amount",
+      "cb_none": "No commission",
+      "it_fixed": "Fixed",
+      "it_variable": "Variable",
+      "ib_reducing": "On the reducing balance",
+      "ib_flat": "Flat on the original principal",
+      "pm_equal_principal": "Equal principal",
+      "pm_equal_instalments": "Equal instalments",
+      "pm_bullet": "Bullet — all at the end",
+      "pm_custom": "Custom schedule",
+      "gk_none": "None",
+      "gk_principal": "Principal only",
+      "gk_interest": "Interest only",
+      "gk_both": "Principal and interest",
+      "freq_semiannual": "Semi-annually",
+      "freq_annual": "Annually",
+      "pu_working_capital": "Working capital",
+      "pu_import_finance": "Import financing",
+      "pu_equipment": "Equipment purchase",
+      "pu_project": "Project financing",
+      "pu_construction": "Construction",
+      "pu_general": "General corporate purposes",
+      "pu_other": "Other",
+      "st_submitted": "Submitted",
+      "summary": "Loan summary",
+      "sum_principal": "Original principal",
+      "sum_repaid": "Principal repaid",
+      "sum_outstanding": "Outstanding principal",
+      "sum_interest": "Interest paid",
+      "sum_fees": "Fees paid",
+      "sum_total": "Total paid",
+      "sum_repaid_on": "Repaid on",
+      "sum_left": "Instalments left",
+      "repaid": "Repaid",
+      "paid_on": "Paid on",
+      "rep_kind": "Kind",
+      "fees_part": "Fees",
+      "total_part": "Total",
+      "no_repayments": "Nothing repaid yet.",
+      "rk_instalment": "Instalment",
+      "rk_extra_principal": "Extra principal",
+      "rk_settlement": "Early settlement",
+      "settle_early": "Make early settlement",
+      "settle_title": "Settle {loanNo} early",
+      "settle_note": "Pay what is left in one payment. The principal outstanding and the interest accrued since the last payment are worked out below; the bank’s charge for ending the loan early is its own figure.",
+      "settle_outstanding": "Principal outstanding",
+      "settle_interest": "Interest accrued",
+      "settle_fee": "Early settlement fee",
+      "settle_total": "Settlement total",
+      "settle_date": "Paid on",
+      "settle_reference": "Bank reference",
+      "loan_currency": "Loan currency",
+      "expected_proceeds": "Expected proceeds",
+      "submit": "Send for approval",
+      "return_to_draft": "Return to draft",
+      "return_reason": "What should be changed",
+      "return_hint": "Sends the offer back to be retyped. Nothing has been posted.",
+      "status_submitted": "Pending approval",
+      "principal_total": "Principal total",
+      "paid_from": "Paid from"
     },
     "landed_cost": {
       "section_title": "Landed cost",
@@ -3556,7 +3663,12 @@
         "customs_asycuda": "Customs / ASYCUDA",
         "port_forwarding": "Port & forwarding",
         "other": "Other"
-      }
+      },
+      "final_title": "Final item cost",
+      "col_invoiced_unit": "Invoiced / unit",
+      "col_charges_unit": "Charges / unit",
+      "col_final_unit": "Final cost / unit",
+      "col_final_value": "Value in stock"
     },
     "employees": {
       "title": "Employees",
@@ -4663,11 +4775,11 @@
       "ratify_hint": "The decision this rests on — e.g. the Finance committee minute"
     },
     "bank_deposits": {
-      "subtitle": "Money put into a bank account by hand — cash taken to the bank, or money from any other source. Each is approved by somebody else and posted.",
+      "subtitle": "Money put into a bank account by hand: cash taken to the bank, and money arriving from anywhere else.",
       "new_cash": "Cash deposit",
-      "new_cash_note": "Cash taken from one of the company’s cash accounts to the bank: a bank transfer, Dr the bank, Cr the cash.",
-      "new_other": "Other deposit",
-      "new_other_note": "Money from outside the company’s own accounts — capital, a refund, a sale outside the ledgers: Dr the bank, Cr the account it was for (never a control account).",
+      "new_cash_note": "Money put into one of the company’s cash accounts by hand: counted in, and credited where it came from.",
+      "new_other": "Bank deposit",
+      "new_other_note": "Money arriving from outside the company’s own accounts — capital, a refund, the sale of something — paid straight into a bank account.",
       "into": "Into bank account",
       "from_cash": "From cash account",
       "credit_account": "Credit account",
@@ -4687,14 +4799,16 @@
       "source": "Source",
       "from": "From",
       "source_cash": "Cash",
-      "source_other": "Other source",
+      "source_other": "Bank",
       "none": "No deposits yet.",
       "approve": "Approve",
       "post": "Post",
       "journal": "Journal",
       "lines": "Deposit",
       "document_type_cash": "Bank deposit — cash",
-      "document_type_other": "Bank deposit — other source"
+      "document_type_other": "Bank deposit — other source",
+      "into_cash": "Into cash account",
+      "reference_cash": "Reference"
     },
     "availability": {
       "subtitle": "What each warehouse holds, item by item: on hand, available to issue, and what is reserved, in transit, in quarantine, damaged or returned — every figure summed from the stock ledger.",
@@ -5295,7 +5409,9 @@
       "withdraw": "Withdraw",
       "document_type": "Employee document",
       "chain_title": "{type} on file",
-      "attachments": "Scan"
+      "attachments": "Scan",
+      "scan": "Scan",
+      "scan_now_caption": "Optional. Up to 25MB — a photograph or a PDF of the paper."
     },
     "hr_dashboard": {
       "title": "HR Dashboard",
@@ -5366,6 +5482,9 @@
       "behind_since": "Behind since",
       "bucket": "Days behind",
       "no_advances": "No advance is still owing."
+    },
+    "monitoring": {
+      "soon": "Coming soon"
     }
   },
   "profile": {
@@ -5731,7 +5850,8 @@
       "hr_payroll_register": "Payroll Register",
       "hr_unsettled_advances": "Unsettled Advances",
       "bill_of_lading": "Bill of Lading",
-      "asycuda_reading": "ASYCUDA Reading"
+      "asycuda_reading": "ASYCUDA Reading",
+      "import_application": "Import Application"
     }
   }
 }

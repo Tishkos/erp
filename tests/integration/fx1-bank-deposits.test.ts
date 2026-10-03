@@ -103,9 +103,16 @@ beforeAll(async () => {
 });
 
 describe('FX3 · bank deposits', () => {
-  it('cash taken to the bank: raised, approved by somebody else, posted — a transfer on both sides', async () => {
+  it('money counted into the cash: raised, approved by somebody else, posted', async () => {
     const made = await withScope(scope(manager), (tx) =>
-      deposits.depositCash(tx, manager, { intoAccountId: bankId, fromCashAccountId: cashId, depositDate: ON, amount: iqd(400), reference: 'SLIP-1' }),
+      deposits.depositCash(tx, manager, {
+        intoAccountId: cashId,
+        creditAccountId: incomeId,
+        payer: 'The owner',
+        depositDate: ON,
+        amount: iqd(400),
+        reference: 'SLIP-1',
+      }),
     );
     // The one who raised it does not approve it.
     await expect(withScope(scope(manager), (tx) => deposits.approve(tx, manager, made.no))).rejects.toThrow(/somebody else/);
@@ -113,16 +120,23 @@ describe('FX3 · bank deposits', () => {
     await withScope(scope(manager), (tx) => deposits.post(tx, manager, made.no));
 
     const row = await withScope(scope(manager), (tx) => deposits.byNo(tx, made.no));
-    expect(row).toMatchObject({ source: 'cash', status: 'posted', intoCode: bankCode, fromCode: cashCode, reference: 'SLIP-1' });
+    // Into the cash account, and the register says which kind it was.
+    expect(row).toMatchObject({ source: 'cash', status: 'posted', intoCode: cashCode, reference: 'SLIP-1' });
     expect(row.journalEntryNo).toMatch(/^JE-/);
 
+    // The cash account is 400 better off; the bank is untouched, because no
+    // bank was involved (2026-10-04).
     const positions = await withScope(scope(manager), (tx) => reports.positions(tx, manager, WINDOW));
     const bank = positions.find((p) => p.accountCode === bankCode)!;
     const cash = positions.find((p) => p.accountCode === cashCode)!;
-    expect(Number(bank.closingIqd)).toBe(400);
-    expect(Number(bank.transfersInIqd), 'a deposit from the till is a transfer in').toBe(400);
-    expect(Number(bank.moneyInIqd), 'not income').toBe(0);
-    expect(Number(cash.closingIqd)).toBe(600);
+    // The till opened with 1,000 and 400 was counted in: 1,400, and money in
+    // rather than a transfer, because it came from outside (2026-10-04).
+    expect(Number(cash.closingIqd)).toBe(1400);
+    // All of it is money in: the 1,000 the till opened with came from equity
+    // and the 400 from outside — neither is a transfer between own accounts.
+    expect(Number(cash.moneyInIqd), 'money from outside is money in').toBe(1400);
+    expect(Number(bank.closingIqd), 'no bank was involved').toBe(0);
+    expect(Number(bank.transfersInIqd)).toBe(0);
   });
 
   it('money from another source: an other receipt into the bank, credited where it belongs, never to a control account', async () => {
@@ -138,23 +152,25 @@ describe('FX3 · bank deposits', () => {
 
     const positions = await withScope(scope(manager), (tx) => reports.positions(tx, manager, WINDOW));
     const bank = positions.find((p) => p.accountCode === bankCode)!;
-    expect(Number(bank.closingIqd)).toBe(650);
+    // Only what was deposited into the bank: the cash deposit went to the till.
+    expect(Number(bank.closingIqd)).toBe(250);
     expect(Number(bank.moneyInIqd), 'money from outside is money in').toBe(250);
   });
 
-  it('a deposit goes into a bank account, from a cash account', async () => {
-    await expect(withScope(scope(manager), (tx) => deposits.depositCash(tx, manager, { intoAccountId: cashId, fromCashAccountId: cashId, depositDate: ON, amount: iqd(1) }))).rejects.toThrow(
-      /into a bank account/,
+  it('each kind takes only its own accounts', async () => {
+    // A bank account is not a cash account, whichever way round it is asked.
+    await expect(withScope(scope(manager), (tx) => deposits.depositCash(tx, manager, { intoAccountId: bankId, creditAccountId: incomeId, payer: 'x', depositDate: ON, amount: iqd(1) }))).rejects.toThrow(
+      /into a cash account/,
     );
-    await expect(withScope(scope(manager), (tx) => deposits.depositCash(tx, manager, { intoAccountId: bankId, fromCashAccountId: bankId, depositDate: ON, amount: iqd(1) }))).rejects.toThrow(
-      /out of a cash account/,
+    await expect(withScope(scope(manager), (tx) => deposits.depositOther(tx, manager, { intoAccountId: cashId, creditAccountId: incomeId, payer: 'x', depositDate: ON, amount: iqd(1) }))).rejects.toThrow(
+      /into a bank account/,
     );
   });
 
   it('the register reads both, pages with a true count, and filters in the query', async () => {
     const all = await withScope(scope(manager), (tx) => deposits.listForScreen(tx, {}));
     expect(all.total).toBe(2);
-    expect(all.rows.map((row) => row.source).sort()).toEqual(['cash', 'other']);
+    expect(all.rows.map((row) => row.source).sort()).toEqual(['bank', 'cash']);
     const posted = await withScope(scope(manager), (tx) => deposits.listForScreen(tx, { view: 'open' }));
     expect(posted.total).toBe(0);
     const found = await withScope(scope(manager), (tx) => deposits.listForScreen(tx, { search: 'insurance' }));

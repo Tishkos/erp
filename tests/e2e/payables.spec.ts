@@ -397,7 +397,7 @@ test.describe('A22 · payables in a browser', () => {
 
     // The officer enters the bank's offer (§15.7).
     await signIn(page, 'officer@example.com');
-    await page.goto('/payables/loans');
+    await page.goto('/treasury/loans');
     await expect(page.getByRole('heading', { level: 1, name: 'Bank Loans' })).toBeVisible();
     await page.getByRole('button', { name: 'New loan' }).click();
     const create = page.getByRole('dialog');
@@ -416,7 +416,7 @@ test.describe('A22 · payables in a browser', () => {
     await create.getByRole('textbox', { name: 'Purpose' }).fill(purpose);
     await create.getByRole('button', { name: 'Create loan' }).click();
     await page.waitForURL(/\/payables\/loans\/LOAN-/, { timeout: 60_000 });
-    const loanNo = decodeURIComponent(page.url().split('/payables/loans/')[1]!.split('?')[0]!);
+    const loanNo = decodeURIComponent(page.url().split('/treasury/loans/')[1]!.split('?')[0]!);
     await expect(page.getByRole('heading', { level: 1, name: loanNo })).toBeVisible();
     await expect(page.getByText('980,000', { exact: false }).first()).toBeVisible();
     await expect(page.getByRole('cell', { name: '250,000 IQD' }).first()).toBeVisible();
@@ -427,7 +427,7 @@ test.describe('A22 · payables in a browser', () => {
     const second = await browser.newContext();
     const admin = await second.newPage();
     await signIn(admin);
-    await admin.goto(`/payables/loans/${encodeURIComponent(loanNo)}`);
+    await admin.goto(`/treasury/loans/${encodeURIComponent(loanNo)}`);
     await admin.getByRole('button', { name: 'Approve', exact: true }).click();
     await expect(admin.getByText('Approved', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
 
@@ -445,7 +445,7 @@ test.describe('A22 · payables in a browser', () => {
     await second.close();
 
     // The register: 750,000 still owed on it.
-    await page.goto(`/payables/loans?q=${loanNo}`);
+    await page.goto(`/treasury/loans?q=${loanNo}`);
     const row = page.getByRole('row', { name: new RegExp(loanNo) });
     await expect(row).toContainText('750,000');
     await expect(row).toContainText('Disbursed');
@@ -644,7 +644,7 @@ test.describe('A22 · payables in a browser', () => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await noSidewaysScroll(page);
     // …and Stage 6's.
-    await page.goto('/payables/loans?view=all');
+    await page.goto('/treasury/loans?view=all');
     await expect(page.getByRole('heading', { level: 1, name: 'القروض المصرفية' })).toBeVisible();
     await noSidewaysScroll(page);
     // …and Stage 8's.

@@ -13,7 +13,7 @@ import { DUE_ROWS, NEW_BANK } from './form';
  * Bank loans — REQ-AP-001 §15.7, §21.10. Every verb is the service's; these
  * only read the form and say where to come back to.
  */
-const LIST = '/payables/loans';
+const LIST = '/treasury/loans';
 const record = (loanNo: string) => `${LIST}/${encodeURIComponent(loanNo)}`;
 
 /** Amount as typed ("3,500.00") at the money scale; null when blank. */
@@ -71,7 +71,32 @@ export async function createLoan(formData: FormData): Promise<void> {
         bankCashAccountId: text(formData, 'bank_cash_account_id'),
         principalTxn: amountOf(text(formData, 'principal')) ?? 0n,
         commissionPct: text(formData, 'commission_pct') || null,
-        commissionTxn: amountOf(text(formData, 'commission_amount')),
+        /*
+         * The commission as the letter states it (2026-10-03): a percentage,
+         * or the bank's own figure, or none at all. The service works out what
+         * the basis does not give it.
+         */
+        commissionTxn:
+          text(formData, 'commission_basis') === 'fixed'
+            ? amountOf(text(formData, 'commission_fixed'))
+            : text(formData, 'commission_basis') === 'none'
+              ? 0n
+              : null,
+        // What the loan is owed in (0276) — independent of the account it
+        // lands in.
+        currency: text(formData, 'currency') || null,
+        commissionBasis: text(formData, 'commission_basis') || null,
+        facilityReference: text(formData, 'facility_reference') || null,
+        principalMethod: text(formData, 'principal_method') || null,
+        interestBasis: text(formData, 'interest_basis') || null,
+        interestType: text(formData, 'interest_type') || null,
+        interestReferenceRate: text(formData, 'interest_reference') || null,
+        interestSpreadPct: text(formData, 'interest_spread') || null,
+        otherFeesTxn: amountOf(text(formData, 'other_fees')) ?? 0n,
+        graceKind: text(formData, 'grace_kind') || null,
+        graceUntil: text(formData, 'grace_until') || null,
+        purposeCode: text(formData, 'purpose_code') || null,
+        expectedDisbursementDate: text(formData, 'expected_disbursement_date') || null,
         commissionTreatmentCode: text(formData, 'commission_treatment'),
         commissionCapitalised: formData.get('commission_capitalised') !== null,
         interestPctPa: text(formData, 'interest_pct') || null,
@@ -108,6 +133,25 @@ export async function setScheduleAction(formData: FormData): Promise<void> {
   }, record(loanNo));
 }
 
+/** Sent for approval: the offer as the bank wrote it, put in front of somebody else. */
+export async function submitLoan(formData: FormData): Promise<void> {
+  const loanNo = text(formData, 'loan_no');
+  await runAdminAndReturn(
+    async (tx, ctx) => loans.submit(tx, ctx, (await loans.loadByNo(tx, loanNo)).id),
+    record(loanNo),
+  );
+}
+
+/** Back to the accountant, with what should be changed. */
+export async function returnLoanToDraft(formData: FormData): Promise<void> {
+  const loanNo = text(formData, 'loan_no');
+  await runAdminAndReturn(
+    async (tx, ctx) =>
+      loans.returnToDraft(tx, ctx, (await loans.loadByNo(tx, loanNo)).id, text(formData, 'reason')),
+    record(loanNo),
+  );
+}
+
 export async function approveLoan(formData: FormData): Promise<void> {
   const loanNo = text(formData, 'loan_no');
   await runAdminAndReturn(
@@ -135,6 +179,31 @@ export async function payInstalmentAction(formData: FormData): Promise<void> {
       loans.payInstalment(tx, ctx, text(formData, 'instalment_id'), {
         paidDate: text(formData, 'paid_date'),
         reference: text(formData, 'reference'),
+        // Which account the money leaves; the loan's own when none is chosen.
+        bankCashAccountId: text(formData, 'bank_cash_account_id') || null,
+      }),
+    record(loanNo),
+  );
+}
+
+/**
+ * End the loan early — by direction, 2026-10-03.
+ *
+ * The principal outstanding and the interest accrued are the service's to work
+ * out; what comes from the form is the day, the bank's reference, and the two
+ * figures the bank itself quotes — its charge for ending early, and the
+ * interest where it asks for something other than the accrual.
+ */
+export async function settleLoanEarly(formData: FormData): Promise<void> {
+  const loanNo = text(formData, 'loan_no');
+  await runAdminAndReturn(
+    async (tx, ctx) =>
+      loans.settleEarly(tx, ctx, (await loans.loadByNo(tx, loanNo)).id, {
+        onDate: text(formData, 'paid_date'),
+        reference: text(formData, 'reference'),
+        feeTxn: amountOf(text(formData, 'fee')),
+        interestTxn: amountOf(text(formData, 'interest')),
+        bankCashAccountId: text(formData, 'bank_cash_account_id') || null,
       }),
     record(loanNo),
   );

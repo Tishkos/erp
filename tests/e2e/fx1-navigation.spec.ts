@@ -56,12 +56,12 @@ test.describe('FX2 · the module dropdowns', () => {
     const nav = page.getByRole('navigation', { name: 'Primary navigation' });
     await nav.getByRole('button', { name: 'Accounting' }).click();
     await expect(nav.getByRole('heading', { name: 'Treasury & Banking', exact: true })).toBeVisible();
-    await expect(nav.getByRole('link', { name: 'Bank Loans', exact: true })).toHaveAttribute('href', '/payables/loans');
+    await expect(nav.getByRole('link', { name: 'Bank Loans', exact: true })).toHaveAttribute('href', '/treasury/loans');
     await expect(nav.getByRole('link', { name: 'Bank Deposits', exact: true })).toHaveAttribute('href', '/treasury/deposits');
   });
 
   test('the loans and the declarations show their new neighbours as tabs', async ({ page }) => {
-    await page.goto('/payables/loans');
+    await page.goto('/treasury/loans');
     const tabs = page.getByRole('navigation', { name: 'Bank Loans' });
     await expect(tabs.getByRole('link', { name: 'Bank Deposits' })).toBeVisible();
     await expect(tabs.getByRole('link', { name: 'Purchase Invoices' })).toHaveCount(0);

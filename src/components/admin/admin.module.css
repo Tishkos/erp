@@ -2400,6 +2400,31 @@
   font-weight: 700;
 }
 
+/* Two figures in one totals cell — what the supplier is owed, and what the
+   ledger will carry underneath it. `.sapNum` already ends them both at the
+   cell's right edge; this only closes the gap between the two lines so they
+   read as one total rather than two (2026-10-03). */
+.sapTable .sapTotalRow > td.sapNum {
+  line-height: 1.35;
+}
+
+/* A field block placed under the lines — the purchase invoice's notes — stands
+   off the table the way the lines caption stands off the fields above it
+   (2026-10-03). */
+.sapTableWrap + .sapFields {
+  margin-block-start: 0.9rem;
+}
+
+/* The advance's own two figures, said under its percentage box, hold one line:
+   wrapped, the field grew to three rows and the figures read as a paragraph.
+   By direction (2026-10-03) overflowing is the better fault. */
+.sapField > .sapEnteredNote {
+  overflow: hidden;
+  margin-block-start: 0.15rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ── Controls ────────────────────────────────────────────────────────────
    The class is repeated so these beat the app's own button and input rules on
    specificity, whichever order the two stylesheets land in. */
@@ -5263,9 +5288,32 @@
   font-size: 0.68rem;
 }
 
-/* The header boxes a draft may type into, drawn like the read-only ones. */
-.sapDoc.sapDoc .sapField > input {
+/* The header boxes a draft may type into, drawn like the read-only ones.
+   `select` as well as `input` (2026-10-03): the rule named only inputs, so a
+   header's selects — Payable account (statement) among them — stood shorter
+   than the `.sapBox` cells either side and the row read as out of line. */
+.sapDoc.sapDoc .sapField > input,
+.sapDoc.sapDoc .sapField > select {
   min-block-size: 2rem;
+}
+
+/* A tick with its sentence beside it — "This is an import" — is a field like
+   any other and was reading as an afterthought under a label (2026-10-03). The
+   wrapper takes the same height as the boxes either side and centres what is
+   in it; the tick itself is a shade larger here and nowhere else, because the
+   global 1rem is right in a permissions matrix of two hundred of them. */
+.sapDoc.sapDoc .sapField > label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-block-size: 2rem;
+}
+
+.sapDoc.sapDoc .sapField > label > input[type='checkbox'] {
+  inline-size: 1.15rem;
+  block-size: 1.15rem;
+  min-inline-size: 1.15rem;
+  min-block-size: 1.15rem;
 }
 
 /* ── Reporting levels ─────────────────────────────────────────────────────

@@ -11,7 +11,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
-import { applicant, asycudaRun, bankLoan, billOfLading, customsPd, employeeDocument, employeeRequest, journalEntry, payable, paymentApplication, shipmentContainer } from './db/schema';
+import { applicant, asycudaRun, bankLoan, bankTransfer, billOfLading, customsPd, employeeDocument, employeeRequest, journalEntry, otherReceipt, payable, paymentApplication, shipmentContainer } from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -187,6 +187,24 @@ const employeeDocumentParentAccess = async (tx: Tx, principal: Principal, object
   return Boolean(row);
 };
 
+/**
+ * A deposit's slip — by direction, 2026-10-04. A deposit is not its own table:
+ * the cash one is a `bank_transfer` and the bank one is an `other_receipt`, so
+ * the paperwork hangs on those. Both ask the grant the Manual Deposits screen
+ * asks before it draws the record, which is the deposit register's own.
+ */
+const bankTransferParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'bank_transfer')) return false;
+  const [row] = await tx.select({ id: bankTransfer.id }).from(bankTransfer).where(eq(bankTransfer.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const otherReceiptParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'other_receipt')) return false;
+  const [row] = await tx.select({ id: otherReceipt.id }).from(otherReceipt).where(eq(otherReceipt.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -203,6 +221,8 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('bill_of_lading', blParentAccess);
   attachments.registerParentAccessCheck('asycuda_run', asycudaRunParentAccess);
   attachments.registerParentAccessCheck('bank_loan', loanParentAccess);
+  attachments.registerParentAccessCheck('bank_transfer', bankTransferParentAccess);
+  attachments.registerParentAccessCheck('other_receipt', otherReceiptParentAccess);
   attachments.registerParentAccessCheck('applicant', applicantParentAccess);
   attachments.registerParentAccessCheck('employee_request', employeeRequestParentAccess);
   attachments.registerParentAccessCheck('employee_document', employeeDocumentParentAccess);

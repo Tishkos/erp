@@ -207,7 +207,8 @@ export async function approve(tx: Tx, ctx: ActorContext, projectCode: string): P
   if (row.status !== 'draft') {
     throw new ProjectStateError(row.code, row.status, 'it is not a draft.');
   }
-  if (row.createdBy === ctx.principal.userId) {
+  // the super user approves alone, by direction 2026-10-03 — the company has one approver and a rule nobody can satisfy approves nothing.
+  if (row.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) {
     throw new Error(
       `${row.code} was raised by you, so somebody else approves the contract and its ` +
         'baseline (§5.2). The baseline is what every variation is measured against.',

@@ -60,6 +60,9 @@ import type { PostingLineRequest } from '../domain/posting';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
+import { advanceOf } from '../domain/payment-applications';
+import * as payableEvents from './payable-events';
+import * as applications from './payment-applications';
 import * as payables from './payables';
 import * as posting from './posting';
 import * as inventory from './inventory';
@@ -236,6 +239,21 @@ export interface CreateApInvoiceInput {
   readonly isImport?: boolean;
   /** D13 — the supplier's terms as written on the PDF, kept verbatim on the application. */
   readonly paymentTermsText?: string | null;
+  /**
+   * §15.3 — what the supplier is paid in front, as a percentage of this
+   * invoice, by direction 2026-10-03.
+   *
+   * A record of the agreement. The account it is paid from and the method are
+   * a later decision (0271), and `post` raises the payment application only
+   * once both are there.
+   */
+  readonly advancePercent?: string | null;
+  /**
+   * What the invoice was agreed in and the rate its dinars were worked out at
+   * — the caller's own conversion, written down (0272). Both or neither.
+   */
+  readonly agreedCurrency?: string | null;
+  readonly agreedRate?: string | null;
   /**
    * The currency the import is agreed in, when it is not the invoice's
    * dinars (a supplier's document in dollars). The lines carry their price in
@@ -616,6 +634,9 @@ export async function create(
       invoiceDate: input.invoiceDate,
       dueDate,
       currency: input.currency ?? 'IQD',
+      advancePercent: input.advancePercent ?? null,
+      agreedCurrency: input.agreedCurrency ?? null,
+      agreedRate: input.agreedCurrency ? (input.agreedRate ?? null) : null,
       note: input.note ?? null,
       // The route this invoice took, recorded on the header so the §15 CHECK
       // can read one field rather than trust the application to have looked at
@@ -1238,7 +1259,8 @@ export async function approveVariance(
     );
   }
 
-  if (invoice.createdBy === ctx.principal.userId) {
+  // the super user approves alone, by direction 2026-10-03 — the company has one approver and a rule nobody can satisfy approves nothing.
+  if (invoice.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) {
     throw new ApInvoiceStateError(
       invoice.invoiceNo,
       invoice.status,
@@ -1340,6 +1362,88 @@ export async function submit(tx: Tx, ctx: ActorContext, id: string): Promise<voi
  * together would make the GRNI clearance approximate, and 05.5's gate asks for
  * it to be exact.
  */
+/**
+ * The due date, told to an invoice after the fact — by direction 2026-10-03.
+ *
+ * The company buys on advance, so nothing is owed on a date when the invoice is
+ * entered: the balance falls due once the bank has confirmed the transfer and
+ * the supplier has said when it wants the rest. The form therefore asks for no
+ * due date, and this is how the real one arrives.
+ *
+ * Set on the invoice *and* on its import application. The payable carries its
+ * own `due_date` and the payables ageing sorts by it, so setting one and not
+ * the other would leave two screens disagreeing about the same debt.
+ *
+ * Allowed on a posted invoice, which is the whole point — and refused on a
+ * reversed one, which is owed to nobody. Recorded as an event on the import and
+ * as an audit row, because a due date drives the ageing and moving one quietly
+ * is how an overdue invoice stops looking overdue.
+ */
+export async function setDueDate(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  dueDate: string,
+): Promise<void> {
+  const { invoice } = await load(tx, id, { lock: true });
+  await authz.authorize(ctx.principal, 'edit_draft', PERMISSION_OBJECT, {
+    branchCode: invoice.branchCode,
+    objectId: id,
+  });
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+    throw new ApInvoiceStateError(invoice.invoiceNo, invoice.status, 'a due date is a date (YYYY-MM-DD).');
+  }
+  if (invoice.status === 'reversed') {
+    throw new ApInvoiceStateError(invoice.invoiceNo, invoice.status, 'nothing is owed on any date.');
+  }
+  if (dueDate < invoice.invoiceDate) {
+    throw new ApInvoiceStateError(
+      invoice.invoiceNo,
+      invoice.status,
+      `${dueDate} is before the invoice's own date (${invoice.invoiceDate}).`,
+    );
+  }
+  /*
+   * An unchanged date is still an answer the first time (0272): the column
+   * carries the entry day by default, so somebody confirming that day as the
+   * due date is telling the record something it did not know.
+   */
+  if (dueDate === invoice.dueDate && invoice.dueDateSetAt) return;
+
+  const before = invoice.dueDate;
+  await tx
+    .update(apInvoice)
+    // Stamped here and nowhere else — it is what makes the date a decision
+    // rather than a default, and the record shows no due date without it.
+    .set({ dueDate, dueDateSetAt: new Date(), updatedAt: new Date() })
+    .where(eq(apInvoice.id, id));
+  if (invoice.payableId) {
+    await tx.update(payable).set({ dueDate, updatedAt: new Date() }).where(eq(payable.id, invoice.payableId));
+    await payableEvents.record(tx, {
+      payableId: invoice.payableId,
+      eventCode: 'FIELD_CHANGED',
+      sourceType: PERMISSION_OBJECT,
+      sourceId: id,
+      sourceNo: invoice.invoiceNo,
+      summary: `Due date of ${invoice.invoiceNo}: ${before} → ${dueDate}`,
+      before: { dueDate: before },
+      after: { dueDate },
+      actorUserId: ctx.principal.userId,
+    });
+  }
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'ap_invoice.due_date_set',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: invoice.branchCode,
+    before: { dueDate: before },
+    after: { dueDate },
+    outcome: 'success',
+  });
+}
+
 export async function post(
   tx: Tx,
   ctx: ActorContext,
@@ -1616,6 +1720,107 @@ export async function post(
   // its purchase order) is applied to it now, so the invoice, the import and
   // the supplier's account agree on what is still owed.
   await advances.applyToPostedInvoice(tx, ctx, id);
+
+  /*
+   * §15.3 — the advance this invoice is paid in front, raised and approved
+   * (2026-10-03, by direction).
+   *
+   * The accountant wrote a percentage on the invoice; the share of the total
+   * just committed is what the bank is asked for, against this invoice's own
+   * import, and the request carries the invoice's approval rather than waiting
+   * for another. Send is untouched: the PD, the funds, the verified supplier
+   * account and the instalment trigger are all still asked there, so this
+   * moves no money.
+   */
+  const advanceIqd = advanceOf(payableIqd, invoice.advancePercent);
+  if (advanceIqd !== null && !invoice.advanceApplicationId) {
+    if (!invoice.payableId) {
+      // A payment application belongs to an import application; an invoice
+      // with none has nowhere to hang the request.
+      await audit.record(tx, {
+        actorUserId: ctx.principal.userId,
+        action: 'ap_invoice.advance_not_raised',
+        objectType: PERMISSION_OBJECT,
+        objectId: id,
+        branchCode: invoice.branchCode,
+        after: { why: 'the invoice names no import application', percent: invoice.advancePercent },
+        outcome: 'success',
+      });
+    } else {
+      const owner = await payables.load(tx, invoice.payableId);
+      if (owner.currency !== 'IQD') {
+        /*
+         * The invoice's total is held in dinars and the import is not. The
+         * rate that should turn one into the other on this day is the
+         * accountant's to choose — the books' own, the bank's, or the one the
+         * supplier's letter implies — and converting on a default here would
+         * put a figure nobody chose in front of a bank.
+         */
+        await payableEvents.record(tx, {
+          payableId: invoice.payableId,
+          eventCode: 'ADVANCE_NOT_RAISED',
+          sourceType: PERMISSION_OBJECT,
+          sourceId: id,
+          sourceNo: invoice.invoiceNo,
+          summary:
+            `${invoice.invoiceNo} asks for ${invoice.advancePercent}% in front — ` +
+            `${say(toDecimalString(advanceIqd, 4n))} — but ${owner.payableNo} is in ${owner.currency}. ` +
+            'Raise the payment application by hand at the rate you mean to use.',
+          actorUserId: ctx.principal.userId,
+        });
+      } else if (!invoice.advancePaidFromAccountId || !invoice.advancePaymentMethodCode) {
+        /*
+         * The percentage is agreed and the account is not chosen yet — which
+         * 0271 allows on purpose, because the supplier's document states the
+         * one and the company decides the other later. Said on the log so the
+         * advance is not quietly forgotten.
+         */
+        await payableEvents.record(tx, {
+          payableId: invoice.payableId,
+          eventCode: 'ADVANCE_NOT_RAISED',
+          sourceType: PERMISSION_OBJECT,
+          sourceId: id,
+          sourceNo: invoice.invoiceNo,
+          summary:
+            `${invoice.invoiceNo} agrees ${invoice.advancePercent}% in front — ` +
+            `${say(toDecimalString(advanceIqd, 4n))} — and names no account to pay it from. ` +
+            'Raise the payment application when the account is decided.',
+          actorUserId: ctx.principal.userId,
+        });
+      } else {
+        const made = await applications.create(tx, ctx, {
+          payableId: invoice.payableId,
+          paymentMethodCode: invoice.advancePaymentMethodCode!,
+          bankCashAccountId: invoice.advancePaidFromAccountId!,
+          amountTxn: advanceIqd,
+          note:
+            `${invoice.advancePercent}% advance on ${invoice.invoiceNo}, ` +
+            `raised when it posted (${say(toDecimalString(payableIqd, 4n))} total).`,
+        });
+        // "not drafts": approved on the invoice's own approval, which a second
+        // person gave when they posted it.
+        await applications.approve(tx, ctx, made.id, { inheritedFrom: invoice.invoiceNo });
+        await tx
+          .update(apInvoice)
+          .set({ advanceApplicationId: made.id, updatedAt: new Date() })
+          .where(eq(apInvoice.id, id));
+
+        // On the import's own log, where somebody watching the payment lane
+        // will see it without being told to look.
+        await payableEvents.record(tx, {
+          payableId: invoice.payableId,
+          eventCode: 'ADVANCE_RAISED',
+          sourceType: PERMISSION_OBJECT,
+          sourceId: id,
+          sourceNo: invoice.invoiceNo,
+          summary:
+            `${made.applicationNo} raised for ${invoice.advancePercent}% of ${invoice.invoiceNo} — ` +
+            `${say(toDecimalString(advanceIqd, 4n))}, approved on the invoice's own approval.`,
+          actorUserId: ctx.principal.userId,
+        });
+      }
+    }
+  }
 
   // §9.2 / A10 — each charged line becomes a landed-cost charge of its
   // import, in this same transaction, typed by this invoice's own category.

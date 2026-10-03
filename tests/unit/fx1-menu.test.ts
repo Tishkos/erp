@@ -67,7 +67,7 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(route('logistics_shipping', 'shipments')).toBe('/payables/shipments');
     expect(route('logistics_shipping', 'containers')).toBe('/payables/containers');
     expect(route('logistics_shipping', 'in_transit')).toBe('/inventory/in-transit');
-    expect(route('treasury', 'loans')).toBe('/payables/loans');
+    expect(route('treasury', 'loans')).toBe('/treasury/loans');
     expect(route('payables', 'payment_applications')).toBe('/payables/payment-applications');
     expect(route('payables', 'purchase_orders')).toBe('/payables/purchase-orders');
   });

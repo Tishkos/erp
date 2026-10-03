@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { rowCount, runAdmin, runAdminAndReturn, text, withQuery } from '@/server/admin-action';
 import { registerAllRecords } from '@/server/records';
 import { parseDecimal } from '@domain/money';
+import { RATE_SCALE, toDecimalString, toIqd } from '@domain/money';
 import { parseQuantity } from '@domain/uom';
 import { businessToday } from '@/server/domain/business-date';
 import { matchSupplier } from '@/server/domain/invoice-draft';
@@ -91,7 +92,40 @@ function linesFrom(formData: FormData): ap.InvoiceLineInput[] {
 export async function createApInvoice(formData: FormData): Promise<void> {
   const outcome = await runAdmin(async (tx, ctx) => {
     const lines = linesFrom(formData);
-    return ap.create(tx, ctx, {
+
+    /*
+     * The currency the invoice is agreed in, and the rate that turns it into
+     * dinars (2026-10-03).
+     *
+     * The prices were typed in this currency, so each line carries both: the
+     * agreed figure as `unitPriceTxn`, and the dinars the journal needs. The
+     * rate is read here, from `rateOn` — the latest effective on the invoice's
+     * own date and not superseded — rather than taken from the form, because a
+     * rate that arrived from a browser is one somebody could have edited and
+     * these dinars end up in the ledger.
+     */
+    const invoiceDate = text(formData, 'invoice_date');
+    const currency = text(formData, 'currency').trim().toUpperCase() || 'IQD';
+    // What it was converted at, kept so the invoice can say so afterwards.
+    let agreedRate: string | null = null;
+    const priced =
+      currency === 'IQD'
+        ? lines
+        : await (async () => {
+            const rate = await rates.rateOn(tx, currency, invoiceDate);
+            agreedRate = toDecimalString(rate.iqdPerUnit, RATE_SCALE);
+            return lines.map((line) => ({
+              ...line,
+              // What was typed is the agreed currency; the dinars are derived.
+              unitPriceTxn: line.unitPriceIqd,
+              unitPriceIqd: toIqd(line.unitPriceIqd, rate.iqdPerUnit),
+              ...(line.discountIqd === undefined
+                ? {}
+                : { discountIqd: toIqd(line.discountIqd, rate.iqdPerUnit) }),
+            }));
+          })();
+    const typedNote = text(formData, 'note').trim();
+    const made = await ap.create(tx, ctx, {
       supplierId: text(formData, 'supplier_id'),
       // Block 4's header is the invoice number, the two dates and the
       // supplier. The supplier's own number is not among them, and the column
@@ -105,25 +139,63 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       // on the page, or no JavaScript ran. The service then applies the
       // supplier's terms itself, by the same arithmetic the form uses (§16).
       dueDate: text(formData, 'due_date').trim() || undefined,
-      note: null,
       // Where it posts, chosen on the form that raised it.
       payableAccountId: text(formData, 'payable_account_id').trim() || null,
       expenseAccountId: text(formData, 'expense_account_id').trim() || null,
       // D13 — the accountant ticked Import: the application is born with it.
       isImport: text(formData, 'is_import') === '1',
+      // §1.1 — the invoice and its journal are in dinars; the import keeps the
+      // currency it was agreed in, which is what gets paid (FX7/FX8).
+      ...(currency === 'IQD' ? {} : { importCurrency: currency }),
       // §24.3 — ticked Import and naming an open import: the invoice joins it.
       payableId: text(formData, 'is_import') === '1' ? text(formData, 'payable_id').trim() || null : null,
-      paymentTermsText: text(formData, 'payment_terms_text').trim() || null,
+      // §15.3 — what the supplier is paid in front, as a percentage of this
+      // invoice. The account it comes from is chosen later (0271).
+      advancePercent: text(formData, 'advance_percent').trim() || null,
+      // Where the dinars came from (0272): an invoice agreed in dollars says
+      // so on its own face, and at what rate, rather than presenting the
+      // converted figures as though somebody typed them.
+      agreedCurrency: currency === 'IQD' ? null : currency,
+      agreedRate,
       // REQ-PM-001 §8 — the element is "project|element"; the three together or none.
       projectCode: text(formData, 'project_element').split('|')[0]?.trim() || null,
       wbsCode: text(formData, 'project_element').split('|')[1]?.trim() || null,
       costCode: text(formData, 'project_cost_code').trim() || null,
-      lines,
+      lines: priced,
     });
+
+    /*
+     * The note, as the invoice's first note rather than as a column nobody
+     * reads (2026-10-03).
+     *
+     * `ap_invoice.note` is a header field the record page does not draw; the
+     * Notes panel under the lines is what a person reads and adds to, and it
+     * is made of `ap_invoice_note` rows — each dated and signed and never
+     * edited. A note typed while raising the invoice is the same kind of thing
+     * as a note added an hour later, so it is written the same way and shows
+     * in the same list.
+     */
+    if (typedNote) await expenses.addNote(tx, ctx, made.id, typedNote);
+    return made;
   });
 
   if (!outcome.ok) redirect(withQuery(`${LIST}/new`, 'error', outcome.error!));
   redirect(record(outcome.value!.invoiceNo));
+}
+
+/**
+ * The due date, said once it is known — by direction 2026-10-03.
+ *
+ * The company buys on advance, so the invoice is entered without one; this is
+ * the moment after, when the bank has confirmed the transfer and the supplier
+ * has named the day for the balance.
+ */
+export async function setDueDateAction(formData: FormData): Promise<void> {
+  const invoiceNo = text(formData, 'invoice_no');
+  await runAdminAndReturn(
+    (tx, ctx) => ap.setDueDate(tx, ctx, text(formData, 'id'), text(formData, 'due_date')),
+    record(invoiceNo),
+  );
 }
 
 /** What the grid hears back: it happened, or why it did not. */

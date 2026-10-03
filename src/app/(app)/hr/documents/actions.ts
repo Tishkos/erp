@@ -23,7 +23,33 @@ const detailsOf = (form: FormData) => ({
 });
 
 export async function createDocument(form: FormData): Promise<void> {
-  const outcome = await runAdmin((tx, ctx) => documents.create(tx, ctx, { employeeId: text(form, 'employee_id'), docType: text(form, 'doc_type'), ...detailsOf(form) }));
+  /*
+   * The scan, if one was chosen, filed in the same transaction as the record
+   * it belongs to (2026-10-03). Read before the transaction opens because
+   * reading a file is slow and a transaction holding a row lock should not
+   * wait on a disk.
+   */
+  const file = form.get('file');
+  const upload = file instanceof File && file.size > 0 ? file : null;
+  const content = upload ? Buffer.from(await upload.arrayBuffer()) : null;
+  if (upload) registerAllRecords();
+
+  const outcome = await runAdmin(async (tx, ctx) => {
+    const made = await documents.create(tx, ctx, {
+      employeeId: text(form, 'employee_id'),
+      docType: text(form, 'doc_type'),
+      ...detailsOf(form),
+    });
+    if (upload && content) {
+      await attachments.upload(tx, ctx, {
+        objectType: documents.PERMISSION_OBJECT,
+        objectId: made.id,
+        fileName: upload.name,
+        content,
+      });
+    }
+    return made;
+  });
   if (!outcome.ok) redirect(`${LIST}?error=${encodeURIComponent(outcome.error ?? '')}&new=1`);
   redirect(`${record(outcome.value!.documentNo)}?saved=1`);
 }

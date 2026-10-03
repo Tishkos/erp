@@ -223,6 +223,14 @@ export default async function ServiceReceiptsPage({
     >
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
 
+      {/*
+        Two registers, stacked with a gap between them (2026-10-03). A register
+        carries no bottom margin of its own — it is usually the last thing on
+        its screen — so these two touched and read as one table with a stray
+        heading in the middle. `reportStack` is the class written for exactly
+        that when it happened to Bank and Cash Reporting.
+      */}
+      <div className={s.reportStack}>
       <section aria-labelledby="awaiting-title" className={`${s.sapDoc} ${s.sapRegister}`}>
         <div className={s.sapWindow}>
           <h2 className={s.sapTitle} id="awaiting-title">
@@ -248,6 +256,7 @@ export default async function ServiceReceiptsPage({
           ) : null}
         </div>
       </section>
+      </div>
     </AdminPage>
   );
 }

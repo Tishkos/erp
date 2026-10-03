@@ -62,7 +62,9 @@ export default async function BudgetDocumentPage({ params, searchParams }: { par
   const when = (value: Date | null) => (value ? formatTimestamp(value.toISOString(), locale as Locale) : '—');
   const costName = (c: { nameEn: string; nameAr: string | null }) => (locale === 'ar' && c.nameAr ? c.nameAr : c.nameEn);
 
-  const isRaiser = doc.createdBy === principal.userId;
+  // Not a super user's: the service exempts them, and the button
+  // should not hide what the service would allow (2026-10-04).
+  const isRaiser = doc.createdBy === principal.userId && !principal.isSuperUser;
   const maySubmit = doc.status === 'draft' && can(principal, 'submit', pb.PERMISSION_OBJECT);
   const mayEdit = doc.status === 'draft' && can(principal, 'edit_draft', pb.PERMISSION_OBJECT);
   const mayDecide = doc.status === 'submitted' && can(principal, 'approve', pb.PERMISSION_OBJECT) && !isRaiser;

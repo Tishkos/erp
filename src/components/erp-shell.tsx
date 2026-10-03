@@ -15,6 +15,7 @@ import {
   Calculator,
   Check,
   ChevronDown,
+  Activity,
   Files,
   FolderKanban,
   Grid3X3,
@@ -77,6 +78,7 @@ type ModuleKey =
   | 'hr'
   | 'reports'
   | 'documents'
+  | 'monitoring'
   | 'settings';
 
 type UtilityPanel = 'launcher' | 'notifications' | 'messages' | 'user';
@@ -177,6 +179,7 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
   { key: 'inventory', icon: Boxes, sectionKeys: ['inventory'] },
   { key: 'hr', icon: Users, sectionKeys: ['hr_payroll'] },
   { key: 'documents', icon: Files, sectionKeys: ['documents'] },
+  { key: 'monitoring', icon: Activity, sectionKeys: ['monitoring'] },
   { key: 'reports', icon: BarChart3, sectionKeys: ['reports'] },
   {
     key: 'settings',

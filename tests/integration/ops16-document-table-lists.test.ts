@@ -115,7 +115,181 @@ const NOT_DOCUMENTS = new Set([
   'employee',
 ]);
 
+/**
+ * The tables a format leaves standing.
+ *
+ * Generated from the schema once (2026-10-03) and then kept by hand, which is
+ * the point: with this list, **every** table in the database is accounted for
+ * — a document the format clears, master data `--master-data` clears, or one
+ * of these — and a table in none of the three fails the test below.
+ *
+ * That rule is what was missing. `legacy_document`, `legacy_import_run`,
+ * `asycuda_run` and `payables_migration_run` were in no list at all, and
+ * nothing could notice: `documentTables()` derives from the journal and the
+ * stock ledger, and imported history, a reading from customs and a record that
+ * a migration ran reference neither. So a format deleted every business
+ * partner and left 2,722 old sales and purchases pointing at partners that no
+ * longer existed, and ASYCUDA still showed two readings afterwards.
+ *
+ * Nobody forgot a rule. There was no rule that could see it. There is now, and
+ * it is the schema itself.
+ *
+ * What is in here: configuration, reference data, the chart, the people, the
+ * audit trail and the sign-in history — what a company still has the morning
+ * after its books are cleared. Three entries worth knowing about:
+ *
+ *   * `payable_event_2026..2028` are partitions of `payable_event`, which *is*
+ *     cleared; emptying the parent empties them, so they need no line of their
+ *     own.
+ *   * `project_wbs` follows its project, and a project is a master record.
+ *   * `shipment_watcher` is a per-branch subscription and names no shipment.
+ */
+const KEPT_BY_A_FORMAT = new Set([
+  'account_required_dimension',
+  'account_type_dimension_default',
+  'app_user',
+  'ar_write_off_policy',
+  'ar_write_off_reason',
+  'asset_category',
+  'auth_account',
+  'auth_verification',
+  'bank',
+  'bank_cash_account',
+  'business_line',
+  'chart_of_account',
+  'company',
+  'container_status',
+  'cost_centre',
+  'crm_campaign',
+  'currency',
+  'department',
+  'dimension_definition',
+  'doc_sequence',
+  'document_status_transition',
+  'document_type',
+  'document_type_controlled_field',
+  'document_type_dimension',
+  'employee',
+  'employee_compensation',
+  'employee_history',
+  'employee_pay_component',
+  'exchange_rate',
+  'expense_category',
+  'financial_statement_line',
+  'fiscal_period',
+  'fiscal_year',
+  'funding_source',
+  'hold_reason_code',
+  'hr_parameter',
+  'instalment_trigger',
+  'investment_type',
+  'investment_valuation_method',
+  'job_queue',
+  'kyc_required_document',
+  'kyc_risk_rating',
+  'landed_cost_basis',
+  'landed_cost_type',
+  'lead_source',
+  'leave_type',
+  'loan_commission_treatment',
+  'logistics_funding_stage_role',
+  'logistics_route',
+  'logistics_service_type',
+  'logistics_service_type_evidence',
+  'notification_rule',
+  'partner_role_required_field',
+  'pay_component',
+  'payable_event_2026',
+  'payable_event_2027',
+  'payable_event_2028',
+  'payable_event_code',
+  'payable_lane',
+  'payable_stage',
+  'payable_type',
+  'payable_type_lane',
+  'payment_application_transition',
+  'payment_method',
+  'payment_risk_policy',
+  'payment_term_instalment',
+  'payment_terms',
+  'pd_status',
+  'period_override',
+  'port',
+  'position',
+  'posting_rule',
+  'price_list',
+  'project_cost_code',
+  'project_recognition_policy',
+  'project_tolerance_profile',
+  'project_type',
+  'project_wbs',
+  'review_cycle',
+  'role',
+  'role_grant',
+  'saved_view',
+  'shipment_watcher',
+  'sign_in_attempt',
+  'stage_time_limit',
+  'sweep_check',
+  'tax_code',
+  'tax_rate',
+  'unit_of_measure',
+  'user_branch_scope',
+  'user_department_scope',
+  'user_mfa',
+  'user_role',
+  'whatsapp_action',
+  'whatsapp_contact',
+  'whatsapp_message',
+  'whatsapp_session',
+  'whatsapp_setting',
+  'workflow_definition',
+  'workflow_step',
+  'working_calendar',
+  'working_calendar_holiday',
+]);
+
+/** Every table the master-data block deletes, truncates or resets. */
+function masterDataTables(): Set<string> {
+  const script = readFileSync('scripts/ops/format-live-database.sh', 'utf8');
+  const block = /read -r -d '' MASTER_DATA_SQL <<SQL \|\| true\n([\s\S]*?)\nSQL\n/.exec(script);
+  if (!block) throw new Error('format-live-database.sh has no MASTER_DATA_SQL block.');
+  const sql = block[1]!;
+  const names = new Set<string>();
+  for (const pattern of [
+    /delete from\s+([a-z_]+)/gi,
+    /truncate\s+(?:table\s+)?([a-z_]+)/gi,
+    /update\s+([a-z_]+)\s+set/gi,
+  ]) {
+    for (const match of sql.matchAll(pattern)) names.add(match[1]!);
+  }
+  return names;
+}
+
 describe('ops 16 · the document-table lists are complete', () => {
+  /*
+   * The rule that would have caught all four omissions.
+   *
+   * Every table is a document, master data, or deliberately kept. A table in
+   * none of the three is one somebody added to the schema and nobody decided
+   * about — which is how history and readings came to survive a format.
+   */
+  it('accounts for every table in the schema', async () => {
+    const { rows } = await ownerPool.query<{ table_name: string }>(`
+      select table_name from information_schema.tables
+       where table_schema = 'public' and table_type = 'BASE TABLE'
+       order by table_name
+    `);
+    const documents = formatScriptTables();
+    const master = masterDataTables();
+    const unaccounted = rows
+      .map((row) => row.table_name)
+      .filter((name) => !documents.has(name) && !master.has(name) && !KEPT_BY_A_FORMAT.has(name))
+      // Drizzle's own bookkeeping is not the company's.
+      .filter((name) => !name.startsWith('__drizzle'));
+    expect(unaccounted).toEqual([]);
+  });
+
   it('names every document table in the format script', async () => {
     const tables = (await documentTables()).filter((name) => !NOT_DOCUMENTS.has(name));
     const listed = formatScriptTables();

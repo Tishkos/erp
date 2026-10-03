@@ -18,14 +18,19 @@ import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { Attachments } from '@/components/admin/attachments';
 import { RecordHistory } from '@/components/admin/history';
+import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import * as attachmentsService from '@/server/services/attachments';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
+import { divideHalfUp, MONEY_SCALE, parseDecimal, toDecimalString } from '@domain/money';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as loans from '@/server/services/loans';
+import * as bankCash from '@/server/services/bank-cash-accounts';
+import * as rates from '@/server/services/exchange-rates';
 import {
   approveLoan,
   attachToLoan,
@@ -33,12 +38,15 @@ import {
   disburseLoan,
   payCommissionAction,
   payInstalmentAction,
+  returnLoanToDraft,
+  submitLoan,
+  settleLoanEarly,
   setScheduleAction,
   setSharesAction,
 } from '../actions';
 import { INSTALMENT_CHIP, LOAN_CHIP } from '../status';
-import { STATUS_CHIP } from '../../payment-applications/status';
-import { windowTone } from '../../window-tone';
+import { STATUS_CHIP } from '../../../payables/payment-applications/status';
+import { windowTone } from '../../../payables/window-tone';
 import { businessToday } from '@/server/domain/business-date';
 import { isNotFoundError } from '@/server/not-found';
 
@@ -61,7 +69,7 @@ export default async function LoanPage({
   params: Promise<{ loanNo: string }>;
   searchParams: SearchParams;
 }) {
-  if (!visibleRoute('/payables/loans')) notFound();
+  if (!visibleRoute('/treasury/loans')) notFound();
   const { loanNo: raw } = await params;
   const loanNo = decodeURIComponent(raw);
   const [t, pa, admin, page, locale, context, outcome] = await Promise.all([
@@ -89,14 +97,70 @@ export default async function LoanPage({
   });
   if (!found) notFound();
   const { loan, treatment, schedule, allocations, totals } = found;
+
+  /*
+   * Where the loan stands, summed from the repayments that were actually
+   * posted (0275) — the same reading the status is decided from, so the
+   * summary and the chip above it cannot disagree.
+   */
+  /*
+   * Every account the company could pay from (2026-10-04). The loan's own is
+   * the default — it usually is the one — but the money may be in another, and
+   * C-20 asks whichever is chosen whether it holds enough.
+   */
+  const payFrom = await withCurrentUser(async (tx) => [
+    ...(await bankCash.listOfKind(tx, 'bank')),
+    ...(await bankCash.listOfKind(tx, 'cash')),
+  ]).then((rows) => rows.filter((account) => account.active));
+
+  const [position, repayments, quote] = await withCurrentUser(async (tx) => [
+    await loans.positionOf(tx, loan.id),
+    await loans.repaymentsOf(tx, loan.id),
+    loan.status === 'active' ? await loans.settlementQuote(tx, loan.id, businessToday()) : null,
+  ] as const);
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
   const money = (value: string, currency = loan.currency) => formatMoney(value, currency, locale as Locale);
   const today = businessToday();
   const hidden = { loan_no: loan.loanNo };
 
-  const mine = loan.createdBy === principal.userId;
+  /*
+   * A figure at the number of places its own money has (2026-10-03). A dinar
+   * has none and a dollar has two, and Finance says which on Currencies &
+   * Rates. Rounded on the stored bigint and written from it — these boxes go
+   * back to a service that holds the typed schedule to repaying the principal
+   * exactly, and a figure that went through a double might not.
+   */
+  const places = BigInt(
+    (await withCurrentUser((tx) => rates.currencies(tx))).find((row) => row.code === loan.currency)?.decimals ?? 2,
+  );
+  const atPlaces = (value: string): string => {
+    const scaled = parseDecimal(value, MONEY_SCALE);
+    if (places >= MONEY_SCALE) return toDecimalString(scaled, MONEY_SCALE);
+    return toDecimalString(divideHalfUp(scaled, 10n ** (MONEY_SCALE - places)), places);
+  };
+
+  /*
+   * Whose loan it is, for the four-eyes rule — and not a super user's, because
+   * `loans.approve` exempts them and a screen that hid the button would be a
+   * screen disagreeing with the service behind it (2026-10-04).
+   *
+   * The company has one approver; that was the direction on 2026-10-03, and
+   * the services were changed then. The buttons were not, so the owner could
+   * send a loan for approval and then find nothing to press.
+   */
+  const mine = loan.createdBy === principal.userId && !principal.isSuperUser;
   const mayEdit = loan.status === 'draft' && can(principal, 'edit_draft', loans.PERMISSION_OBJECT);
-  const mayApprove = loan.status === 'draft' && !mine && can(principal, 'approve', loans.PERMISSION_OBJECT);
+  /*
+   * Sent for approval by whoever may enter a loan — including the person who
+   * entered it, since sending is not agreeing. Approval is a different grant
+   * and still refuses them (0273).
+   */
+  const maySubmit = loan.status === 'draft' && can(principal, 'create', loans.PERMISSION_OBJECT);
+  const mayApprove =
+    (loan.status === 'draft' || loan.status === 'submitted') &&
+    !mine &&
+    can(principal, 'approve', loans.PERMISSION_OBJECT);
+  const mayReturn = loan.status === 'submitted' && can(principal, 'approve', loans.PERMISSION_OBJECT);
   const mayPost = can(principal, 'post', loans.PERMISSION_OBJECT);
   const mayDisburse = loan.status === 'approved' && mayPost;
   const unpaid = schedule.filter((row) => row.status !== 'paid');
@@ -181,12 +245,23 @@ export default async function LoanPage({
       : []),
   ];
 
-  const scheduleRows = [...schedule.map((row) => row), ...Array.from({ length: Math.max(0, 8 - schedule.length) }, () => null)];
+  /*
+   * The instalments there are, and no blank rows after them (2026-10-03). It
+   * used to pad to eight, so a loan of four showed four empty dates nobody had
+   * asked for — and the padding was the only way to lengthen a schedule, which
+   * is a regeneration rather than four empty boxes.
+   */
+  const scheduleRows = schedule;
+
+  // What the paperclip says it holds.
+  const attachedCount = await withCurrentUser((tx) =>
+    attachmentsService.currentFor(tx, loans.PERMISSION_OBJECT, loan.id),
+  ).then((rows) => rows.length);
 
   return (
     <AdminPage
-      back={{ href: '/payables/loans', label: page('loans') }}
-      tabs={<SectionTabs route="/payables/loans" />}
+      back={{ href: '/treasury/loans', label: page('loans') }}
+      tabs={<SectionTabs route="/treasury/loans" />}
       title={loan.loanNo}
       trail={[{ href: '/', label: admin('dashboard_label') }]}
       variant="sap"
@@ -196,6 +271,22 @@ export default async function LoanPage({
       <DocumentWindow
         actions={
           <>
+            {maySubmit ? (
+              <form action={submitLoan}>
+                <Hidden name="loan_no" value={loan.loanNo} />
+                {/* The accent button: sending a loan for approval is what the
+                    draft is for, and the company chose gold for the action a
+                    screen exists to take (2026-10-03). */}
+                <Submit label={t('submit')} variant="document" />
+              </form>
+            ) : null}
+            {mayReturn ? (
+              <form action={returnLoanToDraft} title={t('return_hint')}>
+                <Hidden name="loan_no" value={loan.loanNo} />
+                <input aria-label={t('return_reason')} name="reason" placeholder={t('return_reason')} required type="text" />
+                <Submit label={t('return_to_draft')} tone="secondary" variant="document" />
+              </form>
+            ) : null}
             {mayApprove ? (
               <form action={approveLoan}>
                 <Hidden name="loan_no" value={loan.loanNo} />
@@ -234,6 +325,16 @@ export default async function LoanPage({
                       options={unpaid.map((row) => ({
                         value: row.id,
                         label: `${row.sequence}. ${day(row.dueDate)} — ${money(row.totalTxn)}`,
+                      }))}
+                      required
+                    />
+                    <Select
+                      defaultValue={loan.bankCashAccountId}
+                      label={t('paid_from')}
+                      name="bank_cash_account_id"
+                      options={payFrom.map((account) => ({
+                        value: account.id,
+                        label: `${account.name} (${account.code}) · ${account.currency}`,
                       }))}
                       required
                     />
@@ -277,9 +378,15 @@ export default async function LoanPage({
                         <tr>
                           <th scope="col">#</th>
                           <th scope="col">{t('due_date')}</th>
-                          <th scope="col">{t('principal_part')}</th>
-                          <th scope="col">{t('interest_part')}</th>
-                          <th scope="col">{t('commission_part')}</th>
+                          <th className={s.sapNum} scope="col">
+                            {`${t('principal_part')} (${loan.currency})`}
+                          </th>
+                          <th className={s.sapNum} scope="col">
+                            {`${t('interest_part')} (${loan.currency})`}
+                          </th>
+                          <th className={s.sapNum} scope="col">
+                            {`${t('commission_part')} (${loan.currency})`}
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -299,7 +406,7 @@ export default async function LoanPage({
                               <input
                                 aria-label={`${t('principal_part')} ${index + 1}`}
                                 className={s.input}
-                                defaultValue={row ? Number(row.principalTxn).toFixed(2) : ''}
+                                defaultValue={row ? atPlaces(row.principalTxn) : ''}
                                 inputMode="decimal"
                                 name={`principal_${index}`}
                               />
@@ -308,7 +415,7 @@ export default async function LoanPage({
                               <input
                                 aria-label={`${t('interest_part')} ${index + 1}`}
                                 className={s.input}
-                                defaultValue={row ? Number(row.interestTxn).toFixed(2) : ''}
+                                defaultValue={row ? atPlaces(row.interestTxn) : ''}
                                 inputMode="decimal"
                                 name={`interest_${index}`}
                               />
@@ -317,7 +424,7 @@ export default async function LoanPage({
                               <input
                                 aria-label={`${t('commission_part')} ${index + 1}`}
                                 className={s.input}
-                                defaultValue={row ? Number(row.commissionTxn).toFixed(2) : ''}
+                                defaultValue={row ? atPlaces(row.commissionTxn) : ''}
                                 inputMode="decimal"
                                 name={`commission_${index}`}
                               />
@@ -325,10 +432,70 @@ export default async function LoanPage({
                           </tr>
                         ))}
                       </tbody>
+                      {/* What the rows come to, against what the loan is.
+                          `setSchedule` refuses a schedule that does not repay
+                          the principal exactly; this says so before it is
+                          pressed (2026-10-03). */}
+                      <tfoot>
+                        <tr className={s.sapTotalRow}>
+                          <td colSpan={2}>{t('principal_total')}</td>
+                          <td className={s.sapNum}>
+                            <bdi dir="ltr">{money(loan.principalTxn)}</bdi>
+                          </td>
+                          <td colSpan={2} />
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                   <SubmitRow>
                     <Submit label={t('save_schedule')} />
+                  </SubmitRow>
+                </Form>
+              </NewRecordDialog>
+            ) : null}
+            {/*
+              Ending it early: what is left, the interest it has earned since
+              the last payment, and whatever the bank charges to close it
+              (2026-10-03). The loan becomes fully repaid by the same rule
+              every repayment goes through — the principal reaching nothing —
+              not because this dialog says so.
+            */}
+            {quote && loan.status === 'active' && mayPost ? (
+              <NewRecordDialog
+                buttonLabel={t('settle_early')}
+                closeLabel={admin('close')}
+                title={t('settle_title', { loanNo: loan.loanNo })}
+              >
+                <p className="muted">{t('settle_note')}</p>
+                <Form action={settleLoanEarly}>
+                  <Hidden name="loan_no" value={loan.loanNo} />
+                  <Grid>
+                    <Select
+                      defaultValue={loan.bankCashAccountId}
+                      label={t('paid_from')}
+                      name="bank_cash_account_id"
+                      options={payFrom.map((account) => ({
+                        value: account.id,
+                        label: `${account.name} (${account.code}) · ${account.currency}`,
+                      }))}
+                      required
+                    />
+                    <Field defaultValue={today} label={t('settle_date')} name="paid_date" required type="date" />
+                    <Field
+                      defaultValue={toDecimalString(quote.accruedInterest, MONEY_SCALE)}
+                      label={t('settle_interest')}
+                      name="interest"
+                    />
+                    <Field label={t('settle_fee')} name="fee" />
+                    <Field label={t('settle_reference')} name="reference" required />
+                  </Grid>
+                  <p className="muted">
+                    {t('settle_outstanding')} {money(toDecimalString(quote.outstanding, MONEY_SCALE))}
+                    {' · '}
+                    {t('settle_total')} {money(toDecimalString(quote.total, MONEY_SCALE))}
+                  </p>
+                  <SubmitRow>
+                    <Submit label={t('settle_early')} />
                   </SubmitRow>
                 </Form>
               </NewRecordDialog>
@@ -344,8 +511,30 @@ export default async function LoanPage({
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={admin('history')}
+        titleActions={
+          <>
+            {/* The paperclip and the clock, as every record wears them
+                (2026-10-03). The loan has no print model yet, so it has no
+                printer: a door onto nothing is worse than no door. */}
+            <AttachmentsButton
+              closeLabel={admin('close')}
+              count={attachedCount}
+              label={t('attachments')}
+              title={t('attachments')}
+            >
+              <Attachments
+                action={attachToLoan}
+                hidden={hidden}
+                mayAttach={can(principal, 'edit_draft', loans.PERMISSION_OBJECT)}
+                objectId={loan.id}
+                objectType={loans.PERMISSION_OBJECT}
+              />
+            </AttachmentsButton>
+            <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
+              <RecordHistory objectId={loan.id} objectType={loans.PERMISSION_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         documentType={t('record')}
         fields={fields}
         id="loan-document"
@@ -353,7 +542,8 @@ export default async function LoanPage({
         linesTitle={t('schedule')}
         number={loan.loanNo}
         totals={[
-          { label: t('outstanding'), value: money(totals.outstanding) },
+          { label: t('outstanding'), value: money(toDecimalString(position.outstanding, MONEY_SCALE)) },
+          { label: t('repaid'), value: money(toDecimalString(position.principalRepaid, MONEY_SCALE)) },
           { label: t('unallocated'), value: money(totals.unallocated) },
         ]}
       >
@@ -490,7 +680,7 @@ export default async function LoanPage({
                               <input
                                 aria-label={`${t('col_share')} ${row.applicationNo}`}
                                 className={s.input}
-                                defaultValue={Number(row.commissionShareTxn).toFixed(2)}
+                                defaultValue={atPlaces(row.commissionShareTxn)}
                                 inputMode="decimal"
                                 name={`share_${index}`}
                               />
@@ -532,19 +722,100 @@ export default async function LoanPage({
         </div>
       </section>
 
-      {/* ── The contract, the schedule the bank sent, its letters ───── */}
-      <section aria-label={t('attachments')} className={s.sapDoc}>
+      {/* ── Where it stands, from what was posted ──────────────────── */}
+      <section aria-labelledby="loan-summary-title" className={s.sapDoc}>
         <div className={s.sapWindow}>
-          <Attachments
-            action={attachToLoan}
-            hidden={hidden}
-            mayAttach={can(principal, 'edit_draft', loans.PERMISSION_OBJECT)}
-            objectId={loan.id}
-            objectType={loans.PERMISSION_OBJECT}
-          />
+          <h2 className={s.sapTitle} id="loan-summary-title">
+            <span>{t('summary')}</span>
+            {/* The same chip the header wears, so the summary and the
+                document agree about what the loan is. */}
+            <span className={`status status--${windowTone(chip)}`} data-status={windowTone(chip)}>
+              {t(`status_${loan.status}`)}
+            </span>
+          </h2>
+          <div className={s.sapBody}>
+            <div className={s.sapFields}>
+              {[
+                { label: t('sum_principal'), value: position.principal },
+                { label: t('sum_repaid'), value: position.principalRepaid },
+                { label: t('sum_outstanding'), value: position.outstanding },
+                { label: t('sum_interest'), value: position.interestPaid },
+                { label: t('sum_fees'), value: position.feesPaid },
+                { label: t('sum_total'), value: position.totalPaid },
+              ].map((figure) => (
+                <div className={s.sapField} key={figure.label}>
+                  <span className={s.sapLabel}>{figure.label}</span>
+                  <span className={s.sapBox}>
+                    <bdi dir="ltr">{money(toDecimalString(figure.value, MONEY_SCALE))}</bdi>
+                  </span>
+                </div>
+              ))}
+              <div className={s.sapField}>
+                <span className={s.sapLabel}>{t('sum_repaid_on')}</span>
+                <span className={s.sapBox}>
+                  <bdi dir="ltr">{day(position.repaidOn)}</bdi>
+                </span>
+              </div>
+              <div className={s.sapField}>
+                <span className={s.sapLabel}>{t('sum_left')}</span>
+                <span className={s.sapBox}>
+                  <bdi dir="ltr">{position.instalmentsLeft}</bdi>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* What has actually been paid, newest first. */}
+          <div className={s.sapTableWrap}>
+            <table aria-labelledby="loan-summary-title" className={s.sapTable}>
+              <thead>
+                <tr>
+                  <th scope="col">{t('paid_on')}</th>
+                  <th scope="col">{t('rep_kind')}</th>
+                  <th className={s.sapNum} scope="col">
+                    {t('principal_part')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {t('interest_part')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {t('fees_part')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {t('total_part')}
+                  </th>
+                  <th scope="col">{t('reference')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {repayments.length === 0 ? (
+                  <tr>
+                    <td className={s.sapEmptyRow} colSpan={7}>
+                      {t('no_repayments')}
+                    </td>
+                  </tr>
+                ) : null}
+                {repayments.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <bdi dir="ltr">{day(row.paidDate)}</bdi>
+                    </td>
+                    <td>{t(`rk_${row.kind}`)}</td>
+                    <td className={s.sapNum}>{money(row.principalTxn)}</td>
+                    <td className={s.sapNum}>{money(row.interestTxn)}</td>
+                    <td className={s.sapNum}>{money(row.feesTxn)}</td>
+                    <td className={s.sapNum}>{money(row.totalTxn)}</td>
+                    <td>
+                      <bdi dir="ltr">{row.reference}</bdi>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
-      <RecordHistory objectId={loan.id} objectType={loans.PERMISSION_OBJECT} />
+
     </AdminPage>
   );
 }
