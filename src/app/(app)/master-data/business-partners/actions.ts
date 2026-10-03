@@ -1,6 +1,7 @@
 'use server';
 
 import { flag, runAdminAndReturn, text } from '@/server/admin-action';
+import * as bankDetails from '@/server/services/business-partner';
 import * as partners from '@/server/services/partners';
 
 const listFor = (role: partners.PartnerRole) =>
@@ -75,5 +76,73 @@ export async function setPartnerActive(formData: FormData): Promise<void> {
     (tx, ctx) =>
       partners.setActive(tx, ctx, code, flag(formData, 'active'), text(formData, 'reason')),
     record(returnRoleOf(formData), code),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// IMPROVEMENT-002 — the partner's bank accounts, set up on its profile.
+// ---------------------------------------------------------------------------
+
+const accountRecord = (formData: FormData, accountId?: string | null) => {
+  const base = record(returnRoleOf(formData), text(formData, 'code'));
+  return accountId ? `${base}&account=${encodeURIComponent(accountId)}` : base;
+};
+
+export async function addPartnerBankAccount(formData: FormData): Promise<void> {
+  await runAdminAndReturn(
+    async (tx, ctx) => {
+      const partner = await partners.detail(tx, text(formData, 'code'));
+      return bankDetails.addBankAccount(tx, ctx, partner.id, {
+        bankCode: text(formData, 'bank_code') || null,
+        bankName: text(formData, 'bank_name') || null,
+        bankBranch: text(formData, 'bank_branch') || null,
+        bankAddress: text(formData, 'bank_address') || null,
+        accountHolder: text(formData, 'account_holder') || null,
+        accountNumber: text(formData, 'account_number') || null,
+        iban: text(formData, 'iban') || null,
+        swift: text(formData, 'swift') || null,
+        currency: text(formData, 'currency') || 'IQD',
+        intermediaryBank: text(formData, 'intermediary_bank') || null,
+        intermediarySwift: text(formData, 'intermediary_swift') || null,
+        note: text(formData, 'note') || null,
+        confirmedNotDuplicate: flag(formData, 'confirmed_not_duplicate'),
+      });
+    },
+    // Refused, it comes back with the dialog open on what was typed wrong.
+    (value) => {
+      const id = (value as { id?: string } | null | undefined)?.id;
+      return id ? accountRecord(formData, id) : `${accountRecord(formData)}&add_bank=1`;
+    },
+  );
+}
+
+export async function submitPartnerBankAccount(formData: FormData): Promise<void> {
+  const id = text(formData, 'account');
+  await runAdminAndReturn((tx, ctx) => bankDetails.submitBankAccount(tx, ctx, id), accountRecord(formData, id));
+}
+
+export async function verifyPartnerBankAccount(formData: FormData): Promise<void> {
+  const id = text(formData, 'account');
+  await runAdminAndReturn((tx, ctx) => bankDetails.approveBankAccount(tx, ctx, id), accountRecord(formData, id));
+}
+
+export async function returnPartnerBankAccount(formData: FormData): Promise<void> {
+  const id = text(formData, 'account');
+  await runAdminAndReturn(
+    (tx, ctx) => bankDetails.returnBankAccount(tx, ctx, id, text(formData, 'reason')),
+    accountRecord(formData, id),
+  );
+}
+
+export async function defaultPartnerBankAccount(formData: FormData): Promise<void> {
+  const id = text(formData, 'account');
+  await runAdminAndReturn((tx, ctx) => bankDetails.setDefaultBankAccount(tx, ctx, id), accountRecord(formData, id));
+}
+
+export async function deactivatePartnerBankAccount(formData: FormData): Promise<void> {
+  const id = text(formData, 'account');
+  await runAdminAndReturn(
+    (tx, ctx) => bankDetails.deactivateBankAccount(tx, ctx, id, text(formData, 'reason')),
+    accountRecord(formData, id),
   );
 }

@@ -1555,18 +1555,22 @@ export async function pickersFor(tx: Tx, payableId: string) {
     const position = await treasury.accountPosition(tx, account.id);
     withAvailable.push({ ...account, availableIqd: money(position.availableIqd) });
   }
+  // IMPROVEMENT-002 — the supplier's accounts still in use, the default first
+  // and the verified before those waiting; one taken out of use is not offered.
   const payees = await tx
     .select({
       id: partnerBankAccount.id,
       bankName: partnerBankAccount.bankName,
       accountNumber: partnerBankAccount.accountNumber,
+      iban: partnerBankAccount.iban,
       swift: partnerBankAccount.swift,
       currency: partnerBankAccount.currency,
+      isDefault: partnerBankAccount.isDefault,
       verified: sql<boolean>`${partnerBankAccount.approvalStatus} = 'approved' and ${partnerBankAccount.isActive}`,
     })
     .from(partnerBankAccount)
-    .where(eq(partnerBankAccount.partnerId, owner.supplierId))
-    .orderBy(desc(partnerBankAccount.isActive));
+    .where(and(eq(partnerBankAccount.partnerId, owner.supplierId), isNull(partnerBankAccount.deactivatedAt)))
+    .orderBy(desc(partnerBankAccount.isDefault), desc(partnerBankAccount.isActive), desc(partnerBankAccount.createdAt));
   const funding = await tx
     .select({ code: fundingSource.code, name: fundingSource.name })
     .from(fundingSource)

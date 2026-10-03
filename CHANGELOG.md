@@ -7,6 +7,35 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+### Added — supplier bank accounts on the supplier's profile (IMPROVEMENT-002, sponsor 2026-10-03)
+- **Bank accounts on the profile.** A supplier may hold several accounts. Each takes the bank (from the bank list, or named), branch, address, beneficiary (defaults to the supplier), account no. and/or IBAN, SWIFT/BIC, currency (from the currency list), an intermediary bank and SWIFT, and a note.
+- **Refused when entered:** an IBAN failing its check digits or its country's length, a SWIFT/BIC of the wrong shape, an inactive currency, or the same account twice on one supplier. The same account on another partner is the duplicate warning, and it can be confirmed.
+- **Verified by a second person.** Send for verification notifies the accounting managers. Whoever entered or sent the account cannot verify it. Send back carries a reason and returns the account to draft.
+- **Several accounts in use, one default.** The first verified account is the default. Make default switches it, and the payment run pays the default. Take out of use needs a reason and is final; a default taken out passes the default on. Nothing is deleted.
+- **The payment application form** offers only accounts still in use, and preselects the verified one in the import's currency. Its hint says where accounts are verified.
+- **The supplier's history** includes its bank accounts' events.
+- Migration 0269: new account columns; one default per partner; the default must be in use; out of use needs a reason and is final; bank and intermediary are frozen once verified. Control C-40.
+
+### Changed — supplier bank accounts on the supplier's profile (IMPROVEMENT-002, sponsor 2026-10-03)
+- **Bank accounts are set up on the supplier's profile.** Each one takes:
+  - The bank, from the bank list or named, with its branch and address.
+  - The beneficiary (by default the supplier itself).
+  - The account no. and/or IBAN.
+  - The SWIFT/BIC and the currency, from the currency list.
+  - An intermediary bank and its SWIFT/BIC.
+  - A note.
+- **A supplier may hold several accounts.** Dinars and dollars, or two banks, can all be in use at once.
+- **What a bank would refuse is refused on entry.** That covers:
+  - An IBAN that fails its check digits or its country's length.
+  - A SWIFT/BIC of the wrong shape.
+  - An inactive currency.
+  - The same account twice on one supplier.
+- **A second person verifies every account.** It cannot be whoever entered it or sent it. Sending it notifies the accounting managers; until now the rule was there and nothing raised it. A verifier may send an account back with what is wrong.
+- **One account is the default.** A payment run pays to it, and the first verified account takes it. Changing the default is recorded.
+- **An account taken out of use keeps its reason and is never deleted.** It is not used again, and if it was the default, the default moves to the most recently verified account.
+- **Changes after verification.** The bank, account no., IBAN, SWIFT and intermediary are frozen (migration 0269). Editing the beneficiary's name un-approves the account, as before.
+- **Payment applications** offer only accounts still in use, with the default first. The verified one in the import's currency is preselected.
+
 ### Changed — ASYCUDA readings are documents (IMPROVEMENT-002, sponsor 2026-10-03)
 - **Update from ASYCUDA is a register.** It lists every reading of the ASYCUDA document list, like the other lists: search, a status filter (Not applied / Applied), number, read on, read by, file, lines, changes, not read, applied on. "Read the ASYCUDA list" in the header takes the export (Excel/CSV, several files read as one) or a pasted list. Where the declarations stand stays on the PD register ("Expiring within N days"), so this screen no longer repeats it.
 - **Each reading is a numbered document**, ASY-YYYY-NNNNN (migration 0268; earlier readings are numbered by date). It opens on its own page with its boxes and its lines in ASYCUDA's order: each line as ASYCUDA wrote it, the PD (linked), what ASYCUDA says, the date, the import, the status when read, the status now, and what applying does. Apply is the action at its foot, once.

@@ -321,6 +321,23 @@ export const partnerBankAccount = pgTable(
     swift: text('swift'),
     currency: char('currency', { length: 3 }).notNull().default('IQD'),
     accountHolder: text('account_holder'),
+    /**
+     * IMPROVEMENT-002 (0269) — the account in full. `bank_code` names the bank
+     * from the bank list when it is on it (a foreign supplier's bank usually is
+     * not); the intermediary is what a dollar transfer routes through.
+     */
+    bankCode: text('bank_code'),
+    bankBranch: text('bank_branch'),
+    bankAddress: text('bank_address'),
+    intermediaryBank: text('intermediary_bank'),
+    intermediarySwift: text('intermediary_swift'),
+    note: text('note'),
+    /** The account a payment run pays to; one per partner, payable only (0269). */
+    isDefault: boolean('is_default').notNull().default(false),
+    /** Taken out of use with a reason, never deleted (0269). */
+    deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
+    deactivatedBy: uuid('deactivated_by').references(() => appUser.id),
+    deactivationReason: text('deactivation_reason'),
 
     /** Runs through the shared status machine and workflow engine (01.6, 01.7). */
     approvalStatus: documentStatus('approval_status').notNull().default('draft'),

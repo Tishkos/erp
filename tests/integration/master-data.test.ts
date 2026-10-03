@@ -488,7 +488,7 @@ describe('03.2 · bank details require independent approval (§4.4, §15)', () =
     ).rejects.toThrow(SelfApprovalError);
   });
 
-  it('retires the previous details, keeping them as history', async () => {
+  it('keeps several sets payable; the first verified stays the default (IMPROVEMENT-002)', async () => {
     const { partner, bank } = await partnerWithDraftBank();
     await withScope(scope(officer), (tx) => partners.submitBankAccount(tx, officer, bank.id));
     await withScope(scope(manager), (tx) => partners.approveBankAccount(tx, manager, bank.id));
@@ -502,17 +502,21 @@ describe('03.2 · bank details require independent approval (§4.4, §15)', () =
     await withScope(scope(officer), (tx) => partners.submitBankAccount(tx, officer, second.id));
     await withScope(scope(manager), (tx) => partners.approveBankAccount(tx, manager, second.id));
 
+    // A partner banks in more than one place; a new account sits beside the
+    // others rather than replacing them, and payments not naming one go to
+    // the default.
     const payable = await withScope(scope(officer), (tx) =>
       partners.payableBankAccount(tx, partner.id),
     );
-    expect(payable?.accountNumber).toBe('5555555555');
+    expect(payable?.accountNumber).toBe('1234567890');
 
-    // Both sets are still on the record; only one is payable.
     const { rows } = await ownerPool.query(
-      `select account_number, is_active from partner_bank_account order by created_at`,
+      `select account_number, is_active, is_default from partner_bank_account order by created_at`,
     );
-    expect(rows).toHaveLength(2);
-    expect(rows.filter((r) => r.is_active)).toHaveLength(1);
+    expect(rows).toEqual([
+      { account_number: '1234567890', is_active: true, is_default: true },
+      { account_number: '5555555555', is_active: true, is_default: false },
+    ]);
   });
 
   it('refuses to edit approved details — a change is a new set (§15)', async () => {
