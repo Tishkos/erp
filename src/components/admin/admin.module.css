@@ -2400,6 +2400,32 @@
   font-weight: 700;
 }
 
+/* Two figures in the totals cell — what the supplier is owed and what the
+   ledger will carry — stacked and right-aligned under each other, the dinars
+   the quieter of the two (2026-10-03). */
+.sapTable .sapTotalRow > td.sapNum {
+  line-height: 1.35;
+  text-align: end;
+}
+
+/* A figure said under a header field — the advance's own money — stays on one
+   line. Wrapped, the cell grew to three rows and the two figures read as a
+   paragraph; by direction (2026-10-03) overflowing is the better fault. */
+.sapField > .sapGridCaption {
+  display: block;
+  overflow: hidden;
+  margin-block-start: 0.15rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sapTable .sapTotalRow > td.sapNum > .sapGridCaption {
+  display: block;
+  margin-block-start: 0.1rem;
+  font-weight: 600;
+  text-align: end;
+}
+
 /* ── Controls ────────────────────────────────────────────────────────────
    The class is repeated so these beat the app's own button and input rules on
    specificity, whichever order the two stylesheets land in. */

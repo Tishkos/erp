@@ -1387,6 +1387,13 @@
       "when": 1795900000080,
       "tag": "0270_invoice_advance",
       "breakpoints": true
+    },
+    {
+      "idx": 198,
+      "version": "7",
+      "when": 1795900000081,
+      "tag": "0271_advance_percent_alone",
+      "breakpoints": true
     }
   ]
 }

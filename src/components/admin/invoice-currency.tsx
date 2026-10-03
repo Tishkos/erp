@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { lineTotal, MONEY_PLACES, toNumber } from '@/lib/decimal';
+import { useRef, useState } from 'react';
+import { MONEY_PLACES, toNumber } from '@/lib/decimal';
 import styles from './admin.module.css';
 
 /**
@@ -47,43 +47,12 @@ export function InvoiceCurrency({
   readonly ledger: string;
   readonly labels: {
     readonly rate: string;
-    readonly totalIn: string;
-    readonly totalLedger: string;
   };
   readonly locale: string;
 }) {
   const box = useRef<HTMLSelectElement>(null);
   const [chosen, setChosen] = useState(ledger);
-  const [total, setTotal] = useState<bigint>(0n);
 
-  useEffect(() => {
-    const form = box.current?.form;
-    if (!form) return;
-
-    /*
-     * The invoice's total, summed off the line grid's own fields — the same
-     * reading `advance-field.tsx` takes, and for the same reason: the grid is
-     * a component of its own and this is not its business.
-     */
-    const read = () => {
-      const claimed = Number(value(form, 'line_count'));
-      const rows = Number.isInteger(claimed) && claimed > 0 ? Math.min(claimed, 500) : 0;
-      let sum = 0n;
-      for (let row = 0; row < rows; row += 1) {
-        const line = lineTotal(
-          value(form, `quantity_${row}`),
-          value(form, `unit_price_${row}`),
-          value(form, `discount_${row}`),
-        );
-        if (line !== null) sum += line;
-      }
-      setTotal(sum);
-    };
-
-    read();
-    form.addEventListener('input', read);
-    return () => form.removeEventListener('input', read);
-  }, []);
 
   const rate = choices.find((c) => c.code === chosen)?.iqdPerUnit ?? '1';
   const foreign = chosen !== ledger;
@@ -114,20 +83,11 @@ export function InvoiceCurrency({
           <bdi dir="ltr">
             {labels.rate.replace('{rate}', shown(scaled(rate))).replace('{currency}', chosen)}
           </bdi>
-          {total > 0n ? (
-            <>
-              {' · '}
-              <bdi dir="ltr">
-                {labels.totalIn.replace('{currency}', chosen).replace('{amount}', shown(total))}
-              </bdi>
-              {' · '}
-              <bdi dir="ltr">
-                {labels.totalLedger
-                  .replace('{currency}', ledger)
-                  .replace('{amount}', shown(inLedger(total, rate)))}
-              </bdi>
-            </>
-          ) : null}
+          {/*
+            The rate and nothing else (2026-10-03). The totals moved to the
+            totals row, which is where a person looks for them and where they
+            are not said twice.
+          */}
         </span>
       ) : null}
     </>

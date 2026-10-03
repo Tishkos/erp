@@ -147,6 +147,9 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       // §24.3 — ticked Import and naming an open import: the invoice joins it.
       payableId: text(formData, 'is_import') === '1' ? text(formData, 'payable_id').trim() || null : null,
       paymentTermsText: text(formData, 'payment_terms_text').trim() || null,
+      // §15.3 — what the supplier is paid in front, as a percentage of this
+      // invoice. The account it comes from is chosen later (0271).
+      advancePercent: text(formData, 'advance_percent').trim() || null,
       // REQ-PM-001 §8 — the element is "project|element"; the three together or none.
       projectCode: text(formData, 'project_element').split('|')[0]?.trim() || null,
       wbsCode: text(formData, 'project_element').split('|')[1]?.trim() || null,

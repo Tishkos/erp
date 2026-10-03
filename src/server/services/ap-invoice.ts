@@ -240,6 +240,15 @@ export interface CreateApInvoiceInput {
   /** D13 — the supplier's terms as written on the PDF, kept verbatim on the application. */
   readonly paymentTermsText?: string | null;
   /**
+   * §15.3 — what the supplier is paid in front, as a percentage of this
+   * invoice, by direction 2026-10-03.
+   *
+   * A record of the agreement. The account it is paid from and the method are
+   * a later decision (0271), and `post` raises the payment application only
+   * once both are there.
+   */
+  readonly advancePercent?: string | null;
+  /**
    * The currency the import is agreed in, when it is not the invoice's
    * dinars (a supplier's document in dollars). The lines carry their price in
    * it as `unitPriceTxn`. Left out, the import is in the invoice's currency.
@@ -619,6 +628,7 @@ export async function create(
       invoiceDate: input.invoiceDate,
       dueDate,
       currency: input.currency ?? 'IQD',
+      advancePercent: input.advancePercent ?? null,
       note: input.note ?? null,
       // The route this invoice took, recorded on the header so the §15 CHECK
       // can read one field rather than trust the application to have looked at
@@ -1738,6 +1748,25 @@ export async function post(
             `${invoice.invoiceNo} asks for ${invoice.advancePercent}% in front — ` +
             `${say(toDecimalString(advanceIqd, 4n))} — but ${owner.payableNo} is in ${owner.currency}. ` +
             'Raise the payment application by hand at the rate you mean to use.',
+          actorUserId: ctx.principal.userId,
+        });
+      } else if (!invoice.advancePaidFromAccountId || !invoice.advancePaymentMethodCode) {
+        /*
+         * The percentage is agreed and the account is not chosen yet — which
+         * 0271 allows on purpose, because the supplier's document states the
+         * one and the company decides the other later. Said on the log so the
+         * advance is not quietly forgotten.
+         */
+        await payableEvents.record(tx, {
+          payableId: invoice.payableId,
+          eventCode: 'ADVANCE_NOT_RAISED',
+          sourceType: PERMISSION_OBJECT,
+          sourceId: id,
+          sourceNo: invoice.invoiceNo,
+          summary:
+            `${invoice.invoiceNo} agrees ${invoice.advancePercent}% in front — ` +
+            `${say(toDecimalString(advanceIqd, 4n))} — and names no account to pay it from. ` +
+            'Raise the payment application when the account is decided.',
           actorUserId: ctx.principal.userId,
         });
       } else {

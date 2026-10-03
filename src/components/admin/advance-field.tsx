@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { lineTotal, MONEY_PLACES, toNumber } from '@/lib/decimal';
+import { inLedger } from './invoice-currency';
 import styles from './admin.module.css';
 
 /**
@@ -21,6 +22,11 @@ import styles from './admin.module.css';
  * that agree today. A form that posted its own arithmetic would be a form that
  * could lie about it.
  *
+ * Two figures and nothing else (2026-10-03): the money the supplier gets in
+ * front, and the dinars that leave the bank account to send it. The sentence
+ * that used to follow them folded the cell onto three lines to say something
+ * true of every advance ever raised.
+ *
  * The lines are read off the form by name, the way `due-date-field.tsx`
  * watches the partner and the date: a form-level `input` listener, because the
  * grid is a component of its own and this is not its business.
@@ -28,21 +34,27 @@ import styles from './admin.module.css';
 export function AdvanceField({
   label,
   name,
-  currency,
-  caption,
+  currencyField,
+  ledgerCurrency,
+  ledgerRates,
   locale,
 }: {
   readonly label: string;
   readonly name: string;
-  /** What the figure is in. The invoice's money is held in dinars. */
-  readonly currency: string;
-  /** Said under the figure: what will happen when the invoice posts. */
-  readonly caption: string;
+  /**
+   * The form field holding the currency the invoice is agreed in, so the
+   * advance is said in that currency as well as in dinars (2026-10-03).
+   */
+  readonly currencyField: string;
+  readonly ledgerCurrency: string;
+  /** One unit of each currency in dinars, as a decimal string at the rate scale. */
+  readonly ledgerRates: Readonly<Record<string, string>>;
   readonly locale: string;
 }) {
   const box = useRef<HTMLInputElement>(null);
   const [percent, setPercent] = useState('');
   const [total, setTotal] = useState<bigint>(0n);
+  const [agreed, setAgreed] = useState(ledgerCurrency);
 
   useEffect(() => {
     const form = box.current?.form;
@@ -68,12 +80,16 @@ export function AdvanceField({
         if (line !== null) sum += line;
       }
       setTotal(sum);
+
+      // And which currency those prices are in.
+      const chosen = value(form, currencyField);
+      if (chosen) setAgreed(chosen);
     };
 
     readTotal();
     form.addEventListener('input', readTotal);
     return () => form.removeEventListener('input', readTotal);
-  }, []);
+  }, [currencyField]);
 
   /*
    * The share, by the same steps the server takes: the percentage scaled to
@@ -83,6 +99,11 @@ export function AdvanceField({
    * the one the bank is asked for.
    */
   const share = advanceShare(total, percent);
+  const shown = (value: bigint, places: number) =>
+    toNumber(value, MONEY_PLACES).toLocaleString(locale === 'ar' ? 'ar' : 'en-US', {
+      maximumFractionDigits: places,
+      minimumFractionDigits: 0,
+    });
 
   return (
     <>
@@ -101,14 +122,17 @@ export function AdvanceField({
       {share !== null ? (
         <span className={styles.sapGridCaption}>
           <bdi dir="ltr">
-            {toNumber(share, MONEY_PLACES).toLocaleString(locale === 'ar' ? 'ar' : 'en-US', {
-              maximumFractionDigits: 2,
-              minimumFractionDigits: 0,
-            })}{' '}
-            {currency}
+            {agreed} {shown(share, 2)}
           </bdi>
-          {' · '}
-          {caption}
+          {/* And what leaves the bank account, which is the dinars. */}
+          {agreed !== ledgerCurrency && ledgerRates[agreed] ? (
+            <>
+              {' · '}
+              <bdi dir="ltr">
+                {ledgerCurrency} {shown(inLedger(share, ledgerRates[agreed]!), 0)}
+              </bdi>
+            </>
+          ) : null}
         </span>
       ) : null}
     </>

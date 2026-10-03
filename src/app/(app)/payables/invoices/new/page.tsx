@@ -4,6 +4,7 @@ import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { DueDateField } from '@/components/admin/due-date-field';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
+import { AdvanceField } from '@/components/admin/advance-field';
 import { InvoiceCurrency } from '@/components/admin/invoice-currency';
 import { PairedPicker } from '@/components/admin/paired-picker';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
@@ -174,8 +175,6 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
              * (2026-10-03).
              */
             rate: x.raw('rate_on_date'),
-            totalIn: x.raw('total_in'),
-            totalLedger: x.raw('total_in'),
           }}
           label={column('currency')}
           ledger="IQD"
@@ -255,6 +254,22 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
       ),
     },
     {
+      // The percentage, which computes what it comes to as the lines are typed.
+      label: x('advance_percent'),
+      control: true,
+      value: (
+        <AdvanceField
+          currencyField="currency"
+          label={x('advance_percent')}
+          ledgerCurrency="IQD"
+          ledgerRates={Object.fromEntries(moneys.map((m) => [m.code, m.iqdPerUnit]))}
+          locale={locale}
+          name="advance_percent"
+        />
+      ),
+    },
+    {
+      // And the supplier's own sentence, which the system cannot compute from.
       label: x('payment_terms_text'),
       control: true,
       value: (

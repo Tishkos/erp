@@ -2919,7 +2919,7 @@
       "project_element": "عنصر المشروع",
       "project_element_none": "لا شيء — ليس لمشروع",
       "project_cost_code": "رمز تكلفة المشروع",
-      "payment_terms_text": "الدفعة المقدمة",
+      "payment_terms_text": "شروط الدفع",
       "payment_terms_placeholder": "مثال: 20% مقدماً، 80% عند الوصول",
       "import_application_new": "جديدة — تفتحها هذه الفاتورة",
       "state_part_paid": "مدفوعة جزئيًا",
@@ -2927,7 +2927,8 @@
       "set_due_date_title": "تاريخ استحقاق {invoiceNo}",
       "set_due_date_note": "الشركة تشتري بدفعة مقدمة، لذلك تُدخل الفاتورة بدون تاريخ استحقاق. حدّده بعد أن يؤكّد المصرف الحوالة ويحدّد المورّد يوم سداد الباقي. ينتقل مع طلب الاستيراد، ويُحفظ التغيير في السجل.",
       "rate_on_date": "1 {currency} = {rate} د.ع",
-      "total_in": "الإجمالي {currency} {amount}"
+      "total_in": "الإجمالي {currency} {amount}",
+      "advance_percent": "نسبة الدفعة المقدمة %"
     },
     "payment_applications": {
       "subtitle": "طلبات الشركة إلى بنوكها وأمين الصندوق للدفع إلى المورد — الأطول انتظارًا أولًا.",
