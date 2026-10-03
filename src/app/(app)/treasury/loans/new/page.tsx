@@ -1,7 +1,7 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, Submit, admin as s } from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
-import { LoanBankField } from '@/components/admin/loan-terms-fields';
+import { LoanBankField, LoanCommissionFields } from '@/components/admin/loan-terms-fields';
 import { LoanProceeds } from '@/components/admin/loan-proceeds';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -303,33 +303,24 @@ export default async function NewLoanPage({ searchParams }: { readonly searchPar
 
     // ── 2 · the commission ──────────────────────────────────────────────
     {
+      /*
+       * The basis and the one figure it calls for (2026-10-04). A letter states
+       * a commission one way or the other, so the box that does not apply is
+       * not drawn — and nothing is posted for it.
+       */
       label: t('commission_basis'),
-      control: true,
-      value: select('commission_basis', commissionBasis, options(COMMISSION_BASES, 'cb_'), t('commission_basis')),
-    },
-    {
-      label: t('commission_pct'),
-      control: true,
+      bare: true,
       value: (
-        <input
-          aria-label={t('commission_pct')}
-          defaultValue={commissionPct}
-          inputMode="decimal"
-          name="commission_pct"
-          type="text"
-        />
-      ),
-    },
-    {
-      label: t('commission_fixed'),
-      control: true,
-      value: (
-        <input
-          aria-label={t('commission_fixed')}
-          defaultValue={commissionFixed}
-          inputMode="decimal"
-          name="commission_fixed"
-          type="text"
+        <LoanCommissionFields
+          bases={options(COMMISSION_BASES, 'cb_')}
+          defaultAmount={commissionFixed}
+          defaultBasis={commissionBasis}
+          defaultPercent={commissionPct}
+          labels={{
+            basis: t('commission_basis'),
+            percent: t('commission_pct'),
+            amount: t('commission_fixed'),
+          }}
         />
       ),
     },

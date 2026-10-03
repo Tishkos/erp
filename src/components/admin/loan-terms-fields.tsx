@@ -32,6 +32,88 @@ export interface Choice {
   readonly label: string;
 }
 
+/**
+ * The commission, asked the way the bank's letter states it (2026-10-04).
+ *
+ * One figure or the other, never both: the box that does not apply is
+ * unmounted rather than hidden, so nothing is posted for it and the service
+ * reads exactly what was asked for.
+ */
+export function LoanCommissionFields({
+  bases,
+  labels,
+  defaultBasis,
+  defaultPercent,
+  defaultAmount,
+}: {
+  readonly bases: readonly Choice[];
+  readonly labels: {
+    readonly basis: string;
+    readonly percent: string;
+    readonly amount: string;
+  };
+  readonly defaultBasis: string;
+  readonly defaultPercent: string;
+  readonly defaultAmount: string;
+}) {
+  const [basis, setBasis] = useState(defaultBasis);
+
+  return (
+    <>
+      <div className={styles.field}>
+        <label className={styles.label} htmlFor="f-commission_basis">
+          {labels.basis}
+        </label>
+        <select
+          className={styles.select}
+          id="f-commission_basis"
+          name="commission_basis"
+          onChange={(event) => setBasis(event.target.value)}
+          value={basis}
+        >
+          {bases.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {basis === 'percentage' ? (
+        <div className={styles.field}>
+          <label className={styles.label} htmlFor="f-commission_pct">
+            {labels.percent}
+          </label>
+          <input
+            autoComplete="off"
+            className={styles.input}
+            defaultValue={defaultPercent}
+            id="f-commission_pct"
+            inputMode="decimal"
+            name="commission_pct"
+          />
+        </div>
+      ) : null}
+
+      {basis === 'fixed' ? (
+        <div className={styles.field}>
+          <label className={styles.label} htmlFor="f-commission_fixed">
+            {labels.amount}
+          </label>
+          <input
+            autoComplete="off"
+            className={styles.input}
+            defaultValue={defaultAmount}
+            id="f-commission_fixed"
+            inputMode="decimal"
+            name="commission_fixed"
+          />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export interface LoanBankLabels {
   readonly bank: string;
   readonly another: string;
