@@ -114,7 +114,12 @@ export interface LoanScheduleLabels {
   readonly frequency: string;
   readonly frequencies: readonly Choice[];
   readonly first: string;
-  readonly nth: (position: number) => string;
+  /**
+   * The label of an instalment between the first and the final one, with
+   * `{position}` where its number goes. A string, not a function: these labels
+   * come from a server component, and a function cannot cross into a client one.
+   */
+  readonly nth: string;
   readonly final: string;
   readonly hint: string;
 }
@@ -165,7 +170,7 @@ export function LoanScheduleFields({
   const label = (index: number): string => {
     if (index === 0) return labels.first;
     if (index === rows - 1) return labels.final;
-    return labels.nth(index + 1);
+    return labels.nth.replace('{position}', String(index + 1));
   };
 
   return (

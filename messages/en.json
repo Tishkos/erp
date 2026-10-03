@@ -2213,7 +2213,7 @@
       "no_invoices": "Post a sales invoice first.",
       "pick_invoice": "Choose the invoice being returned against.",
       "lines_title": "Lines",
-      "partner_hint": "Supplier name or code",
+      "partner_hint": "Customer name or code",
       "partner_optional": "Optional — narrows the invoices suggested below.",
       "invoice_hint": "Invoice number, or part of it",
       "invoice_ambiguous": "That could be more than one invoice. Type more of its number.",

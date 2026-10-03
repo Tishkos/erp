@@ -42,6 +42,9 @@ test.describe('REQ-HARDEN-001 Stage 1 · access and accounts', () => {
     await admin.page.getByRole('textbox', { name: 'Display name', exact: true }).fill(`Harden ${RUN}`);
     // No role yet: the CEO grants one later, while the person is signed in (HD1).
     await admin.page.getByLabel(/HQ ·/).check();
+    // Since FIX-5 a new user is also an employee unless unticked, and an
+    // employee needs a department. This account is about access alone.
+    await admin.page.getByRole('checkbox', { name: 'Also an employee' }).uncheck();
     await admin.page.getByRole('button', { name: 'Create' }).click();
     await admin.page.waitForURL(/\/administration\/users\/[a-f0-9-]+\?saved=1/, { timeout: 60_000 });
     await admin.page.waitForLoadState('networkidle');

@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Page } from '@playwright/test';
+import writeXlsxFile from 'write-excel-file/node';
 
 import { PALETTES as palettes, ACCENTS as accents } from '../../src/server/domain/appearance';
 
@@ -203,8 +204,113 @@ test('Print / Export uses the active palette and readable download links', async
   }
 });
 
-test('status chips follow the palette into the dark, on every screen that draws one', async ({ page }) => {
-  test.setTimeout(120_000);
+/**
+ * One row on each register the chip test reads, raised through the screens a
+ * person uses — so the test never depends on what an earlier spec or run left
+ * behind (a fresh database has no import, payment application, declaration,
+ * B/L, container, loan or migration run). The journal register has the seed's
+ * opening entry, and the chart its approved accounts.
+ */
+async function raiseOneOfEach(browser: Browser) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const run = Date.now().toString(36).toUpperCase().slice(-5);
+  const digits = String(Date.now()).slice(-6);
+  try {
+    await signIn(page);
+
+    // An import, born at its purchase invoice (the Import box starts ticked).
+    await page.goto('/payables/invoices/new');
+    await page.getByLabel('Supplier Code').fill('SUP-00001');
+    await page.locator('input[name="item_code_0"]').fill('ITM-SEED');
+    await page.locator('input[name="quantity_0"]').fill('1');
+    await page.locator('input[name="unit_price_0"]').fill('1000');
+    await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
+    await page.locator('input[name="is_import"]').check();
+    await page.getByRole('button', { name: 'Create' }).click();
+    await page.waitForURL(
+      (url) => url.pathname.startsWith('/payables/invoices/') && !url.pathname.endsWith('/new'),
+      { timeout: 120_000 },
+    );
+    await page.getByRole('link', { name: 'Import tracking' }).click();
+    await page.waitForURL(/\/payables\/IMP-/);
+    const importUrl = page.url().split('?')[0]!;
+
+    // A payment application for part of it.
+    await page.getByRole('button', { name: 'New payment application' }).click();
+    const pay = page.getByRole('dialog');
+    await pay.getByRole('textbox', { name: 'Amount' }).fill('500');
+    await pay.getByLabel('Method').selectOption({ label: 'Cheque' });
+    await pay.getByLabel('Paid from').selectOption({ index: 0 });
+    await pay.getByRole('button', { name: 'Create' }).click();
+    await page.waitForURL(/\/payables\/payment-applications\/PAYAPP-/, { timeout: 60_000 });
+
+    // A declaration registered on it.
+    await page.goto(importUrl);
+    await page.getByRole('button', { name: 'Register PD' }).click();
+    const pd = page.getByRole('dialog');
+    await pd.getByRole('textbox', { name: 'PD no.' }).fill(`6${run}`);
+    await pd.getByLabel('Registered').fill('2026-09-02');
+    await pd.getByLabel('Expires').fill('2027-03-01');
+    await pd.getByRole('button', { name: 'Register PD' }).click();
+    await expect(page.getByRole('link', { name: `6${run}` })).toBeVisible({ timeout: 30_000 });
+
+    // A B/L with one container.
+    await page.goto(importUrl);
+    await page.getByRole('button', { name: 'New B/L' }).click();
+    const bl = page.getByRole('dialog');
+    await bl.getByRole('textbox', { name: 'B/L no.' }).fill(`BL-THEME-${run}`);
+    await bl.getByLabel('B/L date').fill('2026-09-20');
+    await bl.getByRole('textbox', { name: 'Containers' }).fill(`TEMU${digits}5`);
+    await bl.getByRole('button', { name: 'New B/L' }).click();
+    await expect(page.getByRole('link', { name: `BL-THEME-${run}` })).toBeVisible({ timeout: 30_000 });
+
+    // A loan, entered.
+    await page.goto('/payables/loans');
+    await page.getByRole('button', { name: 'New loan' }).click();
+    const loan = page.getByRole('dialog');
+    await loan.getByLabel('Proceeds land in').selectOption({ index: 0 });
+    await loan.getByRole('textbox', { name: 'Principal' }).fill('100000');
+    await loan.getByRole('button', { name: 'Create loan' }).click();
+    await page.waitForURL(/\/payables\/loans\/LOAN-/, { timeout: 60_000 });
+
+    // A migration dry run: the run register's row.
+    // The sheet's shape, as payables.spec.ts Stage 8 writes it: 46266 is
+    // 2026-09-01 as a spreadsheet serial.
+    const rows = (data: unknown[][]) => data.map((row) => row.map((value) => (value === null ? null : { value })));
+    const buffer = (await writeXlsxFile([
+      {
+        sheet: 'dashboard',
+        data: rows([
+          ['PO no./ INV.', 'INV. Date', 'Supplier', 'INV. Amount', 'INV. Qty', 'Pmt Terms', 'Products', 'PD. No.', 'Registration Date', 'Expire Date', 'PD. Status', 'Paid Amount (SWIFT)', 'Pmt Remaining', 'Applied Amount', 'BL No.', 'Inbounded Qty', 'Clear?'],
+          [`THEME-${run}`, 46266, 'Al-Rafidain Trading Co.', 1000, 10, 'CFR', 'panel', null, null, null, null, 0, 1000, 0, null, null, null],
+        ]),
+      },
+      {
+        sheet: 'PMT',
+        data: rows([['PO/INV. no.', 'Supplier', 'INV. Date', 'Bank', 'Application AMT.', 'Application date', 'Swift date', 'Payment Status']]),
+      },
+      {
+        sheet: 'PD',
+        data: rows([['PO no./ INV.', 'INV. Date', 'Supplier', 'PD No.', 'Registration Date', 'Expire Date', 'Status', 'Bank Code', 'SWIFT', 'Notes']]),
+      },
+    ] as never).toBuffer()) as Buffer;
+    await page.goto('/administration/payables-migration');
+    await page.locator('input[name="file"]').setInputFiles({
+      name: `THEME-${run}.xlsx`,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      buffer,
+    });
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
+    await expect(page.locator('#migration-latest-title')).toContainText('Dry run', { timeout: 60_000 });
+  } finally {
+    await context.close();
+  }
+}
+
+test('status chips follow the palette into the dark, on every screen that draws one', async ({ browser, page }) => {
+  test.setTimeout(300_000);
+  await raiseOneOfEach(browser);
   await signIn(page);
 
   // A status is drawn in three different rules — the document window's

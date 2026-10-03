@@ -95,19 +95,22 @@ test('a Purchase Invoice is raised, sent for approval, and posted by the CEO', a
     const dialog = page.locator('dialog[open], [role="dialog"]').first();
     await dialog.getByLabel(/^Legal name/).fill(`Print Supplier ${RUN}`);
     await dialog.getByRole('button', { name: 'Create' }).click();
-    await page.waitForURL(/\/master-data\/business-partners\/[^/?]+/, { timeout: 60_000 });
+    await page.waitForURL(/\/(?:payables\/suppliers|sales\/customers)\/[^/?]+/, { timeout: 60_000 });
     supplierCode = minted(page);
 
     await page.goto('/payables/invoices/new');
     await page.getByLabel('Supplier Code').fill(supplierCode);
     const due = page.locator('input[name="due_date"]');
     if (!(await due.inputValue())) await due.fill(TODAY);
-    await page.locator('select[name="item_code_0"]').selectOption('ITM-SEED');
+    // The item code is a searchable field (an input over a datalist).
+    await page.locator('input[name="item_code_0"]').fill('ITM-SEED');
     await page.getByLabel('Quantity').first().fill('3');
     await page.getByLabel('Unit Price').first().fill('2500');
     await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
+    // A local purchase: the Import box starts ticked since 2026-10-03.
+    await page.locator('input[name="is_import"]').uncheck();
     await page.getByRole('button', { name: 'Create' }).click();
-    await page.waitForURL((url) => /\/purchasing\/ap-invoices\/(?!new$)[^/]+$/.test(url.pathname) && url.search === '', {
+    await page.waitForURL((url) => /\/payables\/invoices\/(?!new$)[^/]+$/.test(url.pathname) && url.search === '', {
       timeout: 120_000,
     });
     invoiceNo = minted(page);
@@ -128,7 +131,7 @@ test('a Sales Invoice puts something on the customer’s statement', async ({ br
     const dialog = page.locator('dialog[open], [role="dialog"]').first();
     await dialog.getByLabel(/^Legal name/).fill(`Print Customer ${RUN}`);
     await dialog.getByRole('button', { name: 'Create' }).click();
-    await page.waitForURL(/\/master-data\/business-partners\/[^/?]+/, { timeout: 60_000 });
+    await page.waitForURL(/\/(?:payables\/suppliers|sales\/customers)\/[^/?]+/, { timeout: 60_000 });
     customerCode = minted(page);
 
     await page.goto('/sales/ar-invoices/new');
