@@ -23,6 +23,7 @@ import {
   approveKycFor,
   BRANCH,
   buildWorld,
+  fundBank,
   scopeOf,
   type MoneyTransferWorld,
 } from './money-transfer-fixture';
@@ -36,6 +37,10 @@ beforeEach(async () => {
   await resetTestData();
   world = await buildWorld();
   await approveKycFor(world, world.clientPartnerId);
+  // C-20: the client's 15,000,000 deposit does not cover the 13,050,000
+  // transfer and the 4,000,000 import payment the batch debits together, so
+  // the bank holds money of its own first.
+  await fundBank(world, '10000000.0000');
 });
 
 /** A client transfer, initiated, ready to be paid through a batch. */

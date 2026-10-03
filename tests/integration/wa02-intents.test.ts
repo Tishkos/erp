@@ -341,6 +341,8 @@ describe('W6 · wa02-renderers — the attachments are the ERP\'s own', () => {
 
   it('the PDF statement is byte-identical to the ERP\'s export of the same sheet at the same instant', async () => {
     const at = new Date('2026-10-02T09:00:00.000Z');
+    // The reply's statement runs to the day it was read, not the day the suite runs.
+    const asOf = businessToday(at);
     const reply = await ask('supplier balance SUP-JINKO', undefined, at);
     expect(reply.attachment?.format).toBe('pdf');
     const erp = await withScope(scope(ceo), (tx) =>
@@ -348,7 +350,7 @@ describe('W6 · wa02-renderers — the attachments are the ERP\'s own', () => {
         key: 'supplier_statement',
         format: 'pdf',
         locale: 'en',
-        input: { id: null, query: new URLSearchParams({ code: SUPPLIER, from: `${today.slice(0, 4)}-01-01`, to: today, currency: 'IQD' }) },
+        input: { id: null, query: new URLSearchParams({ code: SUPPLIER, from: `${asOf.slice(0, 4)}-01-01`, to: asOf, currency: 'IQD' }) },
         at: at.toISOString(),
       }),
     );

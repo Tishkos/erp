@@ -23,6 +23,23 @@ export interface Funding {
   readonly on?: string;
 }
 
+/**
+ * An equity account to fund from when the fixture has no contra of its own:
+ * "Opening Funds", which no test reads. Made on first use after a reset.
+ */
+export async function openingFundsAccount(): Promise<string> {
+  const { rows: found } = await ownerPool.query(`select id from chart_of_account where code = 'E9FUNDS'`);
+  if (found[0]) return found[0].id as string;
+  const { rows } = await ownerPool.query(
+    `insert into chart_of_account
+       (code, name, account_type, parent_id, is_group, is_active, approval_status, level, currency_restriction)
+     select 'E9FUNDS', 'Opening Funds', account_type, id, false, true, 'approved', 1, 'IQD'
+       from chart_of_account where code = 'E000001'
+     returning id`,
+  );
+  return rows[0].id as string;
+}
+
 export async function fundLedger(funding: Funding): Promise<void> {
   const on = funding.on ?? '2026-01-01';
   const client = await ownerPool.connect();

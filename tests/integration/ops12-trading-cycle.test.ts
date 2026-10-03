@@ -42,6 +42,7 @@ import * as trialBalance from '@/server/services/trial-balance';
 import { parseDecimal } from '@/server/domain/money';
 import { parseQuantity } from '@/server/domain/uom';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
+import { fundLedger } from './funds';
 
 const BAGHDAD = 'BGW';
 const PANEL = 'ITM-PANEL';
@@ -404,6 +405,16 @@ describe('the Operations build, driven as one system', () => {
     expect(await onHand()).toBe(30); // and the refusal moved nothing
 
     // ── Pay the supplier part of what is owed (block 6) ────────────────────
+    // C-20: the bank holds money before the payment leaves it — opening funds
+    // from return clearing, which no step of this cycle reads.
+    await fundLedger({
+      glAccountId: accounts.bank!,
+      contraAccountId: accounts.return_clearing!,
+      amountIqd: '200000.0000',
+      branchCode: BAGHDAD,
+      userId: manager.principal.userId,
+      on: BUY_ON,
+    });
     const payment = await withScope(scope(clerk), (tx) =>
       pay.create(tx, clerk, {
         supplierId,
@@ -420,7 +431,7 @@ describe('the Operations build, driven as one system', () => {
 
     // "Accounts Payable Dr. / Bank or Cash Cr."
     expect(await ledger('supplier_payable')).toBe(-60_000);
-    expect(await ledger('bank')).toBe(-100_000);
+    expect(await ledger('bank')).toBe(200_000 - 100_000); // the opening funds, less the payment out
     expect(await closing('supplier', SUPPLIER)).toBe(60_000);
 
     // ── Receive part of what the customer owes (block 6) ───────────────────
@@ -439,7 +450,7 @@ describe('the Operations build, driven as one system', () => {
 
     // "Bank or Cash Dr. / Accounts Receivable Cr."
     expect(await ledger('customer_receivable')).toBe(90_000);
-    expect(await ledger('bank')).toBe(50_000); // 150,000 in less 100,000 out
+    expect(await ledger('bank')).toBe(200_000 + 150_000 - 100_000); // opening funds and 150,000 in, less 100,000 out
     expect(await closing('customer', CUSTOMER)).toBe(90_000);
 
     // ── And the books still agree, after all of it ─────────────────────────
