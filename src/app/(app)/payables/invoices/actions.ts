@@ -135,7 +135,6 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       // on the page, or no JavaScript ran. The service then applies the
       // supplier's terms itself, by the same arithmetic the form uses (§16).
       dueDate: text(formData, 'due_date').trim() || undefined,
-      note: null,
       // Where it posts, chosen on the form that raised it.
       payableAccountId: text(formData, 'payable_account_id').trim() || null,
       expenseAccountId: text(formData, 'expense_account_id').trim() || null,
@@ -146,7 +145,7 @@ export async function createApInvoice(formData: FormData): Promise<void> {
       ...(currency === 'IQD' ? {} : { importCurrency: currency }),
       // §24.3 — ticked Import and naming an open import: the invoice joins it.
       payableId: text(formData, 'is_import') === '1' ? text(formData, 'payable_id').trim() || null : null,
-      paymentTermsText: text(formData, 'payment_terms_text').trim() || null,
+      note: text(formData, 'note').trim() || null,
       // §15.3 — what the supplier is paid in front, as a percentage of this
       // invoice. The account it comes from is chosen later (0271).
       advancePercent: text(formData, 'advance_percent').trim() || null,

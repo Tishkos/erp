@@ -424,6 +424,15 @@ export function advanceOf(totalIqd: bigint, percent: string | null | undefined):
   const parsed = BigInt(whole) * 10000n + BigInt(places);
   if (parsed <= 0n) return null;
   if (totalIqd <= 0n) return null;
+  /*
+   * Never more than the whole invoice (2026-10-03). 0270's CHECK says the same
+   * of the stored column and the box on the screen will not take the
+   * keystroke; this is what the arithmetic itself will not do, so a caller
+   * that reached here another way is refused rather than obeyed.
+   */
+  if (parsed > 100n * 10000n) {
+    throw new Error('an advance cannot be more than 100% of the invoice');
+  }
 
   // total × percent / 100, half-up on the last place.
   const scale = 10n ** 4n;

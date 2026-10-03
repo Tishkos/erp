@@ -75,6 +75,28 @@ describe('AP-16 · the screen and the server work out the same advance', () => {
     expect(advanceOf(iqd('0.01'), '0.01')).toBeNull();
   });
 
+  /*
+   * A hundred is the ceiling — by direction, 2026-10-03: "advance payment
+   * should never be more than 100 please".
+   *
+   * The two sides say no in different voices on purpose. The box on the screen
+   * has already refused the keystroke, so `advanceShare` is reached only by a
+   * figure that was not typed into it and answers nothing. `advanceOf` is what
+   * the bank is asked for, so it raises: a caller that got here with 120% is a
+   * caller with a defect, and silently paying nothing would hide it until
+   * somebody wondered where the advance went.
+   */
+  it('neither side works out an advance of more than the invoice', () => {
+    const total = iqd('265720');
+    expect(advanceShare(total, '100')).toBe(iqd('265720'));
+    expect(advanceOf(total, '100')).toBe(iqd('265720'));
+
+    for (const over of ['100.0001', '101', '120', '1000']) {
+      expect(advanceShare(total, over)).toBeNull();
+      expect(() => advanceOf(total, over)).toThrow(/more than 100/);
+    }
+  });
+
   it('agrees across a sweep of percentages a person might actually type', () => {
     // Every tenth of a per cent from nought to a hundred, against a total with
     // fils in it — the arithmetic either matches everywhere or it does not

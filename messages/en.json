@@ -2919,8 +2919,6 @@
       "project_element": "Project element",
       "project_element_none": "None — not for a project",
       "project_cost_code": "Project cost code",
-      "payment_terms_text": "Payment terms",
-      "payment_terms_placeholder": "e.g. 20% in advance, 80% on arrival",
       "import_application_new": "New — opened by this invoice",
       "state_part_paid": "Part paid",
       "set_due_date": "Set due date",

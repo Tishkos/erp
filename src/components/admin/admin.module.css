@@ -2400,30 +2400,29 @@
   font-weight: 700;
 }
 
-/* Two figures in the totals cell — what the supplier is owed and what the
-   ledger will carry — stacked and right-aligned under each other, the dinars
-   the quieter of the two (2026-10-03). */
+/* Two figures in one totals cell — what the supplier is owed, and what the
+   ledger will carry underneath it. `.sapNum` already ends them both at the
+   cell's right edge; this only closes the gap between the two lines so they
+   read as one total rather than two (2026-10-03). */
 .sapTable .sapTotalRow > td.sapNum {
   line-height: 1.35;
-  text-align: end;
 }
 
-/* A figure said under a header field — the advance's own money — stays on one
-   line. Wrapped, the cell grew to three rows and the two figures read as a
-   paragraph; by direction (2026-10-03) overflowing is the better fault. */
-.sapField > .sapGridCaption {
-  display: block;
+/* A field block placed under the lines — the purchase invoice's notes — stands
+   off the table the way the lines caption stands off the fields above it
+   (2026-10-03). */
+.sapTableWrap + .sapFields {
+  margin-block-start: 0.9rem;
+}
+
+/* The advance's own two figures, said under its percentage box, hold one line:
+   wrapped, the field grew to three rows and the figures read as a paragraph.
+   By direction (2026-10-03) overflowing is the better fault. */
+.sapField > .sapEnteredNote {
   overflow: hidden;
   margin-block-start: 0.15rem;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.sapTable .sapTotalRow > td.sapNum > .sapGridCaption {
-  display: block;
-  margin-block-start: 0.1rem;
-  font-weight: 600;
-  text-align: end;
 }
 
 /* ── Controls ────────────────────────────────────────────────────────────

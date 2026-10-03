@@ -1039,17 +1039,21 @@ export function InvoiceLinesGrid({
                 the totals row is the last line read before Create
                 (2026-10-03).
               */}
+              {/*
+                `sapEnteredNote` because the Journal Entry record already says a
+                figure in another currency this way — under the dinar amount of
+                a debit, in the currency it was entered in. A muted block with
+                no padding of its own, so the two figures share the cell's right
+                edge (2026-10-03).
+              */}
               {ledgerRates && ledgerCurrency && agreed !== ledgerCurrency && ledgerRates[agreed] ? (
-                <>
-                  <br />
-                  <bdi className={styles.sapGridCaption} dir="ltr">
-                    {ledgerCurrency}{' '}
-                    {toNumber(inLedgerCurrency(total, ledgerRates[agreed]!), MONEY_PLACES).toLocaleString(
-                      locale === 'ar' ? 'ar' : 'en-US',
-                      { maximumFractionDigits: 0, minimumFractionDigits: 0 },
-                    )}
-                  </bdi>
-                </>
+                <bdi className={styles.sapEnteredNote} dir="ltr">
+                  {ledgerCurrency}{' '}
+                  {toNumber(inLedgerCurrency(total, ledgerRates[agreed]!), MONEY_PLACES).toLocaleString(
+                    locale === 'ar' ? 'ar' : 'en-US',
+                    { maximumFractionDigits: 0, minimumFractionDigits: 0 },
+                  )}
+                </bdi>
               ) : null}
             </td>
             <td colSpan={showSupplier ? 3 : 2} />

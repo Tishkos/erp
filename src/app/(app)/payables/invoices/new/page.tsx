@@ -268,19 +268,6 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
         />
       ),
     },
-    {
-      // And the supplier's own sentence, which the system cannot compute from.
-      label: x('payment_terms_text'),
-      control: true,
-      value: (
-        <input
-          aria-label={x('payment_terms_text')}
-          name="payment_terms_text"
-          placeholder={x('payment_terms_placeholder')}
-          type="text"
-        />
-      ),
-    },
     /*
      * REQ-PM-001 §8 — a purchase for a project names its element and cost
      * code here; the order (or the payable) then promises it there, and the
@@ -342,6 +329,17 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
             id="ap-invoice-new"
             linesTitle={t('ap_invoices.lines')}
             number=""
+            fieldsAfterLines={[
+              {
+                // After the totals, where it was asked for: the last thing
+                // before Create, for whatever about this invoice no field
+                // anticipated.
+                label: x('note'),
+                control: true,
+                wide: true,
+                value: <input aria-label={x('note')} name="note" type="text" />,
+              },
+            ]}
           >
             <InvoiceLinesGrid
               currency="IQD"

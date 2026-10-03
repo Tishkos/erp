@@ -99,10 +99,10 @@ export function AdvanceField({
    * the one the bank is asked for.
    */
   const share = advanceShare(total, percent);
-  const shown = (value: bigint, places: number) =>
+  const shown = (value: bigint, places: number, least = 0) =>
     toNumber(value, MONEY_PLACES).toLocaleString(locale === 'ar' ? 'ar' : 'en-US', {
       maximumFractionDigits: places,
-      minimumFractionDigits: 0,
+      minimumFractionDigits: least,
     });
 
   return (
@@ -113,16 +113,27 @@ export function AdvanceField({
         max={100}
         min={0}
         name={name}
-        onChange={(event) => setPercent(event.target.value)}
+        /*
+         * Never more than a hundred (2026-10-03). An advance of 120% asks a
+         * bank for more than the goods cost, so the box does not take the
+         * figure: `advanceOf` refuses it on the server and 0270's CHECK
+         * refuses the row, and a box that accepted it would be a box that
+         * made somebody find out at the third refusal.
+         */
+        onChange={(event) => {
+          const typed = event.target.value;
+          const asked = Number(typed);
+          setPercent(Number.isFinite(asked) && asked > 100 ? '100' : typed);
+        }}
         ref={box}
         step="any"
         type="number"
         value={percent}
       />
       {share !== null ? (
-        <span className={styles.sapGridCaption}>
+        <span className={styles.sapEnteredNote}>
           <bdi dir="ltr">
-            {agreed} {shown(share, 2)}
+            {agreed} {shown(share, 2, 2)}
           </bdi>
           {/* And what leaves the bank account, which is the dinars. */}
           {agreed !== ledgerCurrency && ledgerRates[agreed] ? (
@@ -167,6 +178,8 @@ export function advanceShare(totalIqd: bigint, percent: string): bigint | null {
   const places = (fraction + '0000').slice(0, 4);
   const scaled = BigInt(whole) * 10_000n + BigInt(places);
   if (scaled <= 0n) return null;
+
+  if (scaled > 100n * 10_000n) return null;
 
   const denominator = 100n * 10_000n;
   const numerator = totalIqd * scaled;
