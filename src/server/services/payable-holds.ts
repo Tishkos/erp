@@ -186,7 +186,7 @@ export async function open(
       objectId: parent.id,
       occurrence: businessToday(),
     },
-    { payableNo: parent.payableNo, reason: code.name, lane: input.laneCode },
+    { payableNo: parent.payableNo, reason: code.name, lane: input.laneCode, stage: parent.stageCode },
     { branchCode: parent.branchCode, actorUserId: ctx.principal.userId },
   );
 

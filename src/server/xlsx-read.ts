@@ -25,7 +25,15 @@ export class XlsxReadError extends Error {
   }
 }
 
-function unzip(buffer: Buffer): Map<string, Buffer> {
+/**
+ * The archive's entries, by name.
+ *
+ * Exported because a workbook is not the only Office file that is a zip: a
+ * `.docx` is one too, with its text in `word/document.xml`, and the supplier
+ * invoices the company is sent arrive in both. One reader, no second
+ * implementation of the same forty lines.
+ */
+export function unzip(buffer: Buffer): Map<string, Buffer> {
   const EOCD = 0x06054b50;
   let end = -1;
   for (let i = buffer.length - 22; i >= Math.max(0, buffer.length - 66_000); i -= 1) {

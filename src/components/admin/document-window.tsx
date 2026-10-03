@@ -54,6 +54,7 @@ export function DocumentWindow({
   children,
   actions,
   totals = [],
+  titleActions,
   auditHref,
   auditLabel,
   id = 'document',
@@ -76,6 +77,13 @@ export function DocumentWindow({
   readonly actions?: ReactNode;
   readonly totals?: readonly DocumentTotal[];
   readonly auditHref?: string | undefined;
+  /**
+   * The small doors in the title bar — the paperclip, the clock, whatever a
+   * document has but is not. The shape journals have had since they were
+   * written: the document is the document, and everything about it opens over
+   * it rather than running on underneath it.
+   */
+  readonly titleActions?: ReactNode;
   readonly auditLabel?: string | undefined;
   readonly id?: string;
 }) {
@@ -91,12 +99,15 @@ export function DocumentWindow({
               <bdi dir="ltr">{number}</bdi>
             </span>
           </span>
-          {auditHref && auditLabel ? (
+          {titleActions || (auditHref && auditLabel) ? (
             <span className={admin.sapTitleActions}>
-              <Link className={admin.sapIconButton} href={auditHref} title={auditLabel}>
-                <History aria-hidden="true" />
-                <span>{auditLabel}</span>
-              </Link>
+              {titleActions}
+              {auditHref && auditLabel ? (
+                <Link className={admin.sapIconButton} href={auditHref} title={auditLabel}>
+                  <History aria-hidden="true" />
+                  <span>{auditLabel}</span>
+                </Link>
+              ) : null}
             </span>
           ) : null}
         </div>

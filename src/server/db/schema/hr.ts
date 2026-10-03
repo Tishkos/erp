@@ -13,7 +13,7 @@
  *   pay_component, leave_type, working_calendar (+ holidays)
  *                           the configuration as master data (R4)
  *
- * Stage HR-2 (0256) — time:
+ * Stage HR-2 (0261) — time:
  *   leave_request           LVE-…: counted on the working calendar, decided by
  *                           the person's manager or the HR manager
  *   leave_balance_entry     an opening balance or an adjustment — append-only;
@@ -81,7 +81,7 @@ export const employee = pgTable(
     status: text('status').notNull().default('active'),
     endDate: date('end_date'),
     endReason: text('end_reason'),
-    /** HR-2 (0256) — when a contract or daily engagement ends; the sweep warns ahead of it. */
+    /** HR-2 (0261) — when a contract or daily engagement ends; the sweep warns ahead of it. */
     contractEndDate: date('contract_end_date'),
 
     /** The user account the person signs in with, when they have one (R5). */
@@ -198,7 +198,7 @@ export const leaveType = pgTable(
     requiresAttachment: boolean('requires_attachment').notNull().default(false),
     /** D-HR-6 — how far below zero a balance may go; 0 refuses. */
     allowedNegativeDays: numeric('allowed_negative_days', { precision: 6, scale: 2 }).notNull().default('0'),
-    /** HR-2 (0256) — the year-end sweep warns when unused days of this type will not carry. */
+    /** HR-2 (0261) — the year-end sweep warns when unused days of this type will not carry. */
     warnBeforeLapse: boolean('warn_before_lapse').notNull().default(false),
     active: boolean('active').notNull().default(true),
     createdBy: uuid('created_by').references(() => appUser.id),
@@ -240,7 +240,7 @@ export const workingCalendarHoliday = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Stage HR-2 — time (0256)
+// Stage HR-2 — time (0261)
 // ---------------------------------------------------------------------------
 
 export const leaveRequest = pgTable(

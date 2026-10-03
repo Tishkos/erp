@@ -1,3 +1,4 @@
+import { Upload } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
@@ -14,7 +15,9 @@ import {
   SubmitRow,
   admin as s,
 } from '@/components/admin';
+import { NewRecordDialog } from '@/components/admin/dialog';
 import { SectionTabs } from '@/components/admin/section-tabs';
+import { draftFromDocumentAction } from './invoices/actions';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
@@ -148,9 +151,39 @@ export default async function PayablesWorkbench({
         // D13 — an import is born at the purchase invoice: the accountant
         // enters the supplier's PDF and ticks Import. There is no second form.
         mayCreate ? (
-          <Link className="action action--primary" href="/payables/invoices/new">
-            {t('new_from_invoice')}
-          </Link>
+          <>
+            {/*
+              The document first, the form second.
+
+              The accountant has the factory's invoice in her hand — a PDF, a
+              workbook, a Word file, in Chinese or English — so the system
+              takes it and does the typing: the goods, the prices, the
+              supplier, with everything it was unsure of written into the
+              draft's note. What it produces is a draft, submitted and
+              approved by people like any other.
+            */}
+            <NewRecordDialog
+              buttonLabel={t('read_document')}
+              closeLabel={admin('close')}
+              openOnLoad={Boolean(outcome.error)}
+              title={t('read_document_title')}
+            >
+              <Form action={draftFromDocumentAction}>
+                <p className="muted">{t('read_document_hint')}</p>
+                <label className={s.uploadPicker}>
+                  <Upload aria-hidden="true" />
+                  <span>{t('read_document_choose')}</span>
+                  <input accept=".pdf,.xlsx,.xls,.docx,.csv,.txt" aria-label={t('read_document_choose')} name="file" required type="file" />
+                </label>
+                <SubmitRow>
+                  <Submit label={t('read_document_submit')} />
+                </SubmitRow>
+              </Form>
+            </NewRecordDialog>
+            <Link className="action action--primary" href="/payables/invoices/new">
+              {t('new_from_invoice')}
+            </Link>
+          </>
         ) : null
       }
       back={{ href: '/', label: admin('dashboard_label') }}

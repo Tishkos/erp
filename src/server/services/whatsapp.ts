@@ -705,16 +705,22 @@ export function registerWhatsappSender(transport: Transport): void {
     // subject and body the rule already wrote: a notification says what
     // happened and names its document, never a figure nobody asked for.
     const settings = await settingsOf(tx);
-    if (settings.groupJid && settings.groupNotifications && (await firstGroupDelivery(tx, message.deliveryId))) {
+    if (settings.groupJid && settings.groupNotifications && (await firstGroupDelivery(tx, message.eventKey))) {
       const groupOut = await recordOutbound(tx, {
         e164: contact.e164,
         groupJid: settings.groupJid,
         body: text,
         sender: contact,
-        // Carried so the "already posted" check above can see this copy.
         deliveryId: message.deliveryId,
         intent: 'notification.group',
-        detail: { eventType: message.eventType, objectType: message.objectType, objectId: message.objectId },
+        // `eventKey` is carried so the "already posted" check above can see
+        // this copy, whichever recipient's delivery wrote it.
+        detail: {
+          eventKey: message.eventKey,
+          eventType: message.eventType,
+          objectType: message.objectType,
+          objectId: message.objectId,
+        },
       });
       try {
         const { waMessageId } = await transport({ e164: contact.e164, groupJid: settings.groupJid }, { text });
@@ -734,18 +740,27 @@ async function settingsOf(tx: Tx): Promise<BotSettings> {
 }
 
 /**
- * Has this notification already been posted to the group?
+ * Has this event already been posted to the group?
  *
  * A rule with five recipients delivers five times; the group wants one copy.
- * The log is the answer: the first delivery of a notification posts it, the
- * rest see it is already there.
+ * The log is the answer: the first delivery of an event posts it, the rest see
+ * it is already there.
+ *
+ * Keyed on the event (2026-10-03). It used to be keyed on the delivery id, and
+ * every recipient's notification has its own delivery row — so the check only
+ * ever recognised a retry of the same delivery, and five recipients still made
+ * five copies. Six outbound rows were found on live for one supplier payment.
  */
-async function firstGroupDelivery(tx: Tx, deliveryId: bigint | null | undefined): Promise<boolean> {
-  if (deliveryId === null || deliveryId === undefined) return true;
+async function firstGroupDelivery(tx: Tx, eventKey: string): Promise<boolean> {
   const [seen] = await tx
     .select({ id: whatsappMessage.id })
     .from(whatsappMessage)
-    .where(and(eq(whatsappMessage.intent, 'notification.group'), eq(whatsappMessage.deliveryId, deliveryId)))
+    .where(
+      and(
+        eq(whatsappMessage.intent, 'notification.group'),
+        sql`${whatsappMessage.detail} ->> 'eventKey' = ${eventKey}`,
+      ),
+    )
     .limit(1);
   return !seen;
 }

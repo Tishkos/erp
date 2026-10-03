@@ -633,10 +633,13 @@ export async function listForScreen(
                o.order_date::text as "orderDate",
                o.status::text as status,
                coalesce(sum(l.quantity * l.unit_price), 0)::text as "totalIqd",
-               coalesce(sum(l.received_quantity), 0)::text || ' / ' || coalesce(sum(l.quantity), 0)::text
-                 as "receivedShare",
-               coalesce(sum(l.invoiced_quantity), 0)::text || ' / ' || coalesce(sum(l.quantity), 0)::text
-                 as "invoicedShare",
+               -- trim_scale so a whole number reads as one: the column's
+               -- scale is six, and "0.000000 / 50.000000" is the database's
+               -- idea of a quantity rather than a person's (2026-10-03).
+               trim_scale(coalesce(sum(l.received_quantity), 0))::text || ' / ' ||
+                 trim_scale(coalesce(sum(l.quantity), 0))::text as "receivedShare",
+               trim_scale(coalesce(sum(l.invoiced_quantity), 0))::text || ' / ' ||
+                 trim_scale(coalesce(sum(l.quantity), 0))::text as "invoicedShare",
                (select p.payable_no from payable p where p.purchase_order_id = o.id limit 1)
                  as "payableNo"
           from purchase_order o

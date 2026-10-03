@@ -67,25 +67,26 @@ describe('§21 · duplicate suppression', () => {
 
   it('produces the same key for the same event, so a retry is recognised', () => {
     // At-least-once job delivery makes a repeat normal, not exceptional.
-    expect(dedupeKeyFor(rule(), event, 'user-1')).toBe(dedupeKeyFor(rule(), event, 'user-1'));
+    expect(dedupeKeyFor(event, 'user-1')).toBe(dedupeKeyFor(event, 'user-1'));
   });
 
   it('produces a different key per recipient', () => {
-    expect(dedupeKeyFor(rule(), event, 'user-1')).not.toBe(
-      dedupeKeyFor(rule(), event, 'user-2'),
-    );
+    expect(dedupeKeyFor(event, 'user-1')).not.toBe(dedupeKeyFor(event, 'user-2'));
   });
 
   it('produces a different key for a genuinely different occurrence', () => {
     // A journal submitted, rejected and submitted again is two tasks, not one.
-    expect(dedupeKeyFor(rule(), { ...event, occurrence: '2' }, 'user-1')).not.toBe(
-      dedupeKeyFor(rule(), event, 'user-1'),
+    expect(dedupeKeyFor({ ...event, occurrence: '2' }, 'user-1')).not.toBe(
+      dedupeKeyFor(event, 'user-1'),
     );
   });
 
-  it('produces a different key per rule', () => {
-    expect(dedupeKeyFor({ code: 'other_rule' }, event, 'user-1')).not.toBe(
-      dedupeKeyFor(rule(), event, 'user-1'),
+  it('produces a different key for a different event on the same object', () => {
+    // The event type is in the key because the rule's code used to carry it
+    // implicitly. Without it, a payable held and then released would share a
+    // key and the release would be suppressed as a repeat of the hold.
+    expect(dedupeKeyFor({ ...event, eventType: 'journal_entry.rejected' }, 'user-1')).not.toBe(
+      dedupeKeyFor(event, 'user-1'),
     );
   });
 });

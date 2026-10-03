@@ -109,6 +109,63 @@ describe('W1 · wa01-outbox — the whatsapp channel delivers, fails with its re
     expect(log[0]).toMatchObject({ direction: 'out', e164: '+9647701112233', status: 'sent', intent: 'notification' });
   });
 
+  it('copies one event into the group once, however many people it notified', async () => {
+    // Found 2026-10-03 on live: six outbound rows for one supplier payment —
+    // a direct message and a group copy for each of three notifications. The
+    // group copy was guarded, but on the delivery id, and every recipient's
+    // notification has its own delivery row; the check only ever recognised a
+    // retry of the same delivery. Its own comment said what it meant to do:
+    // "a rule with five recipients delivers five times; the group wants one
+    // copy".
+    for (const person of [manager, secondManager]) {
+      await withScope(scope(admin), (tx) =>
+        wa.saveContact(tx, admin, {
+          userId: person.principal.userId,
+          e164: person === manager ? '+9647701112233' : '+9647701112244',
+          allowNotifications: true,
+          allowQueries: false,
+          allowDigest: false,
+        }),
+      );
+    }
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_jid', '120363000000000001@g.us'));
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_notifications', 'true'));
+
+    await withScope(scope(officer), (tx) => notifications.raise(tx, EVENT));
+    wa.registerWhatsappSender(transport);
+    const result = await withScope(systemScope(), (tx) => notifications.deliverChannel(tx, 'whatsapp'));
+    expect(result).toMatchObject({ sent: 2, failed: 0 });
+
+    const { rows } = await ownerPool.query(
+      `select intent, count(*)::int as n from whatsapp_message where direction = 'out' group by 1 order by 1`,
+    );
+    expect(rows).toEqual([
+      { intent: 'notification', n: 2 },
+      { intent: 'notification.group', n: 1 },
+    ]);
+  });
+
+  it('copies the next day’s notice into the group again', async () => {
+    // The group key keeps the occurrence, so a notice that is raised daily on
+    // the same document is one copy a day — not one copy ever.
+    await withScope(scope(admin), (tx) =>
+      wa.saveContact(tx, admin, { userId: manager.principal.userId, e164: '+9647701112233', allowNotifications: true, allowQueries: false, allowDigest: false }),
+    );
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_jid', '120363000000000001@g.us'));
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_notifications', 'true'));
+    wa.registerWhatsappSender(transport);
+
+    await withScope(scope(officer), (tx) => notifications.raise(tx, EVENT));
+    await withScope(systemScope(), (tx) => notifications.deliverChannel(tx, 'whatsapp'));
+    await withScope(scope(officer), (tx) => notifications.raise(tx, { ...EVENT, occurrence: '2' }));
+    await withScope(systemScope(), (tx) => notifications.deliverChannel(tx, 'whatsapp'));
+
+    const { rows } = await ownerPool.query(
+      `select count(*)::int as n from whatsapp_message where intent = 'notification.group'`,
+    );
+    expect(rows[0].n).toBe(2);
+  });
+
   it('a transport failure is recorded with its reason, retried on the schedule, and rests after three', async () => {
     await withScope(scope(admin), (tx) =>
       wa.saveContact(tx, admin, { userId: manager.principal.userId, e164: '+9647701112233', allowNotifications: true, allowQueries: false, allowDigest: false }),

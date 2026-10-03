@@ -36,6 +36,7 @@ import {
   supplierPaymentAllocation,
 } from '../db/schema';
 import { parseDecimal, toDecimalString } from '../domain/money';
+import * as treasury from './treasury';
 import { bucketFor, horizonFor } from '../domain/ageing';
 import { oldestFirst, proposeAllocation } from '../domain/receipt-allocation';
 export { AGEING_BUCKETS, bucketFor, horizonFor, type AgeingBucket } from '../domain/ageing';
@@ -83,6 +84,27 @@ export class SupplierBlockedError extends Error {
 }
 
 /** §15 — *"payment amount cannot exceed approved available invoice balance."* */
+/**
+ * §15.3's funds check, on the door it was missing from.
+ *
+ * The payment application has checked this since it was written. A supplier
+ * payment raised and posted directly did not, so money left an account that
+ * held none and the balance went negative — which is an overdraft, and an
+ * overdraft is a loan somebody has to have agreed. Deposit it, draw it, or
+ * pay from an account that holds it.
+ */
+export class InsufficientFundsError extends Error {
+  readonly code = 'INSUFFICIENT_FUNDS';
+  constructor(accountCode: string, available: bigint, requested: bigint) {
+    const money = (v: bigint) => toDecimalString(v, 4n);
+    super(
+      `${accountCode} has ${money(available)} IQD available against ${money(requested)} IQD — ` +
+        'deposit or draw the money first, or pay from an account that holds it.',
+    );
+    this.name = 'InsufficientFundsError';
+  }
+}
+
 export class AllocationTooLargeError extends Error {
   readonly code = 'ALLOCATION_TOO_LARGE';
   constructor(
@@ -459,6 +481,19 @@ export async function post(
       payment.status,
       'it has already posted.',
     );
+  }
+
+  /*
+   * The money has to be there.
+   *
+   * `availableIqd` is the balance less what other approved payments have
+   * already committed, so two payments that each fit the balance cannot both
+   * go out against the same money.
+   */
+  const position = await treasury.accountPosition(tx, payment.bankCashAccountId);
+  const amount = parseDecimal(payment.amountIqd, 4n);
+  if (position.availableIqd < amount) {
+    throw new InsufficientFundsError(position.accountCode, position.availableIqd, amount);
   }
 
   const [supplier] = await tx
