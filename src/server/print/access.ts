@@ -23,6 +23,8 @@ export const EXPORT_ACCESS = {
   item_reconciliation: { kind: 'document', route: '/inventory/stock-reconciliation', object: 'stock_reconciliation' },
   // IMPROVEMENT-002 — the B/L, printed from its own page (its boxes, containers and what each carries).
   bill_of_lading: { kind: 'document', route: '/payables/shipments', object: 'bill_of_lading' },
+  // IMPROVEMENT-002 — an ASYCUDA reading, printed from its own page (its lines as ASYCUDA gave them).
+  asycuda_reading: { kind: 'document', route: '/payables/pd/asycuda', object: 'customs_pd' },
   customer_statement: { kind: 'report', route: '/sales/customer-statements', object: 'business_partner' },
   supplier_statement: { kind: 'report', route: '/payables/supplier-statements', object: 'business_partner' },
   bank_statement: { kind: 'report', route: '/master-data/bank-accounts', object: 'bank_account' },

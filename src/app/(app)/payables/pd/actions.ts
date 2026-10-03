@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { runAdminAndReturn, text } from '@/server/admin-action';
+import { registerAllRecords } from '@/server/records';
 import * as asycuda from '@/server/services/asycuda-runs';
 import * as attachments from '@/server/services/attachments';
 import * as customs from '@/server/services/customs-pd';
@@ -11,6 +12,7 @@ import * as payables from '@/server/services/payables';
 /** PD / ASYCUDA — REQ-AP-001 §16, §21.8. Every verb is the service's. */
 const LIST = '/payables/pd';
 const ASYCUDA = '/payables/pd/asycuda';
+const asycudaRecord = (runNo: string) => `${ASYCUDA}/${encodeURIComponent(runNo)}`;
 const record = (pdNo: string, year?: string | number | null) =>
   `${LIST}/${encodeURIComponent(pdNo)}${year ? `?year=${year}` : ''}`;
 
@@ -127,6 +129,8 @@ export async function readAsycudaList(formData: FormData): Promise<void> {
     uploads.map(async (file) => ({ fileName: file.name, content: Buffer.from(await file.arrayBuffer()) })),
   );
 
+  // Where files go and who may read them back — registered before the first upload of a cold process.
+  registerAllRecords();
   await runAdminAndReturn(
     async (tx, ctx) => {
       const read = files.length > 0 ? asycuda.readFiles(files) : null;
@@ -134,11 +138,12 @@ export async function readAsycudaList(formData: FormData): Promise<void> {
         source: read ? 'file' : 'paste',
         fileNames: files.map((file) => file.fileName),
         text: read ? read.text : pasted,
+        files,
       });
     },
     (value) => {
-      const started = value as { id?: string } | null | undefined;
-      return started?.id ? `${ASYCUDA}?run=${encodeURIComponent(started.id)}` : ASYCUDA;
+      const started = value as { runNo?: string } | null | undefined;
+      return started?.runNo ? asycudaRecord(started.runNo) : `${ASYCUDA}?new=1`;
     },
   );
 }
@@ -146,13 +151,27 @@ export async function readAsycudaList(formData: FormData): Promise<void> {
 /** Applies a reading that was looked at first. */
 export async function applyAsycudaRun(formData: FormData): Promise<void> {
   const id = text(formData, 'run');
+  const runNo = text(formData, 'run_no');
   await runAdminAndReturn(
     async (tx, ctx) => asycuda.applyRun(tx, ctx, id),
-    (value) => {
-      const result = value as { changed?: number } | null | undefined;
-      return `${ASYCUDA}?run=${encodeURIComponent(id)}&applied=${result?.changed ?? 0}`;
-    },
+    runNo ? asycudaRecord(runNo) : ASYCUDA,
   );
+}
+
+/** IMPROVEMENT-002 — more paperwork filed on an ASYCUDA reading (the screenshot, the officer's note). */
+export async function attachToAsycudaRun(formData: FormData): Promise<void> {
+  const runNo = text(formData, 'run_no');
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) redirect(`${asycudaRecord(runNo)}?error=attachment_missing`);
+  const upload = file as File;
+  const content = Buffer.from(await upload.arrayBuffer());
+  // Where files go and who may read them back — registered before the first upload of a cold process.
+  registerAllRecords();
+  await runAdminAndReturn(async (tx, ctx) => {
+    const found = await asycuda.runByNo(tx, runNo);
+    if (!found) throw new Error(`No ASYCUDA reading ${runNo}.`);
+    await attachments.upload(tx, ctx, { objectType: asycuda.RUN_OBJECT, objectId: found.run.id, fileName: upload.name, content });
+  }, asycudaRecord(runNo));
 }
 
 /** The ASYCUDA screenshot, the customs letter — kept with the PD. */
@@ -165,6 +184,8 @@ export async function attachToPd(formData: FormData): Promise<void> {
   }
   const upload = file as File;
   const content = Buffer.from(await upload.arrayBuffer());
+  // Where files go and who may read them back — registered before the first upload of a cold process.
+  registerAllRecords();
   await runAdminAndReturn(async (tx, ctx) => {
     const view = await customs.viewByNo(tx, pdNo, Number(year) || null);
     await attachments.upload(tx, ctx, {

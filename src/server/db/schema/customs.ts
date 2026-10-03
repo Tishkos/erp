@@ -106,6 +106,8 @@ export const asycudaRun = pgTable(
   'asycuda_run',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    /** IMPROVEMENT-002 — the reading as a document: ASY-{YYYY}-{SERIAL} (0268). */
+    runNo: text('run_no'),
     /** `file` when a report was uploaded, `paste` when the list was typed. */
     source: text('source').$type<'file' | 'paste'>().notNull(),
     fileNames: jsonb('file_names').notNull().$type<string[]>().default([]),

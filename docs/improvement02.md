@@ -219,6 +219,7 @@ Each stage below is one branch and one PR. Its tests are named before it is buil
 | 2026-10-03 | IM2-0 | #33 `fix/c20-test-fixtures`, #34 HR-6, #35 `test/e2e-current-ui` | merged — integration 2,420/2,420, e2e 133/133 |
 | 2026-10-03 | IM2-1 | #37 `improve2/stage-1-import` | merged — integration 2,427/2,427 (148 files); e2e `im2-import-shortage` 2/2 |
 | 2026-10-03 | IM2-1b | `improve2/bl-rewrite` | the B/L rewrite (table, check digit, ETA, edit/cancel, print and doors) — integration ap0*, im2-*, hd09, hd14, wa02 green; e2e im2-bl 3/3, payables + theme 15/15 |
+| 2026-10-03 | IM2-1c | `improve2/asycuda` | ASYCUDA readings as numbered documents (register, record page, the export filed on it, print, doors); PD page doors; uploads register their access rules — integration im2-03 4/4, ap04, im2-02 green; unit 1657; e2e im2-asycuda 2/2, payables + im2-bl + fx1 + theme 25/25, mobile-rtl 1/1 |
 
 ---
 

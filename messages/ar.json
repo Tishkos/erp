@@ -3118,7 +3118,7 @@
       "history": "سجل الحالة",
       "recorded_by": "سجّله",
       "attachments": "المرفقات",
-      "asycuda_subtitle": "حمّل قائمة المستندات المصدّرة من ASYCUDA، أو الصقها. لا يتغير شيء حتى ترى الفرق وتطبّقه.",
+      "asycuda_subtitle": "كل قراءة لقائمة مستندات أسيكودا مرقّمة ومحفوظة مع الملف الذي جاءت منه. افتح أي قراءة لترى سطراً بسطر ما ستغيّره؛ لا يتغير شيء حتى تُطبَّق.",
       "asycuda_paste": "قائمة أسيكودا",
       "asycuda_hint": "تصريح واحد في كل سطر: الرقم، ثم الحالة كما تكتبها أسيكودا، ثم التاريخ إن ظهر — مفصولة بعلامات جدولة أو فواصل أو مسافات.",
       "asycuda_list": "القائمة",
@@ -3154,7 +3154,7 @@
       "asycuda_file": "تقرير ASYCUDA",
       "asycuda_file_hint": "قائمة المستندات كما يصدّرها ASYCUDA — Excel أو CSV. تُقرأ عدة ملفات كقائمة واحدة.",
       "asycuda_already_applied": "طُبّقت في {at}. أعد قراءة القائمة لترى ما تبقّى.",
-      "asycuda_runs": "القراءات السابقة",
+      "asycuda_runs": "قراءات أسيكودا",
       "asycuda_no_runs": "لم تُقرأ القائمة بعد.",
       "asycuda_read_at": "القراءة",
       "asycuda_from": "المصدر",
@@ -3171,7 +3171,22 @@
       "asycuda_days": "{days} يوم",
       "asycuda_expired_days": "منذ {days} يوم",
       "yes": "نعم",
-      "no": "كلا"
+      "no": "كلا",
+      "asycuda_read": "قراءة قائمة أسيكودا",
+      "asycuda_read_note": "اختر قائمة المستندات كما صدّرها أسيكودا، أو الصقها. تصبح قراءة مرقّمة يُحفظ الملف معها، وترى الفرق قبل أن يتغير أي شيء.",
+      "asycuda_no": "رقم القراءة",
+      "asycuda_read_by": "قرأها",
+      "asycuda_lines": "الأسطر",
+      "asycuda_applied_at": "تاريخ التطبيق",
+      "asycuda_applied_by": "طبّقها",
+      "asycuda_none": "لا توجد قراءة مطابقة.",
+      "asycuda_files_kept": "{count, plural, one {ملف واحد محفوظ} two {ملفان محفوظان} few {# ملفات محفوظة} many {# ملفاً محفوظاً} other {# ملف محفوظ}}",
+      "asycuda_document": "قراءة أسيكودا",
+      "asycuda_lines_title": "القائمة كما أعطاها أسيكودا",
+      "asycuda_as_given": "كما كتبها أسيكودا",
+      "asycuda_was": "عند القراءة",
+      "asycuda_to_pds": "سجل التصاريح",
+      "outcome_changed": "تم التحديث"
     },
     "shipments": {
       "subtitle": "بوالص الشحن لكل استيراد، مع حاوياتها محسوبةً عند وصولها.",
@@ -5665,7 +5680,8 @@
       "hr_leave_balances": "أرصدة الإجازات",
       "hr_payroll_register": "سجل الرواتب",
       "hr_unsettled_advances": "السلف غير المسوّاة",
-      "bill_of_lading": "بوليصة الشحن"
+      "bill_of_lading": "بوليصة الشحن",
+      "asycuda_reading": "قراءة أسيكودا"
     }
   }
 }

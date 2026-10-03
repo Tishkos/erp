@@ -920,6 +920,8 @@ export async function resetTestData(): Promise<void> {
                          'PAYMENT_APPLICATION', 'BANK_CODE',
                          -- REQ-AP-001 Stage 5, migration 0234.
                          'CONTAINER_RECEIPT', 'PORT_CODE',
+                         -- IMPROVEMENT-002, migration 0268 — the ASYCUDA reading as a document.
+                         'ASYCUDA_RUN',
                          -- REQ-AP-001 Stage 6, migration 0235.
                          'LOAN',
                          -- REQ-HR-001 Stage HR-1, migration 0241.

@@ -3118,7 +3118,7 @@
       "history": "Status history",
       "recorded_by": "Recorded by",
       "attachments": "Attachments",
-      "asycuda_subtitle": "Upload the document list exported from ASYCUDA, or paste it. Nothing changes until you have seen the difference and applied it.",
+      "asycuda_subtitle": "Every reading of the ASYCUDA document list, numbered and kept with the file it came from. Open one to see line by line what it changes; nothing moves until it is applied.",
       "asycuda_paste": "The ASYCUDA list",
       "asycuda_hint": "One PD per line: the number, the status as ASYCUDA writes it, and the date if shown — separated by tabs, commas or spaces.",
       "asycuda_list": "List",
@@ -3154,7 +3154,7 @@
       "asycuda_file": "The ASYCUDA report",
       "asycuda_file_hint": "The document list as ASYCUDA exports it — Excel or CSV. Several files are read as one list.",
       "asycuda_already_applied": "Applied on {at}. Read the list again to see what is left.",
-      "asycuda_runs": "Readings so far",
+      "asycuda_runs": "ASYCUDA readings",
       "asycuda_no_runs": "The list has not been read yet.",
       "asycuda_read_at": "Read",
       "asycuda_from": "From",
@@ -3171,7 +3171,22 @@
       "asycuda_days": "{days} days",
       "asycuda_expired_days": "{days} days ago",
       "yes": "Yes",
-      "no": "No"
+      "no": "No",
+      "asycuda_read": "Read the ASYCUDA list",
+      "asycuda_read_note": "Choose the document list as ASYCUDA exported it, or paste it. It becomes a numbered reading with the file kept on it, and you see the difference before anything changes.",
+      "asycuda_no": "Reading no.",
+      "asycuda_read_by": "Read by",
+      "asycuda_lines": "Lines",
+      "asycuda_applied_at": "Applied on",
+      "asycuda_applied_by": "Applied by",
+      "asycuda_none": "No reading matches.",
+      "asycuda_files_kept": "{count, plural, one {# file kept} other {# files kept}}",
+      "asycuda_document": "ASYCUDA reading",
+      "asycuda_lines_title": "The list as ASYCUDA gave it",
+      "asycuda_as_given": "As ASYCUDA wrote it",
+      "asycuda_was": "When read",
+      "asycuda_to_pds": "PD register",
+      "outcome_changed": "Updated"
     },
     "shipments": {
       "subtitle": "The bills of lading of every import, each with its containers counted as they arrive.",
@@ -5665,7 +5680,8 @@
       "hr_leave_balances": "Leave Balances",
       "hr_payroll_register": "Payroll Register",
       "hr_unsettled_advances": "Unsettled Advances",
-      "bill_of_lading": "Bill of Lading"
+      "bill_of_lading": "Bill of Lading",
+      "asycuda_reading": "ASYCUDA Reading"
     }
   }
 }

@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { runAdminAndReturn, text } from '@/server/admin-action';
+import { registerAllRecords } from '@/server/records';
 import { parseQuantity } from '@/server/domain/uom';
 import * as attachments from '@/server/services/attachments';
 import * as events from '@/server/services/payable-events';
@@ -127,6 +128,8 @@ export async function attachToBl(formData: FormData): Promise<void> {
   if (!(file instanceof File) || file.size === 0) redirect(`${blRecord(blNo)}?error=attachment_missing`);
   const upload = file as File;
   const content = Buffer.from(await upload.arrayBuffer());
+  // Where files go and who may read them back — registered before the first upload of a cold process.
+  registerAllRecords();
   await runAdminAndReturn(async (tx, ctx) => {
     const view = await shipments.viewBl(tx, blNo);
     await attachments.upload(tx, ctx, { objectType: shipments.BL_OBJECT, objectId: view.bl.id, fileName: upload.name, content });
@@ -280,6 +283,8 @@ export async function attachToContainer(formData: FormData): Promise<void> {
   }
   const upload = file as File;
   const content = Buffer.from(await upload.arrayBuffer());
+  // Where files go and who may read them back — registered before the first upload of a cold process.
+  registerAllRecords();
   await runAdminAndReturn(async (tx, ctx) => {
     const view = await shipments.viewContainer(tx, containerNo, text(formData, 'container_id') || null);
     await attachments.upload(tx, ctx, {
