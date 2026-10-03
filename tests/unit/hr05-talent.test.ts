@@ -128,7 +128,7 @@ describe('H8 · recruitment and performance write their audit with every change'
   }
 
   it('the database holds what the services promise', () => {
-    const migration = readFileSync(join(ROOT, 'src/server/db/migrations/0259_hr_talent.sql'), 'utf8');
+    const migration = readFileSync(join(ROOT, 'src/server/db/migrations/0264_hr_talent.sql'), 'utf8');
     for (const name of [
       'applicant_stage_append_only',
       'applicant_stage_closing_note',

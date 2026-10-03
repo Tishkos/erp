@@ -57,7 +57,7 @@ describe('H8 · employee tables are written by one module, with history', () => 
     expect(source).not.toMatch(/\.(update|delete)\(employeeHistory\)/);
     expect(source).not.toMatch(/\.(update|delete)\(employeeCompensation\)/);
     expect(source).not.toMatch(/\.(update|delete)\(employeePayComponent\)/);
-    expect(readFileSync(join(ROOT, 'src/server/db/migrations/0257_hr_payroll.sql'), 'utf8')).toMatch(/employee_pay_component_append_only/);
+    expect(readFileSync(join(ROOT, 'src/server/db/migrations/0262_hr_payroll.sql'), 'utf8')).toMatch(/employee_pay_component_append_only/);
     const migration = readFileSync(join(ROOT, 'src/server/db/migrations/0241_hr_people.sql'), 'utf8');
     expect(migration).toMatch(/employee_history_append_only/);
     expect(migration).toMatch(/employee_compensation_append_only/);

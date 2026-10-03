@@ -21,7 +21,7 @@
  *   attendance_day          what the day sheet recorded: present or absent
  *   hr_parameter            the sweep's limits as rows (R4)
  *
- * Stage HR-3 (0257) — payroll:
+ * Stage HR-3 (0262) — payroll:
  *   employee_pay_component  a person's own figure for a component, or its stop —
  *                           dated, append-only, under the compensation grant
  *   payroll_run             PAY-…: one live run per branch per month
@@ -29,12 +29,12 @@
  *   payroll_line_component  each component of the line, computed or typed
  *   payroll_payment         one pay method's net pay leaving a bank or cash account
  *
- * Stage HR-4 (0258) — advances & loans, equipment:
+ * Stage HR-4 (0263) — advances & loans, equipment:
  *   employee_advance           EADV-…: money lent, recovered from pay or cash
  *   employee_advance_recovery  what came back — append-only
  *   employee_asset             what a person holds, handed out and returned
  *
- * Stage HR-5 (0259) — recruitment & performance:
+ * Stage HR-5 (0264) — recruitment & performance:
  *   vacancy             VAC-…: a position to fill, how many, from when
  *   applicant           APL-…: who applied, the stage they are at; hired, an employee
  *   applicant_stage     every move of an applicant — append-only
@@ -183,9 +183,9 @@ export const payComponent = pgTable(
     /** A fixed amount in IQD, or a percentage of the base, by `calculation`. */
     defaultValue: numeric('default_value', { precision: 20, scale: 4 }).notNull().default('0'),
     taxable: boolean('taxable').notNull().default(true),
-    /** HR-3 (0257) — where an earning or an employer cost is expensed; empty, the posting mapping decides. */
+    /** HR-3 (0262) — where an earning or an employer cost is expensed; empty, the posting mapping decides. */
     expenseAccountId: uuid('expense_account_id').references(() => chartOfAccount.id),
-    /** HR-3 (0257) — where a deduction or an employer cost is owed; empty, the posting mapping decides. */
+    /** HR-3 (0262) — where a deduction or an employer cost is owed; empty, the posting mapping decides. */
     liabilityAccountId: uuid('liability_account_id').references(() => chartOfAccount.id),
     active: boolean('active').notNull().default(true),
     sortOrder: smallint('sort_order').notNull().default(100),
@@ -374,7 +374,7 @@ export const hrParameter = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Stage HR-3 (0257) — payroll
+// Stage HR-3 (0262) — payroll
 // ---------------------------------------------------------------------------
 
 export const employeePayComponent = pgTable(
@@ -561,7 +561,7 @@ export const payrollLineComponent = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Stage HR-4 (0258) — advances & loans, equipment
+// Stage HR-4 (0263) — advances & loans, equipment
 // ---------------------------------------------------------------------------
 
 export const employeeAdvance = pgTable(

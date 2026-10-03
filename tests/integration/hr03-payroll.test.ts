@@ -16,6 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ownerPool, rejection } from './setup';
+import { fundAccount } from './hr-funds';
 import { BAGHDAD, buildTradingWorld, type TradingWorld } from './trading-fixture';
 import { withScope } from '@/server/db/client';
 import * as attendance from '@/server/services/attendance';
@@ -140,6 +141,9 @@ beforeEach(async () => {
     );
   }
   const till = await as(manager, (tx) => banks.create(tx, manager, 'cash', { name: 'Payroll Till', glAccountId: accounts.cash!, currency: 'IQD', custodianUserId: manager.principal.userId }));
+  // C-20 — the bank and the till hold money before the pay leaves them.
+  await fundAccount(world, accounts.bank!, '10000000.0000');
+  await fundAccount(world, accounts.cash!, '10000000.0000');
   cashAccountId = (await ownerPool.query(`select id from bank_cash_account where code = $1`, [till.code])).rows[0].id;
 
   karimId = await person('E-0001', 'Karim Saleh', 'FIN', '2025-01-01', { appUserId: karimUser.principal.userId });
@@ -298,8 +302,9 @@ describe('H5 · the worked example, posted and paid to the dinar', () => {
     );
     const balance = (role: string) => balances.find((b) => b.account_id === accounts[role]);
     expect(balance('net_pay')!.b).toBe('0.0000');
-    expect(balance('bank')!.b).toBe('-1785227.0000');
-    expect(balance('cash')!.b).toBe('-518182.0000');
+    // Each was funded with 10,000,000 (C-20); the pay left them.
+    expect(balance('bank')!.b).toBe('8214773.0000');
+    expect(balance('cash')!.b).toBe('9481818.0000');
     expect(balance('bank')!.party).toBeTruthy();
     expect((await as(karimUser, (tx) => payroll.payslip(tx, 'PSL-BGW-2026-000001')))?.run).toMatchObject({ status: 'paid', paidOn: '2026-09-30', paymentReference: 'Salary file 09/2026' });
 

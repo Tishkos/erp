@@ -13,6 +13,7 @@
 import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ownerPool, rejection } from './setup';
+import { fundAccount } from './hr-funds';
 import { BAGHDAD, buildTradingWorld, type TradingWorld } from './trading-fixture';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
@@ -101,6 +102,8 @@ beforeEach(async () => {
     await as(manager, (tx) => coa.setRequiredDimensions(tx, manager, rows[0].id, []));
   }
   accounts.bank = world.accounts.bank!;
+  // C-20 — the bank holds money before an advance leaves it.
+  await fundAccount(world, accounts.bank, '10000000.0000');
   for (const [event, role] of [
     ['hr.payroll_run', 'salary_expense'],
     ['hr.payroll_run', 'payroll_withholding'],
@@ -146,7 +149,7 @@ describe('H6 · asked, endorsed, approved, paid', () => {
     await as(manager, (tx) => advances.pay(tx, manager, made.advanceNo, { bankCashAccountId: world.bankAccountId, on: '2026-07-25', reference: 'TRF-77' }));
     expect(await advanceRow(made.advanceNo)).toMatchObject({ status: 'paid', recovered: '0.0000' });
     expect(await balance('employee_advance')).toBe('600000.0000');
-    expect(await balance('bank')).toBe('-600000.0000');
+    expect(await balance('bank')).toBe('9400000.0000');
     const detail = (await as(karimUser, (tx) => advances.byNo(tx, made.advanceNo)))!;
     expect(detail.months.map((m) => [m.month, m.instalmentIqd])).toEqual([
       ['2026-08-01', '200000.0000'],
