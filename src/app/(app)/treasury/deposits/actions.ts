@@ -22,7 +22,10 @@ export async function depositCash(formData: FormData): Promise<void> {
     (tx, ctx) =>
       deposits.depositCash(tx, ctx, {
         intoAccountId: text(formData, 'into_account_id'),
-        fromCashAccountId: text(formData, 'from_cash_account_id'),
+        // Where it came from, named on the chart — the same question the bank
+        // deposit asks, because it is the same document (2026-10-04).
+        creditAccountId: text(formData, 'credit_account_id'),
+        payer: text(formData, 'payer'),
         depositDate: text(formData, 'deposit_date'),
         amount: amountOf(formData),
         reference: text(formData, 'reference') || null,

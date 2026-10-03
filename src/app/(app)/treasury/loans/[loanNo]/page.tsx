@@ -29,6 +29,7 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as loans from '@/server/services/loans';
+import * as bankCash from '@/server/services/bank-cash-accounts';
 import * as rates from '@/server/services/exchange-rates';
 import {
   approveLoan,
@@ -102,6 +103,16 @@ export default async function LoanPage({
    * posted (0275) — the same reading the status is decided from, so the
    * summary and the chip above it cannot disagree.
    */
+  /*
+   * Every account the company could pay from (2026-10-04). The loan's own is
+   * the default — it usually is the one — but the money may be in another, and
+   * C-20 asks whichever is chosen whether it holds enough.
+   */
+  const payFrom = await withCurrentUser(async (tx) => [
+    ...(await bankCash.listOfKind(tx, 'bank')),
+    ...(await bankCash.listOfKind(tx, 'cash')),
+  ]).then((rows) => rows.filter((account) => account.active));
+
   const [position, repayments, quote] = await withCurrentUser(async (tx) => [
     await loans.positionOf(tx, loan.id),
     await loans.repaymentsOf(tx, loan.id),
@@ -317,6 +328,16 @@ export default async function LoanPage({
                       }))}
                       required
                     />
+                    <Select
+                      defaultValue={loan.bankCashAccountId}
+                      label={t('paid_from')}
+                      name="bank_cash_account_id"
+                      options={payFrom.map((account) => ({
+                        value: account.id,
+                        label: `${account.name} (${account.code}) · ${account.currency}`,
+                      }))}
+                      required
+                    />
                     <Field defaultValue={today} label={t('paid_date')} name="paid_date" required type="date" />
                     <Field id="pay-reference" label={t('reference')} name="reference" required />
                   </Grid>
@@ -449,6 +470,16 @@ export default async function LoanPage({
                 <Form action={settleLoanEarly}>
                   <Hidden name="loan_no" value={loan.loanNo} />
                   <Grid>
+                    <Select
+                      defaultValue={loan.bankCashAccountId}
+                      label={t('paid_from')}
+                      name="bank_cash_account_id"
+                      options={payFrom.map((account) => ({
+                        value: account.id,
+                        label: `${account.name} (${account.code}) · ${account.currency}`,
+                      }))}
+                      required
+                    />
                     <Field defaultValue={today} label={t('settle_date')} name="paid_date" required type="date" />
                     <Field
                       defaultValue={toDecimalString(quote.accruedInterest, MONEY_SCALE)}

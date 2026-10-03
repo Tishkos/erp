@@ -55,13 +55,15 @@ export default async function DepositPage({ params, searchParams }: { params: Pr
   });
   if (!deposit) notFound();
 
-  const object = deposit.source === 'cash' ? deposits.PERMISSION_OBJECT : deposits.RECEIPT_PERMISSION_OBJECT;
+  // The legacy cash-to-bank transfer is the only transfer; everything else is
+  // a receipt, into the cash or into the bank (2026-10-04).
+  const object = deposit.source === 'transfer' ? deposits.PERMISSION_OBJECT : deposits.RECEIPT_PERMISSION_OBJECT;
   // What the paperclip says it holds — the slip, on whichever document the
   // deposit actually is.
   const attached = await withCurrentUser((tx) =>
-    attachmentsService.currentFor(tx, deposit.source === 'cash' ? 'bank_transfer' : 'other_receipt', deposit.id),
+    attachmentsService.currentFor(tx, deposit.source === 'transfer' ? 'bank_transfer' : 'other_receipt', deposit.id),
   );
-  const historyType = deposit.source === 'cash' ? 'bank_transfer' : 'other_receipt';
+  const historyType = deposit.source === 'transfer' ? 'bank_transfer' : 'other_receipt';
   const money = (amount: string) => formatMoney(amount, deposit.currency, locale as Locale);
   const mayApprove = deposit.status === 'draft' && can(principal, 'approve', object) && deposit.createdBy !== principal.userId;
   const mayPost = deposit.status === 'approved' && can(principal, 'post', object);
@@ -74,7 +76,7 @@ export default async function DepositPage({ params, searchParams }: { params: Pr
     { label: t('source'), value: t(`source_${deposit.source}`) },
     { label: t('into'), value: <bdi dir="auto">{`${deposit.intoName} (${deposit.intoCode}) · ${deposit.currency}`}</bdi> },
     { label: t('from'), value: <bdi dir="auto">{from}</bdi> },
-    ...(deposit.source === 'other' ? [{ label: t('credit_account'), value: <bdi dir="auto">{`${deposit.fromCode} · ${deposit.fromName}`}</bdi> }] : []),
+    ...(deposit.source !== 'transfer' ? [{ label: t('credit_account'), value: <bdi dir="auto">{`${deposit.fromCode} · ${deposit.fromName}`}</bdi> }] : []),
     { label: t('reference'), value: <bdi dir="auto">{deposit.reference ?? '—'}</bdi> },
     {
       label: t('journal'),
@@ -163,7 +165,7 @@ export default async function DepositPage({ params, searchParams }: { params: Pr
                 <bdi dir="auto">{`${deposit.intoName} (${deposit.intoCode})`}</bdi>
               </td>
               <td>
-                <bdi dir="auto">{deposit.source === 'cash' ? from : `${deposit.fromCode} · ${deposit.fromName}`}</bdi>
+                <bdi dir="auto">{deposit.source === 'transfer' ? from : `${deposit.fromCode} · ${deposit.fromName}`}</bdi>
               </td>
               <td className={s.sapNum}>
                 <bdi dir="ltr">{money(deposit.amount)}</bdi>

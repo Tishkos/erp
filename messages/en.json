@@ -3590,7 +3590,8 @@
       "return_reason": "What should be changed",
       "return_hint": "Sends the offer back to be retyped. Nothing has been posted.",
       "status_submitted": "Pending approval",
-      "principal_total": "Principal total"
+      "principal_total": "Principal total",
+      "paid_from": "Paid from"
     },
     "landed_cost": {
       "section_title": "Landed cost",
@@ -4776,7 +4777,7 @@
     "bank_deposits": {
       "subtitle": "Money put into a bank account by hand: cash taken to the bank, and money arriving from anywhere else.",
       "new_cash": "Cash deposit",
-      "new_cash_note": "Cash taken from one of the company’s cash accounts to the bank: a bank transfer, Dr the bank, Cr the cash.",
+      "new_cash_note": "Money put into one of the company’s cash accounts by hand: counted in, and credited where it came from.",
       "new_other": "Bank deposit",
       "new_other_note": "Money arriving from outside the company’s own accounts — capital, a refund, the sale of something — paid straight into a bank account.",
       "into": "Into bank account",
@@ -4805,7 +4806,9 @@
       "journal": "Journal",
       "lines": "Deposit",
       "document_type_cash": "Bank deposit — cash",
-      "document_type_other": "Bank deposit — other source"
+      "document_type_other": "Bank deposit — other source",
+      "into_cash": "Into cash account",
+      "reference_cash": "Reference"
     },
     "availability": {
       "subtitle": "What each warehouse holds, item by item: on hand, available to issue, and what is reserved, in transit, in quarantine, damaged or returned — every figure summed from the stock ledger.",

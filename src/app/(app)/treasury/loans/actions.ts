@@ -179,6 +179,8 @@ export async function payInstalmentAction(formData: FormData): Promise<void> {
       loans.payInstalment(tx, ctx, text(formData, 'instalment_id'), {
         paidDate: text(formData, 'paid_date'),
         reference: text(formData, 'reference'),
+        // Which account the money leaves; the loan's own when none is chosen.
+        bankCashAccountId: text(formData, 'bank_cash_account_id') || null,
       }),
     record(loanNo),
   );
@@ -201,6 +203,7 @@ export async function settleLoanEarly(formData: FormData): Promise<void> {
         reference: text(formData, 'reference'),
         feeTxn: amountOf(text(formData, 'fee')),
         interestTxn: amountOf(text(formData, 'interest')),
+        bankCashAccountId: text(formData, 'bank_cash_account_id') || null,
       }),
     record(loanNo),
   );

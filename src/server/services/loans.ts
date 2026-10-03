@@ -489,6 +489,28 @@ export async function setSchedule(tx: Tx, ctx: ActorContext, loanId: string, row
   });
 }
 
+/**
+ * The account a repayment leaves from (2026-10-04).
+ *
+ * The loan's own unless another is named. Any active bank or cash account may
+ * be named — a company pays the bank from whichever account holds the money —
+ * and C-20 then asks that account whether it does, which is the question worth
+ * asking. A closed account is refused here rather than at the posting, where
+ * the message would be about an account code and not about a decision.
+ */
+async function payingAccount(
+  tx: Tx,
+  loan: { readonly loanNo: string; readonly bankCashAccountId: string },
+  chosen?: string | null,
+) {
+  const id = (chosen ?? '').trim() || loan.bankCashAccountId;
+  const account = await accountOf(tx, id);
+  if (!account.active) {
+    throw new LoanError(`${account.code} is closed; name an open account to pay ${loan.loanNo} from.`);
+  }
+  return account;
+}
+
 // ---------------------------------------------------------------------------
 // The two currencies — the loan's, and the account the money moves through
 // ---------------------------------------------------------------------------
@@ -1094,7 +1116,16 @@ export async function payInstalment(
   tx: Tx,
   ctx: ActorContext,
   instalmentId: string,
-  input: { readonly paidDate: string; readonly reference: string },
+  input: {
+    readonly paidDate: string;
+    readonly reference: string;
+    /**
+     * The account the money leaves (2026-10-04). The loan's own when nothing
+     * is said, which is usually the one — but a company pays from whichever
+     * account holds the money that day, and that is not for the ERP to decide.
+     */
+    readonly bankCashAccountId?: string | null;
+  },
 ) {
   // HD9 — the instalment and its loan, locked: a double submit pays once.
   const [instalment] = await tx
@@ -1123,7 +1154,7 @@ export async function payInstalment(
     throw new LoanError(`Instalment ${earlier.sequence} of ${loan.loanNo} is still unpaid; instalments are repaid in order.`);
   }
 
-  const account = await accountOf(tx, loan.bankCashAccountId);
+  const account = await payingAccount(tx, loan, input.bankCashAccountId);
   const convert = async (value: bigint) =>
     value > 0n ? (await rateService.convertOn(tx, value, loan.currency, input.paidDate)).amountIqd : 0n;
   const principalTxn = amountOf(instalment.principalTxn);
@@ -1390,6 +1421,8 @@ export async function settleEarly(
     readonly reference: string;
     /** The bank's charge for ending it early; nothing when it makes none. */
     readonly feeTxn?: bigint | null;
+    /** The account the settlement leaves; the loan's own when nothing is said. */
+    readonly bankCashAccountId?: string | null;
     /** The interest the bank asks for, when it differs from the accrual. */
     readonly interestTxn?: bigint | null;
   },
@@ -1412,7 +1445,7 @@ export async function settleEarly(
   if (interest < 0n || fee < 0n) throw new LoanError('A settlement’s interest and fee are never negative.');
   const total = quote.outstanding + interest + fee;
 
-  const account = await accountOf(tx, loan.bankCashAccountId);
+  const account = await payingAccount(tx, loan, input.bankCashAccountId);
   const convert = async (value: bigint) =>
     value > 0n ? (await rateService.convertOn(tx, value, loan.currency, input.onDate)).amountIqd : 0n;
   const principalIqd = await convert(quote.outstanding);
@@ -1901,7 +1934,10 @@ export async function listForScreen(tx: Tx, filter: LoanListFilter = {}) {
   const view = filter.view ?? 'open';
   const where = and(
     view === 'open'
-      ? inArray(bankLoan.status, ['draft', 'approved', 'active'])
+      // Open means not finished with: a loan waiting for approval is as open
+      // as a draft, and leaving `submitted` out of this list emptied the
+      // register the moment anybody sent one on (2026-10-04).
+      ? inArray(bankLoan.status, ['draft', 'submitted', 'approved', 'active'])
       : view === 'overdue'
         ? and(eq(bankLoan.status, 'active'), unpaidPastDue)
         : view === 'closed'

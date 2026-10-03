@@ -27,7 +27,7 @@ import { registerPage, searchOf, type RegisterPaging } from './register-page';
 export const PERMISSION_OBJECT = 'bank_cash_account';
 export const RECEIPT_PERMISSION_OBJECT = otherReceipt.PERMISSION_OBJECT;
 
-export type DepositSource = 'cash' | 'other';
+export type DepositSource = 'cash' | 'bank' | 'transfer';
 
 export interface DepositRow {
   readonly id: string;
@@ -57,7 +57,7 @@ export type DepositView = (typeof DEPOSIT_VIEWS)[number];
 
 /** Both documents, as one relation the register reads. */
 const DEPOSITS = sql`(
-  select t.id, t.transfer_no as no, 'cash'::text as source, t.transfer_date::text as deposit_date,
+  select t.id, t.transfer_no as no, 'transfer'::text as source, t.transfer_date::text as deposit_date,
          t.status::text as status, ta.code as into_code, ta.name as into_name, t.to_currency as currency,
          t.received_amount::text as amount, fa.code as from_code, fa.name as from_name, null::text as payer,
          t.bank_reference as reference, t.note, t.branch_code, t.created_by::text as created_by,
@@ -68,7 +68,9 @@ const DEPOSITS = sql`(
     join bank_cash_account fa on fa.id = t.from_account_id
    where ta.account_type = 'bank' and fa.account_type = 'cash'
   union all
-  select r.id, r.receipt_no, 'other'::text, r.receipt_date::text,
+  -- A receipt is told apart by the account that received it: into the cash it
+  -- is a cash deposit, into the bank a bank deposit (2026-10-04).
+  select r.id, r.receipt_no, a.account_type::text, r.receipt_date::text,
          r.status::text, a.code, a.name, r.currency,
          r.amount_iqd::text, c.code, c.name, r.payer,
          r.reference, r.note, r.branch_code, r.created_by::text,
@@ -77,13 +79,12 @@ const DEPOSITS = sql`(
     left join journal_entry je on je.id = r.journal_entry_id
     join bank_cash_account a on a.id = r.bank_cash_account_id
     join chart_of_account c on c.id = r.credit_account_id
-   where a.account_type = 'bank'
 ) d`;
 
 const toRow = (row: Record<string, unknown>): DepositRow => ({
   id: String(row.id),
   no: String(row.no),
-  source: row.source === 'cash' ? 'cash' : 'other',
+  source: row.source === 'cash' ? 'cash' : row.source === 'transfer' ? 'transfer' : 'bank',
   depositDate: String(row.deposit_date),
   status: String(row.status),
   intoCode: String(row.into_code),
@@ -144,20 +145,31 @@ export interface CashDepositInput {
 }
 
 /** Cash taken to the bank: a bank transfer from the cash account, same currency. */
-export async function depositCash(tx: Tx, ctx: ActorContext, input: CashDepositInput): Promise<{ no: string }> {
-  const accounts = await accountKinds(tx, [input.intoAccountId, input.fromCashAccountId]);
-  if (accounts.get(input.intoAccountId) !== 'bank') throw new Error('A deposit goes into a bank account; choose one.');
-  if (accounts.get(input.fromCashAccountId) !== 'cash') throw new Error('A cash deposit comes out of a cash account; choose one.');
+/**
+ * Money put into one of the company's **cash** accounts by hand (2026-10-04).
+ *
+ * The same document as a bank deposit — a receipt of money arriving, credited
+ * where the chart says it came from — differing only in which kind of account
+ * receives it. Only cash accounts are offered, and only a cash account is
+ * accepted.
+ */
+export async function depositCash(tx: Tx, ctx: ActorContext, input: OtherDepositInput): Promise<{ no: string }> {
+  const accounts = await accountKinds(tx, [input.intoAccountId]);
+  if (accounts.get(input.intoAccountId) !== 'cash') {
+    throw new Error('A cash deposit goes into a cash account; choose one.');
+  }
   if (input.amount <= 0n) throw new Error('State the amount deposited.');
-  const made = await treasury.createTransfer(tx, ctx, {
-    fromAccountId: input.fromCashAccountId,
-    toAccountId: input.intoAccountId,
-    transferDate: input.depositDate,
+  const made = await otherReceipt.create(tx, ctx, {
+    bankCashAccountId: input.intoAccountId,
+    branchCode: ctx.branchCode,
+    receiptDate: input.depositDate,
     amountIqd: input.amount,
-    bankReference: input.reference ?? null,
+    creditAccountId: input.creditAccountId,
+    payer: input.payer,
+    reference: input.reference ?? null,
     note: input.note ?? null,
   });
-  return { no: made.transferNo };
+  return { no: made.receiptNo };
 }
 
 export interface OtherDepositInput {
@@ -170,7 +182,7 @@ export interface OtherDepositInput {
   readonly note?: string | null;
 }
 
-/** Money from outside the company's own accounts: an other receipt into the bank account. */
+/** Money put into one of the company's **bank** accounts by hand. */
 export async function depositOther(tx: Tx, ctx: ActorContext, input: OtherDepositInput): Promise<{ no: string }> {
   const accounts = await accountKinds(tx, [input.intoAccountId]);
   if (accounts.get(input.intoAccountId) !== 'bank') throw new Error('A deposit goes into a bank account; choose one.');
@@ -197,14 +209,18 @@ export async function approve(tx: Tx, ctx: ActorContext, no: string): Promise<vo
   if (deposit.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) {
     throw new Error(`${deposit.no} was raised by you; somebody else approves it.`);
   }
-  if (deposit.source === 'cash') await treasury.approveTransfer(tx, ctx, deposit.id);
+  // Which document it is, rather than which label it wears: only the legacy
+  // cash-to-bank transfer is a transfer (2026-10-04).
+  if (deposit.source === 'transfer') await treasury.approveTransfer(tx, ctx, deposit.id);
   else await otherReceipt.approve(tx, ctx, deposit.id);
 }
 
 /** Post — the journal, through the document's own posting. */
 export async function post(tx: Tx, ctx: ActorContext, no: string): Promise<{ journalEntryId: string }> {
   const deposit = await byNo(tx, no);
-  return deposit.source === 'cash' ? treasury.postTransfer(tx, ctx, deposit.id) : otherReceipt.post(tx, ctx, deposit.id);
+  return deposit.source === 'transfer'
+    ? treasury.postTransfer(tx, ctx, deposit.id)
+    : otherReceipt.post(tx, ctx, deposit.id);
 }
 
 async function accountKinds(tx: Tx, ids: readonly string[]): Promise<Map<string, string>> {

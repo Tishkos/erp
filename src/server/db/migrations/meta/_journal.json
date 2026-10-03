@@ -1436,6 +1436,20 @@
       "when": 1795900000087,
       "tag": "0277_loan_submitted_status",
       "breakpoints": true
+    },
+    {
+      "idx": 205,
+      "version": "7",
+      "when": 1795900000088,
+      "tag": "0278_super_user_approves",
+      "breakpoints": true
+    },
+    {
+      "idx": 206,
+      "version": "7",
+      "when": 1795900000089,
+      "tag": "0279_loan_document_dimensions",
+      "breakpoints": true
     }
   ]
 }

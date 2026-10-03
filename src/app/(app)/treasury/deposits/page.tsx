@@ -61,6 +61,8 @@ export default async function DepositsPage({ searchParams }: { searchParams: Sea
   const query = (p: number) => [outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '', view ? `view=${view}` : '', `page=${p}`].filter(Boolean).join('&');
   const today = businessToday();
   const bankOptions = banks.map((account) => ({ value: account.id, label: `${account.name} (${account.code}) · ${account.currency}` }));
+  const cashOptions = cash.map((account) => ({ value: account.id, label: `${account.name} (${account.code}) · ${account.currency}` }));
+  const creditOptions = credit.map((account) => ({ value: account.id, label: `${account.code} · ${account.name}` }));
 
   return (
     <AdminPage
@@ -71,16 +73,18 @@ export default async function DepositsPage({ searchParams }: { searchParams: Sea
               <p className="muted">{t('new_cash_note')}</p>
               <Form action={depositCash}>
                 <Grid>
-                  <Select label={t('into')} name="into_account_id" options={bankOptions} required />
-                  <Select
-                    label={t('from_cash')}
-                    name="from_cash_account_id"
-                    options={cash.map((account) => ({ value: account.id, label: `${account.name} (${account.code}) · ${account.currency}` }))}
-                    required
-                  />
+                  {/* Cash accounts only: a cash deposit is money put into the
+                      company's cash, and a bank account has no business in this
+                      list (2026-10-04). */}
+                  <Select label={t('into_cash')} name="into_account_id" options={cashOptions} required />
+                  <Select label={t('credit_account')} name="credit_account_id" options={creditOptions} required />
+                  <Field label={t('payer')} name="payer" required />
                   <Field label={t('amount')} name="amount" required />
                   <Field defaultValue={today} label={t('date')} name="deposit_date" required type="date" />
-                  <Field label={t('reference')} name="reference" />
+                  {/* No bank is involved in counting money into the cash box,
+                      so it asks for the slip the company's own till gave
+                      (2026-10-04). */}
+                  <Field label={t('reference_cash')} name="reference" />
                 </Grid>
                 <Field label={t('note')} name="note" wide />
                 <SubmitRow>
@@ -95,7 +99,7 @@ export default async function DepositsPage({ searchParams }: { searchParams: Sea
               <Form action={depositOther}>
                 <Grid>
                   <Select label={t('into')} name="other_into_account_id" options={bankOptions} required />
-                  <Select label={t('credit_account')} name="credit_account_id" options={credit.map((account) => ({ value: account.id, label: `${account.code} · ${account.name}` }))} required />
+                  <Select label={t('credit_account')} name="credit_account_id" options={creditOptions} required />
                   <Field label={t('payer')} name="payer" required />
                   <Field label={t('amount')} name="other_amount" required />
                   <Field defaultValue={today} label={t('date')} name="other_deposit_date" required type="date" />
