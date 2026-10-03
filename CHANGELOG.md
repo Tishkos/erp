@@ -8,6 +8,22 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 ## Unreleased
 
 ### Added
+- REQ-HR-001 HR-5 — **Recruitment** and **Performance**. A vacancy (VAC-…)
+  for a position, drafted by HR and opened by the HR manager; its applicants
+  (APL-…, CV filed on their record) move forward through screening,
+  interview and offer — never back, out with a note — and an offer hired is
+  an employee made in the vacancy's branch, department and position, its
+  first history row naming the application (one record per person: a known
+  national id is refused). The last hire fills the vacancy; a filled or
+  closed vacancy tells the rest of its pipeline no. The sweep raises a
+  vacancy past its closing day. **Review cycles** on HR Settings; a cycle's
+  reviews (REV-…) started for everybody with a manager who signs in; HR sets
+  the goals and their weights, only the reviewer rates them, the overall is
+  the weighted average; the person reads their own review and adds their word
+  once; an HR manager who is neither the reviewer nor the person signs it off,
+  after which it is the record. The dashboard shows reviews and offers
+  waiting on me; the employee page shows where the person was hired from and
+  their reviews. Migration 0259.
 - REQ-HR-001 HR-4 — **Advances & Loans**. A salary advance or a loan
   (EADV-…) asked for by HR or by the person, endorsed by their manager,
   approved by Finance (never by the asker, the person or the endorser), paid

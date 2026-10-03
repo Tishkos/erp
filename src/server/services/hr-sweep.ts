@@ -15,6 +15,8 @@
  *   advance behind      HR-4: a paid advance or loan whose recoveries are
  *                       behind its schedule at the end of last month → the
  *                       HR managers, once per advance per month
+ *   vacancy overdue     HR-5: an open vacancy past its closing day → the HR
+ *                       managers, once per vacancy per closing day
  *
  * The limits are `hr_parameter` rows (R4), edited on HR Settings.
  */
@@ -28,6 +30,7 @@ import * as advances from './employee-advances';
 import * as hrSettings from './hr-settings';
 import * as leave from './leave';
 import * as notifications from './notifications';
+import * as recruitment from './recruitment';
 
 export interface SweepRun {
   readonly asOf: string;
@@ -35,6 +38,7 @@ export interface SweepRun {
   readonly leaveWaiting: number;
   readonly leaveLapsing: number;
   readonly advancesBehind: number;
+  readonly vacanciesOverdue: number;
   readonly created: number;
 }
 
@@ -162,7 +166,19 @@ export async function run(tx: Tx, principal: Principal, asOf: string): Promise<S
     created += raised.created;
   }
 
-  return { asOf, contractsExpiring: ending.length, leaveWaiting: waiting.rows.length, leaveLapsing: lapsing, advancesBehind: behind.length, created };
+  // HR-5 — open vacancies past their closing day: extend it, or close it with its reason.
+  const overdue = await recruitment.overdueAsOf(tx, asOf);
+  for (const seat of overdue) {
+    const raised = await notifications.raise(
+      tx,
+      { eventType: 'hr.vacancy_overdue', objectType: recruitment.VACANCY_OBJECT, objectId: seat.vacancyNo, occurrence: seat.closesOn ?? asOf },
+      { vacancyNo: seat.vacancyNo, position: seat.positionCode, closesOn: seat.closesOn, hired: `${seat.hired} of ${seat.headcount}` },
+      { branchCode: seat.branchCode, actorUserId: principal.userId },
+    );
+    created += raised.created;
+  }
+
+  return { asOf, contractsExpiring: ending.length, leaveWaiting: waiting.rows.length, leaveLapsing: lapsing, advancesBehind: behind.length, vacanciesOverdue: overdue.length, created };
 }
 
 export type { ActorContext };

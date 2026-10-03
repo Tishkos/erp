@@ -11,7 +11,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { bankLoan, customsPd, journalEntry, payable, paymentApplication, shipmentContainer } from './db/schema';
+import { applicant, bankLoan, customsPd, journalEntry, payable, paymentApplication, shipmentContainer } from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -146,6 +146,16 @@ const loanParentAccess = async (tx: Tx, principal: Principal, objectId: string) 
   return Boolean(row);
 };
 
+/**
+ * REQ-HR-001 HR-5 — an applicant's CV and letters: recruitment's own grant,
+ * and the applicant's row policy (which asks for it too) answers the branch.
+ */
+const applicantParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'recruitment')) return false;
+  const [row] = await tx.select({ id: applicant.id }).from(applicant).where(eq(applicant.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -160,6 +170,7 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('customs_pd', customsPdParentAccess);
   attachments.registerParentAccessCheck('shipment_container', containerParentAccess);
   attachments.registerParentAccessCheck('bank_loan', loanParentAccess);
+  attachments.registerParentAccessCheck('applicant', applicantParentAccess);
 }
 
 /** Streams a stored file, for a route handler that has already checked access. */

@@ -147,9 +147,10 @@ function kindOf(value: string): EmploymentKind {
   return value;
 }
 
-export async function create(tx: Tx, ctx: ActorContext, input: EmployeeInput): Promise<{ id: string; employeeNo: string }> {
+/** `reason` is said on the first history row — HR-5's hire names the application it came from. */
+export async function create(tx: Tx, ctx: ActorContext, input: EmployeeInput, reason: string | null = null): Promise<{ id: string; employeeNo: string }> {
   await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, { branchCode: ctx.branchCode });
-  return insertEmployee(tx, ctx, ctx.branchCode, input, { appUserId: null, reason: null });
+  return insertEmployee(tx, ctx, ctx.branchCode, input, { appUserId: null, reason });
 }
 
 export interface UserEmployeeInput {

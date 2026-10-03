@@ -316,6 +316,8 @@ export default async function Home() {
         waiting.leaveAwaiting.length > 0 ||
         waiting.payrollAwaiting.length > 0 ||
         waiting.advancesAwaiting.length > 0 ||
+        waiting.reviewsAwaiting.length > 0 ||
+        waiting.hiresAwaiting.length > 0 ||
         waiting.holdsNeedingReason.length > 0) ? (
         <Band
           count={
@@ -325,7 +327,9 @@ export default async function Home() {
             waiting.receiptsAwaiting.length +
             waiting.leaveAwaiting.length +
             waiting.payrollAwaiting.length +
-            waiting.advancesAwaiting.length
+            waiting.advancesAwaiting.length +
+            waiting.reviewsAwaiting.length +
+            waiting.hiresAwaiting.length
           }
           href="/approvals"
           hrefLabel={t('dashboard.open_approvals')}
@@ -466,6 +470,50 @@ export default async function Home() {
                   </td>
                   <td>
                     <Link href={`/hr/advances/${encodeURIComponent(advance.advanceNo)}`}>{t('dashboard.open_advance')}</Link>
+                  </td>
+                </tr>
+              ))}
+            </BandTable>
+          ) : null}
+
+          {/* REQ-HR-001 HR-5 — reviews waiting for me: to rate, to sign off, to read and answer. */}
+          {waiting.reviewsAwaiting.length > 0 ? (
+            <BandTable headings={[t('dashboard.reviews_awaiting'), t('dashboard.review_cycle'), '']}>
+              {waiting.reviewsAwaiting.map((review) => (
+                <tr key={`rv:${review.reviewNo}`}>
+                  <td className={s.sapAccountCell}>
+                    <Link href={`/hr/performance/${encodeURIComponent(review.reviewNo)}`}>
+                      <bdi dir="ltr">{review.reviewNo}</bdi>
+                    </Link>{' '}
+                    · <bdi dir="auto">{review.fullNameEn}</bdi> · {t(`dashboard.review_action_${review.action}`)}
+                  </td>
+                  <td>
+                    <bdi dir="ltr">{review.cycleCode}</bdi>
+                  </td>
+                  <td>
+                    <Link href={`/hr/performance/${encodeURIComponent(review.reviewNo)}`}>{t('dashboard.open_review')}</Link>
+                  </td>
+                </tr>
+              ))}
+            </BandTable>
+          ) : null}
+
+          {/* REQ-HR-001 HR-5 — offers made, waiting for the hire. */}
+          {waiting.hiresAwaiting.length > 0 ? (
+            <BandTable headings={[t('dashboard.hires_awaiting'), t('dashboard.vacancy'), '']}>
+              {waiting.hiresAwaiting.map((offer) => (
+                <tr key={`hi:${offer.applicantNo}`}>
+                  <td className={s.sapAccountCell}>
+                    <Link href={`/hr/recruitment/applicants/${encodeURIComponent(offer.applicantNo)}`}>
+                      <bdi dir="ltr">{offer.applicantNo}</bdi>
+                    </Link>{' '}
+                    · <bdi dir="auto">{offer.fullNameEn}</bdi>
+                  </td>
+                  <td>
+                    <bdi dir="ltr">{offer.vacancyNo}</bdi>
+                  </td>
+                  <td>
+                    <Link href={`/hr/recruitment/applicants/${encodeURIComponent(offer.applicantNo)}`}>{t('dashboard.open_applicant')}</Link>
                   </td>
                 </tr>
               ))}

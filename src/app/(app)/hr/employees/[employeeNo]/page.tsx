@@ -22,6 +22,8 @@ import * as leave from '@/server/services/leave';
 import * as payroll from '@/server/services/payroll';
 import * as advances from '@/server/services/employee-advances';
 import * as equipment from '@/server/services/employee-assets';
+import * as performance from '@/server/services/performance';
+import * as recruitment from '@/server/services/recruitment';
 import { showDays, daysFrom, weekdayOf } from '@/server/domain/hr-time';
 import {
   adjustLeaveBalance,
@@ -74,6 +76,8 @@ export default async function EmployeePage({ params, searchParams }: { params: P
   const maySeeEquipment = can(principal, 'view', equipment.PERMISSION_OBJECT);
   const mayHandOut = can(principal, 'create', equipment.PERMISSION_OBJECT);
   const mayTakeBack = can(principal, 'edit_draft', equipment.PERMISSION_OBJECT);
+  const maySeeReviews = can(principal, 'view', performance.PERMISSION_OBJECT);
+  const maySeeRecruitment = can(principal, 'view', recruitment.PERMISSION_OBJECT);
   const query = await searchParams;
   const today = businessToday();
   const monthParam = typeof query.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(query.month) ? query.month : today.slice(0, 7);
@@ -114,6 +118,9 @@ export default async function EmployeePage({ params, searchParams }: { params: P
       equipment: maySeeEquipment ? await equipment.ofEmployee(tx, row.id) : [],
       freeAssets: mayHandOut ? await equipment.available(tx) : [],
       clearance: maySeeAdvances || maySeeEquipment ? await equipment.clearanceOf(tx, row.id) : null,
+      // HR-5 — the application the person was hired from, and their reviews.
+      hiredFrom: maySeeRecruitment ? await recruitment.hiredFrom(tx, row.id) : null,
+      reviews: maySeeReviews ? await performance.ofEmployee(tx, row.id) : [],
     };
   });
   if (!found) notFound();
@@ -145,6 +152,18 @@ export default async function EmployeePage({ params, searchParams }: { params: P
     { label: x('position'), value: <bdi dir="auto">{row.positionTitle ?? '—'}</bdi> },
     { label: x('manager'), value: <bdi dir="auto">{row.managerName ? `${row.managerNo} · ${row.managerName}` : '—'}</bdi> },
     { label: x('hire_date'), value: <bdi dir="ltr">{day(row.hireDate)}</bdi> },
+    ...(found.hiredFrom
+      ? [
+          {
+            label: x('hired_from'),
+            value: (
+              <Link className={s.sapLink} href={`/hr/recruitment/applicants/${encodeURIComponent(found.hiredFrom.applicantNo)}`}>
+                <bdi dir="ltr">{`${found.hiredFrom.applicantNo} · ${found.hiredFrom.vacancyNo}`}</bdi>
+              </Link>
+            ),
+          },
+        ]
+      : []),
     { label: x('employment_kind'), value: x(`kind_${row.employmentKind}`) },
     ...(row.contractEndDate ? [{ label: x('contract_end_date'), value: <bdi dir="ltr">{day(row.contractEndDate)}</bdi> }] : []),
     ...(row.status === 'ended'
@@ -765,6 +784,68 @@ export default async function EmployeePage({ params, searchParams }: { params: P
                 </Form>
               </div>
             ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {/* REQ-HR-001 HR-5 — the person's performance reviews, cycle by cycle. */}
+      {maySeeReviews ? (
+        <section aria-labelledby="employee-reviews-title" className={s.sapDoc}>
+          <div className={s.sapWindow}>
+            <h2 className={s.sapTitle} id="employee-reviews-title">
+              <span>{x('reviews_title')}</span>
+              <span className={s.sapTitleMeta}>{t('rows_shown', { count: found.reviews.length })}</span>
+            </h2>
+            <div className={s.sapTableWrap}>
+              <table aria-labelledby="employee-reviews-title" className={s.sapTable}>
+                <thead>
+                  <tr>
+                    <th scope="col">{column('reference')}</th>
+                    <th scope="col">{x('review_cycle')}</th>
+                    <th scope="col">{x('reviewer')}</th>
+                    <th className={s.sapNum} scope="col">
+                      {x('review_overall')}
+                    </th>
+                    <th scope="col">{column('status')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {found.reviews.length === 0 ? (
+                    <tr>
+                      <td className={s.sapEmptyRow} colSpan={5}>
+                        {x('reviews_none')}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {found.reviews.map((r) => {
+                    const tone = { draft: 'draft', rated: 'submitted', signed_off: 'posted', cancelled: 'cancelled' }[r.status] ?? 'draft';
+                    return (
+                      <tr key={r.reviewNo}>
+                        <td>
+                          <Link className={s.sapLink} href={`/hr/performance/${encodeURIComponent(r.reviewNo)}`}>
+                            <bdi dir="ltr">{r.reviewNo}</bdi>
+                          </Link>
+                        </td>
+                        <td>
+                          <bdi dir="ltr">{r.cycleCode}</bdi>
+                        </td>
+                        <td>
+                          <bdi dir="auto">{r.reviewerName ?? '—'}</bdi>
+                        </td>
+                        <td className={s.sapNum}>
+                          <bdi dir="ltr">{r.overallRating ?? '—'}</bdi>
+                        </td>
+                        <td>
+                          <span className={`status status--${tone} ${s.sapRegisterStatus}`} data-status={tone}>
+                            {x(`review_status_${r.status}`)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       ) : null}

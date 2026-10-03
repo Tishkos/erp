@@ -14,6 +14,8 @@ import { rows as listRows } from './list';
 import * as leave from './leave';
 import * as payroll from './payroll';
 import * as advances from './employee-advances';
+import * as performance from './performance';
+import * as recruitment from './recruitment';
 import * as notifications from './notifications';
 import * as openItems from './open-items';
 import * as statement from './partner-statement';
@@ -122,6 +124,9 @@ export interface Waiting {
   readonly payrollAwaiting: readonly payroll.PayrollWaiting[];
   /** REQ-HR-001 HR-4 — advances and loans waiting on this reader: to endorse, to approve, to pay. */
   readonly advancesAwaiting: readonly advances.AdvanceWaiting[];
+  /** REQ-HR-001 HR-5 — reviews waiting on this reader: to rate, to sign off, to read; offers waiting for a hire. */
+  readonly reviewsAwaiting: readonly performance.ReviewWaiting[];
+  readonly hiresAwaiting: readonly recruitment.HireWaiting[];
   readonly unreadNotifications: number;
 }
 
@@ -245,6 +250,8 @@ export async function waitingFor(tx: Tx, principal: Principal): Promise<Waiting>
     leaveAwaiting: await leave.waitingFor(tx, { principal, branchCode: '' }),
     payrollAwaiting: await payroll.waitingFor(tx, { principal }),
     advancesAwaiting: await advances.waitingFor(tx, { principal }),
+    reviewsAwaiting: await performance.waitingFor(tx, { principal }),
+    hiresAwaiting: await recruitment.waitingFor(tx, { principal }),
     unreadNotifications: unread.length,
   };
 }

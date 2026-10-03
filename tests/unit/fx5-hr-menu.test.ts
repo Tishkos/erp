@@ -35,8 +35,8 @@ describe('FX15 · the HR menu', () => {
     expect(en.nav.hr_payroll).toBe('Human Resources');
   });
 
-  it('Employees, Departments, Positions, Attendance, Leave Management, Payroll and Advances & Loans are built, under /hr', () => {
+  it('Employees, Departments, Positions, Attendance, Leave Management, Payroll, Advances & Loans, Recruitment and Performance are built, under /hr', () => {
     const built = hr.items.filter((item) => isDelivered(routeFor(item, hr.key))).map((item) => routeFor(item, hr.key));
-    expect(built).toEqual(['/hr/employees', '/hr/departments', '/hr/positions', '/hr/attendance', '/hr/leave', '/hr/payroll', '/hr/advances']);
+    expect(built).toEqual(['/hr/employees', '/hr/departments', '/hr/positions', '/hr/attendance', '/hr/leave', '/hr/payroll', '/hr/advances', '/hr/recruitment', '/hr/performance']);
   });
 });
