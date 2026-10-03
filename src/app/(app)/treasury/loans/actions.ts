@@ -13,7 +13,7 @@ import { DUE_ROWS, NEW_BANK } from './form';
  * Bank loans — REQ-AP-001 §15.7, §21.10. Every verb is the service's; these
  * only read the form and say where to come back to.
  */
-const LIST = '/payables/loans';
+const LIST = '/treasury/loans';
 const record = (loanNo: string) => `${LIST}/${encodeURIComponent(loanNo)}`;
 
 /** Amount as typed ("3,500.00") at the money scale; null when blank. */
@@ -157,6 +157,28 @@ export async function payInstalmentAction(formData: FormData): Promise<void> {
       loans.payInstalment(tx, ctx, text(formData, 'instalment_id'), {
         paidDate: text(formData, 'paid_date'),
         reference: text(formData, 'reference'),
+      }),
+    record(loanNo),
+  );
+}
+
+/**
+ * End the loan early — by direction, 2026-10-03.
+ *
+ * The principal outstanding and the interest accrued are the service's to work
+ * out; what comes from the form is the day, the bank's reference, and the two
+ * figures the bank itself quotes — its charge for ending early, and the
+ * interest where it asks for something other than the accrual.
+ */
+export async function settleLoanEarly(formData: FormData): Promise<void> {
+  const loanNo = text(formData, 'loan_no');
+  await runAdminAndReturn(
+    async (tx, ctx) =>
+      loans.settleEarly(tx, ctx, (await loans.loadByNo(tx, loanNo)).id, {
+        onDate: text(formData, 'paid_date'),
+        reference: text(formData, 'reference'),
+        feeTxn: amountOf(text(formData, 'fee')),
+        interestTxn: amountOf(text(formData, 'interest')),
       }),
     record(loanNo),
   );

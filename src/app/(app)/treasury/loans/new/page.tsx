@@ -404,7 +404,7 @@ export default async function NewLoanPage({ searchParams }: { readonly searchPar
 
   return (
     <AdminPage
-      back={{ href: '/payables/loans', label: admin('back') }}
+      back={{ href: '/treasury/loans', label: admin('back') }}
       title={t('new')}
       trail={[{ href: '/', label: admin('dashboard_label') }]}
       variant="sap"
@@ -421,7 +421,7 @@ export default async function NewLoanPage({ searchParams }: { readonly searchPar
                 terms they describe. The schedule is worked out on the server
                 because the arithmetic belongs to the domain (2026-10-03).
               */}
-              <Submit formAction="/payables/loans/new" formMethod="get" label={t('update_schedule')} tone="secondary" variant="document" />
+              <Submit formAction="/treasury/loans/new" formMethod="get" label={t('update_schedule')} tone="secondary" variant="document" />
               <Submit label={t('create')} variant="document" />
             </>
           }

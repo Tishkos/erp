@@ -372,7 +372,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('cash_accounts', 'bank_account', '/master-data/cash-accounts'),
       // REQ-FIX-001 FIX-1 — the bank's side of the company's money: its loans
       // (route kept, D-FX-1) and the deposits made into it by hand (D-FX-2).
-      page('loans', 'bank_loan', '/payables/loans'),
+      page('loans', 'bank_loan', '/treasury/loans'),
       page('bank_deposits', 'bank_cash_account', '/treasury/deposits'),
       // Bank and Cash Reporting — every account's balance and what it is
       // made of, beside the accounts themselves (2026-09-29).

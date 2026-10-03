@@ -522,3 +522,121 @@ describe('§15.6 · the sweep, approvals, cancel', () => {
     expect(await rejection(set([{ dueDate: '2027-01-01', principalTxn: iqd('1000000') }]))).toMatch(/fixed when it was approved/);
   });
 });
+
+/**
+ * The lifecycle, as the sponsor stated it (2026-10-03).
+ *
+ * "Outstanding Principal = Original Principal − Posted Principal Repayments.
+ * When outstanding principal reaches zero… → Fully Repaid", and "don't use
+ * 'fully repaid' based only on the number of payments".
+ *
+ * So the two are pulled apart here: a loan whose instalments are all paid *is*
+ * settled because its principal came back, and a loan settled early is settled
+ * with instalments still on its schedule. The count never decides.
+ */
+describe('§15.6 · fully repaid is read from what was posted', () => {
+  it('each repayment lowers the outstanding principal, and the last one settles it', async () => {
+    await fundBank(world, '2000000.0000');
+    const loan = await createLoan();
+    await approveLoan(loan.id);
+    await disburse(loan.id);
+
+    const position = () => withScope(scope(world.manager), (tx) => loans.positionOf(tx, loan.id));
+    const start = await position();
+    expect([start.principal, start.principalRepaid, start.outstanding]).toEqual([
+      iqd('1000000'),
+      0n,
+      iqd('1000000'),
+    ]);
+    expect(start.instalmentsLeft).toBe(4);
+
+    const rows = await scheduleOf(loan.id);
+    const pay = (index: number, on: string) =>
+      withScope(scope(world.manager), (tx) =>
+        loans.payInstalment(tx, world.manager, rows[index].id, { paidDate: on, reference: `RAF-${index + 1}` }),
+      );
+
+    await pay(0, '2026-10-15');
+    const afterOne = await position();
+    expect(afterOne.principalRepaid).toBe(iqd('250000'));
+    expect(afterOne.outstanding).toBe(iqd('750000'));
+    expect((await loanRow(loan.id)).status).toBe('active');
+
+    await pay(1, '2026-11-15');
+    await pay(2, '2026-12-15');
+    const afterThree = await position();
+    expect(afterThree.outstanding).toBe(iqd('250000'));
+    expect((await loanRow(loan.id)).status).toBe('active');
+
+    // The last one takes the principal to nothing: settled, and dated.
+    await pay(3, '2026-12-20');
+    const done = await position();
+    expect(done.outstanding).toBe(0n);
+    expect(done.principalRepaid).toBe(iqd('1000000'));
+    expect(done.instalmentsLeft).toBe(0);
+    const settled = await loanRow(loan.id);
+    expect(settled.status).toBe('fully_repaid');
+    expect(settled.repaid_on).toEqual(expect.anything());
+
+    // And the ledger holds one row per payment, with the parts split.
+    const repayments = await withScope(scope(world.manager), (tx) => loans.repaymentsOf(tx, loan.id));
+    expect(repayments).toHaveLength(4);
+    expect(repayments.every((row) => row.kind === 'instalment')).toBe(true);
+  });
+
+  it('an early settlement repays what is left and settles the loan with instalments still standing', async () => {
+    await fundBank(world, '2000000.0000');
+    const loan = await createLoan();
+    await approveLoan(loan.id);
+    await disburse(loan.id);
+    const rows = await scheduleOf(loan.id);
+    await withScope(scope(world.manager), (tx) =>
+      loans.payInstalment(tx, world.manager, rows[0].id, { paidDate: '2026-10-15', reference: 'RAF-1' }),
+    );
+
+    // What it would cost to end it today — principal left, plus the interest
+    // earned since that payment.
+    const quote = await withScope(scope(world.manager), (tx) =>
+      loans.settlementQuote(tx, loan.id, '2026-11-30'),
+    );
+    expect(quote.outstanding).toBe(iqd('750000'));
+    expect(quote.accruedFrom).toBe('2026-10-15');
+
+    await withScope(scope(world.manager), (tx) =>
+      loans.settleEarly(tx, world.manager, loan.id, {
+        onDate: '2026-11-30',
+        reference: 'RAF-SETTLE',
+        feeTxn: iqd('5000'),
+      }),
+    );
+
+    const done = await withScope(scope(world.manager), (tx) => loans.positionOf(tx, loan.id));
+    expect(done.outstanding).toBe(0n);
+    expect(done.principalRepaid).toBe(iqd('1000000'));
+    expect(done.feesPaid >= iqd('5000')).toBe(true);
+    expect(done.instalmentsLeft).toBe(0);
+
+    const settled = await loanRow(loan.id);
+    expect(settled.status).toBe('fully_repaid');
+    expect(settled.repaid_on).toEqual(expect.anything());
+
+    // Three instalments were still on the schedule when it was settled: they
+    // are marked paid against the settlement, not deleted.
+    const after = await scheduleOf(loan.id);
+    expect(after).toHaveLength(4);
+    expect(after.every((row: { status: string }) => row.status === 'paid')).toBe(true);
+
+    // And the ledger says what actually happened: one instalment, one settlement.
+    const repayments = await withScope(scope(world.manager), (tx) => loans.repaymentsOf(tx, loan.id));
+    expect(repayments.map((row) => row.kind).sort()).toEqual(['instalment', 'settlement']);
+  });
+
+  it('refuses to settle a loan that owes nothing, and one that is not active', async () => {
+    const loan = await createLoan();
+    const settle = () =>
+      withScope(scope(world.manager), (tx) =>
+        loans.settleEarly(tx, world.manager, loan.id, { onDate: '2026-11-30', reference: 'X' }),
+      );
+    expect(await rejection(settle())).toMatch(/only a disbursed loan is settled/);
+  });
+});

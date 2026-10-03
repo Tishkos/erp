@@ -35,6 +35,7 @@ import {
   bankLoan,
   bankLoanAllocation,
   bankLoanInstalment,
+  bankLoanRepayment,
   landedCostCharge,
   loanCommissionTreatment,
   payable,
@@ -461,6 +462,154 @@ export async function setSchedule(tx: Tx, ctx: ActorContext, loanId: string, row
 }
 
 // ---------------------------------------------------------------------------
+// Where the loan stands — read from what was posted, never from a count
+// ---------------------------------------------------------------------------
+
+export interface LoanPosition {
+  /** What the bank lent. */
+  readonly principal: bigint;
+  /** What has been repaid of it, posted. */
+  readonly principalRepaid: bigint;
+  /** What is left — the principal less what came back. Never below nothing. */
+  readonly outstanding: bigint;
+  readonly interestPaid: bigint;
+  readonly feesPaid: bigint;
+  /** Everything that has left the bank account for this loan. */
+  readonly totalPaid: bigint;
+  /** Instalments still asking for money. */
+  readonly instalmentsLeft: number;
+  /** What those come to, as the schedule stands. */
+  readonly scheduledLeft: bigint;
+  /** The day the principal reached nothing, where it has. */
+  readonly repaidOn: string | null;
+  readonly settled: boolean;
+}
+
+/**
+ * Where a loan stands, from the ledger of posted repayments (0275).
+ *
+ * "Outstanding Principal = Original Principal − Posted Principal Repayments"
+ * — and nothing else. A loan with four instalments all marked paid but only
+ * three posted is not repaid; a loan whose principal came back in one early
+ * payment is, whatever its schedule still says.
+ */
+export async function positionOf(tx: Tx, loanId: string): Promise<LoanPosition> {
+  const [loan] = await tx.select().from(bankLoan).where(eq(bankLoan.id, loanId)).limit(1);
+  if (!loan) throw new LoanError('No such loan.');
+
+  const paid = await tx
+    .select({
+      principal: sql<string>`coalesce(sum(${bankLoanRepayment.principalTxn}), 0)::text`,
+      interest: sql<string>`coalesce(sum(${bankLoanRepayment.interestTxn}), 0)::text`,
+      fees: sql<string>`coalesce(sum(${bankLoanRepayment.feesTxn}), 0)::text`,
+      total: sql<string>`coalesce(sum(${bankLoanRepayment.totalTxn}), 0)::text`,
+      last: sql<string | null>`max(${bankLoanRepayment.paidDate})::text`,
+    })
+    .from(bankLoanRepayment)
+    .where(eq(bankLoanRepayment.loanId, loanId));
+
+  const row = paid[0]!;
+  const principal = amountOf(loan.principalTxn);
+  const principalRepaid = amountOf(row.principal);
+  const outstanding = principalRepaid >= principal ? 0n : principal - principalRepaid;
+
+  // What the schedule is still asking for: rows nobody has paid that ask for
+  // something. A grace row asks for nothing and is not one of them.
+  const open = await tx
+    .select({ total: bankLoanInstalment.totalTxn })
+    .from(bankLoanInstalment)
+    .where(
+      and(
+        eq(bankLoanInstalment.loanId, loanId),
+        isNull(bankLoanInstalment.supersededAt),
+        sql`${bankLoanInstalment.status} <> 'paid'`,
+      ),
+    );
+  const live = open.map((instalment) => amountOf(instalment.total)).filter((total) => total > 0n);
+
+  return {
+    principal,
+    principalRepaid,
+    outstanding,
+    interestPaid: amountOf(row.interest),
+    feesPaid: amountOf(row.fees),
+    totalPaid: amountOf(row.total),
+    instalmentsLeft: live.length,
+    scheduledLeft: live.reduce((sum, total) => sum + total, 0n),
+    repaidOn: loan.repaidOn,
+    settled: loan.status === 'fully_repaid',
+  };
+}
+
+/**
+ * Fully repaid, when it is — and never because somebody said so.
+ *
+ * The rule is the one the sponsor stated: the outstanding principal is nothing,
+ * and nothing else is still being asked for. A loan that still has an
+ * instalment carrying interest is not settled, however much principal came
+ * back; a loan whose last instalment was waived by an early settlement is,
+ * because the settlement marked those rows paid as it posted.
+ *
+ * Called after every repayment. Returns whether it settled the loan, so the
+ * caller can say so on the import's log.
+ */
+async function settleIfCleared(
+  tx: Tx,
+  ctx: ActorContext,
+  loan: { readonly id: string; readonly loanNo: string; readonly status: string; readonly branchCode: string },
+  onDate: string,
+): Promise<boolean> {
+  if (loan.status !== 'active') return false;
+  const position = await positionOf(tx, loan.id);
+  if (position.outstanding > 0n || position.instalmentsLeft > 0) return false;
+
+  assertMove(loan.loanNo, loan.status, 'fully_repaid');
+  await tx
+    .update(bankLoan)
+    .set({ status: 'fully_repaid', repaidOn: onDate, updatedAt: new Date() })
+    .where(eq(bankLoan.id, loan.id));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'bank_loan.fully_repaid',
+    objectType: PERMISSION_OBJECT,
+    objectId: loan.id,
+    branchCode: loan.branchCode,
+    before: { status: loan.status },
+    after: {
+      status: 'fully_repaid',
+      repaidOn: onDate,
+      principalRepaid: money(position.principalRepaid),
+      interestPaid: money(position.interestPaid),
+      feesPaid: money(position.feesPaid),
+      totalPaid: money(position.totalPaid),
+    },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+  return true;
+}
+
+/** Every posted repayment of a loan, newest first — the record's own list. */
+export async function repaymentsOf(tx: Tx, loanId: string) {
+  return tx
+    .select({
+      id: bankLoanRepayment.id,
+      kind: bankLoanRepayment.kind,
+      paidDate: bankLoanRepayment.paidDate,
+      principalTxn: bankLoanRepayment.principalTxn,
+      interestTxn: bankLoanRepayment.interestTxn,
+      feesTxn: bankLoanRepayment.feesTxn,
+      totalTxn: bankLoanRepayment.totalTxn,
+      reference: bankLoanRepayment.reference,
+      journalEntryId: bankLoanRepayment.journalEntryId,
+    })
+    .from(bankLoanRepayment)
+    .where(eq(bankLoanRepayment.loanId, loanId))
+    .orderBy(desc(bankLoanRepayment.paidDate), desc(bankLoanRepayment.createdAt));
+}
+
+// ---------------------------------------------------------------------------
 // submit — the offer, as the bank wrote it, put in front of somebody else
 // ---------------------------------------------------------------------------
 
@@ -756,14 +905,33 @@ export async function payInstalment(
     })
     .where(eq(bankLoanInstalment.id, instalment.id));
 
+  /*
+   * The ledger the status is read from (0275). What was paid, split the way
+   * the instalment split it — the commission a spread treatment rides on the
+   * instalments is a fee, not principal and not interest.
+   */
+  await tx.insert(bankLoanRepayment).values({
+    loanId: loan.id,
+    instalmentId: instalment.id,
+    kind: 'instalment',
+    paidDate: input.paidDate,
+    principalTxn: instalment.principalTxn,
+    interestTxn: instalment.interestTxn,
+    feesTxn: instalment.commissionTxn,
+    totalTxn: instalment.totalTxn,
+    totalIqd: money(totalIqd),
+    reference,
+    journalEntryId: result.journalEntryId,
+    createdBy: ctx.principal.userId,
+  });
+
+  /*
+   * Fully repaid, if this was what cleared it — worked out from the ledger,
+   * not from the instalments that happen to be left. The old rule counted
+   * rows, which said nothing about what had actually been paid.
+   */
+  const settledNow = await settleIfCleared(tx, ctx, loan, input.paidDate);
   const remaining = schedule.filter((row) => row.id !== instalment.id && row.status !== 'paid');
-  if (remaining.length === 0) {
-    assertMove(loan.loanNo, loan.status, 'fully_repaid');
-    await tx
-      .update(bankLoan)
-      .set({ status: 'fully_repaid', updatedAt: new Date() })
-      .where(eq(bankLoan.id, loan.id));
-  }
 
   for (const payableId of await fundedPayables(tx, loan.id)) {
     await events.record(tx, {
@@ -771,7 +939,7 @@ export async function payInstalment(
       eventCode: 'LOAN_INSTALMENT_PAID',
       summary:
         `${loan.loanNo} instalment ${instalment.sequence} repaid on ${input.paidDate} — ` +
-        `${loan.currency} ${shown(amountOf(instalment.totalTxn))}${remaining.length === 0 ? '; the loan is fully repaid' : ''}`,
+        `${loan.currency} ${shown(amountOf(instalment.totalTxn))}${settledNow ? '; the loan is fully repaid' : ''}`,
       sourceType: PERMISSION_OBJECT,
       sourceId: loan.id,
       sourceNo: loan.loanNo,
@@ -871,6 +1039,203 @@ export async function payCommission(
 // ---------------------------------------------------------------------------
 // cancel — before the money arrives, with a reason
 // ---------------------------------------------------------------------------
+
+/**
+ * What it would cost to end the loan today — by direction, 2026-10-03.
+ *
+ * The principal still outstanding, the interest earned since the last
+ * instalment that was paid (on that outstanding, actual/365, the same count the
+ * schedule uses), and whatever the bank charges for ending it early, which is
+ * its own figure and is typed. Nothing is written: this is the quote a person
+ * reads before deciding.
+ */
+export async function settlementQuote(tx: Tx, loanId: string, onDate: string) {
+  const [loan] = await tx.select().from(bankLoan).where(eq(bankLoan.id, loanId)).limit(1);
+  if (!loan) throw new LoanError('No such loan.');
+  const position = await positionOf(tx, loanId);
+
+  /*
+   * Interest runs from the last date money changed hands — the last repayment,
+   * or the disbursement if none has — to the day of the settlement.
+   */
+  const [latest] = await tx
+    .select({ paidDate: bankLoanRepayment.paidDate })
+    .from(bankLoanRepayment)
+    .where(eq(bankLoanRepayment.loanId, loanId))
+    .orderBy(desc(bankLoanRepayment.paidDate))
+    .limit(1);
+  const from = latest?.paidDate ?? loan.disbursementDate ?? onDate;
+  const days = BigInt(Math.max(0, Math.round((Date.parse(onDate) - Date.parse(from)) / 86_400_000)));
+  const rate = loan.interestPctPa ? percentOf(loan.interestPctPa, 'An interest rate') : 0n;
+  const accrued =
+    rate > 0n && position.outstanding > 0n
+      ? (position.outstanding * rate * days) / (100n * 10n ** MONEY_SCALE * 365n)
+      : 0n;
+
+  return {
+    outstanding: position.outstanding,
+    accruedFrom: from,
+    accruedDays: Number(days),
+    accruedInterest: accrued,
+    /** What the bank charges to end it early. Typed, because the bank quotes it. */
+    feeTxn: 0n,
+    total: position.outstanding + accrued,
+  };
+}
+
+/**
+ * End the loan early: pay what is left in one go — by direction, 2026-10-03.
+ *
+ * One posting, one repayment row: the principal still outstanding, the interest
+ * accrued to the day, and the bank's early-settlement charge. Every instalment
+ * still standing is marked paid against it, because the schedule no longer
+ * describes anything that will happen — and the loan becomes fully repaid by
+ * the same rule every other repayment goes through, not by this function
+ * deciding it.
+ */
+export async function settleEarly(
+  tx: Tx,
+  ctx: ActorContext,
+  loanId: string,
+  input: {
+    readonly onDate: string;
+    readonly reference: string;
+    /** The bank's charge for ending it early; nothing when it makes none. */
+    readonly feeTxn?: bigint | null;
+    /** The interest the bank asks for, when it differs from the accrual. */
+    readonly interestTxn?: bigint | null;
+  },
+) {
+  const loan = await lock(tx, loanId);
+  await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, { branchCode: loan.branchCode });
+  if (loan.status !== 'active') {
+    throw new LoanError(`${loan.loanNo} is ${loan.status.replace('_', ' ')}; only a disbursed loan is settled.`);
+  }
+  const reference = input.reference?.trim() ?? '';
+  if (!reference) throw new LoanError('Give the bank’s reference for the settlement.');
+  if (!input.onDate) throw new LoanError('Give the date the settlement was paid.');
+
+  const quote = await settlementQuote(tx, loanId, input.onDate);
+  if (quote.outstanding <= 0n) {
+    throw new LoanError(`${loan.loanNo} has no principal outstanding; there is nothing to settle.`);
+  }
+  const interest = input.interestTxn ?? quote.accruedInterest;
+  const fee = input.feeTxn ?? 0n;
+  if (interest < 0n || fee < 0n) throw new LoanError('A settlement’s interest and fee are never negative.');
+  const total = quote.outstanding + interest + fee;
+
+  const account = await accountOf(tx, loan.bankCashAccountId);
+  const convert = async (value: bigint) =>
+    value > 0n ? (await rateService.convertOn(tx, value, loan.currency, input.onDate)).amountIqd : 0n;
+  const principalIqd = await convert(quote.outstanding);
+  const interestIqd = await convert(interest);
+  const feeIqd = await convert(fee);
+  const totalIqd = principalIqd + interestIqd + feeIqd;
+
+  const criteria = { branchCode: loan.branchCode };
+  const dimensions = { branch: loan.branchCode };
+  const result = await posting.post(tx, ctx, {
+    eventType: 'treasury.loan_repayment',
+    documentTypeCode: PERMISSION_OBJECT,
+    source: { module: 'treasury', documentId: loan.id, event: 'settled' },
+    branchCode: loan.branchCode,
+    documentDate: input.onDate,
+    postingDate: input.onDate,
+    description: `Loan ${loan.loanNo} settled early — ${loan.currency} ${shown(total)} (${reference})`,
+    lines: [
+      { role: 'loan_liability', debit: money(principalIqd), criteria, dimensions, loanNo: loan.loanNo },
+      ...(interestIqd > 0n ? [{ role: 'loan_interest', debit: money(interestIqd), criteria, dimensions }] : []),
+      ...(feeIqd > 0n
+        ? [{ role: commissionRole(false), debit: money(feeIqd), criteria, dimensions }]
+        : []),
+      {
+        role: 'bank',
+        accountId: account.glAccountId,
+        credit: money(totalIqd),
+        criteria,
+        dimensions,
+        bankAccountCode: account.code,
+      },
+    ],
+  });
+
+  await tx.insert(bankLoanRepayment).values({
+    loanId: loan.id,
+    kind: 'settlement',
+    paidDate: input.onDate,
+    principalTxn: money(quote.outstanding),
+    interestTxn: money(interest),
+    feesTxn: money(fee),
+    totalTxn: money(total),
+    totalIqd: money(totalIqd),
+    reference,
+    journalEntryId: result.journalEntryId,
+    createdBy: ctx.principal.userId,
+  });
+
+  /*
+   * The schedule described instalments that will not now happen. They are
+   * marked paid against this settlement rather than deleted: the bank's letter
+   * said they were due, and the register keeps what the letter said.
+   */
+  await tx
+    .update(bankLoanInstalment)
+    .set({
+      status: 'paid',
+      paidDate: input.onDate,
+      paidReference: reference,
+      journalEntryId: result.journalEntryId,
+      paidBy: ctx.principal.userId,
+      paidAt: new Date(),
+    })
+    .where(
+      and(
+        eq(bankLoanInstalment.loanId, loan.id),
+        isNull(bankLoanInstalment.supersededAt),
+        sql`${bankLoanInstalment.status} <> 'paid'`,
+      ),
+    );
+
+  await tx
+    .update(bankLoan)
+    .set({ settlementFeeTxn: money(fee), updatedAt: new Date() })
+    .where(eq(bankLoan.id, loan.id));
+
+  await settleIfCleared(tx, ctx, loan, input.onDate);
+
+  for (const payableId of await fundedPayables(tx, loan.id)) {
+    await events.record(tx, {
+      payableId,
+      eventCode: 'LOAN_INSTALMENT_PAID',
+      summary:
+        `${loan.loanNo} settled early on ${input.onDate} — ${loan.currency} ${shown(total)}; the loan is fully repaid`,
+      sourceType: PERMISSION_OBJECT,
+      sourceId: loan.id,
+      sourceNo: loan.loanNo,
+      actorUserId: ctx.principal.userId,
+    });
+  }
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'bank_loan.settled_early',
+    objectType: PERMISSION_OBJECT,
+    objectId: loan.id,
+    branchCode: loan.branchCode,
+    after: {
+      onDate: input.onDate,
+      principal: money(quote.outstanding),
+      interest: money(interest),
+      fee: money(fee),
+      total: money(total),
+      reference,
+    },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+
+  return { total, principal: quote.outstanding, interest, fee, journalEntryId: result.journalEntryId };
+}
 
 export async function cancel(tx: Tx, ctx: ActorContext, loanId: string, reason: string) {
   const loan = await lock(tx, loanId);

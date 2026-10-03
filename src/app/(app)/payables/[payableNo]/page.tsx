@@ -870,7 +870,7 @@ export default async function PayablePage({
                     {funding.map((draw) => (
                       <tr key={draw.id}>
                         <td>
-                          <Link className={s.sapLink} href={`/payables/loans/${encodeURIComponent(draw.loanNo)}`}>
+                          <Link className={s.sapLink} href={`/treasury/loans/${encodeURIComponent(draw.loanNo)}`}>
                             <bdi dir="ltr">{draw.loanNo}</bdi>
                           </Link>
                         </td>

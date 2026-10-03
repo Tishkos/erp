@@ -117,6 +117,10 @@ export const bankLoan = pgTable(
     commissionJournalEntryId: uuid('commission_journal_entry_id').references(() => journalEntry.id),
 
     status: text('status').notNull().default('draft'),
+    /** The day the loan came to nothing (0275). Null while anything is owed. */
+    repaidOn: date('repaid_on', { mode: 'string' }),
+    /** What ending it early cost beyond principal and interest, if it did. */
+    settlementFeeTxn: numeric('settlement_fee_txn', { precision: 19, scale: 4 }),
     purpose: text('purpose'),
     closedReason: text('closed_reason'),
 
@@ -139,6 +143,52 @@ export const bankLoan = pgTable(
     uniqueIndex('bank_loan_no_uniq').on(t.loanNo),
     index('bank_loan_account_idx').on(t.bankCashAccountId),
     index('bank_loan_status_idx').on(t.status),
+  ],
+);
+
+/**
+ * What was actually repaid — the ledger the loan's status is read from (0275).
+ *
+ * One row per posted repayment, saying what of it went to principal, to
+ * interest and to fees, with the journal that posted it. An instalment payment
+ * writes one; so does an extra payment of principal, and so does an early
+ * settlement. The outstanding principal is the loan's principal less the
+ * principal on these rows — not a count of instalments, and not a status
+ * somebody typed.
+ *
+ * Append-only by trigger: a repayment that was wrong is reversed by its journal
+ * and a correcting row.
+ */
+export const bankLoanRepayment = pgTable(
+  'bank_loan_repayment',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    loanId: uuid('loan_id')
+      .notNull()
+      .references(() => bankLoan.id),
+    /** The instalment it settles, where it settles one. */
+    instalmentId: uuid('instalment_id').references(() => bankLoanInstalment.id),
+    kind: text('kind').notNull(),
+    paidDate: date('paid_date', { mode: 'string' }).notNull(),
+    principalTxn: numeric('principal_txn', { precision: 19, scale: 4 }).notNull().default('0'),
+    interestTxn: numeric('interest_txn', { precision: 19, scale: 4 }).notNull().default('0'),
+    feesTxn: numeric('fees_txn', { precision: 19, scale: 4 }).notNull().default('0'),
+    totalTxn: numeric('total_txn', { precision: 19, scale: 4 }).notNull(),
+    totalIqd: numeric('total_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    reference: text('reference').notNull(),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('bank_loan_repayment_loan_idx').on(t.loanId, t.paidDate),
+    index('bank_loan_repayment_instalment_idx').on(t.instalmentId),
+    check(
+      'bank_loan_repayment_kind',
+      sql`${t.kind} in ('instalment', 'extra_principal', 'settlement')`,
+    ),
   ],
 );
 

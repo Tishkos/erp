@@ -281,7 +281,6 @@ describe('every screen has one address', () => {
       // Block 10 — Purchase Returns.
       '/payables/invoices',
       // REQ-AP-001 Stage 6 — bank loans.
-      '/payables/loans',
       // §15 — what we owe, invoice by invoice.
       '/payables/open-items',
       // REQ-AP-001 Stage 3 — payment applications (§21.7).
@@ -325,6 +324,7 @@ describe('every screen has one address', () => {
       '/sales/sales-returns',
       // §17 — Bank and Cash Reporting, beside the accounts it reports on.
       '/treasury/deposits',
+      '/treasury/loans',
       '/treasury/reporting',
     ]);
   });

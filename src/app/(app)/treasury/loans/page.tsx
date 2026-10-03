@@ -46,7 +46,7 @@ export const dynamic = 'force-dynamic';
 const VIEWS = ['open', 'overdue', 'closed', 'all'] as const;
 
 export default async function LoansPage({ searchParams }: { searchParams: SearchParams }) {
-  if (!visibleRoute('/payables/loans')) notFound();
+  if (!visibleRoute('/treasury/loans')) notFound();
 
   const [t, admin, page, locale, context, outcome] = await Promise.all([
     getTranslations('admin.loans'),
@@ -86,9 +86,9 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
         rate that may follow a published one, a grace period and a schedule of
         several rows. None of that fits in a window over a list.
       */
-      actions={pickers ? <LinkButton href="/payables/loans/new" label={t('new')} tone="primary" /> : null}
+      actions={pickers ? <LinkButton href="/treasury/loans/new" label={t('new')} tone="primary" /> : null}
       back={{ href: '/', label: admin('dashboard_label') }}
-      tabs={<SectionTabs route="/payables/loans" />}
+      tabs={<SectionTabs route="/treasury/loans" />}
       subtitle={t('subtitle')}
       title={page('loans')}
       variant="sap"
@@ -102,7 +102,7 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
             <span className={s.sapTitleMeta}>{admin('rows_shown', { count: result.total })}</span>
           </h2>
           <ListToolbar
-            clearHref="/payables/loans"
+            clearHref="/treasury/loans"
             clearLabel={admin('clear_search')}
             countLabel={admin('rows_shown', { count: result.total })}
             placeholder={admin('search_placeholder')}
@@ -150,7 +150,7 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
                 {shown.map((row) => (
                   <tr key={row.id}>
                     <td>
-                      <Link className={s.sapLink} href={`/payables/loans/${encodeURIComponent(row.loanNo)}`}>
+                      <Link className={s.sapLink} href={`/treasury/loans/${encodeURIComponent(row.loanNo)}`}>
                         <bdi dir="ltr">{row.loanNo}</bdi>
                       </Link>
                     </td>
@@ -195,7 +195,7 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
             </table>
           </div>
           {result.pages > 1 ? (
-            <Pagination count={result.pages} current={result.page} hrefFor={(p) => `/payables/loans?${query(p)}`} labels={{ label: admin('pagination'), previous: admin('previous'), next: admin('next'), page: (p) => admin('page_n', { page: p }) }} locale={locale} />
+            <Pagination count={result.pages} current={result.page} hrefFor={(p) => `/treasury/loans?${query(p)}`} labels={{ label: admin('pagination'), previous: admin('previous'), next: admin('next'), page: (p) => admin('page_n', { page: p }) }} locale={locale} />
           ) : null}
         </div>
       </section>

@@ -444,11 +444,23 @@ export function assertScheduleRepays(
 
 /** Where an unpaid instalment stands on a day: due inside the warning window, overdue after it. */
 export function instalmentState(
-  row: { readonly status: string; readonly dueDate: string },
+  // The total as the row carries it: a decimal string from the database, or a
+  // bigint where the caller has already parsed it.
+  row: { readonly status: string; readonly dueDate: string; readonly totalTxn?: string | bigint },
   today: string,
   warningDays: number,
 ): InstalmentState {
   if (row.status === 'paid') return 'paid';
+  /*
+   * Nothing is due in a grace period (0274). The bank's own schedule lists the
+   * date, so the register lists it too and the shape of the letter is kept —
+   * but there is nothing to chase, nothing to pay, and nothing that can fall
+   * overdue.
+   */
+  if (row.totalTxn !== undefined) {
+    const total = typeof row.totalTxn === 'bigint' ? row.totalTxn : parseDecimal(row.totalTxn, MONEY_SCALE);
+    if (total <= 0n) return 'upcoming';
+  }
   if (row.dueDate < today) return 'overdue';
   if (row.dueDate <= addDays(today, warningDays)) return 'due';
   return 'upcoming';

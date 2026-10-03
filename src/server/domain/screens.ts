@@ -483,7 +483,7 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/payables/shipments',
   '/payables/containers',
   // REQ-AP-001 Stage 6 — bank loans (§15.7, §21.10).
-  '/payables/loans',
+  '/treasury/loans',
   // REQ-AP-001 Stage 8 — the sheet import and its sign-off (§24.3).
   '/administration/payables-migration',
   // REQ-IMPROVE-001 Stage 1 — the two screens the menu promised (OP-4).

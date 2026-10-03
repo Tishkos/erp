@@ -1408,6 +1408,20 @@
       "when": 1795900000083,
       "tag": "0273_loan_bank_terms",
       "breakpoints": true
+    },
+    {
+      "idx": 201,
+      "version": "7",
+      "when": 1795900000084,
+      "tag": "0274_loan_grace_instalment",
+      "breakpoints": true
+    },
+    {
+      "idx": 202,
+      "version": "7",
+      "when": 1795900000085,
+      "tag": "0275_loan_repayments",
+      "breakpoints": true
     }
   ]
 }

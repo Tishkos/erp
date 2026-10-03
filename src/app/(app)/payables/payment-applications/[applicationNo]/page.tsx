@@ -185,7 +185,7 @@ export default async function PaymentApplicationPage({
       value: found.loan ? (
         <>
           <bdi dir="auto">{found.fundingName}</bdi> ·{' '}
-          <Link className={s.sapLink} href={`/payables/loans/${encodeURIComponent(found.loan.loanNo)}`}>
+          <Link className={s.sapLink} href={`/treasury/loans/${encodeURIComponent(found.loan.loanNo)}`}>
             <bdi dir="ltr">{found.loan.loanNo}</bdi>
           </Link>
         </>

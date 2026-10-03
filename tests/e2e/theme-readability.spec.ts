@@ -268,7 +268,7 @@ async function raiseOneOfEach(browser: Browser) {
     await expect(page.getByRole('link', { name: `BL-THEME-${run}` })).toBeVisible({ timeout: 30_000 });
 
     // A loan, entered.
-    await page.goto('/payables/loans');
+    await page.goto('/treasury/loans');
     await page.getByRole('button', { name: 'New loan' }).click();
     const loan = page.getByRole('dialog');
     await loan.getByLabel('Proceeds land in').selectOption({ index: 0 });
@@ -330,7 +330,7 @@ test('status chips follow the palette into the dark, on every screen that draws 
     '/payables/pd?view=all',
     '/payables/shipments',
     '/payables/containers?view=all',
-    '/payables/loans?view=all',
+    '/treasury/loans?view=all',
     // …and Stage 8's run register.
     '/administration/payables-migration',
   ];

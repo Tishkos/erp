@@ -24,6 +24,7 @@ import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
+import { MONEY_SCALE, toDecimalString } from '@domain/money';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
@@ -35,12 +36,13 @@ import {
   disburseLoan,
   payCommissionAction,
   payInstalmentAction,
+  settleLoanEarly,
   setScheduleAction,
   setSharesAction,
 } from '../actions';
 import { INSTALMENT_CHIP, LOAN_CHIP } from '../status';
-import { STATUS_CHIP } from '../../payment-applications/status';
-import { windowTone } from '../../window-tone';
+import { STATUS_CHIP } from '../../../payables/payment-applications/status';
+import { windowTone } from '../../../payables/window-tone';
 import { businessToday } from '@/server/domain/business-date';
 import { isNotFoundError } from '@/server/not-found';
 
@@ -63,7 +65,7 @@ export default async function LoanPage({
   params: Promise<{ loanNo: string }>;
   searchParams: SearchParams;
 }) {
-  if (!visibleRoute('/payables/loans')) notFound();
+  if (!visibleRoute('/treasury/loans')) notFound();
   const { loanNo: raw } = await params;
   const loanNo = decodeURIComponent(raw);
   const [t, pa, admin, page, locale, context, outcome] = await Promise.all([
@@ -91,6 +93,17 @@ export default async function LoanPage({
   });
   if (!found) notFound();
   const { loan, treatment, schedule, allocations, totals } = found;
+
+  /*
+   * Where the loan stands, summed from the repayments that were actually
+   * posted (0275) — the same reading the status is decided from, so the
+   * summary and the chip above it cannot disagree.
+   */
+  const [position, repayments, quote] = await withCurrentUser(async (tx) => [
+    await loans.positionOf(tx, loan.id),
+    await loans.repaymentsOf(tx, loan.id),
+    loan.status === 'active' ? await loans.settlementQuote(tx, loan.id, businessToday()) : null,
+  ] as const);
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
   const money = (value: string, currency = loan.currency) => formatMoney(value, currency, locale as Locale);
   const today = businessToday();
@@ -192,8 +205,8 @@ export default async function LoanPage({
 
   return (
     <AdminPage
-      back={{ href: '/payables/loans', label: page('loans') }}
-      tabs={<SectionTabs route="/payables/loans" />}
+      back={{ href: '/treasury/loans', label: page('loans') }}
+      tabs={<SectionTabs route="/treasury/loans" />}
       title={loan.loanNo}
       trail={[{ href: '/', label: admin('dashboard_label') }]}
       variant="sap"
@@ -340,6 +353,43 @@ export default async function LoanPage({
                 </Form>
               </NewRecordDialog>
             ) : null}
+            {/*
+              Ending it early: what is left, the interest it has earned since
+              the last payment, and whatever the bank charges to close it
+              (2026-10-03). The loan becomes fully repaid by the same rule
+              every repayment goes through — the principal reaching nothing —
+              not because this dialog says so.
+            */}
+            {quote && loan.status === 'active' && mayPost ? (
+              <NewRecordDialog
+                buttonLabel={t('settle_early')}
+                closeLabel={admin('close')}
+                title={t('settle_title', { loanNo: loan.loanNo })}
+              >
+                <p className="muted">{t('settle_note')}</p>
+                <Form action={settleLoanEarly}>
+                  <Hidden name="loan_no" value={loan.loanNo} />
+                  <Grid>
+                    <Field defaultValue={today} label={t('settle_date')} name="paid_date" required type="date" />
+                    <Field
+                      defaultValue={toDecimalString(quote.accruedInterest, MONEY_SCALE)}
+                      label={t('settle_interest')}
+                      name="interest"
+                    />
+                    <Field label={t('settle_fee')} name="fee" />
+                    <Field label={t('settle_reference')} name="reference" required />
+                  </Grid>
+                  <p className="muted">
+                    {t('settle_outstanding')} {money(toDecimalString(quote.outstanding, MONEY_SCALE))}
+                    {' · '}
+                    {t('settle_total')} {money(toDecimalString(quote.total, MONEY_SCALE))}
+                  </p>
+                  <SubmitRow>
+                    <Submit label={t('settle_early')} />
+                  </SubmitRow>
+                </Form>
+              </NewRecordDialog>
+            ) : null}
             {mayCancel ? (
               <ReasonForm
                 action={cancelLoan}
@@ -382,7 +432,8 @@ export default async function LoanPage({
         linesTitle={t('schedule')}
         number={loan.loanNo}
         totals={[
-          { label: t('outstanding'), value: money(totals.outstanding) },
+          { label: t('outstanding'), value: money(toDecimalString(position.outstanding, MONEY_SCALE)) },
+          { label: t('repaid'), value: money(toDecimalString(position.principalRepaid, MONEY_SCALE)) },
           { label: t('unallocated'), value: money(totals.unallocated) },
         ]}
       >
@@ -558,6 +609,100 @@ export default async function LoanPage({
               </div>
             ) : null}
           </Form>
+        </div>
+      </section>
+
+      {/* ── Where it stands, from what was posted ──────────────────── */}
+      <section aria-labelledby="loan-summary-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="loan-summary-title">
+            <span>{t('summary')}</span>
+            {/* The same chip the header wears, so the summary and the
+                document agree about what the loan is. */}
+            <span className={`status status--${windowTone(chip)}`} data-status={windowTone(chip)}>
+              {t(`status_${loan.status}`)}
+            </span>
+          </h2>
+          <div className={s.sapBody}>
+            <div className={s.sapFields}>
+              {[
+                { label: t('sum_principal'), value: position.principal },
+                { label: t('sum_repaid'), value: position.principalRepaid },
+                { label: t('sum_outstanding'), value: position.outstanding },
+                { label: t('sum_interest'), value: position.interestPaid },
+                { label: t('sum_fees'), value: position.feesPaid },
+                { label: t('sum_total'), value: position.totalPaid },
+              ].map((figure) => (
+                <div className={s.sapField} key={figure.label}>
+                  <span className={s.sapLabel}>{figure.label}</span>
+                  <span className={s.sapBox}>
+                    <bdi dir="ltr">{money(toDecimalString(figure.value, MONEY_SCALE))}</bdi>
+                  </span>
+                </div>
+              ))}
+              <div className={s.sapField}>
+                <span className={s.sapLabel}>{t('sum_repaid_on')}</span>
+                <span className={s.sapBox}>
+                  <bdi dir="ltr">{day(position.repaidOn)}</bdi>
+                </span>
+              </div>
+              <div className={s.sapField}>
+                <span className={s.sapLabel}>{t('sum_left')}</span>
+                <span className={s.sapBox}>
+                  <bdi dir="ltr">{position.instalmentsLeft}</bdi>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* What has actually been paid, newest first. */}
+          <div className={s.sapTableWrap}>
+            <table aria-labelledby="loan-summary-title" className={s.sapTable}>
+              <thead>
+                <tr>
+                  <th scope="col">{t('paid_on')}</th>
+                  <th scope="col">{t('rep_kind')}</th>
+                  <th className={s.sapNum} scope="col">
+                    {t('principal_part')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {t('interest_part')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {t('fees_part')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {t('total_part')}
+                  </th>
+                  <th scope="col">{t('reference')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {repayments.length === 0 ? (
+                  <tr>
+                    <td className={s.sapEmptyRow} colSpan={7}>
+                      {t('no_repayments')}
+                    </td>
+                  </tr>
+                ) : null}
+                {repayments.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <bdi dir="ltr">{day(row.paidDate)}</bdi>
+                    </td>
+                    <td>{t(`rk_${row.kind}`)}</td>
+                    <td className={s.sapNum}>{money(row.principalTxn)}</td>
+                    <td className={s.sapNum}>{money(row.interestTxn)}</td>
+                    <td className={s.sapNum}>{money(row.feesTxn)}</td>
+                    <td className={s.sapNum}>{money(row.totalTxn)}</td>
+                    <td>
+                      <bdi dir="ltr">{row.reference}</bdi>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
