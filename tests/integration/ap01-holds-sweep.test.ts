@@ -212,6 +212,18 @@ describe('ap01 · the sweep answers for every clock', () => {
 
   it('a hold nobody owns is escalated once, past the configured days', async () => {
     await withScope(superScope(), (tx) => sweep.runSweep(tx, TODAY));
+
+    // A hold's age is counted from `created_at`, which is the wall clock, and
+    // the dates in this test are fixtures. So the hold is stamped as having
+    // been opened on TODAY: left to the wall clock the age was whatever the
+    // calendar made it, and the test escalated or did not escalate depending
+    // on the day it was run (2026-10-03 — it passed on the 2nd and failed on
+    // the 3rd, having been written with four days in mind).
+    await ownerPool.query(`update payable_hold set created_at = $1::date where payable_id = $2`, [
+      TODAY,
+      payableId,
+    ]);
+
     // Five days later, still unowned — past the seeded escalate_after of 3.
     const later = await withScope(superScope(), (tx) => sweep.runSweep(tx, '2026-10-06'));
     expect(later.escalated).toBe(1);

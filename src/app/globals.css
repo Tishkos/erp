@@ -919,8 +919,10 @@ table.list a {
 }
 
 .erp-brand__logo {
-  inline-size: 2.9rem;
-  block-size: 3rem;
+  /* Smaller by direction (2026-10-02). The mark here is the Q on its own, and
+     a monogram carries at a size the full logo could not. */
+  inline-size: 2.3rem;
+  block-size: 2.4rem;
   flex: 0 0 auto;
   object-fit: cover;
   object-position: center 28%;
@@ -1573,10 +1575,14 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
 }
 
 .erp-mobile-drawer__logo {
-  inline-size: 8.2rem;
+  /* Square, because the mark is. This slot was 8.2rem wide and cropped a
+     horizontal band out of the old logo — that band was the Q, with the name
+     below it left outside the frame. The header now carries the Q on its own,
+     so a wide slot would crop the monogram itself and show a slice through
+     the middle of it. */
+  inline-size: 3.1rem;
   block-size: 3.1rem;
-  object-fit: cover;
-  object-position: center 28%;
+  object-fit: contain;
 }
 
 .erp-mobile-drawer__context {

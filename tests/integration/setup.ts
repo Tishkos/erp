@@ -494,6 +494,8 @@ export async function resetTestData(): Promise<void> {
     // REQ-LEGACY-001 — the old books' history and the runs that wrote it.
     await client.query('delete from legacy_document');
     await client.query('delete from legacy_import_run');
+    // REQ-AP-001 §21.8 — each reading of the ASYCUDA document list (0257).
+    await client.query('delete from asycuda_run');
     // REQ-WA-001 — the bridge's log, allow-list and pairing; the seeded
     // settings are restored, the bridge's heartbeat keys go.
     await client.query('truncate whatsapp_message, whatsapp_contact restart identity cascade');

@@ -6,7 +6,7 @@
   "nav": {
     "home": "Home",
     "crm": "CRM",
-    "sales": "Sales",
+    "sales": "Receivables",
     "purchasing": "Purchasing",
     "inventory": "Inventory & Warehouses",
     "projects": "Projects & Contracting",
@@ -66,7 +66,7 @@
     "procurement_dashboard": "Procurement Dashboard",
     "purchase_orders": "Purchase Orders",
     "goods_receipts": "Goods Receipts",
-    "service_receipts": "Service Receipt / Expense Confirmation",
+    "service_receipts": "Expenses",
     "ap_invoices": "Purchase Invoices",
     "supplier_advances": "Supplier Advances",
     "supplier_payments": "Supplier Payments",
@@ -986,7 +986,7 @@
     "module": {
       "dashboard": "Dashboard",
       "accounting": "Accounting",
-      "sales": "Sales",
+      "sales": "Receivables",
       "purchasing": "Purchasing",
       "payables": "Payables",
       "logistics": "Logistics",
@@ -1903,8 +1903,8 @@
       "last_movement": "Last movement",
       "never_moved": "Nothing has moved yet",
       "see_transactions": "See every transaction",
-      "reserved": "Reserved for payments",
-      "available": "Available"
+      "reserved": "Pending debit",
+      "available": "Available to pay with"
     },
     "bank_accounts": {
       "subtitle": "The company’s bank accounts, and the G/L account each is carried in.",
@@ -2596,7 +2596,19 @@
       "col_paid": "Paid",
       "remaining_short": "Remaining",
       "col_containers": "Containers",
-      "x_of_y": "{received} of {total}"
+      "x_of_y": "{received} of {total}",
+      "read_document": "Read a document",
+      "read_document_title": "Read the supplier’s document",
+      "read_document_hint": "The invoice the factory sent — PDF, Excel, Word or CSV, in any language. It is read into a draft purchase invoice with the goods, the prices and the supplier filled in, and the file is kept against it. Anything that could not be read is left empty and written into the draft’s note.",
+      "read_document_choose": "Choose the document",
+      "read_document_submit": "Read it",
+      "papers_title": "Paperwork",
+      "papers_count": "{count} file(s)",
+      "papers_file": "File",
+      "papers_source": "Kept on",
+      "papers_added": "Added",
+      "rail_done": "this is true of the import now",
+      "rail_todo": "not yet"
     },
     "payables_settings": {
       "title": "Payables Settings",
@@ -2978,7 +2990,8 @@
       "confirm_before_cut_over": "Paid before the cut-over",
       "confirm_before_cut_over_note": "For an application migrated from the sheet whose money left before the cut-over: the SWIFT date and reference from the bank’s copy are recorded and nothing is posted — that payment is already in the books the ERP opened with. Money that left after the cut-over is confirmed with the button beside this one, which posts it.",
       "exchange_open": "Fully paid in its currency; in dinars its invoices still owe {owed} and its payments are {over} over them. That is the exchange difference: it is booked once the exchange gain and loss are mapped on Posting Mappings.",
-      "exchange_settle": "Settle exchange difference"
+      "exchange_settle": "Settle exchange difference",
+      "amount_part_hint": "Any part of it. {remaining} is still owed — pay 20% with the order and the rest against the bill of lading if that is the deal, and raise another application for each part. Leave it empty to ask for all of it."
     },
     "supplier_advances": {
       "subtitle": "Money paid to a supplier before the invoice — the deposits on imports, and advances against orders.",
@@ -3080,7 +3093,7 @@
       "history": "Status history",
       "recorded_by": "Recorded by",
       "attachments": "Attachments",
-      "asycuda_subtitle": "Paste the document list from ASYCUDA. Nothing changes until you have seen the difference and applied it.",
+      "asycuda_subtitle": "Upload the document list exported from ASYCUDA, or paste it. Nothing changes until you have seen the difference and applied it.",
       "asycuda_paste": "The ASYCUDA list",
       "asycuda_hint": "One PD per line: the number, the status as ASYCUDA writes it, and the date if shown — separated by tabs, commas or spaces.",
       "asycuda_list": "List",
@@ -3112,7 +3125,28 @@
       },
       "link": "Link to an import",
       "link_note": "PD {pdNo} came from the sheet without an import it could be matched to. Name the import it belongs to; it carries the PD from then on, with its status as it stands. A linked PD is not unlinked.",
-      "view_holding": "Holding list — not linked to an import"
+      "view_holding": "Holding list — not linked to an import",
+      "asycuda_file": "The ASYCUDA report",
+      "asycuda_file_hint": "The document list as ASYCUDA exports it — Excel or CSV. Several files are read as one list.",
+      "asycuda_already_applied": "Applied on {at}. Read the list again to see what is left.",
+      "asycuda_runs": "Readings so far",
+      "asycuda_no_runs": "The list has not been read yet.",
+      "asycuda_read_at": "Read",
+      "asycuda_from": "From",
+      "asycuda_change_count": "Changes",
+      "asycuda_pasted": "Pasted in",
+      "asycuda_status_previewed": "Not applied",
+      "asycuda_status_applied": "Applied",
+      "asycuda_nothing_given": "Choose the ASYCUDA report, or paste the list.",
+      "asycuda_standing": "Where the declarations stand",
+      "asycuda_standing_meta": "{total} live · {expiring} expiring within {days} days",
+      "asycuda_no_pds": "No declaration has been registered yet.",
+      "asycuda_not_linked": "not linked to an import",
+      "asycuda_pays": "Releases payment",
+      "asycuda_days": "{days} days",
+      "asycuda_expired_days": "{days} days ago",
+      "yes": "Yes",
+      "no": "No"
     },
     "shipments": {
       "subtitle": "The bills of lading of every import, each with its containers counted as they arrive.",
@@ -3238,8 +3272,6 @@
       "freq_quarterly": "Quarterly",
       "freq_custom": "On dates I type",
       "first_due": "First instalment due",
-      "custom_dates": "Due dates",
-      "custom_dates_hint": "For a custom schedule: one date per line (YYYY-MM-DD).",
       "purpose": "Purpose",
       "create": "Create loan",
       "view": "View",
@@ -3322,7 +3354,14 @@
         "deducted_at_disbursement": "Deducted at disbursement",
         "paid_separately": "Paid separately",
         "spread_over_instalments": "Spread over instalments"
-      }
+      },
+      "another_bank": "Another bank — I will type its name",
+      "bank_name": "Bank name",
+      "bank_name_hint": "Added to the bank register with this loan.",
+      "bank_swift": "SWIFT / BIC",
+      "due_nth": "Instalment {position} due",
+      "final_due": "Final instalment due",
+      "rhythm_hint": "Fills the dates below. Retype any the bank set differently."
     },
     "landed_cost": {
       "section_title": "Landed cost",

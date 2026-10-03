@@ -17,6 +17,8 @@ import {
 } from '@/components/admin';
 import { Pagination } from '@/components/ui';
 import { NewRecordDialog } from '@/components/admin/dialog';
+import { LoanBankField, LoanScheduleFields } from '@/components/admin/loan-terms-fields';
+import { NEW_BANK } from './form';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -88,14 +90,19 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
             <p className="muted">{t('new_note')}</p>
             <Form action={createLoan}>
               <Grid>
-                <Select
-                  label={t('bank')}
-                  name="bank_code"
-                  options={pickers.banks.map((bank) => ({
+                <LoanBankField
+                  banks={pickers.banks.map((bank) => ({
                     value: bank.code,
                     label: bank.swift ? `${bank.name} · ${bank.swift}` : bank.name,
                   }))}
-                  required
+                  labels={{
+                    bank: t('bank'),
+                    another: t('another_bank'),
+                    name: t('bank_name'),
+                    nameHint: t('bank_name_hint'),
+                    swift: t('bank_swift'),
+                  }}
+                  newBankValue={NEW_BANK}
                 />
                 <Select
                   label={t('account')}
@@ -133,19 +140,22 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
                     label: t(`method_${method}`),
                   }))}
                 />
-                <Field defaultValue="4" label={t('instalments')} name="instalment_count" required />
-                <Select
-                  defaultValue="quarterly"
-                  label={t('frequency')}
-                  name="frequency"
-                  options={['monthly', 'quarterly', 'custom'].map((frequency) => ({
-                    value: frequency,
-                    label: t(`freq_${frequency}`),
-                  }))}
+                <LoanScheduleFields
+                  labels={{
+                    count: t('instalments'),
+                    frequency: t('frequency'),
+                    frequencies: ['monthly', 'quarterly', 'custom'].map((frequency) => ({
+                      value: frequency,
+                      label: t(`freq_${frequency}`),
+                    })),
+                    first: t('first_due'),
+                    nth: (position: number) => t('due_nth', { position: String(position) }),
+                    final: t('final_due'),
+                    hint: t('rhythm_hint'),
+                  }}
+                  today={today}
                 />
-                <Field defaultValue={today} label={t('first_due')} name="first_due_date" required type="date" />
               </Grid>
-              <Field hint={t('custom_dates_hint')} label={t('custom_dates')} name="custom_dates" type="textarea" wide />
               <Field id="loan-purpose" label={t('purpose')} name="purpose" wide />
               <Checkbox defaultChecked label={t('capitalised')} name="commission_capitalised" />
               <SubmitRow>

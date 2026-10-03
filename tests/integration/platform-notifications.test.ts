@@ -65,9 +65,19 @@ beforeEach(async () => {
   secondManager = await createUser('accounting_manager');
 });
 
-afterEach(() => {
+afterEach(async () => {
   notifications.clearSenders();
   jobs.clearHandlers();
+  // `notification_rule` is configuration the migrations seed, and
+  // `resetTestData` does not restore it. A test that adds a rule or changes a
+  // rule's channels must put them back, or the next run of this suite starts
+  // from somewhere else — which is how a passing suite becomes a failing one
+  // on its second run (2026-10-03).
+  await ownerPool.query(`delete from notification_rule where code = 'journal_awaiting_approval_ceo'`);
+  await ownerPool.query(
+    `update notification_rule set channels = ARRAY['in_app','email']::notification_channel[]
+      where code = 'journal_awaiting_approval'`,
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -84,6 +94,54 @@ describe('§21 · exactly one notification per qualifying event', () => {
     const { rows } = await ownerPool.query(`select subject, recipient_user_id from notification`);
     expect(rows).toHaveLength(2);
     expect(rows[0].subject).toContain('JE-2026-000001');
+  });
+
+  it('tells a person once when two rules reach them, by both their channels', async () => {
+    // Reported 2026-10-03: three WhatsApp messages for one supplier payment.
+    // Two rules cover that event — one for the accounting manager, one for the
+    // CEO — and one person held both roles, so one payment told them twice.
+    // The dedupe key began with the rule's code, so it only ever suppressed a
+    // repeat of the same rule.
+    await ownerPool.query(
+      `insert into notification_rule (code, description, event_type, recipient_role, channels, active)
+       values ('journal_awaiting_approval_ceo', 'The same event, a second role', $1, 'ceo',
+               ARRAY['in_app','whatsapp']::notification_channel[], true)`,
+      [EVENT.eventType],
+    );
+    await ownerPool.query(`insert into user_role (user_id, role_code) values ($1,'ceo')`, [
+      manager.principal.userId,
+    ]);
+
+    const result = await withScope(scope(officer), (tx) => notifications.raise(tx, EVENT));
+
+    // Three rule-and-recipient pairs, but only two people.
+    expect(result.created).toBe(2);
+
+    const { rows } = await ownerPool.query(
+      `select recipient_user_id, count(*)::int as n from notification group by 1 order by 2 desc`,
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0].n).toBe(1);
+
+    // And the person both rules reached keeps every channel either named: the
+    // manager's rule says in-app and e-mail, the CEO's adds WhatsApp.
+    const channels = await ownerPool.query(
+      `select d.channel from notification_delivery d
+         join notification n on n.id = d.notification_id
+        where n.recipient_user_id = $1`,
+      [manager.principal.userId],
+    );
+    // Sorted here rather than in SQL: `channel` is an enum, so the database
+    // orders it by declaration and the test would be asserting that instead.
+    expect(channels.rows.map((row) => row.channel).sort()).toEqual(['email', 'in_app', 'whatsapp']);
+
+    // The notification carries the stricter of the two rules, so escalation
+    // still happens on the manager's day-long window rather than never.
+    const kept = await ownerPool.query(
+      `select rule_code from notification where recipient_user_id = $1`,
+      [manager.principal.userId],
+    );
+    expect(kept.rows[0].rule_code).toBe('journal_awaiting_approval');
   });
 
   it('creates nothing the second time the same event arrives', async () => {

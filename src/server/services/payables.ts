@@ -47,13 +47,14 @@ import {
   type StageFacts,
   type StageRow,
 } from '../domain/payables';
-import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
+import { MONEY_SCALE, parseDecimal, say, toDecimalString } from '../domain/money';
 import { totals as paymentTotalsOf } from '../domain/payment-applications';
 import { formatQuantity, parseQuantity } from '../domain/uom';
 import type { ActorContext } from './chart-of-accounts';
 import * as audit from './audit';
 import * as authz from './authorization';
 import { can } from '../domain/permissions';
+import * as notifications from './notifications';
 import * as events from './payable-events';
 import * as purchaseOrders from './purchase-order';
 import * as rateService from './exchange-rates';
@@ -316,14 +317,36 @@ export async function recomputeStage(
       .set({ stageCode: next, stageSince: new Date(), updatedAt: new Date() })
       .where(eq(payable.id, payableId));
 
+    const leftName = (from as { name?: string })?.name ?? row.stageCode;
+    const reachedName = (to as { name?: string })?.name ?? next;
+
     await events.record(tx, {
       payableId,
       eventCode: 'STAGE_CHANGED',
-      summary: `Stage: ${(from as { name?: string })?.name ?? row.stageCode} → ${(to as { name?: string })?.name ?? next}`,
+      summary: `Stage: ${leftName} → ${reachedName}`,
       before: { stage: row.stageCode },
       after: { stage: next },
       actorUserId,
     });
+
+    // The stage is the one fact that says where an import has got to, and an
+    // import runs for weeks; until now the move was written to this log and
+    // nobody was told (2026-10-03).
+    //
+    // The occurrence is the stage reached, so every stage the document arrives
+    // at is announced once and a recompute that lands where it already was
+    // says nothing.
+    await notifications.raise(
+      tx,
+      {
+        eventType: 'payable.stage.changed',
+        objectType: 'payable',
+        objectId: payableId,
+        occurrence: next,
+      },
+      { payableNo: row.payableNo, stage: reachedName, previousStage: leftName },
+      { branchCode: row.branchCode, actorUserId },
+    );
   }
 
   await clearOrReopen(tx, row, rail, facts, next, actorUserId);
@@ -715,7 +738,7 @@ export async function create(
   await events.record(tx, {
     payableId,
     eventCode: 'PAYABLE_OPENED',
-    summary: `${type.name} opened — ${input.supplierReference.trim()}, ${supplier.name}, ${input.currency} ${toDecimalString(amountTxn)}`,
+    summary: `${type.name} opened — ${input.supplierReference.trim()}, ${supplier.name}, ${say(toDecimalString(amountTxn), input.currency)}`,
     after: { payableNo: allocated.documentNo, reference: input.supplierReference.trim() },
     actorUserId: ctx.principal.userId,
   });

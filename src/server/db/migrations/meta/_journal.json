@@ -1188,21 +1188,21 @@
     {
       "idx": 169,
       "version": "7",
-      "when": 1795900000049,
+      "when": 1795900000063,
       "tag": "0245_project_system",
       "breakpoints": true
     },
     {
       "idx": 170,
       "version": "7",
-      "when": 1795900000050,
+      "when": 1795900000064,
       "tag": "0246_project_budget",
       "breakpoints": true
     },
     {
       "idx": 171,
       "version": "7",
-      "when": 1795900000051,
+      "when": 1795900000065,
       "tag": "0247_project_execution",
       "breakpoints": true
     },
@@ -1286,8 +1286,43 @@
     {
       "idx": 183,
       "version": "7",
-      "when": 1795900000063,
-      "tag": "0256_hr_time",
+      "when": 1795900000066,
+      "tag": "0256_bank_of_baghdad_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 184,
+      "version": "7",
+      "when": 1795900000067,
+      "tag": "0257_asycuda_run",
+      "breakpoints": true
+    },
+    {
+      "idx": 185,
+      "version": "7",
+      "when": 1795900000068,
+      "tag": "0258_import_stage_shipment",
+      "breakpoints": true
+    },
+    {
+      "idx": 186,
+      "version": "7",
+      "when": 1795900000069,
+      "tag": "0259_bank_never_negative",
+      "breakpoints": true
+    },
+    {
+      "idx": 187,
+      "version": "7",
+      "when": 1795900000070,
+      "tag": "0260_payable_stage_notification",
+      "breakpoints": true
+    },
+    {
+      "idx": 188,
+      "version": "7",
+      "when": 1795900000071,
+      "tag": "0261_hr_time",
       "breakpoints": true
     }
   ]
