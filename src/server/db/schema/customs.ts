@@ -9,7 +9,7 @@
  * list, or the sweep.
  */
 import { sql } from 'drizzle-orm';
-import { boolean, date, index, pgTable, smallint, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, date, index, integer, jsonb, pgTable, smallint, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { appUser, branch } from './platform';
 import { bank } from './item';
 import { payable } from './payables';
@@ -87,4 +87,42 @@ export const customsPdStatusHistory = pgTable(
     recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('customs_pd_status_history_pd_idx').on(t.pdId, t.recordedAt)],
+);
+
+/**
+ * One reading of the ASYCUDA document list — 0257.
+ *
+ * The screen used to read a pasted list, show the difference and keep
+ * nothing. A declaration's status is what releases a payment, so where that
+ * reading came from and when has to be answerable afterwards: the lines as
+ * they were read, the file they came from, the difference computed at that
+ * moment, who read it and who applied it.
+ *
+ * `report` is the difference as it stood, kept whole rather than in a child
+ * table — the same shape `legacy_import_run.report` uses, and for the same
+ * reason: it is a record of what was seen, never queried across runs.
+ */
+export const asycudaRun = pgTable(
+  'asycuda_run',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** `file` when a report was uploaded, `paste` when the list was typed. */
+    source: text('source').$type<'file' | 'paste'>().notNull(),
+    fileNames: jsonb('file_names').notNull().$type<string[]>().default([]),
+    /** SHA-256 over the lines as read — what "the same list again" means. */
+    textSha256: text('text_sha256').notNull(),
+    lineText: text('line_text').notNull(),
+    report: jsonb('report').notNull(),
+    lineCount: integer('line_count').notNull().default(0),
+    changeCount: integer('change_count').notNull().default(0),
+    unreadableCount: integer('unreadable_count').notNull().default(0),
+    status: text('status').$type<'previewed' | 'applied'>().notNull().default('previewed'),
+    readBy: uuid('read_by')
+      .notNull()
+      .references(() => appUser.id),
+    readAt: timestamp('read_at', { withTimezone: true }).notNull().defaultNow(),
+    appliedBy: uuid('applied_by').references(() => appUser.id),
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
+  },
+  (t) => [index('asycuda_run_read_idx').on(t.readAt)],
 );

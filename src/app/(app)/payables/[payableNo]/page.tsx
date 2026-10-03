@@ -20,6 +20,8 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { Attachments } from '@/components/admin/attachments';
 import { RecordHistory } from '@/components/admin/history';
+import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import * as papers from '@/server/services/payable-papers';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { StopDialog } from '@/components/admin/stop-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
@@ -53,7 +55,7 @@ import {
   updateHold,
   updatePiLines,
 } from '../actions';
-import { createApplication, planInstalmentsAction } from '../payment-applications/actions';
+import { createApplication } from '../payment-applications/actions';
 import { registerPd } from '../pd/actions';
 import { pdChip } from '../pd/status';
 import { createBlAction } from '../shipments/actions';
@@ -168,6 +170,10 @@ export default async function PayablePage({
   const daysSince = (since: Date | string) =>
     Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 86_400_000));
 
+  // Every attachment the import has, wherever it was put: on the invoice,
+  // the declaration, a payment application, a bill of lading or a container.
+  const allPapers = await withCurrentUser((tx) => papers.papersFor(tx, row.id));
+
   const activeRail = rail.filter((stage) => stage.active);
   const currentSeq = activeRail.find((stage) => stage.code === row.stageCode)?.sequence ?? 0;
   const oldestHold = holds[0] ?? null;
@@ -181,18 +187,56 @@ export default async function PayablePage({
   const railName = (stage: (typeof rail)[number]) =>
     (stage as { name?: string }).name ?? stage.code;
 
-  // The rail as the header reads it: done, here, still to come (§21.3).
-  const railText = activeRail
-    .map((stage) => {
-      const mark =
-        stage.code === row.stageCode
-          ? ` ← ${t('rail_now')}`
-          : stage.sequence < currentSeq && found.reached.includes(stage.code)
-            ? ' ✓'
-            : '';
-      return `${stage.sequence}. ${railName(stage)}${mark}`;
-    })
-    .join('  ·  ');
+  /*
+   * The rail, as chips.
+   *
+   * Where a stage sends you: the lane that answers for it. The sections are
+   * already on this page under these anchors, so "where are we" and "what do
+   * I do about it" are one click apart.
+   */
+  const STAGE_SECTION: Readonly<Record<string, string>> = {
+    import_invoiced_funded: '#payments',
+    fully_paid: '#payments',
+    payment_sent: '#payments',
+    closed_matched: '#payments',
+    import_pd_registered: '#pd',
+    import_shipped: '#shipment',
+    import_partly_received: '#shipment',
+    import_all_received: '#shipment',
+    goods_received: '#shipment',
+    import_cleared: '#landed-cost',
+  };
+
+  const railChips = (
+    <span className={s.inlineRow}>
+      {activeRail.map((stage) => {
+        // `reached` is each stage's own rule read against the facts, and they
+        // do not hold in order — a payment sent before the declaration is
+        // registered is "Payment in progress" with the PD stage never passed.
+        const here = stage.code === row.stageCode;
+        const holds = found.reached.includes(stage.code);
+        const tone = here ? 'submitted' : holds ? 'approved' : 'draft';
+        const label = `${stage.sequence}. ${railName(stage)}`;
+        const section = STAGE_SECTION[stage.ruleName] ?? null;
+        const chip = (
+          <span
+            className={`status status--${tone}`}
+            data-status={tone}
+            title={here ? t('rail_now') : holds ? t('rail_done') : t('rail_todo')}
+          >
+            {label}
+          </span>
+        );
+        return section ? (
+          <Link href={section} key={stage.code}>
+            {chip}
+          </Link>
+        ) : (
+          <span key={stage.code}>{chip}</span>
+        );
+      })}
+    </span>
+  );
 
   const stageChip = row.cancelledAt
     ? 'cancelled'
@@ -230,7 +274,7 @@ export default async function PayablePage({
     { label: t('col_branch'), value: <bdi dir="ltr">{row.branchCode}</bdi> },
     { label: t('quantity'), value: row.quantity ? <bdi dir="ltr">{formatQuantity(row.quantity, locale as Locale)}</bdi> : '—' },
     { label: t('terms'), value: row.paymentTermsText ?? '—', wide: true },
-    { label: t('rail'), value: <bdi dir="auto">{railText}</bdi>, wide: true },
+    { label: t('rail'), value: railChips, wide: true },
     { label: t('description'), value: <bdi dir="auto">{row.description}</bdi>, wide: true },
   ];
 
@@ -257,40 +301,36 @@ export default async function PayablePage({
       <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
 
       <DocumentWindow
+        titleActions={
+          <>
+            <AttachmentsButton
+              closeLabel={admin('close')}
+              count={found.attachments.rows.length}
+              label={t('tab_attachments')}
+              title={t('tab_attachments')}
+            >
+              <Attachments
+                preloaded={found.attachments}
+                action={attachToPayable}
+                hidden={{ payable_no: row.payableNo }}
+                mayAttach={mayEdit}
+                objectId={row.id}
+                objectType={payables.PERMISSION_OBJECT}
+              />
+            </AttachmentsButton>
+            <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
+              <RecordHistory objectId={row.id} objectType={payables.PERMISSION_OBJECT} preloaded={found.history} />
+            </HistoryButton>
+          </>
+        }
         actions={
-          mayEdit && !row.cancelledAt && !row.closedAt ? (
-            <>
-              <Form action={setTerms}>
-                <Hidden name="payable_no" value={row.payableNo} />
-                <Field
-                  defaultValue={row.paymentTermsText ?? ''}
-                  id="terms-edit"
-                  label={t('terms')}
-                  name="payment_terms"
-                  required
-                />
-                <Submit label={t('terms_save')} tone="secondary" variant="document" />
-              </Form>
-              <Form action={linkInvoice}>
-                <Hidden name="payable_no" value={row.payableNo} />
-                <Field
-                  hint={t('link_invoice_hint')}
-                  id="link-invoice"
-                  label={t('link_invoice')}
-                  name="ap_invoice_id"
-                  required
-                />
-                <Submit label={t('link_save')} tone="secondary" variant="document" />
-              </Form>
-              {mayCancel ? (
-                <ReasonForm
-                  action={cancelPayable}
-                  hidden={{ payable_no: row.payableNo }}
-                  label={t('cancel')}
-                  reasonLabel={t('cancel_reason')}
-                />
-              ) : null}
-            </>
+          mayEdit && !row.cancelledAt && !row.closedAt && mayCancel ? (
+            <ReasonForm
+              action={cancelPayable}
+              hidden={{ payable_no: row.payableNo }}
+              label={t('cancel')}
+              reasonLabel={t('cancel_reason')}
+            />
           ) : null
         }
         documentType={type.name}
@@ -580,6 +620,16 @@ export default async function PayablePage({
         </div>
       </section>
 
+      {/*
+        The four lanes of an import, side by side.
+
+        They are independent by design (§21.3) — paid while the goods are
+        at sea, arrived while customs is open — so they are read against
+        each other, and stacking them meant scrolling past three to reach
+        the fourth. `chartGrid` is the dashboard's own grid: as many
+        columns as fit, stacking itself when the screen is narrow.
+      */}
+      <div className={s.chartGrid}>
       {/* ── Payments (§15): the plan, the applications, Applied / Paid /
           Remaining. Imports only; drawn as the invoices register above. ── */}
       {paymentTotals ? (
@@ -614,65 +664,6 @@ export default async function PayablePage({
               </div>
             ) : null}
 
-            <div className={s.sapTableWrap}>
-              <table aria-label={pa('instalments')} className={s.sapTable}>
-                <thead>
-                  <tr>
-                    <th scope="col">#</th>
-                    <th scope="col">{pa('instalment')}</th>
-                    <th scope="col">{pa('trigger')}</th>
-                    <th scope="col">{pa('expected_date')}</th>
-                    <th className={s.sapNum} scope="col">
-                      {pa('share')}
-                    </th>
-                    <th className={s.sapNum} scope="col">
-                      {pa('col_amount')}
-                    </th>
-                    <th scope="col">{pa('col_status')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {instalments.length === 0 ? (
-                    <tr>
-                      <td className={s.sapEmptyRow} colSpan={7}>
-                        {pa('no_instalments')}
-                      </td>
-                    </tr>
-                  ) : null}
-                  {instalments.map((instalment) => (
-                    <tr key={instalment.id}>
-                      <td>{instalment.sequence}</td>
-                      <td>
-                        <bdi dir="auto">{instalment.label}</bdi>
-                      </td>
-                      <td>
-                        <bdi dir="auto">
-                          {instalment.triggerName}
-                          {instalment.triggerDays !== null ? ` · ${instalment.triggerDays}` : ''}
-                        </bdi>
-                      </td>
-                      <td>
-                        <bdi dir="ltr">{day(instalment.expectedDate)}</bdi>
-                      </td>
-                      <td className={s.sapNum}>
-                        <bdi dir="ltr">{instalment.percent ? `${Number(instalment.percent)}%` : '—'}</bdi>
-                      </td>
-                      <td className={s.sapNum}>
-                        <bdi dir="ltr">{money(instalment.amountTxn)}</bdi>
-                      </td>
-                      <td>
-                        <span
-                          className={`status status--${instalment.status === 'paid' ? 'settled' : instalment.status === 'applied' ? 'submitted' : 'draft'}`}
-                          data-status={instalment.status === 'paid' ? 'settled' : instalment.status === 'applied' ? 'submitted' : 'draft'}
-                        >
-                          {pa(`instalment_${instalment.status}`)}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
 
             <div className={s.sapTableWrap}>
               <table aria-label={pa('section_applications')} className={s.sapTable}>
@@ -794,107 +785,6 @@ export default async function PayablePage({
               <div className={s.sapBody}>
                 <SubmitRow>
                   <NewRecordDialog
-                    buttonLabel={pa('plan')}
-                    closeLabel={admin('close')}
-                    title={pa('plan_title', { payableNo: row.payableNo })}
-                    wide
-                  >
-                    <p className="muted">{pa('plan_note', { amount: money(row.amountTxn) })}</p>
-                    <Form action={planInstalmentsAction}>
-                      <Hidden name="payable_no" value={row.payableNo} />
-                      <input name="row_count" type="hidden" value="6" />
-                      <div className={s.sapTableWrap}>
-                        <table className={s.sapTable}>
-                          <thead>
-                            <tr>
-                              <th scope="col">{pa('instalment')}</th>
-                              <th scope="col">{pa('basis')}</th>
-                              <th scope="col">{pa('value')}</th>
-                              <th scope="col">{pa('trigger')}</th>
-                              <th scope="col">{pa('trigger_days')}</th>
-                              <th scope="col">{pa('expected_date')}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {[0, 1, 2, 3, 4, 5].map((index) => {
-                              const current = instalments.filter((i) => i.status === 'planned')[index];
-                              return (
-                                <tr key={index}>
-                                  <td>
-                                    <input
-                                      aria-label={`${pa('instalment')} ${index + 1}`}
-                                      className={s.input}
-                                      defaultValue={current?.label ?? (index === 0 ? pa('deposit') : index === 1 ? pa('balance') : '')}
-                                      name={`label_${index}`}
-                                    />
-                                  </td>
-                                  <td>
-                                    <select
-                                      aria-label={`${pa('basis')} ${index + 1}`}
-                                      className={s.select}
-                                      defaultValue={current?.basis ?? 'percent'}
-                                      name={`basis_${index}`}
-                                    >
-                                      <option value="percent">{pa('basis_percent')}</option>
-                                      <option value="amount">{pa('basis_amount')}</option>
-                                    </select>
-                                  </td>
-                                  <td>
-                                    <input
-                                      aria-label={`${pa('value')} ${index + 1}`}
-                                      className={s.input}
-                                      defaultValue={
-                                        current ? (current.basis === 'percent' ? Number(current.percent).toString() : current.amountTxn) : ''
-                                      }
-                                      inputMode="decimal"
-                                      name={`value_${index}`}
-                                    />
-                                  </td>
-                                  <td>
-                                    <select
-                                      aria-label={`${pa('trigger')} ${index + 1}`}
-                                      className={s.select}
-                                      defaultValue={current?.triggerCode ?? (index === 0 ? 'on_order' : 'against_bl_copy')}
-                                      name={`trigger_${index}`}
-                                    >
-                                      {pickers.triggers.map((trigger) => (
-                                        <option key={trigger.code} value={trigger.code}>
-                                          {trigger.name}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </td>
-                                  <td>
-                                    <input
-                                      aria-label={`${pa('trigger_days')} ${index + 1}`}
-                                      className={s.input}
-                                      defaultValue={current?.triggerDays ?? ''}
-                                      inputMode="numeric"
-                                      name={`days_${index}`}
-                                    />
-                                  </td>
-                                  <td>
-                                    <input
-                                      aria-label={`${pa('expected_date')} ${index + 1}`}
-                                      className={`${s.input} ${s.dateInput}`}
-                                      defaultValue={current?.expectedDate ?? ''}
-                                      name={`expected_${index}`}
-                                      type="date"
-                                    />
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                      <SubmitRow>
-                        <Submit label={pa('plan_save')} />
-                      </SubmitRow>
-                    </Form>
-                  </NewRecordDialog>
-
-                  <NewRecordDialog
                     buttonLabel={pa('new')}
                     closeLabel={admin('close')}
                     openOnLoad={openPay}
@@ -903,16 +793,18 @@ export default async function PayablePage({
                     <Form action={createApplication}>
                       <Hidden name="payable_no" value={row.payableNo} />
                       <Grid>
-                        <Select
-                          emptyLabel={pa('no_instalment')}
-                          label={pa('instalment')}
-                          name="instalment_id"
-                          options={pickers.instalments.map((instalment) => ({
-                            value: instalment.id,
-                            label: `${instalment.sequence}. ${instalment.label} — ${money(instalment.amountTxn)}`,
-                          }))}
+                        {/*
+                          A part payment is the ordinary case, not a special
+                          one: 20% with the order, the rest against the bill
+                          of lading. The box has always taken any amount —
+                          what it was missing was saying so, and saying what
+                          is still owed (2026-10-03).
+                        */}
+                        <Field
+                          hint={pa('amount_part_hint', { remaining: money(toDecimalString(paymentTotals.remainingTxn, 4n)) })}
+                          label={pa('col_amount')}
+                          name="amount"
                         />
-                        <Field hint={pa('amount_hint')} label={pa('col_amount')} name="amount" />
                         <Select
                           label={pa('col_method')}
                           name="payment_method"
@@ -937,12 +829,6 @@ export default async function PayablePage({
                             value: payee.id,
                             label: `${payee.bankName} · ${payee.accountNumber}${payee.swift ? ` · ${payee.swift}` : ''}${payee.verified ? '' : ` (${pa('unverified')})`}`,
                           }))}
-                        />
-                        <Select
-                          defaultValue="own_funds"
-                          label={pa('funding')}
-                          name="funding_source"
-                          options={pickers.funding.map((source) => ({ value: source.code, label: source.name }))}
                         />
                         {pickers.loans.length > 0 ? (
                           <Select
@@ -1557,6 +1443,7 @@ export default async function PayablePage({
           </div>
         </section>
       ) : null}
+      </div>
 
       {/* ── The service lane: confirmations and the contract (§21.3) ──── */}
       {receipts.length > 0 || contract || type.code === 'service' || type.code === 'recurring' ? (
@@ -1716,20 +1603,6 @@ export default async function PayablePage({
         </div>
       </section>
 
-      {/* ── Attachments & history ────────────────────────────────────── */}
-      <section aria-label={t('tab_attachments')} className={s.sapDoc}>
-        <div className={s.sapWindow}>
-          <Attachments
-            preloaded={found.attachments}
-            action={attachToPayable}
-            hidden={{ payable_no: row.payableNo }}
-            mayAttach={mayEdit}
-            objectId={row.id}
-            objectType={payables.PERMISSION_OBJECT}
-          />
-        </div>
-      </section>
-      <RecordHistory objectId={row.id} objectType={payables.PERMISSION_OBJECT} preloaded={found.history} />
     </AdminPage>
   );
 }

@@ -1031,6 +1031,13 @@
   color: var(--status-rejected, var(--text-muted));
 }
 
+/* Money a payment application has claimed and the bank has not yet sent:
+   amber, the same token the ERP already gives a submitted document, because
+   that is precisely what is holding it. */
+.holdingsPending > span > svg {
+  color: var(--status-submitted, var(--text-muted));
+}
+
 /* -------------------------------------------------------------------------
  * Two report panels, one above the other
  *
@@ -5175,14 +5182,18 @@
   gap: 0.35rem;
 }
 
+/* A shade bigger than it was, and it says it can be clicked (2026-10-03):
+   at 1.7rem with a 0.85rem glyph the two icons beside a document's title read
+   as decoration, and the cursor did not contradict that. */
 .sapDoc.sapDoc .sapIconButton,
 .sapDoc.sapDoc a.sapIconButton {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
   min-inline-size: 0;
-  min-block-size: 1.7rem;
-  padding: 0.15rem 0.55rem;
+  min-block-size: 1.95rem;
+  padding: 0.2rem 0.65rem;
+  cursor: pointer;
   border: 1px solid var(--w-line-strong);
   border-radius: var(--w-radius-sm);
   background: var(--w-bg);
@@ -5198,8 +5209,8 @@
 }
 
 .sapDoc .sapIconButton svg {
-  inline-size: 0.85rem;
-  block-size: 0.85rem;
+  inline-size: 1.02rem;
+  block-size: 1.02rem;
 }
 
 .sapIconCount {
@@ -5641,6 +5652,24 @@
   gap: 0.85rem;
   grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
   margin: 0;
+}
+
+/*
+ * A document window standing in that grid fills its cell.
+ *
+ * The import's four lanes sit side by side (2026-10-03). A grid cell already
+ * stretches to the tallest in its row, but the window inside it keeps its own
+ * height, so four lanes of different lengths drew four boxes with white space
+ * under the short ones. Scoped to a window inside the grid: nothing else that
+ * uses `.chartGrid` holds one.
+ */
+.chartGrid > .sapDoc {
+  display: flex;
+}
+
+.chartGrid > .sapDoc > .sapWindow {
+  flex: 1;
+  margin-block-end: 0;
 }
 
 .chartFigure {

@@ -4,6 +4,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { Pagination } from '@/components/ui';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { SectionTabs } from '@/components/admin/section-tabs';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -53,6 +54,7 @@ export default async function PurchaseOrdersPage({
     <AdminPage
       back={{ href: '/payables', label: t('payables') }}
       subtitle={t('subtitle')}
+      tabs={<SectionTabs route="/payables/purchase-orders" />}
       title={t('title')}
       variant="sap"
     >

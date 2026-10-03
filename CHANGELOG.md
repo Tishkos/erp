@@ -45,7 +45,7 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
   shows the year's balances, the requests and the month day by day. A
   contract's end date; the morning `hr-sweep` warns of contracts ending,
   requests waiting and annual leave about to lapse (limits on HR Settings).
-  Migration 0256.
+  Migration 0261.
 - The sponsor's WhatsApp configuration (`whatsapp-configuration`) on top of
   main: Noah on Opus 5.5 working the question out (WA-3), answering in the
   group only, reading what is sent to him, the claude-CLI brain, the

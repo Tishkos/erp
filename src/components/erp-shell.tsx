@@ -51,7 +51,16 @@ import {
 import { routeFor } from '@domain/screens';
 import { saveMyAppearanceSettings } from '@/app/(app)/appearance-actions';
 import { Button, Panel } from '@/components/ui';
-import mainLogo from '../../mainLogo.png';
+/*
+ * The monogram, not the full mark.
+ *
+ * The logo carries the Q, "ERP" and the company's name in both scripts, which
+ * is right on a sign-in card or a letterhead. The slot here is 46 x 48 CSS
+ * pixels and the name is already written beside it in `erp-brand__wordmark`,
+ * so the full mark would put the name twice and neither legibly. Both files
+ * are cut from the same source, so there is one brand to keep in step.
+ */
+import mainLogo from '../../mainLogoMark.png';
 import { GlobalSearch } from './global-search';
 import { switchBranch } from '@/app/(app)/actions';
 
@@ -159,7 +168,7 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
   { key: 'sales', icon: ShoppingCart, sectionKeys: ['sales'] },
   // Purchasing became Payables — one module for everything owed (REQ-AP-001 D7).
   // REQ-FIX-001 FIX-1 — four headings, like Accounting's.
-  { key: 'payables', icon: ShoppingBag, sectionKeys: ['payables', 'payables_payments', 'payables_suppliers', 'payables_setup'] },
+  { key: 'payables', icon: ShoppingBag, sectionKeys: ['payables', 'payables_suppliers', 'payables_setup'] },
   // Everything logistics in the system (by direction, 2026-10-02).
   { key: 'logistics', icon: Truck, sectionKeys: ['logistics_customs', 'logistics_shipping', 'logistics'] },
   { key: 'money_transfer', icon: ArrowLeftRight, sectionKeys: ['money_transfer'] },
@@ -228,10 +237,35 @@ function isActiveHref(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function moduleIsActive(pathname: string, module: ModuleGroup): boolean {
-  return module.sections.some((section) =>
-    section.items.some((item) => item.href && isActiveHref(pathname, item.href)),
-  );
+/**
+ * The one module the current page belongs to.
+ *
+ * A module matches when one of its own links matches the path, and more than
+ * one can: the Logistics screens are routed under `/payables/…` — the customs
+ * declarations, the bills of lading, the containers — so Payables matches them
+ * too, through its own `/payables` link. Both lit at once, and the first one
+ * drawn reads as the chosen one, which is why opening Customs
+ * Pre-Declarations lit Payables (reported 2026-10-02).
+ *
+ * So the longest matching link wins: `/payables/pd` beats `/payables`, and the
+ * module that actually lists the screen is the module that lights up. Routing
+ * a screen under another module's path stays a thing you can do.
+ */
+function activeLink(pathname: string, modules: readonly ModuleGroup[]): { readonly moduleKey: string; readonly href: string } | null {
+  let best: { moduleKey: string; href: string } | null = null;
+  for (const module of modules) {
+    for (const section of module.sections) {
+      for (const item of section.items) {
+        // The address the link actually goes to, which is not always the one
+        // the menu declares — `routeFor` is what the <Link> is built from, so
+        // matching on anything else compares against a page nobody opened.
+        const href = routeFor(item, section.key);
+        if (!isActiveHref(pathname, href)) continue;
+        if (!best || href.length > best.href.length) best = { moduleKey: module.key, href };
+      }
+    }
+  }
+  return best;
 }
 
 function firstModuleHref(module: ModuleGroup): string | null {
@@ -324,10 +358,13 @@ function PendingItem({ item }: { readonly item: MenuItem }) {
 function ModuleContents({
   module,
   pathname,
+  activeHref,
   onNavigate,
 }: {
   readonly module: ModuleGroup;
   readonly pathname: string;
+  /** The one deepest link that matches the path, worked out once by the shell. */
+  readonly activeHref: string | null;
   readonly onNavigate: () => void;
 }) {
   const nav = useTranslations('nav');
@@ -351,7 +388,11 @@ function ModuleContents({
               return (
                 <li className="erp-module-section__item" key={item.key}>
                   <Link
-                    aria-current={isActiveHref(pathname, href) ? 'page' : undefined}
+                    // The one deepest link, not every link the path starts
+                    // with: Update from ASYCUDA lives under Customs
+                    // Pre-Declarations' address, so both used to read as the
+                    // open screen (reported 2026-10-02).
+                    aria-current={activeHref === href ? 'page' : undefined}
                     className={`erp-menu-item erp-menu-item--link${preview ? ' erp-menu-item--preview' : ''}`}
                     href={href}
                     onClick={onNavigate}
@@ -393,6 +434,8 @@ export function ErpShell({
   const pathname = usePathname();
   const router = useRouter();
   const modules = useMemo(() => groupSections(sections), [sections]);
+  const active = useMemo(() => activeLink(pathname, modules), [pathname, modules]);
+  const activeKey = active?.moduleKey ?? null;
   const [openPopover, setOpenPopover] = useState<OpenPopover>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openMobileModules, setOpenMobileModules] = useState<readonly ModuleKey[]>([]);
@@ -643,7 +686,7 @@ export function ErpShell({
                 setOpenPopover(null);
                 setOpenMobileModules(
                   modules
-                    .filter((module) => moduleIsActive(pathname, module))
+                    .filter((module) => module.key === activeKey)
                     .map((module) => module.key),
                 );
                 setMobileOpen(true);
@@ -665,8 +708,8 @@ export function ErpShell({
                     <button
                       className="erp-nav__trigger"
                       type="button"
-                      data-active={moduleIsActive(pathname, module) ? 'true' : 'false'}
-                      aria-current={moduleIsActive(pathname, module) ? 'page' : undefined}
+                      data-active={module.key === activeKey ? 'true' : 'false'}
+                      aria-current={module.key === activeKey ? 'page' : undefined}
                       aria-expanded={isOpen}
                       aria-controls={panelId}
                       title={shell(`module.${module.key}`)}
@@ -682,6 +725,7 @@ export function ErpShell({
                         <ModuleContents
                           module={module}
                           pathname={pathname}
+                          activeHref={active?.href ?? null}
                           onNavigate={closeNavigation}
                         />
                       </div>
@@ -978,6 +1022,7 @@ export function ErpShell({
                     <ModuleContents
                       module={module}
                       pathname={pathname}
+                      activeHref={active?.href ?? null}
                       onNavigate={closeNavigation}
                     />
                   </details>

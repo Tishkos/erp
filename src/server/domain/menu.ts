@@ -154,35 +154,34 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ordinal: 4,
     items: [
       page('payables_workbench', 'payable', '/payables'),
+      // Where the work starts: an import is born at its purchase invoice
+      // (D12/D13), so it reads before the order and the receipt.
+      page('ap_invoices', 'ap_invoice', '/payables/invoices'),
       page('purchase_orders', 'purchase_order'),
       page('goods_receipts', 'goods_receipt'),
       page('service_receipts', 'service_receipt'),
       page('recurring_contracts', 'recurring_contract', '/payables/contracts'),
-      page('ap_invoices', 'ap_invoice', '/payables/invoices'),
+      // The payment is the end of the same job as the invoice (2026-10-03),
+      // so it is one heading: order, receipt, invoice, payment.
+      page('payment_applications', 'payment_application', '/payables/payment-applications'),
+      page('supplier_payments', 'supplier_payment', '/payables/supplier-payments'),
+      page('supplier_advances', 'supplier_advance', '/payables/advances'),
+      // A credit memo is raised against an invoice, so it reads beside them
+      // rather than under a heading of its own (2026-10-03).
+      page('supplier_credit_memos', 'supplier_credit_memo', '/payables/credit-memos'),
+      // Not built yet; carried from the former finance_ap section (§21.1).
+      page('ap_payments', 'supplier_payment'),
+      page('ap_advances', 'supplier_advance'),
+      page('ap_allocations', 'ap_allocation'),
       page('goods_returns', 'goods_return', '/payables/goods-returns'),
       page('match_exceptions', 'match_exception'),
       page('procurement_dashboard', 'procurement_dashboard'),
     ],
   },
   {
-    // REQ-FIX-001 FIX-1 — paying what is owed.
-    key: 'payables_payments',
-    ordinal: 21,
-    items: [
-      page('payment_applications', 'payment_application', '/payables/payment-applications'),
-      page('supplier_payments', 'supplier_payment', '/payables/supplier-payments'),
-      page('supplier_advances', 'supplier_advance', '/payables/advances'),
-      page('supplier_credit_memos', 'supplier_credit_memo', '/payables/credit-memos'),
-      // Moved in from the former finance_ap section (§21.1).
-      page('ap_payments', 'supplier_payment'),
-      page('ap_advances', 'supplier_advance'),
-      page('ap_allocations', 'ap_allocation'),
-    ],
-  },
-  {
     // REQ-FIX-001 FIX-1 — who it is owed to, and how much is outstanding.
     key: 'payables_suppliers',
-    ordinal: 22,
+    ordinal: 21,
     items: [
       page('suppliers', 'business_partner', '/payables/suppliers'),
       // The supplier's side of the same mirror. See the note under Sales.
@@ -197,7 +196,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
   {
     // REQ-FIX-001 FIX-1 — the module's own configuration.
     key: 'payables_setup',
-    ordinal: 23,
+    ordinal: 22,
     items: [
       page('payables_settings', 'payables_settings', '/administration/payables-settings'),
       // REQ-AP-001 Stage 8 — the one-time sheet import (§24.3).
@@ -260,7 +259,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
      * screens keep their routes (D-FX-1).
      */
     key: 'logistics_customs',
-    ordinal: 24,
+    ordinal: 23,
     items: [
       page('pds', 'customs_pd', '/payables/pd'),
       { key: 'asycuda_update', object: 'customs_pd', verb: 'import', href: '/payables/pd/asycuda' },
@@ -268,7 +267,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
   },
   {
     key: 'logistics_shipping',
-    ordinal: 25,
+    ordinal: 24,
     items: [
       page('shipments', 'bill_of_lading', '/payables/shipments'),
       page('containers', 'shipment_container', '/payables/containers'),

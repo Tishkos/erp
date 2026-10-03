@@ -192,7 +192,14 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
       control: true,
       value: (
         <label>
-          <input name="is_import" type="checkbox" value="1" /> {x('is_import_hint')}
+          {/*
+           * Ticked to begin with, by direction (2026-10-03): nearly everything
+           * this company buys comes from abroad, and the invoice that opens no
+           * import application is the exception. Untick it for a local
+           * purchase — and then the goods land in the warehouse on posting
+           * rather than waiting at sea, which is what it means.
+           */}
+          <input defaultChecked name="is_import" type="checkbox" value="1" /> {x('is_import_hint')}
         </label>
       ),
     },

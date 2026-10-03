@@ -15,6 +15,8 @@ import {
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { Pagination } from '@/components/ui';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { SectionTabs } from '@/components/admin/section-tabs';
+import * as rates from '@/server/services/exchange-rates';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -58,7 +60,8 @@ export default async function RecurringContractsPage({
   }
   const mayCreate = can(principal, 'create', contracts.PERMISSION_OBJECT);
 
-  const { result, suppliers, departments, categories } = await withCurrentUser(async (tx) => ({
+  const { result, suppliers, departments, categories, moneys } = await withCurrentUser(async (tx) => ({
+    moneys: await rates.currencies(tx),
     result: await contracts.listForScreen(tx, { page: outcome.page }),
     suppliers: await partners.listActiveInRole(tx, 'supplier'),
     departments: await departmentsService.listAll(tx),
@@ -74,6 +77,7 @@ export default async function RecurringContractsPage({
 
   return (
     <AdminPage
+      tabs={<SectionTabs route="/payables/contracts" />}
       actions={
         mayCreate ? (
           <NewRecordDialog
@@ -103,7 +107,15 @@ export default async function RecurringContractsPage({
                   options={categories.map((c) => ({ value: c.code, label: c.name }))}
                   required
                 />
-                <Field defaultValue="USD" label={t('currency')} name="currency" required />
+                <Select
+                  defaultValue="USD"
+                  label={t('currency')}
+                  name="currency"
+                  options={moneys
+                    .filter((c) => c.isActive)
+                    .map((c) => ({ value: c.code, label: `${c.code} · ${c.name}` }))}
+                  required
+                />
                 <Field label={t('amount')} name="amount" required />
                 <Select
                   label={t('frequency')}

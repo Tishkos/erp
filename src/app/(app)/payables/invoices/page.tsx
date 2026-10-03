@@ -110,51 +110,9 @@ export default async function ApInvoicesPage({ searchParams }: { searchParams: S
     <AdminPage
       actions={
         mayCreate ? (
-          <>
-            <NewRecordDialog
-              buttonLabel={x('add')}
-              closeLabel={t('close')}
-              openOnLoad={params.expense === '1' && Boolean(outcome.error)}
-              title={x('add_title')}
-            >
-              <Form action={addExpenseAction}>
-                <Grid>
-                  <Select
-                    label={x('category')}
-                    name="expense_category"
-                    options={categories.map((c) => ({ value: c.code, label: c.name }))}
-                    required
-                  />
-                  <Select
-                    label={x('supplier')}
-                    name="supplier_id"
-                    options={suppliers.map((p) => ({ value: p.id, label: `${p.name} (${p.code})` }))}
-                    required
-                  />
-                  <Field label={x('amount')} name="amount" required />
-                  <Field defaultValue={today} label={x('invoice_date')} name="invoice_date" required type="date" />
-                  <Field label={x('due_date')} name="due_date" required type="date" />
-                  <Field label={x('supplier_invoice_no')} name="supplier_invoice_no" />
-                  <Select
-                    emptyLabel="—"
-                    label={x('charged_to')}
-                    name="charged_to"
-                    options={imports.map((i) => ({
-                      value: i.id,
-                      label: `${i.payableNo} · ${i.reference} · ${i.supplierName}`,
-                    }))}
-                  />
-                </Grid>
-                <Field hint={x('name_hint')} label={x('name')} name="name" required wide />
-                <SubmitRow>
-                  <Submit label={x('save')} />
-                </SubmitRow>
-              </Form>
-            </NewRecordDialog>
-            <Link className="action action--primary" href="/payables/invoices/new">
-              {t('ap_invoices.new')}
-            </Link>
-          </>
+          <Link className="action action--primary" href="/payables/invoices/new">
+            {t('ap_invoices.new')}
+          </Link>
         ) : null
       }
       back={{ href: '/', label: t('dashboard_label') }}
