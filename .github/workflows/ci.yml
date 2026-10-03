@@ -50,7 +50,7 @@ jobs:
       - name: Coverage
         run: npm run test:coverage
       - name: Publish coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-domain
@@ -154,7 +154,7 @@ jobs:
       - run: npm run db:seed
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report
