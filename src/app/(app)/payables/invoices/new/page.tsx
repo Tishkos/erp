@@ -63,6 +63,10 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
     return <Denied object={page('ap_invoices')} />;
   }
 
+  // Declared before the reads below: the currency rates are fetched for this
+  // date, and it used to be declared after them.
+  const today = businessToday();
+
   const { suppliers, allSuppliers, stockItems, allItems, houses, schedules, accounts, mapped, imports, assignment, moneys } =
     await withCurrentUser(async (tx) => ({
       // REQ-PM-001 §8 — the project elements a purchase may be assigned to.
@@ -111,7 +115,6 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
   );
 
   const sellable = stockItems;
-  const today = businessToday();
 
   // Each supplier beside the terms they are on, which is all the due date
   // needs: the partner chosen in the header decides which schedule applies.

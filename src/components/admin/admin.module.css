@@ -5272,6 +5272,25 @@
   min-block-size: 2rem;
 }
 
+/* A tick with its sentence beside it — "This is an import" — is a field like
+   any other and was reading as an afterthought under a label (2026-10-03). The
+   wrapper takes the same height as the boxes either side and centres what is
+   in it; the tick itself is a shade larger here and nowhere else, because the
+   global 1rem is right in a permissions matrix of two hundred of them. */
+.sapDoc.sapDoc .sapField > label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-block-size: 2rem;
+}
+
+.sapDoc.sapDoc .sapField > label > input[type='checkbox'] {
+  inline-size: 1.15rem;
+  block-size: 1.15rem;
+  min-inline-size: 1.15rem;
+  min-block-size: 1.15rem;
+}
+
 /* ── Reporting levels ─────────────────────────────────────────────────────
    A header row carries the sum of what is beneath it. */
 .levelHeader > td {
