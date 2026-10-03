@@ -55,13 +55,24 @@ import type { PermissionVerb } from '../../src/server/domain/permissions';
 
 const apply = process.argv.includes('--apply');
 
-/** Everything a person may do with the things in their section. */
+/**
+ * Everything a person may do with the things in their section — except approve.
+ *
+ * `approve` is absent from every role here, by direction (2026-10-03): "he
+ * cannot approve anything without baban ali this very important". Baban
+ * approves, and his power is the super-user flag rather than a grant, so
+ * taking the verb out of the roles takes it out of the company.
+ *
+ * `post` and `execute` stay, because posting a journal somebody already
+ * approved is the accountant's work rather than a second approval. Where the
+ * owner asked for the committing act itself to wait — a sale, money out, a
+ * purchase invoice — the section is `RAISE_ONLY`, which has neither.
+ */
 const FULL: PermissionVerb[] = [
   'view',
   'create',
   'edit_draft',
   'submit',
-  'approve',
   'post',
   'execute',
   'configure',
@@ -104,6 +115,19 @@ const SALES = ['sales', 'finance_ar', 'crm'];
 const MONEY_OUT = ['treasury', 'money_transfer'];
 const BUYING = ['payables'];
 
+/*
+ * The objects inside Payables that are money leaving, rather than buying.
+ *
+ * Payables is one menu section holding two different things: the purchase side
+ * (orders, receipts, invoices) and the paying side (applications, payments,
+ * advances). Granting the section in full to the supply chain therefore handed
+ * Shene `post` on a supplier payment — she could have sent money with nobody
+ * approving it, which is the opposite of what was asked (caught by reading the
+ * grants back, 2026-10-03). Named here so no section grant can include them by
+ * accident again.
+ */
+const PAYING = ['payment_application', 'supplier_payment', 'supplier_advance', 'ap_allocation'];
+
 type Grant = { readonly object: string; readonly verb: PermissionVerb };
 
 function grants(objects: readonly string[], verbs: readonly PermissionVerb[]): Grant[] {
@@ -135,17 +159,17 @@ const NEW_ROLES = [
     code: 'director',
     name: 'Director',
     description:
-      'Every section. A sale, money going out and a purchase invoice are raised for the CEO to approve. Ali and Zahra.',
+      'Every section, and no approvals. A sale, money going out and a purchase invoice are raised for the CEO. Ali and Zahra.',
     grants: restrict(
       grants(objectsOf(...EVERY_SECTION), FULL),
-      grants(objectsOf(...SALES, ...MONEY_OUT, ...BUYING), RAISE_ONLY),
+      grants([...objectsOf(...SALES, ...MONEY_OUT, ...BUYING), ...PAYING], RAISE_ONLY),
     ),
   },
   {
     code: 'supply_chain_officer',
     name: 'Supply chain officer',
     description:
-      'Supply chain, ASYCUDA, shipping and inventory in full. A purchase invoice is raised for the CEO to approve. Nothing else. Shene and Diana.',
+      'Supply chain, ASYCUDA, shipping and inventory, with no approvals. A purchase invoice is raised for the CEO. Nothing else. Shene and Diana.',
     grants: restrict(
       grants(
         objectsOf(
@@ -159,23 +183,34 @@ const NEW_ROLES = [
         ),
         FULL,
       ),
-      // The purchase invoice is the thing that commits the company to pay.
-      grants(['ap_invoice'], RAISE_ONLY),
+      // The purchase invoice commits the company to pay; the payment objects
+      // are the paying itself. Both are raised here and approved by the CEO.
+      grants(['ap_invoice', ...PAYING], RAISE_ONLY),
     ),
   },
   {
     code: 'inventory_clerk',
     name: 'Inventory clerk',
-    description: 'Inventory, and nothing else. Lara.',
+    description: 'Inventory, with no approvals. Nothing else. Lara.',
     grants: grants(objectsOf('inventory'), FULL),
   },
   {
     code: 'sales_inventory_clerk',
     name: 'Sales and inventory clerk',
-    description: 'Inventory in full. A sales invoice is raised for the CEO to approve. Zhyar.',
+    description: 'Inventory, with no approvals. A sales invoice is raised for the CEO. Zhyar and Rawezh.',
     grants: restrict(
       grants(objectsOf('inventory'), FULL),
       grants(objectsOf(...SALES), RAISE_ONLY),
+    ),
+  },
+  {
+    code: 'accountant',
+    name: 'Accountant',
+    description:
+      'Every section, and no approvals — a sale, money going out and a purchase invoice are raised for the CEO. Manar.',
+    grants: restrict(
+      grants(objectsOf(...EVERY_SECTION), FULL),
+      grants([...objectsOf(...SALES, ...MONEY_OUT, ...BUYING), ...PAYING], RAISE_ONLY),
     ),
   },
   {
@@ -185,7 +220,7 @@ const NEW_ROLES = [
       'The import application and its papers, in full; inventory to look at. Nothing else. For Maki, when their address is known.',
     grants: restrict(
       grants(objectsOf('payables', 'logistics_customs', 'logistics_shipping'), FULL),
-      grants(objectsOf('inventory'), READ),
+      grants([...objectsOf('inventory'), ...PAYING], READ),
     ),
   },
 ] as const;
@@ -205,6 +240,8 @@ const PEOPLE = [
   { email: 'diana@qs-groups.com', name: 'Diana', roles: ['supply_chain_officer'], superUser: false },
   { email: 'lara@qs-groups.com', name: 'Lara', roles: ['inventory_clerk'], superUser: false },
   { email: 'zhyar@qs-groups.com', name: 'Zhyar', roles: ['sales_inventory_clerk'], superUser: false },
+  { email: 'rawezh@qs-groups.com', name: 'Rawezh Jalil', roles: ['sales_inventory_clerk'], superUser: false },
+  { email: 'info@qs-groups.com', name: 'Manar', roles: ['accountant'], superUser: false },
 ] as const;
 
 async function main(): Promise<void> {
