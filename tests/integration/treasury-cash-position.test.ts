@@ -359,10 +359,17 @@ describe('07.8 gate · the forecast and its five sources (§17)', () => {
       cash.forecast(tx, manager, { from: '2026-02-01', to: '2026-02-28' }),
     );
 
-    // §17 names five. `investment_calls` is the sixth, added when Phase 13 was
-    // built: §13.8 requires the investment cash-flow forecast to feed this one,
-    // and a second forecast nobody reconciled against would be worse than a
-    // longer list here.
+    /*
+     * §17 names five. `investment_calls` was the sixth, added when Phase 13 was
+     * built: §13.8 requires the investment cash-flow forecast to feed this one,
+     * and a second forecast nobody reconciled against would be worse than a
+     * longer list here.
+     *
+     * The loans are the seventh and eighth (2026-10-03, by direction). A bank
+     * loan does two things to a bank account on dates set months ahead — an
+     * instalment falls due, and a drawdown arrives — and a forecast that knew
+     * neither was a forecast with a hole in it exactly where the certainty is.
+     */
     expect(result.sources.map((s) => s.source)).toEqual([
       'ap_due',
       'ar_expected',
@@ -370,15 +377,20 @@ describe('07.8 gate · the forecast and its five sources (§17)', () => {
       'payroll',
       'transfer_funding',
       'investment_calls',
+      'loan_repayments',
+      'loan_drawdowns',
     ]);
 
     // Two of §17's five are not wired yet, and the report says so rather than
-    // reporting them as nil. Payroll is, since REQ-HR-001 HR-3.
+    // reporting them as nil. Payroll is, since REQ-HR-001 HR-3; the loans are,
+    // since their register holds a schedule and a repayment ledger.
     expect(result.sources.filter((s) => s.available).map((s) => s.source)).toEqual([
       'ap_due',
       'ar_expected',
       'payroll',
       'investment_calls',
+      'loan_repayments',
+      'loan_drawdowns',
     ]);
     for (const source of result.sources.filter((s) => !s.available)) {
       expect(source.note).toMatch(/Awaits Phase \d+/);

@@ -121,6 +121,10 @@ export const FORECAST_SOURCES = [
   'payroll',
   'transfer_funding',
   'investment_calls',
+  // What the bank loans do to the accounts (2026-10-03): instalments falling
+  // due, and the money a loan brings in when it is drawn.
+  'loan_repayments',
+  'loan_drawdowns',
 ] as const;
 
 export type ForecastSource = (typeof FORECAST_SOURCES)[number];
@@ -166,6 +170,16 @@ export const SOURCE_STATUS: readonly SourceStatus[] = [
     source: 'investment_calls',
     available: true,
     note: 'Unmet capital calls, by due date (§13.7). Committed money with a date on it, which is exactly what a forecast is for.',
+  },
+  {
+    source: 'loan_repayments',
+    available: true,
+    note: 'Bank loan instalments still to be paid, on their due date (§15.7). An instalment inside a grace period asks for nothing and is not in here.',
+  },
+  {
+    source: 'loan_drawdowns',
+    available: true,
+    note: 'Approved loans on the day the bank said it would send the money — the net of it, since a commission deducted at disbursement never arrives.',
   },
 ];
 
@@ -304,6 +318,12 @@ export async function forecast(
   if (!excluded.includes('ar_expected')) {
     movements.push(...(await arExpected(tx, input.from, input.to, branchCode)));
   }
+  if (!excluded.includes('loan_repayments')) {
+    movements.push(...(await loanRepayments(tx, input.from, input.to, branchCode)));
+  }
+  if (!excluded.includes('loan_drawdowns')) {
+    movements.push(...(await loanDrawdowns(tx, input.from, input.to, branchCode)));
+  }
   if (!excluded.includes('investment_calls')) {
     movements.push(...(await investmentCalls(tx, input.from, input.to, branchCode)));
   }
@@ -416,6 +436,92 @@ async function apDue(
     date: row.date,
     source: 'ap_due' as const,
     amountIqd: -parseDecimal(row.amountIqd, 4n),
+  }));
+}
+
+/**
+ * §15.7 — the bank loan instalments still to be paid, on the day they fall due.
+ *
+ * The schedule says what is owed and when; a row that has been paid is gone
+ * from here, and a row inside a grace period asks for nothing and never was.
+ * Converted at the rate in force on the due date, because a dollar loan repaid
+ * next quarter costs whatever dinars it costs then — the forecast's own
+ * assumption, stated here rather than hidden.
+ */
+async function loanRepayments(
+  tx: Tx,
+  from: string,
+  to: string,
+  branchCode: string | null,
+): Promise<{ date: string; source: ForecastSource; amountIqd: bigint }[]> {
+  const result = (await tx.execute(sql`
+    select s.due_date::text as "date",
+           (s.total_txn * coalesce(r.iqd_per_unit, 1))::text as "amountIqd"
+      from bank_loan_instalment s
+      join bank_loan l on l.id = s.loan_id
+      left join lateral (
+        select x.iqd_per_unit
+          from exchange_rate x
+         where x.currency_code = l.currency
+           and x.effective_from <= s.due_date
+           and x.superseded_at is null
+         order by x.effective_from desc
+         limit 1
+      ) r on true
+     where l.status = 'active'
+       and s.superseded_at is null
+       and s.status <> 'paid'
+       and s.total_txn > 0
+       and s.due_date between ${from}::date and ${to}::date
+       and (${branchCode}::text is null or l.branch_code = ${branchCode})
+  `)) as unknown as { rows: { date: string; amountIqd: string }[] };
+
+  // Money going out is negative, as every outgoing source here is.
+  return result.rows.map((row) => ({
+    date: row.date,
+    source: 'loan_repayments' as const,
+    amountIqd: -parseDecimal(row.amountIqd, 4n),
+  }));
+}
+
+/**
+ * §15.7 — the money an approved loan will bring in, on the day its bank said.
+ *
+ * The net: a commission the bank deducts at disbursement never reaches the
+ * account, so a forecast that counted the principal would promise money that
+ * was never coming. A loan with no expected date is not in here — a forecast
+ * is made of dated things.
+ */
+async function loanDrawdowns(
+  tx: Tx,
+  from: string,
+  to: string,
+  branchCode: string | null,
+): Promise<{ date: string; source: ForecastSource; amountIqd: bigint }[]> {
+  const result = (await tx.execute(sql`
+    select l.expected_disbursement_date::text as "date",
+           (l.net_proceeds_txn * coalesce(r.iqd_per_unit, 1))::text as "amountIqd"
+      from bank_loan l
+      left join lateral (
+        select x.iqd_per_unit
+          from exchange_rate x
+         where x.currency_code = l.currency
+           and x.effective_from <= l.expected_disbursement_date
+           and x.superseded_at is null
+         order by x.effective_from desc
+         limit 1
+      ) r on true
+     where l.status = 'approved'
+       and l.expected_disbursement_date is not null
+       and l.net_proceeds_txn > 0
+       and l.expected_disbursement_date between ${from}::date and ${to}::date
+       and (${branchCode}::text is null or l.branch_code = ${branchCode})
+  `)) as unknown as { rows: { date: string; amountIqd: string }[] };
+
+  return result.rows.map((row) => ({
+    date: row.date,
+    source: 'loan_drawdowns' as const,
+    amountIqd: parseDecimal(row.amountIqd, 4n),
   }));
 }
 
