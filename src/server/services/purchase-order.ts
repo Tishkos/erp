@@ -273,7 +273,8 @@ export async function approve(tx: Tx, ctx: ActorContext, id: string): Promise<vo
     );
   }
 
-  if (order.createdBy === ctx.principal.userId) {
+  // the super user approves alone, by direction 2026-10-03 — the company has one approver and a rule nobody can satisfy approves nothing.
+  if (order.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) {
     throw new PurchaseOrderStateError(
       order.orderNo,
       order.status,

@@ -2406,7 +2406,7 @@
       "none": "No opening stock yet.",
       "created_note": "The system gives the document its number. Save sends it for approval; approval brings the stock in.",
       "approve": "Approve and post",
-      "awaiting": "Waiting for approval by someone other than the person who entered it.",
+      "awaiting": "Waiting for approval.",
       "approved_by": "Approved by",
       "lines": "Lines",
       "total": "Total"

@@ -464,7 +464,8 @@ export async function approve(
     throw new NotTheBenefitingDepartmentError(receipt.departmentCode, receipt.receiptNo);
   }
 
-  if (receipt.createdBy === ctx.principal.userId) {
+  // the super user approves alone, by direction 2026-10-03 — the company has one approver and a rule nobody can satisfy approves nothing.
+  if (receipt.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) {
     throw new ServiceReceiptStateError(
       receipt.receiptNo,
       receipt.status,

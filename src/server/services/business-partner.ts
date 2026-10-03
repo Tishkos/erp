@@ -543,7 +543,8 @@ export async function approveBankAccount(
 
   const row = await bankAccountRow(tx, bankAccountId);
   if (row.deactivatedAt) throw new BankDetailsError('This bank account was taken out of use; it cannot be verified.');
-  if (row.createdBy && row.createdBy === ctx.principal.userId) {
+  // the super user approves alone, by direction 2026-10-03.
+  if (row.createdBy && row.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) {
     throw new SelfApprovalError(ctx.principal.userId);
   }
 

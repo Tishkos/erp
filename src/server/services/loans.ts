@@ -397,7 +397,8 @@ export async function approve(tx: Tx, ctx: ActorContext, loanId: string) {
   const loan = await lock(tx, loanId);
   await authz.authorize(ctx.principal, 'approve', PERMISSION_OBJECT, { branchCode: loan.branchCode });
   assertMove(loan.loanNo, loan.status, 'approved');
-  if (loan.createdBy === ctx.principal.userId) {
+  // the super user approves alone, by direction 2026-10-03 — the company has one approver and a rule nobody can satisfy approves nothing.
+  if (loan.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) {
     throw new LoanError(`${loan.loanNo}: the person who entered a loan cannot approve it (§5.2).`);
   }
   const account = await accountOf(tx, loan.bankCashAccountId);

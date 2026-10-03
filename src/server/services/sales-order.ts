@@ -564,7 +564,8 @@ export async function approve(
   // §5.2 — the person who raised an order does not approve it, unless they hold
   // approval authority in their own right (§7.3's "Sales Manager orders finalise
   // directly").
-  if (order.createdBy === ctx.principal.userId && !finalisesDirectly(ctx.principal)) {
+  // the super user approves alone, by direction 2026-10-03.
+  if (order.createdBy === ctx.principal.userId && !finalisesDirectly(ctx.principal) && !ctx.principal.isSuperUser) {
     throw new SalesOrderStateError(
       order.orderNo,
       order.status,

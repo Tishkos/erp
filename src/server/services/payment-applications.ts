@@ -548,7 +548,8 @@ export async function approve(
   const row = await lock(tx, id);
   await authz.authorize(ctx.principal, 'approve', PERMISSION_OBJECT, { branchCode: row.branchCode });
   await move(tx, row, 'approved');
-  if (row.createdBy === ctx.principal.userId && !options.inheritedFrom) {
+  // the super user approves alone, by direction 2026-10-03.
+  if (row.createdBy === ctx.principal.userId && !options.inheritedFrom && !ctx.principal.isSuperUser) {
     throw new PaymentApplicationError(
       `${row.applicationNo}: the person who prepared a payment application cannot approve it — ` +
         'approving it reserves company money (§5.2).',

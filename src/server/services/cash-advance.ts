@@ -164,7 +164,8 @@ export async function approve(tx: Tx, ctx: ActorContext, id: string): Promise<vo
   if (advance.status !== 'draft') {
     throw new CashAdvanceStateError(advance.advanceNo, advance.status, 'it is not a draft.');
   }
-  if (advance.createdBy === ctx.principal.userId) {
+  // the super user approves alone, by direction 2026-10-03 — the company has one approver and a rule nobody can satisfy approves nothing.
+  if (advance.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) {
     throw new Error(
       `${advance.advanceNo} was raised by you, so somebody else approves it (§5.2). ` +
         'An advance one person raises and approves is money leaving on one person’s say-so.',

@@ -1241,7 +1241,8 @@ export async function approveVariance(
     );
   }
 
-  if (invoice.createdBy === ctx.principal.userId) {
+  // the super user approves alone, by direction 2026-10-03 — the company has one approver and a rule nobody can satisfy approves nothing.
+  if (invoice.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) {
     throw new ApInvoiceStateError(
       invoice.invoiceNo,
       invoice.status,

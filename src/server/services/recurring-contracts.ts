@@ -250,7 +250,8 @@ export async function approve(tx: Tx, ctx: ActorContext, id: string): Promise<vo
   if (contract.status !== 'draft') {
     throw new ContractStateError(contract.contractNo, 'only a draft can be approved.');
   }
-  if (contract.createdBy === ctx.principal.userId) {
+  // the super user approves alone, by direction 2026-10-03 — the company has one approver and a rule nobody can satisfy approves nothing.
+  if (contract.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) {
     throw new ContractStateError(
       contract.contractNo,
       'the person who raised a contract cannot approve it — it is a standing commitment (§5.2).',

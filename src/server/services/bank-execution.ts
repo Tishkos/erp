@@ -242,7 +242,8 @@ export async function approveBatch(tx: Tx, ctx: ActorContext, id: string): Promi
     requestId: ctx.requestId ?? null,
   });
 
-  if (batch.createdBy === ctx.principal.userId) {
+  // the super user approves alone, by direction 2026-10-03 — the company has one approver and a rule nobody can satisfy approves nothing.
+  if (batch.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) {
     throw new BankExecutionBatchStateError(
       batch.batchNo,
       batch.status,

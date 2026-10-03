@@ -236,7 +236,8 @@ export async function postSettlement(tx: Tx, ctx: ActorContext, settlementNo: st
   const row = await load(tx, doc!.projectCode);
   await permit(ctx, 'approve', PERMISSION_OBJECT, doc!.projectCode);
   if (doc!.status !== 'draft') throw new ProjectSystemError('status', `${settlementNo} is ${doc!.status}; a draft is posted`);
-  if (doc!.createdBy === ctx.principal.userId) throw new ProjectSystemError('approver', `${settlementNo} was drafted by you; somebody else posts it`);
+  // the super user approves alone, by direction 2026-10-03 — the company has one approver and a rule nobody can satisfy approves nothing.
+  if (doc!.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) throw new ProjectSystemError('approver', `${settlementNo} was drafted by you; somebody else posts it`);
   if (row.status !== 'closing') throw new ProjectSystemError('status', `${doc!.projectCode} is ${row.status}; a project is settled while technically complete`);
   await assertNothingPending(tx, doc!.projectCode);
   const figures = await settlementFigures(tx, doc!.projectCode, doc!.settledOn);
@@ -380,7 +381,8 @@ export async function approveHours(tx: Tx, ctx: ActorContext, id: string): Promi
   const sheet = await lockSheet(tx, id);
   await permit(ctx, 'approve', PERMISSION_OBJECT, sheet.projectCode);
   if (sheet.status !== 'draft') throw new ProjectSystemError('status', `the line is ${sheet.status}; a draft is approved`);
-  if (sheet.createdBy === ctx.principal.userId) throw new ProjectSystemError('approver', 'you booked these hours; somebody else approves them');
+  // the super user approves alone, by direction 2026-10-03 — the company has one approver and a rule nobody can satisfy approves nothing.
+  if (sheet.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) throw new ProjectSystemError('approver', 'you booked these hours; somebody else approves them');
   await tx.update(projectTimesheet).set({ status: 'approved', approvedBy: ctx.principal.userId, approvedAt: new Date() }).where(eq(projectTimesheet.id, id));
   await recordChange(tx, ctx, { action: 'project_timesheet.approved', objectType: 'project', objectId: sheet.projectCode, after: { id, workDate: sheet.workDate, hours: sheet.hours } });
 }

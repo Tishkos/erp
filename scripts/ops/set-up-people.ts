@@ -159,7 +159,7 @@ const NEW_ROLES = [
     code: 'director',
     name: 'Director',
     description:
-      'Every section, and no approvals. A sale, money going out and a purchase invoice are raised for the CEO. Ali and Zahra.',
+      'Every section, and no approvals. A sale, money going out and a purchase invoice are raised for the CEO. Zahra.',
     grants: restrict(
       grants(objectsOf(...EVERY_SECTION), FULL),
       grants([...objectsOf(...SALES, ...MONEY_OUT, ...BUYING), ...PAYING], RAISE_ONLY),
@@ -207,10 +207,31 @@ const NEW_ROLES = [
     code: 'accountant',
     name: 'Accountant',
     description:
-      'Every section, and no approvals — a sale, money going out and a purchase invoice are raised for the CEO. Manar.',
+      'Every section, and no approvals — a sale, money going out and a purchase invoice are raised for the CEO. Ali.',
     grants: restrict(
       grants(objectsOf(...EVERY_SECTION), FULL),
       grants([...objectsOf(...SALES, ...MONEY_OUT, ...BUYING), ...PAYING], RAISE_ONLY),
+    ),
+  },
+  {
+    code: 'sales_logistics_coordinator',
+    name: 'Sales and logistics coordinator',
+    description:
+      'Sales, the import application and logistics — and nothing else. A sale and a purchase invoice are raised for the CEO. Manar.',
+    grants: restrict(
+      grants(
+        objectsOf('sales', 'payables', 'payables_suppliers', 'logistics', 'logistics_customs', 'logistics_shipping'),
+        FULL,
+      ),
+      /*
+       * Narrowed only within her own sections.
+       *
+       * `restrict` adds its narrow grants as well as trimming the wide ones,
+       * so handing it `objectsOf(...SALES)` here — which reaches into
+       * finance_ar and crm — would quietly give her two sections she was not
+       * given. Only objects she already holds are named.
+       */
+      grants([...objectsOf('sales'), 'ap_invoice', ...PAYING], RAISE_ONLY),
     ),
   },
   {
@@ -253,14 +274,14 @@ const NEW_ROLES = [
  */
 const PEOPLE = [
   { email: 'qs@qs-groups.com', name: 'Baban Ali', roles: ['ceo'], superUser: true },
-  { email: 'ali@qs-groups.com', name: 'Ali', roles: ['director'], superUser: false },
+  { email: 'ali@qs-groups.com', name: 'Ali', roles: ['accountant'], superUser: false },
   { email: 'coo@qs-groups.com', name: 'Zahra', roles: ['director'], superUser: false },
   { email: 'shene@qs-groups.com', name: 'Shene', roles: ['supply_chain_officer'], superUser: false },
   { email: 'diana@qs-groups.com', name: 'Diana', roles: ['supply_chain_officer'], superUser: false },
   { email: 'lara@qs-groups.com', name: 'Lara', roles: ['inventory_clerk'], superUser: false },
   { email: 'zhyar@qs-groups.com', name: 'Zhyar', roles: ['sales_inventory_clerk'], superUser: false },
   { email: 'rawezh@qs-groups.com', name: 'Rawezh Jalil', roles: ['sales_inventory_clerk'], superUser: false },
-  { email: 'info@qs-groups.com', name: 'Manar', roles: ['accountant'], superUser: false },
+  { email: 'info@qs-groups.com', name: 'Manar', roles: ['sales_logistics_coordinator'], superUser: false },
   /*
    * The developer. Settings and plumbing, and no business data — by direction,
    * 2026-10-03: "he is developer but cannot see anything".

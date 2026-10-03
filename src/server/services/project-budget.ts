@@ -502,7 +502,8 @@ export async function approveBudgetDocument(tx: Tx, ctx: ActorContext, documentN
   const row = await load(tx, doc.projectCode);
   await permit(ctx, 'approve', PERMISSION_OBJECT, doc.projectCode);
   if (doc.status !== 'submitted') throw new ProjectSystemError('status', `${documentNo} is ${doc.status}; a submitted document is approved`);
-  if (doc.createdBy === ctx.principal.userId) throw new ProjectSystemError('approver', `${documentNo} was raised by you; somebody else approves it (PM4)`);
+  // the super user approves alone, by direction 2026-10-03.
+  if (doc.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) throw new ProjectSystemError('approver', `${documentNo} was raised by you; somebody else approves it (PM4)`);
   if (row.status === 'closed') throw new ProjectSystemError('status', `${doc.projectCode} is closed`);
   const lines = await tx.select().from(projectBudgetDocumentLine).where(eq(projectBudgetDocumentLine.documentId, doc.id)).orderBy(asc(projectBudgetDocumentLine.lineNo));
   const kind = doc.kind as BudgetDocumentKind;
@@ -901,7 +902,8 @@ export async function approveChangeOrder(tx: Tx, ctx: ActorContext, variationNo:
   const row = await load(tx, variation.projectCode);
   await permit(ctx, 'approve', PERMISSION_OBJECT, variation.projectCode);
   if (variation.status !== 'draft') throw new ProjectSystemError('status', `${variationNo} is ${variation.status}`);
-  if (variation.createdBy === ctx.principal.userId) throw new ProjectSystemError('approver', `${variationNo} was raised by you; somebody else approves it`);
+  // the super user approves alone, by direction 2026-10-03.
+  if (variation.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) throw new ProjectSystemError('approver', `${variationNo} was raised by you; somebody else approves it`);
   if ((which === 'commercial' && variation.commercialApprovedBy) || (which === 'budget' && variation.budgetApprovedBy)) {
     throw new ProjectSystemError('approver', `${variationNo} already carries its ${which} approval`);
   }

@@ -487,7 +487,8 @@ export async function approveKyc(tx: Tx, ctx: ActorContext, id: string): Promise
     requestId: ctx.requestId ?? null,
   });
 
-  if (record.createdBy === ctx.principal.userId) {
+  // the super user approves alone, by direction 2026-10-03 — the company has one approver and a rule nobody can satisfy approves nothing.
+  if (record.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) {
     throw new Error(
       'The person who raised a KYC record cannot approve it — approving it is what releases a client ' +
         'to move money (§5.2).',

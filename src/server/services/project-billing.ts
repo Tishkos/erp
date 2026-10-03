@@ -454,7 +454,8 @@ export async function approveCertificate(tx: Tx, ctx: ActorContext, certificateN
   const row = await loadCustomerProject(tx, cert.projectCode);
   await permit(ctx, 'approve', PERMISSION_OBJECT, cert.projectCode);
   if (cert.status !== 'draft') throw new ProjectSystemError('status', `${certificateNo} is ${cert.status}; only a draft certificate is approved`);
-  if (cert.createdBy === ctx.principal.userId) throw new ProjectSystemError('approver', `${certificateNo} was raised by you; somebody else approves it`);
+  // the super user approves alone, by direction 2026-10-03 — the company has one approver and a rule nobody can satisfy approves nothing.
+  if (cert.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) throw new ProjectSystemError('approver', `${certificateNo} was raised by you; somebody else approves it`);
   if (row.status === 'closed') throw new ProjectSystemError('status', `${cert.projectCode} is closed`);
   await statuses.assertTransitionAllowed(tx, CERTIFICATE_DOCUMENT_TYPE, 'draft', 'approved');
   await statuses.assertTransitionAllowed(tx, CERTIFICATE_DOCUMENT_TYPE, 'approved', 'posted');
