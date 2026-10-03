@@ -37,13 +37,19 @@ import { businessToday } from '@/server/domain/business-date';
  * Bank loans — REQ-AP-001 §15.7, §21.10.
  *
  * One register for every lender: loan no · bank · principal · outstanding ·
- * next due · overdue · status, the open loans first. Drawn as Purchase
- * Invoices is: the module's tabs, one register window, the search box and
- * one filter, status chips in the last column.
+ * next due · overdue · status, newest first. Arriving at it shows **every**
+ * loan, repaid ones included, each wearing its own chip — by direction
+ * (2026-10-04): a loan that has been paid off is a loan the company took, and
+ * the subtitle says "every bank loan in one register". Opening on the open
+ * ones hid a settled loan from the only screen that lists loans; the View
+ * filter is how somebody narrows to Open, Overdue or Closed.
+ *
+ * Drawn as Purchase Invoices is: the module's tabs, one register window, the
+ * search box and one filter, status chips in the last column.
  */
 export const dynamic = 'force-dynamic';
 
-const VIEWS = ['open', 'overdue', 'closed', 'all'] as const;
+const VIEWS = ['all', 'open', 'overdue', 'closed'] as const;
 
 export default async function LoansPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/treasury/loans')) notFound();
@@ -65,7 +71,7 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
   const params = await searchParams;
   const view = (VIEWS as readonly string[]).includes(String(params.view))
     ? (params.view as (typeof VIEWS)[number])
-    : 'open';
+    : 'all';
 
   const { result, pickers } = await withCurrentUser(async (tx) => ({
     result: await loans.listForScreen(tx, { view, search: outcome.q, page: outcome.page }),

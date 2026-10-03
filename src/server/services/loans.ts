@@ -66,6 +66,9 @@ import {
   unallocated,
   type AllocationMethod,
   type Frequency,
+  type GraceKind,
+  type InterestBasis,
+  type PrincipalMethod,
   type ScheduleRow,
 } from '../domain/loans';
 import { addDays, formatAmount as shown } from '../domain/payment-applications';
@@ -1403,14 +1406,75 @@ export async function settlementQuote(tx: Tx, loanId: string, onDate: string) {
 }
 
 /**
- * End the loan early: pay what is left in one go — by direction, 2026-10-03.
+ * The instalments still unpaid, worked out again on what is left after an early
+ * part-payment — by direction, 2026-10-04.
  *
- * One posting, one repayment row: the principal still outstanding, the interest
- * accrued to the day, and the bank's early-settlement charge. Every instalment
- * still standing is marked paid against it, because the schedule no longer
- * describes anything that will happen — and the loan becomes fully repaid by
- * the same rule every other repayment goes through, not by this function
- * deciding it.
+ * The same due dates and the same number of instalments; each smaller, because
+ * the balance is. Interest on the first of them runs from the day of the
+ * part-payment, since the payment itself took the interest up to that day. The
+ * old rows are superseded, not deleted: the schedule the bank first wrote is
+ * still there to read.
+ */
+async function rescheduleUnpaid(
+  tx: Tx,
+  ctx: ActorContext,
+  loan: typeof bankLoan.$inferSelect,
+  remaining: bigint,
+  fromDate: string,
+): Promise<ScheduleRow[]> {
+  const unpaid = (await scheduleOf(tx, loan.id)).filter((row) => row.status !== 'paid');
+  if (unpaid.length === 0) throw new LoanError(`${loan.loanNo} has no instalments left to spread the balance over.`);
+
+  const commissionLeft = unpaid.reduce((sum, row) => sum + amountOf(row.commissionTxn), 0n);
+  const graceLive = loan.graceKind !== 'none' && Boolean(loan.graceUntil) && loan.graceUntil! >= fromDate;
+  const rows = buildSchedule({
+    principal: remaining,
+    commission: commissionLeft,
+    spreadCommission: commissionLeft > 0n,
+    interestPctPa: loan.interestPctPa ? percentOf(loan.interestPctPa, 'An interest rate') : null,
+    count: unpaid.length,
+    frequency: 'custom',
+    firstDueDate: unpaid[0]!.dueDate,
+    customDates: unpaid.map((row) => row.dueDate),
+    startDate: fromDate,
+    principalMethod: loan.principalMethod as PrincipalMethod,
+    interestBasis: loan.interestBasis as InterestBasis,
+    grace: graceLive ? (loan.graceKind as GraceKind) : 'none',
+    graceUntil: graceLive ? loan.graceUntil : null,
+  }).map((row, index) => ({ ...row, sequence: unpaid[index]!.sequence }));
+
+  await tx
+    .update(bankLoanInstalment)
+    .set({ supersededAt: new Date(), supersededBy: ctx.principal.userId })
+    .where(inArray(bankLoanInstalment.id, unpaid.map((row) => row.id)));
+  for (const row of rows) {
+    await tx.insert(bankLoanInstalment).values({
+      loanId: loan.id,
+      sequence: row.sequence,
+      dueDate: row.dueDate,
+      principalTxn: money(row.principal),
+      commissionTxn: money(row.commission),
+      interestTxn: money(row.interest),
+      totalTxn: money(row.total),
+      createdBy: ctx.principal.userId,
+    });
+  }
+  return rows;
+}
+
+/**
+ * Pay the loan early — all of it, or part of it (2026-10-03; part, 2026-10-04).
+ *
+ * One posting, one repayment row: the principal paid, the interest accrued to
+ * the day, and the bank's early-settlement charge.
+ *
+ * * **All of what is left** — every instalment still standing is marked paid
+ *   against it, because the schedule no longer describes anything that will
+ *   happen, and the loan becomes fully repaid by the same rule every other
+ *   repayment goes through.
+ * * **Part of it** — 5,000 paid early on 10,000 leaves 5,000 owed. The loan
+ *   stays active and the unpaid instalments are worked out again on the 5,000
+ *   (`rescheduleUnpaid`). Nothing is marked paid that was not.
  */
 export async function settleEarly(
   tx: Tx,
@@ -1425,6 +1489,11 @@ export async function settleEarly(
     readonly bankCashAccountId?: string | null;
     /** The interest the bank asks for, when it differs from the accrual. */
     readonly interestTxn?: bigint | null;
+    /**
+     * The principal paid early. Left out, or equal to the outstanding, the loan
+     * is settled; less, it is a part-payment and the instalments are redone.
+     */
+    readonly principalTxn?: bigint | null;
   },
 ) {
   const loan = await lock(tx, loanId);
@@ -1440,38 +1509,79 @@ export async function settleEarly(
   if (quote.outstanding <= 0n) {
     throw new LoanError(`${loan.loanNo} has no principal outstanding; there is nothing to settle.`);
   }
+  const principal = input.principalTxn ?? quote.outstanding;
+  if (principal <= 0n) throw new LoanError('State the principal paid early.');
+  if (principal > quote.outstanding) {
+    throw new LoanError(
+      `${loan.loanNo} has ${loan.currency} ${shown(quote.outstanding)} outstanding; ` +
+        `${shown(principal)} is more than is owed.`,
+    );
+  }
+  const partial = principal < quote.outstanding;
+  if (partial) {
+    /*
+     * An instalment already past due is paid as itself first: the part-payment
+     * redoes the instalments still to come, and one that is late is not that.
+     */
+    const late = (await scheduleOf(tx, loan.id)).find(
+      (row) => row.status !== 'paid' && row.dueDate < input.onDate,
+    );
+    if (late) {
+      throw new LoanError(
+        `Instalment ${late.sequence} of ${loan.loanNo} was due on ${late.dueDate}; pay it before paying early.`,
+      );
+    }
+  }
   const interest = input.interestTxn ?? quote.accruedInterest;
   const fee = input.feeTxn ?? 0n;
   if (interest < 0n || fee < 0n) throw new LoanError('A settlement’s interest and fee are never negative.');
-  const total = quote.outstanding + interest + fee;
+  const total = principal + interest + fee;
 
   const account = await payingAccount(tx, loan, input.bankCashAccountId);
   const convert = async (value: bigint) =>
     value > 0n ? (await rateService.convertOn(tx, value, loan.currency, input.onDate)).amountIqd : 0n;
-  const principalIqd = await convert(quote.outstanding);
+  const principalIqd = await convert(principal);
   const interestIqd = await convert(interest);
   const feeIqd = await convert(fee);
   const totalIqd = principalIqd + interestIqd + feeIqd;
 
   /*
-   * The whole of what is left comes off the liability at what the books carry
-   * it at (0276); the cash leaves at today's rate. The difference is the gain
-   * or the loss, as it is on any other repayment.
+   * The principal paid comes off the liability at what the books carry it at
+   * (0276) — all of it on a settlement, its share on a part-payment; the cash
+   * leaves at today's rate. The difference is the gain or the loss, as it is
+   * on any other repayment.
    */
   const carryingIqd = await carryingIqdOf(tx, loan.loanNo);
-  const principalCarriedIqd = loan.currency === LEDGER_CURRENCY ? principalIqd : carryingIqd;
+  const principalCarriedIqd =
+    loan.currency === LEDGER_CURRENCY ? principalIqd : carryingShare(carryingIqd, quote.outstanding, principal);
   const fxIqd = principalIqd - principalCarriedIqd;
+
+  /*
+   * A settlement happens once; part-payments may happen several times, and the
+   * posting engine keeps one journal per source event — so each is numbered.
+   * The loan row is locked, so two cannot take the same number.
+   */
+  const event = partial
+    ? `prepaid:${
+        (await tx
+          .select({ id: bankLoanRepayment.id })
+          .from(bankLoanRepayment)
+          .where(and(eq(bankLoanRepayment.loanId, loan.id), eq(bankLoanRepayment.kind, 'extra_principal')))).length + 1
+      }`
+    : 'settled';
 
   const criteria = { branchCode: loan.branchCode };
   const dimensions = { branch: loan.branchCode };
   const result = await posting.post(tx, ctx, {
     eventType: 'treasury.loan_repayment',
     documentTypeCode: PERMISSION_OBJECT,
-    source: { module: 'treasury', documentId: loan.id, event: 'settled' },
+    source: { module: 'treasury', documentId: loan.id, event },
     branchCode: loan.branchCode,
     documentDate: input.onDate,
     postingDate: input.onDate,
-    description: `Loan ${loan.loanNo} settled early — ${loan.currency} ${shown(total)} (${reference})`,
+    description: partial
+      ? `Loan ${loan.loanNo} principal paid early — ${loan.currency} ${shown(principal)} (${reference})`
+      : `Loan ${loan.loanNo} settled early — ${loan.currency} ${shown(total)} (${reference})`,
     lines: [
       { role: 'loan_liability', debit: money(principalCarriedIqd), criteria, dimensions, loanNo: loan.loanNo },
       ...(interestIqd > 0n ? [{ role: 'loan_interest', debit: money(interestIqd), criteria, dimensions }] : []),
@@ -1493,9 +1603,9 @@ export async function settleEarly(
 
   await tx.insert(bankLoanRepayment).values({
     loanId: loan.id,
-    kind: 'settlement',
+    kind: partial ? 'extra_principal' : 'settlement',
     paidDate: input.onDate,
-    principalTxn: money(quote.outstanding),
+    principalTxn: money(principal),
     interestTxn: money(interest),
     feesTxn: money(fee),
     totalTxn: money(total),
@@ -1505,42 +1615,50 @@ export async function settleEarly(
     createdBy: ctx.principal.userId,
   });
 
-  /*
-   * The schedule described instalments that will not now happen. They are
-   * marked paid against this settlement rather than deleted: the bank's letter
-   * said they were due, and the register keeps what the letter said.
-   */
-  await tx
-    .update(bankLoanInstalment)
-    .set({
-      status: 'paid',
-      paidDate: input.onDate,
-      paidReference: reference,
-      journalEntryId: result.journalEntryId,
-      paidBy: ctx.principal.userId,
-      paidAt: new Date(),
-    })
-    .where(
-      and(
-        eq(bankLoanInstalment.loanId, loan.id),
-        isNull(bankLoanInstalment.supersededAt),
-        sql`${bankLoanInstalment.status} <> 'paid'`,
-      ),
-    );
+  if (partial) {
+    // What is left is still owed, over the instalments still to come.
+    await rescheduleUnpaid(tx, ctx, loan, quote.outstanding - principal, input.onDate);
+  } else {
+    /*
+     * The schedule described instalments that will not now happen. They are
+     * marked paid against this settlement rather than deleted: the bank's letter
+     * said they were due, and the register keeps what the letter said.
+     */
+    await tx
+      .update(bankLoanInstalment)
+      .set({
+        status: 'paid',
+        paidDate: input.onDate,
+        paidReference: reference,
+        journalEntryId: result.journalEntryId,
+        paidBy: ctx.principal.userId,
+        paidAt: new Date(),
+      })
+      .where(
+        and(
+          eq(bankLoanInstalment.loanId, loan.id),
+          isNull(bankLoanInstalment.supersededAt),
+          sql`${bankLoanInstalment.status} <> 'paid'`,
+        ),
+      );
+  }
 
+  // The fee the bank charged for paying early, over every time it was paid early.
   await tx
     .update(bankLoan)
-    .set({ settlementFeeTxn: money(fee), updatedAt: new Date() })
+    .set({ settlementFeeTxn: money(amountOf(loan.settlementFeeTxn) + fee), updatedAt: new Date() })
     .where(eq(bankLoan.id, loan.id));
 
-  await settleIfCleared(tx, ctx, loan, input.onDate);
+  const settledNow = await settleIfCleared(tx, ctx, loan, input.onDate);
 
   for (const payableId of await fundedPayables(tx, loan.id)) {
     await events.record(tx, {
       payableId,
       eventCode: 'LOAN_INSTALMENT_PAID',
-      summary:
-        `${loan.loanNo} settled early on ${input.onDate} — ${loan.currency} ${shown(total)}; the loan is fully repaid`,
+      summary: settledNow
+        ? `${loan.loanNo} settled early on ${input.onDate} — ${loan.currency} ${shown(total)}; the loan is fully repaid`
+        : `${loan.loanNo} principal of ${loan.currency} ${shown(principal)} paid early on ${input.onDate}; ` +
+          `${shown(quote.outstanding - principal)} still owed`,
       sourceType: PERMISSION_OBJECT,
       sourceId: loan.id,
       sourceNo: loan.loanNo,
@@ -1550,23 +1668,33 @@ export async function settleEarly(
 
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
-    action: 'bank_loan.settled_early',
+    action: partial ? 'bank_loan.prepaid' : 'bank_loan.settled_early',
     objectType: PERMISSION_OBJECT,
     objectId: loan.id,
     branchCode: loan.branchCode,
+    before: { outstanding: money(quote.outstanding) },
     after: {
       onDate: input.onDate,
-      principal: money(quote.outstanding),
+      principal: money(principal),
       interest: money(interest),
       fee: money(fee),
       total: money(total),
+      outstanding: money(quote.outstanding - principal),
       reference,
     },
     outcome: 'success',
     requestId: ctx.requestId ?? null,
   });
 
-  return { total, principal: quote.outstanding, interest, fee, journalEntryId: result.journalEntryId };
+  return {
+    total,
+    principal,
+    interest,
+    fee,
+    outstanding: quote.outstanding - principal,
+    fullyRepaid: settledNow,
+    journalEntryId: result.journalEntryId,
+  };
 }
 
 export async function cancel(tx: Tx, ctx: ActorContext, loanId: string, reason: string) {
@@ -1931,7 +2059,11 @@ export async function listForScreen(tx: Tx, filter: LoanListFilter = {}) {
   const unpaidPastDue = sql`exists (select 1 from bank_loan_instalment i
                                where i.loan_id = ${bankLoan.id} and i.superseded_at is null and i.status <> 'paid'
                                  and i.due_date < ${asOf}::date)`;
-  const view = filter.view ?? 'open';
+  // No view asked for is every loan, repaid ones included (2026-10-04, by
+  // direction): the register is the whole book of what the company borrowed,
+  // and a settled loan shows its own chip and a nil outstanding rather than
+  // leaving the only screen that lists loans.
+  const view = filter.view ?? 'all';
   const where = and(
     view === 'open'
       // Open means not finished with: a loan waiting for approval is as open

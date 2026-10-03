@@ -644,6 +644,158 @@ describe('§15.6 · fully repaid is read from what was posted', () => {
     // And the ledger says what actually happened: one instalment, one settlement.
     const repayments = await withScope(scope(world.manager), (tx) => loans.repaymentsOf(tx, loan.id));
     expect(repayments.map((row) => row.kind).sort()).toEqual(['instalment', 'settlement']);
+
+    /*
+     * And it stays in the register. Asked for nothing in particular the
+     * register answers with every loan, settled ones included (2026-10-04, by
+     * direction) — a loan paid off early was still borrowed, and the screen
+     * that lists loans is the only place it can be seen. The chip and a nil
+     * outstanding say what became of it; `open` is what somebody narrows to.
+     */
+    const register = async (view?: 'open' | 'closed' | 'all') =>
+      withScope(scope(world.manager), (tx) => loans.listForScreen(tx, view ? { view } : {}));
+    const held = (rows: { loanNo: string }[]) => rows.some((row) => row.loanNo === loan.loanNo);
+    const byDefault = await register();
+    expect(held(byDefault.rows)).toBe(true);
+    const settledRow = byDefault.rows.find((row) => row.loanNo === loan.loanNo)!;
+    expect(settledRow.status).toBe('fully_repaid');
+    expect(settledRow.outstandingTxn).toBe('0.0000');
+    expect(settledRow.nextDue).toBeNull();
+    expect(held((await register('all')).rows)).toBe(true);
+    expect(held((await register('closed')).rows)).toBe(true);
+    expect(held((await register('open')).rows)).toBe(false);
+  });
+
+  /*
+   * Part of it paid early (2026-10-04, by direction): "I paid 5,000 of 10,000
+   * early and it said completed, repaid everything." Paying part of the
+   * principal leaves the rest owed, keeps the loan active, and works out the
+   * instalments still to come again on what is left.
+   */
+  it('a part-payment lowers the outstanding, keeps the loan active and redoes the instalments left', async () => {
+    await fundBank(world, '2000000.0000');
+    const loan = await createLoan();
+    await approveLoan(loan.id);
+    await disburse(loan.id);
+    const rows = await scheduleOf(loan.id);
+    await withScope(scope(world.manager), (tx) =>
+      loans.payInstalment(tx, world.manager, rows[0].id, { paidDate: '2026-10-15', reference: 'RAF-1' }),
+    );
+
+    const part = await withScope(scope(world.manager), (tx) =>
+      loans.settleEarly(tx, world.manager, loan.id, {
+        onDate: '2026-11-30',
+        reference: 'RAF-PART-1',
+        principalTxn: iqd('300000'),
+      }),
+    );
+    expect(part.outstanding).toBe(iqd('450000'));
+    expect(part.fullyRepaid).toBe(false);
+
+    const position = await withScope(scope(world.manager), (tx) => loans.positionOf(tx, loan.id));
+    expect(position.outstanding).toBe(iqd('450000'));
+    expect(position.principalRepaid).toBe(iqd('550000'));
+    expect(position.instalmentsLeft).toBe(3);
+    expect((await loanRow(loan.id)).status).toBe('active');
+
+    // The three left keep their dates and numbers, and share the 450,000.
+    const redone = await scheduleOf(loan.id);
+    expect(redone).toHaveLength(4);
+    expect(redone[0].status).toBe('paid');
+    const left = redone.slice(1);
+    expect(left.map((row: { sequence: number }) => row.sequence)).toEqual([2, 3, 4]);
+    expect(left.map((row: { due_date: unknown }) => String(row.due_date))).toEqual(
+      rows.slice(1).map((row: { due_date: unknown }) => String(row.due_date)),
+    );
+    expect(left.every((row: { status: string }) => row.status !== 'paid')).toBe(true);
+    expect(left.map((row: { principal_txn: string }) => row.principal_txn)).toEqual([
+      '150000.0000',
+      '150000.0000',
+      '150000.0000',
+    ]);
+
+    // A second part-payment posts its own journal, and the instalments shrink again.
+    await withScope(scope(world.manager), (tx) =>
+      loans.settleEarly(tx, world.manager, loan.id, {
+        onDate: '2026-12-10',
+        reference: 'RAF-PART-2',
+        principalTxn: iqd('150000'),
+      }),
+    );
+    const again = (await scheduleOf(loan.id)).slice(1);
+    expect(again.map((row: { principal_txn: string }) => row.principal_txn)).toEqual([
+      '100000.0000',
+      '100000.0000',
+      '100000.0000',
+    ]);
+
+    // More than is owed is refused; so is paying early past an instalment that is late.
+    expect(
+      await rejection(
+        withScope(scope(world.manager), (tx) =>
+          loans.settleEarly(tx, world.manager, loan.id, {
+            onDate: '2026-12-15',
+            reference: 'X',
+            principalTxn: iqd('300001'),
+          }),
+        ),
+      ),
+    ).toMatch(/more than is owed/);
+    expect(
+      await rejection(
+        withScope(scope(world.manager), (tx) =>
+          loans.settleEarly(tx, world.manager, loan.id, {
+            onDate: '2027-04-05',
+            reference: 'X',
+            principalTxn: iqd('1000'),
+          }),
+        ),
+      ),
+    ).toMatch(/Instalment 2 .* pay it before paying early/);
+
+    // The ledger reads as it happened.
+    const repayments = await withScope(scope(world.manager), (tx) => loans.repaymentsOf(tx, loan.id));
+    expect(repayments.map((row) => row.kind).sort()).toEqual(['extra_principal', 'extra_principal', 'instalment']);
+
+    // And paying the rest settles it.
+    await withScope(scope(world.manager), (tx) =>
+      loans.settleEarly(tx, world.manager, loan.id, { onDate: '2026-12-20', reference: 'RAF-SETTLE' }),
+    );
+    expect((await loanRow(loan.id)).status).toBe('fully_repaid');
+    const done = await withScope(scope(world.manager), (tx) => loans.positionOf(tx, loan.id));
+    expect(done.outstanding).toBe(0n);
+    expect(done.principalRepaid).toBe(iqd('1000000'));
+  });
+
+  it('a part-payment works the interest out again on the smaller balance', async () => {
+    await fundBank(world, '2000000.0000');
+    const loan = await createLoan({ interestPctPa: '12' });
+    await approveLoan(loan.id);
+    await disburse(loan.id);
+    const before = await scheduleOf(loan.id);
+
+    await withScope(scope(world.manager), (tx) =>
+      loans.settleEarly(tx, world.manager, loan.id, {
+        onDate: '2026-10-01',
+        reference: 'RAF-PART',
+        principalTxn: iqd('500000'),
+      }),
+    );
+
+    const after = await scheduleOf(loan.id);
+    expect(after).toHaveLength(4);
+    const principalLeft = after.reduce(
+      (sum: bigint, row: { principal_txn: string }) => sum + iqd(row.principal_txn),
+      0n,
+    );
+    expect(principalLeft).toBe(iqd('500000'));
+    // Half the balance: every instalment's interest is smaller than it was.
+    for (let i = 0; i < 4; i += 1) {
+      expect(iqd(after[i].interest_txn) < iqd(before[i].interest_txn)).toBe(true);
+    }
+    // The first runs from the part-payment, 91 days to 2026-12-31 on 500,000 at 12 %.
+    expect(after[0].interest_txn).toBe('14958.9000');
+    expect((await loanRow(loan.id)).status).toBe('active');
   });
 
   it('refuses to settle a loan that owes nothing, and one that is not active', async () => {
