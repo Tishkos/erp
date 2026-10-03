@@ -480,7 +480,9 @@
     "sent_by": "Sent by",
     "stage": "Stage",
     "owner": "Owner",
-    "since": "Since"
+    "since": "Since",
+    "unit_price_in": "Unit Price ({currency})",
+    "total_price_in": "Total Price ({currency})"
   },
   "list": {
     "search": "Search",

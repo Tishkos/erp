@@ -96,6 +96,15 @@ export interface LiveLines {
 }
 
 export interface InvoiceLineLabels {
+  /**
+   * "Unit Price ({currency})" and "Total Price ({currency})", raw.
+   *
+   * The plain keys have "(IQD)" written into them and are shared with the
+   * sales grid, so these are passed instead of editing those — a screen that
+   * gives neither keeps the labels it had (2026-10-03).
+   */
+  readonly unitPriceIn?: string | undefined;
+  readonly totalIn?: string | undefined;
   readonly itemCode: string;
   readonly itemName: string;
   readonly quantity: string;
@@ -257,6 +266,7 @@ export function InvoiceLinesGrid({
   widthsKey,
   labels,
   currency,
+  currencyField,
   locale,
   headingId,
   live,
@@ -289,7 +299,16 @@ export function InvoiceLinesGrid({
    */
   readonly widthsKey?: string;
   readonly labels: InvoiceLineLabels;
+  /** The currency it starts in; `currencyField` may change it as a person types. */
   readonly currency: string;
+  /**
+   * The form field holding the currency the document is agreed in.
+   *
+   * Given, the grid follows it: the totals and the money headings change with
+   * the selection rather than keeping the currency the page was rendered with
+   * (2026-10-03). Omitted, the grid stays in `currency` exactly as before.
+   */
+  readonly currencyField?: string | undefined;
   readonly locale: string;
   readonly headingId: string;
   /** Present on a draft that already exists: each row saves itself. */
@@ -485,17 +504,40 @@ export function InvoiceLinesGrid({
     }
   }, [loadAvailability, mode, rows]);
 
+  /*
+   * The currency the document is agreed in, followed rather than fixed.
+   *
+   * Server-rendered as a prop it could not change, so choosing USD at the top
+   * of the header left every column headed IQD and the totals formatted as
+   * dinars (2026-10-03).
+   */
+  const [agreed, setAgreed] = useState(currency);
+  useEffect(() => {
+    if (!currencyField) return;
+    const form = table.current?.closest('form');
+    if (!form) return;
+    const follow = () => {
+      const field = form.elements.namedItem(currencyField);
+      const chosen =
+        field instanceof HTMLSelectElement || field instanceof HTMLInputElement ? field.value : '';
+      if (chosen) setAgreed(chosen);
+    };
+    follow();
+    form.addEventListener('input', follow);
+    return () => form.removeEventListener('input', follow);
+  }, [currencyField]);
+
   const money = useMemo(
     () =>
       new Intl.NumberFormat(locale, {
         style: 'currency',
-        currency,
+        currency: agreed,
         currencyDisplay: 'code',
         // The dinar has no subunit in practice: IQD 2,000, never IQD 2,000.00.
-        minimumFractionDigits: currency === 'IQD' ? 0 : 2,
-        maximumFractionDigits: currency === 'IQD' ? 0 : 2,
+        minimumFractionDigits: agreed === 'IQD' ? 0 : 2,
+        maximumFractionDigits: agreed === 'IQD' ? 0 : 2,
       }),
-    [locale, currency],
+    [locale, agreed],
   );
 
   /** One empty row at the foot, always. Filling the last one opens the next. */
@@ -701,7 +743,7 @@ export function InvoiceLinesGrid({
               </th>
             ) : null}
             <th className={styles.sapNum} scope="col">
-              {labels.unitPrice}
+              {labels.unitPriceIn ? labels.unitPriceIn.replace('{currency}', agreed) : labels.unitPrice}
               <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('price')} />
             </th>
             <th className={styles.sapNum} scope="col">
@@ -709,7 +751,7 @@ export function InvoiceLinesGrid({
               <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('discount')} />
             </th>
             <th className={styles.sapNum} scope="col">
-              {labels.total}
+              {labels.totalIn ? labels.totalIn.replace('{currency}', agreed) : labels.total}
               <ColumnGrip label={labels.resizeColumn} resizing={resizing} {...gripProps('total')} />
             </th>
             {showSupplier ? (

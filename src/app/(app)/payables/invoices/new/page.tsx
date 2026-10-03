@@ -156,9 +156,16 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
         <InvoiceCurrency
           choices={moneys}
           labels={{
-            rate: x('rate_on_date'),
-            totalIn: x('total_in'),
-            totalLedger: x('total_in'),
+            /*
+             * `raw`, not `t()`: these carry `{currency}` and `{amount}` for the
+             * client to fill as the lines are typed, and `t()` demands every
+             * placeholder at call time — given none it throws a FORMATTING_ERROR
+             * and renders the key itself, which is what the screen showed
+             * (2026-10-03).
+             */
+            rate: x.raw('rate_on_date'),
+            totalIn: x.raw('total_in'),
+            totalLedger: x.raw('total_in'),
           }}
           label={column('currency')}
           ledger="IQD"
@@ -317,6 +324,10 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
               items={sellable}
               loadAvailability={invoiceLineAvailability}
               mode="purchase"
+              // The table follows the currency chosen in the header, so the
+              // totals and the money headings say what the invoice is agreed
+              // in rather than what the page was rendered with (2026-10-03).
+              currencyField="currency"
               unitColumn
               purchaseSupplierField="supplier_id"
               widthsKey={`erp.lines.ap.${context.principal.userId}`}
@@ -326,6 +337,8 @@ export default async function NewApInvoicePage({ searchParams }: { searchParams:
                 quantity: column('quantity'),
               unit: column('unit'),
                 unitPrice: column('unit_price'),
+                unitPriceIn: column.raw('unit_price_in'),
+                totalIn: column.raw('total_price_in'),
                 discount: column('discount'),
                 total: column('total_price'),
                 supplier: column('supplier'),

@@ -480,7 +480,9 @@
     "sent_by": "أرسله",
     "stage": "المرحلة",
     "owner": "المالك",
-    "since": "منذ"
+    "since": "منذ",
+    "unit_price_in": "سعر الوحدة ({currency})",
+    "total_price_in": "السعر الإجمالي ({currency})"
   },
   "list": {
     "search": "بحث",
