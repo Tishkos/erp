@@ -60,7 +60,9 @@ export default async function ChangeOrderPage({ params, searchParams }: { params
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
   const costName = (en: string | null, ar: string | null) => (locale === 'ar' && ar ? ar : (en ?? ''));
 
-  const isRaiser = v.createdBy === principal.userId;
+  // Not a super user's: the service exempts them, and the button
+  // should not hide what the service would allow (2026-10-04).
+  const isRaiser = v.createdBy === principal.userId && !principal.isSuperUser;
   const mayApprove = v.status === 'draft' && can(principal, 'approve', pb.PERMISSION_OBJECT) && !isRaiser;
 
   const fields: DocumentField[] = [

@@ -128,7 +128,16 @@ export default async function LoanPage({
     return toDecimalString(divideHalfUp(scaled, 10n ** (MONEY_SCALE - places)), places);
   };
 
-  const mine = loan.createdBy === principal.userId;
+  /*
+   * Whose loan it is, for the four-eyes rule — and not a super user's, because
+   * `loans.approve` exempts them and a screen that hid the button would be a
+   * screen disagreeing with the service behind it (2026-10-04).
+   *
+   * The company has one approver; that was the direction on 2026-10-03, and
+   * the services were changed then. The buttons were not, so the owner could
+   * send a loan for approval and then find nothing to press.
+   */
+  const mine = loan.createdBy === principal.userId && !principal.isSuperUser;
   const mayEdit = loan.status === 'draft' && can(principal, 'edit_draft', loans.PERMISSION_OBJECT);
   /*
    * Sent for approval by whoever may enter a loan — including the person who
