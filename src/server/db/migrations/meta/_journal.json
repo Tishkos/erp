@@ -1373,6 +1373,13 @@
       "when": 1795900000078,
       "tag": "0268_asycuda_document",
       "breakpoints": true
+    },
+    {
+      "idx": 196,
+      "version": "7",
+      "when": 1795900000079,
+      "tag": "0269_supplier_bank_accounts",
+      "breakpoints": true
     }
   ]
 }

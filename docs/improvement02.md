@@ -220,6 +220,8 @@ Each stage below is one branch and one PR. Its tests are named before it is buil
 | 2026-10-03 | IM2-1 | #37 `improve2/stage-1-import` | merged — integration 2,427/2,427 (148 files); e2e `im2-import-shortage` 2/2 |
 | 2026-10-03 | IM2-1b | `improve2/bl-rewrite` | the B/L rewrite (table, check digit, ETA, edit/cancel, print and doors) — integration ap0*, im2-*, hd09, hd14, wa02 green; e2e im2-bl 3/3, payables + theme 15/15 |
 | 2026-10-03 | IM2-1c | `improve2/asycuda` | ASYCUDA readings as numbered documents (register, record page, the export filed on it, print, doors); PD page doors; uploads register their access rules — integration im2-03 4/4, ap04, im2-02 green; unit 1657; e2e im2-asycuda 2/2, payables + im2-bl + fx1 + theme 25/25, mobile-rtl 1/1 |
+| 2026-10-03 | IM2-1d | `improve2/supplier-bank-accounts` | supplier bank accounts on the profile (several, IBAN/SWIFT checked, second-person verification, default, out of use with reason; payee select; payment run pays the default) — integration im2-04 5/5, master-data, treasury-payment-run, ap03/04/06/07, hd05, hd09, im07, fx3 green; unit 1665; e2e im2-supplier-banks 2/2 |
+| 2026-10-03 | IM2-1d | `improve2/supplier-bank-accounts` | supplier bank accounts on the profile (several, IBAN/SWIFT checked, verified by a second person, default, out of use with reason; 0269; C-40) — integration im2-04 5/5, master-data, treasury-payment-run, ap03/04/06/07, hd05, hd09, fx3, im07 green; unit 1665; e2e im2-supplier-banks 2/2 |
 
 ---
 

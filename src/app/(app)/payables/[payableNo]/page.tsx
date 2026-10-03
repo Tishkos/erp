@@ -837,14 +837,21 @@ export default async function PayablePage({
                           }))}
                           required
                         />
+                        {/* IMPROVEMENT-002 — the supplier's accounts are set up and
+                            verified on its profile; the one in this import's
+                            currency (the default first) is chosen for you. */}
                         <Select
+                          defaultValue={
+                            (pickers.payees.find((payee) => payee.verified && payee.currency === row.currency) ??
+                              pickers.payees.find((payee) => payee.verified))?.id ?? ''
+                          }
                           emptyLabel="—"
                           hint={pa('payee_hint')}
                           label={pa('payee')}
                           name="payee_bank_account_id"
                           options={pickers.payees.map((payee) => ({
                             value: payee.id,
-                            label: `${payee.bankName} · ${payee.accountNumber}${payee.swift ? ` · ${payee.swift}` : ''}${payee.verified ? '' : ` (${pa('unverified')})`}`,
+                            label: `${payee.bankName} · ${payee.iban ?? payee.accountNumber}${payee.swift ? ` · ${payee.swift}` : ''} · ${payee.currency}${payee.verified ? '' : ` (${pa('unverified')})`}`,
                           }))}
                         />
                         {pickers.loans.length > 0 ? (
