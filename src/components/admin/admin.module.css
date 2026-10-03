@@ -5263,8 +5263,12 @@
   font-size: 0.68rem;
 }
 
-/* The header boxes a draft may type into, drawn like the read-only ones. */
-.sapDoc.sapDoc .sapField > input {
+/* The header boxes a draft may type into, drawn like the read-only ones.
+   `select` as well as `input` (2026-10-03): the rule named only inputs, so a
+   header's selects — Payable account (statement) among them — stood shorter
+   than the `.sapBox` cells either side and the row read as out of line. */
+.sapDoc.sapDoc .sapField > input,
+.sapDoc.sapDoc .sapField > select {
   min-block-size: 2rem;
 }
 

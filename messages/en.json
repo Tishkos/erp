@@ -5295,7 +5295,9 @@
       "withdraw": "Withdraw",
       "document_type": "Employee document",
       "chain_title": "{type} on file",
-      "attachments": "Scan"
+      "attachments": "Scan",
+      "scan": "Scan",
+      "scan_now_caption": "Optional. Up to 25MB — a photograph or a PDF of the paper."
     },
     "hr_dashboard": {
       "title": "HR Dashboard",

@@ -5295,7 +5295,9 @@
       "withdraw": "سحب",
       "document_type": "مستند موظف",
       "chain_title": "{type} المحفوظة",
-      "attachments": "النسخة الممسوحة"
+      "attachments": "النسخة الممسوحة",
+      "scan": "المرفق",
+      "scan_now_caption": "اختياري. حتى 25 ميغابايت — صورة أو ملف PDF للورقة."
     },
     "hr_dashboard": {
       "title": "لوحة الموارد البشرية",

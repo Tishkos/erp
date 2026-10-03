@@ -68,7 +68,27 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Se
                 <Field label={x('expires_on')} name="expires_on" type="date" />
                 <Field label={x('note')} name="note" wide />
               </Grid>
-              <p className={s.sapGridCaption}>{x('scan_caption')}</p>
+              {/*
+                The scan, asked for here rather than after saving (2026-10-03).
+                The person filling this in is holding the paper; sending them
+                to the record and back for the one thing already in their hand
+                was asking twice. Optional — a contract not yet scanned is
+                still worth recording — and the document's own page keeps its
+                attach form for a scan that arrives later or replaces a bad
+                photograph.
+              */}
+              <div className={s.sapField}>
+                <label className={s.sapLabel} htmlFor="hr-document-scan">
+                  {x('scan')}
+                </label>
+                <input
+                  accept=".pdf,.jpg,.jpeg,.png,.webp,.heic"
+                  id="hr-document-scan"
+                  name="file"
+                  type="file"
+                />
+                <span className={s.sapGridCaption}>{x('scan_now_caption')}</span>
+              </div>
               <SubmitRow>
                 <Submit label={t('create')} />
               </SubmitRow>
