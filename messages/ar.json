@@ -2683,7 +2683,16 @@
       "papers_added": "أُضيف",
       "rail_done": "هذا صحيح على الاستيراد الآن",
       "rail_todo": "لم يحدث بعد",
-      "rate_applied": "سعر الصرف المطبّق"
+      "rate_applied": "سعر الصرف المطبّق",
+      "col_invoice_no": "رقم الفاتورة",
+      "col_supplier_invoice_no": "رقم فاتورة المورد",
+      "col_total_iqd": "الإجمالي (د.ع)",
+      "col_settled_iqd": "المسدد (د.ع)",
+      "col_item": "الصنف",
+      "col_description": "الوصف",
+      "col_qty": "الكمية",
+      "col_unit_price": "سعر الوحدة",
+      "col_date": "التاريخ"
     },
     "payables_settings": {
       "title": "إعدادات الذمم الدائنة",
@@ -5749,7 +5758,8 @@
       "hr_payroll_register": "سجل الرواتب",
       "hr_unsettled_advances": "السلف غير المسوّاة",
       "bill_of_lading": "بوليصة الشحن",
-      "asycuda_reading": "قراءة أسيكودا"
+      "asycuda_reading": "قراءة أسيكودا",
+      "import_application": "طلب استيراد"
     }
   }
 }

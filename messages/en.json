@@ -2683,7 +2683,16 @@
       "papers_added": "Added",
       "rail_done": "this is true of the import now",
       "rail_todo": "not yet",
-      "rate_applied": "Rate applied"
+      "rate_applied": "Rate applied",
+      "col_invoice_no": "Invoice no.",
+      "col_supplier_invoice_no": "Supplier invoice no.",
+      "col_total_iqd": "Total (IQD)",
+      "col_settled_iqd": "Settled (IQD)",
+      "col_item": "Item",
+      "col_description": "Description",
+      "col_qty": "Qty",
+      "col_unit_price": "Unit price",
+      "col_date": "Date"
     },
     "payables_settings": {
       "title": "Payables Settings",
@@ -5749,7 +5758,8 @@
       "hr_payroll_register": "Payroll Register",
       "hr_unsettled_advances": "Unsettled Advances",
       "bill_of_lading": "Bill of Lading",
-      "asycuda_reading": "ASYCUDA Reading"
+      "asycuda_reading": "ASYCUDA Reading",
+      "import_application": "Import Application"
     }
   }
 }

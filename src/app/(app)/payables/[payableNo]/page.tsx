@@ -20,6 +20,7 @@ import { NewRecordDialog } from '@/components/admin/dialog';
 import { Attachments } from '@/components/admin/attachments';
 import { RecordHistory } from '@/components/admin/history';
 import { AttachmentsButton, HistoryButton, NotesButton } from '@/components/admin/icon-dialog';
+import { ExportIcon } from '@/components/print/export-menu';
 import * as papers from '@/server/services/payable-papers';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { StopDialog } from '@/components/admin/stop-dialog';
@@ -372,6 +373,13 @@ export default async function PayablePage({
                 objectType={payables.PERMISSION_OBJECT}
               />
             </AttachmentsButton>
+            {/* The printer, first — the import application's own copy
+                (2026-10-03). */}
+            <ExportIcon
+              exportKey="import_application"
+              id={row.payableNo}
+              title={`${type.name} ${row.payableNo}`}
+            />
             {/*
               The notes somebody wrote on this import, behind the same door the
               purchase invoice uses (2026-10-03). They are `NOTE_ADDED` events
