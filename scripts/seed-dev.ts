@@ -265,6 +265,13 @@ async function main() {
       ['A100050', 'Employee Advances and Loans', 'A000001', null],
       // REQ-HR-001 HR-6 — what people spent for the company and are reimbursed.
       ['X100090', 'Staff Expenses', 'X000001', null],
+      // REQ-PM-001 PM-5 — a certificate's retention is the customer's own
+      // receivable (the customer sub-ledger, as POSTING_MAP requires); billed
+      // revenue; and the two sides recognition moves between periods.
+      ['A100060', 'Retention Receivable', 'A000001', 'customer'],
+      ['A100070', 'Unbilled Project Work (WIP)', 'A000001', null],
+      ['L100070', 'Deferred Project Revenue', 'L000001', null],
+      ['R100030', 'Project Revenue', 'R000001', null],
     ];
     for (const [code, name, parent, control] of accounts) {
       await tx.execute(sql`
@@ -318,6 +325,12 @@ async function main() {
       ['hr.employee_advance_repayment', 'employee_advance', 'A100050'],
       ['hr.expense_claim', 'employee_expense', 'X100090'],
       ['hr.expense_claim', 'employee_advance', 'A100050'],
+      ['projects.certificate', 'customer_receivable', 'A100020'],
+      ['projects.certificate', 'project_retention_receivable', 'A100060'],
+      ['projects.certificate', 'project_revenue', 'R100030'],
+      ['projects.recognition', 'project_wip', 'A100070'],
+      ['projects.recognition', 'project_deferred_revenue', 'L100070'],
+      ['projects.recognition', 'project_revenue', 'R100030'],
     ];
     for (const [event, role, code] of mappings) {
       await tx.execute(sql`

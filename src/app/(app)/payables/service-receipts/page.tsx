@@ -175,7 +175,7 @@ export default async function ServiceReceiptsPage({
         mayCreate ? (
           <NewRecordDialog
             buttonLabel={x('add')}
-            closeLabel={t('close')}
+            closeLabel={admin('close')}
             openOnLoad={params.expense === '1' && Boolean(outcome.error)}
             title={x('add_title')}
           >

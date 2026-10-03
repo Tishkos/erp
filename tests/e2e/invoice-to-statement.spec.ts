@@ -98,11 +98,16 @@ async function controlAccount(
   //
   // Scoped to its own panel: the account's record carries several Save
   // buttons, and the first one on the page belongs to the name.
+  //
+  // The approval left `saved=1` in the address; open the record afresh so the
+  // wait below is for this save's own redirect, not the last one's.
+  const record = `/master-data/chart-of-accounts/${code}`;
+  await page.goto(record);
   const designation = page.locator('form:has(select[name="controlAccount"])').first();
   await designation.locator('select[name="controlAccount"]').selectOption(kind);
   await designation.locator('button[type="submit"]').first().click();
-  await page.waitForLoadState('networkidle');
-  await page.reload();
+  await page.waitForURL(/[?&]saved=1/, { timeout: 60_000 });
+  await page.goto(record);
   await expect(page.locator('select[name="controlAccount"]')).toHaveValue(kind.toLowerCase());
 
   return code;
@@ -142,7 +147,7 @@ async function createPartner(page: Page, screen: string, button: string, name: s
   const dialog = page.locator('dialog[open], [role="dialog"]').first();
   await dialog.getByLabel(/^Legal name/).fill(`${name} Limited`);
   await dialog.getByRole('button', { name: 'Create', exact: true }).click();
-  await page.waitForURL(/\/master-data\/business-partners\/[^/?]+/, { timeout: 60_000 });
+  await page.waitForURL(/\/(?:payables\/suppliers|sales\/customers)\/[^/?]+/, { timeout: 60_000 });
   return decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!);
 }
 
@@ -212,8 +217,10 @@ test.describe('a purchase invoice reaches the supplier statement', () => {
     await page.locator('input[name="quantity_0"]').fill('3');
     await page.locator('input[name="unit_price_0"]').fill('2500');
     await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
+    // A local purchase: the Import box starts ticked since 2026-10-03.
+    await page.locator('input[name="is_import"]').uncheck();
     await page.getByRole('button', { name: 'Create', exact: true }).click();
-    await page.waitForURL(/\/purchasing\/ap-invoices\/API-/, { timeout: 90_000 });
+    await page.waitForURL(/\/payables\/invoices\/API-/, { timeout: 90_000 });
 
     // Exact status words: the record page carries "Posted by" and
     // "Waiting for approval" as labels, and a loose match on those would

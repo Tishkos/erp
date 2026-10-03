@@ -8,14 +8,17 @@ import writeXlsxFile from 'write-excel-file/node';
  *        supplier's PDF on the ordinary New invoice form and ticks Import. The
  *        invoice page then offers "Import tracking", which opens the
  *        application (stage rail, status log, stop dialog).
- *   D12  An expense is a purchase invoice: "Add expense" on the Purchase
- *        Invoices list, a note on the invoice, Unpaid / Paid / Overdue on the
- *        register.
+ *   D12  An expense is a purchase invoice: "Add expense" on the Expenses
+ *        screen (moved there from Purchase Invoices, 2026-10-03), a note on
+ *        the invoice, Unpaid / Paid / Overdue on the invoice register.
  *   §16  Stage 4: a PD registered on the import, validated on its record,
- *        and the ASYCUDA list read into a difference before it is applied.
- *   §15  Stage 3: the instalment plan and a payment application from the
- *        import's Payments section; the maker cannot approve; the accounting
- *        manager approves and sends under a logged override; the register
+ *        listed in the ASYCUDA screen's register of declarations, and the
+ *        ASYCUDA list read into a kept reading before it is applied.
+ *   §15  Stage 3: a payment application for a part of what is owed, from the
+ *        import's Payments lane (the instalment plan left the import on
+ *        2026-10-03 — the application asks for the account and the amount);
+ *        the maker cannot approve; the accounting manager approves and sends
+ *        (under a logged override if the funds check fails); the register
  *        shows it waiting for the bank.
  *   §17  Stage 5: a B/L entered from the import page with its containers
  *        pasted in; one container moved to the port and received into a
@@ -141,7 +144,11 @@ test.describe('A22 · payables in a browser', () => {
     // The module's own tabs, as on every other screen — its heading's
     // (REQ-FIX-001 FIX-1: Purchasing & Invoices).
     await expect(page.getByRole('link', { name: 'Purchase Orders' }).first()).toBeVisible();
+    // The quick form is no longer here: it moved to Expenses (2026-10-03).
+    await expect(page.getByRole('button', { name: 'Add expense' })).toHaveCount(0);
 
+    await page.goto('/payables/service-receipts');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await page.getByRole('button', { name: 'Add expense' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
@@ -173,7 +180,7 @@ test.describe('A22 · payables in a browser', () => {
     await expect(row.getByText(`Landlord travelling ${RUN}`)).toBeVisible();
   });
 
-  test('Stage 3 · plan the terms, apply, approve (a second person), send under override', async ({
+  test('Stage 3 · apply for a part, approve (a second person), send', async ({
     page,
     browser,
   }) => {
@@ -197,21 +204,18 @@ test.describe('A22 · payables in a browser', () => {
     await page.getByRole('link', { name: 'Import tracking' }).click();
     await page.waitForURL(/\/payables\/IMP-/);
 
-    // §15.2 — the plan: 30% on order, 70% against the B/L copy.
-    await expect(page.getByRole('heading', { name: /Payments/ })).toBeVisible();
-    await page.getByRole('button', { name: 'Plan instalments' }).click();
-    const plan = page.getByRole('dialog');
-    await plan.getByRole('textbox', { name: '% or amount 1' }).fill('30');
-    await plan.getByRole('textbox', { name: '% or amount 2' }).fill('70');
-    await plan.getByRole('combobox', { name: 'Due when 2' }).selectOption('against_bl_copy');
-    await plan.getByRole('button', { name: 'Save the plan' }).click();
-    await expect(page.getByRole('cell', { name: 'Deposit', exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText('Planned').first()).toBeVisible();
+    // The plan is off the import (2026-10-03): no "Plan instalments".
+    await expect(page.getByRole('heading', { name: /^Payments/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Plan instalments' })).toHaveCount(0);
 
-    // §15.3 — the application for the deposit, by cheque from the seeded account.
+    // §15.3 — the application for the 30% deposit (of 50,000), by cheque from
+    // the seeded account. Any part of what is owed; no instalment, no
+    // "Funded by" — the account says where the money leaves from.
     await page.getByRole('button', { name: 'New payment application' }).click();
     const create = page.getByRole('dialog');
-    await create.getByLabel('Instalment').selectOption({ index: 1 });
+    await expect(create.getByLabel('Instalment')).toHaveCount(0);
+    await expect(create.getByLabel('Funded by')).toHaveCount(0);
+    await create.getByRole('textbox', { name: 'Amount' }).fill('15000');
     await create.getByLabel('Method').selectOption({ label: 'Cheque' });
     await create.getByLabel('Paid from').selectOption({ index: 0 });
     await create.getByRole('button', { name: 'Create' }).click();
@@ -291,15 +295,22 @@ test.describe('A22 · payables in a browser', () => {
     await change.getByRole('button', { name: 'Change status' }).click();
     await expect(page.getByText('Validated ·').first()).toBeVisible({ timeout: 30_000 });
 
-    // §21.8 — the ASYCUDA list: the difference first, then applied.
+    // §21.8 — the ASYCUDA screen is the register of declarations first: the
+    // new PD is listed with its import before anything is read.
     await page.goto('/payables/pd/asycuda');
+    const standing = page.getByRole('table', { name: 'Where the declarations stand' });
+    await expect(standing.getByRole('link', { name: pdNo })).toBeVisible();
+    // The list pasted (a file works the same way): the difference first, kept
+    // as a reading, then applied.
     await page.getByRole('textbox', { name: 'List' }).fill(`${pdNo}\tTotally Written Off\n12345 Lost`);
     await page.getByRole('button', { name: 'Show the difference' }).click();
+    await page.waitForURL(/\/payables\/pd\/asycuda\?run=/);
     await expect(page.getByText('Will be updated')).toBeVisible();
     await expect(page.getByText('Not read')).toBeVisible();
     await page.getByRole('button', { name: 'Apply 1 changes' }).click();
-    await page.waitForURL(/\/payables\/pd\?applied=1/);
-    await expect(page.getByText('1 PD statuses updated from the ASYCUDA list.')).toBeVisible();
+    await page.waitForURL(/\/payables\/pd\/asycuda\?run=.*applied=1/);
+    await expect(page.getByText(/^Applied on /)).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Readings so far' }).getByText('Applied', { exact: true }).first()).toBeVisible();
     await page.goto(`/payables/pd?view=final&q=${pdNo}`);
     await expect(page.getByRole('row', { name: new RegExp(pdNo) })).toContainText('Totally written off');
   });
@@ -388,9 +399,13 @@ test.describe('A22 · payables in a browser', () => {
     await create.getByRole('textbox', { name: 'Principal' }).fill('1000000');
     await create.getByRole('textbox', { name: 'Commission %' }).fill('2');
     await create.getByLabel('Commission taken').selectOption('deducted_at_disbursement');
-    await create.getByRole('textbox', { name: 'Instalments' }).fill('4');
+    // The count is a number box, and a due date is asked per instalment,
+    // seeded quarterly from the first (2026-10-03).
+    await create.getByRole('spinbutton', { name: 'Instalments' }).fill('4');
     await create.getByLabel('Repaid').selectOption('quarterly');
     await create.getByLabel('First instalment due').fill('2026-12-31');
+    await expect(create.getByLabel('Instalment 2 due')).toHaveValue('2027-03-31');
+    await expect(create.getByLabel('Final instalment due')).toHaveValue('2027-09-30');
     await create.getByRole('textbox', { name: 'Purpose' }).fill(purpose);
     await create.getByRole('button', { name: 'Create loan' }).click();
     await page.waitForURL(/\/payables\/loans\/LOAN-/, { timeout: 60_000 });
@@ -587,6 +602,9 @@ test.describe('A22 · payables in a browser', () => {
     await noSidewaysScroll(page);
 
     await page.goto('/payables/invoices');
+    await noSidewaysScroll(page);
+    // Add expense lives on Expenses (2026-10-03).
+    await page.goto('/payables/service-receipts');
     await noSidewaysScroll(page);
     const add = page.getByRole('button', { name: 'إضافة مصروف' });
     await expect(add).toBeVisible();

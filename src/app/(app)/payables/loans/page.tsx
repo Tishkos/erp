@@ -149,7 +149,7 @@ export default async function LoansPage({ searchParams }: { searchParams: Search
                       label: t(`freq_${frequency}`),
                     })),
                     first: t('first_due'),
-                    nth: (position: number) => t('due_nth', { position: String(position) }),
+                    nth: t('due_nth', { position: '{position}' }),
                     final: t('final_due'),
                     hint: t('rhythm_hint'),
                   }}

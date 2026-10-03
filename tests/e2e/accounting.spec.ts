@@ -129,8 +129,11 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
       await page.getByRole('button', { name: 'New account' }).click();
       await page.waitForTimeout(1200);
       const parent = page.getByRole('combobox', { name: 'Under' });
+      // An enabled option: a posting account under the type also carries its
+      // name ("… › Deferred Project Revenue — holds no sub-accounts") and
+      // cannot be chosen.
       const option = await parent
-        .locator('option')
+        .locator('option:not([disabled])')
         .filter({ hasText: under })
         .first()
         .getAttribute('value');
@@ -293,9 +296,12 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     let reversalNo = '';
     for (let attempt = 0; attempt < 4 && !reversalNo; attempt += 1) {
       await page.waitForTimeout(2_500);
-      // The reason is typed beside the button, in the document's own foot.
-      await page.getByRole('textbox', { name: 'Why it is being reversed' }).fill('posted twice');
+      // Reverse asks first: a confirmation dialog takes the reason, and its
+      // own button does the reversing.
       await page.getByRole('button', { name: 'Reverse', exact: true }).click();
+      const confirm = page.getByRole('dialog', { name: 'Confirm journal reversal' });
+      await confirm.getByRole('textbox', { name: 'Why it is being reversed' }).fill('posted twice');
+      await confirm.getByRole('button', { name: 'Yes, reverse this journal' }).click();
       await page.waitForTimeout(3_000);
 
       await page.goto(`/finance/journals/${entryNo}`);
@@ -361,7 +367,7 @@ test('an account statement keeps its partner when the filters run', async ({ pag
     const dialog = page.locator('dialog[open], [role="dialog"]').first();
     await dialog.getByLabel(/^Legal name/).fill(`Statement ${kind} ${stamp}`);
     await dialog.getByRole('button', { name: 'Create', exact: true }).click();
-    await page.waitForURL(/\/master-data\/business-partners\/[^/?]+/, { timeout: 60_000 });
+    await page.waitForURL(/\/(?:payables\/suppliers|sales\/customers)\/[^/?]+/, { timeout: 60_000 });
     return decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!.split('?')[0]!);
   };
 
@@ -433,7 +439,7 @@ test('item sales account appears in invoice account selection', async ({ page })
     await select.selectOption(value);
   }
   await itemDialog.getByRole('button', { name: 'Create' }).click();
-  await page.waitForURL(/\/master-data\/items\/[^/?]+/, { timeout: 60_000 });
+  await page.waitForURL(/\/inventory\/items\/[^/?]+/, { timeout: 60_000 });
   const itemCode = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!.split('?')[0]!);
   const salesAccount = page.getByLabel('Sales account', { exact: true });
   const salesAccountId = await salesAccount
@@ -455,7 +461,7 @@ test('item sales account appears in invoice account selection', async ({ page })
   const customerDialog = page.locator('dialog[open], [role="dialog"]').first();
   await customerDialog.getByLabel(/^Legal name/).fill(`E2E Routed Customer ${stamp}`);
   await customerDialog.getByRole('button', { name: 'Create', exact: true }).click();
-  await page.waitForURL(/\/master-data\/business-partners\/[^/?]+/, { timeout: 60_000 });
+  await page.waitForURL(/\/(?:payables\/suppliers|sales\/customers)\/[^/?]+/, { timeout: 60_000 });
   const customerCode = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!.split('?')[0]!);
 
   await page.goto('/sales/ar-invoices/new');
@@ -496,7 +502,7 @@ test('a sales invoice header carries block 5 fields, and approves without dimens
   const dialog = page.locator('dialog[open], [role="dialog"]').first();
   await dialog.getByLabel(/^Legal name/).fill(`Dimension Customer ${stamp}`);
   await dialog.getByRole('button', { name: 'Create', exact: true }).click();
-  await page.waitForURL(/\/master-data\/business-partners\/[^/?]+/, { timeout: 60_000 });
+  await page.waitForURL(/\/(?:payables\/suppliers|sales\/customers)\/[^/?]+/, { timeout: 60_000 });
   const customerCode = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!.split('?')[0]!);
 
   await page.goto('/sales/ar-invoices/new');

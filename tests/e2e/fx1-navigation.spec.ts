@@ -3,8 +3,9 @@ import { expect, test, type Page } from '@playwright/test';
 /**
  * REQ-FIX-001 FX2 — the dropdowns the sponsor asked for (2026-10-02).
  *
- * Payables opens on four headings like Accounting's, with nothing of
- * logistics or banking left in it; Logistics holds the customs declarations,
+ * Payables opens on three headings (FIX-1 made it four; the owner folded
+ * Payments into Purchasing & Invoices on 2026-10-03, 009c1fb), with nothing
+ * of logistics or banking left in it; Logistics holds the customs declarations,
  * the ASYCUDA list and the shipping; Treasury & Banking, under Accounting,
  * holds the bank loans and the deposits beside the accounts. Then a cash
  * deposit is raised on the new screen and its record opens.
@@ -24,13 +25,16 @@ async function signIn(page: Page) {
 test.describe('FX2 · the module dropdowns', () => {
   test.beforeEach(async ({ page }) => signIn(page));
 
-  test('Payables is four headings, and holds only payables work', async ({ page }) => {
+  test('Payables is three headings, and holds only payables work', async ({ page }) => {
     const nav = page.getByRole('navigation', { name: 'Primary navigation' });
     await nav.getByRole('button', { name: 'Payables' }).click();
-    for (const heading of ['Purchasing & Invoices', 'Payments', 'Suppliers & Balances', 'Setup']) {
+    for (const heading of ['Purchasing & Invoices', 'Suppliers & Balances', 'Setup']) {
       await expect(nav.getByRole('heading', { name: heading, exact: true })).toBeVisible();
     }
+    // The payment screens sit with the invoices they pay — no heading of their own.
+    await expect(nav.getByRole('heading', { name: 'Payments', exact: true })).toHaveCount(0);
     await expect(nav.getByRole('link', { name: 'Purchase Invoices', exact: true })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Payment Applications', exact: true })).toBeVisible();
     for (const gone of ['Customs Pre-Declarations', 'Bills of Lading', 'Containers', 'Bank Loans']) {
       await expect(nav.getByRole('link', { name: gone, exact: true })).toHaveCount(0);
     }

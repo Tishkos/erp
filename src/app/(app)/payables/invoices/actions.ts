@@ -252,7 +252,8 @@ export async function addExpenseAction(formData: FormData): Promise<void> {
       chargedToPayableId: text(formData, 'charged_to').trim() || null,
     });
   });
-  if (!outcome.ok) redirect(withQuery(`${LIST}?expense=1`, 'error', outcome.error!));
+  // The form lives on Expenses now (2026-10-03), which reopens it with the error.
+  if (!outcome.ok) redirect(withQuery('/payables/service-receipts?expense=1', 'error', outcome.error!));
   redirect(record(outcome.value!.invoiceNo));
 }
 
