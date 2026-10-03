@@ -7,6 +7,15 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
 
 ## Unreleased
 
+### Fixed
+- REQ-HR-001 — the payroll, advances and recruitment/performance migrations
+  had reached the journal at times earlier than main's newest, so a database
+  that had already run those would have passed them over. They run after
+  main's now (0262–0264); a database that ran them under their earlier names
+  is recorded, not run twice (`migrate.ts`). The controls register's
+  duplicated rows are renumbered (C-20 the bank rule, C-21 onward HR). The
+  payroll and advances tests fund the bank before paying from it (C-20).
+
 ### Added
 - REQ-HR-001 HR-5 — **Recruitment** and **Performance**. A vacancy (VAC-…)
   for a position, drafted by HR and opened by the HR manager; its applicants
@@ -23,7 +32,7 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
   once; an HR manager who is neither the reviewer nor the person signs it off,
   after which it is the record. The dashboard shows reviews and offers
   waiting on me; the employee page shows where the person was hired from and
-  their reviews. Migration 0259.
+  their reviews. Migration 0264.
 - REQ-HR-001 HR-4 — **Advances & Loans**. A salary advance or a loan
   (EADV-…) asked for by HR or by the person, endorsed by their manager,
   approved by Finance (never by the asker, the person or the endorser), paid
@@ -34,7 +43,7 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
   behind its schedule; the dashboard shows advances waiting on me. The
   employee page shows the person's advances and the **equipment** they hold
   (a fixed asset or an item, handed out and returned with its condition) —
-  a leaver's clearance. Migration 0258.
+  a leaver's clearance. Migration 0263.
 - REQ-HR-001 HR-3 — **Payroll**. One run per branch per month, computed from
   the facts: the salary in force, each person's own component figures
   (allowances, an exemption — dated rows on the employee page), the
@@ -48,7 +57,7 @@ a rollback plan (blueprint §25; REQ-IMPROVE-001 OP-11). The version is
   bank transfer and in cash from the treasury's accounts; a run nothing was
   paid from is reversed whole and run again. The dashboard shows runs waiting
   on me; the cash forecast's payroll source is live; the period-close
-  checklist warns of a month without a posted payroll. Migration 0257.
+  checklist warns of a month without a posted payroll. Migration 0262.
 - REQ-HR-001 HR-2 — time. **Leave Management**: requests counted on the
   year's working calendar (rest days and holidays not taken, half days at the
   ends), held to the balance of their type (entitlement by months served,

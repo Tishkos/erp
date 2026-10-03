@@ -30,6 +30,8 @@ Pass timestamps to `audit.record` as ISO strings, not JavaScript `Date` objects:
 
 Release `5f721629294249c8e9bd16b124f8b770253b50c3` on `fix/item-revenue-routing` — the supplier-statement fix, invoice dimensions, item-based revenue routing and account-profile corrections — is integrated here. The tree's pricing work predates it and was committed first, so the merge reads as "the release on top of the prices".
 
+HR's migrations run after main's own 0256–0260: `0261_hr_time`, `0262_hr_payroll`, `0263_hr_advances`, `0264_hr_talent` at journal times …071–…074. HR-3 to HR-5 first reached main as `0257_hr_payroll`, `0258_hr_advances`, `0259_hr_talent` at …064–…066 — earlier than main's …066–…070, so a database past those would have skipped them. `migrate.ts` › `recordRenamed` records each under its new time where its tables already exist and runs one an earlier name had skipped; a new HR migration takes a `when` after the journal's last entry, as every migration does.
+
 Production applied migrations `0197` and `0200` with journal timestamps `1795900000001` and `1795900000002`. Drizzle orders execution by `_journal.json` timestamps, not filename numbers, so the pending `0198`/`0199`/`0201` migrations are appended after the latest journal entry with strictly greater timestamps. Never rewrite an applied migration and never sort the journal by filename.
 
 ## Inventory: one ledger, and the scripts that must respect it
