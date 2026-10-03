@@ -7,6 +7,7 @@
  */
 import { flag, runAdminAndReturn, text } from '@/server/admin-action';
 import * as settings from '@/server/services/hr-settings';
+import * as performance from '@/server/services/performance';
 
 const BACK = '/administration/hr-settings';
 
@@ -88,4 +89,27 @@ export async function saveHrParameters(form: FormData): Promise<void> {
       if (value.trim() !== '') await settings.setParameter(tx, ctx, key, value);
     }
   }, BACK);
+}
+
+/** HR-5 — a review cycle: made as a draft, opened for reviews, closed when every review is done. */
+export async function saveReviewCycle(form: FormData): Promise<void> {
+  await runAdminAndReturn(
+    (tx, ctx) =>
+      performance.createCycle(tx, ctx, {
+        code: text(form, 'code'),
+        nameEn: text(form, 'name_en'),
+        nameAr: text(form, 'name_ar') || null,
+        periodFrom: text(form, 'period_from'),
+        periodTo: text(form, 'period_to'),
+      }),
+    BACK,
+  );
+}
+
+export async function openReviewCycle(form: FormData): Promise<void> {
+  await runAdminAndReturn((tx, ctx) => performance.openCycle(tx, ctx, text(form, 'code')), BACK);
+}
+
+export async function closeReviewCycle(form: FormData): Promise<void> {
+  await runAdminAndReturn((tx, ctx) => performance.closeCycle(tx, ctx, text(form, 'code')), BACK);
 }

@@ -11,8 +11,12 @@ import { visibleRoute } from '@/server/delivered';
 import { PAY_CALCULATIONS, PAY_COMPONENT_KINDS } from '@/server/domain/hr';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as settings from '@/server/services/hr-settings';
+import * as performance from '@/server/services/performance';
 import {
   addCalendarHoliday,
+  closeReviewCycle,
+  openReviewCycle,
+  saveReviewCycle,
   removeCalendarHoliday,
   saveCalendar,
   saveHrParameters,
@@ -24,8 +28,8 @@ import {
 
 /**
  * HR settings — REQ-HR-001 §5–§7 (R4). Copies the Payables Settings screen:
- * four stacked windows — pay components, leave types, working calendars and
- * the morning sweep's limits (HR-2) —
+ * five stacked windows — pay components, leave types, working calendars, the
+ * review cycles (HR-5) and the morning sweep's limits (HR-2) —
  * each a register with a new-row form under it. Nothing deletes; a row is
  * deactivated. Positions moved to HR → Positions (REQ-FIX-001 FIX-5).
  */
@@ -47,13 +51,15 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
   }
   const mayConfigure = can(principal, 'configure', settings.PERMISSION_OBJECT);
 
-  const { components, leaveTypes, calendars, limits, accountChoices } = await withCurrentUser(async (tx) => ({
+  const { components, leaveTypes, calendars, limits, accountChoices, cycles } = await withCurrentUser(async (tx) => ({
     limits: await settings.parameters(tx),
     components: await settings.payComponents(tx),
     // HR-3 — the accounts a component may post to: an expense, a plain liability.
     accountChoices: mayConfigure ? await settings.componentAccountChoices(tx) : { expense: [], liability: [] },
     leaveTypes: await settings.leaveTypes(tx),
     calendars: await settings.calendars(tx),
+    // HR-5 — the periods people are reviewed for.
+    cycles: await performance.cycles(tx),
   }));
   const iqd = (value: string) => formatMoney(value, 'IQD', locale as Locale);
 
@@ -361,6 +367,96 @@ export default async function HrSettingsPage({ searchParams }: { searchParams: S
                 </SubmitRow>
               </Form>
             </>
+          ) : null}
+        </div>
+      </section>
+      {/* REQ-HR-001 HR-5 — the review cycles: opened for reviews, closed when every review is done. */}
+      <section aria-labelledby="hrs-cycles-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="hrs-cycles-title">
+            <span>{t('review_cycles')}</span>
+            <span className={s.sapTitleMeta}>{admin('rows_shown', { count: cycles.length })}</span>
+          </h2>
+          <div className={s.sapTableWrap}>
+            <table aria-labelledby="hrs-cycles-title" className={s.sapTable}>
+              <thead>
+                <tr>
+                  <th scope="col">{t('code')}</th>
+                  <th scope="col">{t('cycle_name')}</th>
+                  <th scope="col">{t('cycle_period')}</th>
+                  <th className={s.sapNum} scope="col">
+                    {t('cycle_reviews')}
+                  </th>
+                  <th scope="col">{t('cycle_status')}</th>
+                  {mayConfigure ? <th scope="col">{admin('actions')}</th> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {cycles.length === 0 ? (
+                  <tr>
+                    <td className={s.sapEmptyRow} colSpan={mayConfigure ? 6 : 5}>
+                      {t('cycles_none')}
+                    </td>
+                  </tr>
+                ) : null}
+                {cycles.map((row) => {
+                  const tone = row.status === 'open' ? 'open' : row.status === 'closed' ? 'closed' : 'draft';
+                  return (
+                    <tr key={row.code}>
+                      <td>
+                        <bdi dir="ltr">{row.code}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="auto">{locale === 'ar' && row.nameAr ? row.nameAr : row.nameEn}</bdi>
+                      </td>
+                      <td>
+                        <bdi dir="ltr">{`${formatBusinessDate(row.periodFrom, locale as Locale)} – ${formatBusinessDate(row.periodTo, locale as Locale)}`}</bdi>
+                      </td>
+                      <td className={s.sapNum}>
+                        <bdi dir="ltr">{`${row.signedOff} / ${row.reviews}`}</bdi>
+                      </td>
+                      <td>
+                        <span className={`status status--${tone} ${s.sapRegisterStatus}`} data-status={tone}>
+                          {t(`cycle_status_${row.status}`)}
+                        </span>
+                      </td>
+                      {mayConfigure ? (
+                        <td>
+                          {row.status === 'draft' ? (
+                            <Form action={openReviewCycle}>
+                              <Hidden name="code" value={row.code} />
+                              <Submit label={t('cycle_open')} small tone="secondary" />
+                            </Form>
+                          ) : null}
+                          {row.status === 'open' ? (
+                            <Form action={closeReviewCycle}>
+                              <Hidden name="code" value={row.code} />
+                              <Submit label={t('cycle_close')} small tone="secondary" />
+                            </Form>
+                          ) : null}
+                          {row.status === 'closed' ? '—' : null}
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {mayConfigure ? (
+            <Form action={saveReviewCycle}>
+              <p className={s.sapGridCaption}>{t('new_cycle')}</p>
+              <Grid>
+                <Field hint={admin('code_hint')} id="f-cycle-code" label={t('code')} name="code" required />
+                <Field id="f-cycle-name-en" label={t('name_en')} name="name_en" required />
+                <Field id="f-cycle-name-ar" label={t('name_ar')} name="name_ar" />
+                <Field label={t('cycle_from')} name="period_from" required type="date" />
+                <Field label={t('cycle_to')} name="period_to" required type="date" />
+              </Grid>
+              <SubmitRow>
+                <Submit label={t('save')} />
+              </SubmitRow>
+            </Form>
           ) : null}
         </div>
       </section>

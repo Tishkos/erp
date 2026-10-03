@@ -222,7 +222,9 @@ describe('every screen has one address', () => {
       '/hr/employees',
       '/hr/leave',
       '/hr/payroll',
+      '/hr/performance',
       '/hr/positions',
+      '/hr/recruitment',
       '/inventory/availability',
       // Operations build — block 7's Warehouses Report.
       '/inventory/fifo-valuation',

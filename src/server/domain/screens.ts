@@ -489,6 +489,9 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/hr/leave',
   '/hr/payroll',
   '/hr/advances',
+  // REQ-HR-001 Stage HR-5 — recruitment and performance.
+  '/hr/recruitment',
+  '/hr/performance',
   '/administration/hr-settings',
   // REQ-WA-001 WA-1/WA-2 — the WhatsApp bridge.
   '/administration/whatsapp',

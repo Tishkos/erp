@@ -544,6 +544,14 @@ export async function resetTestData(): Promise<void> {
     // REQ-HR-001 HR-3 — the runs name their journals; their lines and payments
     // hang off them; a person's own component figures are dated rows like pay.
     // REQ-HR-001 HR-4 — the recoveries name the runs and the advances; the equipment the people.
+    // REQ-HR-001 HR-5 — applicants name their vacancy and the employee a hire made; reviews the
+    // person and their cycle (a test's own: no cycle is seeded).
+    await client.query('delete from review_goal');
+    await client.query('delete from performance_review');
+    await client.query('delete from review_cycle');
+    await client.query('delete from applicant_stage');
+    await client.query('delete from applicant');
+    await client.query('delete from vacancy');
     await client.query('delete from employee_advance_recovery');
     await client.query('delete from employee_advance');
     await client.query('delete from employee_asset');
@@ -908,7 +916,7 @@ export async function resetTestData(): Promise<void> {
                          -- REQ-AP-001 Stage 6, migration 0235.
                          'LOAN',
                          -- REQ-HR-001 Stage HR-1, migration 0241.
-                         'EMPLOYEE', 'POSITION_CODE', 'LEAVE_REQUEST', 'PAYROLL_RUN', 'PAYSLIP', 'EMPLOYEE_ADVANCE', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
+                         'EMPLOYEE', 'POSITION_CODE', 'LEAVE_REQUEST', 'PAYROLL_RUN', 'PAYSLIP', 'EMPLOYEE_ADVANCE', 'VACANCY', 'APPLICANT', 'PERFORMANCE_REVIEW', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

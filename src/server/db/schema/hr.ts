@@ -33,6 +33,14 @@
  *   employee_advance           EADV-…: money lent, recovered from pay or cash
  *   employee_advance_recovery  what came back — append-only
  *   employee_asset             what a person holds, handed out and returned
+ *
+ * Stage HR-5 (0259) — recruitment & performance:
+ *   vacancy             VAC-…: a position to fill, how many, from when
+ *   applicant           APL-…: who applied, the stage they are at; hired, an employee
+ *   applicant_stage     every move of an applicant — append-only
+ *   review_cycle        a period people are reviewed for (master data)
+ *   performance_review  REV-…: one person, one cycle, their reviewer; rated, signed off
+ *   review_goal         the review's goals: weight, target, rating
  */
 import { sql } from 'drizzle-orm';
 import { boolean, check, date, index, integer, numeric, pgTable, smallint, text, time, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
@@ -655,4 +663,170 @@ export const employeeAsset = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('employee_asset_employee_idx').on(t.employeeId, t.returnedOn), check('employee_asset_kind', sql`${t.assetKind} in ('fixed_asset', 'item')`)],
+);
+
+export const vacancy = pgTable(
+  'vacancy',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    vacancyNo: text('vacancy_no').notNull(),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    positionCode: text('position_code')
+      .notNull()
+      .references(() => position.code),
+    departmentCode: text('department_code')
+      .notNull()
+      .references(() => department.code),
+    headcount: smallint('headcount').notNull().default(1),
+    hired: smallint('hired').notNull().default(0),
+    employmentKind: text('employment_kind').notNull().default('permanent'),
+    opensOn: date('opens_on').notNull(),
+    closesOn: date('closes_on'),
+    description: text('description').notNull(),
+    status: text('status').notNull().default('draft'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    openedBy: uuid('opened_by').references(() => appUser.id),
+    openedAt: timestamp('opened_at', { withTimezone: true }),
+    closedBy: uuid('closed_by').references(() => appUser.id),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    closeReason: text('close_reason'),
+  },
+  (t) => [
+    uniqueIndex('vacancy_no_uniq').on(t.vacancyNo),
+    index('vacancy_status_idx').on(t.status, t.branchCode),
+    check('vacancy_status', sql`${t.status} in ('draft', 'open', 'filled', 'closed', 'cancelled')`),
+    check('vacancy_kind', sql`${t.employmentKind} in ('permanent', 'contract', 'daily')`),
+  ],
+);
+
+export const applicant = pgTable(
+  'applicant',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    applicantNo: text('applicant_no').notNull(),
+    vacancyId: uuid('vacancy_id')
+      .notNull()
+      .references(() => vacancy.id),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    fullNameEn: text('full_name_en').notNull(),
+    fullNameAr: text('full_name_ar'),
+    phone: text('phone'),
+    email: text('email'),
+    source: text('source'),
+    stage: text('stage').notNull().default('applied'),
+    note: text('note'),
+    employeeId: uuid('employee_id').references(() => employee.id),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('applicant_no_uniq').on(t.applicantNo),
+    index('applicant_vacancy_idx').on(t.vacancyId, t.stage),
+    check('applicant_stage', sql`${t.stage} in ('applied', 'screening', 'interview', 'offer', 'hired', 'rejected', 'withdrawn')`),
+  ],
+);
+
+export const applicantStage = pgTable(
+  'applicant_stage',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    applicantId: uuid('applicant_id')
+      .notNull()
+      .references(() => applicant.id),
+    fromStage: text('from_stage'),
+    toStage: text('to_stage').notNull(),
+    note: text('note'),
+    movedBy: uuid('moved_by')
+      .notNull()
+      .references(() => appUser.id),
+    movedAt: timestamp('moved_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('applicant_stage_applicant_idx').on(t.applicantId, t.movedAt)],
+);
+
+export const reviewCycle = pgTable(
+  'review_cycle',
+  {
+    code: text('code').primaryKey(),
+    nameEn: text('name_en').notNull(),
+    nameAr: text('name_ar'),
+    periodFrom: date('period_from').notNull(),
+    periodTo: date('period_to').notNull(),
+    status: text('status').notNull().default('draft'),
+    createdBy: uuid('created_by').references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check('review_cycle_status', sql`${t.status} in ('draft', 'open', 'closed')`)],
+);
+
+export const performanceReview = pgTable(
+  'performance_review',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    reviewNo: text('review_no').notNull(),
+    cycleCode: text('cycle_code')
+      .notNull()
+      .references(() => reviewCycle.code),
+    employeeId: uuid('employee_id')
+      .notNull()
+      .references(() => employee.id),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    reviewerUserId: uuid('reviewer_user_id')
+      .notNull()
+      .references(() => appUser.id),
+    status: text('status').notNull().default('draft'),
+    overallRating: numeric('overall_rating', { precision: 4, scale: 2 }),
+    reviewerComment: text('reviewer_comment'),
+    employeeComment: text('employee_comment'),
+    employeeCommentedAt: timestamp('employee_commented_at', { withTimezone: true }),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    ratedAt: timestamp('rated_at', { withTimezone: true }),
+    signedOffBy: uuid('signed_off_by').references(() => appUser.id),
+    signedOffAt: timestamp('signed_off_at', { withTimezone: true }),
+    signOffNote: text('sign_off_note'),
+    cancelledBy: uuid('cancelled_by').references(() => appUser.id),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+  },
+  (t) => [
+    uniqueIndex('performance_review_no_uniq').on(t.reviewNo),
+    uniqueIndex('performance_review_cycle_employee_uniq').on(t.cycleCode, t.employeeId),
+    check('performance_review_status', sql`${t.status} in ('draft', 'rated', 'signed_off', 'cancelled')`),
+    check('performance_review_signer_not_reviewer', sql`${t.signedOffBy} is null or ${t.signedOffBy} <> ${t.reviewerUserId}`),
+  ],
+);
+
+export const reviewGoal = pgTable(
+  'review_goal',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    reviewId: uuid('review_id')
+      .notNull()
+      .references(() => performanceReview.id),
+    lineNo: smallint('line_no').notNull(),
+    title: text('title').notNull(),
+    target: text('target'),
+    weight: smallint('weight').notNull(),
+    rating: smallint('rating'),
+    comment: text('comment'),
+  },
+  (t) => [uniqueIndex('review_goal_line_uniq').on(t.reviewId, t.lineNo), check('review_goal_weight', sql`${t.weight} between 1 and 100`)],
 );

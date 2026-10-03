@@ -39,6 +39,8 @@ const ROUTES = [
   '/hr/leave',
   '/hr/payroll',
   '/hr/advances',
+  '/hr/recruitment',
+  '/hr/performance',
   '/finance/periods',
   '/projects',
   '/projects/contracts',

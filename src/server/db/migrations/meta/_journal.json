@@ -1303,6 +1303,13 @@
       "when": 1795900000065,
       "tag": "0258_hr_advances",
       "breakpoints": true
+    },
+    {
+      "idx": 186,
+      "version": "7",
+      "when": 1795900000066,
+      "tag": "0259_hr_talent",
+      "breakpoints": true
     }
   ]
 }
