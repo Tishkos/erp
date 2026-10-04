@@ -84,6 +84,7 @@ fi
 # them costs nothing, and the day one of them fills is not the day anybody
 # wants to discover this list was written before it existed.
 read -r -d '' DOCUMENT_TABLES <<'TABLES' || true
+cloud_file_link
 employee_request_line
 employee_document
 review_goal

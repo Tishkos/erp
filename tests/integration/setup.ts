@@ -510,6 +510,12 @@ export async function resetTestData(): Promise<void> {
     // REQ-WA-001 — the bridge's log, allow-list and pairing; the seeded
     // settings are restored, the bridge's heartbeat keys go.
     await client.query('truncate whatsapp_message, whatsapp_contact restart identity cascade');
+    // Platform phase, Agent 4 — the Document Center: a person's linked cloud account and its
+    // pending sign-in, the links from cloud files to records (never deleted in production), the
+    // role -> group mappings; the one settings row goes back to its seed (switched off).
+    await client.query('truncate cloud_file_link, cloud_link_attempt, cloud_account');
+    await client.query('delete from cloud_group_mapping');
+    await client.query(`update cloud_setting set enabled = false, base_url = 'https://files.qs-groups.com', root_path = '/', record_root = '/Qimah', updated_by = null, updated_at = now() where id = 1`);
     await client.query('delete from whatsapp_session');
     await client.query(`delete from whatsapp_setting where key like 'bridge_%'`);
     /*

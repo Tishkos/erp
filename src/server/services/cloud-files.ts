@@ -25,26 +25,24 @@ import type { Tx } from '../db/client';
 import { cloudFileLink, roleGrant, appUser } from '../db/schema';
 import {
   CloudLinkError,
-  CloudPathError,
   MAX_UPLOAD_BYTES,
   assertFileName,
   assertLinkShape,
   assertWithin,
   folderNameForRecord,
   joinPath,
-  normaliseCloudPath,
   openInCloudUrl,
-  parentOf,
   sharesFor,
   type GroupMapping,
 } from '../domain/cloud-files';
 import { DEFAULT_UPLOAD_POLICY, extensionOf, inspect } from '../domain/attachments';
 import { can } from '../domain/permissions';
-import { AdminValidationError, permit, recordChange } from './administration';
+import { AdminValidationError, permit } from './administration';
 import * as audit from './audit';
 import type { ActorContext } from './chart-of-accounts';
 import {
   CloudConflictError,
+  CloudNotFoundError,
   CloudRequestError,
   type CloudClient,
   type CloudEntry,
@@ -64,6 +62,52 @@ export function folderRights(entry: Pick<CloudEntry, 'permissions' | 'isFolder'>
   const letters = entry.permissions ?? '';
   // The cloud did not say: do not offer what it may refuse. (A real Nextcloud always says.)
   return { upload: letters.includes('C'), makeFolder: letters.includes('K') };
+}
+
+// ---------------------------------------------------------------------------
+// Browsing — as the person, inside the Document Center's folder
+// ---------------------------------------------------------------------------
+
+export interface Listing {
+  readonly path: string;
+  readonly folder: CloudEntry;
+  readonly entries: readonly CloudEntry[];
+  readonly rights: { upload: boolean; makeFolder: boolean };
+}
+
+/**
+ * A folder of the Document Center as the cloud shows it to this person. The
+ * ERP's part is the permission to use the screen and the fence around the
+ * folder it starts in; which files appear is the cloud's answer, nothing else.
+ */
+export async function browse(ctx: ActorContext, client: CloudClient, config: settings.CloudSettings, path: string): Promise<Listing> {
+  await permit(ctx, 'view', FILES_OBJECT, null);
+  const normal = assertWithin(config.rootPath, path);
+  const { folder, entries } = await client.list(normal);
+  return { path: normal, folder, entries, rights: folderRights(folder) };
+}
+
+/** One file or folder of the Document Center, for a download or a preview. "Not found" is also what a file the person may not see is. */
+export async function entryAt(ctx: ActorContext, client: CloudClient, config: settings.CloudSettings, path: string): Promise<CloudEntry> {
+  await permit(ctx, 'view', FILES_OBJECT, null);
+  const normal = assertWithin(config.rootPath, path);
+  const entry = await client.stat(normal);
+  if (!entry) throw new CloudNotFoundError('Not found in Cloud Files.', 404);
+  return entry;
+}
+
+/**
+ * The file behind a link, as this person sees it — only when they may open the
+ * record it is linked to AND the cloud shows them the file. Either refusal is
+ * the same "not found".
+ */
+export async function entryForLink(tx: Tx, ctx: ActorContext, client: CloudClient, linkId: string): Promise<{ entry: CloudEntry; link: LinkRow }> {
+  await permit(ctx, 'view', FILES_OBJECT, linkId);
+  const [row] = await tx.select().from(cloudFileLink).where(and(eq(cloudFileLink.id, linkId), eq(cloudFileLink.serverUrl, client.baseUrl), isNull(cloudFileLink.unlinkedAt))).limit(1);
+  if (!row || !(await openRecord(tx, ctx.principal, row.objectType, row.objectId))) throw new CloudNotFoundError('Not found in Cloud Files.', 404);
+  const entry = await resolveForPerson(client, row);
+  if (!entry) throw new CloudNotFoundError('Not found in Cloud Files.', 404);
+  return { entry, link: { ...row, linkedByName: null } };
 }
 
 // ---------------------------------------------------------------------------
@@ -412,8 +456,7 @@ export async function ensureRecordFolder(tx: Tx, ctx: ActorContext, client: Clou
   const path = joinPath(kindFolder, folderNameForRecord(record.label));
   assertWithin(config.rootPath, path);
 
-  const madeParents = await client.ensureFolder(kindFolder);
-  void madeParents;
+  await client.ensureFolder(kindFolder);
   const existing = await client.stat(path);
   let created = false;
   if (!existing) {
@@ -578,5 +621,3 @@ export async function recordDownload(tx: Tx, ctx: ActorContext, entry: CloudEntr
     clientIp: ctx.clientIp ?? null,
   });
 }
-
-export { CloudPathError, normaliseCloudPath, parentOf, recordChange };
