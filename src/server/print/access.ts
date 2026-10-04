@@ -63,6 +63,8 @@ export const EXPORT_ACCESS = {
   hr_leave_balances: { kind: 'report', route: '/hr/reports', object: 'hr_report' },
   hr_payroll_register: { kind: 'report', route: '/hr/reports', object: 'payroll_run' },
   hr_unsettled_advances: { kind: 'report', route: '/hr/reports', object: 'employee_advance' },
+  // REQ-PM-001 PM-5 — the progress certificate, the client's invoice for work done (shared, 2026-10-04).
+  project_certificate: { kind: 'document', route: '/projects/billing', object: 'project' },
 } as const satisfies Record<
   string,
   { readonly kind: 'document' | 'report'; readonly route: string; readonly object: string; readonly selfService?: boolean }

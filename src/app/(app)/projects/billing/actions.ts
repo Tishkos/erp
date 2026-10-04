@@ -5,7 +5,10 @@
  * certificates raised from them or from measured progress and approved by
  * somebody else, and the period's revenue recognition.
  */
+import { redirect } from 'next/navigation';
 import { runAdminAndReturn, text } from '@/server/admin-action';
+import { registerAllRecords } from '@/server/records';
+import * as attachments from '@/server/services/attachments';
 import * as billing from '@/server/services/project-billing';
 
 const page = (form: FormData) => {
@@ -59,4 +62,27 @@ export async function approveCertificate(form: FormData): Promise<void> {
 
 export async function cancelCertificate(form: FormData): Promise<void> {
   await runAdminAndReturn((tx, ctx) => billing.cancelCertificate(tx, ctx, text(form, 'certificate_no'), text(form, 'reason')), record(form));
+}
+
+/**
+ * A certificate's papers — the signed measurement, the client's acceptance —
+ * kept against the certificate, by its number as its history is
+ * (shared, 2026-10-04: every invoice wears the paperclip from its draft).
+ */
+export async function attachToCertificate(form: FormData): Promise<void> {
+  const file = form.get('file');
+  if (!(file instanceof File) || file.size === 0) redirect(`${record(form)}?error=attachment_missing`);
+  const upload = file as File;
+  const content = Buffer.from(await upload.arrayBuffer());
+  // Where files go and who may read them back — registered before the first upload of a cold process.
+  registerAllRecords();
+  await runAdminAndReturn(async (tx, ctx) => {
+    const view = await billing.certificate(tx, text(form, 'certificate_no'));
+    await attachments.upload(tx, ctx, {
+      objectType: billing.CERTIFICATE_DOCUMENT_TYPE,
+      objectId: view.certificate.certificateNo,
+      fileName: upload.name,
+      content,
+    });
+  }, record(form));
 }
