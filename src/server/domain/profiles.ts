@@ -79,6 +79,8 @@ export const PROFILE_KINDS = [
   'performance_review',
   'vacancy',
   'payroll_run',
+  // The Task Center (platform phase): a task opens its record page.
+  'task',
   // Kinds with no page yet.
   'currency',
   'fixed_asset',
@@ -160,6 +162,7 @@ const BASES: Readonly<Record<ProfileKind, string | null>> = {
   performance_review: '/hr/performance',
   vacancy: '/hr/recruitment',
   payroll_run: '/hr/payroll',
+  task: '/tasks',
   currency: null, // missing — shared (exchange rates are a settings screen, no record page)
   fixed_asset: null, // missing — shared (no module owns it yet)
   investment: null, // missing — shared (no module owns it yet)

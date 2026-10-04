@@ -15,6 +15,7 @@ import * as hrReports from './hr-reports';
 import * as accountingDocuments from './accounting-documents';
 import * as projectDocuments from './project-documents';
 import * as hrDocuments from './hr-documents';
+import * as taskDocuments from './task-documents';
 
 export type { ExportKey } from './access';
 
@@ -124,6 +125,7 @@ const BUILDERS = {
   vacancy: byId(hrDocuments.vacancy),
   applicant: byId(hrDocuments.applicant),
   employee_request: byId(hrDocuments.employeeRequest),
+  task: byId(taskDocuments.task),
 } satisfies Record<ExportKey, Builder>;
 
 export function exportable(key: ExportKey): Exportable {

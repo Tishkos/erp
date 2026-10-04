@@ -323,7 +323,8 @@ export function normaliseTags(input: string | readonly string[] | null | undefin
  * The kinds the Task Center emits through `notifications.insertNotification`
  * (it builds no bell and no delivery path of its own). The first nine are the
  * brief's; `rejected`, `returned`, `cancelled` and `resumed` tell the people
- * a refusal, a return, a cancellation or a restart concerns.
+ * a refusal, a return, a cancellation or a restart concerns; `updated` tells
+ * the assignee that what the task says has changed (the deadline moved).
  */
 export const TASK_NOTIFICATION_KINDS = [
   'task.assigned',
@@ -337,6 +338,7 @@ export const TASK_NOTIFICATION_KINDS = [
   'task.completed',
   'task.reassigned',
   'task.cancelled',
+  'task.updated',
   'task.due_soon',
   'task.overdue',
 ] as const;
@@ -353,10 +355,11 @@ export interface TaskPeople {
  * The people a kind of notice is for, before the actor and anyone who cannot
  * open the task are taken out (the service does that against the database).
  *
- *   assigned / reassigned  the assignee (reassigned: the one it was taken from too)
+ *   assigned / reassigned  the assignee (reassigned: the one it was taken from too — if they can still open it)
  *   accepted … submitted   the assigner and the creator, and the watchers
  *   returned               the assignee
  *   completed / cancelled  the assignee, and the watchers
+ *   updated                the assignee, and the watchers
  *   due_soon               the assignee
  *   overdue                the assignee and the assigner
  */
@@ -391,6 +394,10 @@ export function recipientsOf(kind: TaskNotificationKind, people: TaskPeople, pre
       add(people.assignee);
       people.watchers.forEach(add);
       break;
+    case 'task.updated':
+      add(people.assignee);
+      people.watchers.forEach(add);
+      break;
     case 'task.due_soon':
       add(people.assignee);
       break;
@@ -416,6 +423,65 @@ export const NOTICE_FOR_ACTION: Readonly<Record<TaskAction, TaskNotificationKind
   reassign: 'task.reassigned',
   cancel: 'task.cancelled',
 };
+
+export interface NoticeFacts {
+  readonly taskNo: string;
+  readonly title: string;
+  /** Who did it (display name); the sweep has nobody. */
+  readonly actor?: string | null;
+  /** The person it is now with, where that is news (assigned, reassigned). */
+  readonly assignee?: string | null;
+  readonly reason?: string | null;
+  readonly dueDate?: string | null;
+  /** Days late (overdue) or days left (due soon). */
+  readonly days?: number | null;
+}
+
+/**
+ * What a notice says, in English — the notification row carries `context` for
+ * a screen that wants to say it in the reader's own language. One line each
+ * for the subject and the body; no markup.
+ */
+export function noticeText(kind: TaskNotificationKind, facts: NoticeFacts): { subject: string; body: string } {
+  const { taskNo, title } = facts;
+  const by = facts.actor ? `${facts.actor} ` : '';
+  const why = facts.reason ? facts.reason : '';
+  const due = facts.dueDate ? ` Due ${facts.dueDate}.` : '';
+  switch (kind) {
+    case 'task.assigned':
+      return { subject: `${taskNo}: ${by}assigned you a task`, body: `${title}.${due}` };
+    case 'task.reassigned':
+      return { subject: `${taskNo}: ${by}reassigned a task`, body: `${title}${facts.assignee ? ` is now with ${facts.assignee}` : ''}.${why ? ` ${why}` : ''}` };
+    case 'task.accepted':
+      return { subject: `${taskNo}: ${by}accepted the task`, body: title };
+    case 'task.rejected':
+      return { subject: `${taskNo}: ${by}declined the task`, body: `${title}. ${why}`.trim() };
+    case 'task.started':
+      return { subject: `${taskNo}: ${by}started work`, body: title };
+    case 'task.blocked':
+      return { subject: `${taskNo}: ${by}is blocked`, body: `${title}. ${why}`.trim() };
+    case 'task.resumed':
+      return { subject: `${taskNo}: ${by}resumed work`, body: title };
+    case 'task.submitted':
+      return { subject: `${taskNo}: ${by}handed the task in for review`, body: `${title}.${why ? ` ${why}` : ''}` };
+    case 'task.returned':
+      return { subject: `${taskNo}: ${by}returned the task to you`, body: `${title}. ${why}`.trim() };
+    case 'task.completed':
+      return { subject: `${taskNo}: ${by}completed the task`, body: title };
+    case 'task.cancelled':
+      return { subject: `${taskNo}: ${by}cancelled the task`, body: `${title}. ${why}`.trim() };
+    case 'task.updated':
+      return { subject: `${taskNo}: ${by}changed the task`, body: `${title}.${due}${why ? ` ${why}` : ''}` };
+    case 'task.due_soon': {
+      const days = facts.days ?? 0;
+      return { subject: `${taskNo} is due ${days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`}`, body: `${title}.${due}` };
+    }
+    case 'task.overdue': {
+      const days = facts.days ?? 0;
+      return { subject: `${taskNo} is ${days} day${days === 1 ? '' : 's'} overdue`, body: `${title}.${due}` };
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // The assignment scope, named

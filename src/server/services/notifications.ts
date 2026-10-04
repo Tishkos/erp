@@ -604,3 +604,18 @@ export function registerDeliveryHandler(runWithTx: (fn: (tx: Tx) => Promise<void
 }
 
 export { lte, role };
+
+// ===========================================================================
+// Task Center event types (platform phase, Agent 3) — one contiguous block.
+// The Task Center emits through `insertNotification` above and builds no bell
+// and no delivery path of its own. Every kind is `task.<what happened>`; the
+// object is a `task` and its id the task number, so a notice opens
+// `/tasks/<number>`. Recipients are limited to people who may open the task
+// (`app_task_visible_to`) before a row is written.
+// ===========================================================================
+export { TASK_NOTIFICATION_KINDS as TASK_EVENT_TYPES } from '../domain/tasks';
+export const TASK_NOTICE_TARGET = {
+  objectType: 'task',
+  category: 'tasks',
+  route: (taskNo: string) => `/tasks/${encodeURIComponent(taskNo)}`,
+} as const;

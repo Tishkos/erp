@@ -51,7 +51,8 @@ export function screenCount(archetype: ScreenArchetype): number {
 export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   // 1 — Home
   my_dashboard: 'dashboard',
-  my_tasks: 'inbox',
+  // The Task Center (platform phase): a numbered record with a list (Mine / Assigned by me / Team) and a page.
+  my_tasks: 'document',
   my_approvals: 'inbox',
   notifications: 'inbox',
   chat: 'workspace',
@@ -410,6 +411,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/documents',
   // Internal chat (platform phase, Agent 1).
   '/chat',
+  // The Task Center (platform phase, Agent 3).
+  '/tasks',
   // Monitoring — drawn, reading nothing yet (2026-10-03).
   '/monitoring/customer-list',
   '/monitoring/history',
