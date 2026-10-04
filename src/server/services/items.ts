@@ -285,12 +285,14 @@ export async function stockOf(tx: Tx, itemCode: string): Promise<StockLine[]> {
   const result = await tx.execute(sql`
     select p.warehouse_code as "warehouseCode",
            w.name           as "warehouseName",
-           p.on_hand::text  as "onHand",
+           -- What stands in the warehouse, a transit warehouse included: the
+           -- row is labelled by its warehouse (0287).
+           p.held::text     as "onHand",
            p.reserved::text as "reserved"
       from stock_position p
       left join warehouse w on w.code = p.warehouse_code
      where p.item_code = ${itemCode}
-       and (p.on_hand <> 0 or p.reserved <> 0)
+       and (p.held <> 0 or p.reserved <> 0)
      order by p.warehouse_code
   `);
   return result.rows as unknown as StockLine[];

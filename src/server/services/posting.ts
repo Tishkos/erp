@@ -36,6 +36,7 @@ import {
   resolveLineAccount,
   resolveRule,
   type PlannedLine,
+  type PostingCriteria,
   type PostingPlan,
   type PostingRequest,
   type PostingRule,
@@ -812,10 +813,16 @@ export async function mappedAccountFor(
   eventType: string,
   lineRole: string,
   branchCode: string,
+  /**
+   * IMPROVEMENT-002 — the rest of the line's criteria, for a caller posting
+   * a line the way the document would have (a landed-cost lock sending a
+   * written-off unit's cost where the write-off itself would post it).
+   */
+  criteria: Omit<PostingCriteria, 'branchCode'> = {},
 ): Promise<string | null> {
   const rules = await rulesForEvent(tx, eventType);
   try {
-    return resolveRule(rules, eventType, lineRole, { branchCode }).accountId;
+    return resolveRule(rules, eventType, lineRole, { ...criteria, branchCode }).accountId;
   } catch (error) {
     // E3 — "nothing mapped" is null; an ambiguous mapping is a configuration
     // fault the form must not hide behind an empty choice.

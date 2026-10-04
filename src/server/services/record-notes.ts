@@ -156,6 +156,8 @@ const TARGETS = new Map<string, NoteTarget>([
   ['ar_invoice', target('ar_invoice', 'edit_draft', inTable('ar_invoice', 'id', 'branch_code'))],
   ['customer_receipt', target('customer_receipt', 'edit_draft', inTable('customer_receipt', 'id', 'branch_code'))],
   ['customer_credit_memo', target('customer_credit_memo', 'edit_draft', inTable('customer_credit_memo', 'id', 'branch_code'))],
+  // Receivables (2026-10-04) — a credit or debit note (`customer_note`, REQ-AR-001) is governed by the memo's grant (D-AR-9).
+  ['customer_note', target('customer_credit_memo', 'edit_draft', inTable('customer_note', 'id', 'branch_code'))],
   ['sales_return', target('sales_return', 'edit_draft', inTable('sales_return', 'id', 'branch_code'))],
   ['sales_order', target('sales_order', 'edit_draft', inTable('sales_order', 'id', 'branch_code'))],
   ['delivery_note', target('delivery_note', 'edit_draft', inTable('delivery_note', 'id', 'branch_code'))],
@@ -167,12 +169,21 @@ const TARGETS = new Map<string, NoteTarget>([
   ['bank_transfer', target('bank_cash_account', 'create', inTable('bank_transfer', 'id', 'branch_code'))],
   ['other_receipt', target('other_receipt', 'create', inTable('other_receipt', 'id', 'branch_code'))],
   ['bank_reconciliation', target('bank_reconciliation', 'edit_draft', inTable('bank_reconciliation', 'id', 'branch_code'))],
+  // REQ-ACC-001 — the statement is the reconciliation's record from its draft; a recurring journal is
+  // a journal's; a tax code and a period are master records, written in the writer's branch.
+  ['bank_statement', target('bank_statement', 'create', inTable('bank_statement', 'id', 'branch_code'))],
+  ['recurring_journal', target('journal_entry', 'edit_draft', inTable('recurring_journal', 'id', 'branch_code'))],
+  ['tax_code', target('tax_code', 'configure', inTable('tax_code', 'code', null))],
+  ['fiscal_period', target('fiscal_period', 'configure', inTable('fiscal_period', 'id', null))],
   ['cash_advance', target('cash_advance', 'create', inTable('cash_advance', 'id', 'branch_code'))],
   // Logistics and customs.
   ['customs_pd', target('customs_pd', 'edit_draft', inTable('customs_pd', 'id', 'branch_code'), (tx, ctx, id, body) => customs.addNote(tx, ctx, id, body))],
   ['asycuda_run', target('customs_pd', 'edit_draft', inTable('asycuda_run', 'id', null))],
   ['bill_of_lading', target('bill_of_lading', 'edit_draft', inTable('bill_of_lading', 'id', 'branch_code'))],
   ['shipment_container', target('shipment_container', 'edit_draft', inTable('shipment_container', 'id', 'branch_code'))],
+  // REQ-LOG-001 — the customs declaration (by id) and the port (a master record, by code).
+  ['customs_declaration', target('customs_declaration', 'edit_draft', inTable('customs_declaration', 'id', 'branch_code'))],
+  ['port', target('port', 'configure', inTable('port', 'code', null))],
   // Inventory. A transfer's events are `warehouse_transfer` whichever table holds it.
   ['warehouse_transfer', target('warehouse_transfer', 'create', inEither(inTable('stock_transfer', 'id', 'branch_code'), inTable('warehouse_transfer', 'id', 'branch_code')))],
   ['stock_reconciliation', target('stock_reconciliation', 'create', inTable('stock_adjustment', 'id', 'branch_code'))],

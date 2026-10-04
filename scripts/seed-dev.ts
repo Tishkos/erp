@@ -302,6 +302,11 @@ async function main() {
       ['purchasing.supplier_credit_memo', 'return_clearing', 'L100030'],
       ['sales.customer_credit_memo', 'customer_receivable', 'A100020'],
       ['sales.customer_credit_memo', 'sales_returns', 'R100020'],
+      // Receivables (2026-10-04) — credit and debit notes, as 0280 copies them.
+      ['sales.customer_credit_note', 'customer_receivable', 'A100020'],
+      ['sales.customer_credit_note', 'sales_returns', 'R100020'],
+      ['sales.customer_debit_note', 'customer_receivable', 'A100020'],
+      ['sales.customer_debit_note', 'sales_revenue', 'R100010'],
       ['inventory.opening_stock', 'opening_balance', 'E100010'],
       ['inventory.stock_adjustment', 'inventory_adjustment', 'X100040'],
       ['purchasing.ap_invoice', 'landed_cost_clearing', 'A100040'],

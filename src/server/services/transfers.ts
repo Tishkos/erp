@@ -440,6 +440,8 @@ async function receiveInheritingCosts(
       branchCode: input.transfer.branchCode,
       quantity: share,
       unitCostIqd: BigInt(consumption.unitCostIqd.replace('.', '')),
+      // IMPROVEMENT-002 — the layer these units left at the source.
+      originLayerId: consumption.layerId,
       movementDate: input.receivedOn,
       kind: 'transfer_receipt',
       sourceDocumentType: DOCUMENT_TYPE,

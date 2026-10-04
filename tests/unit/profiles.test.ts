@@ -33,6 +33,7 @@ describe('profileHref', () => {
     expect(profileHref('project', 'PRJ-001')).toBe('/projects/PRJ-001');
     expect(profileHref('import', 'IMP-2026-0001')).toBe('/payables/IMP-2026-0001');
     expect(profileHref('bl', 'MSKU123')).toBe('/payables/shipments/MSKU123');
+    expect(profileHref('port', 'PRT-0001')).toBe('/logistics/ports/PRT-0001');
     expect(profileHref('loan', 'LN-2026-0001')).toBe('/treasury/loans/LN-2026-0001');
     expect(profileHref('project_certificate', 'PC-2026-0001')).toBe('/projects/billing/PC-2026-0001');
   });
@@ -54,7 +55,7 @@ describe('profileHref', () => {
   });
 
   it('answers null for a kind with no profile page yet', () => {
-    for (const kind of ['port', 'carrier', 'currency', 'fixed_asset', 'investment'] as const) {
+    for (const kind of ['carrier', 'currency', 'fixed_asset', 'investment'] as const) {
       expect(profileBase(kind), kind).toBeNull();
       expect(profileHref(kind, 'X'), kind).toBeNull();
     }

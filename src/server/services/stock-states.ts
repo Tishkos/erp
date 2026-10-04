@@ -116,6 +116,8 @@ export async function moveAtCost(
       quantity: parseQuantity(consumption.quantity),
       // The layer's own cost, carried across untouched.
       unitCostIqd: BigInt(consumption.unitCostIqd.replace('.', '')),
+      // IMPROVEMENT-002 — the layer these units left, for a later landed-cost lock.
+      originLayerId: consumption.layerId,
       movementDate: input.movementDate,
       kind: input.receiptKind,
       sourceDocumentType: input.sourceDocumentType ?? null,

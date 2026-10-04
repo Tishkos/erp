@@ -1,16 +1,18 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { History } from 'lucide-react';
 import { AdminPage, Flash, ReasonForm, admin as s } from '@/components/admin';
 import { ActionReadyButton } from '@/components/admin/action-ready-button';
 import { Attachments } from '@/components/admin/attachments';
-import { AttachmentsButton } from '@/components/admin/icon-dialog';
+import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { RecordHistory } from '@/components/admin/history';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { JournalHeaderForm } from '@/components/admin/journal-header-form';
 import { JournalLinesGrid } from '@/components/admin/journal-lines-grid';
 import { ConfirmButton } from '@/components/admin/confirm-button';
 import { ConfirmReasonForm } from '@/components/admin/confirm-reason-form';
-import { ExportMenu } from '@/components/print/export-menu';
+import { ExportIcon } from '@/components/print/export-menu';
 import { PrintSheet } from '@/components/print/print-sheet';
 import { printSheet } from '@/server/print/sheet';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
@@ -23,6 +25,8 @@ import * as coa from '@/server/services/chart-of-accounts';
 import * as departments from '@/server/services/departments';
 import * as journal from '@/server/services/journal';
 import * as attachments from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
+import * as recurring from '@/server/services/recurring-journals';
 import {
   approveJournal,
   attachToJournal,
@@ -84,6 +88,9 @@ export default async function JournalPage({
         ...detail,
         accounts: await coa.postableAccounts(tx),
         attached: (await attachments.currentFor(tx, journal.PERMISSION_OBJECT, detail.header.id)).length,
+        notes: await recordNotes.listNotes(tx, { object: journal.PERMISSION_OBJECT, recordId: detail.header.id }),
+        // REQ-ACC-001 — the recurring journal that raised it, if one did.
+        template: await recurring.templateOfJournal(tx, detail.header.id),
         depts: (await departments.listAll(tx)).filter((d) => d.active),
       };
     } catch (error) {
@@ -93,7 +100,7 @@ export default async function JournalPage({
     }
   });
   if (!data) notFound();
-  const { header, lines, raisedBy, approvedBy, linked, accounts, depts, attached } = data;
+  const { header, lines, raisedBy, approvedBy, linked, accounts, depts, attached, notes, template } = data;
   const sheet = await printSheet('journal_entry', header.entryNo);
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
@@ -112,7 +119,6 @@ export default async function JournalPage({
     can(principal, 'reverse_cancel', journal.PERMISSION_OBJECT);
   const mayAttach = isDraft && can(principal, 'create', 'attachment');
   const hidden = { id: header.id, entryNo: header.entryNo };
-  const address = `/finance/journals/${encodeURIComponent(header.entryNo)}`;
 
   const totalDebit = money(header.totalDebitIqd);
   const totalCredit = money(header.totalCreditIqd);
@@ -120,7 +126,6 @@ export default async function JournalPage({
 
   return (
     <AdminPage
-      actions={<ExportMenu exportKey="journal_entry" id={header.entryNo} principal={principal} />}
       back={{ href: '/finance/journals', label: t('back') }}
       title={header.entryNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -138,9 +143,11 @@ export default async function JournalPage({
                 <bdi dir="ltr">{header.entryNo}</bdi>
               </span>
             </span>
-            {/* The paperwork and the trail: two small doors in the title bar,
-                so the document itself is only the document. */}
+            {/* Printer, paperclip, notes, clock — the four doors every record
+                wears (AGENTS.md), so the document itself is only the document.
+                The full audit page stays at /audit for a link to land on. */}
             <span className={s.sapTitleActions}>
+              <ExportIcon exportKey="journal_entry" id={header.entryNo} title={`${t('journals.record_type')} ${header.entryNo}`} />
               <AttachmentsButton
                 closeLabel={t('close')}
                 count={attached}
@@ -155,10 +162,10 @@ export default async function JournalPage({
                   objectType={journal.PERMISSION_OBJECT}
                 />
               </AttachmentsButton>
-              <Link className={s.sapIconButton} href={`${address}/audit`} title={t('journals.audit_log')}>
-                <History aria-hidden="true" />
-                <span>{t('journals.audit_log')}</span>
-              </Link>
+              <RecordNotesDoor notes={notes} object={journal.PERMISSION_OBJECT} recordId={header.id} />
+              <HistoryButton closeLabel={t('close')} label={t('journals.audit_log')} title={t('journals.audit_log')}>
+                <RecordHistory objectId={header.id} objectType={journal.PERMISSION_OBJECT} />
+              </HistoryButton>
             </span>
           </div>
 
@@ -249,6 +256,16 @@ export default async function JournalPage({
                   </bdi>
                 </span>
               </div>
+              {template ? (
+                <div className={s.sapField}>
+                  <span className={s.sapLabel}>{t('journals.raised_from')}</span>
+                  <span className={s.sapBox}>
+                    <Link className={s.sapLink} href={`/finance/recurring-journals/${encodeURIComponent(template.templateNo)}`}>
+                      <bdi dir="ltr">{template.templateNo}</bdi>
+                    </Link>
+                  </span>
+                </div>
+              ) : null}
               {/* Both ends of a reversal point at each other, permanently. */}
               {linked ? (
                 <div className={`${s.sapField} ${s.sapWide}`}>
@@ -256,9 +273,7 @@ export default async function JournalPage({
                     {t(linked.relation === 'reversed_by' ? 'journals.reversed_by_hint' : 'journals.reverses_hint')}
                   </span>
                   <span className={s.sapBox}>
-                    <Link className={s.sapLink} href={`/finance/journals/${encodeURIComponent(linked.entryNo)}`}>
-                      <bdi dir="ltr">{linked.entryNo}</bdi>
-                    </Link>
+                    <ProfileLink code={linked.entryNo} kind="journal" />
                   </span>
                 </div>
               ) : null}
@@ -338,8 +353,9 @@ export default async function JournalPage({
                         <td>
                           <bdi dir="ltr">{line.lineNo}</bdi>
                         </td>
+                        {/* The account opens its own profile (REQ-ACC-001, the shared `ProfileLink`). */}
                         <td className={s.sapAccountCell}>
-                          <bdi dir="ltr">{line.accountCode}</bdi> · <bdi dir="auto">{line.accountName}</bdi>
+                          <ProfileLink code={line.accountCode} kind="gl_account" name={line.accountName} />
                         </td>
                         <td>
                           <bdi dir="ltr">{line.departmentCode ?? ''}</bdi>

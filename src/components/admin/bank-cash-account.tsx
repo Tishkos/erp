@@ -43,6 +43,7 @@ import {
   updateAccount,
 } from '@/app/(app)/master-data/bank-accounts/actions';
 import { businessToday } from '@/server/domain/business-date';
+import { ProfileLink } from './profile-link';
 
 /**
  * Bank accounts and cash accounts — Phase 2 requirements 5 and 6.
@@ -367,7 +368,8 @@ export async function AccountRecord({
                 <span>{t('accounts_shared.gl_account')}</span>
                 <span>
                   {row.glAccountCode ? (
-                    `${row.glAccountCode} · ${row.glAccountName}`
+                    // The G/L account opens its own record (REQ-ACC-001 profiles).
+                    <ProfileLink code={row.glAccountCode} kind="gl_account" name={row.glAccountName} />
                   ) : (
                     <Pill label={t('accounts_shared.gl_missing')} on={false} />
                   )}
@@ -382,9 +384,13 @@ export async function AccountRecord({
                   <li>
                     <span>{t('bank_accounts.bank')}</span>
                     <span>
-                      {row.bankMasterName
-                        ? `${row.bankMasterName}${row.bankMasterSwift ? ` · ${row.bankMasterSwift}` : ''}`
-                        : t('none')}
+                      {row.bankMasterName && row.bankCode ? (
+                        <ProfileLink code={row.bankCode} dir="auto" kind="bank">
+                          {`${row.bankMasterName}${row.bankMasterSwift ? ` · ${row.bankMasterSwift}` : ''}`}
+                        </ProfileLink>
+                      ) : (
+                        t('none')
+                      )}
                     </span>
                   </li>
                   <li>

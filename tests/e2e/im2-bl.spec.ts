@@ -67,7 +67,7 @@ test.describe('IM2 · the B/L table, its doors, correction and cancel', () => {
 
     await page.getByRole('link', { name: blNo }).click();
     await page.waitForURL(/\/payables\/shipments\//);
-    const lines = page.locator('#bl-document table').first();
+    const lines = page.locator('#bl-document table[aria-labelledby="bl-document-lines-heading"]');
     await expect(lines.getByRole('row', { name: new RegExp(first) })).toContainText('40HC');
     await expect(lines.getByRole('row', { name: new RegExp(first) })).toContainText(`SL-${RUN}-1`);
     await expect(lines.getByRole('row', { name: new RegExp(second) })).toContainText('20GP');

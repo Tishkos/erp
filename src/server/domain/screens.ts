@@ -108,6 +108,19 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   asycuda_update: 'workspace',
   shipments: 'document',
   containers: 'list',
+  // REQ-LOG-001 — the four Logistics headings' new screens. The declaration
+  // and the port are records (a list and the record behind it); the rest are
+  // registers over records other modules own, read-only.
+  customs_declarations: 'document',
+  customs_duties: 'list',
+  customs_documents: 'list',
+  import_shipments: 'list',
+  ports_routes: 'document',
+  freight_costs: 'list',
+  shipment_documents: 'list',
+  shipment_tracking: 'list',
+  landed_costs: 'list',
+  cost_allocation: 'report',
   loans: 'document',
   purchasing_reports: 'report',
   payables_settings: 'settings',
@@ -117,22 +130,21 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   whatsapp: 'settings',
   project_settings: 'settings',
 
-  // 5 — Inventory
+  // 5 — Inventory (IMPROVEMENT-002: the twelve screens)
   availability: 'workspace',
   opening_stock: 'document',
+  stock_receipts: 'list',
+  stock_issues: 'list',
   stock_movements: 'document',
   stock_ledger: 'report',
   transfer_requests: 'document',
   in_transit: 'list',
-  quarantine: 'workspace',
-  inventory_returns: 'document',
-  damaged_goods: 'document',
-  serial_batch_tracking: 'workspace',
+  stock_count: 'document',
   uom: 'document',
   stock_reconciliation: 'workspace',
+  inventory_checks: 'workspace',
+  inventory_valuation: 'report',
   fifo_valuation: 'report',
-  inventory_reports: 'report',
-  inventory_settings: 'settings',
 
   // 6 — Projects
   project_master: 'document',
@@ -212,7 +224,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   credit_limits: 'document',
   collections: 'workspace',
   ar_ageing: 'report',
-  ar_reconciliation: 'workspace',
+  ar_reconciliation: 'report',
 
   // 12 — Finance · Payables. Supplier Ledger, Advances, Payments,
   // Allocations and Ageing were the Payables screens under second names and
@@ -433,6 +445,12 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/master-data/exchange-rates',
   // The Warehouses Report and Warehouse Setup.
   '/inventory/fifo-valuation',
+  // IMPROVEMENT-002 — the inventory screens.
+  '/inventory/stock-receipts',
+  '/inventory/stock-issues',
+  '/inventory/stock-count',
+  '/inventory/checks',
+  '/inventory/valuation',
   '/master-data/warehouses',
   // Transfer, Opening Stock, Item Reconciliation, Stock Movement.
   '/inventory/transfers',
@@ -452,8 +470,9 @@ const DELIVERED: ReadonlySet<string> = new Set([
   // Payments and Receipts.
   '/payables/supplier-payments',
   '/sales/customer-receipts',
-  // Invoice Status Tracking.
-  '/inventory/in-transit',
+  // Invoice Status Tracking — absorbed by In-Transit Inventory (REQ-LOG-001);
+  // /inventory/in-transit redirects there (next.config.ts).
+  '/logistics/in-transit',
   // The Account Statement, one screen on each side.
   '/sales/customer-statements',
   '/payables/supplier-statements',
@@ -466,6 +485,11 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/payables/pd/asycuda',
   // §15 and §16 — open items and ageing, one screen on each side.
   '/sales/receivables',
+  // Receivables (2026-10-04) — the customer's credits, the credit and debit
+  // notes, and the subledger against the control account.
+  '/sales/customer-credits',
+  '/sales/credit-notes',
+  '/sales/customer-reconciliation',
   // REQ-AP-001 Stage 1 — the payables workbench, the payable page's list
   // route, and the module's settings.
   '/payables',
@@ -484,6 +508,17 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/master-data/banks',
   // REQ-AP-001 Stage 4 — PD / ASYCUDA (§16, §21.8).
   '/payables/pd',
+  // REQ-LOG-001 — the Logistics module's own screens.
+  '/logistics/customs-declarations',
+  '/logistics/customs-duties',
+  '/logistics/customs-documents',
+  '/logistics/shipments',
+  '/logistics/ports',
+  '/logistics/freight-costs',
+  '/logistics/shipment-documents',
+  '/logistics/shipment-tracking',
+  '/logistics/landed-costs',
+  '/logistics/cost-allocation',
   // REQ-AP-001 Stage 5 — B/Ls and containers (§17, §18, §21.9).
   '/payables/shipments',
   '/payables/containers',
@@ -536,6 +571,15 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/projects/close',
   '/projects/reports',
   '/administration/project-settings',
+  // REQ-ACC-001 Part D — the Accounting screens over the existing engines.
+  '/treasury/transfers',
+  '/treasury/bank-reconciliation',
+  '/treasury/payments-receipts',
+  '/treasury/cash-forecast',
+  '/finance/account-reconciliation',
+  '/master-data/tax-codes',
+  '/finance/closing',
+  '/finance/recurring-journals',
 ]);
 
 export function isDelivered(route: string): boolean {

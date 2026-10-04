@@ -10,6 +10,7 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as banks from '@/server/services/bank-cash-accounts';
 import * as partners from '@/server/services/partners';
+import * as paymentMethods from '@/server/services/payment-methods';
 import * as receipts from '@/server/services/customer-receipt';
 import { gapsFor } from '@domain/setup-gaps';
 import { createReceipt } from '../actions';
@@ -49,12 +50,14 @@ export default async function NewReceiptPage({ searchParams }: { searchParams: S
     return <Denied object={page('customer_receipts')} />;
   }
 
-  const { customers, allCustomers, accounts } = await withCurrentUser(async (tx) => ({
+  const { customers, allCustomers, accounts, methods } = await withCurrentUser(async (tx) => ({
     customers: await partners.listActiveInRole(tx, 'customer'),
     // The whole list too, so an empty picker can say which of the two things is
     // wrong: nobody has been added, or nobody added is active.
     allCustomers: await partners.listByRole(tx, 'customer'),
     accounts: [...(await banks.listOfKind(tx, 'bank')), ...(await banks.listOfKind(tx, 'cash'))],
+    // The payment method master (Receivables, 2026-10-04) — how the money came.
+    methods: await paymentMethods.listActive(tx),
   }));
 
   // Active, and with a G/L account still behind it. A bank or cash account
@@ -99,7 +102,9 @@ export default async function NewReceiptPage({ searchParams }: { searchParams: S
           options={open.map((account) => ({
             value: account.id,
             code: account.code,
-            name: account.name,
+            // The account's currency is the receipt's (§17), so it is said
+            // where the account is chosen.
+            name: `${account.name} · ${account.currency}`,
           }))}
           placeholder={t('search_placeholder')}
           required
@@ -133,6 +138,20 @@ export default async function NewReceiptPage({ searchParams }: { searchParams: S
           step="0.0001"
           type="number"
         />
+      ),
+    },
+    {
+      label: t('customer_receipts.payment_method'),
+      control: true,
+      value: (
+        <select aria-label={t('customer_receipts.payment_method')} defaultValue="" name="payment_method_code">
+          <option value="">{t('customer_receipts.payment_method_none')}</option>
+          {methods.map((method) => (
+            <option key={method.code} value={method.code}>
+              {`${method.code} · ${method.name}`}
+            </option>
+          ))}
+        </select>
       ),
     },
     {

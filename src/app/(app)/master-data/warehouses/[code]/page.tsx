@@ -15,7 +15,10 @@ import {
   SubmitRow,
   admin as s,
 } from '@/components/admin';
-import { AuditLogButton, RecordHistory } from '@/components/admin/history';
+import { RecordHistory } from '@/components/admin/history';
+import { HistoryButton } from '@/components/admin/icon-dialog';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+import * as recordNotes from '@/server/services/record-notes';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
@@ -77,11 +80,12 @@ export default async function WarehouseRecordPage({
         warehouseCode: code,
         allPermittedBranches: true,
       }),
+      notes: await recordNotes.listNotes(tx, { object: warehouses.PERMISSION_OBJECT, recordId: code }),
     };
   });
 
   if (!data) notFound();
-  const { row, stock } = data;
+  const { row, stock, notes } = data;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   const units = (quantity: string) => String(Number(quantity));
@@ -89,7 +93,15 @@ export default async function WarehouseRecordPage({
 
   return (
     <AdminPage
-      actions={<AuditLogButton label={t('history')} />}
+      actions={
+        <>
+          {/* Notes and the clock — the profile's two doors (shared, 2026-10-04). */}
+          <RecordNotesDoor notes={notes} object={warehouses.PERMISSION_OBJECT} recordId={row.code} />
+          <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+            <RecordHistory objectId={row.code} objectType={warehouses.PERMISSION_OBJECT} />
+          </HistoryButton>
+        </>
+      }
       back={{ href: '/master-data/warehouses', label: t('back') }}
       title={`${row.code} · ${row.name}`}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -210,7 +222,6 @@ export default async function WarehouseRecordPage({
             </div>
           </Panel>
 
-          <RecordHistory objectId={row.code} objectType={warehouses.PERMISSION_OBJECT} />
         </div>
       </div>
     </AdminPage>

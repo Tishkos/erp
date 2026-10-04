@@ -15,12 +15,16 @@ export const EXPORT_ACCESS = {
   sales_invoice: { kind: 'document', route: '/sales/ar-invoices', object: 'ar_invoice' },
   supplier_payment: { kind: 'document', route: '/payables/supplier-payments', object: 'supplier_payment' },
   customer_receipt: { kind: 'document', route: '/sales/customer-receipts', object: 'customer_receipt' },
+  // Receivables (2026-10-04) — a credit or debit note, from its own page.
+  customer_note: { kind: 'document', route: '/sales/credit-notes', object: 'customer_credit_memo' },
   sales_return: { kind: 'document', route: '/sales/sales-returns', object: 'sales_return' },
   purchase_return: { kind: 'document', route: '/payables/goods-returns', object: 'goods_return' },
   transfer: { kind: 'document', route: '/inventory/transfers', object: 'warehouse_transfer' },
   opening_stock: { kind: 'document', route: '/inventory/opening-stock', object: 'opening_stock' },
   journal_entry: { kind: 'document', route: '/finance/journals', object: 'journal_entry' },
   item_reconciliation: { kind: 'document', route: '/inventory/stock-reconciliation', object: 'stock_reconciliation' },
+  // IMPROVEMENT-002 — a stock count, printed from its own page.
+  stock_count: { kind: 'document', route: '/inventory/stock-count', object: 'stock_count' },
   // IMPROVEMENT-002 — the B/L, printed from its own page (its boxes, containers and what each carries).
   bill_of_lading: { kind: 'document', route: '/payables/shipments', object: 'bill_of_lading' },
   // IMPROVEMENT-002 — an ASYCUDA reading, printed from its own page (its lines as ASYCUDA gave them).
@@ -28,6 +32,16 @@ export const EXPORT_ACCESS = {
   // The import application itself — the record that ties the invoice, the
   // goods, the declaration and the shipment together (2026-10-03).
   import_application: { kind: 'document', route: '/payables', object: 'payable' },
+  // REQ-ACC-001 — Accounting's records, each printed from its own page.
+  internal_transfer: { kind: 'document', route: '/treasury/transfers', object: 'bank_cash_account' },
+  bank_reconciliation: { kind: 'document', route: '/treasury/bank-reconciliation', object: 'bank_reconciliation' },
+  payments_receipts: { kind: 'report', route: '/treasury/payments-receipts', object: 'bank_account' },
+  cash_forecast: { kind: 'report', route: '/treasury/cash-forecast', object: 'bank_cash_account' },
+  account_reconciliation: { kind: 'report', route: '/finance/account-reconciliation', object: 'trial_balance' },
+  tax_code: { kind: 'document', route: '/master-data/tax-codes', object: 'tax_code' },
+  recurring_journal: { kind: 'document', route: '/finance/recurring-journals', object: 'journal_entry' },
+  // The period's close checklist and history, read under the trial balance's grant (a reading of the ledger).
+  period_close: { kind: 'document', route: '/finance/closing', object: 'trial_balance' },
   // REQ-PAY-001 PAY4 — the purchase records that had no copy (2026-10-04).
   purchase_order: { kind: 'document', route: '/payables/purchase-orders', object: 'purchase_order' },
   goods_receipt: { kind: 'document', route: '/payables/goods-receipts', object: 'goods_receipt' },
@@ -35,17 +49,32 @@ export const EXPORT_ACCESS = {
   supplier_advance: { kind: 'document', route: '/payables/advances', object: 'supplier_advance' },
   recurring_contract: { kind: 'document', route: '/payables/contracts', object: 'recurring_contract' },
   supplier_credit_note: { kind: 'document', route: '/payables/credit-memos', object: 'supplier_credit_memo' },
+  // REQ-LOG-001 item 23 — the four Logistics records that had no print model
+  // (the PD, the container, its receipt, the customs declaration), each
+  // under the object its screen authorises `view` on.
+  customs_pd: { kind: 'document', route: '/payables/pd', object: 'customs_pd' },
+  shipment_container: { kind: 'document', route: '/payables/containers', object: 'shipment_container' },
+  container_receipt: { kind: 'document', route: '/payables/containers', object: 'shipment_container' },
+  customs_declaration: { kind: 'document', route: '/logistics/customs-declarations', object: 'customs_declaration' },
+  port: { kind: 'document', route: '/logistics/ports', object: 'port' },
+  // IMPROVEMENT-002 — the Final Cost of an import: purchase → each lock →
+  // final per layer, the locks' charges, and where the departed part went.
+  landed_cost_final: { kind: 'document', route: '/payables', object: 'payable' },
   customer_statement: { kind: 'report', route: '/sales/customer-statements', object: 'business_partner' },
   supplier_statement: { kind: 'report', route: '/payables/supplier-statements', object: 'business_partner' },
   bank_statement: { kind: 'report', route: '/master-data/bank-accounts', object: 'bank_account' },
   cash_statement: { kind: 'report', route: '/master-data/cash-accounts', object: 'bank_account' },
   warehouses_report: { kind: 'report', route: '/inventory/fifo-valuation', object: 'inventory_movement' },
+  // IMPROVEMENT-002 — the FIFO position at a date against the G/L, and the stock ledger's health checks.
+  inventory_valuation: { kind: 'report', route: '/inventory/valuation', object: 'inventory_movement' },
+  inventory_checks: { kind: 'report', route: '/inventory/checks', object: 'inventory_movement' },
   stock_movement: { kind: 'report', route: '/inventory/stock-movements', object: 'stock_movement' },
   stock_ledger: { kind: 'report', route: '/inventory/stock-ledger', object: 'stock_movement' },
   treasury_reporting: { kind: 'report', route: '/treasury/reporting', object: 'bank_account' },
   receivables: { kind: 'report', route: '/sales/receivables', object: 'ar_invoice' },
   payables: { kind: 'report', route: '/payables/open-items', object: 'ap_invoice' },
-  invoice_status_tracking: { kind: 'report', route: '/inventory/in-transit', object: 'supplier_shipment' },
+  // REQ-LOG-001 — its screen is a section of In-Transit Inventory now.
+  invoice_status_tracking: { kind: 'report', route: '/logistics/in-transit', object: 'supplier_shipment' },
   trial_balance: { kind: 'report', route: '/finance/trial-balance', object: 'trial_balance' },
   income_statement: { kind: 'report', route: '/finance/income-statement', object: 'financial_statement' },
   balance_sheet: { kind: 'report', route: '/finance/balance-sheet', object: 'financial_statement' },

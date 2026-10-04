@@ -351,3 +351,45 @@ export async function calendar(tx: Tx, fiscalYearCode?: string): Promise<FiscalP
 
   return rows.map((r) => toPeriod(r.period, r.yearCode));
 }
+
+/**
+ * The close history — REQ-ACC-001 Part D-6, the Period / Year-End Closing
+ * screen. Every change of a period's status, newest first: who, when, from
+ * what to what, why, and the warnings a close was taken over. Read from the
+ * audit trail `setPeriodStatus` writes (it is the record; nothing else holds
+ * it). The trail's own row security still applies: a change is filed under
+ * the branch its maker worked in, so a reader sees the changes made from the
+ * branches they work in (the Super User sees all).
+ */
+export async function closeHistory(tx: Tx, ctx: ActorContext, limit = 100) {
+  await authz.authorize(ctx.principal, 'view', PERMISSION_OBJECT, { branchCode: ctx.branchCode });
+  const result = await tx.execute(sql`
+    select a.id::text as id, a.occurred_at as "occurredAt", a.action,
+           p.name as "periodName", y.code as "yearCode",
+           a.before_value->>'status' as "fromStatus", a.after_value->>'status' as "toStatus",
+           coalesce(a.after_value->'warnings', '[]'::jsonb) as warnings,
+           a.reason, u.display_name as "actorName"
+      from audit_event a
+      join fiscal_period p on p.id::text = a.object_id
+      join fiscal_year y on y.id = p.fiscal_year_id
+      left join app_user u on u.id = a.actor_user_id
+     where a.object_type = ${PERMISSION_OBJECT}
+       and a.action in ('fiscal_period.closed', 'fiscal_period.reopened')
+       and a.outcome = 'success'
+     order by a.occurred_at desc
+     limit ${limit}`);
+  return (result as unknown as {
+    rows: {
+      id: string;
+      occurredAt: Date;
+      action: string;
+      periodName: string;
+      yearCode: string;
+      fromStatus: string | null;
+      toStatus: string | null;
+      warnings: string[];
+      reason: string | null;
+      actorName: string | null;
+    }[];
+  }).rows;
+}

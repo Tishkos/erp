@@ -55,6 +55,8 @@ describe('ap01 · every service that touches a payable writes its story', () => 
       // their shipment / warehouse events — ap05-shipment.
       'bill_of_lading',
       'container_receipt',
+      // REQ-LOG-001 (0301): raise / move / clear each write DECLARATION_* — log01-declaration.
+      'customs_declaration',
       // Stage 4 (0233): register / status / note / re-register each write
       // their PD_ event — ap04-customs-pd.
       'customs_pd',

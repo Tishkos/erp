@@ -125,7 +125,7 @@ const BASES: Readonly<Record<ProfileKind, string | null>> = {
   container: '/payables/containers',
   pd: '/payables/pd',
   asycuda_run: '/payables/pd/asycuda',
-  port: null, // missing — logistics builds it
+  port: '/logistics/ports',
   carrier: null, // missing — logistics builds it
   journal: '/finance/journals',
   loan: '/treasury/loans',

@@ -188,6 +188,14 @@ export const costLayer = pgTable(
      */
     supplierId: uuid('supplier_id').references(() => businessPartner.id),
 
+    /**
+     * IMPROVEMENT-002 (0285) — for a layer a relocation created (a transfer,
+     * a container receipt out of transit, a move at cost), the layer its stock
+     * came from. Written by the relocation itself, so a landed-cost lock
+     * follows the stock by fact rather than by matching quantities.
+     */
+    originLayerId: uuid('origin_layer_id'),
+
     /** The movement that created it — every layer comes from a receipt. */
     createdByMovementId: uuid('created_by_movement_id')
       .notNull()

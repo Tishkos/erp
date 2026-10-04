@@ -4,6 +4,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, ListToolbar, admin as s, matches } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ProfileLink } from '@/components/admin/profile-link';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -129,16 +130,20 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Sea
                       <bdi dir="ltr">{formatBusinessDate(row.receiptDate, locale as Locale)}</bdi>
                     </td>
                     <td>
-                      <bdi dir="ltr">{row.customerCode ?? '—'}</bdi>
+                      <ProfileLink code={row.customerCode} kind="customer">{row.customerCode ?? '—'}</ProfileLink>
                     </td>
                     <td>
-                      <bdi dir="auto">{row.customerName ?? '—'}</bdi>
+                      <ProfileLink code={row.customerCode} dir="auto" kind="customer">{row.customerName ?? '—'}</ProfileLink>
                     </td>
                     <td>
-                      <bdi dir="ltr">{row.bankCode ?? '—'}</bdi>
+                      <ProfileLink code={row.bankCode} kind={row.bankType === 'cash' ? 'cash_account' : 'bank_account'}>
+                        {row.bankCode ?? '—'}
+                      </ProfileLink>
                     </td>
                     <td>
-                      <bdi dir="auto">{row.bankName ?? '—'}</bdi>
+                      <ProfileLink code={row.bankCode} dir="auto" kind={row.bankType === 'cash' ? 'cash_account' : 'bank_account'}>
+                        {row.bankName ?? '—'}
+                      </ProfileLink>
                     </td>
                     <td className={s.sapNum}>
                       <bdi dir="ltr">{money(row.amountIqd)}</bdi>

@@ -18,6 +18,7 @@ import { randomUUID } from 'node:crypto';
 
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
+import { businessToday } from '../domain/business-date';
 import {
   costLayer,
   costLayerConsumption,
@@ -49,6 +50,7 @@ import { toDecimalString } from '../domain/money';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
+import * as departures from './inventory-departures';
 import * as posting from './posting';
 import type { PostingRequest } from '../domain/posting';
 import { costOf as fifoCostOf } from '../domain/fifo';
@@ -134,8 +136,13 @@ export async function positionOf(
   // trigger and the Stock Movement page both read the warehouse whole, so the
   // position does too: whatever rows there are, summed. `reserved` is not
   // summed, because the view already counts it once per row.
+  //
+  // `held`, not `on_hand` (0287): the position is what the physical rule
+  // reads — nothing leaves a warehouse that is not in it — and goods in a
+  // transit warehouse are in it, though the view shows them in transit, not
+  // on hand, to a reader.
   const result = await tx.execute(sql`
-    select sum(on_hand)::text        as on_hand,
+    select sum(held)::text           as on_hand,
            max(reserved)::text       as reserved,
            sum(in_quarantine)::text  as in_quarantine,
            sum(damaged)::text        as damaged,
@@ -395,6 +402,13 @@ export interface ReceiveInput {
   readonly sourceDocumentId?: string | null;
   readonly sourceLineId?: string | null;
   readonly journalEntryId?: string | null;
+  /**
+   * IMPROVEMENT-002 (0285) — for stock a relocation brings in (a transfer, a
+   * move at cost, a container receipt out of transit), the layer it left. A
+   * landed-cost lock follows the units by this fact, never by matching
+   * quantities.
+   */
+  readonly originLayerId?: string | null;
   readonly serialNumber?: string | null;
   readonly batchNumber?: string | null;
   readonly expiryDate?: string | null;
@@ -463,6 +477,7 @@ export async function receive(
           branchCode: input.branchCode,
           movementDate: input.movementDate,
           costIqd: fifoCostOf(input.quantity, input.unitCostIqd),
+          inbound: true,
           sourceDocumentType: input.sourceDocumentType ?? null,
           sourceDocumentId: input.sourceDocumentId ?? null,
           dimensions: input.dimensions,
@@ -517,6 +532,7 @@ export async function receive(
     remainingQuantity: formatQuantity(layer.remainingQuantity),
     unitCostIqd: toDecimalString(layer.unitCostIqd, 4n),
     supplierId: input.supplierId ?? null,
+    originLayerId: input.originLayerId ?? null,
     createdByMovementId: movement!.id,
   });
 
@@ -907,7 +923,11 @@ const POSTING_EFFECTS: Readonly<
   // "Inventory loss | Inventory Loss Expense | Inventory / Inventory in Transit"
   write_off: { debit: 'inventory_loss', credit: 'inventory' },
   damage: { debit: 'inventory_loss', credit: 'inventory' },
-  count_adjustment: { debit: 'inventory_loss', credit: 'inventory' },
+  // IMPROVEMENT-002 (sponsor, 2026-10-04) — a Stock Count's difference is an
+  // inventory adjustment, as Item Reconciliation's is; inventory loss is for
+  // write-off and damage only. A shortfall: Dr adjustment / Cr inventory. A
+  // surplus is the other way round (`INBOUND_EFFECTS`).
+  count_adjustment: { debit: 'inventory_adjustment', credit: 'inventory' },
   opening_stock: { debit: 'inventory', credit: 'opening_balance' },
   sales_return: { debit: 'inventory', credit: 'cogs' },
   // Appendix C: "Goods Return | Dr Return Clearing / Supplier position |
@@ -918,6 +938,27 @@ const POSTING_EFFECTS: Readonly<
   // and the supplier agreeing to credit it, and the Supplier Credit Memo empties
   // it (Dr Supplier A/P / Cr Return Clearing).
   goods_return: { debit: 'return_clearing', credit: 'inventory' },
+});
+
+/**
+ * The effect of a movement of these kinds when it brings stock *in*. A count
+ * that finds more than the system held puts stock on the books: Dr inventory /
+ * Cr inventory adjustment — not the shortfall's lines with a positive amount.
+ */
+const INBOUND_EFFECTS: Readonly<
+  Record<string, { readonly debit: string; readonly credit: string } | undefined>
+> = Object.freeze({
+  count_adjustment: { debit: 'inventory', credit: 'inventory_adjustment' },
+});
+
+/**
+ * The event a kind posts under. A Stock Count's adjustment posts through the
+ * mapping Item Reconciliation already asks Finance for
+ * (`inventory.stock_adjustment` › `inventory_adjustment`), so one account
+ * answers for both and the Posting Mappings screen lists it once.
+ */
+const EVENT_OF: Readonly<Record<string, string | undefined>> = Object.freeze({
+  count_adjustment: 'inventory.stock_adjustment',
 });
 
 /** Whether a movement of this kind posts at all. */
@@ -942,6 +983,8 @@ export function postingRequestFor(input: {
   branchCode: string;
   movementDate: string;
   costIqd: bigint;
+  /** True for a movement that brings stock in (a receipt); its kind may post the other way round. */
+  inbound?: boolean;
   sourceDocumentType?: string | null;
   sourceDocumentId?: string | null;
   /**
@@ -951,7 +994,7 @@ export function postingRequestFor(input: {
    */
   dimensions?: Readonly<Record<string, string | null | undefined>> | undefined;
 }): PostingRequest | null {
-  const effect = POSTING_EFFECTS[input.kind];
+  const effect = (input.inbound ? INBOUND_EFFECTS[input.kind] : undefined) ?? POSTING_EFFECTS[input.kind];
   if (!effect || input.costIqd === 0n) return null;
 
   const amount = toDecimalString(input.costIqd < 0n ? -input.costIqd : input.costIqd, 4n);
@@ -963,7 +1006,7 @@ export function postingRequestFor(input: {
   const criteria = { warehouseCode: input.warehouseCode, branchCode: input.branchCode };
 
   return {
-    eventType: `inventory.${input.kind}`,
+    eventType: EVENT_OF[input.kind] ?? `inventory.${input.kind}`,
     // The document that moved the stock decides which dimensions it must
     // carry (§4.2's document-type layer) — a sales return's credit to COGS is
     // judged as a sales return, not as a bare movement.
@@ -1038,6 +1081,12 @@ export async function postMovement(
 // Reversal — §9.2
 // ---------------------------------------------------------------------------
 
+/** The reversal's date: the day asked (today by default), never before the original. */
+export function reversalDateOf(originalDate: string, requested?: string | null): string {
+  const asked = requested?.trim() || businessToday();
+  return asked < originalDate ? originalDate : asked;
+}
+
 /**
  * Undoes a movement, restoring the exact layers it consumed.
  *
@@ -1049,6 +1098,16 @@ export async function reverseMovement(
   ctx: ActorContext,
   movementId: string,
   reason: string,
+  options: {
+    /**
+     * The day the reversal happens — the same day as the journal reversal
+     * beside it (IMPROVEMENT-002). The stock goes back on the day it is put
+     * back; the original movement keeps its own date, so a past position stays
+     * what it was and a movement in a closed month can still be undone in the
+     * open one. Never earlier than the original.
+     */
+    readonly reversalDate?: string;
+  } = {},
 ): Promise<MovementResult> {
   const [original] = await tx
     .select()
@@ -1099,7 +1158,7 @@ export async function reverseMovement(
       branchCode: original.branchCode,
       kind: 'reversal',
       quantity: formatQuantity(-parseQuantity(original.quantity)),
-      movementDate: original.movementDate,
+      movementDate: reversalDateOf(original.movementDate, options.reversalDate),
       sourceDocumentType: original.sourceDocumentType,
       sourceDocumentId: original.sourceDocumentId,
       sourceLineId: original.sourceLineId,
@@ -1146,6 +1205,39 @@ export async function reverseMovement(
         .update(costLayer)
         .set({ remainingQuantity: formatQuantity(layer.remainingQuantity) })
         .where(eq(costLayer.id, layer.id));
+    }
+
+    // IMPROVEMENT-002 — units that left before a landed-cost lock go back onto
+    // a layer that now carries the restated cost, so the layer rises by more
+    // than the cost they left at. The difference is the landed share the lock
+    // sent after them, and it comes back from where it went (Dr inventory /
+    // Cr the departure's account), dated this reversal; a movement no lock
+    // reached rises by exactly what left, and nothing is posted.
+    const before = new Map(layers.map((layer) => [layer.id, layer]));
+    const units: departures.ReturnedUnits[] = [];
+    for (const consumption of consumptions) {
+      const was = before.get(consumption.layerId);
+      const now = restored.find((layer) => layer.id === consumption.layerId);
+      if (!was || !now) continue;
+      const rise =
+        fifoCostOf(now.remainingQuantity, was.unitCostIqd) - fifoCostOf(was.remainingQuantity, was.unitCostIqd);
+      const inventoryIqd = rise - BigInt(consumption.costIqd.replace('.', ''));
+      if (inventoryIqd <= 0n) continue;
+      units.push({
+        departedMovementId: movementId,
+        fromLayerId: consumption.layerId,
+        quantity: parseQuantity(consumption.quantity),
+        toLayerId: consumption.layerId,
+        inventoryIqd,
+      });
+    }
+    if (units.length > 0) {
+      await departures.returnLandedShare(tx, ctx, {
+        returnMovementId: reversal!.id,
+        units,
+        postingDate: reversalDateOf(original.movementDate, options.reversalDate),
+        description: `Landed cost returned with the reversal of ${original.kind.replace(/_/g, ' ')} — ${original.itemCode} in ${original.warehouseCode}`,
+      });
     }
   }
 
@@ -1482,6 +1574,7 @@ export async function relocate(
       sourceDocumentType: input.sourceDocumentType,
       sourceDocumentId: input.sourceDocumentId,
       sourceLineId: input.sourceLineId ?? null,
+      originLayerId: layer.id,
     });
 
     costIqd += issued.costIqd ?? 0n;

@@ -2,12 +2,17 @@ import { EXPORT_ACCESS, type ExportKey } from './access';
 import * as documents from './documents';
 import * as shipmentDocuments from './shipment-documents';
 import * as customsDocuments from './customs-documents';
+import * as logisticsDocuments from './logistics-documents';
 import * as importDocuments from './import-documents';
 import * as purchaseDocuments from './purchase-documents';
+import * as landedCostDocuments from './landed-cost-documents';
+import * as inventoryDocuments from './inventory-documents';
+import * as inventoryReports from './inventory-reports';
 import type { BuildContext, Built } from './documents';
 import * as reports from './reports';
 import * as projectReports from './project-reports';
 import * as hrReports from './hr-reports';
+import * as accountingDocuments from './accounting-documents';
 import * as projectDocuments from './project-documents';
 import * as hrDocuments from './hr-documents';
 
@@ -44,26 +49,44 @@ const BUILDERS = {
   sales_invoice: byId(documents.salesInvoice),
   supplier_payment: byId(documents.supplierPayment),
   customer_receipt: byId(documents.customerReceipt),
+  customer_note: byId(documents.customerNote),
   sales_return: byId(documents.salesReturn),
   purchase_return: byId(documents.purchaseReturn),
   transfer: byId(documents.transfer),
   opening_stock: byId(documents.openingStock),
   journal_entry: byId(documents.journalEntry),
   item_reconciliation: byId(documents.itemReconciliation),
+  stock_count: byId(inventoryDocuments.stockCount),
   bill_of_lading: byId(shipmentDocuments.billOfLading),
   asycuda_reading: byId(customsDocuments.asycudaReading),
   import_application: byId(importDocuments.importApplication),
+  internal_transfer: byId(accountingDocuments.internalTransfer),
+  bank_reconciliation: byId(accountingDocuments.bankReconciliation),
+  payments_receipts: (ctx, input) => accountingDocuments.paymentsReceipts(ctx, input.query),
+  cash_forecast: (ctx, input) => accountingDocuments.cashForecast(ctx, input.query),
+  account_reconciliation: (ctx, input) => accountingDocuments.accountReconciliation(ctx, input.query),
+  tax_code: byId(accountingDocuments.taxCode),
+  recurring_journal: byId(accountingDocuments.recurringJournal),
+  period_close: byId(accountingDocuments.periodClose),
   purchase_order: byId(purchaseDocuments.purchaseOrder),
   goods_receipt: byId(purchaseDocuments.goodsReceipt),
   payment_application: byId(purchaseDocuments.paymentApplication),
   supplier_advance: byId(purchaseDocuments.supplierAdvance),
   recurring_contract: byId(purchaseDocuments.recurringContract),
   supplier_credit_note: byId(purchaseDocuments.supplierCreditNote),
+  customs_pd: byId(logisticsDocuments.customsPd),
+  shipment_container: byId(logisticsDocuments.shipmentContainer),
+  container_receipt: byId(logisticsDocuments.containerReceipt),
+  customs_declaration: byId(logisticsDocuments.customsDeclaration),
+  port: byId(logisticsDocuments.port),
+  landed_cost_final: byId(landedCostDocuments.finalCostOfImport),
   customer_statement: (ctx, input) => reports.partnerStatement(ctx, 'customer', input.query),
   supplier_statement: (ctx, input) => reports.partnerStatement(ctx, 'supplier', input.query),
   bank_statement: (ctx, input) => (input.id ? reports.bankStatement(ctx, input.id, input.query, 'bank') : Promise.resolve(null)),
   cash_statement: (ctx, input) => (input.id ? reports.bankStatement(ctx, input.id, input.query, 'cash') : Promise.resolve(null)),
   warehouses_report: (ctx, input) => reports.warehousesReport(ctx, input.query),
+  inventory_valuation: (ctx, input) => inventoryReports.inventoryValuation(ctx, input.query),
+  inventory_checks: (ctx, input) => inventoryReports.inventoryChecks(ctx, input.query),
   stock_movement: (ctx, input) => reports.stockMovement(ctx, input.query),
   stock_ledger: (ctx, input) => reports.stockLedger(ctx, input.query),
   treasury_reporting: (ctx, input) => reports.treasuryReporting(ctx, input.query),

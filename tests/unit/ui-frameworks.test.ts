@@ -63,8 +63,10 @@ describe('Appendix A · the approved menu tree', () => {
     // Master Data & Configuration became four headings on 2026-10-04 —
     // Financial keeps `master_data`; Banking, Organization and Inventory
     // Reference are the twenty-sixth to twenty-eighth.
-    expect(MENU).toHaveLength(28);
-    expect([...MENU.map((s) => s.ordinal)].sort((a, b) => a - b)).toEqual(Array.from({ length: 28 }, (_, i) => i + 1));
+    // REQ-LOG-001 (2026-10-04): Logistics is four headings — In Transit and
+    // Landed Costs are the twenty-ninth and thirtieth.
+    expect(MENU).toHaveLength(30);
+    expect([...MENU.map((s) => s.ordinal)].sort((a, b) => a - b)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
   });
 
   it('names every required submenu of Finance — General Ledger', () => {
@@ -125,7 +127,8 @@ describe('§25 · navigation reflects permission, and is not the control', () =>
   it('shows a Super User everything', () => {
     // Twenty-five since Monitoring was added (2026-10-03); twenty-eight since
     // Master Data split into its four headings (2026-10-04).
-    expect(visibleMenu(superUser)).toHaveLength(28);
+    // Thirty since Logistics became four headings (REQ-LOG-001).
+    expect(visibleMenu(superUser)).toHaveLength(30);
   });
 
   it('shows a user only the sections they hold a grant in', () => {

@@ -19,7 +19,10 @@ import {
   SubmitRow,
   admin as s,
 } from '@/components/admin';
-import { AuditLogButton, RecordHistory } from '@/components/admin/history';
+import { RecordHistory } from '@/components/admin/history';
+import { HistoryButton } from '@/components/admin/icon-dialog';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+import * as recordNotes from '@/server/services/record-notes';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { can } from '@domain/permissions';
@@ -92,6 +95,7 @@ export default async function ItemPage({
         // REQ-FIX-001 FIX-4 — the units it is bought and sold in.
         units: await itemUnits.unitsOf(tx, code),
         uoms: mayEdit ? await uomService.listActive(tx) : [],
+        notes: await recordNotes.listNotes(tx, { object: items.PERMISSION_OBJECT, recordId: code }),
       };
     } catch (error) {
       if (error instanceof AdminNotFoundError) return null;
@@ -99,7 +103,7 @@ export default async function ItemPage({
     }
   });
   if (!data) notFound();
-  const { row, accounts, suppliers, units, uoms } = data;
+  const { row, accounts, suppliers, units, uoms, notes } = data;
   const kept = new Set(units.filter((unit) => unit.active).map((unit) => unit.uomCode));
   const addable = uoms.filter((uom) => !kept.has(uom.code));
 
@@ -111,7 +115,15 @@ export default async function ItemPage({
 
   return (
     <AdminPage
-      actions={<AuditLogButton label={t('history')} />}
+      actions={
+        <>
+          {/* Notes and the clock — the profile's two doors (shared, 2026-10-04). */}
+          <RecordNotesDoor notes={notes} object={items.PERMISSION_OBJECT} recordId={row.code} />
+          <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+            <RecordHistory objectId={row.code} objectType={items.PERMISSION_OBJECT} />
+          </HistoryButton>
+        </>
+      }
       back={{ href: '/inventory/items', label: t('back') }}
       title={`${row.code} · ${row.name}`}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -539,7 +551,6 @@ export default async function ItemPage({
             </Panel>
           ) : null}
 
-          <RecordHistory objectId={row.code} objectType={items.PERMISSION_OBJECT} />
         </div>
       </div>
     </AdminPage>

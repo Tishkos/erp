@@ -310,7 +310,7 @@ supplier.
 | **Transfer** | `/inventory/transfers` | **Built** |
 | **Item Reconciliation** | `/inventory/stock-reconciliation` | **Built** |
 | **Warehouses Report** | `/inventory/fifo-valuation` | **Built** |
-| **Invoice Status Tracking** | `/inventory/in-transit` | **Built** |
+| **Invoice Status Tracking** | `/logistics/in-transit` (a section of In-Transit Inventory, REQ-LOG-001; `/inventory/in-transit` redirects) | **Built** |
 | **Items** | `/master-data/items` | **Built** |
 | **Units of Measure** | `/master-data/uom` | **Built** |
 | Quarantine, Returns, Damaged Goods, Serial/Batch Tracking, Reports, Settings | — | Planned |
@@ -352,7 +352,7 @@ Every warehouse's holding by item, with quantity from the movement ledger and
 **Total Price at FIFO cost** — a value in dinars, not a selling price. 507 units
 bought as 10 at 50 and 500 at 500, less 3 sold, is 250,350 IQD.
 
-### Invoice Status Tracking — `/inventory/in-transit`
+### Invoice Status Tracking — `/logistics/in-transit` (was `/inventory/in-transit`, which redirects; REQ-LOG-001)
 
 Goods bought abroad, between the invoice and the shelf: which shipment stage
 each consignment has reached, who moved it there and when.

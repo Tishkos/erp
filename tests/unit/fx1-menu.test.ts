@@ -67,9 +67,25 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     }
   });
 
-  it('Logistics holds the customs declarations, the ASYCUDA list, the shipping and the jobs', () => {
-    expect(keysOf('logistics_customs')).toEqual(['pds', 'asycuda_update']);
-    expect(keysOf('logistics_shipping')).toEqual(['shipments', 'containers', 'in_transit']);
+  it('Logistics is the owner’s four headings, fifteen items in his order (REQ-LOG-001)', () => {
+    expect(keysOf('logistics_customs')).toEqual([
+      'pds',
+      'customs_declarations',
+      'asycuda_update',
+      'customs_duties',
+      'customs_documents',
+    ]);
+    expect(keysOf('logistics_shipping')).toEqual([
+      'import_shipments',
+      'shipments',
+      'containers',
+      'ports_routes',
+      'freight_costs',
+      'shipment_documents',
+    ]);
+    expect(keysOf('logistics_in_transit')).toEqual(['in_transit', 'shipment_tracking']);
+    expect(keysOf('logistics_landed_costs')).toEqual(['landed_costs', 'cost_allocation']);
+    // The client jobs stay in the tree (Appendix A) but leave the dropdown (Q3).
     expect(keysOf('logistics')).toContain('logistics_jobs');
   });
 
@@ -88,6 +104,32 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(keysOf('master_banking')).toEqual(['banks', 'bank_cash_accounts', 'cash_accounts']);
   });
 
+  it('Receivables is one heading, Sales & Receivables, in the order a receivable lives (2026-10-04)', () => {
+    expect(keysOf('sales').slice(0, 8)).toEqual([
+      'ar_invoices',
+      'customer_receipts',
+      'ar_allocations',
+      'ar_statements',
+      'ar_open_items',
+      'customer_credit_memos',
+      'sales_returns',
+      'ar_reconciliation',
+    ]);
+    const route = (itemKey: string) =>
+      routeFor(section('sales').items.find((item) => item.key === itemKey)!, 'sales');
+    expect(route('ar_allocations')).toBe('/sales/customer-credits');
+    expect(route('customer_credit_memos')).toBe('/sales/credit-notes');
+    expect(route('ar_reconciliation')).toBe('/sales/customer-reconciliation');
+  });
+
+  it('Customers live in Master Data only, at the route every customer link uses', () => {
+    const everywhere = MENU.flatMap((s) => s.items.filter((item) => item.key === 'customers').map(() => s.key));
+    expect(everywhere).toEqual(['master_data']);
+    expect(
+      routeFor(section('master_data').items.find((item) => item.key === 'customers')!, 'master_data'),
+    ).toBe('/sales/customers');
+  });
+
   it('the moved screens keep their routes (D-FX-1)', () => {
     const route = (sectionKey: string, itemKey: string) =>
       routeFor(
@@ -97,7 +139,11 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(route('logistics_customs', 'pds')).toBe('/payables/pd');
     expect(route('logistics_shipping', 'shipments')).toBe('/payables/shipments');
     expect(route('logistics_shipping', 'containers')).toBe('/payables/containers');
-    expect(route('logistics_shipping', 'in_transit')).toBe('/inventory/in-transit');
+    // REQ-LOG-001 Q4 — the one route that moved: In-Transit Inventory absorbed
+    // Invoice Status Tracking, and the old address redirects to it.
+    expect(route('logistics_in_transit', 'in_transit')).toBe('/logistics/in-transit');
+    expect(route('logistics_customs', 'customs_declarations')).toBe('/logistics/customs-declarations');
+    expect(route('logistics_shipping', 'ports_routes')).toBe('/logistics/ports');
     expect(route('treasury', 'loans')).toBe('/treasury/loans');
     expect(route('master_banking', 'bank_cash_accounts')).toBe('/master-data/bank-accounts');
     expect(route('master_banking', 'cash_accounts')).toBe('/master-data/cash-accounts');

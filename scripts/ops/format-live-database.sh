@@ -114,6 +114,8 @@ warranty_registration
 promise_to_pay
 collection_activity
 ar_write_off
+customer_credit_application
+customer_note
 customer_credit_memo_line
 customer_credit_memo
 customer_receipt_allocation
@@ -136,12 +138,15 @@ shipment_container_line
 shipment_container_status_history
 shipment_container
 bill_of_lading
+bank_loan_repayment
+bank_loan_revaluation
 bank_loan_allocation
 bank_loan_instalment
 bank_loan
 payment_application
 payable_instalment
 asycuda_run
+customs_declaration
 customs_pd_status_history
 customs_pd
 ap_invoice_note
@@ -149,6 +154,7 @@ legacy_document
 legacy_import_run
 payables_migration_run
 payable_exchange_difference
+landed_cost_departure
 landed_cost_layer_adjustment
 landed_cost_charge
 landed_cost_lock
@@ -220,6 +226,7 @@ project_recognition
 project_balance_movement
 project_certificate
 project_progress
+project_settlement_supplement
 project_material_issue_line
 project_material_issue
 project_timesheet
@@ -249,6 +256,9 @@ investment_proposal
 invoice_line
 invoice
 subledger_entry
+recurring_journal_run
+recurring_journal_line
+recurring_journal
 journal_line
 journal_entry
 posting_log
@@ -420,6 +430,7 @@ select rpad(t.table_name, 28) || lpad(t.n::text, 8)
     union all select 'goods_return', count(*) from goods_return
     union all select 'sales_return', count(*) from sales_return
     union all select 'customer_credit_memo', count(*) from customer_credit_memo
+    union all select 'customer_note', count(*) from customer_note
     union all select 'supplier_credit_memo', count(*) from supplier_credit_memo
     union all select 'inventory_movement', count(*) from inventory_movement
     union all select 'cost_layer', count(*) from cost_layer

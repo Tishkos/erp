@@ -5,10 +5,17 @@ import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
 import { InvoiceSettlement } from '@/components/admin/invoice-settlement';
+import { ReceivableInvoiceActivity } from '@/components/admin/receivable-invoice-activity';
+import { Attachments } from '@/components/admin/attachments';
+import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+import { ExportIcon } from '@/components/print/export-menu';
+import * as attachmentsService from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { ExportMenu } from '@/components/print/export-menu';
 import { PrintSheet } from '@/components/print/print-sheet';
 import { printSheet } from '@/server/print/sheet';
 import { Panel } from '@/components/ui';
@@ -23,6 +30,7 @@ import * as partners from '@/server/services/partners';
 import * as warehouses from '@/server/services/warehouses';
 import {
   approveArInvoice,
+  attachToArInvoice,
   saveArInvoiceAccounts,
   invoiceLineAvailability,
   postArInvoice,
@@ -123,6 +131,9 @@ export default async function ArInvoicePage({
           .filter((id): id is string => Boolean(id))
           .map((id) => coa.loadAccount(tx, id).catch(() => null)),
       ),
+      // The Notes door (shared, 2026-10-04): what people have said about this
+      // invoice, kept as its own audit events.
+      notes: await recordNotes.listNotes(tx, { object: ar.PERMISSION_OBJECT, recordId: document.id }),
     };
   });
 
@@ -188,8 +199,20 @@ export default async function ArInvoicePage({
   const fields: DocumentField[] = [
     { label: column('invoice_no'), value: <bdi dir="ltr">{invoice.invoiceNo}</bdi> },
     { label: column('status'), value: status(invoice.status), status: invoice.status },
-    { label: column('customer_code'), value: <bdi dir="ltr">{customer?.code ?? '—'}</bdi> },
-    { label: column('customer_name'), value: <bdi dir="auto">{customer?.name ?? '—'}</bdi> },
+    // The customer is a link to their profile (Master Data › Customers) — "like
+    // Bank Loans: we can click the bank or the customer" (2026-10-04).
+    {
+      label: column('customer_code'),
+      value: <ProfileLink code={customer?.code} kind="customer">{customer?.code ?? '—'}</ProfileLink>,
+    },
+    {
+      label: column('customer_name'),
+      value: (
+        <ProfileLink code={customer?.code} dir="auto" kind="customer">
+          {customer?.name ?? '—'}
+        </ProfileLink>
+      ),
+    },
     {
       label: column('posting_date'),
       value: <bdi dir="ltr">{formatBusinessDate(invoice.invoiceDate, locale as Locale)}</bdi>,
@@ -265,9 +288,14 @@ export default async function ArInvoicePage({
 
   const sheet = await printSheet('sales_invoice', invoice.invoiceNo);
 
+  // The paperwork: how many there are, and whether this person may add one.
+  const attached = await withCurrentUser((tx) =>
+    attachmentsService.currentFor(tx, ar.PERMISSION_OBJECT, invoice.id),
+  );
+  const mayAttach = can(principal, 'create', 'attachment');
+
   return (
     <AdminPage
-      actions={<ExportMenu exportKey="sales_invoice" id={invoice.invoiceNo} />}
       back={{ href: '/sales/ar-invoices', label: t('back') }}
       title={invoice.invoiceNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -323,8 +351,35 @@ export default async function ArInvoicePage({
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Printer, paperclip, notes, clock — the standing order (2026-10-03),
+                from the draft. */}
+            <ExportIcon
+              exportKey="sales_invoice"
+              id={invoice.invoiceNo}
+              title={`${page('ar_invoice')} ${invoice.invoiceNo}`}
+            />
+            <AttachmentsButton
+              closeLabel={t('close')}
+              count={attached.length}
+              label={t('attachments.title')}
+              title={t('attachments.title')}
+            >
+              <Attachments
+                action={attachToArInvoice}
+                hidden={{ invoice_no: invoice.invoiceNo }}
+                mayAttach={mayAttach}
+                objectId={invoice.id}
+                objectType={ar.PERMISSION_OBJECT}
+              />
+            </AttachmentsButton>
+            <RecordNotesDoor notes={found.notes} object={ar.PERMISSION_OBJECT} recordId={invoice.id} />
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={invoice.id} objectType={ar.PERMISSION_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         documentType={page('ar_invoice')}
         fields={fields}
         id="ar-invoice-document"
@@ -520,7 +575,13 @@ export default async function ArInvoicePage({
           the report listing it cannot disagree about its own due date. */}
       <InvoiceSettlement invoiceNo={invoice.invoiceNo} side="customer" />
 
-      <RecordHistory objectId={invoice.id} objectType={ar.PERMISSION_OBJECT} />
+      {/* Receivables (2026-10-04) — the receipts and credits applied, the
+          notes and returns raised against it, and what is left. */}
+      <ReceivableInvoiceActivity
+        customerCode={customer?.code ?? null}
+        invoiceId={invoice.id}
+        invoiceNo={invoice.invoiceNo}
+      />
       {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>
   );

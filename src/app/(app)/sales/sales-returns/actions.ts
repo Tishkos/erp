@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation';
 import { runAdmin, runAdminAndReturn, text, withQuery } from '@/server/admin-action';
 import { parseQuantity } from '@domain/uom';
 import * as sr from '@/server/services/sales-return';
+import * as attachments from '@/server/services/attachments';
+import { registerAllRecords } from '@/server/records';
 import { LINE_ROWS } from './lines';
 import { businessToday } from '@/server/domain/business-date';
 
@@ -114,4 +116,30 @@ export async function rejectReturn(formData: FormData): Promise<void> {
     (tx, ctx) => sr.reject(tx, ctx, text(formData, 'id'), text(formData, 'reason')),
     record(returnNo),
   );
+}
+
+/**
+ * File a paper on the return — the paperclip in its title bar (Receivables,
+ * 2026-10-04: every record wears the four doors from the moment it exists).
+ */
+export async function attachToReturn(formData: FormData): Promise<void> {
+  const returnNo = text(formData, 'return_no');
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(withQuery(record(returnNo), 'error', 'attachment_missing'));
+  }
+  const upload = file as File;
+  const content = Buffer.from(await upload.arrayBuffer());
+  // Where files go and who may read them back — registered before the first upload of a cold process.
+  registerAllRecords();
+  await runAdminAndReturn(async (tx, ctx) => {
+    const found = await sr.viewByNo(tx, returnNo);
+    if (!found) redirect(withQuery(record(returnNo), 'error', 'not_found'));
+    await attachments.upload(tx, ctx, {
+      objectType: sr.PERMISSION_OBJECT,
+      objectId: found.id,
+      fileName: upload.name,
+      content,
+    });
+  }, record(returnNo));
 }

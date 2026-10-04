@@ -12,31 +12,48 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
 import {
+  apInvoice,
   applicant,
+  arInvoice,
   asycudaRun,
   bankLoan,
+  bankStatement,
   bankTransfer,
   billOfLading,
+  customerCreditMemo,
+  customerNote,
+  customerReceipt,
+  customsDeclaration,
   customsPd,
   employeeAdvance,
   employeeDocument,
   employeeRequest,
+  fiscalPeriod,
+  goodsReceipt,
+  goodsReturn,
   journalEntry,
   otherReceipt,
   payable,
   paymentApplication,
   payrollRun,
   performanceReview,
+  port,
   project,
   projectBudgetDocument,
   projectCertificate,
   projectMaterialIssue,
   projectVariation,
+  purchaseOrder,
+  recurringContract,
+  recurringJournal,
+  salesReturn,
   shipmentContainer,
+  supplierAdvance,
+  supplierCreditMemo,
+  supplierPayment,
+  taxCode,
   vacancy,
 } from './db/schema';
-import { applicant, asycudaRun, bankLoan, bankTransfer, billOfLading, customsPd, employeeDocument, employeeRequest, journalEntry, otherReceipt, payable, paymentApplication, projectCertificate, shipmentContainer } from './db/schema';
-import { apInvoice, goodsReceipt, goodsReturn, purchaseOrder, recurringContract, supplierAdvance, supplierCreditMemo, supplierPayment } from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -178,6 +195,20 @@ const asycudaRunParentAccess = async (tx: Tx, principal: Principal, objectId: st
   return Boolean(row);
 };
 
+/** REQ-LOG-001 — a customs declaration's files (the lodgement, the assessment): whoever may see the declarations. */
+const customsDeclarationParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'customs_declaration')) return false;
+  const [row] = await tx.select({ id: customsDeclaration.id }).from(customsDeclaration).where(eq(customsDeclaration.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/** REQ-LOG-001 — a port's papers (the tariff sheet, the agent's letter): whoever may see the ports. Addressed by code. */
+const portParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'port')) return false;
+  const [row] = await tx.select({ code: port.code }).from(port).where(eq(port.code, objectId)).limit(1);
+  return Boolean(row);
+};
+
 const loanParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
   if (!can(principal, 'view', 'bank_loan')) return false;
   const [row] = await tx.select({ id: bankLoan.id }).from(bankLoan).where(eq(bankLoan.id, objectId)).limit(1);
@@ -219,7 +250,10 @@ const employeeDocumentParentAccess = async (tx: Tx, principal: Principal, object
  * asks before it draws the record, which is the deposit register's own.
  */
 const bankTransferParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
-  if (!can(principal, 'view', 'bank_transfer')) return false;
+  // `bank_cash_account` is what `treasury.ts` and Manual Deposits authorise a
+  // transfer on; no role holds a `bank_transfer` grant, so asking for one
+  // refused everybody but the Super User (REQ-ACC-001, 2026-10-04).
+  if (!can(principal, 'view', 'bank_cash_account')) return false;
   const [row] = await tx.select({ id: bankTransfer.id }).from(bankTransfer).where(eq(bankTransfer.id, objectId)).limit(1);
   return Boolean(row);
 };
@@ -227,6 +261,39 @@ const bankTransferParentAccess = async (tx: Tx, principal: Principal, objectId: 
 const otherReceiptParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
   if (!can(principal, 'view', 'other_receipt')) return false;
   const [row] = await tx.select({ id: otherReceipt.id }).from(otherReceipt).where(eq(otherReceipt.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/**
+ * REQ-ACC-001 — the bank's statement file and the reconciliation's working
+ * papers, on the statement: whoever may read reconciliations, and row
+ * security answers the branch.
+ */
+const bankStatementParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'bank_reconciliation') && !can(principal, 'view', 'bank_statement')) return false;
+  const [row] = await tx.select({ id: bankStatement.id }).from(bankStatement).where(eq(bankStatement.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/** REQ-ACC-001 — a tax code's papers (the authority's letter, the rate notice): whoever reads tax codes. */
+const taxCodeParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'tax_code')) return false;
+  const [row] = await tx.select({ code: taxCode.code }).from(taxCode).where(eq(taxCode.code, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/** REQ-ACC-001 — a period's closing papers (the sign-off, the reconciliations' file): whoever reads Accounting Periods. */
+const fiscalPeriodParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'fiscal_period')) return false;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectId)) return false;
+  const [row] = await tx.select({ id: fiscalPeriod.id }).from(fiscalPeriod).where(eq(fiscalPeriod.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/** REQ-ACC-001 — a recurring journal's papers (the lease, the agreement): whoever reads journals; row security answers the branch. */
+const recurringJournalParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'journal_entry')) return false;
+  const [row] = await tx.select({ id: recurringJournal.id }).from(recurringJournal).where(eq(recurringJournal.id, objectId)).limit(1);
   return Boolean(row);
 };
 
@@ -346,6 +413,68 @@ const payrollRunParentAccess = async (tx: Tx, principal: Principal, objectId: st
   return Boolean(row);
 };
 
+/*
+ * Receivables (2026-10-04) — the sales invoice, the receipt, the credit or
+ * debit note, the credit memo and the sales return carry their files behind
+ * the paperclip, like every record. The
+ * invoice and the receipt are read under their own objects; a note under the
+ * credit memo's, which governs it. Row security decides the branch.
+ */
+const arInvoiceParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'ar_invoice')) return false;
+  const [row] = await tx.select({ id: arInvoice.id }).from(arInvoice).where(eq(arInvoice.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const customerReceiptParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'customer_receipt')) return false;
+  const [row] = await tx
+    .select({ id: customerReceipt.id })
+    .from(customerReceipt)
+    .where(eq(customerReceipt.id, objectId))
+    .limit(1);
+  return Boolean(row);
+};
+
+const customerNoteParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'customer_credit_memo')) return false;
+  const [row] = await tx.select({ id: customerNote.id }).from(customerNote).where(eq(customerNote.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const customerCreditMemoParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'customer_credit_memo')) return false;
+  const [row] = await tx
+    .select({ id: customerCreditMemo.id })
+    .from(customerCreditMemo)
+    .where(eq(customerCreditMemo.id, objectId))
+    .limit(1);
+  return Boolean(row);
+};
+
+const salesReturnParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'sales_return')) return false;
+  const [row] = await tx.select({ id: salesReturn.id }).from(salesReturn).where(eq(salesReturn.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/**
+ * Inventory's records (IMPROVEMENT-002), each kept by its uuid: a count, an
+ * opening stock document, a transfer (either table), an item reconciliation.
+ * Whoever reads the record under its own grant and row security reads its
+ * papers — the count sheet, the signed transfer note.
+ */
+const inventoryRecordParentAccess =
+  (object: string, tables: readonly string[]) => async (tx: Tx, principal: Principal, objectId: string) => {
+    if (!can(principal, 'view', object)) return false;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectId)) return false;
+    for (const table of tables) {
+      const result = await tx.execute(sql`select 1 from ${sql.identifier(table)} where id = ${objectId}::uuid limit 1`);
+      if (result.rows.length > 0) return true;
+    }
+    return false;
+  };
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -361,9 +490,20 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('shipment_container', containerParentAccess);
   attachments.registerParentAccessCheck('bill_of_lading', blParentAccess);
   attachments.registerParentAccessCheck('asycuda_run', asycudaRunParentAccess);
+  attachments.registerParentAccessCheck('customs_declaration', customsDeclarationParentAccess);
+  attachments.registerParentAccessCheck('port', portParentAccess);
   attachments.registerParentAccessCheck('bank_loan', loanParentAccess);
   attachments.registerParentAccessCheck('bank_transfer', bankTransferParentAccess);
   attachments.registerParentAccessCheck('other_receipt', otherReceiptParentAccess);
+  attachments.registerParentAccessCheck('bank_statement', bankStatementParentAccess);
+  attachments.registerParentAccessCheck('tax_code', taxCodeParentAccess);
+  attachments.registerParentAccessCheck('recurring_journal', recurringJournalParentAccess);
+  attachments.registerParentAccessCheck('fiscal_period', fiscalPeriodParentAccess);
+  attachments.registerParentAccessCheck('ar_invoice', arInvoiceParentAccess);
+  attachments.registerParentAccessCheck('customer_receipt', customerReceiptParentAccess);
+  attachments.registerParentAccessCheck('customer_note', customerNoteParentAccess);
+  attachments.registerParentAccessCheck('customer_credit_memo', customerCreditMemoParentAccess);
+  attachments.registerParentAccessCheck('sales_return', salesReturnParentAccess);
   attachments.registerParentAccessCheck('applicant', applicantParentAccess);
   attachments.registerParentAccessCheck('employee_request', employeeRequestParentAccess);
   attachments.registerParentAccessCheck('employee_document', employeeDocumentParentAccess);
@@ -379,6 +519,10 @@ export function registerAttachmentRuntime(): void {
   for (const [object, table] of PURCHASE_PARENTS) {
     attachments.registerParentAccessCheck(object, purchaseParentAccess(object, table));
   }
+  attachments.registerParentAccessCheck('stock_count', inventoryRecordParentAccess('stock_count', ['stock_count']));
+  attachments.registerParentAccessCheck('opening_stock', inventoryRecordParentAccess('opening_stock', ['opening_stock']));
+  attachments.registerParentAccessCheck('warehouse_transfer', inventoryRecordParentAccess('warehouse_transfer', ['stock_transfer', 'warehouse_transfer']));
+  attachments.registerParentAccessCheck('stock_reconciliation', inventoryRecordParentAccess('stock_reconciliation', ['stock_adjustment']));
 }
 
 /** Streams a stored file, for a route handler that has already checked access. */

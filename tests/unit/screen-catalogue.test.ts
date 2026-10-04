@@ -110,8 +110,16 @@ describe('the screen catalogue covers the approved tree', () => {
     // (2026-10-04): Supplier Ledger, Advances, Payments, Allocations and
     // Ageing were the Payables screens under second names, and Supplier
     // Credits is new.
-    expect(allMenuItems()).toHaveLength(239);
-    expect(Object.keys(SCREENS)).toHaveLength(239);
+    // Plus REQ-LOG-001's ten (2026-10-04): Customs Declarations, Customs
+    // Duties & Taxes, Customs Documents, Shipments, Ports & Routes, Freight &
+    // Shipping Costs, Shipment Documents, Shipment Tracking, Landed Costs and
+    // Cost Allocation.
+    // plus IMPROVEMENT-002's inventory menu (2026-10-04): Stock Receipts,
+    // Stock Issues, Stock Count, Inventory Checks and Inventory Valuation in,
+    // the unbuilt Quarantine, Returns, Damaged Goods, Serial / Batch,
+    // Reports and Settings placeholders out.
+    expect(allMenuItems()).toHaveLength(248);
+    expect(Object.keys(SCREENS)).toHaveLength(248);
   });
 
   it('uses only declared archetypes', () => {
@@ -135,7 +143,9 @@ describe('the screen catalogue covers the approved tree', () => {
     // − 2 − 2 (receipts, payments).
     // Payables finalisation (2026-10-04): − 1 − 2 − 2 − 1 − 1 out (Supplier
     // Ledger, Advances, Payments, Allocations, Ageing), + 1 in (Supplier Credits).
-    expect(total).toBe(352);
+    // REQ-LOG-001: + 2 + 2 (declarations, ports) + 8 (the registers).
+    // IMPROVEMENT-002 inventory: + 1 + 1 + 2 + 1 + 1 in, − 1 − 2 − 2 − 1 − 1 − 1 out.
+    expect(total).toBe(362);
   });
 });
 
@@ -188,7 +198,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(239);
+    expect(screenRoutes().size).toBe(248);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -215,10 +225,14 @@ describe('every screen has one address', () => {
       '/administration/whatsapp',
       '/approvals',
       '/documents',
+      // REQ-ACC-001 Part D — Account Reconciliation.
+      '/finance/account-reconciliation',
       // The accounting core.
       '/finance/balance-sheet',
       '/finance/cash-flow',
       '/finance/changes-in-equity',
+      // REQ-ACC-001 Part D — Period / Year-End Closing.
+      '/finance/closing',
       '/finance/gl-inquiry',
       '/finance/income-statement',
       '/finance/journals',
@@ -226,6 +240,8 @@ describe('every screen has one address', () => {
       // Back on the tree (by direction, 2026-09-24): the documents that cannot
       // name their own account still have to name it somewhere.
       '/finance/posting-mappings',
+      // REQ-ACC-001 Part D — Recurring Journals.
+      '/finance/recurring-journals',
       '/finance/reversals',
       '/finance/trial-balance',
       '/hr/advances',
@@ -242,19 +258,36 @@ describe('every screen has one address', () => {
       '/hr/reports',
       '/hr/requests',
       '/inventory/availability',
+      // IMPROVEMENT-002 — the inventory screens.
+      '/inventory/checks',
       // Operations build — block 7's Warehouses Report.
       '/inventory/fifo-valuation',
-      // Block 8 — Invoice Status Tracking.
-      '/inventory/in-transit',
       '/inventory/items',
       // Block 7 — Opening Stock, Item Reconciliation, Stock Movement, Transfer.
       '/inventory/opening-stock',
       // The Stock Ledger (2026-09-27).
+      '/inventory/stock-count',
+      '/inventory/stock-issues',
       '/inventory/stock-ledger',
       '/inventory/stock-movements',
+      '/inventory/stock-receipts',
       '/inventory/stock-reconciliation',
       '/inventory/transfers',
       '/inventory/uom',
+      '/inventory/valuation',
+      // REQ-LOG-001 — the Logistics module's own screens; In-Transit
+      // Inventory absorbed Block 8's Invoice Status Tracking.
+      '/logistics/cost-allocation',
+      '/logistics/customs-declarations',
+      '/logistics/customs-documents',
+      '/logistics/customs-duties',
+      '/logistics/freight-costs',
+      '/logistics/in-transit',
+      '/logistics/landed-costs',
+      '/logistics/ports',
+      '/logistics/shipment-documents',
+      '/logistics/shipment-tracking',
+      '/logistics/shipments',
       '/master-data/bank-accounts',
       // REQ-AP-001 Stage 3 — the bank master.
       '/master-data/banks',
@@ -268,6 +301,8 @@ describe('every screen has one address', () => {
       '/master-data/payment-methods',
       '/master-data/payment-terms',
       '/master-data/statement-mapping',
+      // REQ-ACC-001 Part D — Tax Codes.
+      '/master-data/tax-codes',
       '/master-data/warehouses',
       /*
        * Monitoring — by direction, 2026-10-03.
@@ -332,18 +367,31 @@ describe('every screen has one address', () => {
       '/projects/wbs',
       // Block 5 — the Sales Invoice.
       '/sales/ar-invoices',
+      // Receivables (2026-10-04) — credit and debit notes.
+      '/sales/credit-notes',
+      // Receivables (2026-10-04) — the customer's credits and advances.
+      '/sales/customer-credits',
       // Block 6 — Receipts.
       '/sales/customer-receipts',
+      // Receivables (2026-10-04) — the subledger against the control account.
+      '/sales/customer-reconciliation',
       '/sales/customer-statements',
       '/sales/customers',
       // §16 — what is owed to us, invoice by invoice.
       '/sales/receivables',
       // Block 9 — Sales Returns.
       '/sales/sales-returns',
+      // REQ-ACC-001 Part D — Bank Reconciliation, the Cash Forecast.
+      '/treasury/bank-reconciliation',
+      '/treasury/cash-forecast',
       // §17 — Bank and Cash Reporting, beside the accounts it reports on.
       '/treasury/deposits',
       '/treasury/loans',
+      // REQ-ACC-001 Part D — Payments & Receipts.
+      '/treasury/payments-receipts',
       '/treasury/reporting',
+      // REQ-ACC-001 Part D — Internal Transfers.
+      '/treasury/transfers',
     ]);
   });
 });

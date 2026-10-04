@@ -20,7 +20,7 @@ import { NewRecordDialog } from '@/components/admin/dialog';
 import { Attachments } from '@/components/admin/attachments';
 import { RecordHistory } from '@/components/admin/history';
 import { AttachmentsButton, HistoryButton, NotesButton } from '@/components/admin/icon-dialog';
-import { ExportIcon } from '@/components/print/export-menu';
+import { ExportIcon, ExportMenu } from '@/components/print/export-menu';
 import * as papers from '@/server/services/payable-papers';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { StopDialog } from '@/components/admin/stop-dialog';
@@ -1447,6 +1447,11 @@ export default async function PayablePage({
                     ))}
                   </tbody>
                 </table>
+                {/* IMPROVEMENT-002 — the Final Cost prints: the chain per layer,
+                    the locks' charges and where the departed part went. */}
+                <div className={s.sapFootActions}>
+                  <ExportMenu exportKey="landed_cost_final" id={row.payableNo} label={lc('final_print')} />
+                </div>
               </div>
             ) : null}
 

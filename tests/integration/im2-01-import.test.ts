@@ -134,9 +134,10 @@ const board = async (onPayable = payableId) => {
 const facts = (onPayable = payableId) => withScope(scope(world.clerk), (tx) => payables.gatherFacts(tx, onPayable));
 const stageOf = async (onPayable = payableId) =>
   (await ownerPool.query(`select stage_code from payable where id = $1`, [onPayable])).rows[0].stage_code as string;
+/** What stands in the warehouse — `held` (0287): a transit warehouse's goods are in it, though not on hand. */
 const onHand = async (warehouseCode: string) =>
   (
-    await ownerPool.query(`select coalesce(sum(on_hand), 0)::text as n from stock_position where item_code = $1 and warehouse_code = $2`, [
+    await ownerPool.query(`select coalesce(sum(held), 0)::text as n from stock_position where item_code = $1 and warehouse_code = $2`, [
       PANEL,
       warehouseCode,
     ])
@@ -234,6 +235,12 @@ describe('units · an import bought in boxes', () => {
     ({ invoiceId, payableId } = await importOf('10', { uomCode: 'BOX', price: '240000' }));
     await postInvoice();
     expect(await onHand(IN_PROCESS)).toBe('240.000000');
+    // IMPROVEMENT-002 (0287): goods in a transit warehouse are in transit, not on hand.
+    const { rows: position } = await ownerPool.query(
+      `select on_hand::text as on_hand, in_transit::text as in_transit, held::text as held from stock_position where item_code = $1 and warehouse_code = $2`,
+      [PANEL, IN_PROCESS],
+    );
+    expect(position).toEqual([{ on_hand: '0', in_transit: '240.000000', held: '240.000000' }]);
     await createBl('MSCU1234566');
     const [only] = await containers();
     expect(await lineOf(only!.id)).toMatchObject({ planned: '10.000000', uom_code: 'BOX' });

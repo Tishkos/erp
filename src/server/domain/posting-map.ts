@@ -165,6 +165,25 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     ],
   },
   {
+    // Receivables (0280) — a credit note with no goods behind it: a price
+    // allowance after the sale. The same two roles as the memo, so the
+    // allowance reports beside the returns rather than netting revenue.
+    event: 'sales.customer_credit_note',
+    lines: [
+      line('customer_receivable', 'credit', true, 'customer'),
+      line('sales_returns', 'debit', true),
+    ],
+  },
+  {
+    // Receivables (0280) — a charge the invoice missed. The invoice's roles,
+    // because it is more of the same sale.
+    event: 'sales.customer_debit_note',
+    lines: [
+      line('customer_receivable', 'debit', true, 'customer'),
+      line('sales_revenue', 'credit', true),
+    ],
+  },
+  {
     // Operations block 7 — Opening Stock. The stock side is each item's own
     // inventory account; what it is opened against is asked here.
     event: 'inventory.opening_stock',
@@ -175,6 +194,17 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     // credits it; the inventory side is the item's own account.
     event: 'inventory.stock_adjustment',
     lines: [line('inventory_adjustment', 'either', true)],
+  },
+  {
+    /*
+     * Internal Transfers (2026-10-04). Both legs are the accounts' own G/L
+     * accounts, so neither is asked here. Between two currencies each leg is
+     * valued at the ledger rate of the day, and what the bank's rate gave
+     * beyond or short of that is a gain or a loss — the same two accounts a
+     * loan repayment and an import's exchange difference use.
+     */
+    event: 'treasury.bank_transfer',
+    lines: [line('exchange_gain', 'credit'), line('exchange_loss', 'debit')],
   },
   // REQ-AP-001 §15.7 — loans. The bank side of each is the loan's own account
   // (a property of the loan, like a receipt's bank), so it is not asked here.

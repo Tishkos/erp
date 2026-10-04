@@ -45,7 +45,7 @@ ALTER TABLE "supplier_credit_memo"
 	ADD COLUMN IF NOT EXISTS "reversal_journal_entry_id" uuid REFERENCES "journal_entry"("id");
 --> statement-breakpoint
 
--- C-41-style four eyes: approved by somebody other than the raiser, unless the
+-- C-44-style four eyes: approved by somebody other than the raiser, unless the
 -- approver is the super user (0278's function).
 ALTER TABLE "supplier_credit_memo" DROP CONSTRAINT IF EXISTS "supplier_credit_memo_four_eyes";
 --> statement-breakpoint

@@ -22,6 +22,10 @@ import * as authz from './authorization';
 import * as audit from './audit';
 import * as inventory from './inventory';
 import { allocateDocumentNumber } from './numbering';
+import { registerPage, searchOf, type RegisterPage, type RegisterPaging } from './register-page';
+import { unitCostForFound } from './stock-operations';
+import type { Principal } from '../domain/permissions';
+import { can } from '../domain/permissions';
 
 export const PERMISSION_OBJECT = 'stock_count';
 const DOCUMENT_TYPE = 'stock_count';
@@ -492,7 +496,10 @@ export async function adjust(
             warehouseCode: count.warehouseCode,
             branchCode: count.branchCode,
             quantity: variance,
-            unitCostIqd: input.surplusUnitCostIqd ?? 0n,
+            // Stock found is valued as Item Reconciliation values it: at what
+            // the same item already costs here (IMPROVEMENT-002), unless the
+            // caller names a cost.
+            unitCostIqd: input.surplusUnitCostIqd ?? (await unitCostForFound(tx, line.itemCode, count.warehouseCode)),
             movementDate: input.adjustedOn,
             kind: 'count_adjustment',
             sourceDocumentType: DOCUMENT_TYPE,
@@ -565,3 +572,145 @@ export async function view(tx: Tx, id: string) {
   return load(tx, id);
 }
 
+// ---------------------------------------------------------------------------
+// The Stock Count screens — IMPROVEMENT-002 (the list and the record)
+// ---------------------------------------------------------------------------
+
+export interface CountListRow {
+  readonly id: string;
+  readonly countNo: string;
+  readonly status: string;
+  readonly branchCode: string;
+  readonly warehouseCode: string;
+  readonly warehouseName: string;
+  readonly scope: string;
+  readonly scopeFilter: string | null;
+  readonly plannedOn: string;
+  readonly countedOn: string | null;
+  readonly adjustedOn: string | null;
+  readonly lines: number;
+  /** Lines whose counted (or recounted) quantity differs from the book. */
+  readonly variances: number;
+}
+
+export interface CountListFilter extends RegisterPaging {
+  readonly search?: string | null;
+  readonly status?: string | null;
+  readonly warehouseCode?: string | null;
+}
+
+/** The register, fifty a page with the true count, under the reader's branches. */
+export async function listForScreen(tx: Tx, principal: Principal, filter: CountListFilter = {}): Promise<RegisterPage<CountListRow>> {
+  if (!can(principal, 'view', PERMISSION_OBJECT)) throw new Error('Not permitted to view stock counts.');
+  const parts = [
+    filter.status ? sql`c.status::text = ${filter.status}` : null,
+    filter.warehouseCode ? sql`c.warehouse_code = ${filter.warehouseCode}` : null,
+    searchOf([sql`c.count_no`, sql`c.warehouse_code`, sql`w.name`, sql`c.scope_filter`], filter.search),
+  ].filter((part): part is NonNullable<typeof part> => part !== null);
+  const from = sql`from stock_count c join warehouse w on w.code = c.warehouse_code
+                   ${parts.length ? sql`where ${sql.join(parts, sql` and `)}` : sql``}`;
+  return registerPage<CountListRow>({
+    paging: filter,
+    count: async () => Number(((await tx.execute(sql`select count(*)::int as n ${from}`)).rows[0] as { n: number }).n),
+    rows: async ({ limit, offset }) => {
+      const result = await tx.execute(sql`
+        select c.id, c.count_no as "countNo", c.status::text as status, c.branch_code as "branchCode",
+               c.warehouse_code as "warehouseCode", w.name as "warehouseName", c.scope::text as scope, c.scope_filter as "scopeFilter",
+               c.planned_on::text as "plannedOn", c.counted_on::text as "countedOn", c.adjusted_on::text as "adjustedOn",
+               (select count(*)::int from stock_count_line l where l.stock_count_id = c.id) as lines,
+               (select count(*)::int from stock_count_line l where l.stock_count_id = c.id
+                  and coalesce(l.recount_quantity, l.counted_quantity) is not null
+                  and coalesce(l.recount_quantity, l.counted_quantity) <> l.system_quantity) as variances
+          ${from}
+         order by c.planned_on desc, c.count_no desc
+         limit ${limit} offset ${offset}`);
+      return result.rows as unknown as CountListRow[];
+    },
+  });
+}
+
+export interface CountLineView {
+  readonly id: string;
+  readonly lineNo: number;
+  readonly itemCode: string;
+  readonly itemName: string | null;
+  readonly uomCode: string | null;
+  readonly systemQuantity: string;
+  readonly countedQuantity: string | null;
+  readonly recountQuantity: string | null;
+  readonly variance: string | null;
+  readonly serialNumber: string | null;
+  readonly batchNumber: string | null;
+  readonly note: string | null;
+  readonly movementId: string | null;
+}
+
+/** The count as its page shows it: the header with names, the lines with the items', or null. */
+export async function viewByNo(tx: Tx, countNo: string) {
+  const header = (
+    await tx.execute(sql`
+      select c.id, c.count_no as "countNo", c.status::text as status, c.branch_code as "branchCode",
+             c.warehouse_code as "warehouseCode", w.name as "warehouseName", c.scope::text as scope, c.scope_filter as "scopeFilter",
+             c.planned_on::text as "plannedOn", c.counted_on::text as "countedOn", c.adjusted_on::text as "adjustedOn",
+             c.approval_reason as "approvalReason", c.approved_at::text as "approvedAt", c.created_at::text as "createdAt",
+             c.planned_by as "plannedBy", pb.display_name as "plannedByName", cb.display_name as "countedByName", ab.display_name as "approvedByName"
+        from stock_count c
+        join warehouse w on w.code = c.warehouse_code
+        left join app_user pb on pb.id = c.planned_by
+        left join app_user cb on cb.id = c.counted_by
+        left join app_user ab on ab.id = c.approved_by
+       where c.count_no = ${countNo}`)
+  ).rows[0] as
+    | {
+        id: string; countNo: string; status: string; branchCode: string; warehouseCode: string; warehouseName: string;
+        scope: string; scopeFilter: string | null; plannedOn: string; countedOn: string | null; adjustedOn: string | null;
+        approvalReason: string | null; approvedAt: string | null; createdAt: string; plannedBy: string;
+        plannedByName: string | null; countedByName: string | null; approvedByName: string | null;
+      }
+    | undefined;
+  if (!header) return null;
+  const lines = (
+    await tx.execute(sql`
+      select l.id, l.line_no as "lineNo", l.item_code as "itemCode", i.name as "itemName", i.base_uom_code as "uomCode",
+             l.system_quantity::text as "systemQuantity", l.counted_quantity::text as "countedQuantity",
+             l.recount_quantity::text as "recountQuantity",
+             (coalesce(l.recount_quantity, l.counted_quantity) - l.system_quantity)::text as variance,
+             l.serial_number as "serialNumber", l.batch_number as "batchNumber", l.note, l.movement_id as "movementId"
+        from stock_count_line l
+        left join item i on i.code = l.item_code
+       where l.stock_count_id = ${header.id}::uuid
+       order by l.line_no`)
+  ).rows as unknown as CountLineView[];
+  return { count: header, lines };
+}
+
+/** A count that has not been adjusted is set aside, with a reason. */
+export async function cancel(tx: Tx, ctx: ActorContext, id: string, reason: string): Promise<void> {
+  const { count } = await load(tx, id);
+  await authz.authorize(ctx.principal, 'execute', PERMISSION_OBJECT, { branchCode: count.branchCode });
+  if (count.status === 'adjusted' || count.status === 'cancelled') {
+    throw new StockCountStateError(count.countNo, count.status, 'only a count not yet adjusted is cancelled.');
+  }
+  if (!reason.trim()) throw new Error('Say why the count is cancelled (§5.4).');
+  await tx.update(stockCount).set({ status: 'cancelled', updatedAt: new Date() }).where(eq(stockCount.id, id));
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'stock_count.cancelled',
+    objectType: PERMISSION_OBJECT,
+    objectId: id,
+    branchCode: count.branchCode,
+    before: { status: count.status },
+    after: { status: 'cancelled' },
+    reason,
+    outcome: 'success',
+  });
+}
+
+/** The warehouses a count can be planned in: the active ones of the reader's branches. */
+export async function warehousesFor(tx: Tx, principal: Principal) {
+  const result = await tx.execute(sql`
+    select w.code, w.name, w.branch_code as "branchCode" from warehouse w
+     where w.active and not w.is_transit ${principal.isSuperUser ? sql`` : sql`and app_branch_allowed(w.branch_code)`}
+     order by w.code`);
+  return result.rows as unknown as { code: string; name: string; branchCode: string }[];
+}

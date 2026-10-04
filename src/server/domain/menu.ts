@@ -101,35 +101,50 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ],
   },
   {
+    /*
+     * Sales & Receivables — the module's one heading, in the order a
+     * receivable lives (by direction, 2026-10-04): the invoice that creates
+     * it, the receipt that pays it, the credits a customer holds, the
+     * statement and the ageing that read it, the notes and returns that
+     * correct it, and the reconciliation that proves it to the ledger.
+     *
+     * Customers are Master Data's — "Customers belong only in Master Data" —
+     * so the customer master is listed there, once, and every screen here
+     * reads it. Its route did not move (D-FX-1).
+     *
+     * Credits & Advances and Customer Reconciliation are Appendix A's
+     * Allocations and Reconciliation (finance_ar), brought here and given
+     * routes; the rest of Finance — Receivables stays where it was.
+     */
     key: 'sales',
     ordinal: 3,
     items: [
-      page('sales_dashboard', 'sales_dashboard'),
-      page('customers', 'business_partner', '/sales/customers'),
-      // A customer's account statement, beside the customer whose account it
-      // is. Appendix A filed it under Receivables; the sponsor asked for it
-      // here (2026-09-23), which is the same refinement that moved Customers
-      // out of Master Data — the screen sits under the heading whose work it
-      // belongs to, and still only once. It grants over `business_partner`
-      // because that is the record it reads and the object the page
-      // authorises on; an object nobody can hold would hide the screen from
-      // everyone but a Super User.
+      page('ar_invoices', 'ar_invoice'),
+      page('customer_receipts', 'customer_receipt'),
+      // An object anybody who reads receipts already holds: the credits are
+      // receipts' remainders first, and applying one is the receipt's own
+      // `execute`.
+      page('ar_allocations', 'customer_receipt', '/sales/customer-credits'),
+      // A customer's account statement. Appendix A filed it under Receivables;
+      // it grants over `business_partner` because that is the record it reads
+      // and the object the page authorises on.
       page('ar_statements', 'business_partner', '/sales/customer-statements'),
+      // The ageing, beside the invoices it ages (2026-09-30).
+      page('ar_open_items', 'ar_invoice', '/sales/receivables'),
+      page('customer_credit_memos', 'customer_credit_memo', '/sales/credit-notes'),
+      page('sales_returns', 'sales_return'),
+      // The subledger against the control account. Read under the invoices'
+      // object, as the ageing's tie is.
+      page('ar_reconciliation', 'ar_invoice', '/sales/customer-reconciliation'),
+      // Not built yet — kept in the tree (Appendix A), hidden until they are.
+      page('sales_dashboard', 'sales_dashboard'),
       page('customer_price_lists', 'price_list'),
       page('sales_orders', 'sales_order'),
       page('reservations', 'stock_reservation'),
       page('pick_lists', 'pick_list'),
       page('delivery_notes', 'delivery_note'),
-      page('ar_invoices', 'ar_invoice'),
-      // Beside the invoices it ages. Appendix A filed it under Receivables; it
-      // sits here for the reason the Account Statement does — the screen
-      // belongs under the heading whose work it is (2026-09-30).
-      page('ar_open_items', 'ar_invoice', '/sales/receivables'),
       page('cash_sales', 'cash_sale'),
-      page('customer_receipts', 'customer_receipt'),
       page('credit_control', 'credit_control'),
-      page('sales_returns', 'sales_return'),
-      page('customer_credit_memos', 'customer_credit_memo'),
       page('warranty_inquiry', 'warranty'),
       page('sales_reports', 'sales_report'),
       page('sales_settings', 'sales_settings'),
@@ -205,24 +220,31 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ],
   },
   {
+    /*
+     * IMPROVEMENT-002 (sponsor, 2026-10-04) — the twelve inventory screens, in
+     * the order the work is done: what is where, what came in and went out,
+     * the counts and corrections, the checks and the valuations. Items, units
+     * and warehouses are master data and live there (one screen, one home).
+     * The unbuilt placeholders (quarantine, returns, damaged goods, serial /
+     * batch, reports, settings) are off the tree until a requirement names
+     * them: the quarantine, damaged and returns buckets are Availability's
+     * columns, and the reports are the three valuation screens.
+     */
     key: 'inventory',
     ordinal: 5,
     items: [
       page('availability', 'inventory_movement', '/inventory/availability'),
       page('opening_stock', 'opening_stock', '/inventory/opening-stock'),
+      page('stock_receipts', 'stock_movement', '/inventory/stock-receipts'),
+      page('stock_issues', 'stock_movement', '/inventory/stock-issues'),
+      page('transfer_requests', 'warehouse_transfer', '/inventory/transfers'),
       page('stock_movements', 'stock_movement', '/inventory/stock-movements'),
       page('stock_ledger', 'stock_movement', '/inventory/stock-ledger'),
-      page('transfer_requests', 'warehouse_transfer', '/inventory/transfers'),
-      page('quarantine', 'quarantine'),
-      page('inventory_returns', 'inventory_return'),
-      page('damaged_goods', 'damage_report'),
-      page('serial_batch_tracking', 'serial_batch'),
-      page('items', 'item', '/inventory/items'),
-      page('uom', 'uom', '/inventory/uom'),
+      page('stock_count', 'stock_count', '/inventory/stock-count'),
       page('stock_reconciliation', 'stock_reconciliation', '/inventory/stock-reconciliation'),
+      page('inventory_checks', 'inventory_movement', '/inventory/checks'),
+      page('inventory_valuation', 'inventory_movement', '/inventory/valuation'),
       page('fifo_valuation', 'fifo_valuation'),
-      page('inventory_reports', 'inventory_report'),
-      page('inventory_settings', 'inventory_settings'),
     ],
   },
   {
@@ -261,21 +283,59 @@ export const MENU: readonly MenuSection[] = Object.freeze([
      */
     key: 'logistics_customs',
     ordinal: 23,
+    /*
+     * REQ-LOG-001 — the owner's four Logistics headings (2026-10-04), fifteen
+     * items in his order. Logistics owns nothing financial: the registers of
+     * duties, freight and landed cost read the import's charges and locks and
+     * link to the import; their menu objects (`customs_duty`, `freight_cost`,
+     * `landed_cost_register`, `cost_allocation`) are read-only, so a role
+     * given a Logistics heading gains no power over the money (0300). New
+     * screens live under /logistics/…; the old ones keep their routes (D-FX-1).
+     */
     items: [
       page('pds', 'customs_pd', '/payables/pd'),
+      page('customs_declarations', 'customs_declaration', '/logistics/customs-declarations'),
       { key: 'asycuda_update', object: 'customs_pd', verb: 'import', href: '/payables/pd/asycuda' },
+      page('customs_duties', 'customs_duty', '/logistics/customs-duties'),
+      page('customs_documents', 'customs_pd', '/logistics/customs-documents'),
     ],
   },
   {
     key: 'logistics_shipping',
     ordinal: 24,
     items: [
+      page('import_shipments', 'bill_of_lading', '/logistics/shipments'),
       page('shipments', 'bill_of_lading', '/payables/shipments'),
       page('containers', 'shipment_container', '/payables/containers'),
-      page('in_transit', 'in_transit', '/inventory/in-transit'),
+      page('ports_routes', 'port', '/logistics/ports'),
+      page('freight_costs', 'freight_cost', '/logistics/freight-costs'),
+      page('shipment_documents', 'bill_of_lading', '/logistics/shipment-documents'),
     ],
   },
   {
+    // REQ-LOG-001 — what is owned and not yet on hand. In-Transit Inventory
+    // absorbed Invoice Status Tracking; /inventory/in-transit redirects here.
+    key: 'logistics_in_transit',
+    ordinal: 29,
+    items: [
+      page('in_transit', 'in_transit', '/logistics/in-transit'),
+      page('shipment_tracking', 'shipment_container', '/logistics/shipment-tracking'),
+    ],
+  },
+  {
+    // REQ-LOG-001 — the landed cost, read: the engine and its actions stay on
+    // the import page (`/payables/[payableNo]#landed-cost`).
+    key: 'logistics_landed_costs',
+    ordinal: 30,
+    items: [
+      page('landed_costs', 'landed_cost_register', '/logistics/landed-costs'),
+      page('cost_allocation', 'cost_allocation', '/logistics/cost-allocation'),
+    ],
+  },
+  {
+    // The client logistics jobs (Phase 10, Appendix A menu 7). No screen yet;
+    // REQ-LOG-001 Q3 took them out of the Logistics dropdown (`erp-shell.tsx`)
+    // and kept them here, so their routes and objects stay reserved.
     key: 'logistics',
     ordinal: 7,
     items: [
@@ -374,11 +434,11 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     items: [
       page('customer_ledger', 'customer_ledger'),
       page('ar_receipts', 'customer_receipt'),
-      page('ar_allocations', 'ar_allocation'),
+      // Allocations and Reconciliation moved to Sales & Receivables
+      // (2026-10-04), where the receivable is worked.
       page('credit_limits', 'credit_limit'),
       page('collections', 'collection'),
       page('ar_ageing', 'ar_ageing'),
-      page('ar_reconciliation', 'ar_reconciliation'),
     ],
   },
   {
@@ -510,6 +570,9 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'master_data',
     ordinal: 18,
     items: [
+      // "Customers belong only in Master Data" (2026-10-04). The route is the
+      // one every customer link already uses (D-FX-1).
+      page('customers', 'business_partner', '/sales/customers'),
       page('chart_of_accounts', 'chart_of_account', '/master-data/chart-of-accounts'),
       page('statement_mapping', 'financial_statement', '/master-data/statement-mapping'),
       page('currencies_rates', 'exchange_rate', '/master-data/exchange-rates'),
@@ -546,7 +609,12 @@ export const MENU: readonly MenuSection[] = Object.freeze([
   {
     key: 'master_inventory',
     ordinal: 28,
-    items: [page('warehouses', 'warehouse', '/master-data/warehouses')],
+    // Items and units keep the routes they were derived under (D-FX-1).
+    items: [
+      page('items', 'item', '/inventory/items'),
+      page('uom', 'uom', '/inventory/uom'),
+      page('warehouses', 'warehouse', '/master-data/warehouses'),
+    ],
   },
   {
     key: 'administration',

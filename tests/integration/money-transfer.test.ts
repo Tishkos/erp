@@ -13,6 +13,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { asApp, ownerPool, rejection, resetTestData } from './setup';
+import { fundLedger, openingFundsAccount } from './funds';
 import { withScope } from '@/server/db/client';
 import * as client from '@/server/services/money-transfer-client';
 import * as mt from '@/server/services/money-transfer';
@@ -1189,6 +1190,19 @@ describe('09.9 — returned transfers and refunds (§12.6)', () => {
         reason: 'Beneficiary account closed',
       }),
     );
+
+    // The company absorbs the 25,000 charge, so refunding the client's whole
+    // 15,000,000 needs that much more in the bank than the client put in. C-20
+    // counts the reversed transfer beside its return (0290, REQ-ACC-001 E-3);
+    // before, it overlooked the original and let this refund overdraw the bank.
+    await fundLedger({
+      glAccountId: world.accounts.bank,
+      contraAccountId: await openingFundsAccount(),
+      amountIqd: '1000000',
+      branchCode: BRANCH,
+      userId: world.manager.principal.userId,
+      on: '2026-02-01',
+    });
 
     return { account, transfer, expense, recognition };
   }

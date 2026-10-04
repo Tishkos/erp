@@ -314,6 +314,8 @@ export async function resetTestData(): Promise<void> {
   await client.query('truncate project_milestone_history');
   await client.query('delete from project_activity_dependency');
   await client.query('delete from project_activity');
+  // IMPROVEMENT-002 (0286) — the supplements name the settlement, the issue line, the cost row and the departure.
+  await client.query('delete from project_settlement_supplement');
   // REQ-PM-001 PM-3 — the material issues name their movements and cost rows.
   await client.query('delete from project_material_issue_line');
   await client.query('delete from project_material_issue');
@@ -429,6 +431,12 @@ export async function resetTestData(): Promise<void> {
   await client.query('delete from payment_proposal');
   await client.query('delete from bank_transfer');
   await client.query('delete from cash_count');
+
+  // Receivables (0280) — credit applications before the receipts, memos,
+  // notes and invoices they join; notes before the invoices they correct.
+  // Applications are append-only in production; the guard is lifted here.
+  await client.query('delete from customer_credit_application');
+  await client.query('delete from customer_note');
 
   // Collections and write-offs before the invoices they hang off. The activity
   // log is append-only in production (blueprint 5.4); the guard is lifted here.
@@ -593,6 +601,9 @@ export async function resetTestData(): Promise<void> {
     await client.query(`update pay_component set expense_account_id = null, liability_account_id = null, active = true, taxable = code in ('BASE', 'HOUSING', 'TRANSPORT', 'OVERTIME'),
         default_value = case code when 'SS_EMPLOYEE' then 5 when 'SS_EMPLOYER' then 12 else 0 end`);
     // Stage 6 (0235) — what the loans funded, their schedules, the loans.
+    // 0275 and 0276 — repayments and revaluations name their loan.
+    await client.query('delete from bank_loan_repayment');
+    await client.query('delete from bank_loan_revaluation');
     await client.query('delete from bank_loan_allocation');
     await client.query('delete from bank_loan_instalment');
     await client.query('delete from bank_loan');
@@ -610,8 +621,15 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from shipment_container');
     await client.query('delete from bill_of_lading');
     await client.query('delete from port where created_by is not null');
+    // REQ-LOG-001 — a seeded port retired by a test is back in use for the next.
+    await client.query('update port set active = true where created_by is null');
     await client.query('delete from container_status where created_by is not null');
     await client.query('update container_status set active = true where created_by is null');
+    // REQ-LOG-001 (0301) — the customs declarations, which name their PD.
+    // Never deleted in production (trigger); lifted here only.
+    await client.query('alter table customs_declaration disable trigger customs_declaration_no_delete');
+    await client.query('delete from customs_declaration');
+    await client.query('alter table customs_declaration enable trigger customs_declaration_no_delete');
     // Stage 4 (0233) — the PDs and their history (append-only in production).
     await client.query('truncate customs_pd_status_history');
     await client.query('delete from customs_pd');
@@ -626,6 +644,7 @@ export async function resetTestData(): Promise<void> {
     await client.query('truncate recurring_contract_amendment');
     // Stage 7 (0236) — the locks and what they did to each layer (append-
     // only in production); the charges name their lock, so they go between.
+    await client.query('delete from landed_cost_departure');
     await client.query('delete from landed_cost_layer_adjustment');
     await client.query('delete from landed_cost_charge');
     await client.query('delete from landed_cost_lock');
@@ -750,6 +769,10 @@ export async function resetTestData(): Promise<void> {
       delete from inventory_movement;
     `);
 
+    // REQ-ACC-001 — a recurring journal's runs name the journals they raised;
+    // the templates name their accounts and departments.
+    await client.query('truncate recurring_journal_run');
+    await client.query('delete from recurring_journal_line; delete from recurring_journal;');
     await client.query('delete from journal_line; delete from journal_entry;');
     await client.query(`
     `);
@@ -924,10 +947,14 @@ export async function resetTestData(): Promise<void> {
                          'PAYABLE_LOCAL_GOODS', 'PAYABLE_ADVANCE', 'RECURRING_CONTRACT',
                          -- REQ-AP-001 Stage 3, migration 0232.
                          'PAYMENT_APPLICATION', 'BANK_CODE',
+                         -- REQ-ACC-001, migrations 0291 and 0292.
+                         'RECURRING_JOURNAL', 'TAX_CODE',
                          -- REQ-AP-001 Stage 5, migration 0234.
                          'CONTAINER_RECEIPT', 'PORT_CODE',
                          -- IMPROVEMENT-002, migration 0268 — the ASYCUDA reading as a document.
                          'ASYCUDA_RUN',
+                         -- REQ-LOG-001, migration 0301 — the customs declaration.
+                         'CUSTOMS_DECLARATION',
                          -- REQ-AP-001 Stage 6, migration 0235.
                          'LOAN',
                          -- REQ-HR-001 Stage HR-1, migration 0241.
@@ -935,7 +962,9 @@ export async function resetTestData(): Promise<void> {
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',
-                         'SALES_RETURN', 'CUSTOMER_CREDIT_MEMO', 'AR_WRITE_OFF', 'CASH_COUNT', 'BANK_TRANSFER',
+                         'SALES_RETURN', 'CUSTOMER_CREDIT_MEMO', 'AR_WRITE_OFF',
+                         -- Receivables, migration 0280.
+                         'CUSTOMER_CREDIT_NOTE', 'CUSTOMER_DEBIT_NOTE', 'CASH_COUNT', 'BANK_TRANSFER',
                          'PAYMENT_PROPOSAL', 'PAYMENT_BATCH', 'BANK_STATEMENT', 'CASH_ADVANCE', 'BANK_RECONCILIATION', 'OTHER_RECEIPT',
                          -- Phase 09, seeded by migrations 0120-0125.
                          'MT_CLIENT_ACCOUNT', 'MT_CLIENT_DEPOSIT', 'MONEY_TRANSFER', 'MT_EXPENSE',

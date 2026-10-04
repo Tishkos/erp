@@ -573,7 +573,7 @@ describe('07.4 gate · an inter-account transfer is one balanced journal (§17)'
           }),
         ),
       ),
-    ).toMatch(/accounts_differ/);
+    ).toMatch(/already in that account|accounts_differ/);
   });
 
   it('refuses a transfer the source cannot fund', async () => {

@@ -26,9 +26,10 @@ rule), `view` (a read-only rendering of another record's data: printer only).
 | Record page | P | A | N | H | Print model | Parties → profile | Owner | Status |
 |---|---|---|---|---|---|---|---|---|
 | `payables/invoices/[invoiceNo]` — purchase invoice (the model) | ✅ | ✅ | ✅ | ✅ | `purchase_invoice` | supplier: text ❌; import: link ✅ | payables | owner module |
-| `sales/ar-invoices/[invoiceNo]` — sales invoice | ◐ | ❌ | ❌ | ◐ | `sales_invoice` | customer: text ❌; journal, G/L accounts: links ✅ | receivables | owner module |
-| `sales/customer-receipts/[receiptNo]` | ◐ | ❌ | ❌ | ◐ | `customer_receipt` | customer, bank/cash account: text ❌ | receivables | owner module |
-| `sales/sales-returns/[returnNo]` | ◐ | ❌ | ❌ | ◐ | `sales_return` | customer, invoice: text ❌ | receivables | owner module |
+| `sales/ar-invoices/[invoiceNo]` — sales invoice | ✅ | ✅ | ✅ | ✅ | `sales_invoice` | customer: `ProfileLink` ✅; journal, G/L accounts: links ✅ | receivables | done |
+| `sales/customer-receipts/[receiptNo]` | ✅ | ✅ | ✅ | ✅ | `customer_receipt` | customer, bank/cash account: `ProfileLink` ✅; invoices, debit notes: links ✅ | receivables | done |
+| `sales/sales-returns/[returnNo]` | ✅ | ✅ | ✅ | ✅ | `sales_return` | customer: `ProfileLink` ✅; invoice: link ✅ | receivables | done |
+| `sales/credit-notes/[noteNo]` — customer credit / debit note, and the credit memo (REQ-AR-001) | ✅ | ✅ | ✅ | ✅ | `customer_note` | customer: `ProfileLink` ✅; invoice, return, journal: links ✅ | receivables | done |
 | `payables/supplier-payments/[paymentNo]` | ◐ | ❌ | ❌ | ◐ | `supplier_payment` | supplier, bank/cash account: text ❌; application: link ✅ | payables | owner module |
 | `payables/goods-returns/[returnNo]` — purchase return | ◐ | ❌ | ❌ | ◐ | `purchase_return` | supplier, invoice: text ❌ | payables | owner module |
 | `payables/advances/[advanceNo]` — supplier advance | ❌ | ❌ | ❌ | ◐ | none | import, invoice: links ✅; supplier: text ❌ | payables | owner module |
@@ -39,20 +40,27 @@ rule), `view` (a read-only rendering of another record's data: printer only).
 | `payables/[payableNo]` — import application | ✅ | ✅ | ✅ | ✅ | `import_application` | supplier: text ❌; B/L, container, PD, invoice, loan: links ✅ | payables | owner module |
 | `treasury/loans/[loanNo]` — bank loan (the party-link model) | ❌ | ✅ | ❌ | ✅ | **none** | bank account: link ✅; bank: text ❌ | payables | owner module |
 | `treasury/deposits/[depositNo]` | ❌ | ✅ | ❌ | ✅ | none | journal: link ✅; bank/cash account: text ❌ | payables | owner module |
-| `finance/journals/[entryNo]` | ◐ | ✅ | ❌ | ◐ (own audit page) | `journal_entry` | G/L accounts: text ❌ | accounting | owner module |
-| `inventory/opening-stock/[documentNo]` (record framework) | ◐ | ❌ | ❌ | ◐ | `opening_stock` | warehouse, items: text ❌ | inventory | owner module |
+| `finance/journals/[entryNo]` | ✅ | ✅ | ✅ | ✅ | `journal_entry` | G/L accounts, reversal journal: `ProfileLink` ✅; recurring template: link ✅ | accounting | done |
+| `treasury/transfers/[transferNo]` — internal transfer | ✅ | ✅ | ✅ | ✅ | `internal_transfer` | bank/cash accounts, G/L accounts, journals: `ProfileLink` ✅ | accounting | done |
+| `treasury/bank-reconciliation/[statementNo]` — statement + reconciliation | ✅ | ✅ | ✅ | ✅ | `bank_reconciliation` | account, G/L account, every journal: `ProfileLink` ✅ | accounting | done |
+| `finance/recurring-journals/[templateNo]` | ✅ | ✅ | ✅ | ✅ | `recurring_journal` | G/L accounts, journals raised: `ProfileLink` ✅ | accounting | done |
+| `master-data/tax-codes/[code]` | ✅ | ✅ | ✅ | ✅ | `tax_code` | G/L account: `ProfileLink` ✅ | accounting | done |
+| `finance/closing` — the period's close (the period is the record) | ✅ | ✅ | ✅ | ✅ | `period_close` | — (checks link their screens) | accounting | done |
+| `inventory/opening-stock/[documentNo]` | ✅ | ✅ | ✅ | ✅ | `opening_stock` | warehouse, items: links ✅ | inventory | done (2026-10-04) |
+| `inventory/stock-count/[countNo]` — stock count (new) | ✅ | ✅ | ✅ | ✅ | `stock_count` | warehouse, items: links ✅ | inventory | done (2026-10-04) |
 
 ## Logistics documents
 
 | Record page | P | A | N | H | Print model | Parties → profile | Owner | Status |
 |---|---|---|---|---|---|---|---|---|
-| `payables/shipments/[blNo]` — B/L | ✅ | ✅ | ❌ | ✅ | `bill_of_lading` | import, containers: links ✅; supplier, port: text ❌ | logistics | owner module |
-| `payables/containers/[containerNo]` | ❌ | ✅ | ❌ | ✅ | none | import, B/L: links ✅; supplier, warehouse: text ❌ | logistics | owner module |
-| `payables/pd/[pdNo]` — PD | ❌ | ✅ | ◐ (box + `last_note`) | ✅ | none | import, applications: links ✅; supplier, bank: text ❌ | logistics | owner module |
-| `payables/pd/asycuda/[runNo]` — ASYCUDA reading | ✅ | ✅ | ❌ | ✅ | `asycuda_reading` | PDs: links ✅ | logistics | owner module |
+| `payables/shipments/[blNo]` — B/L | ✅ | ✅ | ✅ | ✅ | `bill_of_lading` | import, supplier, port, containers, warehouse: `ProfileLink` ✅ | logistics | done (REQ-LOG-001) |
+| `payables/containers/[containerNo]` | ✅ | ✅ | ✅ | ✅ | `shipment_container` **(new)**; the receipt prints as `container_receipt` from its field | import, supplier, B/L, warehouse, PD: `ProfileLink` ✅ | logistics | done |
+| `payables/pd/[pdNo]` — PD | ✅ | ✅ | ✅ | ✅ | `customs_pd` **(new)** | import, supplier, bank, PDs, applications, B/Ls, containers: `ProfileLink` ✅ | logistics | done |
+| `payables/pd/asycuda/[runNo]` — ASYCUDA reading | ✅ | ✅ | ✅ | ✅ | `asycuda_reading` | PDs, imports: `ProfileLink` ✅ | logistics | done |
+| `logistics/customs-declarations/[declarationNo]` — customs declaration | ✅ | ✅ | ✅ | ✅ | `customs_declaration` **(new)** | import, supplier, PD: `ProfileLink` ✅ | logistics | done |
+| `logistics/ports/[code]` — port (profile) | ✅ | ✅ | ✅ | ✅ | `port` **(new)** | B/Ls, imports, suppliers, containers: `ProfileLink` ✅ | logistics | done |
 
-The B/L, the PD, the container and the ASYCUDA reading draw the clock before
-the printer on `main`; the rule's order is printer, paperclip, notes, clock.
+All six draw printer, paperclip, notes, clock in the rule's order (REQ-LOG-001, 2026-10-04).
 
 ## Project System (shared, Phase 2 — done on `feat/shared-module`)
 
@@ -96,17 +104,18 @@ The employee link on an HR record is shown only to readers who hold `view` on
 |---|---|---|---|---|---|
 | `master-data/business-partners/[code]` (`/sales/customers/…`, `/payables/suppliers/…`) | `customer`, `supplier` | ❌ | ◐ | receivables / payables | owner module |
 | `master-data/banks/[code]` | `bank` | ❌ | ◐ | accounting | owner module |
-| `master-data/bank-accounts/[code]`, `master-data/cash-accounts/[code]` | `bank_account`, `cash_account` | ❌ | ◐ | accounting | owner module |
+| `master-data/bank-accounts/[code]`, `master-data/cash-accounts/[code]` | `bank_account`, `cash_account` | ❌ | ◐ (G/L account and bank: `ProfileLink` ✅) | accounting | owner module |
 | `master-data/chart-of-accounts/[code]` | `gl_account` | ❌ | ◐ (record framework) | accounting | owner module |
-| `master-data/items/[code]` (`/inventory/items/…`) | `item` | ❌ | ◐ | inventory | owner module |
-| `master-data/warehouses/[code]` | `warehouse` | ❌ | ◐ | inventory | owner module |
+| `master-data/items/[code]` (`/inventory/items/…`) | `item` | ✅ | ✅ | inventory | done (2026-10-04) |
+| `master-data/warehouses/[code]` | `warehouse` | ✅ | ✅ | inventory | done (2026-10-04) |
 | `hr/employees/[employeeNo]` | `employee` | ✅ | ✅ | shared | profile |
 | `projects/[code]` | `project` | ✅ | ✅ | shared | profile |
 | `master-data/branches/[code]`, `master-data/departments/[code]`, `master-data/cost-centres/[code]` | `branch`, `department`, `cost_centre` | ❌ | ◐ (`AuditLogButton` + `RecordHistory`) | shared | profile (history only — no record links to a note on them yet) |
 | `master-data/payment-terms/[code]`, `master-data/payment-methods/[code]` | `payment_term`, `payment_method` | ❌ | ◐ | shared | profile |
 | `hr/positions/[code]`, `hr/departments/[code]` | `position` (`department` resolves to master-data) | ❌ | ◐ | shared | profile |
 | `administration/users/[id]`, `administration/roles/[code]` | `user` | ❌ | ◐ | shared | profile (platform settings, not records) |
-| — | `port`, `carrier` | | missing — **logistics builds it** | logistics | owner module |
+| `logistics/ports/[code]` | `port` | ✅ | ✅ | logistics | done (four doors) |
+| — | `carrier` | | missing — no carrier record exists (a B/L's shipping line is text) | logistics | not delivered |
 | — | `currency`, `fixed_asset`, `investment` | | missing — those modules have no delivered screens; nothing to link from yet | shared | not delivered |
 
 ## Export keys added on `feat/shared-module`

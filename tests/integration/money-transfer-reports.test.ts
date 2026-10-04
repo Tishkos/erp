@@ -11,6 +11,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ownerPool, resetTestData } from './setup';
+import { fundLedger, openingFundsAccount } from './funds';
 import { withScope } from '@/server/db/client';
 import * as client from '@/server/services/money-transfer-client';
 import * as mt from '@/server/services/money-transfer';
@@ -68,6 +69,24 @@ async function fundedAccount() {
 }
 
 /** The worked example, sent and charged. */
+/**
+ * The company absorbs the transfer's 25,000 bank charge, so refunding the
+ * client's whole 15,000,000 needs that much more in the bank than the client
+ * put in. C-20 counts the reversed transfer beside its return (0290,
+ * REQ-ACC-001 E-3); before, it overlooked the original and let the refund
+ * overdraw the bank.
+ */
+async function fundForAbsorbedCharge() {
+  await fundLedger({
+    glAccountId: world.accounts.bank,
+    contraAccountId: await openingFundsAccount(),
+    amountIqd: '1000000',
+    branchCode: BRANCH,
+    userId: world.manager.principal.userId,
+    on: '2026-02-01',
+  });
+}
+
 async function sentTransfer(accountId: string) {
   await withScope(scopeOf(world.manager), (tx) =>
     client.confirmFunding(tx, world.manager, accountId, iqd('13050000')),
@@ -151,6 +170,7 @@ describe('§12.7 acceptance 1 — every transfer and refund reconciles', () => {
         reason: 'Beneficiary account closed',
       }),
     );
+    await fundForAbsorbedCharge();
     await withScope(scopeOf(world.manager), (tx) =>
       mt.refundClient(tx, world.manager, transfer.id, { refundDate: '2026-02-21' }),
     );
@@ -171,13 +191,16 @@ describe('§12.7 acceptance 1 — every transfer and refund reconciles', () => {
     );
     expect(gl[0].balance).toBe('0.0000');
 
-    // And the bank is down by exactly the charge the company absorbed (§12.6).
+    // And the bank is down by exactly the charge the company absorbed (§12.6):
+    // the 1,000,000 put in for it, less 25,000. (It used to end at −25,000 —
+    // an overdraft C-20 forbids, let through while the guard overlooked the
+    // reversed original; REQ-ACC-001 E-3.)
     const { rows: bank } = await ownerPool.query(
       `select coalesce(sum(debit_iqd) - sum(credit_iqd), 0)::numeric(19,4)::text as balance
          from journal_line where account_id = $1`,
       [world.accounts.bank],
     );
-    expect(bank[0].balance).toBe('-25000.0000');
+    expect(bank[0].balance).toBe('975000.0000');
   });
 });
 
@@ -278,6 +301,7 @@ describe('09.11 — the §12.7 report set', () => {
         reason: 'Beneficiary account closed',
       }),
     );
+    await fundForAbsorbedCharge();
     await withScope(scopeOf(world.manager), (tx) =>
       mt.refundClient(tx, world.manager, transfer.id, { refundDate: '2026-02-21' }),
     );

@@ -59,6 +59,7 @@ import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
 import * as inventory from './inventory';
+import * as departures from './inventory-departures';
 import * as creditMemos from './customer-credit-memo';
 import * as statuses from './statuses';
 import { allocateDocumentNumber } from './numbering';
@@ -769,6 +770,44 @@ export async function accept(
     movementIds.push(movement.movementId);
     valueIqd += lineValue;
 
+    // IMPROVEMENT-002 — units sold before a landed-cost lock bring the lock's
+    // share back with them: the return layer is raised to the restated cost
+    // and the share comes back from the cost of sales it went to (the
+    // inventory layer's `returnLandedShare`). A sale no lock reached posts
+    // nothing more.
+    if (movement.layerId) {
+      const sold = await tx
+        .select({ id: inventoryMovement.id, quantity: inventoryMovement.quantity })
+        .from(inventoryMovement)
+        .where(
+          and(
+            eq(inventoryMovement.kind, 'delivery'),
+            line.deliveryNoteLineId
+              ? and(eq(inventoryMovement.sourceDocumentType, 'delivery_note'), eq(inventoryMovement.sourceLineId, line.deliveryNoteLineId))
+              : and(eq(inventoryMovement.sourceDocumentType, 'ar_invoice'), eq(inventoryMovement.sourceLineId, line.arInvoiceLineId)),
+            sql`not exists (select 1 from inventory_movement x where x.reverses_movement_id = ${inventoryMovement.id})`,
+          ),
+        )
+        .orderBy(inventoryMovement.createdAt);
+      // Spread over the line's deliveries by what each took; the last takes the remainder.
+      const delivered = sold.map((row) => -parseQuantity(row.quantity));
+      const total = delivered.reduce((sum, quantity) => sum + quantity, 0n);
+      if (total > 0n) {
+        let given = 0n;
+        const units = sold.map((row, index) => {
+          const quantity = index === sold.length - 1 ? accepted - given : (accepted * delivered[index]!) / total;
+          given += quantity;
+          return { departedMovementId: row.id, quantity, toLayerId: movement.layerId! };
+        });
+        await departures.returnLandedShare(tx, ctx, {
+          returnMovementId: movement.movementId,
+          units,
+          postingDate: returnDoc.receivedOn ?? returnDoc.requestedOn,
+          description: `Landed cost returned with Sales Return ${returnDoc.returnNo} — ${line.itemCode}`,
+        });
+      }
+    }
+
     await tx
       .update(salesReturnLine)
       .set({ inventoryMovementId: movement.movementId })
@@ -960,6 +999,22 @@ export async function list(tx: Tx) {
     .leftJoin(businessPartner, eq(businessPartner.id, salesReturn.customerId))
     .leftJoin(arInvoice, eq(arInvoice.id, salesReturn.arInvoiceId))
     .orderBy(desc(salesReturn.requestedOn), desc(salesReturn.returnNo));
+}
+
+/** Block 9's header for one return: its customer and the invoice it answers (Receivables, 2026-10-04). */
+export async function partiesOf(tx: Tx, id: string) {
+  const [row] = await tx
+    .select({
+      customerCode: businessPartner.code,
+      customerName: businessPartner.legalName,
+      invoiceNo: arInvoice.invoiceNo,
+    })
+    .from(salesReturn)
+    .leftJoin(businessPartner, eq(businessPartner.id, salesReturn.customerId))
+    .leftJoin(arInvoice, eq(arInvoice.id, salesReturn.arInvoiceId))
+    .where(eq(salesReturn.id, id))
+    .limit(1);
+  return row ?? null;
 }
 
 /** The return a person is looking at, found by the number printed on it. */

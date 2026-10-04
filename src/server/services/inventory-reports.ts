@@ -183,6 +183,60 @@ export async function valuation(
   return (result as unknown as { rows: ValuationRow[] }).rows;
 }
 
+export interface WarehouseSummaryRow {
+  readonly warehouseCode: string;
+  readonly warehouseName: string;
+  readonly branchCode: string;
+  readonly isTransit: boolean;
+  /** Items with a non-zero ledger quantity in the warehouse. */
+  readonly items: number;
+  /** Σ the ledger's quantity over those items, in their base units. */
+  readonly units: string;
+  /** Σ remaining × unit cost over the warehouse's layers. */
+  readonly valueIqd: string;
+  /** Items at or below their `min_stock_level`. */
+  readonly lowStock: number;
+  /** Items whose ledger quantity is below zero. */
+  readonly negativeStock: number;
+  readonly lastMovementOn: string | null;
+}
+
+/**
+ * IMPROVEMENT-002 — the Warehouses Report's summary: one row per warehouse
+ * the reader may see, from the same ledger and layers the item rows are
+ * made of. Low stock reads `item.min_stock_level` (0288); nothing is low
+ * where no level is set.
+ */
+export async function warehouseSummary(tx: Tx, principal: Principal): Promise<WarehouseSummaryRow[]> {
+  assertCan(principal, 'view', PERMISSION_OBJECT);
+  const result = await tx.execute(sql`
+    with ledger as (
+      select m.warehouse_code, m.item_code, sum(m.quantity) as quantity, max(m.movement_date) as last_on
+        from inventory_movement m
+       group by m.warehouse_code, m.item_code
+    ),
+    layers as (
+      select l.warehouse_code, sum(l.remaining_quantity * l.unit_cost_iqd) as value_iqd
+        from cost_layer l where l.remaining_quantity > 0
+       group by l.warehouse_code
+    )
+    select w.code as "warehouseCode", w.name as "warehouseName", w.branch_code as "branchCode", w.is_transit as "isTransit",
+           count(g.item_code) filter (where g.quantity <> 0)::int as items,
+           coalesce(sum(g.quantity), 0)::text as units,
+           coalesce(round(v.value_iqd, 4), 0)::text as "valueIqd",
+           count(g.item_code) filter (where i.min_stock_level is not null and g.quantity <= i.min_stock_level)::int as "lowStock",
+           count(g.item_code) filter (where g.quantity < 0)::int as "negativeStock",
+           max(g.last_on)::text as "lastMovementOn"
+      from warehouse w
+      left join ledger g on g.warehouse_code = w.code
+      left join item i on i.code = g.item_code
+      left join layers v on v.warehouse_code = w.code
+     where w.active ${principal.isSuperUser ? sql`` : sql`and app_branch_allowed(w.branch_code)`}
+     group by w.code, w.name, w.branch_code, w.is_transit, v.value_iqd
+     order by w.branch_code, w.code`);
+  return (result as unknown as { rows: WarehouseSummaryRow[] }).rows;
+}
+
 export interface TraceRow {
   readonly movementId: string;
   readonly kind: string;

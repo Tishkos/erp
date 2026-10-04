@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AdminPage, Field, Flash, Form, Grid, ReadOnlyField, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { AdminPage, Field, Flash, Form, Grid, ReadOnlyField, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -210,6 +210,20 @@ export default async function NewGoodsReturnPage({ searchParams }: { searchParam
                       ))}
                   </select>
                 </label>
+                {/* IMPROVEMENT-002 — after a landed-cost lock the goods carry
+                    freight, duty and clearance on top of the invoice price;
+                    whether the supplier pays that back is asked, never
+                    assumed, so No is the default. */}
+                <Select
+                  defaultValue="no"
+                  hint={t('goods_returns.reimburses_landed_cost_hint')}
+                  label={t('goods_returns.reimburses_landed_cost')}
+                  name="reimburses_landed_cost"
+                  options={[
+                    { value: 'no', label: t('no') },
+                    { value: 'yes', label: t('yes') },
+                  ]}
+                />
                 <Field
                   label={t('goods_returns.reason')}
                   name="reason"
