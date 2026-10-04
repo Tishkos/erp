@@ -59,6 +59,7 @@ import type { WidgetKey } from '../domain/dashboard-widgets';
 import { TASK_STATUS_TONE } from '../domain/tasks';
 import { can, type Principal } from '../domain/permissions';
 import { furthest, stagesFor, countByStage, type ImportFacts, type JourneyStage } from '../domain/import-journey';
+import { parseQuantity } from '../domain/uom';
 import * as approvalCenter from './approval-center';
 import * as chatRead from './chat-read';
 import * as dashboard from './dashboard';
@@ -671,7 +672,7 @@ const LOADERS_BY_KEY: Record<WidgetKey, Loader> = {
   },
 
   async list_in_transit(ctx) {
-    const rows = (await logistics.inTransitInventory(ctx.tx, { view: 'open' })).rows.filter((row) => parseFloat(row.inTransit) > 0);
+    const rows = (await logistics.inTransitInventory(ctx.tx, { view: 'open' })).rows.filter((row) => parseQuantity(row.inTransit) > 0n);
     return table(
       [col('import'), col('item'), col('in_transit', true), col('containers')],
       rows.slice(0, ROWS).map((row) => ({
@@ -708,7 +709,7 @@ const LOADERS_BY_KEY: Record<WidgetKey, Loader> = {
         from ledger g
         join item i on i.code = g.item_code
         join warehouse w on w.code = g.warehouse_code
-       where w.active ${ctx.principal.isSuperUser ? sql`` : sql`and app_branch_allowed(w.branch_code)`}
+       where w.active and not w.is_transit ${ctx.principal.isSuperUser ? sql`` : sql`and app_branch_allowed(w.branch_code)`}
          and i.min_stock_level is not null and g.quantity <= i.min_stock_level
        order by (g.quantity - i.min_stock_level), g.item_code, g.warehouse_code
        limit ${ROWS}`);

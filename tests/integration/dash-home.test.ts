@@ -398,6 +398,21 @@ describe('2 · the figures are the services\' figures', () => {
     ]);
   });
 
+  it('lists stock at or below its minimum on the shelf, never goods still in transit', async () => {
+    // 50 panels are on the main warehouse's shelf and 90 are in the in-transit warehouse; the item's minimum is 1,000.
+    await ownerPool.query(`update item set min_stock_level = 1000 where code = $1`, [PANEL]);
+    try {
+      const view = await homeOf(warehouse);
+      const low = tableOf(view, 'list_low_stock');
+      expect(low.rows.map((row) => row.key)).toEqual([`${PANEL}:${WAREHOUSE}`]);
+      expect(low.rows.map((row) => row.key).join()).not.toContain(IN_PROCESS);
+    } finally {
+      await ownerPool.query(`update item set min_stock_level = null where code = $1`, [PANEL]);
+    }
+    // And with no minimum set, nothing is "low": the widget says so instead of listing the catalogue.
+    expect(outcomeOf(await homeOf(warehouse), 'list_low_stock')?.state).toBe('empty');
+  });
+
   it('takes the date from the business day, not from the machine\'s UTC day', async () => {
     expect((await homeOf(ceo)).asOf).toBe(TODAY);
   });
