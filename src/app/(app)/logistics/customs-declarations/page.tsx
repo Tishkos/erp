@@ -98,6 +98,9 @@ export default async function CustomsDeclarationsPage({ searchParams }: { search
       variant="sap"
     >
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
+      <p className={s.sapNote}>
+        <strong>{t('chain_title')}</strong> {t('chain')}
+      </p>
 
       <section aria-labelledby="declaration-list-title" className={`${s.sapDoc} ${s.sapRegister}`}>
         <div className={s.sapWindow}>

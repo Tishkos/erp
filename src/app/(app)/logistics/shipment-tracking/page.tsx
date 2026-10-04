@@ -51,6 +51,9 @@ export default async function ShipmentTrackingPage({ searchParams }: { searchPar
   return (
     <AdminPage back={{ href: '/', label: admin('dashboard_label') }} tabs={<SectionTabs route="/logistics/shipment-tracking" />} subtitle={t('tracking_subtitle')} title={page('shipment_tracking')} variant="sap">
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
+      <p className={s.sapNote}>
+        <strong>{t('chain_title')}</strong> {t('chain')}
+      </p>
 
       <section aria-labelledby="tracking-list-title" className={`${s.sapDoc} ${s.sapRegister}`}>
         <div className={s.sapWindow}>
@@ -164,7 +167,7 @@ export default async function ShipmentTrackingPage({ searchParams }: { searchPar
                       <bdi dir="ltr">{day(row.portFileSentOn)}</bdi>
                     </td>
                     <td>
-                      <bdi dir="ltr">{row.lastUpdateAt ? formatBusinessDate(businessDateOf(row.lastUpdateAt), locale as Locale) : '—'}</bdi>
+                      <bdi dir="ltr">{row.lastUpdateAt ? formatBusinessDate(businessDateOf(new Date(row.lastUpdateAt)), locale as Locale) : '—'}</bdi>
                       {row.lastNote ? <div className="muted">{row.lastNote}</div> : null}
                     </td>
                     <td>{row.nextAction ? t(`na.${row.nextAction}`) : '—'}</td>

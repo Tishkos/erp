@@ -21,7 +21,7 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as declarations from '@/server/services/customs-declarations';
 import * as recordNotes from '@/server/services/record-notes';
-import { businessToday } from '@/server/domain/business-date';
+import { businessDateOf, businessToday } from '@/server/domain/business-date';
 import { isNotFoundError } from '@/server/not-found';
 import { windowTone } from '../../../payables/window-tone';
 import { attachToDeclaration, moveDeclaration, updateDeclaration } from '../actions';
@@ -271,7 +271,7 @@ export default async function CustomsDeclarationPage({
                   </bdi>
                 </td>
                 <td>
-                  <bdi dir="ltr">{day(row.createdAt.toISOString().slice(0, 10))}</bdi>
+                  <bdi dir="ltr">{day(businessDateOf(row.createdAt))}</bdi>
                 </td>
                 <td className={s.sapNum}>
                   <bdi dir="ltr">{amount(row.amountIqd, 'IQD')}</bdi>

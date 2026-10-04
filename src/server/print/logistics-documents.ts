@@ -8,6 +8,7 @@
  */
 import { formatBusinessDate } from '@/i18n/config';
 import en from '../../../messages/en.json';
+import { businessDateOf } from '../domain/business-date';
 import { formatQuantity, parseQuantity } from '../domain/uom';
 import * as customs from '../services/customs-pd';
 import * as declarations from '../services/customs-declarations';
@@ -351,7 +352,7 @@ export async function customsDeclaration(ctx: BuildContext, declarationNo: strin
           rows: charged.rows.map((row) => ({
             cells: {
               source: `${row.sourceType} ${row.sourceNo ?? ''}`.trim(),
-              date: row.createdAt.toISOString().slice(0, 10),
+              date: businessDateOf(row.createdAt),
               amount: row.amountIqd,
               state: row.lockId ? t('state_locked') : t('state_unlocked'),
               note: row.note ?? '',

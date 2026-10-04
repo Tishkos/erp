@@ -54,7 +54,7 @@ export async function DocumentRegister({ searchParams, scope }: { readonly searc
 
   const result = await withCurrentUser((tx) => views.documentsRegister(tx, scope, { search: outcome.q, page: outcome.page, objectType: kind || null }));
   const query = (p: number) => [outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '', kind ? `kind=${kind}` : '', `page=${p}`].filter(Boolean).join('&');
-  const when = (value: Date) => formatBusinessDate(businessDateOf(value), locale as Locale);
+  const when = (value: string) => formatBusinessDate(businessDateOf(new Date(value)), locale as Locale);
   const size = (bytes: number) => (bytes >= 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 
   return (

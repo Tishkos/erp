@@ -51,6 +51,9 @@ export default async function LandedCostsPage({ searchParams }: { searchParams: 
   return (
     <AdminPage back={{ href: '/', label: admin('dashboard_label') }} tabs={<SectionTabs route="/logistics/landed-costs" />} subtitle={t('landed_subtitle')} title={page('landed_costs')} variant="sap">
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
+      <p className={s.sapNote}>
+        <strong>{t('chain_title')}</strong> {t('chain')}
+      </p>
       <p className={s.sapNote}>{t('final_value_note')}</p>
 
       <section aria-labelledby="landed-list-title" className={`${s.sapDoc} ${s.sapRegister}`}>

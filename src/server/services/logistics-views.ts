@@ -47,6 +47,8 @@ import { registerPage, searchOf, type RegisterPaging } from './register-page';
 const money = (value: bigint) => toDecimalString(value, MONEY_SCALE);
 const amountOf = (value: string | null | undefined) => parseDecimal(value ?? '0', MONEY_SCALE);
 const qty = (value: string | null | undefined) => formatQuantity(parseQuantity(value ?? '0'));
+/** A raw `timestamptz` comes back from `tx.execute` as text; the screens get an ISO instant. */
+const instant = (value: string | Date | null | undefined): string | null => (value ? new Date(value).toISOString() : null);
 
 type Rows<T> = { rows: T[] };
 
@@ -74,9 +76,10 @@ export interface ChargeRow {
   readonly lockSequence: number | null;
   readonly lockDate: string | null;
   readonly entryNo: string | null;
-  readonly cancelledAt: Date | null;
+  /** ISO instants. */
+  readonly cancelledAt: string | null;
   readonly cancelReason: string | null;
-  readonly createdAt: Date;
+  readonly createdAt: string;
   readonly payableNo: string;
   readonly reference: string | null;
   readonly supplierCode: string;
@@ -133,7 +136,12 @@ async function chargesOf(tx: Tx, types: readonly string[], filter: ChargeFilter)
         ${from}
         order by c.created_at desc, c.id
         limit ${limit} offset ${offset}`);
-      return (result.rows as Omit<ChargeRow, 'state'>[]).map((row) => ({ ...row, state: chargeState(row) }));
+      return (result.rows as Omit<ChargeRow, 'state'>[]).map((row) => ({
+        ...row,
+        cancelledAt: instant(row.cancelledAt),
+        createdAt: instant(row.createdAt)!,
+        state: chargeState(row),
+      }));
     },
   });
 }
@@ -180,7 +188,8 @@ export interface DocumentRow {
   readonly contentType: string;
   readonly sizeBytes: number;
   readonly version: number;
-  readonly createdAt: Date;
+  /** ISO instant. */
+  readonly createdAt: string;
   readonly uploadedBy: string | null;
   /** The record's own number: the PD, the reading, the declaration, the B/L, the container, the import. */
   readonly recordNo: string | null;
@@ -235,7 +244,7 @@ export async function documentsRegister(tx: Tx, scope: DocumentScope, filter: Do
         ${from}
         order by a.created_at desc, a.id
         limit ${limit} offset ${offset}`);
-      return result.rows as unknown as DocumentRow[];
+      return (result.rows as unknown as DocumentRow[]).map((row) => ({ ...row, createdAt: instant(row.createdAt)! }));
     },
   });
 }
@@ -598,7 +607,8 @@ export interface TrackingRow {
   readonly payableNo: string;
   readonly supplierName: string;
   readonly supplierCode: string;
-  readonly lastUpdateAt: Date | null;
+  /** ISO instant. */
+  readonly lastUpdateAt: string | null;
   readonly lastNote: string | null;
   readonly pdSummary: string | null;
   readonly declarationStatus: string | null;
@@ -650,6 +660,7 @@ export async function shipmentTracking(tx: Tx, filter: TrackingFilter = {}): Pro
      order by c.eta asc nulls last, c.container_no`);
   const rows = (result.rows as unknown as Omit<TrackingRow, 'delayDays' | 'nextAction'>[]).map((row) => ({
     ...row,
+    lastUpdateAt: instant(row.lastUpdateAt),
     planned: qty(row.planned),
     delayDays: delayDays(row.eta, row.receivedOn, asOf),
     nextAction: nextAction({ statusCode: row.statusCode, cancelled: row.cancelled, customsClearedOn: row.customsClearedOn, portFileSentOn: row.portFileSentOn }),
@@ -921,7 +932,7 @@ export async function locks(tx: Tx, filter: { payableId?: string | null } = {}) 
       journalStatus: string | null;
       note: string | null;
       lockedBy: string | null;
-      lockedAt: Date;
+      lockedAt: string;
       payableNo: string;
       supplierName: string;
       layers: number;
@@ -929,6 +940,7 @@ export async function locks(tx: Tx, filter: { payableId?: string | null } = {}) 
     }[]
   ).map((row) => ({
     ...row,
+    lockedAt: instant(row.lockedAt)!,
     totalIqd: money(amountOf(row.totalIqd)),
     inventoryIqd: money(amountOf(row.inventoryIqd)),
     cogsIqd: money(amountOf(row.cogsIqd)),
@@ -1049,7 +1061,7 @@ export async function receiptByNo(tx: Tx, receiptNo: string) {
         branchCode: string;
         varianceReason: string | null;
         note: string | null;
-        createdAt: Date;
+        createdAt: string;
         createdByName: string | null;
         warehouseName: string | null;
         containerId: string;

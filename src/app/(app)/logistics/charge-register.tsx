@@ -61,7 +61,8 @@ export async function ChargeRegister({
     totals: await views.chargeTotals(tx, types),
   }));
   const query = (p: number) => [outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '', `state=${state}`, `page=${p}`].filter(Boolean).join('&');
-  const day = (value: Date | string | null) => (value ? formatBusinessDate(typeof value === 'string' ? value : businessDateOf(value), locale as Locale) : '—');
+  // A business date as given, or an ISO instant taken to the business day.
+  const day = (value: string | null) => (value ? formatBusinessDate(/^\d{4}-\d{2}-\d{2}$/.test(value) ? value : businessDateOf(new Date(value)), locale as Locale) : '—');
   const typeName = (code: string, name: string) => (lc.has(`type_name.${code}`) ? lc(`type_name.${code}`) : name);
   const chip = (row: views.ChargeRow) => (row.state === 'withdrawn' ? 'cancelled' : row.state === 'locked' ? 'settled' : 'submitted');
 
