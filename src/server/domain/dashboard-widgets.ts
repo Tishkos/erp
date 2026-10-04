@@ -247,6 +247,8 @@ export interface QuickActionDefinition {
   readonly requires: readonly Requirement[];
   readonly capability?: WidgetCapability;
   readonly weight: number;
+  /** Offered first whatever the person's families are — what is waiting on them comes before any family's shortcuts. */
+  readonly lead?: boolean;
 }
 
 /**
@@ -256,7 +258,7 @@ export interface QuickActionDefinition {
  */
 export const QUICK_ACTIONS = [
   { key: 'assign_task', family: 'employee', href: '/tasks', requires: [{ verb: 'submit', object: 'task' }], capability: 'assigner', weight: 90 },
-  { key: 'open_approvals', family: 'employee', href: '/approvals', requires: [], capability: 'approver', weight: 95 },
+  { key: 'open_approvals', family: 'employee', href: '/approvals', requires: [], capability: 'approver', weight: 95, lead: true },
   { key: 'new_sales_invoice', family: 'receivables', href: '/sales/ar-invoices/new', requires: [{ verb: 'create', object: 'ar_invoice' }], weight: 80 },
   { key: 'new_customer_receipt', family: 'receivables', href: '/sales/customer-receipts/new', requires: [{ verb: 'create', object: 'customer_receipt' }], weight: 75 },
   { key: 'new_purchase_invoice', family: 'payables', href: '/payables/invoices/new', requires: [{ verb: 'create', object: 'ap_invoice' }], weight: 80 },
