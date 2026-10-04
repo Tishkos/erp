@@ -119,9 +119,9 @@ describe('the screen catalogue covers the approved tree', () => {
     // the unbuilt Quarantine, Returns, Damaged Goods, Serial / Batch,
     // Reports and Settings placeholders out.
     // Plus Chat (platform phase, Agent 1): one workspace screen; Cloud Files Settings (Agent 4): one;
-    // Exceptions (Agent 7): one document screen.
-    expect(allMenuItems()).toHaveLength(251);
-    expect(Object.keys(SCREENS)).toHaveLength(251);
+    // Exceptions (Agent 7): one document screen; the ERP Control Center (Agent 9): one report screen.
+    expect(allMenuItems()).toHaveLength(252);
+    expect(Object.keys(SCREENS)).toHaveLength(252);
   });
 
   it('uses only declared archetypes', () => {
@@ -149,7 +149,8 @@ describe('the screen catalogue covers the approved tree', () => {
     // IMPROVEMENT-002 inventory: + 1 + 1 + 2 + 1 + 1 in, − 1 − 2 − 2 − 1 − 1 − 1 out.
     // Platform phase: + 1 (Chat, a workspace) + 1 (Cloud Files Settings) + 1 (My Tasks, an inbox that became a document).
     // + 2 (Exceptions, a document: the register and the record).
-    expect(total).toBe(367);
+    // + 1 (the ERP Control Center, a report; its Related records page is a drill-down of the screens it reads, not a menu item).
+    expect(total).toBe(368);
   });
 });
 
@@ -202,7 +203,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(251);
+    expect(screenRoutes().size).toBe(252);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -231,6 +232,8 @@ describe('every screen has one address', () => {
       '/approvals',
       // Internal chat (platform phase, Agent 1).
       '/chat',
+      // The ERP Control Center (platform phase, Agent 9).
+      '/control-center',
       '/documents',
       // The Exception Center (platform phase, Agent 7).
       '/exceptions',

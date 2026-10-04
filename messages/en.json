@@ -315,7 +315,8 @@
     "payments_receipts": "Payments & Receipts",
     "tax_codes": "Tax Codes",
     "cloud_files_settings": "Cloud Files Settings",
-    "exceptions": "Exceptions"
+    "exceptions": "Exceptions",
+    "control_center": "Control Center"
   },
   "auth": {
     "email": "Email",
@@ -7151,6 +7152,378 @@
         "task_blocked": "Blocked for {days, plural, one {# day} other {# days}}: {reason}",
         "approval_waiting": "Waiting for a decision for {days, plural, one {# day} other {# days}}",
         "health_message": "{message}"
+      }
+    },
+    "control_center": {
+      "title": "ERP Control Center",
+      "subtitle": "Is Qimah internally healthy? Real checks of the books, the stock, the ledgers and the machinery, with the figures behind each. Read now; nothing is ever changed from here.",
+      "read_at": "Checked {when}: {count} checks read in {ms} ms. Nothing is stored; every figure is read when this page opens.",
+      "scope_all": "Company-wide: every branch is compared.",
+      "scope_branches": "Branches you see: {branches}. Each check compares only what you may read.",
+      "domain": "Domain",
+      "all_domains": "All domains",
+      "state": "State",
+      "all_states": "All states",
+      "run_now": "Run checks now",
+      "summary": "Summary",
+      "checks_count": "{count} checks",
+      "open_exceptions": "Open exceptions",
+      "exceptions_hidden": "You do not have access to the Exception Center, so its counts are not shown.",
+      "none": "No check was run.",
+      "none_filtered": "No check is in that state.",
+      "col_check": "Check",
+      "col_state": "State",
+      "col_evidence": "Evidence",
+      "domain_meta": "{count} checks, {attention} need attention",
+      "attention_count": "{count} need attention",
+      "more_items": "{count} more are not listed here.",
+      "open": "Open",
+      "state_ok": "OK",
+      "state_attention": "Needs attention",
+      "state_not_checked": "Not checked",
+      "state_unavailable": "Could not be checked",
+      "domain_accounting": "Accounting",
+      "domain_inventory": "Inventory",
+      "domain_receivables": "Receivables",
+      "domain_payables": "Payables",
+      "domain_logistics": "Logistics",
+      "domain_platform": "System",
+      "reason": {
+        "no_access": "Not checked for you: it reads {object}, which you may not open.",
+        "timeout": "Could not be checked: it did not answer within {seconds, plural, one {# second} other {# seconds}}.",
+        "budget": "Could not be checked: the {seconds, plural, one {# second} other {# seconds}} allowed for the whole run ran out first.",
+        "error": "Could not be checked: {message}",
+        "no_host_data": "Could not be checked: {what} cannot be read on this server.",
+        "not_configured": "Not set up here, so there is nothing to check."
+      },
+      "what": {
+        "jobs": "the job records",
+        "crontab": "the job schedule"
+      },
+      "object": {
+        "ap_invoice": "Purchase Invoices",
+        "app_user": "Users",
+        "ar_invoice": "Sales Invoices",
+        "bank_account": "Bank Accounts",
+        "bank_reconciliation": "Bank Reconciliation",
+        "cloud_setting": "Cloud Files Settings",
+        "control_center": "the Control Center",
+        "customs_pd": "Customs PDs",
+        "employee": "Employees",
+        "in_transit": "In-Transit Inventory",
+        "inventory_movement": "Inventory Checks",
+        "job": "Background Jobs",
+        "landed_cost": "Landed Cost",
+        "landed_cost_register": "Landed Costs",
+        "posting_rule": "Posting Mappings",
+        "role": "Roles",
+        "shipment_container": "Containers",
+        "supplier_credit_memo": "Supplier Credits",
+        "system_health": "Backup and Health",
+        "trial_balance": "the Trial Balance",
+        "whatsapp": "WhatsApp"
+      },
+      "word": {
+        "connected": "connected",
+        "connecting": "connecting",
+        "disconnected": "disconnected",
+        "reconnecting": "reconnecting",
+        "stopped": "stopped",
+        "logged_out": "logged out",
+        "waiting_for_qr_scan": "waiting for the QR code to be scanned",
+        "not_configured": "not set up",
+        "not_linked": "not linked",
+        "relink": "must be linked again",
+        "ready": "ready",
+        "in_app": "in-app",
+        "email": "e-mail",
+        "whatsapp": "WhatsApp"
+      },
+      "figure": {
+        "debit": "Total debit",
+        "credit": "Total credit",
+        "difference": "Difference",
+        "accounts": "Accounts",
+        "issues": "Journals failing the integrity check",
+        "accounts_unlinked": "Bank or cash accounts with no ledger account",
+        "found": "Found",
+        "stock_layers": "Stock at FIFO cost",
+        "stock_accounts": "Inventory accounts in the ledger",
+        "stock_provisional": "Of which without a journal of their own",
+        "subledger": "Sub-ledger",
+        "control_account": "Control account",
+        "lines": "Inconsistent ledger lines",
+        "statement": "Owed by the statements",
+        "ageing": "Open documents",
+        "unapplied_credits": "Credits not yet applied",
+        "debits_without_document": "Owed with no open document",
+        "parties": "Parties",
+        "imports": "Imports in transit",
+        "jobs": "Scheduled jobs",
+        "jobs_ok": "Running on time",
+        "queues": "Queues",
+        "pending": "Waiting",
+        "abandoned": "Given up on",
+        "deliveries_stuck": "Deliveries stuck",
+        "deliveries_failed": "Deliveries failed in the last {days, plural, one {# day} other {# days}}",
+        "bridge_state": "Bridge",
+        "pending_deliveries": "WhatsApp deliveries waiting",
+        "cloud_address": "Cloud address",
+        "cloud_links": "Files linked",
+        "cloud_own_connection": "Your connection",
+        "migrations": "Migrations applied",
+        "build": "Build",
+        "health_checked": "Health checks run",
+        "users_active": "Active users",
+        "users_without_role": "Without a role",
+        "grant_objects": "Objects with grants",
+        "grants_unknown": "Unknown objects",
+        "super_users": "Active Super Users",
+        "super_user": "Super User {user}",
+        "users_without_employee": "Users with no employee record",
+        "ended_with_active_user": "Ended employees whose user is active"
+      },
+      "item": {
+        "trial_balance_difference": "Total debit {debitIqd} does not equal total credit {creditIqd}: a difference of {differenceIqd}.",
+        "bank_account_unlinked": "Bank or cash account {account} points at a ledger account that no longer exists.",
+        "stock_gl_difference": "Stock at FIFO cost is {layersIqd} but the inventory accounts hold {glIqd}: a difference of {differenceIqd}.",
+        "control_difference": "{account}: sub-ledger {subledgerIqd}, ledger {glIqd}, a difference of {differenceIqd}.",
+        "statement_above_ageing": "{party}: the statement shows {ledgerIqd} owed but the open documents come to {documentsIqd}; {differenceIqd} has no document behind it.",
+        "transit_shipped_over_ordered": "Import {importNo}, {item}: {shippedQty} is planned into containers but only {orderedQty} was bought.",
+        "transit_received_over_ordered": "Import {importNo}, {item}: {receivedQty} has been received but only {orderedQty} was bought.",
+        "transit_short_in_transit": "Import {importNo}, {item}: every container is in, yet {inTransitQty} still stands in transit.",
+        "job_failed": "Job {job} last finished with exit code {exit} on {lastDate}.",
+        "job_overdue": "Job {job} ({schedule}) has not run for {hours, plural, one {# hour} other {# hours}}.",
+        "job_never": "Job {job} has never run.",
+        "outbox_abandoned": "Queue {queue}: {abandoned, plural, one {# item was} other {# items were}} given up on.",
+        "outbox_waiting": "Queue {queue}: {pending, plural, one {# item is} other {# items are}} waiting, the oldest since {oldestDate}.",
+        "deliveries_stuck": "{count, plural, one {# notification delivery is} other {# notification deliveries are}} stuck.",
+        "deliveries_failed": "{count, plural, one {# delivery} other {# deliveries}} by {channel} failed in the last {days, plural, one {# day} other {# days}}.",
+        "whatsapp_not_paired": "WhatsApp is not paired (bridge state: {state}).",
+        "whatsapp_state": "WhatsApp is paired but not connected (bridge state: {state}).",
+        "whatsapp_silent": "The WhatsApp bridge last reported on {lastSeenDate}.",
+        "whatsapp_never_seen": "The WhatsApp bridge has never reported.",
+        "cloud_no_address": "Cloud files are switched on but no server address is set.",
+        "cloud_secret_key": "The key that protects stored cloud passwords has a problem: {message}",
+        "cloud_relink": "Your cloud connection must be linked again.",
+        "cloud_links_elsewhere": "{count, plural, one {# linked file points} other {# linked files point}} at a different server from the one set.",
+        "health_database": "The database does not answer.",
+        "health_migrations": "Migrations applied: {applied} of {expected}.",
+        "health_finding": "{healthCheck}: {message}",
+        "user_without_role": "{user} ({email}) is active and holds no role.",
+        "unknown_grant": "Permission object {object} is granted to {roles}, but nothing in Qimah uses it.",
+        "super_user": "{user} ({email}) is a Super User.",
+        "user_without_employee": "{user} ({email}) is an active user with no employee record.",
+        "employee_ended_user_active": "{employee} has left, but the user {email} is still active."
+      },
+      "check": {
+        "accounting_trial_balance": {
+          "title": "Trial balance",
+          "what": "Total debits equal total credits across every posted journal."
+        },
+        "accounting_journal_integrity": {
+          "title": "Journal integrity",
+          "what": "Every posted journal balances, has two sides and posts only to accounts that take postings."
+        },
+        "accounting_bank_reconciliation": {
+          "title": "Bank reconciliation",
+          "what": "No bank statement differs from the ledger beyond the days allowed."
+        },
+        "accounting_bank_accounts": {
+          "title": "Bank and cash accounts",
+          "what": "Every bank and cash account points at a ledger account that exists."
+        },
+        "accounting_posting_roles": {
+          "title": "Posting roles",
+          "what": "Every role a posting rule needs is mapped to an account."
+        },
+        "accounting_fx_mapping": {
+          "title": "Exchange difference accounts",
+          "what": "The exchange gain/loss and revaluation roles are mapped, so foreign-currency postings can close."
+        },
+        "accounting_posting_failures": {
+          "title": "Posting failures",
+          "what": "No posting has failed and is waiting to be replayed."
+        },
+        "inventory_stock_vs_gl": {
+          "title": "Stock against the ledger",
+          "what": "The FIFO layers hold the same value as the inventory accounts in the ledger."
+        },
+        "inventory_negative_stock": {
+          "title": "Negative stock",
+          "what": "No item stands below zero in any warehouse."
+        },
+        "inventory_fifo_layers": {
+          "title": "FIFO layers",
+          "what": "The cost layers of every item agree with the stock movements."
+        },
+        "inventory_documents_ledger": {
+          "title": "Documents against the stock ledger",
+          "what": "Every stock document wrote its movements and every movement has its document."
+        },
+        "inventory_transit": {
+          "title": "Stock in transit",
+          "what": "What stands in the transit warehouses is explained by open imports."
+        },
+        "receivables_control_account": {
+          "title": "Receivables control account",
+          "what": "The customer sub-ledger equals the receivables control accounts, and every ledger line is consistent."
+        },
+        "receivables_statement_ageing": {
+          "title": "Customer statements against ageing",
+          "what": "What the statements show owed is accounted for by open invoices."
+        },
+        "payables_control_account": {
+          "title": "Payables control account",
+          "what": "The supplier sub-ledger equals the payables control accounts, and every ledger line is consistent."
+        },
+        "payables_statement_ageing": {
+          "title": "Supplier statements against ageing",
+          "what": "What the statements show owed is accounted for by open invoices."
+        },
+        "payables_supplier_credits": {
+          "title": "Supplier credits",
+          "what": "Every supplier credit is applied for what its live applications add up to."
+        },
+        "logistics_transit_issues": {
+          "title": "Imports in transit",
+          "what": "No import has more shipped or received than was bought, or goods in transit after every container is in."
+        },
+        "logistics_landed_costs": {
+          "title": "Landed costs",
+          "what": "No import has landed cost that is stuck waiting to be allocated."
+        },
+        "logistics_customs": {
+          "title": "Customs",
+          "what": "No PD or declaration is rejected, expired or inconsistent."
+        },
+        "logistics_shipment_delays": {
+          "title": "Shipment delays",
+          "what": "No container is past its expected arrival or has gone without a status update."
+        },
+        "platform_jobs": {
+          "title": "Scheduled jobs",
+          "what": "Every scheduled job has run on time and finished cleanly."
+        },
+        "platform_outbox": {
+          "title": "Outbox queues",
+          "what": "No queue holds items given up on or items waiting more than a day."
+        },
+        "platform_deliveries": {
+          "title": "Notification deliveries",
+          "what": "No delivery is stuck and none failed in the last week."
+        },
+        "platform_whatsapp": {
+          "title": "WhatsApp bridge",
+          "what": "The bridge is paired, connected and reporting."
+        },
+        "platform_cloud": {
+          "title": "Cloud files",
+          "what": "The cloud connection is set up, its key is sound and its links point at the server set."
+        },
+        "platform_system_health": {
+          "title": "System health",
+          "what": "The database answers, the migrations are at head, and backups and disk are in order."
+        },
+        "platform_users_without_role": {
+          "title": "Users without a role",
+          "what": "Every active user holds at least one role (Super Users excepted)."
+        },
+        "platform_unknown_grants": {
+          "title": "Unknown permission objects",
+          "what": "Every permission granted to a role names an object Qimah uses."
+        },
+        "platform_super_users": {
+          "title": "Super Users",
+          "what": "At most one active Super User, since a Super User passes every permission check."
+        },
+        "platform_employee_links": {
+          "title": "Users and employees",
+          "what": "Every active user has an employee record, and no ended employee has an active user."
+        }
+      }
+    },
+    "relationships": {
+      "title": "Related records",
+      "page_title": "{kind} {label}: related records",
+      "subtitle": "How the real records around this one connect. Only records you may open are drawn.",
+      "back": "Back to {label}",
+      "open_chain": "Open the whole chain",
+      "steps_shown": "{count, plural, one {# step} other {# steps}}",
+      "root_line": "{kind}: {label} {name}",
+      "none": "Nothing related to this record that you may open.",
+      "scope_hint": "A step you may not open is not shown at all, and records you may not open are not counted.",
+      "not_yet": "Not yet",
+      "unavailable": "Could not be read just now.",
+      "chip_present": "Has records",
+      "more": "and {count, plural, one {# more} other {# more}} you may open",
+      "more_unknown": "and more",
+      "col_step": "Step",
+      "col_record": "Record",
+      "col_from": "From",
+      "col_date": "Date",
+      "col_status": "Status",
+      "col_figure": "Amount or quantity",
+      "kind": {
+        "import": "Import",
+        "supplier": "Supplier",
+        "customer": "Customer",
+        "item": "Item"
+      },
+      "step": {
+        "import_invoice": "Purchase invoices",
+        "import_bl": "Bills of lading",
+        "import_container": "Containers",
+        "import_customs": "Customs PDs",
+        "import_declaration": "Declarations",
+        "import_landed_cost": "Landed cost",
+        "import_receipt": "Receipts",
+        "import_inventory": "Inventory",
+        "import_layer": "FIFO layers",
+        "supplier_purchase_order": "Purchase orders",
+        "supplier_goods_receipt": "Goods receipts",
+        "supplier_invoice": "Purchase invoices",
+        "supplier_payment": "Payments",
+        "supplier_statement": "Statement",
+        "supplier_ageing": "Ageing",
+        "customer_invoice": "Sales invoices",
+        "customer_receipt": "Receipts",
+        "customer_credit": "Credit notes",
+        "customer_return": "Returns",
+        "customer_statement": "Statement",
+        "customer_ageing": "Ageing",
+        "item_warehouse": "Warehouses",
+        "item_layer": "FIFO layers",
+        "item_movement": "Movements",
+        "item_document": "Source documents"
+      },
+      "node": {
+        "statement": "Statement",
+        "ageing": "Open invoices",
+        "landed_cost_lock": "Landed cost lock",
+        "cost_layer": "FIFO layer"
+      },
+      "note": {
+        "bl": "Vessel {vessel}, expected {etaDate}",
+        "bl_vessel": "Vessel {vessel}",
+        "bl_eta": "Expected {etaDate}",
+        "pd": "Expires {expiryDate}",
+        "declaration": "Customs reference {reference}",
+        "lock": "Lock {sequence}, allocated by {basis}",
+        "receipt": "Into warehouse {warehouse}",
+        "item_name": "{name}",
+        "layer": "{originalQty} received at {unitCostIqd} a unit",
+        "layer_item": "{item} in {warehouse}: {originalQty} received at {unitCostIqd} a unit",
+        "warehouse_name": "{name}",
+        "movement": "{movementType}",
+        "document": "{movementType}",
+        "statement": "Oldest entry {oldestDate}",
+        "ageing": "{open} open, {overdue} overdue"
+      },
+      "status": {
+        "accepted": "Accepted",
+        "assessed": "Assessed",
+        "cleared": "Cleared"
       }
     }
   },

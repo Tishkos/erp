@@ -292,7 +292,7 @@ test.describe('A22 · payables in a browser', () => {
     await register.getByLabel('Expires').fill('2027-03-01');
     await register.getByLabel('Bank').selectOption({ label: 'Arab Bank · ARABIQBAXXX' });
     await register.getByRole('button', { name: 'Register PD' }).click();
-    const pdLink = page.getByRole('link', { name: pdNo });
+    const pdLink = page.getByRole('link', { name: pdNo }).first();
     await expect(pdLink).toBeVisible({ timeout: 30_000 });
 
     // Validated — one history row, the status in the header.
@@ -369,11 +369,11 @@ test.describe('A22 · payables in a browser', () => {
     await create.getByLabel('Container no. 1').fill(first);
     await create.getByLabel('Container no. 2').fill(second);
     await create.getByRole('button', { name: 'New B/L' }).click();
-    await expect(page.getByRole('link', { name: blNo })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('link', { name: blNo }).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText('0 of 2 received').filter({ visible: true }).first()).toBeVisible();
 
     // §17.3 — one container reaches the port.
-    await page.getByRole('link', { name: first }).click();
+    await page.getByRole('link', { name: first }).first().click();
     await expect(page.getByRole('heading', { level: 1, name: first })).toBeVisible();
     await page.getByRole('button', { name: 'Change stage' }).click();
     const stage = page.getByRole('dialog');
@@ -503,7 +503,7 @@ test.describe('A22 · payables in a browser', () => {
     await bl.getByLabel('ETA').fill('2026-10-20');
     await bl.getByLabel('Container no. 1').fill(container);
     await bl.getByRole('button', { name: 'New B/L' }).click();
-    await page.getByRole('link', { name: container }).click();
+    await page.getByRole('link', { name: container }).first().click();
     await page.getByRole('button', { name: 'Receive container' }).click();
     await page.getByRole('dialog').getByLabel('Warehouse').selectOption('WH-HQ');
     await page.getByRole('dialog').getByRole('button', { name: 'Receive container' }).click();
@@ -517,7 +517,7 @@ test.describe('A22 · payables in a browser', () => {
     await register.getByLabel('Registered').fill('2026-09-02');
     await register.getByLabel('Expires').fill('2027-03-01');
     await register.getByRole('button', { name: 'Register PD' }).click();
-    await page.getByRole('link', { name: pdNo }).click();
+    await page.getByRole('link', { name: pdNo }).first().click();
     for (const status of ['validated', 'totally_written_off']) {
       await page.getByRole('button', { name: 'Change status' }).click();
       const change = page.getByRole('dialog');

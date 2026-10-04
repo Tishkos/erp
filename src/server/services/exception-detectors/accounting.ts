@@ -174,7 +174,7 @@ export async function glIntegrity(ctx: DetectContext): Promise<Finding[]> {
 // A posting role with no account
 // ---------------------------------------------------------------------------
 
-const FX_ROLE = /exchange|revaluation/;
+export const FX_ROLE = /exchange|revaluation/;
 
 /**
  * A line a document cannot post without (`always`) and a foreign-exchange

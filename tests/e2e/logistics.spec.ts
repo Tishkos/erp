@@ -133,7 +133,7 @@ test.describe('REQ-LOG-001 · the Logistics module', () => {
     await dialog.getByLabel('Container no. 2').fill(second);
     await dialog.getByLabel('ITM-SEED 2').fill('200');
     await dialog.getByRole('button', { name: 'New B/L' }).click();
-    await expect(page.getByRole('link', { name: blNo })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('link', { name: blNo }).first()).toBeVisible({ timeout: 30_000 });
 
     // The Shipments register: one row per import, its B/L, 0 of 2 received.
     await page.goto('/logistics/shipments');

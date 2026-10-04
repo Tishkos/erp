@@ -20,6 +20,7 @@ import {
   admin as s,
 } from '@/components/admin';
 import { RecordHistory } from '@/components/admin/history';
+import { RelatedRecords } from '@/components/admin/related-records';
 import { HistoryButton } from '@/components/admin/icon-dialog';
 import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import * as recordNotes from '@/server/services/record-notes';
@@ -33,6 +34,7 @@ import { formatQuantity, parseQuantity } from '@domain/uom';
 import { formatMoney, type Locale } from '@/i18n/config';
 import * as coa from '@/server/services/chart-of-accounts';
 import * as items from '@/server/services/items';
+import * as relationships from '@/server/services/relationships';
 import * as itemUnits from '@/server/services/item-units';
 import * as uomService from '@/server/services/units-of-measure';
 import {
@@ -112,6 +114,10 @@ export default async function ItemPage({
   const asset = accounts.filter((a) => a.accountType === 'asset');
   const linkedIds = new Set(row.suppliers.map((supplier) => supplier.supplierId));
   const linkable = suppliers.filter((supplier) => !linkedIds.has(supplier.id));
+  // Platform phase, Agent 9 — where the item stands, which layers cost it, and the movements and documents behind them.
+  const related = row.isStock
+    ? await withCurrentUser((tx) => relationships.graphFor(tx, { principal, branchCode: context.scope.branchCode }, 'item', row.code))
+    : null;
 
   return (
     <AdminPage
@@ -551,6 +557,7 @@ export default async function ItemPage({
             </Panel>
           ) : null}
 
+          {related ? <RelatedRecords graph={related} variant="panel" /> : null}
         </div>
       </div>
     </AdminPage>

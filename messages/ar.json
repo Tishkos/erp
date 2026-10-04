@@ -315,7 +315,8 @@
     "payments_receipts": "المدفوعات والمقبوضات",
     "tax_codes": "رموز الضرائب",
     "cloud_files_settings": "إعدادات Cloud Files",
-    "exceptions": "الاستثناءات"
+    "exceptions": "الاستثناءات",
+    "control_center": "مركز التحكم"
   },
   "auth": {
     "email": "البريد الإلكتروني",
@@ -7151,6 +7152,378 @@
         "task_blocked": "معطّلة منذ {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}: {reason}",
         "approval_waiting": "تنتظر قرارًا منذ {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}",
         "health_message": "{message}"
+      }
+    },
+    "control_center": {
+      "title": "مركز التحكم في النظام",
+      "subtitle": "هل نظام قمة سليم من الداخل؟ فحوص حقيقية للدفاتر والمخزون والدفاتر الفرعية وآليات التشغيل، مع الأرقام خلف كل فحص. تُقرأ الآن، ولا يتغيّر شيء من هنا أبدًا.",
+      "read_at": "جرى الفحص {when}: قُرئ {count} فحصًا في {ms} مللي ثانية. لا يُخزَّن شيء؛ كل رقم يُقرأ عند فتح هذه الصفحة.",
+      "scope_all": "على مستوى الشركة: تُقارَن كل الفروع.",
+      "scope_branches": "الفروع التي تراها: {branches}. كل فحص يقارن ما يحق لك الاطلاع عليه فقط.",
+      "domain": "المجال",
+      "all_domains": "كل المجالات",
+      "state": "الحالة",
+      "all_states": "كل الحالات",
+      "run_now": "شغّل الفحوص الآن",
+      "summary": "الملخص",
+      "checks_count": "{count} فحصًا",
+      "open_exceptions": "الاستثناءات المفتوحة",
+      "exceptions_hidden": "لا تملك صلاحية الوصول إلى مركز الاستثناءات، لذلك لا تظهر أعداده.",
+      "none": "لم يُشغَّل أي فحص.",
+      "none_filtered": "لا فحص في هذه الحالة.",
+      "col_check": "الفحص",
+      "col_state": "الحالة",
+      "col_evidence": "الدليل",
+      "domain_meta": "{count} فحصًا، منها {attention} تحتاج إلى انتباه",
+      "attention_count": "{count} تحتاج إلى انتباه",
+      "more_items": "{count} أخرى غير مدرجة هنا.",
+      "open": "افتح",
+      "state_ok": "سليم",
+      "state_attention": "يحتاج إلى انتباه",
+      "state_not_checked": "لم يُفحص",
+      "state_unavailable": "تعذّر فحصه",
+      "domain_accounting": "المحاسبة",
+      "domain_inventory": "المخزون",
+      "domain_receivables": "الذمم المدينة",
+      "domain_payables": "الذمم الدائنة",
+      "domain_logistics": "الخدمات اللوجستية",
+      "domain_platform": "النظام",
+      "reason": {
+        "no_access": "لم يُفحص لك: يقرأ {object} وهو غير متاح لك.",
+        "timeout": "تعذّر فحصه: لم يُجب خلال {seconds, plural, one {ثانية واحدة} two {ثانيتين} few {# ثوانٍ} many {# ثانية} other {# ثانية}}.",
+        "budget": "تعذّر فحصه: انتهت مهلة التشغيل الكاملة وهي {seconds, plural, one {ثانية واحدة} two {ثانيتين} few {# ثوانٍ} many {# ثانية} other {# ثانية}} قبل الوصول إليه.",
+        "error": "تعذّر فحصه: {message}",
+        "no_host_data": "تعذّر فحصه: لا يمكن قراءة {what} على هذا الخادم.",
+        "not_configured": "غير مُعدّ هنا، فلا شيء يُفحص."
+      },
+      "what": {
+        "jobs": "سجلات المهام",
+        "crontab": "جدول المهام"
+      },
+      "object": {
+        "ap_invoice": "فواتير المشتريات",
+        "app_user": "المستخدمون",
+        "ar_invoice": "فواتير المبيعات",
+        "bank_account": "الحسابات البنكية",
+        "bank_reconciliation": "التسوية البنكية",
+        "cloud_setting": "إعدادات الملفات السحابية",
+        "control_center": "مركز التحكم",
+        "customs_pd": "بيانات الجمارك المسبقة",
+        "employee": "الموظفون",
+        "in_transit": "المخزون في الطريق",
+        "inventory_movement": "فحوص المخزون",
+        "job": "المهام الخلفية",
+        "landed_cost": "التكلفة الواصلة",
+        "landed_cost_register": "التكاليف الواصلة",
+        "posting_rule": "ربط الترحيل",
+        "role": "الأدوار",
+        "shipment_container": "الحاويات",
+        "supplier_credit_memo": "أرصدة الموردين الدائنة",
+        "system_health": "النسخ الاحتياطي وسلامة النظام",
+        "trial_balance": "ميزان المراجعة",
+        "whatsapp": "واتساب"
+      },
+      "word": {
+        "connected": "متصل",
+        "connecting": "قيد الاتصال",
+        "disconnected": "غير متصل",
+        "reconnecting": "يعيد الاتصال",
+        "stopped": "متوقف",
+        "logged_out": "مسجّل الخروج",
+        "waiting_for_qr_scan": "بانتظار مسح رمز QR",
+        "not_configured": "غير مُعدّ",
+        "not_linked": "غير مربوط",
+        "relink": "يجب ربطه من جديد",
+        "ready": "جاهز",
+        "in_app": "داخل النظام",
+        "email": "البريد الإلكتروني",
+        "whatsapp": "واتساب"
+      },
+      "figure": {
+        "debit": "إجمالي المدين",
+        "credit": "إجمالي الدائن",
+        "difference": "الفرق",
+        "accounts": "الحسابات",
+        "issues": "قيود تخفق في فحص السلامة",
+        "accounts_unlinked": "حسابات بنكية أو نقدية بلا حساب في الدفتر",
+        "found": "المكتشف",
+        "stock_layers": "المخزون بتكلفة الوارد أولًا",
+        "stock_accounts": "حسابات المخزون في الدفتر",
+        "stock_provisional": "منها ما ليس له قيد خاص",
+        "subledger": "الدفتر الفرعي",
+        "control_account": "الحساب الرقابي",
+        "lines": "أسطر دفتر غير متسقة",
+        "statement": "المستحق بحسب الكشوف",
+        "ageing": "المستندات المفتوحة",
+        "unapplied_credits": "أرصدة دائنة لم تُطبَّق بعد",
+        "debits_without_document": "مستحق بلا مستند مفتوح",
+        "parties": "الأطراف",
+        "imports": "استيرادات في الطريق",
+        "jobs": "المهام المجدولة",
+        "jobs_ok": "تعمل في وقتها",
+        "queues": "الطوابير",
+        "pending": "بالانتظار",
+        "abandoned": "جرى التخلي عنها",
+        "deliveries_stuck": "عمليات تسليم عالقة",
+        "deliveries_failed": "عمليات تسليم فشلت في آخر {days, plural, one {يوم واحد} two {يومين} few {# أيام} many {# يومًا} other {# يوم}}",
+        "bridge_state": "الجسر",
+        "pending_deliveries": "رسائل واتساب بالانتظار",
+        "cloud_address": "عنوان السحابة",
+        "cloud_links": "الملفات المربوطة",
+        "cloud_own_connection": "اتصالك",
+        "migrations": "الترحيلات المطبقة",
+        "build": "الإصدار",
+        "health_checked": "فحوص السلامة المنفذة",
+        "users_active": "المستخدمون النشطون",
+        "users_without_role": "بلا دور",
+        "grant_objects": "كائنات لها صلاحيات",
+        "grants_unknown": "كائنات غير معروفة",
+        "super_users": "المستخدمون الرئيسيون النشطون",
+        "super_user": "المستخدم الرئيسي {user}",
+        "users_without_employee": "مستخدمون بلا سجل موظف",
+        "ended_with_active_user": "موظفون انتهت خدمتهم ومستخدمهم نشط"
+      },
+      "item": {
+        "trial_balance_difference": "إجمالي المدين {debitIqd} لا يساوي إجمالي الدائن {creditIqd}: الفرق {differenceIqd}.",
+        "bank_account_unlinked": "الحساب البنكي أو النقدي {account} يشير إلى حساب في الدفتر لم يعد موجودًا.",
+        "stock_gl_difference": "المخزون بتكلفة الوارد أولًا {layersIqd} بينما تحمل حسابات المخزون {glIqd}؛ والفرق {differenceIqd}.",
+        "control_difference": "{account}: الدفتر الفرعي {subledgerIqd}، الدفتر العام {glIqd}، والفرق {differenceIqd}.",
+        "statement_above_ageing": "{party}: يُظهر الكشف مستحقًا {ledgerIqd} بينما مجموع المستندات المفتوحة {documentsIqd}؛ و{differenceIqd} بلا مستند خلفه.",
+        "transit_shipped_over_ordered": "الاستيراد {importNo}، {item}: خُطّط {shippedQty} في الحاويات بينما المشترى {orderedQty} فقط.",
+        "transit_received_over_ordered": "الاستيراد {importNo}، {item}: استُلم {receivedQty} بينما المشترى {orderedQty} فقط.",
+        "transit_short_in_transit": "الاستيراد {importNo}، {item}: وصلت كل الحاويات، ومع ذلك ما زال {inTransitQty} في الطريق.",
+        "job_failed": "آخر تشغيل للمهمة {job} انتهى برمز الخروج {exit} بتاريخ {lastDate}.",
+        "job_overdue": "المهمة {job} ({schedule}) لم تعمل منذ {hours, plural, one {ساعة واحدة} two {ساعتين} few {# ساعات} many {# ساعة} other {# ساعة}}.",
+        "job_never": "المهمة {job} لم تعمل قط.",
+        "outbox_abandoned": "الطابور {queue}: جرى التخلي عن {abandoned} من العناصر.",
+        "outbox_waiting": "الطابور {queue}: {pending} من العناصر بالانتظار، أقدمها منذ {oldestDate}.",
+        "deliveries_stuck": "{count} من عمليات تسليم الإشعارات عالقة.",
+        "deliveries_failed": "فشل {count} من عمليات التسليم عبر {channel} في آخر {days, plural, one {يوم واحد} two {يومين} few {# أيام} many {# يومًا} other {# يوم}}.",
+        "whatsapp_not_paired": "واتساب غير مقترن (حالة الجسر: {state}).",
+        "whatsapp_state": "واتساب مقترن لكنه غير متصل (حالة الجسر: {state}).",
+        "whatsapp_silent": "آخر بلاغ من جسر واتساب كان بتاريخ {lastSeenDate}.",
+        "whatsapp_never_seen": "جسر واتساب لم يرسل أي بلاغ قط.",
+        "cloud_no_address": "الملفات السحابية مفعّلة لكن لا يوجد عنوان خادم.",
+        "cloud_secret_key": "في المفتاح الذي يحمي كلمات مرور السحابة المخزّنة مشكلة: {message}",
+        "cloud_relink": "يجب ربط اتصالك بالسحابة من جديد.",
+        "cloud_links_elsewhere": "{count} من الملفات المربوطة تشير إلى خادم غير المضبوط.",
+        "health_database": "قاعدة البيانات لا تستجيب.",
+        "health_migrations": "الترحيلات المطبقة: {applied} من {expected}.",
+        "health_finding": "{healthCheck}: {message}",
+        "user_without_role": "{user} ({email}) نشط ولا يحمل أي دور.",
+        "unknown_grant": "كائن الصلاحيات {object} ممنوح لـ {roles} لكن لا شيء في قمة يستخدمه.",
+        "super_user": "{user} ({email}) مستخدم رئيسي.",
+        "user_without_employee": "{user} ({email}) مستخدم نشط بلا سجل موظف.",
+        "employee_ended_user_active": "{employee} غادر لكن المستخدم {email} ما زال نشطًا."
+      },
+      "check": {
+        "accounting_trial_balance": {
+          "title": "ميزان المراجعة",
+          "what": "إجمالي المدين يساوي إجمالي الدائن في كل القيود المرحَّلة."
+        },
+        "accounting_journal_integrity": {
+          "title": "سلامة القيود",
+          "what": "كل قيد مرحَّل متوازن وله طرفان ويرحَّل إلى حسابات تقبل الترحيل فقط."
+        },
+        "accounting_bank_reconciliation": {
+          "title": "التسوية البنكية",
+          "what": "لا يختلف كشف بنكي عن الدفتر بعد الأيام المسموحة."
+        },
+        "accounting_bank_accounts": {
+          "title": "الحسابات البنكية والنقدية",
+          "what": "كل حساب بنكي ونقدي يشير إلى حساب موجود في الدفتر."
+        },
+        "accounting_posting_roles": {
+          "title": "أدوار الترحيل",
+          "what": "كل دور تحتاجه قاعدة ترحيل مربوط بحساب."
+        },
+        "accounting_fx_mapping": {
+          "title": "حسابات فروق الصرف",
+          "what": "أدوار ربح وخسارة الصرف وإعادة التقييم مربوطة، فيمكن إقفال الترحيلات بالعملة الأجنبية."
+        },
+        "accounting_posting_failures": {
+          "title": "إخفاقات الترحيل",
+          "what": "لا ترحيل فشل وينتظر إعادة التشغيل."
+        },
+        "inventory_stock_vs_gl": {
+          "title": "المخزون مقابل الدفتر",
+          "what": "طبقات الوارد أولًا تحمل القيمة نفسها التي تحملها حسابات المخزون في دفتر الأستاذ."
+        },
+        "inventory_negative_stock": {
+          "title": "المخزون السالب",
+          "what": "لا صنف تحت الصفر في أي مستودع."
+        },
+        "inventory_fifo_layers": {
+          "title": "طبقات الوارد أولًا",
+          "what": "طبقات التكلفة لكل صنف تتفق مع حركات المخزون."
+        },
+        "inventory_documents_ledger": {
+          "title": "المستندات مقابل دفتر المخزون",
+          "what": "كل مستند مخزني كتب حركاته، ولكل حركة مستندها."
+        },
+        "inventory_transit": {
+          "title": "المخزون في الطريق",
+          "what": "ما يقف في مستودعات العبور تفسّره الاستيرادات المفتوحة."
+        },
+        "receivables_control_account": {
+          "title": "الحساب الرقابي للذمم المدينة",
+          "what": "الدفتر الفرعي للعملاء يساوي الحسابات الرقابية للذمم المدينة، وكل سطر في الدفتر متسق."
+        },
+        "receivables_statement_ageing": {
+          "title": "كشوف العملاء مقابل أعمار الذمم",
+          "what": "ما تُظهره الكشوف مستحقًا تفسّره الفواتير المفتوحة."
+        },
+        "payables_control_account": {
+          "title": "الحساب الرقابي للذمم الدائنة",
+          "what": "الدفتر الفرعي للموردين يساوي الحسابات الرقابية للذمم الدائنة، وكل سطر في الدفتر متسق."
+        },
+        "payables_statement_ageing": {
+          "title": "كشوف الموردين مقابل أعمار الذمم",
+          "what": "ما تُظهره الكشوف مستحقًا تفسّره الفواتير المفتوحة."
+        },
+        "payables_supplier_credits": {
+          "title": "أرصدة الموردين الدائنة",
+          "what": "كل رصيد دائن للمورد مطبَّق بما تساويه تطبيقاته الحية."
+        },
+        "logistics_transit_issues": {
+          "title": "استيرادات في الطريق",
+          "what": "لا استيراد شُحن أو استُلم منه أكثر مما اشتُري، ولا بضاعة في الطريق بعد وصول كل الحاويات."
+        },
+        "logistics_landed_costs": {
+          "title": "التكاليف الواصلة",
+          "what": "لا استيراد له تكلفة واصلة عالقة بانتظار التوزيع."
+        },
+        "logistics_customs": {
+          "title": "الجمارك",
+          "what": "لا بيان جمركي مسبق أو إقرار مرفوض أو منتهٍ أو غير متسق."
+        },
+        "logistics_shipment_delays": {
+          "title": "تأخر الشحنات",
+          "what": "لا حاوية تجاوزت موعد وصولها المتوقع أو مضى عليها زمن بلا تحديث للحالة."
+        },
+        "platform_jobs": {
+          "title": "المهام المجدولة",
+          "what": "كل مهمة مجدولة عملت في وقتها وانتهت بسلام."
+        },
+        "platform_outbox": {
+          "title": "طوابير الإرسال",
+          "what": "لا طابور فيه عناصر جرى التخلي عنها أو عناصر تنتظر أكثر من يوم."
+        },
+        "platform_deliveries": {
+          "title": "تسليم الإشعارات",
+          "what": "لا تسليم عالق ولا تسليم فشل في الأسبوع الأخير."
+        },
+        "platform_whatsapp": {
+          "title": "جسر واتساب",
+          "what": "الجسر مقترن ومتصل ويرسل بلاغاته."
+        },
+        "platform_cloud": {
+          "title": "الملفات السحابية",
+          "what": "الاتصال بالسحابة مُعدّ ومفتاحه سليم وروابطه تشير إلى الخادم المضبوط."
+        },
+        "platform_system_health": {
+          "title": "سلامة النظام",
+          "what": "قاعدة البيانات تستجيب والترحيلات مكتملة والنسخ الاحتياطي والقرص بحال جيدة."
+        },
+        "platform_users_without_role": {
+          "title": "مستخدمون بلا دور",
+          "what": "كل مستخدم نشط يحمل دورًا واحدًا على الأقل (عدا المستخدمين الرئيسيين)."
+        },
+        "platform_unknown_grants": {
+          "title": "كائنات صلاحيات غير معروفة",
+          "what": "كل صلاحية ممنوحة لدور تسمّي كائنًا يستخدمه النظام."
+        },
+        "platform_super_users": {
+          "title": "المستخدمون الرئيسيون",
+          "what": "مستخدم رئيسي نشط واحد على الأكثر، لأنه يتجاوز كل فحوص الصلاحيات."
+        },
+        "platform_employee_links": {
+          "title": "المستخدمون والموظفون",
+          "what": "لكل مستخدم نشط سجل موظف، ولا موظف انتهت خدمته له مستخدم نشط."
+        }
+      }
+    },
+    "relationships": {
+      "title": "السجلات المرتبطة",
+      "page_title": "{kind} {label}: السجلات المرتبطة",
+      "subtitle": "كيف ترتبط السجلات الحقيقية حول هذا السجل. تُرسم السجلات التي يحق لك فتحها فقط.",
+      "back": "العودة إلى {label}",
+      "open_chain": "افتح السلسلة كاملة",
+      "steps_shown": "{count, plural, one {خطوة واحدة} two {خطوتان} few {# خطوات} many {# خطوة} other {# خطوة}}",
+      "root_line": "{kind}: {label} {name}",
+      "none": "لا شيء مرتبط بهذا السجل مما يحق لك فتحه.",
+      "scope_hint": "الخطوة التي لا يحق لك فتحها لا تظهر إطلاقًا، والسجلات التي لا يحق لك فتحها لا تُعدّ.",
+      "not_yet": "لم يحدث بعد",
+      "unavailable": "تعذّرت القراءة الآن.",
+      "chip_present": "فيها سجلات",
+      "more": "و{count} أخرى يحق لك فتحها",
+      "more_unknown": "وغيرها",
+      "col_step": "الخطوة",
+      "col_record": "السجل",
+      "col_from": "من",
+      "col_date": "التاريخ",
+      "col_status": "الحالة",
+      "col_figure": "المبلغ أو الكمية",
+      "kind": {
+        "import": "الاستيراد",
+        "supplier": "المورد",
+        "customer": "العميل",
+        "item": "الصنف"
+      },
+      "step": {
+        "import_invoice": "فواتير المشتريات",
+        "import_bl": "بوالص الشحن",
+        "import_container": "الحاويات",
+        "import_customs": "البيانات الجمركية المسبقة",
+        "import_declaration": "الإقرارات الجمركية",
+        "import_landed_cost": "التكلفة الواصلة",
+        "import_receipt": "الاستلامات",
+        "import_inventory": "المخزون",
+        "import_layer": "طبقات الوارد أولًا",
+        "supplier_purchase_order": "أوامر الشراء",
+        "supplier_goods_receipt": "استلامات البضاعة",
+        "supplier_invoice": "فواتير المشتريات",
+        "supplier_payment": "المدفوعات",
+        "supplier_statement": "كشف الحساب",
+        "supplier_ageing": "أعمار الذمم",
+        "customer_invoice": "فواتير المبيعات",
+        "customer_receipt": "سندات القبض",
+        "customer_credit": "إشعارات الدائن",
+        "customer_return": "المرتجعات",
+        "customer_statement": "كشف الحساب",
+        "customer_ageing": "أعمار الذمم",
+        "item_warehouse": "المستودعات",
+        "item_layer": "طبقات الوارد أولًا",
+        "item_movement": "الحركات",
+        "item_document": "المستندات المصدر"
+      },
+      "node": {
+        "statement": "كشف الحساب",
+        "ageing": "الفواتير المفتوحة",
+        "landed_cost_lock": "تثبيت التكلفة الواصلة",
+        "cost_layer": "طبقة وارد أولًا"
+      },
+      "note": {
+        "bl": "السفينة {vessel}، الوصول المتوقع {etaDate}",
+        "bl_vessel": "السفينة {vessel}",
+        "bl_eta": "الوصول المتوقع {etaDate}",
+        "pd": "ينتهي في {expiryDate}",
+        "declaration": "المرجع الجمركي {reference}",
+        "lock": "التثبيت {sequence}، وُزّع على أساس {basis}",
+        "receipt": "إلى المستودع {warehouse}",
+        "item_name": "{name}",
+        "layer": "استُلم {originalQty} بسعر {unitCostIqd} للوحدة",
+        "layer_item": "{item} في {warehouse}: استُلم {originalQty} بسعر {unitCostIqd} للوحدة",
+        "warehouse_name": "{name}",
+        "movement": "{movementType}",
+        "document": "{movementType}",
+        "statement": "أقدم قيد {oldestDate}",
+        "ageing": "{open} مفتوحة، {overdue} متأخرة"
+      },
+      "status": {
+        "accepted": "مقبول",
+        "assessed": "مُقيَّم",
+        "cleared": "مُخلَّص"
       }
     }
   },

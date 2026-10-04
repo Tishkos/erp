@@ -254,7 +254,7 @@ async function raiseOneOfEach(browser: Browser) {
     await pd.getByLabel('Registered').fill('2026-09-02');
     await pd.getByLabel('Expires').fill('2027-03-01');
     await pd.getByRole('button', { name: 'Register PD' }).click();
-    await expect(page.getByRole('link', { name: `6${run}` })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('link', { name: `6${run}` }).first()).toBeVisible({ timeout: 30_000 });
 
     // A B/L with one container.
     await page.goto(importUrl);
@@ -265,7 +265,7 @@ async function raiseOneOfEach(browser: Browser) {
     await bl.getByLabel('ETA').fill('2026-10-20');
     await bl.getByLabel('Container no. 1').fill(containerNo('TEMU', `${digits}5`));
     await bl.getByRole('button', { name: 'New B/L' }).click();
-    await expect(page.getByRole('link', { name: `BL-THEME-${run}` })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('link', { name: `BL-THEME-${run}` }).first()).toBeVisible({ timeout: 30_000 });
 
     // A loan, entered — on its own page since PR #42 (`/treasury/loans/new`).
     await page.goto('/treasury/loans/new');
