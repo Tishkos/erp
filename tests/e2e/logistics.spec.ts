@@ -38,6 +38,26 @@ async function expectFourDoors(page: Page) {
   expect(names).toEqual(['Print / Export', 'Attachments', 'Notes', 'Audit log']);
 }
 
+/** ITM-SEED needs its inventory and COGS accounts before an invoice of it posts. */
+async function itemAccounts(page: Page, code = 'ITM-SEED') {
+  await page.goto(`/master-data/items/${code}`);
+  const form = page.locator('form:has(select[name="inventoryAccountId"])').first();
+  await expect(form).toBeVisible({ timeout: 60_000 });
+  let changed = false;
+  for (const field of ['inventoryAccountId', 'cogsAccountId']) {
+    const select = form.locator(`select[name="${field}"]`);
+    if ((await select.inputValue()) !== '') continue;
+    const first = await select.locator('option:not([value=""])').first().getAttribute('value');
+    if (!first) continue;
+    await select.selectOption(first);
+    changed = true;
+  }
+  if (changed) {
+    await form.locator('button[type="submit"]').first().click();
+    await page.waitForURL(/saved=1/, { timeout: 60_000 });
+  }
+}
+
 async function noSidewaysScroll(page: Page) {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
@@ -83,6 +103,8 @@ test.describe('REQ-LOG-001 · the Logistics module', () => {
     expect(order.filter((name) => items.includes(name))).toEqual(items);
     await page.keyboard.press('Escape');
 
+    // The import of 500, born at its invoice and posted — its goods land in transit.
+    await itemAccounts(page);
     await page.goto('/payables/invoices/new');
     await page.getByLabel('Supplier Code').fill('SUP-00001');
     await page.locator('[name="item_code_0"]').fill('ITM-SEED');
@@ -92,6 +114,10 @@ test.describe('REQ-LOG-001 · the Logistics module', () => {
     await page.locator('input[name="is_import"]').check();
     await page.getByRole('button', { name: 'Create' }).click();
     await page.waitForURL((url) => url.pathname.startsWith('/payables/invoices/') && !url.pathname.endsWith('/new'), { timeout: 120_000 });
+    await page.getByRole('button', { name: 'Send for approval', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Approve and post', exact: true })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole('button', { name: 'Approve and post', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Approve and post', exact: true })).toHaveCount(0, { timeout: 60_000 });
     await page.getByRole('link', { name: 'Import tracking' }).click();
     await page.waitForURL(/\/payables\/IMP-/);
     importNo = decodeURIComponent(page.url().split('/payables/')[1]!.split(/[?#]/)[0]!);
@@ -233,6 +259,17 @@ test.describe('REQ-LOG-001 · the Logistics module', () => {
     for (const head of ['Ordered', 'In containers', 'In transit', 'Received', 'On hand']) {
       await expect(table.getByRole('columnheader', { name: head })).toBeVisible();
     }
+    // The posted import: 500 ordered, 500 in containers, 500 in transit (in the In Process warehouse), nothing received.
+    const row = table.getByRole('row', { name: new RegExp(importNo) });
+    await expect(row).toBeVisible();
+    const cells = await row.getByRole('cell').allTextContents();
+    expect(cells.slice(3, 9).map((cell) => cell.replace(/[\s,]/g, ''))).toEqual(['500', '500', '500WH-INPROC500', '500000IQD', '0', '0']);
+    // The ledger's own transit balance says the same, and nothing of it is available.
+    const ledger = page.getByRole('heading', { name: /Transit warehouses/ }).locator('..').locator('table');
+    const ledgerRow = ledger.getByRole('row', { name: /WH-INPROC/ }).first();
+    await expect(ledgerRow).toBeVisible();
+    await expect(ledgerRow).toContainText('In Process');
+    await expect(page.getByText('Every unit in a transit warehouse is accounted for')).toBeVisible();
     await shoot(page, 'in-transit-en-desktop');
     for (const screen of SCREENS) {
       await page.goto(screen.route);
