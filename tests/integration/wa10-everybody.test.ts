@@ -13,6 +13,12 @@
  *     person who said yes: what the service refuses, chat refuses, in the
  *     service's words, and the attempt is audited either way.
  *   * A customer or supplier is created from chat, and a prospect approved.
+ *   * A journal entry, a purchase invoice or a sales invoice is keyed from
+ *     what the person said and saved as a DRAFT ("draft maker") — every code
+ *     resolved to a real record first, nothing posted, and the form's own
+ *     service the one that saves it.
+ *   * Any document is looked up by its number, as the asker; and the pictures
+ *     of a screen travel with the answer.
  */
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -41,7 +47,8 @@ const CHAT = '120363000000000001@g.us';
 
 const dir = mkdtempSync(join(tmpdir(), 'noah-'));
 const issuesFile = join(dir, 'var', 'issues.md');
-const previous = { guide: process.env.ERP_GUIDE_DIR, issues: process.env.ERP_ISSUES_FILE };
+const shotsDir = join(dir, 'shots');
+const previous = { guide: process.env.ERP_GUIDE_DIR, issues: process.env.ERP_ISSUES_FILE, shots: process.env.ERP_GUIDE_SHOTS_DIR };
 
 beforeAll(() => {
   mkdirSync(join(dir, 'docs', 'guide'), { recursive: true });
@@ -64,6 +71,15 @@ beforeAll(() => {
   );
   process.env.ERP_GUIDE_DIR = join(dir, 'docs');
   process.env.ERP_ISSUES_FILE = issuesFile;
+
+  mkdirSync(join(shotsDir, 'en'), { recursive: true });
+  const shots = (['menu', 'screen', 'form'] as const).map((view) => {
+    const file = `en/payables-invoices-${view}.jpg`;
+    writeFileSync(join(shotsDir, file), Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+    return { route: '/payables/invoices', locale: 'en', view, file };
+  });
+  writeFileSync(join(shotsDir, 'index.json'), JSON.stringify(shots));
+  process.env.ERP_GUIDE_SHOTS_DIR = shotsDir;
 });
 
 afterAll(() => {
@@ -71,6 +87,8 @@ afterAll(() => {
   else process.env.ERP_GUIDE_DIR = previous.guide;
   if (previous.issues === undefined) delete process.env.ERP_ISSUES_FILE;
   else process.env.ERP_ISSUES_FILE = previous.issues;
+  if (previous.shots === undefined) delete process.env.ERP_GUIDE_SHOTS_DIR;
+  else process.env.ERP_GUIDE_SHOTS_DIR = previous.shots;
 });
 
 async function createUser(roles: string, name: string): Promise<ActorContext> {
@@ -301,5 +319,303 @@ describe('a customer or a supplier from chat', () => {
     expect(await confirm(world.manager, made.pending)).toMatchObject({ ok: true, said: expect.stringMatching(/Customer CUS-\d+ · Chat Customer Co is on the system\. It is approved/) });
     expect(await propose(world.manager, 'create_partner', { name: 'No Role Given' })).toMatchObject({ ok: false, reason: expect.stringMatching(/customer or a supplier/) });
     expect(await propose(world.manager, 'create_partner', { role: 'customer', name: ' ' })).toMatchObject({ ok: false });
+  });
+});
+
+describe('a draft from chat', () => {
+  const codeOf = async (id: string) => (await ownerPool.query(`select code from chart_of_account where id = $1`, [id])).rows[0].code as string;
+  const count = async (table: string) => (await ownerPool.query(`select count(*)::int as n from ${table}`)).rows[0].n as number;
+
+  it('a journal entry: refused while it does not balance or names what is not there, and saved as a draft — posting nothing — on a yes', async () => {
+    const expense = await codeOf(world.accounts.expense!);
+    const bank = await codeOf(world.accounts.bank!);
+
+    expect(
+      await propose(world.clerk, 'create_draft', { kind: 'journal_entry', lines: [{ account: expense, debit: '250,000' }, { account: bank, credit: '200000' }] }),
+    ).toMatchObject({ ok: false, reason: expect.stringMatching(/does not balance: debits 250,000, credits 200,000 — out by 50,000/) });
+    expect(await propose(world.clerk, 'create_draft', { kind: 'journal_entry', lines: [{ account: 'Z999999', debit: '1' }, { account: bank, credit: '1' }] })).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/Line 1: there is no account Z999999 in the chart/),
+    });
+    expect(await propose(world.clerk, 'create_draft', { kind: 'journal_entry', lines: [{ account: 'X000001', debit: '1' }, { account: bank, credit: '1' }] })).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/is a heading, and nothing posts to a heading/),
+    });
+    expect(await propose(world.clerk, 'create_draft', { kind: 'journal_entry', lines: [{ account: expense, debit: '5', credit: '5' }] })).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/needs a debit or a credit — one of them/),
+    });
+    expect(await propose(world.clerk, 'create_draft', { kind: 'payment', lines: [{}] })).toMatchObject({ ok: false, reason: expect.stringMatching(/Which kind of draft/) });
+    expect(await propose(world.clerk, 'create_draft', { kind: 'journal_entry', lines: [] })).toMatchObject({ ok: false, reason: expect.stringMatching(/at least one line/) });
+
+    const before = await count('journal_entry');
+    const made = await propose(world.clerk, 'create_draft', {
+      kind: 'journal_entry',
+      date: '2026-09-15',
+      description: 'Office rent, September',
+      lines: [
+        { account: expense.toLowerCase(), debit: '250,000', description: 'Rent' },
+        { account: bank, credit: 250000 },
+      ],
+    });
+    if (!made.ok) throw new Error(made.reason);
+    expect(made.pending).toMatchObject({ action: 'create_draft', chat: CHAT, draft: { kind: 'journal_entry', date: '2026-09-15', currency: 'IQD' } });
+    expect(made.pending.sentence).toContain('create a DRAFT journal entry dated 2026-09-15 — "Office rent, September", branch BGW');
+    expect(made.pending.sentence).toContain(`1. ${expense} · Service and Expense Cost — debit 250,000`);
+    expect(made.pending.sentence).toContain(`2. ${bank} · Bank Current Account — credit 250,000`);
+    expect(made.pending.sentence).toMatch(/debits 250,000 = credits 250,000 \(IQD\)/);
+    expect(made.pending.sentence).toMatch(/Nothing is posted/);
+    // Proposing changed nothing.
+    expect(await count('journal_entry')).toBe(before);
+
+    const done = await confirm(world.clerk, made.pending);
+    if (!done.ok) throw new Error(done.reason);
+    expect(done.said).toMatch(/Journal entry JE-\S+ is saved as a draft with 2 line\(s\)\./);
+    expect(done.said).toMatch(/\/finance\/journals\/JE-/);
+    const { rows } = await ownerPool.query(
+      `select j.status, j.posting_date::text as posting_date, j.description, j.created_by,
+              (select count(*)::int from journal_line l where l.journal_entry_id = j.id) as lines,
+              (select coalesce(sum(l.debit_iqd), 0)::text from journal_line l where l.journal_entry_id = j.id) as debits
+         from journal_entry j order by j.created_at desc limit 1`,
+    );
+    expect(rows[0]).toMatchObject({ status: 'draft', posting_date: '2026-09-15', description: 'Office rent, September', lines: 2, created_by: world.clerk.principal.userId });
+    expect(Number(rows[0].debits)).toBe(250000);
+    expect(await count('journal_entry')).toBe(before + 1);
+
+    // Somebody whose role keys no journals: whatever chat proposes, the journal's own service refuses.
+    const stranger = await propose(nobody, 'create_draft', { kind: 'journal_entry', lines: [{ account: expense, debit: '10' }, { account: bank, credit: '10' }] });
+    if (stranger.ok) expect((await confirm(nobody, stranger.pending)).ok).toBe(false);
+    expect(await count('journal_entry')).toBe(before + 1);
+
+    // The saving is in the audit trail, as the person who said yes.
+    const audit = await ownerPool.query(
+      `select outcome, actor_user_id, after_value -> 'draft' ->> 'kind' as kind from audit_event where action = 'whatsapp.action.create_draft' and outcome = 'success' order by occurred_at desc limit 1`,
+    );
+    expect(audit.rows[0]).toMatchObject({ kind: 'journal_entry', actor_user_id: world.clerk.principal.userId });
+  });
+
+  it('a purchase invoice: the supplier, the item and the warehouse are found first; saved as a draft that owes nothing yet', async () => {
+    expect(await propose(world.clerk, 'create_draft', { kind: 'purchase_invoice', party: 'Nobody Ltd', lines: [{ item: PANEL, quantity: 1, unitPrice: 1 }] })).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/No active, approved supplier matches "Nobody Ltd"/),
+    });
+    expect(await propose(world.clerk, 'create_draft', { kind: 'purchase_invoice', lines: [{ item: PANEL, quantity: 1, unitPrice: 1 }] })).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/Which supplier\?/),
+    });
+    expect(await propose(world.clerk, 'create_draft', { kind: 'purchase_invoice', party: 'jinko', lines: [{ item: 'ITM-NOPE', quantity: 1, unitPrice: 1 }] })).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/Line 1: no item "ITM-NOPE"/),
+    });
+    expect(await propose(world.clerk, 'create_draft', { kind: 'purchase_invoice', party: 'jinko', lines: [{ item: PANEL, quantity: 'many', unitPrice: 1 }] })).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/how many\?/),
+    });
+    expect(await propose(world.clerk, 'create_draft', { kind: 'purchase_invoice', party: 'jinko', lines: [{ item: PANEL, quantity: 2 }] })).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/what is the unit price in IQD\?/),
+    });
+    expect(
+      await propose(world.clerk, 'create_draft', { kind: 'purchase_invoice', party: 'jinko', lines: [{ item: PANEL, quantity: 2, unitPrice: 5, warehouse: 'WH-NOPE' }] }),
+    ).toMatchObject({ ok: false, reason: expect.stringMatching(/there is no active warehouse WH-NOPE in branch BGW/) });
+
+    const before = await count('ap_invoice');
+    const made = await propose(world.clerk, 'create_draft', {
+      kind: 'purchase_invoice',
+      party: 'jinko',
+      date: '2026-09-10',
+      dueDate: '2026-11-10',
+      description: 'Keyed from chat',
+      lines: [{ item: 'itm-panel', quantity: '10', unitPrice: '10,000', discount: '5,000', warehouse: 'wh-main' }],
+    });
+    if (!made.ok) throw new Error(made.reason);
+    expect(made.pending.sentence).toMatch(/create a DRAFT purchase invoice — supplier \S+ · Jinko Solar, dated 2026-09-10, due 2026-11-10, in IQD, branch BGW/);
+    expect(made.pending.sentence).toContain('a local purchase (not an import)');
+    expect(made.pending.sentence).toContain(`1. ${PANEL} · Solar Panel 550W — 10 × 10,000 − 5,000 → warehouse ${WAREHOUSE}`);
+    expect(made.pending.sentence).toContain('total 95,000 IQD');
+    expect(made.pending.sentence).toMatch(/no journal, no stock, nothing owed yet/);
+    expect(await count('ap_invoice')).toBe(before);
+
+    const done = await confirm(world.clerk, made.pending);
+    if (!done.ok) throw new Error(done.reason);
+    expect(done.said).toMatch(/Purchase invoice API-\S+ is saved as a draft for \S+ · Jinko Solar\./);
+    expect(done.said).toMatch(/\/payables\/invoices\/API-/);
+    const { rows } = await ownerPool.query(
+      `select i.invoice_no, i.status, i.supplier_id, i.invoice_date::text as invoice_date, i.journal_entry_id, i.created_by,
+              (select count(*)::int from ap_invoice_line l where l.ap_invoice_id = i.id) as lines
+         from ap_invoice i order by i.created_at desc limit 1`,
+    );
+    expect(rows[0]).toMatchObject({ status: 'draft', supplier_id: world.supplierId, invoice_date: '2026-09-10', journal_entry_id: null, lines: 1, created_by: world.clerk.principal.userId });
+    expect(await count('inventory_movement')).toBe(0);
+
+    // What he made can be looked up by its number, and moved on by the usual step.
+    const no = rows[0].invoice_no as string;
+    const seen = await tool(world.clerk, 'document_status', { no: no.toLowerCase() });
+    expect(seen).toContain(`${no} · purchase invoice`);
+    expect(seen).toMatch(/status: draft · branch BGW · 95,000 IQD/);
+    expect(seen).toContain(`/payables/invoices/${no}`);
+    expect(await tool(nobody, 'document_status', { no })).toMatch(/role does not include "purchase invoice"/);
+    expect(await tool(world.clerk, 'document_status', { no: 'API-BGW-2026-999999' })).toMatch(/There is no purchase invoice API-BGW-2026-999999/);
+    expect(await tool(world.clerk, 'document_status', { no: 'XYZ-1' })).toMatch(/cannot tell what kind of document XYZ-1 is/);
+    const submit = await propose(world.clerk, 'document_step', { step: 'submit', document: no });
+    if (!submit.ok) throw new Error(submit.reason);
+    expect(await confirm(world.clerk, submit.pending)).toMatchObject({ ok: true });
+  });
+
+  it('a purchase priced in dollars is put to the person with the rate of its date, and a missing rate is said', async () => {
+    // Two warehouses in the branch: he asks which, and does not pick one.
+    expect(await propose(world.clerk, 'create_draft', { kind: 'purchase_invoice', party: 'jinko', lines: [{ item: PANEL, quantity: 10, unitPrice: 100 }] })).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/which warehouse does it arrive in\? The choices: .*WH-MAIN · Main Warehouse/),
+    });
+    const made = await propose(world.clerk, 'create_draft', {
+      kind: 'purchase_invoice',
+      party: 'jinko',
+      date: '2026-09-10',
+      currency: 'usd',
+      lines: [{ item: PANEL, quantity: 10, unitPrice: 100, warehouse: WAREHOUSE }],
+    });
+    if (!made.ok) throw new Error(made.reason);
+    expect(made.pending.sentence).toMatch(/in USD \(1 USD = 1,310 IQD on 2026-09-10\)/);
+    expect(made.pending.sentence).toContain('total 1,000 USD (1,310,000 IQD)');
+    const done = await confirm(world.clerk, made.pending);
+    if (!done.ok) throw new Error(done.reason);
+    const { rows } = await ownerPool.query(`select status, agreed_currency, agreed_rate::text as agreed_rate from ap_invoice order by created_at desc limit 1`);
+    expect(rows[0]).toMatchObject({ status: 'draft', agreed_currency: 'USD' });
+    expect(Number(rows[0].agreed_rate)).toBe(1310);
+
+    expect(
+      await propose(world.clerk, 'create_draft', { kind: 'purchase_invoice', party: 'jinko', currency: 'EUR', lines: [{ item: PANEL, quantity: 1, unitPrice: 1 }] }),
+    ).toMatchObject({ ok: false, reason: expect.stringMatching(/There is no EUR rate for/) });
+  });
+
+  it('a sales invoice: the customer by name, saved as a draft from which no stock has left', async () => {
+    const before = await count('ar_invoice');
+    const made = await propose(world.clerk, 'create_draft', {
+      kind: 'sales_invoice',
+      party: 'al noor',
+      date: '2026-09-12',
+      lines: [{ item: 'Solar Panel 550W', quantity: 2, unitPrice: 15000, warehouse: WAREHOUSE }],
+    });
+    if (!made.ok) throw new Error(made.reason);
+    expect(made.pending.sentence).toMatch(/create a DRAFT sales invoice — customer \S+ · Al Noor Trading, dated 2026-09-12, in IQD, branch BGW/);
+    expect(made.pending.sentence).toContain(`1. ${PANEL} · Solar Panel 550W — 2 × 15,000 → warehouse ${WAREHOUSE}`);
+    expect(made.pending.sentence).toContain('total 30,000 IQD');
+    expect(await count('ar_invoice')).toBe(before);
+
+    const done = await confirm(world.clerk, made.pending);
+    if (!done.ok) throw new Error(done.reason);
+    expect(done.said).toMatch(/Sales invoice INV-\S+ is saved as a draft for \S+ · Al Noor Trading\./);
+    const { rows } = await ownerPool.query(`select status, customer_id, journal_entry_id from ar_invoice order by created_at desc limit 1`);
+    expect(rows[0]).toMatchObject({ status: 'draft', customer_id: world.customerId, journal_entry_id: null });
+    expect(await count('inventory_movement')).toBe(0);
+
+    // A supplier is not a customer.
+    expect(await propose(world.clerk, 'create_draft', { kind: 'sales_invoice', party: 'jinko', lines: [{ item: PANEL, quantity: 1, unitPrice: 1, warehouse: WAREHOUSE }] })).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/No active, approved customer matches "jinko"/),
+    });
+  });
+});
+
+describe('the pictures of a screen travel with the answer', () => {
+  const show = (ctx: ActorContext, args: Record<string, unknown>) =>
+    asking(ctx, (read) => toolRunnerFor(read, [], undefined, { userName: 'Tester', chat: CHAT })('show_screen', args));
+
+  it('show_screen attaches them for somebody who may open the screen, each with its tag', async () => {
+    const shown = await show(world.manager, { screen: '/payables/invoices', view: 'all' });
+    expect(shown.text).toMatch(/3 picture\(s\) of Purchase Invoices/);
+    expect(shown.text).toContain('[picture: payables-invoices-menu]');
+    expect(shown.images).toHaveLength(3);
+    const closed = await show(nobody, { screen: '/payables/invoices' });
+    expect(closed.images ?? []).toEqual([]);
+    expect(closed.text).toMatch(/role cannot open Purchase Invoices/);
+  });
+
+  it('untagged, the words go first and each picture follows under what it shows', async () => {
+    const shown = await show(world.manager, { screen: '/payables/invoices', view: 'all' });
+    const reply = await wa.answer({
+      userId: world.manager.principal.userId,
+      text: 'where do I enter a purchase invoice?',
+      agent: async () => ({
+        text: 'Payables → Purchasing & Invoices → Purchase Invoices. The ringed entry in the first picture is the one to click.',
+        model: null,
+        used: ['screens', 'show_screen'],
+        images: [...(shown.images ?? []), { file: join(shotsDir, 'en', 'never-made.jpg'), caption: 'missing' }],
+      }),
+    });
+    // The one whose file is not there is left out; the words still go.
+    expect(reply.images.map((image) => image.fileName)).toEqual(['payables-invoices-menu.jpg', 'payables-invoices-screen.jpg', 'payables-invoices-form.jpg']);
+    expect(reply.images[0]).toMatchObject({ format: 'image', contentType: 'image/jpeg', caption: expect.stringMatching(/Purchase Invoices: where it is in the menu/) });
+    expect(reply.images[0]!.body.length).toBe(4);
+    expect(reply.parts.map((part) => (part.image ? part.image.fileName : 'words'))).toEqual(['words', 'payables-invoices-menu.jpg', 'payables-invoices-screen.jpg', 'payables-invoices-form.jpg']);
+    expect(reply.text).toContain('The ringed entry in the first picture');
+    expect(reply.attachment).toBeNull();
+  });
+
+  it('tagged, each step is sent under its own picture, and the stamp closes the last of them', async () => {
+    const shown = await show(world.manager, { screen: '/payables/invoices', view: 'all' });
+    const reply = await wa.answer({
+      userId: world.manager.principal.userId,
+      text: 'how do I enter a purchase invoice?',
+      agent: async () => ({
+        text: [
+          'To enter a purchase invoice:',
+          '',
+          '[picture: payables-invoices-menu]',
+          '*Step 1* — open *Payables* and click *Purchase Invoices*, ringed in red.',
+          '',
+          '[picture: payables-invoices-screen]',
+          '*Step 2* — press *New invoice*.',
+          '',
+          '[picture: payables-invoices-form]',
+          '*Step 3* — 1 — *Supplier*: who billed you; required.',
+        ].join('\n'),
+        model: null,
+        used: ['guide', 'show_screen'],
+        images: shown.images ?? [],
+      }),
+    });
+    expect(reply.parts.map((part) => [part.image?.fileName ?? null, part.text.split('\n')[0]])).toEqual([
+      [null, 'To enter a purchase invoice:'],
+      ['payables-invoices-menu.jpg', '*Step 1* — open *Payables* and click *Purchase Invoices*, ringed in red.'],
+      ['payables-invoices-screen.jpg', '*Step 2* — press *New invoice*.'],
+      ['payables-invoices-form.jpg', '*Step 3* — 1 — *Supplier*: who billed you; required.'],
+    ]);
+    // W-R7: when it was read, under which branch, as whom — under the last step, and in its caption.
+    const last = reply.parts[reply.parts.length - 1]!;
+    expect(last.text).toMatch(/BGW/);
+    expect(last.image!.caption).toBe(last.text);
+    expect(reply.parts[1]!.image!.caption).toBe('*Step 1* — open *Payables* and click *Purchase Invoices*, ringed in red.');
+    // The record keeps the whole answer, without the tags.
+    expect(reply.text).not.toMatch(/\[picture/);
+    expect(reply.text).toContain('*Step 2* — press *New invoice*.');
+  });
+
+  it('an answer with no pictures is one message, as it always was', async () => {
+    const reply = await wa.answer({
+      userId: world.manager.principal.userId,
+      text: 'what is an import?',
+      agent: async () => ({ text: 'A payable whose goods come from abroad.', model: null, used: [] }),
+    });
+    expect(reply.images).toEqual([]);
+    expect(reply.parts).toEqual([{ text: reply.text, image: null }]);
+  });
+});
+
+describe('the look-ups a draft needs', () => {
+  it('finds an account by part of its name, and says the rate of a date', async () => {
+    const found = await tool(world.clerk, 'accounts', { search: 'bank current' });
+    expect(found).toMatch(/1 account\(s\) matching "bank current":/);
+    expect(found).toMatch(/A9\d{5} · Bank Current Account · /);
+    expect(await tool(world.clerk, 'accounts', { search: 'x000001' })).toMatch(/X000001 · .* · HEADING \(nothing posts to it\)/);
+    expect(await tool(world.clerk, 'accounts', { search: 'trade payables' })).toMatch(/supplier control account/);
+    expect(await tool(world.clerk, 'accounts', { search: 'no such account anywhere' })).toMatch(/No account matches/);
+    expect(await tool(nobody, 'accounts')).toMatch(/permission view on chart_of_account/);
+
+    expect(await tool(world.clerk, 'exchange_rate', { currency: 'usd', date: '2026-09-10' })).toMatch(/1 USD = 1,310 IQD on 2026-09-10 \(the accounting rate in force since 2026-01-01\)/);
+    expect(await tool(world.clerk, 'exchange_rate', { currency: 'IQD' })).toMatch(/1 IQD = 1 IQD/);
+    expect(await tool(world.clerk, 'exchange_rate', { currency: 'XYZ' })).toMatch(/XYZ: no accounting rate/);
+    expect(await tool(nobody, 'exchange_rate')).toMatch(/permission view on exchange_rate/);
   });
 });

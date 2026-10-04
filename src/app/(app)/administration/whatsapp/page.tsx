@@ -181,9 +181,9 @@ export default async function WhatsappPage({ searchParams }: { searchParams: Sea
                 <Field hint={t('number_hint')} label={t('number')} name="e164" placeholder="+9647xxxxxxxxx" required />
               </Grid>
               <Checkbox defaultChecked label={t('allow_notifications')} name="allow_notifications" />
-              <Checkbox label={t('allow_queries')} name="allow_queries" />
-              <Checkbox label={t('allow_digest')} name="allow_digest" />
-              <Checkbox label={t('allow_actions')} name="allow_actions" />
+              <Checkbox defaultChecked label={t('allow_queries')} name="allow_queries" />
+              <Checkbox defaultChecked label={t('allow_digest')} name="allow_digest" />
+              <Checkbox defaultChecked label={t('allow_actions')} name="allow_actions" />
               <p className={s.sapNote}>{t('queries_note')}</p>
               <p className={s.sapNote}>{t('actions_note')}</p>
               <SubmitRow>

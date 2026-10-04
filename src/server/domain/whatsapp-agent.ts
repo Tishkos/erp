@@ -66,6 +66,8 @@ export interface AgentClient {
  */
 export interface ToolOutcome {
   readonly text: string;
+  /** Pictures to send after the answer — a screen, its menu path, its form. */
+  readonly images?: ReadonlyArray<{ readonly file: string; readonly caption: string }>;
   readonly attachment?: {
     readonly model: unknown;
     readonly format?: 'pdf' | 'xlsx';
@@ -277,9 +279,9 @@ export const AGENT_TOOLS = [
       properties: {
         action: {
           ...string,
-          enum: ['approve_document', 'reject_document', 'approve_opening_stock', 'document_step', 'create_partner', 'approve_partner'],
+          enum: ['approve_document', 'reject_document', 'approve_opening_stock', 'document_step', 'create_partner', 'approve_partner', 'create_draft'],
           description:
-            "approve_document / reject_document: something already waiting in their own approval inbox. approve_opening_stock: an opening stock document, which posts its quantities into the inventory ledger. document_step: move a document one step by its number — give `step`; purchase invoice API-… (submit, post, reverse), sales invoice INV-… (approve, post, reverse), purchase order PO-… (submit, approve, cancel), goods receipt GRN-… (submit, post), purchase return GRT-… (approve, post), supplier payment PAY-… (post, reverse), customer receipt RCT-… (approve, post), journal entry JE-… (submit, approve, reject, reverse), internal transfer BTR-… (approve, post), opening stock OPN-… (submit, approve). create_partner: a new customer or supplier — give `role` and `name`. approve_partner: make a prospect customer or supplier usable — give its code as `document`.",
+            "approve_document / reject_document: something already waiting in their own approval inbox. approve_opening_stock: an opening stock document, which posts its quantities into the inventory ledger. document_step: move a document one step by its number — give `step`; purchase invoice API-… (submit, post, reverse), sales invoice INV-… (approve, post, reverse), purchase order PO-… (submit, approve, cancel), goods receipt GRN-… (submit, post), purchase return GRT-… (approve, post), supplier payment PAY-… (post, reverse), customer receipt RCT-… (approve, post), journal entry JE-… (submit, approve, reject, reverse), internal transfer BTR-… (approve, post), opening stock OPN-… (submit, approve). create_partner: a new customer or supplier — give `role` and `name`. approve_partner: make a prospect customer or supplier usable — give its code as `document`. create_draft: key a document from what they told you and save it as a DRAFT (nothing posts) — give `kind` (journal_entry, purchase_invoice or sales_invoice), `lines`, and for an invoice `party`; a journal line is `account` + `debit` or `credit` (+ `department`), an invoice line is `item` + `quantity` + `unitPrice` (+ `warehouse`, `discount`).",
         },
         document: { ...string, description: 'The document number as it is written on the system (or the partner code for approve_partner).' },
         step: { ...string, enum: ['submit', 'approve', 'reject', 'post', 'reverse', 'cancel'], description: 'For document_step: which step.' },
@@ -289,8 +291,60 @@ export const AGENT_TOOLS = [
         phone: { ...string, description: 'For create_partner: optional.' },
         email: { ...string, description: 'For create_partner: optional.' },
         address: { ...string, description: 'For create_partner: optional.' },
+        kind: { ...string, enum: ['journal_entry', 'purchase_invoice', 'sales_invoice'], description: 'For create_draft: which document.' },
+        party: { ...string, description: 'For create_draft of an invoice: the supplier (purchase) or customer (sales), by code or name.' },
+        date: { ...string, description: 'For create_draft: the document date, YYYY-MM-DD. Today when not stated.' },
+        dueDate: { ...string, description: 'For create_draft of an invoice: optional, YYYY-MM-DD.' },
+        currency: { ...string, description: 'For create_draft of a purchase invoice: the currency the prices are in (IQD unless they said otherwise, e.g. USD).' },
+        import: { ...boolean, description: 'For create_draft of a purchase invoice: true when the goods come from abroad (it opens an import application). Ask if they did not say.' },
+        description: { ...string, description: 'For create_draft: the journal\'s description, or a note on the invoice.' },
+        lines: {
+          type: 'array',
+          description: 'For create_draft: the lines, in order.',
+          items: {
+            type: 'object',
+            properties: {
+              item: { ...string, description: 'Invoice line: the item code (or its exact name).' },
+              quantity: { ...string, description: 'Invoice line: how many.' },
+              unitPrice: { ...string, description: 'Invoice line: the price of one, in the invoice currency.' },
+              discount: { ...string, description: 'Invoice line: optional, an amount off the line.' },
+              warehouse: { ...string, description: 'Invoice line: the warehouse code it arrives in or is sold from. Leave out when the branch has only one.' },
+              account: { ...string, description: 'Journal line: the account code, such as A000003.' },
+              debit: { ...string, description: 'Journal line: the debit amount in IQD (or credit, not both).' },
+              credit: { ...string, description: 'Journal line: the credit amount in IQD.' },
+              department: { ...string, description: 'Journal line: the department code, where the account wants one (expenses usually do — FIN).' },
+              description: { ...string, description: 'Optional: what the line is for.' },
+            },
+            additionalProperties: false,
+          },
+        },
       },
       required: ['action'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'document_status',
+    description:
+      'Any document by its number — what it is, its status, its branch and amount, and the address of its page: a purchase invoice (API-…), sales invoice (INV-…), purchase order (PO-…), goods receipt (GRN-…), purchase return (GRT-…), supplier payment (PAY-…), customer receipt (RCT-…), journal entry (JE-…), internal transfer (BTR-…), opening stock (OPN-…). Use it before you propose a step on a document, and for "where is…", "what happened to…".',
+    input_schema: { type: 'object', properties: { no: { ...string, description: 'The document number.' } }, required: ['no'], additionalProperties: false },
+  },
+  {
+    name: 'show_screen',
+    description:
+      'Attach pictures of a screen to your answer, so the person sees where to click and what to type. view "menu": the module\'s dropdown open with the screen ringed in red — where to go. "screen": the screen itself with its New button ringed. "form": what opens when that button is pressed, every field NUMBERED in red — the result tells you which number is which field, so you can say "1 — Name: …". "all": the three of them, which is a whole how-to. Besides the menu\'s screens there are: "sign in" (the sign-in page, numbered), "top bar" (the bar at the top with its parts numbered: modules, branch, search, notifications, language, account), "account menu" (the menu under the person\'s initials) and "change password". The result gives each picture a tag: write the tag on a line of its own in your answer and what you write under it is sent as that picture\'s caption — step, picture, step, picture. Name the screen in English ("purchase invoices", "suppliers", "sign in") or by its address. The pictures are of a training copy with sample data: the layout is the real one; the names and figures in them are not the company\'s. At most six pictures go with one answer.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        screen: { ...string, description: 'The screen: its English name, or its address (/payables/invoices).' },
+        view: {
+          ...string,
+          enum: ['menu', 'screen', 'form', 'record', 'all'],
+          description:
+            'Which picture. "all" for a how-to (menu, screen, form); "menu" when they only asked where it is; "record" for one saved document opened — its status, its action buttons, and the printer / paperclip / notes / history icons — when the question is about what to do with a record that already exists.',
+        },
+      },
+      required: ['screen'],
       additionalProperties: false,
     },
   },
@@ -347,6 +401,29 @@ export const AGENT_TOOLS = [
     },
   },
   {
+    name: 'accounts',
+    description:
+      'The chart of accounts: code, name, type, whether it is a heading (nothing posts to a heading) and whether it is active. Use it to find an account by part of its name or code — before you key a journal draft, when somebody asks "which account is…", or to explain what an account is for. Balances are trial_balance; this is the list.',
+    input_schema: {
+      type: 'object',
+      properties: { search: { ...string, description: 'Optional: part of a code or name. Leave it out for the whole chart (the first 80).' } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'exchange_rate',
+    description:
+      'The accounting exchange rate in force on a date: how many IQD one unit of a currency is, and since when. Use it for "what is the dollar rate", before you key a draft priced in a foreign currency, and to explain why a foreign amount became the dinar figure it did. Leave the currency out for every currency the company keeps.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        currency: { ...string, description: 'Optional: the currency code, such as USD.' },
+        date: { ...string, description: 'Optional: YYYY-MM-DD. Today when left out.' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'what_the_bot_can_do',
     description: 'The short list of set phrases the bot also understands. Use it only when asked what it can do.',
     input_schema: noArgs,
@@ -370,6 +447,7 @@ export function systemPrompt(input: { readonly locale: BotLocale; readonly userN
     'The ERP is your subject. Everything in it — the books, the stock, the imports, the people, the rules, the screens, why a thing was refused, what somebody should do next — is yours to know and to explain in as much detail as anyone wants. Other subjects you can be helpful about briefly and honestly, but you do not go looking for them: a question that is not about this company and this system gets a short useful answer and an offer to get back to the books.',
     `You are answering ${input.userName}, working in branch ${input.branchCode}. Today is ${input.today}. The books are kept in Iraqi dinars (IQD); foreign purchases are in USD and converted at the accounting rate.`,
     'Everybody in the company may ask you — the owner, an accountant, a storekeeper, a salesperson on their first day. Pitch the answer to the person in front of you: plain words, and no term they did not use without saying what it means.',
+    'HOW THEY REACH YOU: the group is the company\'s own conversation and you are not one of the people talking in it. You are shown a message only when it begins with !ai, and you see it with that word already taken off. You never see, and never answer, anything else said in the group — so do not refer to "what was said above" unless it is in the turns you were given. Whenever you need an answer back — a yes to a proposal, a missing detail, a choice between two — tell them to start their reply with !ai (for example *!ai yes*), because a reply without it never reaches you.',
     'The company is in a TESTING PHASE (October 2026). The database was started clean: the chart of accounts, the posting rules, the fiscal year, the head-office branch and its warehouses are set up, and everything else — customers, suppliers, items, documents — is being entered now by people trying the system out. An empty list usually means nobody has entered one yet: say so, and say where the first one is entered. Encourage people to try things, and treat every stumble as worth writing down (report_issue).',
     '',
     'WHAT THE SYSTEM HOLDS, so you can explain it as well as read it:',
@@ -422,6 +500,10 @@ export function systemPrompt(input: { readonly locale: BotLocale; readonly userN
     '• When they are stuck on a message from the system, find it in the guide\'s refusals, say what causes it in plain words and exactly what to do next. If it is not in the guide, reason from the rules above and say that you are reasoning.',
     '• A screen that is not built yet shows "Coming soon": say so plainly, and what they can use instead. A screen their role cannot open: say which permission it needs and that an administrator gives it on Settings → Administration → Users / Roles.',
     '• When explaining a field or a whole form, go through every field in the order the form shows them. Nobody should have to ask twice.',
+    '• Send the pictures — a how-to without them is half an answer: call show_screen for the screen you are explaining ("all" for a how-to, "menu" when they only asked where it is; "sign in", "top bar", "account menu" and "change password" have pictures too). It hands you a tag for each picture. Write your answer as STEPS, and put each picture at its step: the tag alone on a line, and under it that step\'s words — "*Step 2* — in this picture the button ringed in red is *New supplier*: press it." What you write under a tag is sent as the caption of that picture, so keep each step short (a few lines) and complete in itself. Start to finish: where to go, what to press, what to type in which field, what happens when they save.',
+    '• The pictures carry red numbers on what matters — every field of a form, the buttons, the tabs, the search and filters, the table, a record\'s status and its printer / paperclip / notes / history icons — and the tool tells you which number is which. Use them: "Look at *1* — *Customer name*: …". For every numbered thing the person has to use, in order: what it is for; why the system needs it; what to put there, with an example from this company where you can look one up; whether it may be left empty; and what it changes elsewhere (the due date, the ageing, the stock, the journal). Explain a term the first time it appears, right beside its step. Never invent a number or a field the tool did not list; if a picture has no numbers, describe the control by its label.',
+    '• A task that crosses several screens is several pictures in order — *Step 1* where to go (the menu picture), *Step 2* what to press (the screen picture), *Step 3* what to fill in (the form picture), *Step 4* what to do with the saved record (the record picture) — each step under its own picture, and nothing described that the picture at that step does not show.',
+    '• They are pictures of a training copy with sample data, so the layout is exact and the names and figures in them are not theirs; say so if they ask about a figure in a picture. If the tool says there is no picture, explain in words — never promise a picture you were not given.',
     '• WhatsApp formatting only: *bold* with single asterisks for a button or field name, numbered lines for steps, a blank line between parts. No Markdown headings, no tables, no code blocks.',
     '',
     'WHEN SOMETHING IS WRONG WITH THE SYSTEM:',
@@ -441,12 +523,13 @@ export function systemPrompt(input: { readonly locale: BotLocale; readonly userN
     '• You are talking to the people of the company, in their own group. Be direct and useful: give the figure, say what it means, and say what you would look at next. Do not pad, do not lecture, and do not apologise for what you can do.',
     '• What a person may see is their role\'s to decide, not yours: a tool that says their role does not include something is the answer — say which permission is missing and who grants it. Never work round it with another tool.',
     '• A question about something outside the ERP — a policy nobody wrote down, a decision that is theirs to make — gets your honest view marked as a view, not a figure dressed up as one.',
-    '• You may change things, within one rule you never bend: PROPOSE, THEN ASK, THEN IT RUNS. Call propose_action, which changes nothing, and it hands you the facts. Put those facts to the person — the document, the figures, and what it will do that cannot be undone — and ask whether they are sure. When they say yes it runs as them, and their permissions, the maker-checker rule, the branch scope and the open period decide. You will be told what happened.',
+    '• You may change things, within one rule you never bend: PROPOSE, THEN ASK, THEN IT RUNS. Call propose_action, which changes nothing, and it hands you the facts. Put those facts to the person — the document, the figures, and what it will do that cannot be undone — and ask them to reply *!ai yes* to go ahead (or *!ai no*). A yes without !ai in front never reaches you, so always spell it that way. When they say yes it runs as them, and their permissions, the maker-checker rule, the branch scope and the open period decide. You will be told what happened.',
     '• Never say a thing is done when you have only proposed it, and never ask for confirmation of something you have not checked. If propose_action refuses, explain the refusal — that is the answer, and it is usually the useful one.',
     '• What you can do today, all through propose_action: approve or reject a document waiting in that person\'s own approval inbox; approve opening stock; move a document one step by its number (document_step) — submit, approve, post, reverse or cancel, for purchase invoices, sales invoices, purchase orders, goods receipts, purchase returns, supplier payments, customer receipts, journal entries, internal transfers and opening stock; create a customer or a supplier; approve a prospect partner. Whether THIS person may take the step is the system\'s answer when it runs — permissions, maker-checker, the open period — and a refusal comes back in the system\'s own words for you to explain.',
-    '• What stays on the screens: anything with lines to type — a new invoice, an order, a journal, an item with its accounts. For those, do not pretend: walk them through the screen (guide + screens), field by field, and offer to take the next step for them once the document exists (submit it, post it).',
+    '• DRAFTS — you can key a journal entry, a purchase invoice or a sales invoice for them (create_draft): gather what it needs in the conversation — who, the date if not today, each line — look up the codes yourself (items, list_partners, the chart), propose it, and read the whole draft back line by line with its total before they say yes. It is saved as a draft: nothing posts, and they can still change it on its page. Then offer the next step (submit, post). If something is missing — a price, a warehouse, which account — ask one short question rather than guessing.',
+    '• What stays on the screens: every other document with lines to type (an order, a receipt, a payment, an item with its accounts). For those, do not pretend: walk them through the screen (guide + screens + pictures), field by field, and offer to take the next step for them once the document exists.',
     '• When somebody asks you to do something and gives no number, find it first (the list tools, the query) and confirm which one they mean before you propose.',
-    '• A person can also do it themselves by typing: approve <document number>. That way answers with a six-digit code to confirm. Both roads end at the same place.',
+    '• A person can also do it themselves by typing: !ai approve <document number>. That way answers with a six-digit code to confirm (!ai confirm <code>). Both roads end at the same place.',
     '• Figures are IQD unless said otherwise. Write large numbers with thousands separators. Name the warehouse, supplier or document you are talking about.',
     '',
     'LANGUAGE — this is not optional:',
@@ -463,9 +546,17 @@ export interface AgentResult {
   readonly format?: 'pdf' | 'xlsx';
   readonly exportObject?: string;
   readonly exportKey?: string;
+  /** Pictures to send after the words. */
+  readonly images?: ReadonlyArray<{ readonly file: string; readonly caption: string }>;
   /** For the log: which tools it used, in order. */
   readonly used: readonly string[];
 }
+
+/**
+ * How many pictures one answer may carry: a walk through one task — the menu,
+ * the screen, the form — and a second screen beside it when the task has two.
+ */
+export const MAX_IMAGES = 6;
 
 /**
  * How many times round the loop before it must answer with what it has. A
@@ -502,6 +593,8 @@ export async function runAgent(input: {
 
   const used: string[] = [];
   let lastAttachment: ToolOutcome['attachment'] = null;
+  // The pictures the tools attached, in order, each once, and no more than three.
+  const images: { file: string; caption: string }[] = [];
 
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
     const reply = await input.client.create({
@@ -527,6 +620,7 @@ export async function runAgent(input: {
         ...(lastAttachment?.format ? { format: lastAttachment.format } : {}),
         ...(lastAttachment?.exportObject ? { exportObject: lastAttachment.exportObject } : {}),
         ...(lastAttachment?.exportKey ? { exportKey: lastAttachment.exportKey } : {}),
+        ...(images.length > 0 ? { images } : {}),
         used,
       };
     }
@@ -540,6 +634,9 @@ export async function runAgent(input: {
       try {
         const outcome = await input.runTool(name, args);
         if (outcome.attachment?.model) lastAttachment = outcome.attachment;
+        for (const image of outcome.images ?? []) {
+          if (images.length < MAX_IMAGES && !images.some((one) => one.file === image.file)) images.push({ file: image.file, caption: image.caption });
+        }
         results.push({ type: 'tool_result', tool_use_id: call.id ?? '', content: outcome.text.slice(0, 12_000) });
       } catch (error) {
         // A tool that refuses is information, not a crash: the model is told
@@ -560,6 +657,7 @@ export async function runAgent(input: {
         ? 'بحثت في عدة أماكن ولم أصل إلى إجابة واحدة. حدّد السؤال أكثر من فضلك.'
         : 'I looked in several places without arriving at one answer — could you narrow the question?',
     model: lastAttachment?.model ?? null,
+    ...(images.length > 0 ? { images } : {}),
     used,
   };
 }

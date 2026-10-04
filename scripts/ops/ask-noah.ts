@@ -47,7 +47,15 @@ async function main(): Promise<void> {
       runAgentFor({ client, model: readerModel(settings.agentModel), ctx, question: asked, userName, chat: 'terminal' }),
   });
 
-  console.log(reply.text);
+  if (reply.images.length === 0) console.log(reply.text);
+  else {
+    // As the group would get it: each part a message, a picture's words under it.
+    for (const [index, part] of reply.parts.entries()) {
+      console.log(part.image ? `┌─ message ${index + 1}: PICTURE ${part.image.fileName} (${Math.round(part.image.body.length / 1024)} KB), with the caption:` : `┌─ message ${index + 1}:`);
+      console.log(part.text);
+      console.log('');
+    }
+  }
   console.log('');
   const tools = (reply.detail.tools as readonly string[] | undefined) ?? [];
   console.log(`— ${reply.locale}, ${Math.round((Date.now() - started) / 1000)}s, tools: ${tools.length > 0 ? tools.join(' → ') : 'none'}`);

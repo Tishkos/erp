@@ -293,7 +293,7 @@ export function route(input: string): Intent {
 const WORDS = {
   en: {
     help: [
-      'I answer from the ERP, read-only. Ask me:',
+      'I answer from the ERP, read-only. Start your message with !ai, then ask — for example:',
       '• stock in warehouse <name or code>',
       '• status of <payable or PAYAPP number>',
       '• swift pending more than <N> days',
@@ -318,7 +318,7 @@ const WORDS = {
   },
   ar: {
     help: [
-      'أجيب من النظام، للقراءة فقط. اسألني:',
+      'أجيب من النظام، للقراءة فقط. ابدأ رسالتك بـ ‎!ai ثم اسأل — مثلاً:',
       '• مخزون مخزن <الاسم أو الرمز>',
       '• حالة <رقم المستحق أو PAYAPP>',
       '• سويفت معلق أكثر من <N> أيام',
@@ -535,8 +535,11 @@ export const DEFAULT_SETTINGS: BotSettings = {
   groupJid: '',
   groupSubject: '',
   groupQueries: true,
-  groupNotifications: true,
-  groupDigest: true,
+  // Off (2026-10-04): the group is the company's own conversation, and the bot
+  // says nothing in it that was not asked for with the trigger. An
+  // administrator may switch either on.
+  groupNotifications: false,
+  groupDigest: false,
   groupOnly: true,
 };
 
@@ -584,6 +587,47 @@ export function listensTo(settings: BotSettings, groupJid: string | null | undef
 export function maySendTo(settings: BotSettings, to: { readonly groupJid?: string | null }): boolean {
   if (!settings.groupOnly) return true;
   return Boolean(to.groupJid) && settings.groupJid !== '' && to.groupJid === settings.groupJid;
+}
+
+// ---------------------------------------------------------------------------
+// The trigger
+// ---------------------------------------------------------------------------
+
+/**
+ * The word that calls him — by direction, 2026-10-04: "the AI must ONLY
+ * respond when a WhatsApp message explicitly starts with `!ai`".
+ *
+ * The group is where the company talks, and he is not one of the people
+ * talking. A message is his only when it BEGINS with the trigger; the word
+ * anywhere else in a sentence is a sentence about him, not to him. Nothing is
+ * inferred: a question he could answer, a figure he knows to be wrong, a
+ * thanks — without the trigger at its start it is not read, not logged and
+ * not answered.
+ *
+ * And two ways to say "not this one" after it — `!dontwrite` and `!ignore`.
+ * With either, the message is left alone exactly as if it had no trigger:
+ * nothing runs and nothing is sent ("don't run it internally either").
+ */
+export const AI_TRIGGER = '!ai';
+export const AI_SILENCERS = ['!dontwrite', '!ignore'] as const;
+
+export type Trigger =
+  /** Not for him: no trigger at the start. */
+  | { readonly kind: 'none' }
+  /** For him, and told to do nothing: `!ai … !dontwrite` / `!ai … !ignore`. */
+  | { readonly kind: 'silent' }
+  /** For him: `text` is the request, the trigger taken off. */
+  | { readonly kind: 'ask'; readonly text: string };
+
+/** What a message is, by its first word and nothing else. */
+export function triggerOf(raw: string | null | undefined): Trigger {
+  // Spaces, and the direction marks a phone puts in front of mixed Arabic and Latin text.
+  const text = (raw ?? '').replace(/^[\s\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]+/, '');
+  const start = /^!ai(?=$|[\s:,،])/i.exec(text);
+  if (!start) return { kind: 'none' };
+  const rest = text.slice(start[0].length).replace(/^[\s:,،]+/, '');
+  if (/(^|\s)!(dontwrite|ignore)(?=$|[\s.,:;!?،؛])/i.test(rest)) return { kind: 'silent' };
+  return { kind: 'ask', text: rest.trim() };
 }
 
 /** The rows of `whatsapp_setting` as typed settings; a missing key is its seed. */

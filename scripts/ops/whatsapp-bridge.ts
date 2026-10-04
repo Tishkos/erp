@@ -68,7 +68,7 @@ import * as actions from '../../src/server/services/whatsapp-actions';
 import { agentClientFor, anthropicClient, modelRouter } from '../../src/server/services/whatsapp-router';
 import { runAgentFor, type AgentClient } from '../../src/server/services/whatsapp-agent';
 import { cliAgentClient, cliReady } from '../../src/server/services/whatsapp-cli-brain';
-import { listensTo, maySendTo } from '../../src/server/domain/whatsapp';
+import { AI_TRIGGER, listensTo, maySendTo, triggerOf } from '../../src/server/domain/whatsapp';
 import { nameOf } from '../../src/server/domain/whatsapp-names';
 import { knownNames, rememberNames } from '../../src/server/services/whatsapp-names';
 import { questionForFiles, type SentFile } from '../../src/server/domain/whatsapp-files';
@@ -233,7 +233,14 @@ function transportFor(sock: () => WASocket | null, current: () => Awaited<Return
     // WA-5 — a group id addresses the group; otherwise the person's number.
     const jid = to.groupJid && isGroupJid(to.groupJid) ? to.groupJid : e164ToJid(to.e164);
     let sent: WAMessage | undefined;
-    if (message.attachment) {
+    if (message.attachment?.format === 'image') {
+      // A picture of a screen: shown in the chat itself, its caption under it.
+      sent = await socket.sendMessage(jid, {
+        image: message.attachment.body,
+        mimetype: message.attachment.contentType,
+        caption: message.text,
+      });
+    } else if (message.attachment) {
       sent = await socket.sendMessage(jid, {
         document: message.attachment.body,
         mimetype: message.attachment.contentType,
@@ -285,6 +292,9 @@ const recentFiles = new Map<string, SentFile[]>();
  * sentence and the yes are both in the message log regardless.
  */
 const proposals = new Map<string, PendingAction>();
+
+/** When each number that is not set up was last told so (see `handleInbound`). */
+const toldNotSetUp = new Map<string, number>();
 
 /**
  * Asks WhatsApp to put a file back on its servers.
@@ -407,12 +417,8 @@ async function handleInbound(
 ): Promise<void> {
   const { e164, groupJid } = senderOf(message, ownE164);
   const sentFile = fileOf(message);
-  const text = (textOf(message) ?? sentFile?.caption ?? '').trim();
-  // A file with nothing typed is still a question; silence with neither is not.
-  if (!e164 || (!text && !sentFile)) return;
-  // What the log records as the message. A file sent without a word would
-  // otherwise be an empty row, which reads as though nothing was said.
-  const body = text || `[${sentFile?.fileName ?? 'file'}]`;
+  const typed = (textOf(message) ?? sentFile?.caption ?? '').trim();
+  if (!e164 || (!typed && !sentFile)) return;
 
   /*
    * The one group, and nothing else — first, before anything is read, logged
@@ -442,6 +448,25 @@ async function handleInbound(
       /* a name that cannot be kept is not a reason to drop the message */
     }
   }
+
+  /*
+   * The trigger — by direction, 2026-10-04: "the AI must ONLY respond when a
+   * WhatsApp message explicitly starts with `!ai`".
+   *
+   * The group is where the company talks; he is not one of the people talking.
+   * A message that does not BEGIN with the trigger ends here: not read, not
+   * logged, not answered, nothing inferred from it — whatever it says and
+   * whoever said it. So does one that begins with it and carries `!dontwrite`
+   * or `!ignore`: nothing is run for it and nothing is sent. Never add a
+   * handler that reads a group message before this line.
+   */
+  const trigger = triggerOf(typed);
+  if (trigger.kind !== 'ask') return;
+  // From here on the message is what was asked, the trigger taken off.
+  const text = trigger.text;
+  // What the log records as the message. A file sent without a word would
+  // otherwise be an empty row, which reads as though nothing was said.
+  const body = text || (sentFile ? `[${sentFile.fileName}]` : AI_TRIGGER);
 
   // Its own voice, heard back. Every answer the bridge sends is recorded with
   // the id WhatsApp gave it, so an id already in the log as outbound is the
@@ -474,10 +499,39 @@ async function handleInbound(
   });
   if (!allowed.ok || !sender) {
     log(`inbound from ${e164}${message.pushName ? ` (${message.pushName})` : ''}: refused (${allowed.ok ? 'no sender' : allowed.reason})`);
+    /*
+     * They called him by name, in the company's own group, so silence would
+     * read as a broken bot. One line saying why — never anything from the
+     * books — and not again for six hours, so it cannot be made to chatter.
+     */
+    const last = toldNotSetUp.get(e164) ?? 0;
+    if (groupJid && Date.now() - last > 6 * 60 * 60_000) {
+      toldNotSetUp.set(e164, Date.now());
+      const line =
+        detectLocale(text) === 'ar'
+          ? 'هذا الرقم غير مربوط بمستخدم في النظام بعد، لذلك لا أستطيع الإجابة. يضيفه مدير النظام من: الإعدادات ← الإدارة ← واتساب.'
+          : 'This number is not linked to a user of the ERP yet, so I cannot answer it. An administrator adds it on Settings → Administration → WhatsApp.';
+      await send({ e164, groupJid }, { text: line }).catch(() => {
+        /* a courtesy that fails is not worth a retry */
+      });
+    }
     return;
   }
 
   const locale = detectLocale(text);
+
+  // The trigger and nothing after it: say how it is used, once, in both languages.
+  if (!text && !sentFile) {
+    await answerWith(scope, send, {
+      sender,
+      e164,
+      groupJid,
+      inboundId,
+      text: `اكتب سؤالك بعد ${AI_TRIGGER} — مثلاً: ${AI_TRIGGER} شلون أضيف مورد جديد؟\nWrite your question after ${AI_TRIGGER} — for example: ${AI_TRIGGER} how do I add a supplier?`,
+      intent: 'hint',
+    });
+    return;
+  }
 
   /*
    * 2. WA-8 — a yes, to something he asked about.
@@ -696,14 +750,60 @@ async function handleInbound(
     }),
   );
   try {
-    const { waMessageId } = await send({ e164, groupJid }, { text: reply.text, attachment: reply.attachment });
+    let waMessageId: string | null = null;
+    if (reply.images.length === 0) {
+      ({ waMessageId } = await send({ e164, groupJid }, { text: reply.text, attachment: reply.attachment }));
+    } else {
+      /*
+       * A walk-through: step, picture, step, picture — each picture sent with
+       * the words of its own step under it, in the order he placed them. The
+       * whole answer is the one row recorded above; each picture is a row of
+       * its own. A picture that fails to send does not undo the answer; words
+       * that fail do.
+       */
+      for (const part of reply.parts) {
+        if (!part.image) {
+          const sent = await send({ e164, groupJid }, { text: part.text });
+          waMessageId ??= sent.waMessageId;
+          continue;
+        }
+        const picture = part.image;
+        const pictureId = await withScope(scope, (tx) =>
+          wa.recordOutbound(tx, {
+            e164,
+            groupJid,
+            body: part.text,
+            sender,
+            attachment: { name: picture.fileName, type: picture.contentType, bytes: picture.body.length },
+            inReplyTo: inboundId,
+            intent: 'picture',
+          }),
+        );
+        try {
+          const sent = await send({ e164, groupJid }, { text: part.text, attachment: picture });
+          waMessageId ??= sent.waMessageId;
+          await withScope(scope, (tx) => wa.markOutbound(tx, pictureId, { status: 'sent', waMessageId: sent.waMessageId }));
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          await withScope(scope, (tx) => wa.markOutbound(tx, pictureId, { status: 'failed', errorMessage: detail }));
+          log(`inbound from ${e164}: picture ${picture.fileName} — send failed: ${detail}`);
+          // The step's words still go, without their picture.
+          const sent = await send({ e164, groupJid }, { text: part.text });
+          waMessageId ??= sent.waMessageId;
+        }
+      }
+      if (reply.attachment) {
+        const sent = await send({ e164, groupJid }, { text: reply.attachment.fileName, attachment: reply.attachment });
+        waMessageId ??= sent.waMessageId;
+      }
+    }
     await withScope(scope, async (tx) => {
       await wa.markOutbound(tx, outId, { status: 'sent', waMessageId });
       await wa.finishInbound(tx, inboundId, { status: 'answered', intent: reply.intent.kind, detail: reply.detail });
       await wa.auditAnswer(tx, reply, { inboundId, question: text });
     });
     log(
-      `inbound from ${e164}: ${reply.intent.kind} answered${reply.attachment ? ` + ${reply.attachment.fileName}` : ''}${checked ? ' (said he was checking first)' : ''}`,
+      `inbound from ${e164}: ${reply.intent.kind} answered${reply.attachment ? ` + ${reply.attachment.fileName}` : ''}${reply.images.length > 0 ? ` + ${reply.images.length} picture(s)` : ''}${checked ? ' (said he was checking first)' : ''}`,
     );
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -798,7 +898,7 @@ async function handleCommand(
               L(`Waiting for you (${waiting.length}):`, `بانتظار موافقتك (${waiting.length}):`),
               ...waiting.slice(0, 15).map((row) => `• *${row.documentNumber}* — ${row.documentType} · ${row.submittedByName ?? ''}`),
               '',
-              L('Reply: approve <number>  ·  reject <number> <reason>', 'أرسل: موافقة <الرقم>  ·  رفض <الرقم> <السبب>'),
+              L(`Reply: ${AI_TRIGGER} approve <number>  ·  ${AI_TRIGGER} reject <number> <reason>`, `أرسل: ${AI_TRIGGER} موافقة <الرقم>  ·  ${AI_TRIGGER} رفض <الرقم> <السبب>`),
             ].join('\n');
     } else if (command.kind === 'confirm') {
       const done = await withScope(scope, (tx) => actions.confirm(tx, { sender, code: command.code }));
@@ -833,7 +933,7 @@ async function handleCommand(
           what,
           `${asked.waiting.documentType} · ${asked.waiting.submittedByName ?? ''}`,
           '',
-          L(`Reply:  confirm ${asked.code}`, `أرسل:  تأكيد ${asked.code}`),
+          L(`Reply:  ${AI_TRIGGER} confirm ${asked.code}`, `أرسل:  ${AI_TRIGGER} تأكيد ${asked.code}`),
           L(`The code is good for ${actions.CODE_MINUTES} minutes.`, `الرمز صالح لمدة ${actions.CODE_MINUTES} دقيقة.`),
         ].join('\n');
       }

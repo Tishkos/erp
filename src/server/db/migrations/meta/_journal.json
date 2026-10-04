@@ -1541,6 +1541,13 @@
       "when": 1795900000112,
       "tag": "0302_partner_prospects_approved",
       "breakpoints": true
+    },
+    {
+      "idx": 220,
+      "version": "7",
+      "when": 1795900000113,
+      "tag": "0303_whatsapp_ai_trigger",
+      "breakpoints": true
     }
   ]
 }

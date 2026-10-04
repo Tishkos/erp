@@ -107,7 +107,7 @@ describe('WA-3 · the tool list', () => {
   it('names each tool once, and covers the books as well as the payables', () => {
     const names = AGENT_TOOLS.map((tool) => tool.name);
     expect(new Set(names).size).toBe(names.length);
-    for (const needed of ['trial_balance', 'open_items', 'stock_valuation', 'approvals_waiting', 'list_warehouses', 'screens', 'guide', 'report_issue', 'reported_issues']) {
+    for (const needed of ['trial_balance', 'open_items', 'stock_valuation', 'approvals_waiting', 'list_warehouses', 'screens', 'guide', 'report_issue', 'reported_issues', 'show_screen', 'document_status']) {
       expect(names, needed).toContain(needed);
     }
   });
@@ -191,7 +191,8 @@ describe('WA-3 · the instructions', () => {
   it('says what he can do, and what stays on the screens', () => {
     expect(prompt).toMatch(/move a document one step by its number \(document_step\)/);
     expect(prompt).toMatch(/create a customer or a supplier/);
-    expect(prompt).toMatch(/What stays on the screens: anything with lines to type/);
+    // The same day, "draft maker": three documents he keys as drafts; the rest stay on their screens.
+    expect(prompt).toMatch(/What stays on the screens: every other document with lines to type/);
   });
 });
 

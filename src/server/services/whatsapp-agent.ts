@@ -13,6 +13,8 @@ import { ISSUE_KINDS, ISSUE_SEVERITIES, type IssueKind, type IssueSeverity } fro
 import { helpText, money, quantity } from '../domain/whatsapp';
 import { describeSentFile, type SentFile } from '../domain/whatsapp-files';
 import type { PendingAction } from '../domain/whatsapp-do';
+import { RATE_SCALE, toDecimalString } from '../domain/money';
+import * as ratesService from './exchange-rates';
 import * as itemsService from './items';
 import * as openingStockService from './opening-stock';
 import * as doService from './whatsapp-do';
@@ -379,6 +381,61 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
             .filter((part) => part !== '')
             .join(chr10()),
         };
+      }
+      case 'accounts': {
+        const no = lacks('chart_of_account');
+        if (no) return no;
+        const asked = String(args.search ?? '').trim();
+        const like = `%${asked.replace(/[%_\\]/g, (ch) => `\\${ch}`)}%`;
+        const result = await ctx.tx.execute(sql`
+          select code, name, account_type::text as type, is_group, is_active, control_account::text as control
+            from chart_of_account
+           where ${asked === ''} or code ilike ${like} or name ilike ${like}
+           order by code
+           limit 81`);
+        const rows = result.rows as { code: string; name: string; type: string; is_group: boolean; is_active: boolean; control: string | null }[];
+        if (rows.length === 0) return { text: asked ? `No account matches "${asked}". Try part of the name in the other language, or leave the search out for the whole chart.` : 'The chart of accounts is empty.' };
+        return {
+          text: [
+            `${rows.length > 80 ? 'More than 80' : rows.length} account(s)${asked ? ` matching "${asked}"` : ''}${rows.length > 80 ? ', the first 80 — narrow the search:' : ':'}`,
+            ...rows
+              .slice(0, 80)
+              .map(
+                (row) =>
+                  `${row.code} · ${row.name} · ${row.type}${row.is_group ? ' · HEADING (nothing posts to it)' : ''}${row.is_active ? '' : ' · inactive'}${row.control ? ` · ${row.control} control account (posted through its own documents, not by hand)` : ''}`,
+              ),
+          ].join(chr10()),
+        };
+      }
+      case 'exchange_rate': {
+        const no = lacks('exchange_rate');
+        if (no) return no;
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(String(args.date ?? '')) ? String(args.date) : ctx.today;
+        const wanted = String(args.currency ?? '').trim().toUpperCase();
+        const kept = (await ratesService.currencies(ctx.tx)) as unknown as { code: string; isLedger?: boolean; isActive?: boolean; active?: boolean }[];
+        const codes = wanted ? [wanted] : kept.filter((row) => !row.isLedger && row.isActive !== false && row.active !== false).map((row) => row.code);
+        if (codes.length === 0) return { text: 'The company keeps no foreign currency yet: everything is in IQD. A currency and its rate are added on Accounting → Master Data — Financial → Currencies and Rates.' };
+        const lines: string[] = [];
+        for (const code of codes) {
+          if (code === 'IQD') {
+            lines.push('IQD is the currency the books are kept in: 1 IQD = 1 IQD.');
+            continue;
+          }
+          try {
+            const rate = await ratesService.rateOn(ctx.tx, code, date);
+            lines.push(`1 ${code} = ${money(toDecimalString(rate.iqdPerUnit, RATE_SCALE))} IQD on ${date} (the accounting rate in force since ${rate.effectiveFrom}).`);
+          } catch (error) {
+            lines.push(`${code}: no accounting rate — ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+        return { text: [...lines, 'Rates are entered on Accounting → Master Data — Financial → Currencies and Rates; a document takes the rate of its own date.'].join(chr10()) };
+      }
+      case 'document_status':
+        return { text: await doService.describeDocument(ctx.tx, ctx.principal, String(args.no ?? ''), systemGuide.appUrl()) };
+      case 'show_screen': {
+        const view = ['menu', 'screen', 'form', 'record', 'all'].includes(String(args.view)) ? (args.view as systemGuide.ShotView | 'all') : 'all';
+        const shown = systemGuide.screenPictures(ctx.principal, ctx.locale, String(args.screen ?? ''), view);
+        return { text: shown.text, ...(shown.images.length > 0 ? { images: shown.images } : {}) };
       }
       case 'screens':
         return { text: systemGuide.screens(ctx.principal, typeof args.search === 'string' ? args.search : null) };

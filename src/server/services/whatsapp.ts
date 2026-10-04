@@ -23,6 +23,8 @@
  * (`whatsapp-agent.ts` › `toolRunnerFor`), and the free query is left to the
  * people whose role reads everything.
  */
+import { readFileSync } from 'node:fs';
+import { CAPTION_MAX, layOutAnswer, type AnswerPart } from '../domain/whatsapp-pictures';
 import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import { applyScope, db, withScope, type RequestScope, type Tx } from '../db/client';
 import { appUser, businessPartner, notificationRule, payableHold, warehouse, whatsappContact, whatsappMessage, whatsappSession, whatsappSetting } from '../db/schema';
@@ -596,6 +598,8 @@ export async function recentTurns(
         sql`${whatsappMessage.createdAt} >= ${since.toISOString()}`,
         sql`${whatsappMessage.body} is not null`,
         sql`${whatsappMessage.redactedAt} is null`,
+        // A picture's row repeats a step of the answer it belongs to.
+        sql`${whatsappMessage.intent} is distinct from 'picture'`,
       ),
     )
     .orderBy(desc(whatsappMessage.createdAt))
@@ -800,7 +804,10 @@ export interface Attachment {
   readonly fileName: string;
   readonly contentType: string;
   readonly body: Buffer;
-  readonly format: 'pdf' | 'xlsx';
+  /** A report as a file — or a picture, which is sent as a picture. */
+  readonly format: 'pdf' | 'xlsx' | 'image';
+  /** For a picture: the line under it. */
+  readonly caption?: string;
 }
 
 export interface Reply {
@@ -812,6 +819,15 @@ export interface Reply {
   readonly detail: Record<string, unknown>;
   /** The export the ERP's own path would have audited, if a file was made. */
   readonly exported: { readonly object: string; readonly key: string; readonly title: string; readonly rows: number } | null;
+  /** Every picture of a screen that goes with the answer (`show_screen`). */
+  readonly images: readonly Attachment[];
+  /**
+   * The answer as the messages it is sent as, in order: words, and each
+   * picture where it belongs with its step as the caption
+   * (`domain/whatsapp-pictures.ts`). One part, with no picture, when the
+   * answer has none.
+   */
+  readonly parts: ReadonlyArray<{ readonly text: string; readonly image: Attachment | null }>;
   readonly readAs: { readonly userId: string; readonly userName: string; readonly branchCode: string; readonly at: Date };
 }
 
@@ -831,6 +847,8 @@ export interface AgentOutcome {
   readonly format?: 'pdf' | 'xlsx';
   readonly exportObject?: string;
   readonly exportKey?: string;
+  /** Pictures a tool attached: files on this host, each with its caption. */
+  readonly images?: ReadonlyArray<{ readonly file: string; readonly caption: string }>;
   readonly used: readonly string[];
 }
 
@@ -908,6 +926,7 @@ export async function answer(input: {
   if (!input.agent && intent.kind === 'none' && input.router) intent = await input.router(input.text, locale);
 
   const scope = scopeFor(principal, branchCode);
+  let pictures: ReadonlyArray<{ readonly file: string; readonly caption: string }> = [];
   const { drafted, head, userName, usedTools } = await withReadOnlyScope(scope, async (tx) => {
     const ctx: ReadContext = { tx, principal, branchCode, locale, settings, today: businessToday(at) };
     const [me0] = await tx.select({ name: appUser.displayName }).from(appUser).where(eq(appUser.id, principal.userId)).limit(1);
@@ -917,6 +936,7 @@ export async function answer(input: {
     if (input.agent) {
       const outcome = await input.agent(ctx, input.text, askerName);
       usedTools = outcome.used;
+      pictures = outcome.images ?? [];
       drafted = {
         text: outcome.text,
         model: (outcome.model ?? null) as PrintModel | null,
@@ -961,7 +981,10 @@ export async function answer(input: {
    * an inference is not a judgement call to make quietly. It stays until
    * somebody asks for it to go.
    */
-  text = `${text}\n\n${footer(locale, { at, branchCode, userName })}`;
+  const laid = layOutAnswer(text, pictures);
+  const stamp = footer(locale, { at, branchCode, userName });
+  text = `${laid.text}\n\n${stamp}`;
+  const parts = partsOf(laid.parts, stamp);
 
   return {
     intent,
@@ -974,10 +997,56 @@ export async function answer(input: {
       ...(usedTools.length > 0 ? { tools: usedTools } : {}),
       rows: drafted.model ? rowsIn(drafted.model) : null,
       attachment: attachment ? { fileName: attachment.fileName, bytes: attachment.body.length } : null,
+      ...(pictures.length > 0 ? { pictures: pictures.map((picture) => picture.file.replace(/^.*[\\/]/, '')) } : {}),
     },
     exported,
+    images: parts.flatMap((part) => (part.image ? [part.image] : [])),
+    parts,
     readAs: { userId: principal.userId, userName, branchCode, at },
   };
+}
+
+/**
+ * The laid-out answer as things to send, the stamp under the last of them.
+ *
+ * A picture that cannot be read is left out and its words still go — unless
+ * its words were only its own caption, which without the picture say nothing.
+ */
+function partsOf(laid: ReadonlyArray<AnswerPart>, stamp: string): Array<{ text: string; image: Attachment | null }> {
+  const out: Array<{ text: string; image: Attachment | null }> = [];
+  for (const part of laid) {
+    if (!part.picture) {
+      out.push({ text: part.text, image: null });
+      continue;
+    }
+    try {
+      const file = part.picture.file;
+      out.push({
+        text: part.text,
+        image: {
+          fileName: file.replace(/^.*[\\/]/, ''),
+          contentType: file.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
+          body: readFileSync(file),
+          format: 'image',
+          caption: part.text,
+        },
+      });
+    } catch {
+      if (part.text !== part.picture.caption) out.push({ text: part.text, image: null });
+    }
+  }
+  const last = out[out.length - 1];
+  if (!last) return [{ text: stamp, image: null }];
+  // Under a picture the stamp would crowd the step; it goes under the last words instead.
+  const lastWords = [...out].reverse().find((part) => !part.image);
+  if (last.image && last.text.length + stamp.length + 2 > CAPTION_MAX) {
+    if (lastWords) lastWords.text = `${lastWords.text}\n\n${stamp}`;
+    else out.push({ text: stamp, image: null });
+  } else {
+    last.text = `${last.text}\n\n${stamp}`;
+    if (last.image) last.image = { ...last.image, caption: last.text };
+  }
+  return out;
 }
 
 /** The bridge's record of an answer: the audit rows the ERP's own screens would have written. */

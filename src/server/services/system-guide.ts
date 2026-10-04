@@ -22,6 +22,7 @@ import {
   ISSUES_HEADER,
   chunkGuide,
   describeScreens,
+  findScreens,
   issueBlock,
   nextIssueId,
   recentIssues,
@@ -51,6 +52,196 @@ export function appUrl(): string {
 /** The `screens` tool: where a thing is in the top bar, for this person. */
 export function screens(principal: Principal, search?: string | null): string {
   return describeScreens(screenCatalogue({ principal, en: EN, ar: AR }), { baseUrl: appUrl(), search: search ?? null });
+}
+
+// ---------------------------------------------------------------------------
+// The pictures
+// ---------------------------------------------------------------------------
+
+export type ShotView = 'menu' | 'screen' | 'form' | 'record';
+export const SHOT_VIEWS: readonly ShotView[] = ['menu', 'screen', 'form', 'record'];
+
+/** One numbered pointer drawn on a picture, and what it points at. */
+interface Mark {
+  readonly n: number;
+  readonly label: string;
+  readonly kind: string;
+  readonly required?: boolean;
+}
+
+interface Shot {
+  readonly route: string;
+  readonly locale: 'en' | 'ar';
+  readonly view: ShotView;
+  readonly file: string;
+  /** On a screen's picture: its "New …" button is ringed. */
+  readonly ringed?: boolean;
+  /** The red numbers on the picture, in order. */
+  readonly marks?: readonly Mark[];
+}
+
+/** Where `scripts/guide/make-screens.ts` put them (copied to the server's `var/`). */
+function shotsDir(): string {
+  return process.env.ERP_GUIDE_SHOTS_DIR?.trim() || join(process.cwd(), 'var', 'guide-shots');
+}
+
+let shotsCache: { readonly stamp: number; readonly shots: readonly Shot[] } | null = null;
+
+function shots(): readonly Shot[] {
+  const file = join(shotsDir(), 'index.json');
+  if (!existsSync(file)) return [];
+  const stamp = statSync(file).mtimeMs;
+  if (shotsCache && shotsCache.stamp === stamp) return shotsCache.shots;
+  try {
+    shotsCache = { stamp, shots: JSON.parse(readFileSync(file, 'utf8')) as Shot[] };
+  } catch {
+    shotsCache = { stamp, shots: [] };
+  }
+  return shotsCache.shots;
+}
+
+const VIEW_WORDS: Readonly<Record<ShotView, { readonly en: string; readonly ar: string }>> = {
+  menu: { en: 'where it is in the menu — the entry ringed in red', ar: 'مكانها في القائمة — المدخل المحاط بالأحمر' },
+  screen: { en: 'the screen as it opens', ar: 'الشاشة كما تظهر عند فتحها' },
+  form: { en: 'the form that opens — the fields to fill', ar: 'النموذج الذي يُفتح — الحقول المطلوب تعبئتها' },
+  record: { en: 'one record opened — its status, its buttons and its doors', ar: 'سجل مفتوح — حالته وأزراره وأبوابه' },
+};
+
+/** A screen whose "New …" button is ringed in its picture says so under it. */
+const RINGED_WORDS = { en: 'the screen — the button ringed in red starts a new one', ar: 'الشاشة — الزر المحاط بالأحمر يبدأ سجلاً جديداً' } as const;
+const NUMBERED_WORDS = { en: 'the red numbers are explained in the message', ar: 'الأرقام الحمراء مشروحة في الرسالة' } as const;
+
+/**
+ * The pictures that are not a screen of the menu — the way in, and the bar
+ * every screen sits under. Everybody is shown these: there is no role that
+ * may not see how to sign in.
+ */
+const EXTRAS: ReadonlyArray<{
+  readonly route: string;
+  readonly en: string;
+  readonly ar: string;
+  readonly words: readonly string[];
+}> = [
+  { route: '/sign-in', en: 'Sign in', ar: 'تسجيل الدخول', words: ['sign in', 'signin', 'sign-in', 'log in', 'login', 'log-in', 'تسجيل الدخول', 'دخول', 'تسجيل'] },
+  { route: 'top-bar', en: 'The top bar', ar: 'الشريط العلوي', words: ['top bar', 'topbar', 'top-bar', 'navbar', 'nav bar', 'navigation', 'header', 'menu bar', 'الشريط العلوي', 'الشريط', 'القائمة العلوية'] },
+  { route: 'user-menu', en: 'Your account menu', ar: 'قائمة الحساب', words: ['account menu', 'user menu', 'user-menu', 'profile', 'my account', 'sign out', 'log out', 'logout', 'appearance', 'قائمة الحساب', 'تسجيل الخروج', 'المظهر', 'حسابي'] },
+  { route: '/password', en: 'Change password', ar: 'تغيير كلمة المرور', words: ['change password', 'password', 'كلمة المرور', 'كلمة السر', 'تغيير كلمة المرور'] },
+];
+
+function extraFor(asked: string) {
+  const wanted = asked.trim().toLowerCase();
+  if (!wanted) return null;
+  return (
+    EXTRAS.find((extra) => extra.route === wanted || extra.en.toLowerCase() === wanted || extra.ar === wanted) ??
+    EXTRAS.find((extra) => extra.words.some((word) => wanted.includes(word))) ??
+    null
+  );
+}
+
+const KIND_WORDS: Readonly<Record<string, string>> = {
+  text: 'a box to type in',
+  area: 'a larger box to type in',
+  choice: 'a list to choose from',
+  date: 'a date',
+  tick: 'a tick box',
+  file: 'a file to attach',
+  button: 'a button',
+  tabs: 'the row of tabs',
+  search: 'the search box',
+  filter: 'a filter',
+  table: 'a table, its columns',
+  paging: 'the page control',
+  section: 'a section',
+  status: 'the status',
+  door: 'an icon in the title bar',
+  link: 'a link',
+};
+
+/** The numbers on one picture, written out for the model: which is which. */
+function marksLine(marks: readonly Mark[] | undefined): string {
+  if (!marks || marks.length === 0) return '';
+  return marks
+    .map((mark) => `${mark.n} = ${mark.label} (${KIND_WORDS[mark.kind] ?? mark.kind}${mark.required ? ', required' : ''})`)
+    .join(' · ');
+}
+
+/** A picture's tag: its file's name without the folder or the extension. */
+const tagOf = (file: string) =>
+  file
+    .replace(/^.*[\\/]/, '')
+    .replace(/\.[a-z0-9]+$/i, '')
+    .toLowerCase();
+
+/**
+ * The `show_screen` tool: the pictures of one screen, in the asker's language,
+ * each with its tag and the meaning of every number drawn on it.
+ *
+ * The screen is found the way `screens` finds it — by its address, or by words
+ * of its name — and only a screen the asker's role may open is shown. The way
+ * in (signing in, the top bar, the account menu, the password) is everybody's.
+ */
+export function screenPictures(
+  principal: Principal,
+  locale: 'en' | 'ar',
+  asked: string,
+  view: ShotView | 'all' = 'all',
+): { readonly text: string; readonly images: ReadonlyArray<{ readonly file: string; readonly caption: string }> } {
+  const all = shots();
+  if (all.length === 0) return { text: 'No pictures are installed on this server. Describe the path in words (the screens tool).', images: [] };
+
+  const catalogue = screenCatalogue({ principal, en: EN, ar: AR });
+  const wanted = asked.trim();
+  const extra = extraFor(wanted);
+  const entry = extra ? null : (catalogue.find((candidate) => candidate.route === wanted) ?? findScreens(catalogue, wanted).find((candidate) => candidate.built) ?? null);
+  if (!extra && !entry) {
+    return {
+      text: `No built screen matches "${asked}". Search with the screens tool first, then ask for the picture by its address. Besides the menu's screens there are pictures of: ${EXTRAS.map((one) => `"${one.en.toLowerCase()}"`).join(', ')}.`,
+      images: [],
+    };
+  }
+  if (entry && !entry.allowed) return { text: `This person's role cannot open ${entry.en.screen}, so its picture is not theirs to be shown. Tell them which permission it needs.`, images: [] };
+
+  const route = extra ? extra.route : entry!.route;
+  const title = extra ? extra.en : entry!.en.screen;
+  const names = entry ? (locale === 'ar' ? entry.ar : entry.en) : null;
+  const heading = extra ? (locale === 'ar' ? extra.ar : extra.en) : `${names!.module} → ${names!.heading} → ${names!.screen}`;
+
+  // "all" is a how-to: where it is, the screen, the form. A record is asked for by name.
+  const views: ShotView[] = view === 'all' ? (extra ? [...SHOT_VIEWS] : ['menu', 'screen', 'form']) : [view];
+  const found = views.flatMap((one) => {
+    const shot = all.find((candidate) => candidate.route === route && candidate.locale === locale && candidate.view === one);
+    if (!shot) return [];
+    const file = join(shotsDir(), shot.file);
+    if (!existsSync(file)) return [];
+    const words = one === 'screen' && shot.ringed && !extra ? RINGED_WORDS[locale] : VIEW_WORDS[one][locale];
+    const numbered = shot.marks && shot.marks.length > 0 ? ` — ${NUMBERED_WORDS[locale]}` : '';
+    return [{ shot, file, caption: extra ? `${heading}${numbered}` : `${heading}: ${words}${numbered}` }];
+  });
+  if (found.length === 0) {
+    const others = SHOT_VIEWS.filter((one) => all.some((candidate) => candidate.route === route && candidate.locale === locale && candidate.view === one));
+    return {
+      text: `There is no ${view === 'all' ? '' : `"${view}" `}picture of ${title} (${route})${view === 'form' ? ' — it has no New button of its own' : ''}.${others.length > 0 && view !== 'all' ? ` It has: ${others.join(', ')}.` : ''} Describe it in words.`,
+      images: [],
+    };
+  }
+
+  const also = extra ? [] : SHOT_VIEWS.filter((one) => !views.includes(one) && all.some((candidate) => candidate.route === route && candidate.locale === locale && candidate.view === one));
+  return {
+    text: [
+      `${found.length} picture(s) of ${title} (${route}) are attached to your answer. Place each one at its step: write its tag on a line of its own, and what you write under the tag (up to the next tag) is sent as that picture's caption.`,
+      ...found.map(({ shot, file }) => {
+        const what = shot.view === 'screen' && shot.ringed && !extra ? RINGED_WORDS.en : VIEW_WORDS[shot.view].en;
+        const numbers = marksLine(shot.marks);
+        return `[picture: ${tagOf(file)}] — ${what}.${numbers ? ` The red numbers on it: ${numbers}.` : ' Nothing is numbered on this one.'}`;
+      }),
+      'For every numbered thing the person has to use, say its number and its name as the picture shows it, then: what it is for, why the system needs it, what to put there (with an example), whether it may be left empty, and what it changes elsewhere — the guide tool has this for each screen. Skip a number that does not matter to what they asked.',
+      also.length > 0 ? `This screen also has: ${also.map((one) => `"${one}"`).join(', ')} — ask for it by that view when the task goes there (a "record" is one saved document opened: its status, its action buttons, and the printer / paperclip / notes / history icons).` : '',
+      "They are pictures of a training copy with sample data: the layout is real, the names and figures in them are not the company's.",
+    ]
+      .filter((line) => line !== '')
+      .join('\n'),
+    images: found.map(({ file, caption }) => ({ file, caption })),
+  };
 }
 
 // ---------------------------------------------------------------------------

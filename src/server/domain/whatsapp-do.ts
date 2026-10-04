@@ -44,9 +44,14 @@
  *   * `create_partner` — a new customer or supplier, by name.
  *   * `approve_partner` — a prospect made usable (§6).
  *
- * What stays on the screens: anything with lines to type — an invoice, an
- * order, a journal. Noah says where the screen is and what each field wants
- * (`domain/system-guide.ts`); he does not key a document from a sentence.
+ * And, the same day ("draft maker"): `create_draft` — a journal entry, a
+ * purchase invoice or a sales invoice keyed from what the person said and
+ * saved as a DRAFT (`services/whatsapp-drafts.ts`). A draft posts nothing and
+ * moves no stock; the steps after it — submit, approve, post — stay separate
+ * proposals, each with its own yes.
+ *
+ * What stays on the screens: every other document with lines to type. Noah
+ * says where the screen is and what each field wants (`domain/system-guide.ts`).
  */
 
 /** What Noah may propose. Every one of these runs through its own service. */
@@ -56,7 +61,8 @@ export type ActionName =
   | 'approve_opening_stock'
   | 'document_step'
   | 'create_partner'
-  | 'approve_partner';
+  | 'approve_partner'
+  | 'create_draft';
 
 export const ACTION_NAMES: readonly ActionName[] = [
   'approve_document',
@@ -65,7 +71,45 @@ export const ACTION_NAMES: readonly ActionName[] = [
   'document_step',
   'create_partner',
   'approve_partner',
+  'create_draft',
 ];
+
+/**
+ * The documents Noah will key as a draft from what he was told ("draft
+ * maker", 2026-10-04). A draft posts nothing and moves no stock: it is the
+ * form filled in, waiting on its own page to be read and changed.
+ */
+export const DRAFT_KINDS = ['journal_entry', 'purchase_invoice', 'sales_invoice'] as const;
+export type DraftKind = (typeof DRAFT_KINDS)[number];
+
+/** One line of a draft, resolved while proposing: every code is a real record. */
+export interface DraftLine {
+  readonly item?: string;
+  readonly itemName?: string;
+  readonly quantity?: string;
+  readonly unitPrice?: string;
+  readonly discount?: string;
+  readonly warehouse?: string;
+  readonly account?: string;
+  readonly accountId?: string;
+  readonly accountName?: string;
+  readonly debit?: string;
+  readonly credit?: string;
+  readonly department?: string;
+  readonly description?: string;
+}
+
+/** A draft as it will be saved: what the person was shown, and nothing else. */
+export interface DraftPayload {
+  readonly kind: DraftKind;
+  readonly date: string;
+  readonly dueDate?: string | null;
+  readonly currency: string;
+  readonly isImport?: boolean;
+  readonly description?: string | null;
+  readonly party?: { readonly id: string; readonly code: string; readonly name: string } | null;
+  readonly lines: readonly DraftLine[];
+}
 
 /** One step along a document's life. */
 export const DOCUMENT_STEPS = ['submit', 'approve', 'reject', 'post', 'reverse', 'cancel'] as const;
@@ -158,6 +202,8 @@ export interface PendingAction {
   readonly step?: DocumentStep | null;
   /** `create_partner` — what to create: `role`, `name`, and the optional contact details. */
   readonly payload?: Readonly<Record<string, string>> | null;
+  /** `create_draft` — the document, line by line, as it was put to the person. */
+  readonly draft?: DraftPayload | null;
   /** The facts Noah must put to them before he asks. */
   readonly sentence: string;
   readonly proposedAt: string;
@@ -282,5 +328,6 @@ export function actionLabel(action: ActionName, step?: DocumentStep | null): str
   if (action === 'approve_opening_stock') return 'approve the opening stock';
   if (action === 'document_step') return `${step ?? 'move'} the document`;
   if (action === 'create_partner') return 'create the partner';
+  if (action === 'create_draft') return 'save the draft';
   return 'approve the partner';
 }

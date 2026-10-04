@@ -132,3 +132,72 @@ the e-mail rows are marked `suppressed` and the log says so once per run.
   on the server answers exactly as the group would be answered, as that user.
 * After a deploy: `systemctl restart whatsapp-bridge`, so the bridge runs the
   new instructions and tools.
+
+## He speaks only when called (2026-10-04)
+
+* **The trigger is `!ai` at the very start of the message.** Anything else said
+  in the group is not read, not logged and not answered — a question he could
+  answer, his name, `!ai` in the middle of a sentence. Nothing is inferred.
+* `!ai <request>` — answered, for every group member whose number has a contact
+  row with *Questions* on. The request is whatever follows the trigger: a
+  question, a look-up, "digest this month's sales", a how-to, a draft.
+* `!ai … !dontwrite` and `!ai … !ignore` — nothing happens: no answer, and
+  nothing is run.
+* A yes to something he proposed is `!ai yes` (`!ai no` to decline); the typed
+  commands are `!ai approve <number>`, `!ai reject <number> <reason>`,
+  `!ai confirm <code>`, `!ai pending`.
+* `!ai` on its own gets one line saying how to use it. A group member whose
+  number is not on the contact list is told so once (and not again for six
+  hours); add them on Settings → Administration → WhatsApp.
+* **He says nothing unasked.** *Post notifications to the group* and *Post the
+  morning digest to the group* are off (migration 0303). Turn either on at
+  Settings → Administration → WhatsApp if the company wants it back; the
+  in-app and e-mail notifications never stopped.
+* The model is the `agent_model` setting — `claude-opus-5-5`.
+
+## The pictures Noah sends
+
+Noah explains a task as steps with pictures — up to six in one answer, each
+sent with its own step as the caption — in the language of the person who
+asked. Every picture carries red numbers on the things that matter (each field
+of a form, the buttons, the tabs, the search and filters, the table, a record's
+status and its printer / paperclip / notes / history icons), and he explains
+each number: what it is for, why it is needed, what to enter, what it changes.
+
+There are four pictures of a screen — `menu` (where it is, the entry ringed),
+`screen`, `form` (what its New button opens) and `record` (one saved document
+opened) — for **every built screen of the menu**, plus *sign in*, *the top
+bar*, *the account menu* and *change password*.
+
+They are not taken when the question is asked: they are made ahead of time
+from the **seeded local development server**, so they show sample data and
+never the company's. The script walks the menu itself, so a new screen is
+covered by running it again.
+
+Make them (the development server running on port 3000, signed-in user from
+`scripts/seed-dev.ts`):
+
+```
+npx tsx scripts/guide/make-screens.ts            # every built screen, English and Arabic
+npx tsx scripts/guide/make-screens.ts --only payables/suppliers --force
+npx tsx scripts/guide/make-screens.ts --only sign-in --force
+```
+
+They land in `var/guide-shots/` with an `index.json` (which also says what
+each red number points at). Put them on the server, where `var/` outlives a
+deploy:
+
+```
+scp -r var/guide-shots root@31.97.123.206:/opt/qs-erp-next/var/
+```
+
+Check from the server, without a phone:
+
+```
+cd /opt/qs-erp-next && npx tsx scripts/ops/ask-noah.ts <email> "how do I add a supplier? show me"
+```
+
+It prints the answer as the group would get it: each message, and under each
+picture the caption it is sent with. No pictures on the server is not an
+error: Noah says the path in words. Make them again when a screen's layout
+changes.

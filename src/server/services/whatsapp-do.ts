@@ -24,6 +24,7 @@ import { sql } from 'drizzle-orm';
 import { withScope, type Tx } from '../db/client';
 import { businessToday } from '../domain/business-date';
 import { can, type Principal } from '../domain/permissions';
+import { profileHref } from '../domain/profiles';
 import { money } from '../domain/whatsapp';
 import {
   DOCUMENT_FAMILIES,
@@ -55,6 +56,7 @@ import * as supplierPayments from './supplier-payment';
 import * as treasury from './treasury';
 import { principalOf, type ReadContext } from './whatsapp';
 import { waitingFor } from './whatsapp-actions';
+import { prepareDraft, runDraft } from './whatsapp-drafts';
 
 const NL = String.fromCharCode(10);
 
@@ -104,14 +106,26 @@ interface Located {
  */
 async function locate(tx: Tx, family: DocumentFamily, documentNo: string): Promise<Located | null> {
   const at = WHERE[family.key];
-  const amount = at.amount ? sql`${sql.identifier(at.amount)}::text` : sql`null::text`;
+  /*
+   * An invoice's header total is written when it posts, so a draft's is read
+   * from its lines — otherwise a draft of 95,000 is put to the person as "0".
+   */
+  const amount =
+    family.key === 'ap_invoice'
+      ? sql`coalesce(nullif(t.total_iqd, 0), (select sum(l.quantity * l.unit_price - l.discount_iqd) from ap_invoice_line l where l.ap_invoice_id = t.id))::numeric(19,4)::text`
+      : family.key === 'ar_invoice'
+        ? sql`(select sum(l.net_iqd) from ar_invoice_line l where l.ar_invoice_id = t.id)::text`
+        : at.amount
+          ? sql`t.${sql.identifier(at.amount)}::text`
+          : sql`null::text`;
   const result = await tx.execute(sql`
-    select id::text as id, status::text as status, branch_code as branch_code, ${amount} as amount
-      from ${sql.identifier(at.table)}
-     where upper(${sql.identifier(at.number)}) = ${documentNo}
+    select t.id::text as id, t.status::text as status, t.branch_code as branch_code, ${amount} as amount
+      from ${sql.identifier(at.table)} t
+     where upper(t.${sql.identifier(at.number)}) = ${documentNo}
      limit 1`);
   const row = result.rows[0] as { id: string; status: string; branch_code: string | null; amount: string | null } | undefined;
-  return row ? { id: row.id, status: row.status, branchCode: row.branch_code, amount: row.amount } : null;
+  // A figure of nothing is not a figure worth saying.
+  return row ? { id: row.id, status: row.status, branchCode: row.branch_code, amount: row.amount && /[1-9]/.test(row.amount) ? row.amount : null } : null;
 }
 
 /**
@@ -170,6 +184,50 @@ const RUN: Readonly<Record<DocumentFamily['key'], Partial<Record<DocumentStep, S
     approve: (tx, ctx, id) => openingStockService.approve(tx, ctx, id),
   },
 };
+
+/** Each family's record page, for the address beside a document. */
+const PAGE: Readonly<Record<DocumentFamily['key'], Parameters<typeof profileHref>[0] | null>> = {
+  ap_invoice: 'purchase_invoice',
+  ar_invoice: 'sales_invoice',
+  purchase_order: 'purchase_order',
+  goods_receipt: 'goods_receipt',
+  goods_return: 'goods_return',
+  supplier_payment: 'supplier_payment',
+  customer_receipt: 'customer_receipt',
+  journal_entry: 'journal',
+  bank_transfer: null,
+  opening_stock: 'opening_stock',
+};
+
+/**
+ * The `document_status` tool: any document of a known family, by its number.
+ *
+ * Read as the asker — a document in a branch they cannot see is not found —
+ * and only for a family whose screen their role opens.
+ */
+export async function describeDocument(tx: Tx, principal: Principal, raw: string, baseUrl: string): Promise<string> {
+  const no = tidyNumber(raw);
+  if (!no) return 'Which document? Give its number.';
+  const family = familyOf(no);
+  if (!family) {
+    return `I cannot tell what kind of document ${no} is from its number. The kinds I can look up by number: ${DOCUMENT_FAMILIES.map((one) => `${one.label} (${one.prefix}-…)`).join(', ')}. For a payable (IMP-, PUR-, SVC-…) use payable_status; for a payment application, application_status.`;
+  }
+  if (!can(principal, 'view', family.key)) {
+    return `This person's role does not include "${family.label}" (the permission view on ${family.key}), so it is not theirs to see. Tell them so, and that an administrator gives it on Settings → Administration → Roles.`;
+  }
+  const found = await locate(tx, family, no);
+  if (!found) return `There is no ${family.label} ${no} that this person can see.`;
+  const kind = PAGE[family.key];
+  const href = kind ? profileHref(kind, no) : family.key === 'bank_transfer' ? `/treasury/transfers/${encodeURIComponent(no)}` : null;
+  return [
+    `${no} · ${family.label}`,
+    `status: ${found.status.replace(/_/g, ' ')}${found.branchCode ? ` · branch ${found.branchCode}` : ''}${found.amount ? ` · ${money(found.amount)}${family.key === 'bank_transfer' ? '' : ' IQD'}` : ''}`,
+    href ? `its page: ${baseUrl}${href}` : '',
+    `steps it has from chat: ${family.steps.join(', ')} (document_step) — whether one applies now depends on its status and on who is asking.`,
+  ]
+    .filter((part) => part !== '')
+    .join(NL);
+}
 
 const families = () => DOCUMENT_FAMILIES.map((family) => `${family.label} (${family.prefix}-…: ${family.steps.join(', ')})`).join('; ');
 
@@ -364,6 +422,20 @@ export async function prepare(input: {
     };
   }
 
+  if (action === 'create_draft') {
+    const prepared = await prepareDraft(input.ctx, input.args);
+    if (!prepared.ok) return { ok: false, reason: prepared.reason };
+    return {
+      ok: true,
+      pending: {
+        ...base,
+        draft: prepared.draft,
+        target: { kind: prepared.draft.kind, id: '', documentNo: `new ${prepared.label}`, branchCode: input.ctx.branchCode },
+        sentence: prepared.sentence,
+      },
+    };
+  }
+
   if (action === 'approve_partner') {
     const code = tidyNumber(input.args.document ?? input.args.code ?? '');
     if (!code) return { ok: false, reason: 'Which partner? I need its code, such as SUP-000004 or CUS-000012 (list_partners finds it by name).' };
@@ -390,7 +462,7 @@ export async function prepare(input: {
 }
 
 function actionNames(): string {
-  return `approve or reject a document that is waiting for you; approve opening stock; move a document a step by its number — ${families()}; create a customer or a supplier; approve a prospect partner`;
+  return `approve or reject a document that is waiting for you; approve opening stock; move a document a step by its number — ${families()}; create a customer or a supplier; approve a prospect partner; save a draft journal entry, purchase invoice or sales invoice`;
 }
 
 /**
@@ -466,6 +538,11 @@ async function perform(tx: Tx, principal: Principal, branchCode: string, pending
     ].join(' ');
   }
 
+  if (pending.action === 'create_draft') {
+    if (!pending.draft) throw new Error('There is no draft to save.');
+    return runDraft(tx, { principal, branchCode }, pending.draft);
+  }
+
   if (pending.action === 'approve_partner') {
     await partnersService.approve(tx, { principal, branchCode }, pending.target.documentNo);
     return `${pending.target.documentNo} approved. It can be chosen on documents now.`;
@@ -512,6 +589,7 @@ function auditDone(
       what: actionLabel(input.pending.action, input.pending.step),
       ...(input.pending.step ? { step: input.pending.step } : {}),
       ...(input.pending.payload ? { payload: input.pending.payload } : {}),
+      ...(input.pending.draft ? { draft: { kind: input.pending.draft.kind, date: input.pending.draft.date, party: input.pending.draft.party?.code ?? null, lines: input.pending.draft.lines.length } } : {}),
       proposedAt: input.pending.proposedAt,
       confirmed: true,
       detail: detail.slice(0, 500),
