@@ -282,7 +282,7 @@ export async function openItems(
            (i.${s.total} - i.${s.paid})::text        as "outstandingIqd",
            coalesce((
              select json_agg(json_build_object(
-                      'paidOn',     a.allocated_at::date::text,
+                      'paidOn',     (a.allocated_at at time zone 'Asia/Baghdad')::date::text,
                       'amountIqd',  a.amount_iqd::text,
                       'documentNo', d.${s.allocationDocumentNo}
                     ) order by a.allocated_at)

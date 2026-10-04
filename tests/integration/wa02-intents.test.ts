@@ -40,7 +40,9 @@ let stoppedNo: string;
 let dueNo: string;
 let applicationNo: string;
 const today = businessToday();
-const plusDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+// In the company's own day, like `today`: the UTC date is yesterday for the first three hours of
+// every Baghdad day, and this file then counted 21 days where the service counts 20.
+const plusDays = (n: number) => businessToday(new Date(Date.now() + n * 86_400_000));
 
 beforeEach(async () => {
   world = await buildTradingWorld();

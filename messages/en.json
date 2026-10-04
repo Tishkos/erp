@@ -6923,6 +6923,7 @@
       "sales_customer_debit_note": "Customer Debit Note"
     },
     "role": {
+      "inventory": "The stock issued to the project, or returned from it",
       "supplier_payable": "What the company owes the supplier",
       "grni": "Goods received, not yet invoiced",
       "expense": "The cost of a service billed",
