@@ -13,7 +13,7 @@
     "logistics": "المهام اللوجستية",
     "money_transfer": "تحويل الأموال",
     "investments": "الاستثمارات",
-    "finance_gl": "المالية — الأستاذ العام",
+    "finance_gl": "الأستاذ العام",
     "finance_ar": "المالية — الحسابات المدينة",
     "finance_ap": "المالية — الحسابات الدائنة",
     "treasury": "الخزينة والبنوك",
@@ -22,7 +22,7 @@
     "hr_payroll": "الموارد البشرية",
     "documents": "المستندات والمهام",
     "reports": "التقارير والتحليلات",
-    "master_data": "البيانات الرئيسية",
+    "master_data": "البيانات الرئيسية — المالية",
     "administration": "الإدارة",
     "integrations": "التكاملات والدعم",
     "payables": "المشتريات والفواتير",
@@ -31,7 +31,10 @@
     "payables_setup": "الإعداد",
     "logistics_customs": "الجمارك (أسيكودا)",
     "logistics_shipping": "الشحن",
-    "monitoring": "المتابعة"
+    "monitoring": "المتابعة",
+    "master_banking": "البيانات الرئيسية — البنوك",
+    "master_organization": "البيانات الرئيسية — الهيكل التنظيمي",
+    "master_inventory": "البيانات الرئيسية — مرجع المخزون"
   },
   "page": {
     "my_dashboard": "لوحة معلوماتي",
@@ -136,13 +139,13 @@
     "disposal": "الاستبعاد",
     "investment_reconciliation": "التسوية",
     "investment_reports": "التقارير",
-    "journal_entry": "قيد يومية",
+    "journal_entry": "قيود اليومية",
     "recurring_journals": "القيود الدورية",
     "reversals": "القيود العكسية",
     "gl_inquiry": "الاستعلام عن الأستاذ العام (G/L)",
     "trial_balance": "ميزان المراجعة",
     "soft_close": "الفترات المحاسبية",
-    "year_end_close": "إقفال نهاية السنة",
+    "year_end_close": "إقفال الفترة / نهاية السنة",
     "posting_mappings": "خرائط الترحيل",
     "customer_ledger": "أستاذ العملاء",
     "ar_open_items": "أعمار الذمم المدينة",
@@ -164,9 +167,9 @@
     "bank_cash_accounts": "الحسابات البنكية",
     "treasury_receipts": "المقبوضات",
     "treasury_payments": "المدفوعات",
-    "bank_transfers": "التحويلات البنكية",
+    "bank_transfers": "التحويلات الداخلية",
     "bank_statements": "كشوف الحسابات البنكية",
-    "bank_reconciliation": "التسوية",
+    "bank_reconciliation": "التسوية البنكية",
     "daily_position": "المركز النقدي اليومي",
     "cash_forecast": "توقعات التدفقات النقدية",
     "treasury_reports": "تقرير البنوك والنقد",
@@ -288,7 +291,10 @@
     "hr_documents": "المستندات",
     "customer_list": "قائمة العملاء",
     "history": "السجل",
-    "reports": "التقارير"
+    "reports": "التقارير",
+    "account_reconciliation": "مطابقة الحسابات",
+    "payments_receipts": "المدفوعات والمقبوضات",
+    "tax_codes": "رموز الضرائب"
   },
   "auth": {
     "email": "البريد الإلكتروني",
@@ -1621,7 +1627,8 @@
       "difference": "الفرق",
       "audit_log": "سجل التدقيق",
       "audit_subtitle": "كل ما سُجّل عن {entryNo}: من فعل ماذا، ومتى.",
-      "back_to_entry": "العودة إلى القيد"
+      "back_to_entry": "العودة إلى القيد",
+      "record_type": "قيد يومية"
     },
     "reversals": {
       "title": "القيود العكسية",
