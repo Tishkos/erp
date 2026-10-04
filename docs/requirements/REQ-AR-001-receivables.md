@@ -15,7 +15,7 @@ truth throughout:
 | **Source** | The sponsor's instruction of 2026-10-04, verbatim in Appendix A |
 | **Approved by** | *The sponsor's instruction of 2026-10-04 (Appendix A); the defaults in §2 marked "owner to confirm" are not yet confirmed.* |
 | **Test case(s)** | `tests/integration/rcv01-receivables.test.ts` (every §14 scenario), `tests/unit/fx1-menu.test.ts`, `tests/unit/screen-catalogue.test.ts` |
-| **Status** | **Built, awaiting the owner** — services, migration, screens, doors, controls and tests built; owner to confirm the defaults in §2 |
+| **Status** | **Built, awaiting the owner** — services, migration, screens, the four doors (the shared Notes door included), profile links, controls and tests built and re-run on the final code (§7); owner to confirm the defaults in §2 |
 
 ---
 
@@ -166,8 +166,8 @@ engine carries one currency per journal; sales tax — no tax engine.
 | 13 | Drill-down ageing → customer/statement/credits; statement → source; invoice → everything | **Done** | as above |
 | 14 | Validation scenarios | **Done — 20/20 passing** | `tests/integration/rcv01-receivables.test.ts` |
 | 12 | UI unchanged; screenshots beside the models; theme readability | **Verified 2026-10-04** | `tests/e2e/receivables.spec.ts`, `theme-readability.spec.ts`, screenshots |
-| R1 | Four doors from the draft on invoice, receipt, return, credit/debit note, credit memo | **Done** | record pages; `attachments-runtime.ts`; rcv01 › *the four doors* |
-| R2 | Customer name links to the customer's profile on every receivables record and register | **Done** | shared `ProfileLink`; `/sales/customers/<code>?role=customer` |
+| R1 | Four doors from the draft on invoice, receipt, return, credit/debit note, credit memo — printer, paperclip, the shared Notes door, clock | **Done** (Notes door wired after `feat/shared-module` SHARED-READY, 2026-10-04) | record pages; `attachments-runtime.ts`; `record-notes.ts` (`customer_note` target); rcv01 › *the four doors*; `receivables.spec.ts` |
+| R2 | Customer links to the customer's profile on every receivables record and register; the receipt's bank/cash account to its own | **Done** | shared `ProfileLink`; `/sales/customers/<code>?role=customer`, `/master-data/{bank,cash}-accounts/<code>`; `receivables.spec.ts` › *the customer on every record and register* |
 | C | Controls register rows for 0280 | **Done** — C-41 to C-45 | `docs/CONTROLS.md`, rcv01 › *0280* |
 
 ---
@@ -217,6 +217,9 @@ filters), attachments runtime (parent checks for `ar_invoice`,
 - [x] Add an e2e spec for the new screens (`tests/e2e/receivables.spec.ts`).
 - [ ] Run the **full** integration suite on an isolated database — the
       orchestrator runs it at merge; the focused AR files run here.
+- [x] Merge `feat/shared-module` (SHARED-READY) and wire the shared Notes door
+      and `ProfileLink` on every receivables record and register (third run,
+      2026-10-04).
 - [x] Rows for the new triggers/constraints in `docs/CONTROLS.md` (C-41–C-45).
 - [x] A Receivables section in `AGENTS.md` (CLAUDE.md only includes it).
 - [ ] The PR into `main` — the orchestrator's.
@@ -263,13 +266,32 @@ npx vitest run --project integration tests/integration/rcv01-receivables.test.ts
   tests/integration/ops05-sales-invoice.test.ts
 ```
 
-Last verified on this branch: typecheck clean on the final code. Unit suite
-1730/1731 before the last fix; the one failure (`hd18-no-raw-enum`) was fixed
-and that file re-run green, but the full unit suite was not re-run after it.
-Integration: `rcv01-receivables` 20/20 and the other seven files 144/144 were
-run **before** the final round of changes (open-items minimal-diff refactor,
-receipt currency check and payment method, statement links, receipt/invoice
-page doors), so they must be re-run.
+Last verified on this branch (third run, 2026-10-04, after the
+`feat/shared-module` merge and the door/link wiring — the final code state):
+typecheck clean; unit 1737/1737; on `erp_test_receivables`
+`rcv01-receivables` 32/32, the seven AR files 144/144
+(open-items 9, ops02 8, ops05 62, ops09 14, ops17 8, sales-ar-subledger 19,
+sales-receipts-cash-sales 24), `shared-record-notes` 8/8;
+`tests/e2e/receivables.spec.ts` 11/11 and `theme-readability.spec.ts` in the
+browser against the seeded `erp_receivables` on port 3003 (screenshots in
+`/home/claude/shots/receivables/`).
+
+**§5.9 proofs → tests.** invoice → receipt → partial → paid: rcv01 › *§14 ·
+invoice, receipt, outstanding* (three tests) and `receivables.spec.ts` › *a
+draft receipt … pays part of the invoice*; advance apart from invoices and
+overpayment as credit: rcv01 › *§14 · credits and advances*; ageing ties to
+statement: `ops17-ageing-ties-to-statement` and rcv01 › *the customer
+subledger equals the A/R control account*; late days from due date → receipt
+date: rcv01 › *due 1 Oct, paid 4 Oct* and › *counts lateness from the due date*;
+credit/debit notes on statement and ageing: rcv01 › *§14 · credit notes and
+debit notes* and `receivables.spec.ts` › *ageing → … statement → source
+document*; returns through the existing FIFO engine: rcv01 › *a return reduces
+A/R, puts the stock back* and `ops09-sales-returns`; reconciliation detects and
+never repairs: rcv01 › *subledger equals control* (read-only service;
+`customer-reconciliation.ts` has no writer) and `receivables.spec.ts` › *credit
+/ debit notes and the reconciliation read the same subledger*; drill-down:
+`receivables.spec.ts` › *the invoice shows its receipts, credit notes, return*
+and › *ageing → customer → invoice → receipt → credits → statement*.
 
 ---
 

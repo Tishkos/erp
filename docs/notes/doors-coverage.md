@@ -20,9 +20,10 @@ under the document) · ❌ missing. **Print model**: the export key, or none.
 | Record page | P | A | N | H | Print model | Parties → profile | Owner |
 |---|---|---|---|---|---|---|---|
 | `payables/invoices/[invoiceNo]` — purchase invoice (the model) | ✅ | ✅ | ✅ | ✅ | `purchase_invoice` | supplier code/name: text ❌; import: link ✅ | payables |
-| `sales/ar-invoices/[invoiceNo]` — sales invoice | ◐ | ❌ | ❌ | ◐ | `sales_invoice` | customer: text ❌; journal, G/L accounts: links ✅ | receivables |
-| `sales/customer-receipts/[receiptNo]` | ◐ | ❌ | ❌ | ◐ | `customer_receipt` | customer, bank/cash account: text ❌ | receivables |
-| `sales/sales-returns/[returnNo]` | ◐ | ❌ | ❌ | ◐ | `sales_return` | customer, invoice: text ❌ | receivables |
+| `sales/ar-invoices/[invoiceNo]` — sales invoice | ✅ | ✅ | ✅ | ✅ | `sales_invoice` | customer: `ProfileLink` ✅; journal, G/L accounts: links ✅ | **receivables — done** |
+| `sales/customer-receipts/[receiptNo]` | ✅ | ✅ | ✅ | ✅ | `customer_receipt` | customer, bank/cash account: `ProfileLink` ✅; invoices, debit notes: links ✅ | **receivables — done** |
+| `sales/sales-returns/[returnNo]` | ✅ | ✅ | ✅ | ✅ | `sales_return` | customer: `ProfileLink` ✅; invoice: link ✅ | **receivables — done** |
+| `sales/credit-notes/[noteNo]` — customer credit / debit note, and the credit memo (REQ-AR-001) | ✅ | ✅ | ✅ | ✅ | `customer_note` | customer: `ProfileLink` ✅; invoice, return, journal: links ✅ | **receivables — done** |
 | `payables/supplier-payments/[paymentNo]` | ◐ | ❌ | ❌ | ◐ | `supplier_payment` | supplier, bank/cash account: text ❌; application: link ✅ | payables |
 | `payables/goods-returns/[returnNo]` — purchase return | ◐ | ❌ | ❌ | ◐ | `purchase_return` | supplier, invoice: text ❌ | payables |
 | `payables/advances/[advanceNo]` — supplier advance | ❌ | ❌ | ❌ | ◐ | none | import, invoice: links ✅; supplier: text ❌ | payables |
