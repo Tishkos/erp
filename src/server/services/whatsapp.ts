@@ -594,7 +594,8 @@ export async function recentTurns(
     .from(whatsappMessage)
     .where(
       and(
-        input.groupJid ? eq(whatsappMessage.groupJid, input.groupJid) : eq(whatsappMessage.e164, input.e164),
+        // A direct chat's turns are that chat's own: what the same person asked in the group is not part of it.
+        input.groupJid ? eq(whatsappMessage.groupJid, input.groupJid) : and(eq(whatsappMessage.e164, input.e164), sql`${whatsappMessage.groupJid} is null`),
         sql`${whatsappMessage.createdAt} >= ${since.toISOString()}`,
         sql`${whatsappMessage.body} is not null`,
         sql`${whatsappMessage.redactedAt} is null`,

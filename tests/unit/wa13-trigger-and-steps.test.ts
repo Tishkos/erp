@@ -11,7 +11,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { AI_SILENCERS, AI_TRIGGER, DEFAULT_SETTINGS, triggerOf } from '@domain/whatsapp';
+import { AI_SILENCERS, AI_TRIGGER, DEFAULT_SETTINGS, isSelfChat, triggerOf } from '@domain/whatsapp';
 import { runAgent, systemPrompt } from '@domain/whatsapp-agent';
 import { CAPTION_MAX, layOutAnswer, pictureId } from '@domain/whatsapp-pictures';
 
@@ -107,7 +107,7 @@ describe('the trigger', () => {
     expect(bridge).toMatch(/if \(current\(\)\.groupOnly && !called\.getStore\(\)\) \{\s+throw new Error\('unasked:/);
     // …the only thing that sets it is the handler that returns unless the message began with the trigger…
     expect(bridge.match(/called\s*\.run\(/g)).toHaveLength(1);
-    expect(bridge).toMatch(/called\s*\.run\(\{ quoted: message, used: false \}, \(\) => handleInbound\(/);
+    expect(bridge).toMatch(/called\s*\.run\(\{ quoted: message, used: false, self: selfChat \}, \(\) => handleInbound\(/);
     // …and the digest does not even try.
     expect(bridge).toMatch(/async function sendDigest[^{]+\{[\s\S]{0,260}if \(settings\.groupOnly\) return;/);
     // The notification sender says the same, whatever the switch says.
@@ -258,5 +258,44 @@ describe('what he did is kept, so he can be improved', () => {
     expect(prompt).toMatch(/saved or approved but never POSTED/);
     expect(prompt).toMatch(/Never tell the group the database is down because one query failed/);
     expect(prompt).toMatch(/activity_log \(outcome problems, their name\)/);
+  });
+});
+
+describe('the owner may try him in their own chat with themselves', () => {
+  // 2026-10-05, by direction: "can I try on my own chat, when writing !ai, so he answers me myself".
+  const own = ['36205600069@s.whatsapp.net', '200000000000005@lid'];
+
+  it('is the chat the account has with itself — by its number or by its LID — and only when switched on', () => {
+    expect(isSelfChat({ enabled: true, fromMe: true, remoteJid: '36205600069@s.whatsapp.net', ownJids: own })).toBe(true);
+    expect(isSelfChat({ enabled: true, fromMe: true, remoteJid: '200000000000005@lid', ownJids: own })).toBe(true);
+    expect(isSelfChat({ enabled: true, fromMe: true, remoteJid: '36205600069:5@s.whatsapp.net', ownJids: own })).toBe(true);
+    expect(isSelfChat({ enabled: false, fromMe: true, remoteJid: '36205600069@s.whatsapp.net', ownJids: own })).toBe(false);
+  });
+
+  it('is never anybody else: not a message the owner sent to another person, not one received, not a group', () => {
+    // Typed by the owner — to somebody else. Also fromMe, and nobody's business here.
+    expect(isSelfChat({ enabled: true, fromMe: true, remoteJid: '9647701929191@s.whatsapp.net', ownJids: own })).toBe(false);
+    // Somebody writing to the owner.
+    expect(isSelfChat({ enabled: true, fromMe: false, remoteJid: '36205600069@s.whatsapp.net', ownJids: own })).toBe(false);
+    expect(isSelfChat({ enabled: true, fromMe: null, remoteJid: '36205600069@s.whatsapp.net', ownJids: own })).toBe(false);
+    expect(isSelfChat({ enabled: true, fromMe: true, remoteJid: '120363411660904272@g.us', ownJids: own })).toBe(false);
+    expect(isSelfChat({ enabled: true, fromMe: true, remoteJid: 'status@broadcast', ownJids: own })).toBe(false);
+    expect(isSelfChat({ enabled: true, fromMe: true, remoteJid: null, ownJids: own })).toBe(false);
+    expect(isSelfChat({ enabled: true, fromMe: true, remoteJid: '36205600069@s.whatsapp.net', ownJids: [] })).toBe(false);
+    expect(isSelfChat({ enabled: true, fromMe: true, remoteJid: '@s.whatsapp.net', ownJids: [''] })).toBe(false);
+  });
+
+  it('still needs the trigger, and the transport writes there only while answering a message written there', () => {
+    const bridge = readFileSync('scripts/ops/whatsapp-bridge.ts', 'utf8');
+    // Off unless the owner switches it on.
+    expect(bridge).toMatch(/const SELF_CHAT = \(process\.env\.WA_SELF_CHAT \?\? ''\)\.trim\(\)\.toLowerCase\(\) === 'on';/);
+    // The group gate gives way to the self chat only; the trigger gate comes after both.
+    const gate = bridge.indexOf('if (!selfChat && !listensTo(settings, groupJid)) {');
+    const trigger = bridge.indexOf('const trigger = triggerOf(typed);');
+    expect(gate).toBeGreaterThan(0);
+    expect(trigger).toBeGreaterThan(gate);
+    // A send to the owner's own number passes only inside the handling of a self-chat message.
+    expect(bridge).toMatch(/const toSelf = SELF_CHAT && !to\.groupJid && Boolean\(own\) && to\.e164 === own && called\.getStore\(\)\?\.self === true;/);
+    expect(bridge).toMatch(/if \(!toSelf && !maySendTo\(current\(\), to\)\) \{/);
   });
 });

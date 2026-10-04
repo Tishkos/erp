@@ -555,6 +555,36 @@ export function maySendTo(settings: BotSettings, to: { readonly groupJid?: strin
   return Boolean(to.groupJid) && settings.groupJid !== '' && to.groupJid === settings.groupJid;
 }
 
+/**
+ * The owner's own chat with himself — by direction, 2026-10-05: "can I try on
+ * my own chat, when writing !ai, so he answers me myself".
+ *
+ * The bridge is linked to a person's own WhatsApp, and that person has one
+ * chat that is nobody else's: "Message yourself". With the switch on
+ * (`WA_SELF_CHAT=on` in the bridge's environment) a message there that begins
+ * with the trigger is answered there — a place to try him without the group
+ * watching. It is the only private chat he will ever hear:
+ *
+ *   * `fromMe` — typed by the account's owner, on their own phone;
+ *   * and addressed to the account ITSELF — not a message the owner sent to
+ *     somebody else, which is also `fromMe` and is nobody's business here.
+ *
+ * Everything else about the one-group rule stands, and so does the trigger:
+ * a note to self that does not begin with it is not read.
+ */
+export function isSelfChat(input: {
+  readonly enabled: boolean;
+  readonly fromMe: boolean | null | undefined;
+  readonly remoteJid: string | null | undefined;
+  /** The account's own addresses, without the device part: its number's and its LID's. */
+  readonly ownJids: readonly string[];
+}): boolean {
+  if (!input.enabled || input.fromMe !== true || !input.remoteJid) return false;
+  const chat = input.remoteJid.replace(/:\d+@/, '@');
+  if (chat.endsWith('@g.us') || chat === 'status@broadcast') return false;
+  return input.ownJids.some((own) => own !== '' && own.replace(/:\d+@/, '@') === chat);
+}
+
 // ---------------------------------------------------------------------------
 // The trigger
 // ---------------------------------------------------------------------------

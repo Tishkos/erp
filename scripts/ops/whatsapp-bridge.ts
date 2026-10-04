@@ -68,7 +68,7 @@ import * as actions from '../../src/server/services/whatsapp-actions';
 import { agentClientFor, anthropicClient, modelRouter } from '../../src/server/services/whatsapp-router';
 import { runAgentFor, type AgentClient } from '../../src/server/services/whatsapp-agent';
 import { cliAgentClient, cliReady } from '../../src/server/services/whatsapp-cli-brain';
-import { AI_TRIGGER, listensTo, maySendTo, triggerOf } from '../../src/server/domain/whatsapp';
+import { AI_TRIGGER, isSelfChat, listensTo, maySendTo, triggerOf } from '../../src/server/domain/whatsapp';
 import { nameOf } from '../../src/server/domain/whatsapp-names';
 import { readTags, rosterForPrompt, rosterFrom, writeTags, type Member, type Participant } from '../../src/server/domain/whatsapp-people';
 import type { AskedPicture } from '../../src/server/domain/whatsapp-agent';
@@ -108,6 +108,14 @@ const AGENT_MODEL_OVERRIDE = process.env.WA_AGENT_MODEL?.trim() || null;
  * change: WA_ANSWER_SELF=off, or simply removed, puts it back.
  */
 const ANSWER_SELF = (process.env.WA_ANSWER_SELF ?? '').trim().toLowerCase() === 'on';
+
+/*
+ * The owner's own "Message yourself" chat (2026-10-05, by direction: "can I
+ * try on my own chat"). Off unless WA_SELF_CHAT=on: with it, a message the
+ * owner writes to THEMSELVES that begins with the trigger is answered in that
+ * chat. No other private chat is heard or written to (`isSelfChat`).
+ */
+const SELF_CHAT = (process.env.WA_SELF_CHAT ?? '').trim().toLowerCase() === 'on';
 const RESET = process.argv.includes('--reset-pairing');
 /** WA-5 — print the groups the bot is in, with their ids, and exit. */
 const LIST_GROUPS = process.argv.includes('--list-groups');
@@ -232,7 +240,7 @@ async function paced(perMinute: number): Promise<void> {
  * a notification, a digest, a greeting somebody adds next year. The rule is
  * held where a message leaves, not at each place one might be written.
  */
-const called = new AsyncLocalStorage<{ quoted: WAMessage | null; used: boolean }>();
+const called = new AsyncLocalStorage<{ quoted: WAMessage | null; used: boolean; self?: boolean }>();
 
 /**
  * The registered group's members, as people (`domain/whatsapp-people.ts`).
@@ -258,7 +266,11 @@ function transportFor(sock: () => WASocket | null, current: () => Awaited<Return
     // The last word on where the bot writes: in group-only mode, its group
     // and nowhere else, whichever part of the code asked (2026-10-04 — the
     // account it is linked to is a person's own).
-    if (!maySendTo(current(), to)) {
+    // …and, when the owner has switched it on, to the owner's own chat with
+    // themselves — while answering a message that was written there.
+    const own = jidToE164(jidNormalizedUser(socket.user?.id ?? ''));
+    const toSelf = SELF_CHAT && !to.groupJid && Boolean(own) && to.e164 === own && called.getStore()?.self === true;
+    if (!toSelf && !maySendTo(current(), to)) {
       throw new Error('group only: the bot writes to its one registered group and to no private chat');
     }
     await paced(current().throttlePerMinute);
@@ -468,6 +480,7 @@ async function handleInbound(
   agentClient: AgentClient | undefined,
   ownE164: string | null,
   members: (groupJid: string) => Promise<readonly Member[]>,
+  selfChat = false,
 ): Promise<void> {
   const { e164, groupJid } = senderOf(message, ownE164);
   const sentFile = fileOf(message);
@@ -486,7 +499,9 @@ async function handleInbound(
    * no name kept — and until a group is registered nothing is heard at all.
    */
   const settings = await withScope(scope, (tx) => wa.settings(tx));
-  if (!listensTo(settings, groupJid)) {
+  // The owner's own chat with themselves is the one private chat he hears —
+  // decided by the caller from the message's own address, never from its words.
+  if (!selfChat && !listensTo(settings, groupJid)) {
     // Only with `group_only` off can this be another group, and that much may
     // be said; a private message under `group_only` leaves no trace.
     if (!settings.groupOnly && groupJid) log(`inbound from ${e164} in ${groupJid}: ignored (not the registered group)`);
@@ -1334,8 +1349,12 @@ async function main(): Promise<void> {
         // Inside `called` — `handleInbound` returns before it reads anything
         // unless the message begins with the trigger, so what it sends is
         // always an answer to somebody who called.
+        const ownJids = [socket?.user?.id, (socket?.user as { lid?: string } | undefined)?.lid]
+          .filter((value): value is string => typeof value === 'string' && value !== '')
+          .map((value) => jidNormalizedUser(value));
+        const selfChat = isSelfChat({ enabled: SELF_CHAT, fromMe: message.key.fromMe, remoteJid: message.key.remoteJid, ownJids });
         called
-          .run({ quoted: message, used: false }, () => handleInbound(scope, send, router, message, agent ?? undefined, ownE164, members))
+          .run({ quoted: message, used: false, self: selfChat }, () => handleInbound(scope, send, router, message, agent ?? undefined, ownE164, members, selfChat))
           .catch((e) => log(`inbound handling failed: ${e}`));
       }
     });

@@ -174,6 +174,15 @@ Everything starts with `!ai` at the beginning of the message.
 * **Have him do a step** — `!ai post INV-…`: he shows what it will do and waits
   for `!ai yes`.
 
+## Trying him without the group watching
+
+The bridge is linked to one person's WhatsApp. With `WA_SELF_CHAT=on` in
+`/opt/qs-erp-next/.env` (then `systemctl restart whatsapp-bridge`), that person
+can open their own **Message yourself** chat and write `!ai …` there: he
+answers in that chat, as them, with everything he can do in the group. Nobody
+else's private chat is ever read, and a note to self that does not begin with
+`!ai` is not read either. Remove the line (or set it to `off`) to switch it off.
+
 ## Live pictures
 
 `!ai show me INV-HQ-2026-000001 and where I press to post it` — Noah takes a
