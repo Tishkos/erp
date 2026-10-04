@@ -110,8 +110,12 @@ describe('the screen catalogue covers the approved tree', () => {
     // (2026-10-04): Supplier Ledger, Advances, Payments, Allocations and
     // Ageing were the Payables screens under second names, and Supplier
     // Credits is new.
-    expect(allMenuItems()).toHaveLength(239);
-    expect(Object.keys(SCREENS)).toHaveLength(239);
+    // Plus REQ-LOG-001's ten (2026-10-04): Customs Declarations, Customs
+    // Duties & Taxes, Customs Documents, Shipments, Ports & Routes, Freight &
+    // Shipping Costs, Shipment Documents, Shipment Tracking, Landed Costs and
+    // Cost Allocation.
+    expect(allMenuItems()).toHaveLength(249);
+    expect(Object.keys(SCREENS)).toHaveLength(249);
   });
 
   it('uses only declared archetypes', () => {
@@ -135,7 +139,8 @@ describe('the screen catalogue covers the approved tree', () => {
     // − 2 − 2 (receipts, payments).
     // Payables finalisation (2026-10-04): − 1 − 2 − 2 − 1 − 1 out (Supplier
     // Ledger, Advances, Payments, Allocations, Ageing), + 1 in (Supplier Credits).
-    expect(total).toBe(352);
+    // REQ-LOG-001: + 2 + 2 (declarations, ports) + 8 (the registers).
+    expect(total).toBe(364);
   });
 });
 
@@ -188,7 +193,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(239);
+    expect(screenRoutes().size).toBe(249);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -250,8 +255,6 @@ describe('every screen has one address', () => {
       '/inventory/availability',
       // Operations build — block 7's Warehouses Report.
       '/inventory/fifo-valuation',
-      // Block 8 — Invoice Status Tracking.
-      '/inventory/in-transit',
       '/inventory/items',
       // Block 7 — Opening Stock, Item Reconciliation, Stock Movement, Transfer.
       '/inventory/opening-stock',
@@ -261,6 +264,19 @@ describe('every screen has one address', () => {
       '/inventory/stock-reconciliation',
       '/inventory/transfers',
       '/inventory/uom',
+      // REQ-LOG-001 — the Logistics module's own screens; In-Transit
+      // Inventory absorbed Block 8's Invoice Status Tracking.
+      '/logistics/cost-allocation',
+      '/logistics/customs-declarations',
+      '/logistics/customs-documents',
+      '/logistics/customs-duties',
+      '/logistics/freight-costs',
+      '/logistics/in-transit',
+      '/logistics/landed-costs',
+      '/logistics/ports',
+      '/logistics/shipment-documents',
+      '/logistics/shipment-tracking',
+      '/logistics/shipments',
       '/master-data/bank-accounts',
       // REQ-AP-001 Stage 3 — the bank master.
       '/master-data/banks',

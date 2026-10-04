@@ -8,6 +8,8 @@ import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { ExportIcon } from '@/components/print/export-menu';
@@ -16,6 +18,7 @@ import { formatBusinessDate, formatQuantity, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
+import * as recordNotes from '@/server/services/record-notes';
 import * as shipments from '@/server/services/shipments';
 import { SIZE_TYPES } from '@/server/domain/shipments';
 import { addContainersAction, attachToBl, blStatusAction, cancelBlAction, updateBlAction } from '../actions';
@@ -72,6 +75,7 @@ export default async function BlPage({
         ...view,
         statuses: await shipments.statuses(tx),
         files: await readAttachments(tx, shipments.BL_OBJECT, view.bl.id),
+        notes: await recordNotes.listNotes(tx, { object: shipments.BL_OBJECT, recordId: view.bl.id }),
         models: mayEdit && open ? await shipments.modelsToShip(tx, view.owner.id) : [],
         ports: mayEdit && open ? await shipments.ports(tx) : [],
       };
@@ -103,20 +107,27 @@ export default async function BlPage({
     {
       label: t('import'),
       value: (
-        <Link className={s.sapLink} href={`/payables/${encodeURIComponent(owner.payableNo)}`}>
-          <bdi dir="ltr">
-            {owner.payableNo} · {owner.supplierReference}
-          </bdi>
-        </Link>
+        <ProfileLink code={owner.payableNo} kind="import">
+          {owner.payableNo} · {owner.supplierReference}
+        </ProfileLink>
       ),
     },
-    { label: t('supplier'), value: <bdi dir="auto">{found.supplier ? `${found.supplier.name} (${found.supplier.code})` : '—'}</bdi> },
+    { label: t('supplier'), value: found.supplier ? <ProfileLink code={found.supplier.code} dir="auto" kind="supplier" name={found.supplier.name} /> : '—' },
     { label: t('bl_date'), value: <bdi dir="ltr">{day(bl.blDate)}</bdi> },
     { label: t('eta'), value: <bdi dir="ltr">{day(bl.eta)}</bdi> },
     { label: t('vessel'), value: <bdi dir="auto">{[bl.vessel, bl.voyage].filter(Boolean).join(' / ') || '—'}</bdi> },
     { label: t('shipping_line'), value: <bdi dir="auto">{bl.shippingLine ?? '—'}</bdi> },
     { label: t('port_of_loading'), value: <bdi dir="auto">{bl.portOfLoading ?? '—'}</bdi> },
-    { label: t('port_of_discharge'), value: <bdi dir="auto">{found.port?.name ?? '—'}</bdi> },
+    {
+      label: t('port_of_discharge'),
+      value: found.port ? (
+        <ProfileLink code={found.port.code} dir="auto" kind="port">
+          {found.port.name}
+        </ProfileLink>
+      ) : (
+        '—'
+      ),
+    },
     ...(bl.cancelledAt ? [{ label: t('cancel_reason'), value: <bdi dir="auto">{bl.cancelReason ?? '—'}</bdi> }] : []),
   ];
 
@@ -146,6 +157,8 @@ export default async function BlPage({
       <DocumentWindow
         titleActions={
           <>
+            {/* Printer, paperclip, notes, clock — the four doors in the standing order (2026-10-04). */}
+            <ExportIcon exportKey="bill_of_lading" id={bl.blNo} title={`B/L ${bl.blNo}`} />
             <AttachmentsButton closeLabel={admin('close')} count={found.files.rows.length} label={admin('attachments.title')} title={admin('attachments.title')}>
               <Attachments
                 action={attachToBl}
@@ -156,10 +169,10 @@ export default async function BlPage({
                 preloaded={found.files}
               />
             </AttachmentsButton>
+            <RecordNotesDoor notes={found.notes} object={shipments.BL_OBJECT} recordId={bl.id} />
             <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
               <RecordHistory objectId={bl.id} objectType={shipments.BL_OBJECT} />
             </HistoryButton>
-            <ExportIcon exportKey="bill_of_lading" id={bl.blNo} title={`B/L ${bl.blNo}`} />
           </>
         }
         actions={
@@ -274,9 +287,9 @@ export default async function BlPage({
             {containers.map((row) => (
               <tr key={row.id}>
                 <td>
-                  <Link className={s.sapLink} href={`/payables/containers/${encodeURIComponent(row.containerNo)}${row.receivedOn || row.cancelledAt ? `?id=${row.id}` : ''}`}>
-                    <bdi dir="ltr">{row.containerNo}</bdi>
-                  </Link>
+                  <ProfileLink code={row.containerNo} kind="container" qualifier={row.receivedOn || row.cancelledAt ? { id: row.id } : {}}>
+                    {row.containerNo}
+                  </ProfileLink>
                 </td>
                 <td>
                   <bdi dir="ltr">{row.sizeType ?? '—'}</bdi>
@@ -298,7 +311,9 @@ export default async function BlPage({
                   <bdi dir="ltr">{row.receivedOn ? amount(row.short) : '—'}</bdi>
                 </td>
                 <td>
-                  <bdi dir="ltr">{row.warehouseCode ?? '—'}</bdi>
+                  <ProfileLink code={row.warehouseCode} kind="warehouse">
+                    {row.warehouseCode ?? '—'}
+                  </ProfileLink>
                 </td>
                 <td>
                   {row.cancelledAt ? (

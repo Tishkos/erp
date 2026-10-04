@@ -1492,6 +1492,20 @@
       "when": 1795900000105,
       "tag": "0295_supplier_credit_debit_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 213,
+      "version": "7",
+      "when": 1795900000110,
+      "tag": "0300_logistics_menu_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 214,
+      "version": "7",
+      "when": 1795900000111,
+      "tag": "0301_customs_declaration",
+      "breakpoints": true
     }
   ]
 }

@@ -181,6 +181,9 @@ const TARGETS = new Map<string, NoteTarget>([
   ['asycuda_run', target('customs_pd', 'edit_draft', inTable('asycuda_run', 'id', null))],
   ['bill_of_lading', target('bill_of_lading', 'edit_draft', inTable('bill_of_lading', 'id', 'branch_code'))],
   ['shipment_container', target('shipment_container', 'edit_draft', inTable('shipment_container', 'id', 'branch_code'))],
+  // REQ-LOG-001 — the customs declaration (by id) and the port (a master record, by code).
+  ['customs_declaration', target('customs_declaration', 'edit_draft', inTable('customs_declaration', 'id', 'branch_code'))],
+  ['port', target('port', 'configure', inTable('port', 'code', null))],
   // Inventory. A transfer's events are `warehouse_transfer` whichever table holds it.
   ['warehouse_transfer', target('warehouse_transfer', 'create', inEither(inTable('stock_transfer', 'id', 'branch_code'), inTable('warehouse_transfer', 'id', 'branch_code')))],
   ['stock_reconciliation', target('stock_reconciliation', 'create', inTable('stock_adjustment', 'id', 'branch_code'))],

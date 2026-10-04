@@ -970,9 +970,11 @@ test.describe('the Operations Build screens open', () => {
   });
 
   test('block 8 · Invoice Status Tracking shows the four stages', async ({ page }) => {
+    // REQ-LOG-001 — absorbed by In-Transit Inventory; the old address redirects.
     await page.goto('/inventory/in-transit');
-
-    await expect(page.getByRole('heading', { name: 'Invoice Status Tracking' })).toBeVisible();
+    await expect(page).toHaveURL(/\/logistics\/in-transit/);
+    await expect(page.getByRole('heading', { level: 1, name: 'In-Transit Inventory' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Invoice Status Tracking/ })).toBeVisible();
 
     // The sponsor's four, in his order, in one picker rather than five links.
     // Nothing is created here — a shipment appears when a Purchase Invoice

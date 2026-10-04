@@ -8,7 +8,10 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { Attachments, readAttachments } from '@/components/admin/attachments';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
 import { RecordHistory } from '@/components/admin/history';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { SectionTabs } from '@/components/admin/section-tabs';
+import { ExportIcon } from '@/components/print/export-menu';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatQuantity, type Locale } from '@/i18n/config';
@@ -16,7 +19,11 @@ import { can } from '@domain/permissions';
 import { CONTAINER_PATH, SIZE_TYPES } from '@domain/shipments';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
+import * as recordNotes from '@/server/services/record-notes';
 import * as shipments from '@/server/services/shipments';
+import * as views from '@/server/services/logistics-views';
+import { declarationChip } from '@domain/import-logistics';
+import { pdChip } from '../../pd/status';
 import {
   attachToContainer,
   cancelContainerAction,
@@ -54,8 +61,10 @@ export default async function ContainerPage({
   const query = await searchParams;
   const id = typeof query.id === 'string' ? query.id : null;
 
-  const [t, admin, page, locale, context, outcome] = await Promise.all([
+  const [t, lg, pdT, admin, page, locale, context, outcome] = await Promise.all([
     getTranslations('admin.shipments'),
+    getTranslations('admin.logistics'),
+    getTranslations('admin.customs_pd'),
     getTranslations('admin'),
     getTranslations('page'),
     getLocale(),
@@ -73,7 +82,14 @@ export default async function ContainerPage({
   const found = await withCurrentUser(async (tx) => {
     try {
       const view = await shipments.viewContainer(tx, containerNo, id);
-      return { ...view, statuses: await shipments.statuses(tx), files: await readAttachments(tx, shipments.CONTAINER_OBJECT, view.container.id) };
+      return {
+        ...view,
+        statuses: await shipments.statuses(tx),
+        files: await readAttachments(tx, shipments.CONTAINER_OBJECT, view.container.id),
+        notes: await recordNotes.listNotes(tx, { object: shipments.CONTAINER_OBJECT, recordId: view.container.id }),
+        // REQ-LOG-001 item 14 — where customs stands for this container's import.
+        customs: await views.customsForImport(tx, view.owner.id),
+      };
     } catch (error) {
       // E1 — a missing record is a 404; anything else reaches the error boundary.
       if (isNotFoundError(error)) return null;
@@ -92,6 +108,7 @@ export default async function ContainerPage({
   const chip = containerChip(container);
   const cs = (code: string, name: string) => (locale !== 'en' && t.has(`cs.${code}`) ? t(`cs.${code}`) : name);
   const statusName = (code: string) => cs(code, found.statuses.find((row) => row.code === code)?.name ?? code);
+  const standingPds = found.customs.pds.filter((pd) => !pd.superseded);
   const pathIndex = container.statusCode === 'late' ? 1 : CONTAINER_PATH.indexOf(container.statusCode as (typeof CONTAINER_PATH)[number]);
   const nextStages = CONTAINER_PATH.filter((_, index) => index > pathIndex);
   const documentId = randomUUID();
@@ -102,22 +119,20 @@ export default async function ContainerPage({
     {
       label: t('bl_no'),
       value: (
-        <Link className={s.sapLink} href={`/payables/shipments/${encodeURIComponent(bl.blNo)}`}>
-          <bdi dir="ltr">{bl.blNo}</bdi>
-        </Link>
+        <ProfileLink code={bl.blNo} kind="bl">
+          {bl.blNo}
+        </ProfileLink>
       ),
     },
     {
       label: t('import'),
       value: (
-        <Link className={s.sapLink} href={`/payables/${encodeURIComponent(owner.payableNo)}`}>
-          <bdi dir="ltr">
-            {owner.payableNo} · {owner.supplierReference}
-          </bdi>
-        </Link>
+        <ProfileLink code={owner.payableNo} kind="import">
+          {owner.payableNo} · {owner.supplierReference}
+        </ProfileLink>
       ),
     },
-    { label: t('supplier'), value: <bdi dir="auto">{found.supplier?.name ?? '—'}</bdi> },
+    { label: t('supplier'), value: found.supplier ? <ProfileLink code={found.supplier.code} dir="auto" kind="supplier" name={found.supplier.name} /> : '—' },
     { label: t('size_type'), value: <bdi dir="ltr">{container.sizeType ?? '—'}</bdi> },
     { label: t('seal_no'), value: <bdi dir="ltr">{container.sealNo ?? '—'}</bdi> },
     ...(container.cancelledAt ? [{ label: t('cancel_reason'), value: <bdi dir="auto">{container.cancelReason ?? '—'}</bdi>, status: 'cancelled', wide: true }] : []),
@@ -127,8 +142,47 @@ export default async function ContainerPage({
     { label: t('customs_cleared_on'), value: <bdi dir="ltr">{day(container.customsClearedOn)}</bdi> },
     { label: t('port_file_sent_on'), value: <bdi dir="ltr">{day(container.portFileSentOn)}</bdi> },
     { label: t('received_on'), value: <bdi dir="ltr">{day(container.receivedOn)}</bdi> },
-    { label: t('warehouse'), value: <bdi dir="ltr">{container.warehouseCode ?? '—'}</bdi> },
-    { label: t('receipt_no'), value: <bdi dir="ltr">{found.receipt?.receiptNo ?? '—'}</bdi> },
+    {
+      label: t('warehouse'),
+      value: (
+        <ProfileLink code={container.warehouseCode} kind="warehouse">
+          {container.warehouseCode ?? '—'}
+        </ProfileLink>
+      ),
+    },
+    {
+      label: t('receipt_no'),
+      value: found.receipt ? (
+        <>
+          <bdi dir="ltr">{found.receipt.receiptNo}</bdi>{' '}
+          <ExportIcon exportKey="container_receipt" id={found.receipt.receiptNo} title={`${t('receipt_no')} ${found.receipt.receiptNo}`} />
+        </>
+      ) : (
+        '—'
+      ),
+    },
+    // REQ-LOG-001 item 14 — the import's customs standing, on the container itself.
+    {
+      label: lg('customs_status'),
+      value: standingPds.length ? (
+        <>
+          {standingPds.map((pd, index) => (
+            <span key={pd.id}>
+              {index > 0 ? ' · ' : ''}
+              <ProfileLink code={pd.pdNo} kind="pd" qualifier={{ year: pd.year }}>
+                {pd.pdNo}
+              </ProfileLink>{' '}
+              <span className={`status status--${pdChip(pd)}`} data-status={pdChip(pd)}>
+                {locale !== 'en' && pdT.has(`ps.${pd.statusCode}`) ? pdT(`ps.${pd.statusCode}`) : pd.statusName}
+              </span>
+            </span>
+          ))}
+        </>
+      ) : (
+        lg('container_no_customs')
+      ),
+      wide: true,
+    },
     ...(found.receipt?.varianceReason
       ? [{ label: t('variance_reason'), value: <bdi dir="auto">{found.receipt.varianceReason}</bdi>, status: 'rejected', wide: true }]
       : []),
@@ -402,6 +456,8 @@ export default async function ContainerPage({
         }
         titleActions={
           <>
+            {/* Printer, paperclip, notes, clock — the four doors in the standing order (2026-10-04). */}
+            <ExportIcon exportKey="shipment_container" id={container.containerNo} title={`${t('container')} ${container.containerNo}`} />
             <AttachmentsButton closeLabel={admin('close')} count={found.files.rows.length} label={admin('attachments.title')} title={admin('attachments.title')}>
               <Attachments
                 action={attachToContainer}
@@ -412,6 +468,7 @@ export default async function ContainerPage({
                 preloaded={found.files}
               />
             </AttachmentsButton>
+            <RecordNotesDoor notes={found.notes} object={shipments.CONTAINER_OBJECT} recordId={container.id} />
             <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
               <RecordHistory objectId={container.id} objectType={shipments.CONTAINER_OBJECT} />
             </HistoryButton>
@@ -517,6 +574,66 @@ export default async function ContainerPage({
         </div>
       </section>
 
+      {/* ── REQ-LOG-001 item 14 — the import's customs declarations ───── */}
+      <section aria-labelledby="container-customs-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="container-customs-title">
+            <span>{lg('container_customs_title')}</span>
+            <span className={s.sapTitleMeta}>{admin('rows_shown', { count: found.customs.declarations.length })}</span>
+          </h2>
+          <div className={s.sapTableWrap}>
+            <table aria-labelledby="container-customs-title" className={s.sapTable}>
+              <thead>
+                <tr>
+                  <th scope="col">{lg('declaration_no')}</th>
+                  <th scope="col">{lg('customs_ref')}</th>
+                  <th scope="col">{lg('pd')}</th>
+                  <th scope="col">{lg('declared_value')}</th>
+                  <th scope="col">{lg('status')}</th>
+                  <th scope="col">{lg('col_cleared_on')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {found.customs.declarations.length === 0 ? (
+                  <tr>
+                    <td className={s.sapEmptyRow} colSpan={6}>
+                      {lg('none_declarations')}
+                    </td>
+                  </tr>
+                ) : null}
+                {found.customs.declarations.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <Link className={s.sapLink} href={`/logistics/customs-declarations/${encodeURIComponent(row.declarationNo)}`}>
+                        <bdi dir="ltr">{row.declarationNo}</bdi>
+                      </Link>
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{row.customsRef ?? '—'}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{row.pdNo ?? '—'}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="ltr">
+                        {row.currency} {row.declaredValue}
+                      </bdi>
+                    </td>
+                    <td>
+                      <span className={`status status--${declarationChip(row.status)}`} data-status={declarationChip(row.status)}>
+                        {lg.has(`ds.${row.status}`) ? lg(`ds.${row.status}`) : row.status}
+                      </span>
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{row.status === 'cleared' ? day(row.statusDate) : '—'}</bdi>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
     </AdminPage>
   );
 }

@@ -23,6 +23,7 @@ import {
   customerCreditMemo,
   customerNote,
   customerReceipt,
+  customsDeclaration,
   customsPd,
   employeeAdvance,
   employeeDocument,
@@ -36,6 +37,7 @@ import {
   paymentApplication,
   payrollRun,
   performanceReview,
+  port,
   project,
   projectBudgetDocument,
   projectCertificate,
@@ -190,6 +192,20 @@ const blParentAccess = async (tx: Tx, principal: Principal, objectId: string) =>
 const asycudaRunParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
   if (!can(principal, 'view', 'customs_pd')) return false;
   const [row] = await tx.select({ id: asycudaRun.id }).from(asycudaRun).where(eq(asycudaRun.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/** REQ-LOG-001 — a customs declaration's files (the lodgement, the assessment): whoever may see the declarations. */
+const customsDeclarationParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'customs_declaration')) return false;
+  const [row] = await tx.select({ id: customsDeclaration.id }).from(customsDeclaration).where(eq(customsDeclaration.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/** REQ-LOG-001 — a port's papers (the tariff sheet, the agent's letter): whoever may see the ports. Addressed by code. */
+const portParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'port')) return false;
+  const [row] = await tx.select({ code: port.code }).from(port).where(eq(port.code, objectId)).limit(1);
   return Boolean(row);
 };
 
@@ -457,6 +473,8 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('shipment_container', containerParentAccess);
   attachments.registerParentAccessCheck('bill_of_lading', blParentAccess);
   attachments.registerParentAccessCheck('asycuda_run', asycudaRunParentAccess);
+  attachments.registerParentAccessCheck('customs_declaration', customsDeclarationParentAccess);
+  attachments.registerParentAccessCheck('port', portParentAccess);
   attachments.registerParentAccessCheck('bank_loan', loanParentAccess);
   attachments.registerParentAccessCheck('bank_transfer', bankTransferParentAccess);
   attachments.registerParentAccessCheck('other_receipt', otherReceiptParentAccess);

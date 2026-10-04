@@ -1647,6 +1647,12 @@ export async function listContainers(tx: Tx, filter: ContainerFilter = {}) {
                               where l.container_id = ${shipmentContainer.id} and l.superseded_at is null)`,
       sealNo: shipmentContainer.sealNo,
       cancelReason: shipmentContainer.cancelReason,
+      // REQ-LOG-001 item 14 — the import's customs standing beside the container's clearance date.
+      customsClearedOn: sql<string | null>`${shipmentContainer.customsClearedOn}::text`,
+      pdSummary: sql<string | null>`(select string_agg(d.pd_no || ' · ' || s.name, ', ' order by d.registration_date)
+                                       from customs_pd d join pd_status s on s.code = d.status_code
+                                      where d.payable_id = ${shipmentContainer.payableId}
+                                        and not exists (select 1 from customs_pd n where n.supersedes_pd_id = d.id))`,
     })
     .from(shipmentContainer)
     .innerJoin(containerStatus, eq(containerStatus.code, shipmentContainer.statusCode))

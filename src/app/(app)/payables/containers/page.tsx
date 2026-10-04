@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import {
@@ -19,6 +18,7 @@ import { formatBusinessDate, formatQuantity, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
+import { ProfileLink } from '@/components/admin/profile-link';
 import * as shipments from '@/server/services/shipments';
 import { containerChip } from './status';
 
@@ -35,8 +35,9 @@ const VIEWS = ['in_transit', 'late', 'received', 'exceptions', 'cancelled', 'all
 export default async function ContainersPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/payables/containers')) notFound();
 
-  const [t, admin, page, locale, context, outcome] = await Promise.all([
+  const [t, lg, admin, page, locale, context, outcome] = await Promise.all([
     getTranslations('admin.shipments'),
+    getTranslations('admin.logistics'),
     getTranslations('admin'),
     getTranslations('page'),
     getLocale(),
@@ -108,6 +109,8 @@ export default async function ContainersPage({ searchParams }: { searchParams: S
                     {t('days_since_eta')}
                   </th>
                   <th scope="col">{t('status')}</th>
+                  <th scope="col">{lg('customs_status')}</th>
+                  <th scope="col">{t('customs_cleared_on')}</th>
                   <th scope="col">{t('warehouse')}</th>
                   <th className={s.sapNum} scope="col">
                     {t('planned_received')}
@@ -120,7 +123,7 @@ export default async function ContainersPage({ searchParams }: { searchParams: S
               <tbody>
                 {shown.length === 0 ? (
                   <tr>
-                    <td className={s.sapEmptyRow} colSpan={11}>
+                    <td className={s.sapEmptyRow} colSpan={13}>
                       {t('no_containers')}
                     </td>
                   </tr>
@@ -128,23 +131,20 @@ export default async function ContainersPage({ searchParams }: { searchParams: S
                 {shown.map((row) => (
                   <tr key={row.id}>
                     <td>
-                      <Link
-                        className={s.sapLink}
-                        href={`/payables/containers/${encodeURIComponent(row.containerNo)}${row.receivedOn || row.cancelledAt ? `?id=${row.id}` : ''}`}
-                      >
-                        <bdi dir="ltr">{row.containerNo}</bdi>
-                      </Link>
+                      <ProfileLink code={row.containerNo} kind="container" qualifier={row.receivedOn || row.cancelledAt ? { id: row.id } : {}}>
+                        {row.containerNo}
+                      </ProfileLink>
                       {row.sizeType ? <div className="muted">{row.sizeType}</div> : null}
                     </td>
                     <td>
-                      <Link className={s.sapLink} href={`/payables/shipments/${encodeURIComponent(row.blNo)}`}>
-                        <bdi dir="ltr">{row.blNo}</bdi>
-                      </Link>
+                      <ProfileLink code={row.blNo} kind="bl">
+                        {row.blNo}
+                      </ProfileLink>
                     </td>
                     <td>
-                      <Link className={s.sapLink} href={`/payables/${encodeURIComponent(row.payableNo)}`}>
-                        <bdi dir="ltr">{row.payableNo}</bdi>
-                      </Link>
+                      <ProfileLink code={row.payableNo} kind="import">
+                        {row.payableNo}
+                      </ProfileLink>
                     </td>
                     <td>
                       <bdi dir="auto">{row.supplierName}</bdi>
@@ -183,7 +183,15 @@ export default async function ContainersPage({ searchParams }: { searchParams: S
                       )}
                     </td>
                     <td>
-                      <bdi dir="ltr">{row.warehouseCode ?? '—'}</bdi>
+                      <bdi dir="auto">{row.pdSummary ?? '—'}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{day(row.customsClearedOn)}</bdi>
+                    </td>
+                    <td>
+                      <ProfileLink code={row.warehouseCode} kind="warehouse">
+                        {row.warehouseCode ?? '—'}
+                      </ProfileLink>
                     </td>
                     <td className={s.sapNum}>
                       <bdi dir="ltr">

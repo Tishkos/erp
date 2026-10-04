@@ -63,7 +63,14 @@ const ROUTES = [
   '/projects/close',
   '/projects/reports',
   '/administration/project-settings',
-  '/inventory/in-transit',
+  // REQ-LOG-001 — In-Transit Inventory (was /inventory/in-transit) and the module's other screens.
+  '/logistics/in-transit',
+  '/logistics/customs-declarations',
+  '/logistics/shipments',
+  '/logistics/ports',
+  '/logistics/shipment-tracking',
+  '/logistics/landed-costs',
+  '/logistics/cost-allocation',
   '/treasury/reporting',
   // REQ-FIX-001 FIX-1.
   '/treasury/deposits',

@@ -2,6 +2,7 @@ import { EXPORT_ACCESS, type ExportKey } from './access';
 import * as documents from './documents';
 import * as shipmentDocuments from './shipment-documents';
 import * as customsDocuments from './customs-documents';
+import * as logisticsDocuments from './logistics-documents';
 import * as importDocuments from './import-documents';
 import * as purchaseDocuments from './purchase-documents';
 import type { BuildContext, Built } from './documents';
@@ -69,6 +70,11 @@ const BUILDERS = {
   supplier_advance: byId(purchaseDocuments.supplierAdvance),
   recurring_contract: byId(purchaseDocuments.recurringContract),
   supplier_credit_note: byId(purchaseDocuments.supplierCreditNote),
+  customs_pd: byId(logisticsDocuments.customsPd),
+  shipment_container: byId(logisticsDocuments.shipmentContainer),
+  container_receipt: byId(logisticsDocuments.containerReceipt),
+  customs_declaration: byId(logisticsDocuments.customsDeclaration),
+  port: byId(logisticsDocuments.port),
   customer_statement: (ctx, input) => reports.partnerStatement(ctx, 'customer', input.query),
   supplier_statement: (ctx, input) => reports.partnerStatement(ctx, 'supplier', input.query),
   bank_statement: (ctx, input) => (input.id ? reports.bankStatement(ctx, input.id, input.query, 'bank') : Promise.resolve(null)),

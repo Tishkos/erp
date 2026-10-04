@@ -71,6 +71,12 @@ const config: NextConfig = {
        */
       { source: '/payables/loans', destination: '/treasury/loans', permanent: true },
       { source: '/payables/loans/:path*', destination: '/treasury/loans/:path*', permanent: true },
+      /*
+       * Invoice Status Tracking was absorbed by In-Transit Inventory
+       * (REQ-LOG-001 item 19, D-FX-1: the only Logistics route that moves). Its
+       * register and Advance actions are a section of the new page.
+       */
+      { source: '/inventory/in-transit', destination: '/logistics/in-transit', permanent: true },
       {
         source: '/purchasing/ap-invoices/:path*',
         destination: '/payables/invoices/:path*',

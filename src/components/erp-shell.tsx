@@ -178,8 +178,14 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
   // credits, supplier balances. Its settings and sheet migration are
   // Administration's; the supplier master is Master Data's.
   { key: 'payables', icon: ShoppingBag, sectionKeys: ['payables', 'payables_payments', 'payables_suppliers'] },
-  // Everything logistics in the system (by direction, 2026-10-02).
-  { key: 'logistics', icon: Truck, sectionKeys: ['logistics_customs', 'logistics_shipping', 'logistics'] },
+  // Everything logistics in the system (by direction, 2026-10-02) — the
+  // owner's four headings (REQ-LOG-001). The client jobs (`logistics`) are
+  // out of the dropdown until they have a screen (Q3).
+  {
+    key: 'logistics',
+    icon: Truck,
+    sectionKeys: ['logistics_customs', 'logistics_shipping', 'logistics_in_transit', 'logistics_landed_costs'],
+  },
   { key: 'money_transfer', icon: ArrowLeftRight, sectionKeys: ['money_transfer'] },
   { key: 'crm', icon: Handshake, sectionKeys: ['crm'] },
   { key: 'projects', icon: FolderKanban, sectionKeys: ['projects'] },

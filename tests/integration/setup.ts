@@ -616,8 +616,15 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from shipment_container');
     await client.query('delete from bill_of_lading');
     await client.query('delete from port where created_by is not null');
+    // REQ-LOG-001 — a seeded port retired by a test is back in use for the next.
+    await client.query('update port set active = true where created_by is null');
     await client.query('delete from container_status where created_by is not null');
     await client.query('update container_status set active = true where created_by is null');
+    // REQ-LOG-001 (0301) — the customs declarations, which name their PD.
+    // Never deleted in production (trigger); lifted here only.
+    await client.query('alter table customs_declaration disable trigger customs_declaration_no_delete');
+    await client.query('delete from customs_declaration');
+    await client.query('alter table customs_declaration enable trigger customs_declaration_no_delete');
     // Stage 4 (0233) — the PDs and their history (append-only in production).
     await client.query('truncate customs_pd_status_history');
     await client.query('delete from customs_pd');
@@ -940,6 +947,8 @@ export async function resetTestData(): Promise<void> {
                          'CONTAINER_RECEIPT', 'PORT_CODE',
                          -- IMPROVEMENT-002, migration 0268 — the ASYCUDA reading as a document.
                          'ASYCUDA_RUN',
+                         -- REQ-LOG-001, migration 0301 — the customs declaration.
+                         'CUSTOMS_DECLARATION',
                          -- REQ-AP-001 Stage 6, migration 0235.
                          'LOAN',
                          -- REQ-HR-001 Stage HR-1, migration 0241.

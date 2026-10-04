@@ -52,13 +52,14 @@ rule), `view` (a read-only rendering of another record's data: printer only).
 
 | Record page | P | A | N | H | Print model | Parties → profile | Owner | Status |
 |---|---|---|---|---|---|---|---|---|
-| `payables/shipments/[blNo]` — B/L | ✅ | ✅ | ❌ | ✅ | `bill_of_lading` | import, containers: links ✅; supplier, port: text ❌ | logistics | owner module |
-| `payables/containers/[containerNo]` | ❌ | ✅ | ❌ | ✅ | none | import, B/L: links ✅; supplier, warehouse: text ❌ | logistics | owner module |
-| `payables/pd/[pdNo]` — PD | ❌ | ✅ | ◐ (box + `last_note`) | ✅ | none | import, applications: links ✅; supplier, bank: text ❌ | logistics | owner module |
-| `payables/pd/asycuda/[runNo]` — ASYCUDA reading | ✅ | ✅ | ❌ | ✅ | `asycuda_reading` | PDs: links ✅ | logistics | owner module |
+| `payables/shipments/[blNo]` — B/L | ✅ | ✅ | ✅ | ✅ | `bill_of_lading` | import, supplier, port, containers, warehouse: `ProfileLink` ✅ | logistics | done (REQ-LOG-001) |
+| `payables/containers/[containerNo]` | ✅ | ✅ | ✅ | ✅ | `shipment_container` **(new)**; the receipt prints as `container_receipt` from its field | import, supplier, B/L, warehouse, PD: `ProfileLink` ✅ | logistics | done |
+| `payables/pd/[pdNo]` — PD | ✅ | ✅ | ✅ | ✅ | `customs_pd` **(new)** | import, supplier, bank, PDs, applications, B/Ls, containers: `ProfileLink` ✅ | logistics | done |
+| `payables/pd/asycuda/[runNo]` — ASYCUDA reading | ✅ | ✅ | ✅ | ✅ | `asycuda_reading` | PDs, imports: `ProfileLink` ✅ | logistics | done |
+| `logistics/customs-declarations/[declarationNo]` — customs declaration | ✅ | ✅ | ✅ | ✅ | `customs_declaration` **(new)** | import, supplier, PD: `ProfileLink` ✅ | logistics | done |
+| `logistics/ports/[code]` — port (profile) | ✅ | ✅ | ✅ | ✅ | `port` **(new)** | B/Ls, imports, suppliers, containers: `ProfileLink` ✅ | logistics | done |
 
-The B/L, the PD, the container and the ASYCUDA reading draw the clock before
-the printer on `main`; the rule's order is printer, paperclip, notes, clock.
+All six draw printer, paperclip, notes, clock in the rule's order (REQ-LOG-001, 2026-10-04).
 
 ## Project System (shared, Phase 2 — done on `feat/shared-module`)
 
@@ -112,7 +113,8 @@ The employee link on an HR record is shown only to readers who hold `view` on
 | `master-data/payment-terms/[code]`, `master-data/payment-methods/[code]` | `payment_term`, `payment_method` | ❌ | ◐ | shared | profile |
 | `hr/positions/[code]`, `hr/departments/[code]` | `position` (`department` resolves to master-data) | ❌ | ◐ | shared | profile |
 | `administration/users/[id]`, `administration/roles/[code]` | `user` | ❌ | ◐ | shared | profile (platform settings, not records) |
-| — | `port`, `carrier` | | missing — **logistics builds it** | logistics | owner module |
+| `logistics/ports/[code]` | `port` | ✅ | ✅ | logistics | done (four doors) |
+| — | `carrier` | | missing — no carrier record exists (a B/L's shipping line is text) | logistics | not delivered |
 | — | `currency`, `fixed_asset`, `investment` | | missing — those modules have no delivered screens; nothing to link from yet | shared | not delivered |
 
 ## Export keys added on `feat/shared-module`

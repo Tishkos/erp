@@ -47,6 +47,14 @@ export const EXPORT_ACCESS = {
   supplier_advance: { kind: 'document', route: '/payables/advances', object: 'supplier_advance' },
   recurring_contract: { kind: 'document', route: '/payables/contracts', object: 'recurring_contract' },
   supplier_credit_note: { kind: 'document', route: '/payables/credit-memos', object: 'supplier_credit_memo' },
+  // REQ-LOG-001 item 23 — the four Logistics records that had no print model
+  // (the PD, the container, its receipt, the customs declaration), each
+  // under the object its screen authorises `view` on.
+  customs_pd: { kind: 'document', route: '/payables/pd', object: 'customs_pd' },
+  shipment_container: { kind: 'document', route: '/payables/containers', object: 'shipment_container' },
+  container_receipt: { kind: 'document', route: '/payables/containers', object: 'shipment_container' },
+  customs_declaration: { kind: 'document', route: '/logistics/customs-declarations', object: 'customs_declaration' },
+  port: { kind: 'document', route: '/logistics/ports', object: 'port' },
   customer_statement: { kind: 'report', route: '/sales/customer-statements', object: 'business_partner' },
   supplier_statement: { kind: 'report', route: '/payables/supplier-statements', object: 'business_partner' },
   bank_statement: { kind: 'report', route: '/master-data/bank-accounts', object: 'bank_account' },
@@ -57,7 +65,8 @@ export const EXPORT_ACCESS = {
   treasury_reporting: { kind: 'report', route: '/treasury/reporting', object: 'bank_account' },
   receivables: { kind: 'report', route: '/sales/receivables', object: 'ar_invoice' },
   payables: { kind: 'report', route: '/payables/open-items', object: 'ap_invoice' },
-  invoice_status_tracking: { kind: 'report', route: '/inventory/in-transit', object: 'supplier_shipment' },
+  // REQ-LOG-001 — its screen is a section of In-Transit Inventory now.
+  invoice_status_tracking: { kind: 'report', route: '/logistics/in-transit', object: 'supplier_shipment' },
   trial_balance: { kind: 'report', route: '/finance/trial-balance', object: 'trial_balance' },
   income_statement: { kind: 'report', route: '/finance/income-statement', object: 'financial_statement' },
   balance_sheet: { kind: 'report', route: '/finance/balance-sheet', object: 'financial_statement' },
