@@ -50,6 +50,7 @@ import { toDecimalString } from '../domain/money';
 import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
+import * as departures from './inventory-departures';
 import * as posting from './posting';
 import type { PostingRequest } from '../domain/posting';
 import { costOf as fifoCostOf } from '../domain/fifo';
@@ -1199,6 +1200,39 @@ export async function reverseMovement(
         .update(costLayer)
         .set({ remainingQuantity: formatQuantity(layer.remainingQuantity) })
         .where(eq(costLayer.id, layer.id));
+    }
+
+    // IMPROVEMENT-002 — units that left before a landed-cost lock go back onto
+    // a layer that now carries the restated cost, so the layer rises by more
+    // than the cost they left at. The difference is the landed share the lock
+    // sent after them, and it comes back from where it went (Dr inventory /
+    // Cr the departure's account), dated this reversal; a movement no lock
+    // reached rises by exactly what left, and nothing is posted.
+    const before = new Map(layers.map((layer) => [layer.id, layer]));
+    const units: departures.ReturnedUnits[] = [];
+    for (const consumption of consumptions) {
+      const was = before.get(consumption.layerId);
+      const now = restored.find((layer) => layer.id === consumption.layerId);
+      if (!was || !now) continue;
+      const rise =
+        fifoCostOf(now.remainingQuantity, was.unitCostIqd) - fifoCostOf(was.remainingQuantity, was.unitCostIqd);
+      const inventoryIqd = rise - BigInt(consumption.costIqd.replace('.', ''));
+      if (inventoryIqd <= 0n) continue;
+      units.push({
+        departedMovementId: movementId,
+        fromLayerId: consumption.layerId,
+        quantity: parseQuantity(consumption.quantity),
+        toLayerId: consumption.layerId,
+        inventoryIqd,
+      });
+    }
+    if (units.length > 0) {
+      await departures.returnLandedShare(tx, ctx, {
+        returnMovementId: reversal!.id,
+        units,
+        postingDate: reversalDateOf(original.movementDate, options.reversalDate),
+        description: `Landed cost returned with the reversal of ${original.kind.replace(/_/g, ' ')} — ${original.itemCode} in ${original.warehouseCode}`,
+      });
     }
   }
 

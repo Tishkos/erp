@@ -24,10 +24,14 @@
  * arrived in — by `cost_layer.origin_layer_id` (0280), which the relocation
  * writes itself, and for older stock by the pairing that came before it.
  */
+import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
+import { valueOf } from '../domain/landed-cost';
+import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
 import { formatQuantity, parseQuantity } from '../domain/uom';
 import type { ActorContext } from './chart-of-accounts';
+import * as audit from './audit';
 import * as posting from './posting';
 
 export class DepartureError extends Error {
@@ -90,9 +94,34 @@ export interface FollowedUnits {
   readonly quantity: bigint;
 }
 
+/** What a handler is told when landed cost comes back from its destination with returned units. */
+export interface ReturnedDeparture {
+  /** The `return` row written. */
+  readonly returnId: string;
+  /** The departure it undoes, and its lock. */
+  readonly departureId: string;
+  readonly lockId: string;
+  readonly payableId: string;
+  readonly journalEntryId: string;
+  readonly postedOn: string;
+  /** The movement that took the units out. */
+  readonly movement: DepartedMovement;
+  /** The movement that brought them back. */
+  readonly returnMovement: DepartedMovement;
+  readonly quantity: bigint;
+  /** Positive: what came back to inventory from the destination. */
+  readonly amountIqd: bigint;
+}
+
 export interface DepartureHandler {
   /** Where the landed cost of the units this movement took goes. */
   readonly destination?: (tx: Tx, movement: DepartedMovement) => Promise<DepartureDestination>;
+  /**
+   * Units this movement took have come back after a lock, and their landed
+   * cost with them (`returnLandedShare`): for a module that keeps an analysis
+   * beside the ledger (a project's cost rows), the negative row.
+   */
+  readonly returned?: (tx: Tx, ctx: ActorContext, returned: ReturnedDeparture) => Promise<void>;
   /**
    * Of `quantity` units this movement took from one layer, those that have
    * since come back into stock (a sales return) and the layer each came back
@@ -447,4 +476,380 @@ export async function mappedAccount(
     warehouseCode: criteria.warehouseCode ?? null,
     projectCode: criteria.projectCode ?? null,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Stock that comes back after a lock brings its landed share back
+// ---------------------------------------------------------------------------
+
+/** Units of a departed movement that are in stock again. */
+export interface ReturnedUnits {
+  /** The movement that took them out — the one the departure rows name. */
+  readonly departedMovementId: string;
+  /**
+   * The layer they left, when the caller knows it (a reversal restores the
+   * exact layers). Left out, the units are spread over the layers the movement
+   * drew from, in proportion to what it took from each.
+   */
+  readonly fromLayerId?: string | null;
+  readonly quantity: bigint;
+  /** The layer they are in now. */
+  readonly toLayerId: string;
+  /**
+   * For units put back onto a layer that already carries the restated cost (a
+   * reversal): exactly what the layer's value rose beyond what the caller's own
+   * journal put back, which caps the return so the layers and the ledger stay
+   * one figure. Left out, the units are in a layer made at the pre-lock cost (a
+   * sales return, a project return), and that layer's unit cost is raised by
+   * the share instead.
+   */
+  readonly inventoryIqd?: bigint;
+}
+
+export interface ReturnLandedShareInput {
+  /** The movement that brought the units back. */
+  readonly returnMovementId: string;
+  readonly units: readonly ReturnedUnits[];
+  /** The day it happens — the day the caller's own journal posts. */
+  readonly postingDate: string;
+  readonly description: string;
+}
+
+interface DepartureRow {
+  id: string;
+  lockId: string;
+  payableId: string;
+  sequence: number;
+  costLayerId: string;
+  movementId: string;
+  quantity: string;
+  amountIqd: string;
+  destinationRole: string;
+  accountId: string;
+  dimensions: Record<string, string | null>;
+  returnedQuantity: string;
+  returnedAmount: string;
+}
+
+interface Share {
+  readonly row: DepartureRow;
+  readonly quantity: bigint;
+  amountIqd: bigint;
+  readonly unit: ReturnedUnits;
+}
+
+const money = (value: string | null | undefined) => parseDecimal(value ?? '0', MONEY_SCALE);
+const showMoney = (value: bigint) => toDecimalString(value, MONEY_SCALE);
+
+/**
+ * Stock that left before a lock and has come back — a sale reversed, a sales
+ * return accepted, project material returned — brings its landed share back
+ * with it (sponsor, 2026-10-04): Dr the item's inventory account in the
+ * warehouse the units stand in / Cr the account and dimensions each departure
+ * was posted to, dated the day the units came back, and one negative `return`
+ * row per departure it undoes, so a lock's story stays whole and a second
+ * return can never take back more than left (0285's trigger holds that too).
+ *
+ * The share is pro rata to the departure's units still out, the last unit
+ * taking the remainder; never more than the departure has left. A layer made
+ * at the pre-lock cost is raised by the share per unit, so its value is what
+ * the ledger holds for it; a layer that already carries the restated cost takes
+ * exactly what its value rose beyond the caller's own journal. Nothing to give
+ * back (no lock reached the units) does nothing.
+ */
+export async function returnLandedShare(
+  tx: Tx,
+  ctx: ActorContext,
+  input: ReturnLandedShareInput,
+): Promise<{ journalEntryId: string | null; amountIqd: bigint; rows: number }> {
+  const nothing = { journalEntryId: null, amountIqd: 0n, rows: 0 };
+  const units = input.units.filter((unit) => unit.quantity > 0n);
+  if (units.length === 0) return nothing;
+
+  const movementIds = [...new Set(units.map((unit) => unit.departedMovementId))];
+  const readDepartures = async () => {
+    const result = await tx.execute(sql`
+      select d.id, d.lock_id as "lockId", d.payable_id as "payableId", k.sequence, d.cost_layer_id as "costLayerId",
+             d.movement_id as "movementId", d.quantity::text as quantity, d.amount_iqd::text as "amountIqd",
+             d.destination_role as "destinationRole", d.account_id as "accountId", d.dimensions,
+             coalesce((select sum(-r.quantity) from landed_cost_departure r where r.returns_departure_id = d.id), 0)::text as "returnedQuantity",
+             coalesce((select sum(-r.amount_iqd) from landed_cost_departure r where r.returns_departure_id = d.id), 0)::text as "returnedAmount"
+        from landed_cost_departure d
+        join landed_cost_lock k on k.id = d.lock_id
+       where d.kind = 'departure'
+         and d.movement_id in (${sql.join(movementIds.map((id) => sql`${id}::uuid`), sql`, `)})
+       order by d.cost_layer_id, k.sequence, d.id`);
+    return result.rows as unknown as DepartureRow[];
+  };
+  if ((await readDepartures()).length === 0) return nothing;
+  // Serialised on the layers (the departure rows are append-only, so they
+  // cannot be locked): two returns against the same departure take turns on
+  // the layer it left, and each reads what the other left — the same rows
+  // `inventory.issue` locks, in one order.
+  const toLayerIds = [...new Set(units.map((unit) => unit.toLayerId))];
+  const layerIds = [...new Set([...(await readDepartures()).map((row) => row.costLayerId), ...toLayerIds])].sort();
+  await tx.execute(sql`
+    select id from cost_layer where id in (${sql.join(layerIds.map((id) => sql`${id}::uuid`), sql`, `)}) order by id for update`);
+  const departures = await readDepartures();
+
+  const returnMovement = await departedMovement(tx, input.returnMovementId);
+  if (!returnMovement) throw new DepartureError(`No inventory movement '${input.returnMovementId}'.`);
+
+  // What the movement took from each layer: the weights for units whose layer
+  // the caller does not know.
+  const consumed = new Map<string, Map<string, bigint>>();
+  for (const movementId of movementIds) {
+    const taken = await tx.execute(sql`
+      select c.layer_id as "layerId", sum(c.quantity)::text as quantity
+        from cost_layer_consumption c
+       where c.movement_id = ${movementId}::uuid and c.quantity > 0
+       group by c.layer_id`);
+    consumed.set(
+      movementId,
+      new Map((taken.rows as { layerId: string; quantity: string }[]).map((row) => [row.layerId, parseQuantity(row.quantity)])),
+    );
+  }
+
+  const shares: Share[] = [];
+  for (const unit of units) {
+    const mine = departures.filter((row) => row.movementId === unit.departedMovementId);
+    if (mine.length === 0) continue;
+    // Per layer: the rows (one per lock) and what each has left.
+    const byLayer = new Map<string, DepartureRow[]>();
+    for (const row of mine) byLayer.set(row.costLayerId, [...(byLayer.get(row.costLayerId) ?? []), row]);
+    const leftOf = (rows: readonly DepartureRow[]) =>
+      rows.reduce((min, row) => {
+        const left = parseQuantity(row.quantity) - parseQuantity(row.returnedQuantity);
+        return min === null || left < min ? left : min;
+      }, null as bigint | null) ?? 0n;
+
+    let perLayer: [string, bigint][];
+    if (unit.fromLayerId) {
+      const rows = byLayer.get(unit.fromLayerId);
+      if (!rows) continue;
+      const left = leftOf(rows);
+      perLayer = [[unit.fromLayerId, unit.quantity < left ? unit.quantity : left]];
+    } else {
+      const weights = consumed.get(unit.departedMovementId) ?? new Map<string, bigint>();
+      const layers = [...weights.entries()].filter(([, quantity]) => quantity > 0n);
+      const total = layers.reduce((sum, [, quantity]) => sum + quantity, 0n);
+      if (total <= 0n) continue;
+      let given = 0n;
+      perLayer = layers.map(([layerId, weight], index) => {
+        const part = index === layers.length - 1 ? unit.quantity - given : (unit.quantity * weight) / total;
+        given += part;
+        const rows = byLayer.get(layerId);
+        if (!rows) return [layerId, 0n];
+        const left = leftOf(rows);
+        return [layerId, part < left ? part : left];
+      });
+    }
+    for (const [layerId, quantity] of perLayer) {
+      if (quantity <= 0n) continue;
+      for (const row of byLayer.get(layerId) ?? []) {
+        const leftQuantity = parseQuantity(row.quantity) - parseQuantity(row.returnedQuantity);
+        const leftAmount = money(row.amountIqd) - money(row.returnedAmount);
+        if (leftQuantity <= 0n || leftAmount < 0n) continue;
+        const amountIqd = quantity >= leftQuantity ? leftAmount : (leftAmount * quantity) / leftQuantity;
+        shares.push({ row, quantity, amountIqd, unit });
+      }
+    }
+  }
+  if (shares.length === 0) return nothing;
+
+  // The layers the units are in now, and how much each takes back: a new layer
+  // is raised by the share per unit (the ledger then holds exactly its value);
+  // a restored layer takes what its value rose, never more than the shares.
+  const layerRows = await tx.execute(sql`
+    select cl.id, cl.item_code as "itemCode", cl.warehouse_code as "warehouseCode", cl.branch_code as "branchCode",
+           cl.original_quantity::text as "originalQuantity", cl.remaining_quantity::text as "remainingQuantity",
+           cl.unit_cost_iqd::text as "unitCost"
+      from cost_layer cl
+     where cl.id in (${sql.join(toLayerIds.map((id) => sql`${id}::uuid`), sql`, `)})`);
+  const toLayers = new Map(
+    (layerRows.rows as unknown as {
+      id: string; itemCode: string; warehouseCode: string; branchCode: string;
+      originalQuantity: string; remainingQuantity: string; unitCost: string;
+    }[]).map((row) => [row.id, row]),
+  );
+
+  const trim = (mine: Share[], cap: bigint) => {
+    let excess = mine.reduce((sum, share) => sum + share.amountIqd, 0n) - cap;
+    for (let index = mine.length - 1; index >= 0 && excess > 0n; index -= 1) {
+      const cut = mine[index]!.amountIqd < excess ? mine[index]!.amountIqd : excess;
+      mine[index]!.amountIqd -= cut;
+      excess -= cut;
+    }
+  };
+  const restated: { id: string; unitCost: bigint }[] = [];
+  for (const toLayerId of toLayerIds) {
+    const layer = toLayers.get(toLayerId);
+    if (!layer) throw new DepartureError(`No cost layer '${toLayerId}'.`);
+    const mine = shares.filter((share) => share.unit.toLayerId === toLayerId);
+    const asked = mine.reduce((sum, share) => sum + share.amountIqd, 0n);
+    if (mine.some((share) => share.unit.inventoryIqd !== undefined)) {
+      // Each unit entry's cap is counted once, not once per lock row.
+      const caps = new Map<ReturnedUnits, bigint>();
+      for (const share of mine) caps.set(share.unit, share.unit.inventoryIqd ?? 0n);
+      const cap = [...caps.values()].reduce((sum, value) => sum + (value > 0n ? value : 0n), 0n);
+      if (cap < asked) trim(mine, cap);
+    } else if (asked > 0n) {
+      const quantity = parseQuantity(layer.originalQuantity);
+      const unitCost = money(layer.unitCost);
+      const raw = asked * 1_000_000n;
+      let delta = raw / quantity;
+      if ((raw % quantity) * 2n >= quantity) delta += 1n;
+      const before = valueOf(quantity, unitCost);
+      let rise = valueOf(quantity, unitCost + delta) - before;
+      while (rise > asked && delta > 0n) {
+        delta -= 1n;
+        rise = valueOf(quantity, unitCost + delta) - before;
+      }
+      if (rise < asked) trim(mine, rise);
+      if (delta > 0n) restated.push({ id: layer.id, unitCost: unitCost + delta });
+    }
+  }
+  const total = shares.reduce((sum, share) => sum + share.amountIqd, 0n);
+  if (total <= 0n) return nothing;
+
+  // One branch per journal: the units came back where they left.
+  const branchCode = returnMovement.branchCode;
+  for (const share of shares) {
+    const branch = share.row.dimensions.branch;
+    if (branch && branch !== branchCode) {
+      throw new DepartureError(
+        `${returnMovement.itemCode} came back in branch ${branchCode}, and its landed cost was posted in branch ${branch} ` +
+          `(lock ${share.row.sequence}); a journal posts in one branch, so the units have to come back to a warehouse of ${branch}.`,
+      );
+    }
+  }
+
+  const stockLines = new Map<string, { accountId: string; warehouseCode: string; amount: bigint }>();
+  const creditLines = new Map<string, { role: string; accountId: string; dimensions: Record<string, string>; amount: bigint }>();
+  const clean = (dimensions: Record<string, string | null>) => {
+    const out: Record<string, string> = {};
+    for (const key of Object.keys(dimensions).sort()) {
+      const value = dimensions[key];
+      if (value !== null && value !== undefined && value !== '') out[key] = value;
+    }
+    return out;
+  };
+  for (const share of shares) {
+    if (share.amountIqd <= 0n) continue;
+    const layer = toLayers.get(share.unit.toLayerId)!;
+    const accounts = await itemAccounts(tx, layer.itemCode);
+    if (!accounts.inventory) {
+      throw new DepartureError(`Item ${layer.itemCode} names no inventory account; set it on the item first.`);
+    }
+    const stockKey = `${accounts.inventory}|${layer.warehouseCode}`;
+    const stock = stockLines.get(stockKey) ?? { accountId: accounts.inventory, warehouseCode: layer.warehouseCode, amount: 0n };
+    stock.amount += share.amountIqd;
+    stockLines.set(stockKey, stock);
+    const dimensions = clean(share.row.dimensions);
+    const creditKey = `${share.row.destinationRole}|${share.row.accountId}|${Object.entries(dimensions).map(([k, v]) => `${k}=${v}`).join('|')}`;
+    const credit = creditLines.get(creditKey) ?? { role: share.row.destinationRole, accountId: share.row.accountId, dimensions, amount: 0n };
+    credit.amount += share.amountIqd;
+    creditLines.set(creditKey, credit);
+  }
+
+  const criteria = { branchCode };
+  const posted = await posting.post(tx, ctx, {
+    eventType: 'payables.landed_cost',
+    documentTypeCode: 'landed_cost_lock',
+    source: { module: 'inventory', documentId: input.returnMovementId, event: 'landed_cost_returned' },
+    branchCode,
+    documentDate: input.postingDate,
+    postingDate: input.postingDate,
+    description: input.description,
+    lines: [
+      ...[...stockLines.values()].map((entry) => ({
+        role: 'inventory',
+        accountId: entry.accountId,
+        debit: showMoney(entry.amount),
+        criteria: { ...criteria, warehouseCode: entry.warehouseCode },
+        dimensions: { branch: branchCode, warehouse: entry.warehouseCode },
+      })),
+      ...[...creditLines.values()].map((entry) => ({
+        role: entry.role,
+        accountId: entry.accountId,
+        credit: showMoney(entry.amount),
+        criteria: {
+          ...criteria,
+          ...(entry.dimensions.warehouse ? { warehouseCode: entry.dimensions.warehouse } : {}),
+          ...(entry.dimensions.project ? { projectCode: entry.dimensions.project } : {}),
+        },
+        dimensions: entry.dimensions,
+      })),
+    ],
+  });
+
+  for (const layer of restated) {
+    await tx.execute(sql`update cost_layer set unit_cost_iqd = ${showMoney(layer.unitCost)}::numeric where id = ${layer.id}::uuid`);
+  }
+
+  let rows = 0;
+  const written: { id: string; share: Share }[] = [];
+  for (const share of shares) {
+    const id = randomUUID();
+    await tx.execute(sql`
+      insert into landed_cost_departure
+        (id, lock_id, payable_id, kind, cost_layer_id, movement_id, movement_kind, source_document_type,
+         source_document_id, source_line_id, quantity, amount_iqd, destination_role, account_id, dimensions,
+         journal_entry_id, returns_departure_id, to_layer_id, departed_on, created_by)
+      values
+        (${id}::uuid, ${share.row.lockId}::uuid, ${share.row.payableId}::uuid, 'return', ${share.row.costLayerId}::uuid,
+         ${returnMovement.id}::uuid, ${returnMovement.kind}, ${returnMovement.sourceDocumentType},
+         ${returnMovement.sourceDocumentId}, ${returnMovement.sourceLineId},
+         ${formatQuantity(-share.quantity)}::numeric, ${showMoney(-share.amountIqd)}::numeric,
+         ${share.row.destinationRole}, ${share.row.accountId}::uuid, ${JSON.stringify(share.row.dimensions)}::jsonb,
+         ${posted.journalEntryId}::uuid, ${share.row.id}::uuid, ${share.unit.toLayerId}::uuid,
+         ${input.postingDate}::date, ${ctx.principal.userId}::uuid)`);
+    rows += 1;
+    written.push({ id, share });
+  }
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'landed_cost.returned',
+    objectType: 'landed_cost',
+    objectId: input.returnMovementId,
+    branchCode,
+    after: {
+      journalEntryId: posted.journalEntryId,
+      postingDate: input.postingDate,
+      amountIqd: showMoney(total),
+      rows,
+      returns: written.map(({ id, share }) => ({
+        id,
+        departureId: share.row.id,
+        lock: share.row.sequence,
+        quantity: formatQuantity(share.quantity),
+        amountIqd: showMoney(share.amountIqd),
+        role: share.row.destinationRole,
+      })),
+      restated: restated.map((layer) => ({ layerId: layer.id, unitCostIqd: showMoney(layer.unitCost) })),
+    },
+    outcome: 'success',
+    requestId: ctx.requestId ?? null,
+  });
+
+  // The modules that keep an analysis beside the ledger write their side now.
+  for (const { id, share } of written) {
+    const movement = await departedMovement(tx, share.row.movementId);
+    if (!movement) continue;
+    await handlers.get(movement.kind)?.returned?.(tx, ctx, {
+      returnId: id,
+      departureId: share.row.id,
+      lockId: share.row.lockId,
+      payableId: share.row.payableId,
+      journalEntryId: posted.journalEntryId,
+      postedOn: input.postingDate,
+      movement,
+      returnMovement,
+      quantity: share.quantity,
+      amountIqd: share.amountIqd,
+    });
+  }
+
+  return { journalEntryId: posted.journalEntryId, amountIqd: total, rows };
 }

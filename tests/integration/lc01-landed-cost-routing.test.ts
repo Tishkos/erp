@@ -417,13 +417,16 @@ interface DepartureRow {
   readonly account_id: string;
   readonly dimensions: Record<string, unknown>;
   readonly journal_entry_id: string;
+  readonly returns_departure_id: string | null;
+  readonly to_layer_id: string | null;
+  readonly departed_on: string;
 }
 
 async function departuresOf(lockId: string): Promise<DepartureRow[]> {
   const { rows } = await ownerPool.query(
     `select id, kind, cost_layer_id, movement_id, movement_kind, source_document_type, source_document_id,
             source_line_id, quantity::text as quantity, amount_iqd::text as amount_iqd, destination_role,
-            account_id, dimensions, journal_entry_id
+            account_id, dimensions, journal_entry_id, returns_departure_id, to_layer_id, departed_on::text as departed_on
        from landed_cost_departure where lock_id = $1
       -- The table's columns, not the text aliases above: '80' sorts after '120' as text.
       order by kind, landed_cost_departure.quantity desc, landed_cost_departure.amount_iqd desc, source_document_id`,
@@ -1510,8 +1513,186 @@ describe('12 · a purchase invoice whose charge is already locked is not reverse
 });
 
 // ===========================================================================
+describe('13 · stock that comes back after a lock brings its landed share back', () => {
+  /** The journal a return of landed cost posted with a movement, and its lines on one account. */
+  async function returnJournalOf(returnMovementId: string) {
+    const { rows } = await ownerPool.query(
+      `select e.id, e.posting_date::text as posting_date, e.status::text as status
+         from journal_entry e
+        where e.source_module = 'inventory' and e.source_doc_id = $1 and e.source_event = 'landed_cost_returned'`,
+      [returnMovementId],
+    );
+    expect(rows, `one landed-cost return journal for movement ${returnMovementId}`).toHaveLength(1);
+    return rows[0] as { id: string; posting_date: string; status: string };
+  }
+
+  it('a sale reversed after the lock: the share comes back from cost of sales onto the restored layer, a return row against the departure, dated the reversal', async () => {
+    const imp = await receivedImport();
+    const undone = await sell('200', { on: '2026-09-01', departmentCode: 'FIN', businessLineCode: 'CONTRACTING' });
+    const kept = await sell('100', { on: '2026-09-02' });
+    await writeOffPd(imp);
+    await charge(imp, '100000');
+
+    const done = await lockImport(imp);
+    // 200 here take 40,000; the 300 sold 60,000 — 40,000 after the first sale, 20,000 after the second.
+    expect([done.inventoryIqd, done.cogsIqd]).toEqual(['40000.0000', '60000.0000']);
+    expect(await layerOf(imp.layerId)).toMatchObject({ remaining: '200.000000', unit: '10200.0000' });
+    await assertLayersMatchGl([PANEL]);
+
+    const today = businessToday();
+    await as(world.manager, (tx) => ar.reverse(tx, world.manager, undone.id, { reason: 'Raised against the wrong customer.' }));
+
+    // The 200 are back on their layer, which carries the restated cost.
+    expect(await layerOf(imp.layerId)).toMatchObject({ remaining: '400.000000', unit: '10200.0000' });
+
+    const rows = await departuresOf(done.id);
+    const departure = rows.find((row) => row.kind === 'departure' && row.source_document_id === undone.id)!;
+    const back = rows.filter((row) => row.kind === 'return');
+    expect(back).toHaveLength(1);
+    const { rows: reversal } = await ownerPool.query(
+      `select r.id from inventory_movement r where r.reverses_movement_id = $1`,
+      [departure.movement_id],
+    );
+    expect(back[0]).toMatchObject({
+      quantity: '-200.000000',
+      amount_iqd: '-40000.0000',
+      destination_role: 'cogs',
+      account_id: departure.account_id,
+      dimensions: departure.dimensions,
+      movement_id: reversal[0].id,
+      movement_kind: 'reversal',
+      source_document_type: 'ar_invoice',
+      source_document_id: undone.id,
+      returns_departure_id: departure.id,
+      to_layer_id: imp.layerId,
+      cost_layer_id: imp.layerId,
+    });
+    expect([today, businessToday()]).toContain(back[0]!.departed_on);
+    // The one the customer kept is untouched.
+    expect(rows.find((row) => row.kind === 'departure' && row.source_document_id === kept.id)).toMatchObject({ amount_iqd: '20000.0000' });
+
+    // Its journal: Dr inventory / Cr the sale's COGS line, dated the reversal, 40,000.
+    const journal = await returnJournalOf(reversal[0].id);
+    expect(journal.id).toBe(back[0]!.journal_entry_id);
+    expect(journal.status).toBe('posted');
+    expect([today, businessToday()]).toContain(journal.posting_date);
+    expect(await lockLinesOn(journal.id, world.accounts.inventory!)).toEqual([
+      { department_code: null, business_line_code: null, business_partner_code: null, warehouse_code: WAREHOUSE, project_code: null, net: '40000.0000' },
+    ]);
+    expect(await lockLinesOn(journal.id, world.accounts.cogs!)).toEqual([
+      { department_code: 'FIN', business_line_code: 'CONTRACTING', business_partner_code: CUSTOMER, warehouse_code: WAREHOUSE, project_code: null, net: '-40000.0000' },
+    ]);
+    // The journal reversal of the sale and the return of the share are dated the same day.
+    const { rows: mirrored } = await ownerPool.query(`select posting_date::text as date from journal_entry where reverses_id = $1`, [undone.journalEntryId]);
+    expect(mirrored[0].date).toBe(journal.posting_date);
+
+    // The lock's own account is unchanged; the import still explains every dinar it locked.
+    await assertLockBalanced(done.id);
+    expect(await assertImportFullyAccounted(imp.payableId)).toEqual({ chargesIqd: '100000.0000', inventoryIqd: '40000.0000', departedIqd: '60000.0000' });
+    // 5,000,000 − 3,000,000 + 40,000 + 2,000,000 back + 40,000 back = 400 × 10,200.
+    expect(await assertLayersMatchGl([PANEL])).toMatchObject({ layersIqd: '4080000.0000', glIqd: '4080000.0000' });
+    // Cost of sales holds exactly the share of what stayed sold: 20,000.
+    const { rows: cogs } = await ownerPool.query(
+      `select coalesce(sum(l.debit_iqd - l.credit_iqd), 0)::text as net from journal_line l
+         join journal_entry e on e.id = l.journal_entry_id
+        where l.account_id = $1 and e.status in ('posted', 'reversed') and e.id in ($2, $3)`,
+      [world.accounts.cogs, done.journalEntryId, journal.id],
+    );
+    expect(cogs[0].net).toBe('20000.0000');
+  }, SLOW);
+
+  it('a sales return after the lock: the return layer costs the restated price, the share comes back from COGS; a later lock reaches the returned units; never more than departed', async () => {
+    const imp = await receivedImport();
+    const sale = await sell('200', { on: '2026-09-01', departmentCode: 'FIN' });
+    await writeOffPd(imp);
+    await charge(imp, '100000');
+    const first = await lockImport(imp);
+    expect([first.inventoryIqd, first.cogsIqd]).toEqual(['60000.0000', '40000.0000']);
+    const departure = (await departuresOf(first.id)).find((row) => row.kind === 'departure')!;
+
+    // 50 of the 200 come back, after the lock.
+    const today = businessToday();
+    const back = await returnSale(sale, '50', today);
+    const returnLayer = await layerCreatedBy('sales_return', back.id, 'sales_return');
+    // The return layer holds them at the restated cost: 10,000 the sale left at + 200 the lock added.
+    expect(await layerOf(returnLayer)).toMatchObject({ remaining: '50.000000', unit: '10200.0000' });
+    const { rows: returnMovement } = await ownerPool.query(
+      `select inventory_movement_id as id from sales_return_line where sales_return_id = $1`,
+      [back.id],
+    );
+    const rows = await departuresOf(first.id);
+    const returned = rows.filter((row) => row.kind === 'return');
+    expect(returned).toHaveLength(1);
+    expect(returned[0]).toMatchObject({
+      quantity: '-50.000000',
+      amount_iqd: '-10000.0000',
+      destination_role: 'cogs',
+      account_id: departure.account_id,
+      returns_departure_id: departure.id,
+      to_layer_id: returnLayer,
+      cost_layer_id: imp.layerId,
+      movement_id: returnMovement[0].id,
+      movement_kind: 'sales_return',
+      source_document_type: 'sales_return',
+      source_document_id: back.id,
+      departed_on: today,
+    });
+    const journal = await returnJournalOf(returnMovement[0].id);
+    // Credited with the dimensions the departure was posted with — the sale's.
+    expect(await lockLinesOn(journal.id, world.accounts.cogs!)).toEqual([
+      {
+        department_code: 'FIN',
+        business_line_code: dimensionOf(departure.dimensions, 'business_line'),
+        business_partner_code: CUSTOMER,
+        warehouse_code: WAREHOUSE,
+        project_code: null,
+        net: '-10000.0000',
+      },
+    ]);
+    await assertLockBalanced(first.id);
+    // 5,000,000 − 2,000,000 + 60,000 + 500,000 back + 10,000 back = 350 × 10,200.
+    expect(await assertLayersMatchGl([PANEL])).toMatchObject({ layersIqd: '3570000.0000', glIqd: '3570000.0000' });
+
+    // The rest come back too: the departure is wholly returned, and it refuses a fils more.
+    const rest = await returnSale(sale, '150', today);
+    const restLayer = await layerCreatedBy('sales_return', rest.id, 'sales_return');
+    expect(await layerOf(restLayer)).toMatchObject({ remaining: '150.000000', unit: '10200.0000' });
+    const all = (await departuresOf(first.id)).filter((row) => row.kind === 'return');
+    expect(all.map((row) => [row.quantity, row.amount_iqd]).sort()).toEqual([
+      ['-150.000000', '-30000.0000'],
+      ['-50.000000', '-10000.0000'],
+    ]);
+    await expect(
+      ownerPool.query(
+        `insert into landed_cost_departure
+           (lock_id, payable_id, kind, cost_layer_id, movement_id, quantity, amount_iqd, destination_role, account_id,
+            journal_entry_id, returns_departure_id, to_layer_id, departed_on, created_by)
+         values ($1, $2, 'return', $3, $4, -1, -0.0001, 'cogs', $5, $6, $7, $8, $9, $10)`,
+        [
+          first.id, imp.payableId, imp.layerId, returnMovement[0].id, departure.account_id, journal.id, departure.id,
+          returnLayer, today, world.manager.principal.userId,
+        ],
+      ),
+    ).rejects.toThrow(/More of this landed cost would come back than left/);
+    expect(await assertLayersMatchGl([PANEL])).toMatchObject({ layersIqd: '5100000.0000', glIqd: '5100000.0000' });
+
+    // A later lock (owner 4.8): the units already back are reached where they
+    // stand — the two return layers — and nothing of them departs.
+    await charge(imp, '50000', today);
+    const second = await lockImport(imp, { lockDate: today });
+    // 50,000 over 500: 300 here 30,000; the 200 returned, 5,000 and 15,000 on their layers.
+    expect([second.inventoryIqd, second.cogsIqd]).toEqual(['50000.0000', '0.0000']);
+    expect(await adjustmentOf(second.id, returnLayer)).toMatchObject({ via_layer_id: imp.layerId, inventory: '5000.0000', before: '10200.0000', after: '10300.0000' });
+    expect(await adjustmentOf(second.id, restLayer)).toMatchObject({ via_layer_id: imp.layerId, inventory: '15000.0000', before: '10200.0000', after: '10300.0000' });
+    expect(await layerOf(imp.layerId)).toMatchObject({ remaining: '300.000000', unit: '10300.0000' });
+    expect((await departuresOf(second.id)).filter((row) => row.kind !== 'return')).toEqual([]);
+    await assertLockBalanced(second.id);
+    expect(await assertImportFullyAccounted(imp.payableId)).toEqual({ chargesIqd: '150000.0000', inventoryIqd: '110000.0000', departedIqd: '40000.0000' });
+    expect(await assertLayersMatchGl([PANEL])).toMatchObject({ layersIqd: '5150000.0000', glIqd: '5150000.0000' });
+  }, SLOW);
+});
+
+// ===========================================================================
 describe('next release', () => {
   it.todo('a settled project gets a post-settlement supplement for a landed share that arrives after settlement (post_settlement)');
-  it.todo('a sale reversed AFTER a lock gives its landed share back: a return row against the departure, onto the restored layer');
-  it.todo('a sales return AFTER a lock restores the landed share onto the return layer: a return row, never more than departed');
 });
