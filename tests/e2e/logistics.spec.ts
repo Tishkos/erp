@@ -187,7 +187,7 @@ test.describe('REQ-LOG-001 · the Logistics module', () => {
     test.setTimeout(240_000);
     await signIn(page);
     await page.goto('/logistics/ports');
-    await expect(page.getByRole('row', { name: /Umm Qasr/ })).toBeVisible();
+    await expect(page.getByRole('row', { name: /PRT-0001/ }).first()).toBeVisible();
     await page.getByRole('button', { name: 'New port' }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByLabel('Name').fill(`Jebel Ali ${RUN}`);
