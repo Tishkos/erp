@@ -7110,6 +7110,24 @@
           "title": "فحص {sourceDetector} يعرض {shown} فقط من {total} نتيجة",
           "explanation": "لتبقى القائمة صالحة للاستخدام، يعرض فحص {sourceDetector} الأشد خطورة وعددها {shown} من {total} نتيجة. عالج الأشد خطورة أولاً؛ وتظهر البقية عند زوال هذه.",
           "action": "افتح الاستثناءات"
+        },
+        "logistics_automation_container_eta": {
+          "name": "حاوية متأخرة، رفعتها قاعدة أتمتة",
+          "title": "الحاوية {container} تجاوزت موعد وصولها المتوقع بـ {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}",
+          "explanation": "وجدت قاعدة الأتمتة {rule} أن الحاوية {container} على بوليصة الشحن {bl} من {supplier} (الاستيراد {importNo}) لم تُستلم بعد. كان موعد وصولها المتوقع {etaDate}. {note}",
+          "action": "افتح تتبع الشحنات"
+        },
+        "tasks_automation_task_overdue": {
+          "name": "مهمة متأخرة، رفعتها قاعدة أتمتة",
+          "title": "المهمة {task} متأخرة {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}: {taskTitle}",
+          "explanation": "وجدت قاعدة الأتمتة {rule} أن {task}، {taskTitle}، ما زالت مفتوحة بعد موعدها في {dueDate}. الأولوية: {priority}. المكلَّف: {assignee}. {note}",
+          "action": "افتح المهمة"
+        },
+        "receivables_automation_invoice_overdue": {
+          "name": "فاتورة متأخرة، رفعتها قاعدة أتمتة",
+          "title": "الفاتورة {invoice} للعميل {customer} متأخرة {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}",
+          "explanation": "وجدت قاعدة الأتمتة {rule} أن الفاتورة {invoice} للعميل {customer} ({customerCode}) ما زال عليها {amountIqd} بعد موعد استحقاقها في {dueDate}. {note}",
+          "action": "افتح الفاتورة"
         }
       },
       "evidence_note": {
@@ -8365,6 +8383,30 @@
       "exception_platform": {
         "title": "استثناء في النظام {ref}",
         "detail": "{extra, select, critical {حرج} other {عالي الخطورة}}: افتح الاستثناء لقراءة التفاصيل وما يجب فعله."
+      },
+      "automation_ap_invoice_submitted": {
+        "title": "أُرسلت فاتورة الشراء {ref}: {name}",
+        "detail": "{party} · {amount} {extra}"
+      },
+      "automation_ap_invoice_posted": {
+        "title": "تم ترحيل فاتورة الشراء {ref}: {name}",
+        "detail": "{party} · {amount} {extra}"
+      },
+      "automation_task_overdue": {
+        "title": "المهمة {ref} متأخرة: {name}",
+        "detail": "تجاوزت موعدها بـ {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}. {extra}"
+      },
+      "automation_container_eta_exceeded": {
+        "title": "الحاوية {ref} تجاوزت موعد وصولها المتوقع: {name}",
+        "detail": "{party}، متأخرة {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}. {extra}"
+      },
+      "automation_ar_invoice_overdue": {
+        "title": "الفاتورة {ref} متأخرة: {name}",
+        "detail": "{party} · {amount}، متأخرة {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}. {extra}"
+      },
+      "automation_paused": {
+        "title": "أُوقفت قاعدة الأتمتة {ref}",
+        "detail": "{name}: {extra}"
       }
     }
   },

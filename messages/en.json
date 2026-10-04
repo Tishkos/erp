@@ -7110,6 +7110,24 @@
           "title": "The check {sourceDetector} shows only {shown} of {total} findings",
           "explanation": "To keep the list usable, the check {sourceDetector} shows the {shown} most severe of {total} findings. Deal with the most severe first; the rest appear as these clear.",
           "action": "Open Exceptions"
+        },
+        "logistics_automation_container_eta": {
+          "name": "Container late, raised by an automation rule",
+          "title": "Container {container} is {days, plural, one {# day} other {# days}} past its expected arrival",
+          "explanation": "Automation rule {rule} found container {container} on bill of lading {bl} from {supplier} (import {importNo}) still not received. It was expected on {etaDate}. {note}",
+          "action": "Open Shipment Tracking"
+        },
+        "tasks_automation_task_overdue": {
+          "name": "Overdue task, raised by an automation rule",
+          "title": "Task {task} is {days, plural, one {# day} other {# days}} overdue: {taskTitle}",
+          "explanation": "Automation rule {rule} found {task}, {taskTitle}, still open after its due date of {dueDate}. Priority: {priority}. Assigned to {assignee}. {note}",
+          "action": "Open Task"
+        },
+        "receivables_automation_invoice_overdue": {
+          "name": "Overdue invoice, raised by an automation rule",
+          "title": "Invoice {invoice} from {customer} is {days, plural, one {# day} other {# days}} overdue",
+          "explanation": "Automation rule {rule} found invoice {invoice} of {customer} ({customerCode}) with {amountIqd} still owed after its due date of {dueDate}. {note}",
+          "action": "Open Invoice"
         }
       },
       "evidence_note": {
@@ -8365,6 +8383,30 @@
       "exception_platform": {
         "title": "System exception {ref}",
         "detail": "{extra, select, critical {Critical} other {High}}: {name}"
+      },
+      "automation_ap_invoice_submitted": {
+        "title": "Purchase invoice {ref} submitted: {name}",
+        "detail": "{party} · {amount} {extra}"
+      },
+      "automation_ap_invoice_posted": {
+        "title": "Purchase invoice {ref} posted: {name}",
+        "detail": "{party} · {amount} {extra}"
+      },
+      "automation_task_overdue": {
+        "title": "Task {ref} is overdue: {name}",
+        "detail": "{days, plural, one {# day} other {# days}} past its due date. {extra}"
+      },
+      "automation_container_eta_exceeded": {
+        "title": "Container {ref} is past its expected arrival: {name}",
+        "detail": "{party}, {days, plural, one {# day} other {# days}} late. {extra}"
+      },
+      "automation_ar_invoice_overdue": {
+        "title": "Invoice {ref} is overdue: {name}",
+        "detail": "{party} · {amount}, {days, plural, one {# day} other {# days}} late. {extra}"
+      },
+      "automation_paused": {
+        "title": "Automation rule {ref} was paused",
+        "detail": "{name}: {extra}"
       }
     }
   },
