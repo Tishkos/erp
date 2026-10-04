@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
@@ -75,6 +76,8 @@ export default async function SalesReturnPage({
         tx,
         document.lines.map((line) => line.arInvoiceLineId),
       ),
+      // Block 9's header: whose return it is and which invoice it answers.
+      parties: await sr.partiesOf(tx, document.id),
       // The paperwork behind the paperclip: how many there are.
       attached: await attachmentsService.currentFor(tx, sr.PERMISSION_OBJECT, document.id),
     };
@@ -93,9 +96,21 @@ export default async function SalesReturnPage({
   const fields: DocumentField[] = [
     { label: column('reference'), value: <bdi dir="ltr">{returnDoc.returnNo}</bdi> },
     { label: column('status'), value: status(returnDoc.status), status: returnDoc.status },
+    { label: column('customer_code'), value: <bdi dir="ltr">{found.parties?.customerCode ?? '—'}</bdi> },
+    { label: column('customer_name'), value: <bdi dir="auto">{found.parties?.customerName ?? '—'}</bdi> },
     {
       label: column('posting_date'),
       value: <bdi dir="ltr">{formatBusinessDate(returnDoc.requestedOn, locale as Locale)}</bdi>,
+    },
+    {
+      label: column('invoice_no'),
+      value: found.parties?.invoiceNo ? (
+        <Link className={s.sapLink} href={`/sales/ar-invoices/${encodeURIComponent(found.parties.invoiceNo)}`}>
+          <bdi dir="ltr">{found.parties.invoiceNo}</bdi>
+        </Link>
+      ) : (
+        '—'
+      ),
     },
     { label: column('branch_code'), value: <bdi dir="ltr">{returnDoc.branchCode}</bdi> },
     {

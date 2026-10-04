@@ -962,6 +962,22 @@ export async function list(tx: Tx) {
     .orderBy(desc(salesReturn.requestedOn), desc(salesReturn.returnNo));
 }
 
+/** Block 9's header for one return: its customer and the invoice it answers (Receivables, 2026-10-04). */
+export async function partiesOf(tx: Tx, id: string) {
+  const [row] = await tx
+    .select({
+      customerCode: businessPartner.code,
+      customerName: businessPartner.legalName,
+      invoiceNo: arInvoice.invoiceNo,
+    })
+    .from(salesReturn)
+    .leftJoin(businessPartner, eq(businessPartner.id, salesReturn.customerId))
+    .leftJoin(arInvoice, eq(arInvoice.id, salesReturn.arInvoiceId))
+    .where(eq(salesReturn.id, id))
+    .limit(1);
+  return row ?? null;
+}
+
 /** The return a person is looking at, found by the number printed on it. */
 export async function viewByNo(tx: Tx, returnNo: string) {
   const [row] = await tx
