@@ -241,6 +241,13 @@ async function currentVersion(tx: Tx, rule: RuleRow): Promise<VersionRow> {
   return row;
 }
 
+/** Equal as data: PostgreSQL keeps a jsonb's keys in its own order, so the text of two equal sets can differ. */
+function sameParams(a: Readonly<Record<string, unknown>>, b: Readonly<Record<string, unknown>>): boolean {
+  const keys = Object.keys(a).sort();
+  const other = Object.keys(b).sort();
+  return keys.length === other.length && keys.every((key, i) => key === other[i] && a[key] === b[key]);
+}
+
 /**
  * Changes a rule: a new version, never an edit in place. The rule's owner
  * becomes the person who saved it (their permissions are what it will run with),
@@ -253,7 +260,7 @@ export async function change(tx: Tx, ctx: ActorContext, ruleNo: string, input: O
   const before = await currentVersion(tx, rule);
   const note = (input.note ?? '').trim() || null;
   if (note !== null && note.length > REASON_MAX) throw new AutomationError(`The note is at most ${REASON_MAX} characters.`);
-  const same = JSON.stringify(before.params) === JSON.stringify(built.params) && before.name === built.name;
+  const same = sameParams(before.params, built.params) && before.name === built.name;
   if (same) throw new AutomationError('Nothing was changed.');
   const version = rule.currentVersion + 1;
   await insertVersion(tx, rule, version, built, ctx.principal.userId, note);

@@ -191,7 +191,7 @@ beforeAll(async () => {
 // ---------------------------------------------------------------------------
 describe('AU1 · a rule is data, built from a template and administered by one permission', () => {
   it('is born off, on its first version, owned by whoever made it, with every parameter kept as typed', async () => {
-    const made = await create(owner, 'invoice_over_threshold', 'Invoices over a million', { p_thresholdIqd: '1,000,000', p_notifyRole: 'accounting_manager', p_note: 'Large invoice' });
+    const made = await create(owner, 'invoice_over_threshold', 'Invoices over a million', { thresholdIqd: '1,000,000', notifyRole: 'accounting_manager', note: 'Large invoice' });
     expect(made.ruleNo).toMatch(/^AUT-\d{3}$/);
     const row = await ruleRow(made.ruleNo);
     expect(row).toMatchObject({ enabled: false, current_version: 1, owner_user_id: owner.id, consecutive_failures: 0, event_key: 'ap_invoice.submitted', template_code: 'invoice_over_threshold' });
@@ -204,17 +204,17 @@ describe('AU1 · a rule is data, built from a template and administered by one p
   });
 
   it('has no firing default: a template without its numbers is refused, and a made-up value is told what is wrong', async () => {
-    await expect(create(owner, 'invoice_over_threshold', 'No threshold', { p_notifyRole: 'accounting_manager' })).rejects.toThrow(/thresholdIqd: required/);
-    await expect(create(owner, 'container_eta_exceeded', 'Zero days', { p_daysLate: '0', p_severity: 'high', p_notifyRole: 'logistics_officer' })).rejects.toThrow(/at least 1/);
-    await expect(create(owner, 'task_overdue', 'Nobody told', { p_daysLate: '2' })).rejects.toThrow(/Choose who is told/);
-    await expect(create(owner, 'invoice_over_threshold', 'Bad role', { p_thresholdIqd: '10', p_notifyRole: 'no_such_role' })).rejects.toThrow(/no role "no_such_role"/);
+    await expect(create(owner, 'invoice_over_threshold', 'No threshold', { notifyRole: 'accounting_manager' })).rejects.toThrow(/thresholdIqd: required/);
+    await expect(create(owner, 'container_eta_exceeded', 'Zero days', { daysLate: '0', severity: 'high', notifyRole: 'logistics_officer' })).rejects.toThrow(/at least 1/);
+    await expect(create(owner, 'task_overdue', 'Nobody told', { daysLate: '2' })).rejects.toThrow(/Choose who is told/);
+    await expect(create(owner, 'invoice_over_threshold', 'Bad role', { thresholdIqd: '10', notifyRole: 'no_such_role' })).rejects.toThrow(/no role "no_such_role"/);
     await expect(create(owner, 'does_not_exist', 'Unknown template', {})).rejects.toThrow(/not a rule template/);
   });
 
   it('is changed by a new version, never in place: the old one stays, the new editor owns the rule, a run names its version', async () => {
     const made = await create(owner, 'invoice_over_threshold', 'To be changed', sample as unknown as Record<string, string>);
-    await expect(as(owner, (tx) => automation.change(tx, owner, made.ruleNo, { name: 'To be changed', params: { p_thresholdIqd: '1000000', p_notifyRole: 'accounting_manager', p_note: 'Large invoice' } }))).rejects.toThrow(/Nothing was changed/);
-    const changed = await as(owner, (tx) => automation.change(tx, owner, made.ruleNo, { name: 'To be changed', params: { p_thresholdIqd: '2500000', p_notifyRole: 'accounting_manager', p_note: 'Larger' }, note: 'Raised the line' }));
+    await expect(as(owner, (tx) => automation.change(tx, owner, made.ruleNo, { name: 'To be changed', params: { thresholdIqd: '1000000', notifyRole: 'accounting_manager', note: 'Large invoice' } }))).rejects.toThrow(/Nothing was changed/);
+    const changed = await as(owner, (tx) => automation.change(tx, owner, made.ruleNo, { name: 'To be changed', params: { thresholdIqd: '2500000', notifyRole: 'accounting_manager', note: 'Larger' }, note: 'Raised the line' }));
     expect(changed.version).toBe(2);
     const versions = (await ownerPool.query(`select version, params from automation_rule_version v join automation_rule r on r.id = v.rule_id where r.rule_no = $1 order by version`, [made.ruleNo])).rows;
     expect(versions.map((v) => v.version)).toEqual([1, 2]);
@@ -225,7 +225,7 @@ describe('AU1 · a rule is data, built from a template and administered by one p
   });
 
   it('holds its vocabulary at the database: an unknown event, action, operator, key or recipient cannot be stored, a version cannot be edited, nothing is deleted', async () => {
-    const made = await create(owner, 'task_overdue', 'Vocabulary', { p_daysLate: '3', p_notifyAssignee: 'on' });
+    const made = await create(owner, 'task_overdue', 'Vocabulary', { daysLate: '3', notifyAssignee: 'on' });
     const row = await ruleRow(made.ruleNo);
     const insert = (conditions: unknown, actions: unknown) =>
       ownerPool.query(`insert into automation_rule_version (rule_id, version, event_key, name, template_code, params, conditions, actions, changed_by) values ($1, 2, 'task.overdue', 'x', 'task_overdue', '{}'::jsonb, $2::jsonb, $3::jsonb, $4)`, [row.id, JSON.stringify(conditions), JSON.stringify(actions), owner.id]);
@@ -242,7 +242,7 @@ describe('AU1 · a rule is data, built from a template and administered by one p
   });
 
   it('is administered by `automation` alone: a clerk and an outsider can neither build nor see, and see nothing', async () => {
-    await expect(create(clerk, 'task_overdue', 'By a clerk', { p_daysLate: '1', p_notifyAssignee: 'on' })).rejects.toThrow(/Permission denied/);
+    await expect(create(clerk, 'task_overdue', 'By a clerk', { daysLate: '1', notifyAssignee: 'on' })).rejects.toThrow(/Permission denied/);
     await expect(enable(outsider, 'AUT-001')).rejects.toThrow(/Permission denied/);
     expect((await as(outsider, (tx) => automation.listRules(tx, outsider.principal))).rows).toEqual([]);
     expect(await as(outsider, (tx) => automation.byNo(tx, outsider.principal, 'AUT-001'))).toBeNull();
@@ -257,7 +257,7 @@ describe('AU1 · a rule is data, built from a template and administered by one p
   it('refuses to build on what the builder cannot open, and to enable what the builder could not do by hand', async () => {
     await expect(create(sysadmin, 'invoice_over_threshold', 'By an administrator', sample as unknown as Record<string, string>)).rejects.toThrow(/may not open ap invoice/);
     // `limited` may open containers and raise exceptions but not a task: a follow-up still builds, and runs without it (AU9).
-    const made = await create(sysadmin, 'task_overdue', 'Sys admin rule', { p_daysLate: '1', p_notifyAssignee: 'on' });
+    const made = await create(sysadmin, 'task_overdue', 'Sys admin rule', { daysLate: '1', notifyAssignee: 'on' });
     const row = await ruleRow(made.ruleNo);
     expect(row.enabled).toBe(false);
   });
@@ -391,16 +391,16 @@ describe('AU3 · a container past its ETA: an exception that keeps itself true, 
 
   it('the morning sweep records the late container once; the container that is not late is not an event', async () => {
     const made = await create(owner, 'container_eta_exceeded', 'Containers late', {
-      p_daysLate: '3',
-      p_severity: 'high',
-      p_notifyRole: 'accounting_manager',
-      p_followUp: 'on',
-      p_taskAssignee: clerk.id,
-      p_taskDepartment: 'FIN',
-      p_taskTitle: 'Chase the forwarder',
-      p_taskPriority: 'high',
-      p_taskDueInDays: '2',
-      p_note: 'Ask for a new date',
+      daysLate: '3',
+      severity: 'high',
+      notifyRole: 'accounting_manager',
+      followUp: 'on',
+      taskAssignee: clerk.id,
+      taskDepartment: 'FIN',
+      taskTitle: 'Chase the forwarder',
+      taskPriority: 'high',
+      taskDueInDays: '2',
+      note: 'Ask for a new date',
     });
     ruleNo = made.ruleNo;
     await enable(owner, ruleNo);
@@ -456,7 +456,7 @@ describe('AU4 · a task is overdue: the assignee, and the supervisor where the s
   it('notifies the assignee and the supervisor once, and not an assignee with no supervisor on record', async () => {
     const made = await tasks_(owner, 'Send the August statements');
     taskNo = made;
-    const rule = await create(sysadmin, 'task_overdue', 'Tasks late', { p_daysLate: '2', p_notifyAssignee: 'on', p_notifySupervisor: 'on', p_note: 'Please clear it' });
+    const rule = await create(sysadmin, 'task_overdue', 'Tasks late', { daysLate: '2', notifyAssignee: 'on', notifySupervisor: 'on', note: 'Please clear it' });
     ruleNo = rule.ruleNo;
     await enable(sysadmin, ruleNo);
     const sys = await systemScope();
@@ -490,13 +490,13 @@ describe('AU5 · a customer invoice is overdue: a follow-up task for, and a noti
 
   it('acts on the invoice past its due date by at least the days, once, and says who raised it', async () => {
     const rule = await create(owner, 'invoice_overdue_follow_up', 'Collect', {
-      p_daysLate: '5',
-      p_minimumAmountIqd: '10000',
-      p_taskDepartment: 'FIN',
-      p_taskTitle: 'Call the customer',
-      p_taskPriority: 'normal',
-      p_taskDueInDays: '3',
-      p_note: 'Ask for a payment date',
+      daysLate: '5',
+      minimumAmountIqd: '10000',
+      taskDepartment: 'FIN',
+      taskTitle: 'Call the customer',
+      taskPriority: 'normal',
+      taskDueInDays: '3',
+      note: 'Ask for a payment date',
     });
     ruleNo = rule.ruleNo;
     await enable(owner, ruleNo);
@@ -573,7 +573,7 @@ describe('AU6 · each thing is done once: a double dispatch, a replay, the same 
   });
 
   it('three runners at once take different events and do each thing exactly once', async () => {
-    const rule = await create(sysadmin, 'task_overdue', 'Concurrent tasks', { p_daysLate: '1', p_notifyAssignee: 'on' });
+    const rule = await create(sysadmin, 'task_overdue', 'Concurrent tasks', { daysLate: '1', notifyAssignee: 'on' });
     await enable(sysadmin, rule.ruleNo);
     const numbers: string[] = [];
     for (let i = 0; i < 6; i += 1) numbers.push(await tasks_(owner, `Concurrent task ${i}`));
@@ -597,7 +597,7 @@ describe('AU7 · a failing action is contained, visible, retried, and finally pa
   let invoice: { invoiceId: string; invoiceNo: string };
 
   it('the business transaction commits whatever the rule does: with the review route broken, the invoice is still submitted and recorded', async () => {
-    const made = await create(owner, 'invoice_over_threshold', 'Fails first', { p_thresholdIqd: '500000', p_notifyRole: 'accounting_manager', p_note: 'x' });
+    const made = await create(owner, 'invoice_over_threshold', 'Fails first', { thresholdIqd: '500000', notifyRole: 'accounting_manager', note: 'x' });
     ruleNo = made.ruleNo;
     await enable(owner, ruleNo);
     // A fault in the review table: not a refusal of the owner's reach, a broken thing.
@@ -674,7 +674,7 @@ describe('AU7 · a failing action is contained, visible, retried, and finally pa
 // ---------------------------------------------------------------------------
 describe('AU8 · the global switch and a disabled rule do nothing', () => {
   it('a disabled rule listens to nothing: nothing is recorded, and what it did before stays in the log', async () => {
-    const rule = await create(owner, 'invoice_over_threshold', 'To be switched off', { p_thresholdIqd: '1', p_notifyRole: 'accounting_manager' });
+    const rule = await create(owner, 'invoice_over_threshold', 'To be switched off', { thresholdIqd: '1', notifyRole: 'accounting_manager' });
     await enable(owner, rule.ruleNo);
     await disable(owner, rule.ruleNo, 'Trying it');
     expect(await ruleRow(rule.ruleNo)).toMatchObject({ enabled: false, paused_at: null });
@@ -718,15 +718,15 @@ describe('AU8 · the global switch and a disabled rule do nothing', () => {
 describe('AU9 · a rule does only what its owner could do by hand', () => {
   it('an action the owner could not do is skipped with the reason while the ones they can do are done', async () => {
     const made = await create(limited, 'container_eta_exceeded', 'No tasks for me', {
-      p_daysLate: '1',
-      p_severity: 'medium',
-      p_notifyRole: 'logistics_officer',
-      p_followUp: 'on',
-      p_taskAssignee: clerk.id,
-      p_taskDepartment: 'FIN',
-      p_taskTitle: 'Chase them',
-      p_taskPriority: 'normal',
-      p_taskDueInDays: '1',
+      daysLate: '1',
+      severity: 'medium',
+      notifyRole: 'logistics_officer',
+      followUp: 'on',
+      taskAssignee: clerk.id,
+      taskDepartment: 'FIN',
+      taskTitle: 'Chase them',
+      taskPriority: 'normal',
+      taskDueInDays: '1',
     });
     await enable(limited, made.ruleNo);
     // The earlier container was received; a new one is late.
@@ -746,7 +746,7 @@ describe('AU9 · a rule does only what its owner could do by hand', () => {
   });
 
   it('a rule none of whose actions the enabler could do is refused at enabling', async () => {
-    const made = await create(limited, 'task_overdue', 'Nothing I can see', { p_daysLate: '1', p_notifyAssignee: 'on' });
+    const made = await create(limited, 'task_overdue', 'Nothing I can see', { daysLate: '1', notifyAssignee: 'on' });
     await enable(limited, made.ruleNo); // may open a task, so the notice is theirs to send
     await ownerPool.query(`delete from role_grant where role_code = 'automation_limited' and object = 'task'`);
     await disable(limited, made.ruleNo, 'Testing the refusal');
@@ -756,7 +756,7 @@ describe('AU9 · a rule does only what its owner could do by hand', () => {
   });
 
   it('an owner who loses the grant to administer automation pauses the rule: it is logged as skipped, nothing is done, and it stays off until a person turns it on', async () => {
-    const rule = await create(owner, 'task_overdue', 'Owner loses the grant', { p_daysLate: '1', p_notifyAssignee: 'on' });
+    const rule = await create(owner, 'task_overdue', 'Owner loses the grant', { daysLate: '1', notifyAssignee: 'on' });
     const lone = await person('Temporary Admin', ['system_administrator']);
     await enable(lone, rule.ruleNo);
     expect((await ruleRow(rule.ruleNo)).owner_user_id).toBe(lone.id);
@@ -766,7 +766,8 @@ describe('AU9 · a rule does only what its owner could do by hand', () => {
     await withScope(sys, async (tx) => events.produce(tx, await events.operatorPrincipal(tx, sys.userId), today, ['task.overdue']));
     const told = await count('notification', `event_type = 'automation.task_overdue' and context->>'rule' = '${rule.ruleNo}'`);
     await runOnce();
-    const runs = (await runsOf(rule.ruleNo)).filter((r) => r.subject_key.endsWith(`:${(await ownerPool.query(`select id from task where task_no = $1`, [taskNo])).rows[0].id}`));
+    const taskId = (await ownerPool.query(`select id from task where task_no = $1`, [taskNo])).rows[0].id;
+    const runs = (await runsOf(rule.ruleNo)).filter((r) => r.subject_key.endsWith(`:${taskId}`));
     expect(runs).toHaveLength(1);
     expect(runs[0]).toMatchObject({ outcome: 'skipped' });
     expect(runs[0]!.reason).toMatch(/its owner no longer holds administer on automation/);
