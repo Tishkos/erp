@@ -86,7 +86,7 @@ test.describe('REQ-HR-001 Stage HR-1 · people and organisation', () => {
     await move.locator('input[name="reason"]').fill('E2E move');
     await move.locator('button[type="submit"]').click();
     await page.waitForURL(/saved=1/);
-    await expect(page.getByText('E2E move').first()).toBeVisible();
+    await expect(page.getByText('E2E move').filter({ visible: true }).first()).toBeVisible();
 
     // The officer opens the same record: identity and history, no compensation.
     const other = await browser.newContext();
@@ -94,7 +94,7 @@ test.describe('REQ-HR-001 Stage HR-1 · people and organisation', () => {
     await signIn(officerPage, OFFICER);
     await officerPage.goto(`/hr/employees/${encodeURIComponent(employeeNo)}`);
     await expect(officerPage.getByRole('heading', { name: new RegExp(employeeNo) })).toBeVisible();
-    await expect(officerPage.getByText('E2E move').first()).toBeVisible();
+    await expect(officerPage.getByText('E2E move').filter({ visible: true }).first()).toBeVisible();
     await expect(officerPage.getByRole('heading', { name: 'Compensation' })).toHaveCount(0);
     await expect(officerPage.getByText('1,250,000 IQD')).toHaveCount(0);
     await other.close();

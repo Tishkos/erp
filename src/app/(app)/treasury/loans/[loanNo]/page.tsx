@@ -19,6 +19,7 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { Attachments } from '@/components/admin/attachments';
 import { RecordHistory } from '@/components/admin/history';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { LoanSettlementTotal } from '@/components/admin/loan-settlement-total';
 import * as attachmentsService from '@/server/services/attachments';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -530,9 +531,10 @@ export default async function LoanPage({
         }
         titleActions={
           <>
-            {/* The paperclip and the clock, as every record wears them
-                (2026-10-03). The loan has no print model yet, so it has no
-                printer: a door onto nothing is worse than no door. */}
+            {/* The paperclip, the notes and the clock, as every record wears
+                them (2026-10-03, notes 2026-10-04). The loan has no print model
+                yet, so it has no printer: a door onto nothing is worse than no
+                door. */}
             <AttachmentsButton
               closeLabel={admin('close')}
               count={attachedCount}
@@ -547,6 +549,7 @@ export default async function LoanPage({
                 objectType={loans.PERMISSION_OBJECT}
               />
             </AttachmentsButton>
+            <RecordNotesDoor object={loans.PERMISSION_OBJECT} recordId={loan.id} />
             <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
               <RecordHistory objectId={loan.id} objectType={loans.PERMISSION_OBJECT} />
             </HistoryButton>

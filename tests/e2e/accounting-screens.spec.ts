@@ -126,10 +126,10 @@ test.describe('REQ-ACC-001 · the Accounting screens', () => {
     await page.goto(`/treasury/transfers/${transferNo}`);
     await page.waitForTimeout(1500);
     await page.getByRole('button', { name: 'Approve', exact: true }).click();
-    await expect(page.getByText('Approved', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Approved', { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
     await page.waitForTimeout(1500);
     await page.getByRole('button', { name: 'Post', exact: true }).click();
-    await expect(page.getByText('Posted', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Posted', { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
     // The journal it posted is a link.
     await expect(page.getByRole('link', { name: /JE-/ }).first()).toBeVisible();
   });
@@ -158,7 +158,7 @@ test.describe('REQ-ACC-001 · the Accounting screens', () => {
     await expect(page.getByText('Rows that could not be read')).toBeVisible({ timeout: 30_000 });
     await page.waitForTimeout(1500);
     await page.getByRole('button', { name: 'Close statement' }).click();
-    await expect(page.getByText('Ready to reconcile').first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Ready to reconcile').filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
     await page.waitForTimeout(1500);
     await page.getByRole('button', { name: 'Start reconciliation' }).click();
     await expect(page.getByRole('heading', { name: 'Still unmatched' })).toBeVisible({ timeout: 30_000 });
@@ -201,7 +201,7 @@ test.describe('REQ-ACC-001 · the Accounting screens', () => {
     await page.waitForURL(/\/master-data\/tax-codes\/TAX-/, { timeout: 60_000 });
     taxCode = page.url().split('/').pop()!;
     await expectDoors(page);
-    await expect(page.getByText('15%').first()).toBeVisible();
+    await expect(page.getByText('15%').filter({ visible: true }).first()).toBeVisible();
     await shot(page, 'tax-code-record-en');
   });
 
@@ -250,7 +250,7 @@ test.describe('REQ-ACC-001 · the Accounting screens', () => {
     await page.goto(`/finance/recurring-journals/${templateNo}`);
     await page.waitForTimeout(1500);
     await page.getByRole('button', { name: 'Agree and start' }).click();
-    await expect(page.getByText('Active', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Active', { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
   });
 
   test('8 · the journal record wears its doors and links its accounts', async ({ page }) => {

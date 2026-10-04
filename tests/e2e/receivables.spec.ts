@@ -69,7 +69,7 @@ async function note(page: Page, body: string) {
   await expect(page.getByRole('dialog', { name: 'Notes' }).getByRole('cell', { name: body })).toBeVisible();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Audit log' }).click();
-  await expect(page.getByRole('dialog', { name: 'Audit log' }).getByText(/note added/i).first()).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Audit log' }).getByText(/note added/i).filter({ visible: true }).first()).toBeVisible();
   await page.keyboard.press('Escape');
 }
 
@@ -253,7 +253,7 @@ test.describe('REQ-AR-001 · receivables in a browser', () => {
     await signIn(page);
     await page.goto('/sales/receivables');
     for (const label of ['Gross receivables', 'Not yet due', 'Overdue', 'Unapplied credits', 'Net position']) {
-      await expect(page.getByText(label, { exact: false }).first()).toBeVisible();
+      await expect(page.getByText(label, { exact: false }).filter({ visible: true }).first()).toBeVisible();
     }
     await shoot(page, 'receivables-ageing-desktop-en');
 
@@ -373,13 +373,14 @@ test.describe('REQ-AR-001 · receivables in a browser', () => {
       ['/sales/customer-statements', 'main'],
     ] as const) {
       await page.goto(route);
-      const link = page.locator(scope).locator(`a[href*="/sales/customers/${CUSTOMER}"]`).first();
+      // The whole code, not a prefix: other runs leave CUS-000012 beside CUS-00001.
+      const link = page.locator(scope).locator(`a[href^="/sales/customers/${CUSTOMER}?"]`).first();
       await expect(link, route).toHaveAttribute('href', profile);
     }
     // The return names its invoice, and the receipt its bank/cash account.
     await page.goto(`/sales/sales-returns/${encodeURIComponent(returnNo)}`);
     await expect(page.locator('#sales-return-document').getByRole('link', { name: invoiceNo })).toBeVisible();
-    await page.locator(`a[href*="/sales/customers/${CUSTOMER}"]`).first().click();
+    await page.locator(`a[href^="/sales/customers/${CUSTOMER}?"]`).first().click();
     await page.waitForURL(profile);
     await expect(page.getByRole('heading', { level: 1 })).toContainText(CUSTOMER);
   });

@@ -69,7 +69,7 @@ test.describe('REQ-HR-001 Stage HR-3 · payroll', () => {
     await page.locator('input[name="note_0"]').fill('');
     await page.getByRole('button', { name: 'Save the typed figures' }).click();
     await page.waitForURL(/error=/);
-    await expect(page.getByText(/needs its note/).first()).toBeVisible();
+    await expect(page.getByText(/needs its note/).filter({ visible: true }).first()).toBeVisible();
     await page.goto(`/hr/payroll/${encodeURIComponent(runNo)}`);
 
     await page.locator('input[name="reason"]').last().fill('Prepared by the end-to-end test');

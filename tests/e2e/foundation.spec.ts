@@ -91,11 +91,11 @@ test.describe('Phase 0 · the administration screens read and write the database
     await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Closed for the test');
     await page.getByRole('button', { name: 'Deactivate' }).click();
     await page.waitForURL(/saved=1/, { timeout: 30_000 });
-    await expect(page.getByText('Inactive').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Inactive').filter({ visible: true }).first()).toBeVisible({ timeout: 15_000 });
     // Requirement 10 — the record carries its own history.
     // The record's own history names events in words; the audit report below
     // keeps the raw codes, which is what an auditor searches on.
-    await expect(page.getByText('Branch closed').first()).toBeVisible();
+    await expect(page.getByText('Branch closed').filter({ visible: true }).first()).toBeVisible();
   });
 
   test('3 · Departments — created, and given a Department Manager', async ({ page }) => {
@@ -147,7 +147,7 @@ test.describe('Phase 0 · the administration screens read and write the database
     await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Left the company');
     await page.getByRole('button', { name: 'Deactivate' }).click();
     await expect(page.getByRole('status')).toContainText('Saved');
-    await expect(page.getByText('Inactive').first()).toBeVisible();
+    await expect(page.getByText('Inactive').filter({ visible: true }).first()).toBeVisible();
   });
 
   test('5 · Roles and Permissions — a role is created and given grants by section and action', async ({ page }) => {
@@ -186,7 +186,7 @@ test.describe('Phase 0 · the administration screens read and write the database
     await page.getByRole('textbox', { name: 'Prefix', exact: true }).fill('TS');
     await page.getByRole('button', { name: 'Create' }).click();
     await page.waitForURL(`**/administration/numbering/${key}?saved=1`, { timeout: 30_000 });
-    await expect(page.getByText('{PREFIX}-{SERIAL}').first()).toBeVisible();
+    await expect(page.getByText('{PREFIX}-{SERIAL}').filter({ visible: true }).first()).toBeVisible();
     // The chart's own series shows numbers it has handed out — never reused.
     await page.goto('/administration/numbering');
     await expect(page.getByRole('link', { name: 'ACCOUNT_CODE_ASSET' })).toBeVisible();

@@ -98,9 +98,12 @@ export default async function DepositsPage({ searchParams }: { searchParams: Sea
               <p className="muted">{t('new_other_note')}</p>
               <Form action={depositOther}>
                 <Grid>
+                  {/* Its own names throughout: two forms on one page must not
+                      share a field name, or the `f-<name>` ids collide and the
+                      second form's label points at the first form's box. */}
                   <Select label={t('into')} name="other_into_account_id" options={bankOptions} required />
-                  <Select label={t('credit_account')} name="credit_account_id" options={creditOptions} required />
-                  <Field label={t('payer')} name="payer" required />
+                  <Select label={t('credit_account')} name="other_credit_account_id" options={creditOptions} required />
+                  <Field label={t('payer')} name="other_payer" required />
                   <Field label={t('amount')} name="other_amount" required />
                   <Field defaultValue={today} label={t('date')} name="other_deposit_date" required type="date" />
                   <Field label={t('reference')} name="other_reference" />

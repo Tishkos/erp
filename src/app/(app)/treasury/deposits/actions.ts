@@ -43,8 +43,8 @@ export async function depositOther(formData: FormData): Promise<void> {
     (tx, ctx) =>
       deposits.depositOther(tx, ctx, {
         intoAccountId: text(formData, 'other_into_account_id'),
-        creditAccountId: text(formData, 'credit_account_id'),
-        payer: text(formData, 'payer'),
+        creditAccountId: text(formData, 'other_credit_account_id'),
+        payer: text(formData, 'other_payer'),
         depositDate: text(formData, 'other_deposit_date'),
         amount: amountOf(formData, 'other_amount'),
         reference: text(formData, 'other_reference') || null,

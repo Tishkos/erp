@@ -1047,6 +1047,10 @@
  * ---------------------------------------------------------------------- */
 .reportStack {
   display: grid;
+  /* One column that may shrink: a grid item's automatic minimum is its
+     content's width, and a register's table is wider than a phone, so the
+     stack grew past the screen and the page scrolled sideways (2026-10-04). */
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.1rem;
 }
 
