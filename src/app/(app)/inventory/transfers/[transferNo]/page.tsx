@@ -11,7 +11,7 @@ import { RecordAttachmentsDoor } from '@/components/admin/record-attachments-doo
 import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { ExportIcon } from '@/components/print/export-menu';
 import { Denied } from '@/components/denied';
-import { formatBusinessDate, formatMoney, formatQuantity as formatLocaleQuantity, formatTimestamp, type Locale } from '@/i18n/config';
+import { formatBusinessDate, formatQuantity as formatLocaleQuantity, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
@@ -60,8 +60,10 @@ export default async function TransferRecordPage({ params, searchParams }: { par
   });
   if (!view) notFound();
 
-  const money = (value: string) => formatMoney(value, 'IQD', locale as Locale);
   const qty = (value: string) => formatLocaleQuantity(value, locale as Locale);
+  // A cost here is the ledger's own figure — 12.5 a unit, 37.5 for three — not a dinar rounded for a list: the
+  // layers and the journal have to add up where a reader can check them. Four places kept, trailing zeros dropped.
+  const money = (value: string) => `${qty(value)} IQD`;
   const mayAttach = can(principal, 'create', stock.TRANSFER_OBJECT);
 
   const fields: DocumentField[] = [
@@ -202,7 +204,7 @@ export default async function TransferRecordPage({ params, searchParams }: { par
                 {view.positions.map((position) => (
                   <tr key={position.warehouseCode}>
                     <td>
-                      <ProfileLink code={position.warehouseCode} kind="warehouse" name={position.warehouseName} />
+                      <ProfileLink code={position.warehouseCode} kind="warehouse" />
                     </td>
                     <td className={s.sapNum}>
                       <bdi dir="ltr">{`${qty(position.before)} ${view.uomCode}`}</bdi>
