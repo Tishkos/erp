@@ -26,9 +26,9 @@ test.describe('section tabs navigate without reloading', () => {
     test.setTimeout(180_000);
     await signIn(page);
 
-    // REQ-FIX-001 FIX-1 — Suppliers sits under Payables' "Suppliers & Balances"
-    // heading now, beside the statements; its tabs are that heading's screens.
-    await page.goto('/payables/suppliers');
+    // The Supplier Statements' tabs are the Supplier Balances heading's
+    // screens (2026-10-04: the supplier master moved to Master Data).
+    await page.goto('/payables/open-items');
     await expect(page.getByRole('link', { name: 'Supplier Statements' })).toBeVisible({ timeout: 60_000 });
 
     await page.evaluate(() => {
@@ -50,7 +50,7 @@ test.describe('section tabs navigate without reloading', () => {
     // How long the transition takes, and whether anything is shown meanwhile.
     // A second of blank screen reads as a reload even when the context proves
     // it was not one.
-    await page.goto('/payables/suppliers');
+    await page.goto('/payables/open-items');
     await expect(page.getByRole('link', { name: 'Supplier Statements' })).toBeVisible({ timeout: 60_000 });
 
     const started = Date.now();

@@ -19,29 +19,49 @@ const keysOf = (key: string) => section(key).items.map((item) => item.key);
 
 describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
   it('Payables is three headings, in the order a payable lives', () => {
-    // FIX-1 made it four; the owner asked for three on 2026-10-03, with the
-    // payment screens beside the invoices they pay — a payment is the end of
-    // the same job, not a different kind of work. Who is owed, and the setup,
-    // stay apart.
-    expect(keysOf('payables').slice(0, 10)).toEqual([
+    // FIX-1 made it four; the owner asked for three on 2026-10-03; the
+    // Purchasing & Payables finalisation (2026-10-04) settled which three:
+    // what is bought and invoiced, how the supplier is paid and what they hold
+    // of ours, and the balances. The setup went to Administration and the
+    // supplier master to Master Data.
+    expect(keysOf('payables').slice(0, 7)).toEqual([
       'payables_workbench',
-      'ap_invoices',
       'purchase_orders',
       'goods_receipts',
+      'ap_invoices',
       'service_receipts',
       'recurring_contracts',
-      'payment_applications',
+      'goods_returns',
+    ]);
+    expect(keysOf('payables_payments')).toEqual([
       'supplier_payments',
+      'payment_applications',
       'supplier_advances',
+      'supplier_credits',
       'supplier_credit_memos',
     ]);
-    expect(MENU.some((s) => s.key === 'payables_payments')).toBe(false);
-    expect(keysOf('payables_suppliers').slice(0, 3)).toEqual(['suppliers', 'ap_statements', 'ap_open_items']);
-    expect(keysOf('payables_setup')).toEqual(['payables_settings', 'payables_migration']);
+    expect(keysOf('payables_suppliers').slice(0, 3)).toEqual(['ap_statements', 'ap_open_items', 'ap_reconciliation']);
+    expect(MENU.some((s) => s.key === 'payables_setup')).toBe(false);
+  });
+
+  it('the supplier master is Master Data, the settings and the sheet migration Administration', () => {
+    expect(keysOf('master_data')).toContain('suppliers');
+    expect(keysOf('administration')).toEqual(expect.arrayContaining(['payables_settings', 'payables_migration']));
+    const payables = ['payables', 'payables_payments', 'payables_suppliers'].flatMap(keysOf);
+    for (const gone of ['suppliers', 'payables_settings', 'payables_migration']) {
+      expect(payables, gone).not.toContain(gone);
+    }
+  });
+
+  it('the never-built second names of Payables screens are gone', () => {
+    const all = MENU.flatMap((s) => s.items.map((item) => item.key));
+    for (const gone of ['ap_payments', 'ap_advances', 'ap_allocations', 'ap_ageing', 'supplier_ledger']) {
+      expect(all, gone).not.toContain(gone);
+    }
   });
 
   it('nothing logistics or banking is left under Payables', () => {
-    const payables = ['payables', 'payables_suppliers', 'payables_setup'].flatMap(keysOf);
+    const payables = ['payables', 'payables_payments', 'payables_suppliers'].flatMap(keysOf);
     for (const gone of ['pds', 'asycuda_update', 'shipments', 'containers', 'in_transit', 'loans', 'bank_deposits']) {
       expect(payables, gone).not.toContain(gone);
     }
@@ -68,7 +88,12 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(route('logistics_shipping', 'containers')).toBe('/payables/containers');
     expect(route('logistics_shipping', 'in_transit')).toBe('/inventory/in-transit');
     expect(route('treasury', 'loans')).toBe('/treasury/loans');
-    expect(route('payables', 'payment_applications')).toBe('/payables/payment-applications');
+    expect(route('payables_payments', 'payment_applications')).toBe('/payables/payment-applications');
     expect(route('payables', 'purchase_orders')).toBe('/payables/purchase-orders');
+    expect(route('payables', 'goods_receipts')).toBe('/payables/goods-receipts');
+    expect(route('payables', 'service_receipts')).toBe('/payables/service-receipts');
+    expect(route('master_data', 'suppliers')).toBe('/payables/suppliers');
+    expect(route('administration', 'payables_settings')).toBe('/administration/payables-settings');
+    expect(route('administration', 'payables_migration')).toBe('/administration/payables-migration');
   });
 });

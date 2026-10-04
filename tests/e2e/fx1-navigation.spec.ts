@@ -28,13 +28,17 @@ test.describe('FX2 · the module dropdowns', () => {
   test('Payables is three headings, and holds only payables work', async ({ page }) => {
     const nav = page.getByRole('navigation', { name: 'Primary navigation' });
     await nav.getByRole('button', { name: 'Payables' }).click();
-    for (const heading of ['Purchasing & Invoices', 'Suppliers & Balances', 'Setup']) {
+    // The Purchasing & Payables finalisation (2026-10-04): purchasing and
+    // invoices, how the supplier is paid and what they hold, the balances.
+    for (const heading of ['Purchasing & Invoices', 'Supplier Payments & Credits', 'Supplier Balances']) {
       await expect(nav.getByRole('heading', { name: heading, exact: true })).toBeVisible();
     }
-    // The payment screens sit with the invoices they pay — no heading of their own.
-    await expect(nav.getByRole('heading', { name: 'Payments', exact: true })).toHaveCount(0);
+    // The settings and the sheet migration are Administration's now.
+    await expect(nav.getByRole('heading', { name: 'Setup', exact: true })).toHaveCount(0);
     await expect(nav.getByRole('link', { name: 'Purchase Invoices', exact: true })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Payment Applications', exact: true })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Supplier Reconciliation', exact: true })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Suppliers', exact: true })).toHaveCount(0);
     for (const gone of ['Customs Pre-Declarations', 'Bills of Lading', 'Containers', 'Bank Loans']) {
       await expect(nav.getByRole('link', { name: gone, exact: true })).toHaveCount(0);
     }

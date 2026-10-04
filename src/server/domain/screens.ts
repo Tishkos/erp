@@ -211,14 +211,12 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   ar_ageing: 'report',
   ar_reconciliation: 'workspace',
 
-  // 12 — Finance · Payables
-  supplier_ledger: 'report',
+  // 12 — Finance · Payables. Supplier Ledger, Advances, Payments,
+  // Allocations and Ageing were the Payables screens under second names and
+  // left the tree (2026-10-04); Supplier Credits is the payments side's own.
   ap_open_items: 'list',
-  ap_advances: 'document',
-  ap_payments: 'document',
-  ap_allocations: 'workspace',
-  ap_ageing: 'report',
   ap_reconciliation: 'workspace',
+  supplier_credits: 'list',
 
   // 13 — Treasury
   bank_cash_accounts: 'document',

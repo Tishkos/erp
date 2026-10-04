@@ -102,9 +102,13 @@ describe('the screen catalogue covers the approved tree', () => {
     // REQ-FIX-001 FIX-1's Bank Deposits and the ASYCUDA list as its own item;
     // plus FIX-5's HR menu in the sponsor's order — Dashboard, Departments,
     // Positions, Recruitment, Performance, Employee Requests and Documents in,
-    // Organisation, Payslips, Expense Claims, Travel and Asset Assignment out.
-    expect(allMenuItems()).toHaveLength(242);
-    expect(Object.keys(SCREENS)).toHaveLength(242);
+    // Organisation, Payslips, Expense Claims, Travel and Asset Assignment out;
+    // less five and plus one with the Purchasing & Payables finalisation
+    // (2026-10-04): Supplier Ledger, Advances, Payments, Allocations and
+    // Ageing were the Payables screens under second names, and Supplier
+    // Credits is new.
+    expect(allMenuItems()).toHaveLength(238);
+    expect(Object.keys(SCREENS)).toHaveLength(238);
   });
 
   it('uses only declared archetypes', () => {
@@ -123,7 +127,9 @@ describe('the screen catalogue covers the approved tree', () => {
     );
     // + Bank Deposits (a document, two) + the ASYCUDA list (a workspace, one);
     // FIX-5: + 1 + 2 + 2 + 2 + 2 + 2 + 1 in, − 1 − 1 − 2 − 2 − 2 out.
-    expect(total).toBe(357);
+    // Payables finalisation (2026-10-04): − 1 − 2 − 2 − 1 − 1 out (Supplier
+    // Ledger, Advances, Payments, Allocations, Ageing), + 1 in (Supplier Credits).
+    expect(total).toBe(351);
   });
 });
 
@@ -176,7 +182,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(242);
+    expect(screenRoutes().size).toBe(238);
   });
 
   it('marks only the delivered screens as reading real data', () => {
