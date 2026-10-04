@@ -1477,7 +1477,48 @@
       "pending": "Pending",
       "decided": "Decided",
       "decision": "Decision",
-      "waiting_on_you": "Waiting on you"
+      "waiting_on_you": "Waiting on you",
+      "col_type": "Type",
+      "col_stage": "Current stage",
+      "col_action": "Action required",
+      "filter_type": "Document type",
+      "filter_all": "All types",
+      "filter_apply": "Filter",
+      "queue_none": "Nothing is waiting for your approval.",
+      "queue_none_filtered": "Nothing matches this filter.",
+      "open_to_act": "Open",
+      "unroutable": "{count, plural, one {# more document is waiting for you but has no decision screen here yet.} other {# more documents are waiting for you but have no decision screen here yet.}}",
+      "failed_sources": "Some sources could not be read this time: {sources}. The rest of the list is complete.",
+      "stage_role": "Role: {role}",
+      "stage_department_manager": "Department manager",
+      "stage_submitted": "Submitted",
+      "stage_draft": "Draft",
+      "stage_offer": "Offer made",
+      "action_approve": "Approve",
+      "action_post": "Approve and post",
+      "action_confirm": "Confirm",
+      "action_endorse": "Endorse",
+      "action_decide": "Decide",
+      "action_pay": "Pay out",
+      "action_rate": "Rate",
+      "action_sign_off": "Sign off",
+      "action_read": "Read and answer",
+      "action_issue": "Issue the letter",
+      "action_hire": "Hire",
+      "action_reimburse": "Reimburse",
+      "type_chart_of_account": "Chart account",
+      "type_journal_entry": "Journal entry",
+      "type_partner_bank_account": "Bank details",
+      "type_purchase_order": "Purchase order",
+      "type_payment_application": "Payment application",
+      "type_ap_invoice": "Purchase invoice",
+      "type_service_receipt": "Service receipt",
+      "type_leave_request": "Leave request",
+      "type_payroll_run": "Payroll run",
+      "type_employee_advance": "Advance or loan",
+      "type_performance_review": "Performance review",
+      "type_applicant": "Job offer",
+      "type_employee_request": "Employee request"
     },
     "pagination": "Pages",
     "previous": "Previous page",
@@ -8005,5 +8046,347 @@
         "year_start": "Start of this year"
       }
     }
+  },
+  "home": {
+    "widget": {
+      "approvals_waiting": {
+        "title": "Waiting for my approval",
+        "empty": "Nothing is waiting for your approval."
+      },
+      "cash_position": {
+        "title": "Cash and bank",
+        "empty": "No bank or cash account is set up."
+      },
+      "receivable_total": {
+        "title": "Owed to us",
+        "empty": "There are no open sales invoices."
+      },
+      "payable_total": {
+        "title": "Owed by us",
+        "empty": "There are no open purchase invoices."
+      },
+      "overdue_receivables": {
+        "title": "Overdue from customers",
+        "empty": "There are no open sales invoices."
+      },
+      "overdue_payables": {
+        "title": "Overdue to suppliers",
+        "empty": "There are no open purchase invoices."
+      },
+      "inventory_value": {
+        "title": "Stock value",
+        "empty": "No stock is held."
+      },
+      "net_result": {
+        "title": "Result this year",
+        "empty": "No income or expense has been posted this year."
+      },
+      "pending_payments": {
+        "title": "Payment applications open",
+        "empty": "There are no open payment applications."
+      },
+      "imports_in_progress": {
+        "title": "Imports in progress",
+        "empty": "No import is in progress."
+      },
+      "warehouse_today": {
+        "title": "Stock movements today",
+        "empty": "No stock moved today."
+      },
+      "purchasing_open": {
+        "title": "Open purchase orders",
+        "empty": "There are no purchase orders."
+      },
+      "sales_period": {
+        "title": "Sales this month",
+        "empty": "No sales invoice has been posted this month."
+      },
+      "hr_overview": {
+        "title": "Employees",
+        "empty": "There are no employees on record."
+      },
+      "projects_overview": {
+        "title": "Active projects",
+        "empty": "There are no projects."
+      },
+      "tasks_mine": {
+        "title": "My open tasks",
+        "empty": "You have no open tasks."
+      },
+      "notifications_unread": {
+        "title": "Unread notifications",
+        "empty": "You have no unread notifications."
+      },
+      "chat_unread": {
+        "title": "Unread messages",
+        "empty": "You have no unread messages."
+      },
+      "chart_trading": {
+        "title": "Income and expenses, month by month",
+        "empty": "No income or expense was posted in the last twelve months."
+      },
+      "chart_receivable_ageing": {
+        "title": "Owed to us, by how late",
+        "empty": "There are no open sales invoices."
+      },
+      "chart_payable_ageing": {
+        "title": "Owed by us, by how late",
+        "empty": "There are no open purchase invoices."
+      },
+      "chart_cash_accounts": {
+        "title": "Cash and bank balances",
+        "empty": "No bank or cash account holds a balance."
+      },
+      "chart_sales_trend": {
+        "title": "Sales invoiced and collected",
+        "empty": "No sales invoice was posted in the last six months."
+      },
+      "chart_top_customers": {
+        "title": "Biggest customers this year",
+        "empty": "No sales invoice has been posted this year."
+      },
+      "chart_stock_value": {
+        "title": "Stock value by warehouse",
+        "empty": "No warehouse holds stock."
+      },
+      "chart_import_stages": {
+        "title": "Import journey",
+        "empty": "No import is in progress."
+      },
+      "attention": {
+        "title": "Needs attention",
+        "empty": "Nothing needs attention."
+      },
+      "list_approvals": {
+        "title": "Waiting for my approval",
+        "empty": "Nothing is waiting for your approval."
+      },
+      "list_tasks": {
+        "title": "My next tasks",
+        "empty": "You have no open tasks."
+      },
+      "list_pinned_views": {
+        "title": "My pinned views",
+        "empty": "You have not pinned a view."
+      },
+      "list_major_imports": {
+        "title": "Biggest imports in progress",
+        "empty": "No import is in progress."
+      },
+      "list_payments_due": {
+        "title": "Payments due in the next seven days",
+        "empty": "No payment falls due in the next seven days."
+      },
+      "list_delayed_containers": {
+        "title": "Delayed containers",
+        "empty": "No container is delayed."
+      },
+      "list_customs_actions": {
+        "title": "Containers waiting on customs",
+        "empty": "No container is waiting on customs."
+      },
+      "list_landed_cost_blocks": {
+        "title": "Landed costs not yet locked",
+        "empty": "Every landed cost is locked."
+      },
+      "list_in_transit": {
+        "title": "Goods in transit",
+        "empty": "No goods are in transit."
+      },
+      "list_pending_receipts": {
+        "title": "Containers ready to receive",
+        "empty": "No container is ready to receive."
+      },
+      "list_low_stock": {
+        "title": "Stock at or below its minimum",
+        "empty": "No item with a minimum level is at or below it."
+      },
+      "list_todays_movements": {
+        "title": "Today's stock movements",
+        "empty": "No stock moved today."
+      },
+      "list_open_orders": {
+        "title": "Open purchase orders",
+        "empty": "There are no open purchase orders."
+      },
+      "list_on_leave": {
+        "title": "On leave today",
+        "empty": "Nobody is on leave today."
+      },
+      "list_projects": {
+        "title": "Active projects",
+        "empty": "There are no active projects."
+      },
+      "list_unread_notifications": {
+        "title": "Unread notifications",
+        "empty": "You have no unread notifications."
+      },
+      "list_findings": {
+        "title": "Findings to fix",
+        "empty": "Nothing was found."
+      },
+      "list_activity": {
+        "title": "Recent activity",
+        "empty": "There is no recent activity."
+      }
+    },
+    "quick": {
+      "assign_task": "Assign a task",
+      "open_approvals": "My approvals",
+      "new_sales_invoice": "New sales invoice",
+      "new_customer_receipt": "New customer receipt",
+      "new_purchase_invoice": "New purchase invoice",
+      "new_supplier_payment": "New supplier payment",
+      "bank_reconciliation": "Bank reconciliation",
+      "shipment_tracking": "Shipment tracking",
+      "stock_availability": "Stock availability",
+      "stock_receipts": "Stock receipts",
+      "purchase_orders": "Purchase orders",
+      "leave_requests": "Leave requests",
+      "projects": "Projects",
+      "my_tasks": "My tasks",
+      "chat": "Chat"
+    },
+    "col": {
+      "action": "Action",
+      "actor": "By",
+      "amount": "Amount",
+      "available": "Available",
+      "cleared_on": "Cleared on",
+      "container": "Container",
+      "containers": "Containers",
+      "days_late": "Days late",
+      "document": "Document",
+      "domain": "Area",
+      "due": "Due",
+      "employee": "Employee",
+      "ends": "Ends",
+      "eta": "ETA",
+      "event": "Event",
+      "exception": "Exception",
+      "expected": "Expected",
+      "finding": "What is wrong",
+      "import": "Import",
+      "in_transit": "In transit",
+      "item": "Item",
+      "leave_type": "Leave type",
+      "manager": "Manager",
+      "minimum": "Minimum",
+      "movement": "Movement",
+      "next_step": "Next step",
+      "notification": "Notification",
+      "on_hand": "On hand",
+      "open_value": "Open value",
+      "order": "Order",
+      "outcome": "Outcome",
+      "payable": "Payable",
+      "priority": "Priority",
+      "project": "Project",
+      "quantity": "Quantity",
+      "reached": "Reached",
+      "request": "Request",
+      "requested_by": "Requested by",
+      "rows": "Rows",
+      "severity": "Severity",
+      "since": "Since",
+      "stage": "Stage",
+      "state": "State",
+      "status": "Status",
+      "supplier": "Supplier",
+      "task": "Task",
+      "type": "Type",
+      "unlocked": "Not locked",
+      "until": "Until",
+      "view": "View",
+      "warehouse": "Warehouse",
+      "when": "When",
+      "where_fixed": "Where it is fixed"
+    },
+    "note": {
+      "partial": "Some sources could not be read.",
+      "accounts": "{count, plural, one {# account} other {# accounts}}",
+      "open_invoices": "{count, plural, one {# open invoice} other {# open invoices}}",
+      "containers_late": "{count, plural, one {# container is late} other {# containers are late}}",
+      "of_imports": "of {total} imports",
+      "orders_submitted": "{count} waiting for approval",
+      "pending_split": "{draft} awaiting approval, {approved} approved",
+      "invoices_this_month": "{count, plural, one {# invoice this month} other {# invoices this month}}",
+      "hr_note": "{onLeave} on leave today, {waiting} requests waiting",
+      "of_projects": "of {total} projects",
+      "tasks_note": "{overdue} overdue, {today} due today",
+      "warehouses": "{count, plural, one {in # warehouse} other {in # warehouses}}",
+      "last_months": "Last {count} months",
+      "year_to_date": "Year to date",
+      "at_cost": "At FIFO cost"
+    },
+    "say": {
+      "containers_of": "{received} of {total} received",
+      "item_line": "{code} · {name}",
+      "task_line": "{no} · {title}",
+      "unidentified_receipts": "{count, plural, one {# receipt has no payer and cannot settle anything} other {# receipts have no payer and cannot settle anything}}",
+      "account_without_ledger": "{code} has no G/L account behind it and cannot post."
+    },
+    "value": {
+      "income": "Income",
+      "expenses": "Expenses",
+      "invoiced": "Invoiced",
+      "collected": "Collected",
+      "stock_ledger": "Stock Ledger",
+      "receipts": "Receipts",
+      "bank_accounts": "Bank/Cash Accounts",
+      "unavailable": "Not available"
+    },
+    "journey": {
+      "application": "Import application",
+      "shipping": "Shipping",
+      "bl": "Bill of lading",
+      "container": "Container",
+      "customs": "Customs",
+      "clearance": "Clearance",
+      "landed_cost": "Landed cost",
+      "receipt": "Receipt",
+      "inventory": "Inventory"
+    },
+    "severity": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "domain": {
+      "accounting": "Accounting",
+      "receivables": "Receivables",
+      "payables": "Payables",
+      "inventory": "Inventory",
+      "logistics": "Logistics",
+      "tasks": "Tasks",
+      "approvals": "Approvals",
+      "platform": "Platform"
+    },
+    "unavailable": {
+      "finance": "No finance data is available for your role.",
+      "receivables": "No receivables data is available for your role.",
+      "payables": "No payables data is available for your role.",
+      "sales": "No sales data is available for your role.",
+      "purchasing": "No purchasing data is available for your role.",
+      "inventory": "No inventory data is available for your role.",
+      "logistics": "No logistics data is available for your role.",
+      "hr": "No HR data is available for your role.",
+      "projects": "No project data is available for your role."
+    },
+    "section_charts": "Trends",
+    "section_unavailable": "Not available for your role",
+    "see_all": "See all",
+    "journey_all": "Every import has reached this step",
+    "journey_some": "{count} of {total} imports have reached this step",
+    "journey_none": "No import has reached this step",
+    "journey_in_progress": "{count, plural, one {# import in progress} other {# imports in progress}}",
+    "journey_partial": "Counted from the first {read} of {total} imports.",
+    "journey_stage": "Step",
+    "journey_reached": "Imports that reached it",
+    "journey_unseen": "Steps your role cannot read are not shown.",
+    "section_quiet": "Nothing to show",
+    "quiet_what": "Section",
+    "quiet_why": "State"
   }
 }

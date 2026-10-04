@@ -1477,7 +1477,48 @@
       "pending": "معلّق",
       "decided": "تم البت",
       "decision": "القرار",
-      "waiting_on_you": "بانتظارك"
+      "waiting_on_you": "بانتظارك",
+      "col_type": "النوع",
+      "col_stage": "المرحلة الحالية",
+      "col_action": "الإجراء المطلوب",
+      "filter_type": "نوع المستند",
+      "filter_all": "كل الأنواع",
+      "filter_apply": "تصفية",
+      "queue_none": "لا شيء ينتظر موافقتك.",
+      "queue_none_filtered": "لا شيء يطابق هذه التصفية.",
+      "open_to_act": "فتح",
+      "unroutable": "{count, plural, one {# مستند آخر بانتظارك لكن لا توجد له شاشة قرار هنا بعد.} other {# مستندات أخرى بانتظارك لكن لا توجد لها شاشة قرار هنا بعد.}}",
+      "failed_sources": "تعذّرت قراءة بعض المصادر هذه المرة: {sources}. بقية القائمة مكتملة.",
+      "stage_role": "الدور: {role}",
+      "stage_department_manager": "مدير القسم",
+      "stage_submitted": "مقدَّم",
+      "stage_draft": "مسودة",
+      "stage_offer": "تم تقديم العرض",
+      "action_approve": "اعتماد",
+      "action_post": "اعتماد وترحيل",
+      "action_confirm": "تأكيد",
+      "action_endorse": "تأييد",
+      "action_decide": "البت",
+      "action_pay": "صرف",
+      "action_rate": "تقييم",
+      "action_sign_off": "اعتماد نهائي",
+      "action_read": "قراءة وردّ",
+      "action_issue": "إصدار الخطاب",
+      "action_hire": "تعيين",
+      "action_reimburse": "تسديد",
+      "type_chart_of_account": "حساب في دليل الحسابات",
+      "type_journal_entry": "قيد يومية",
+      "type_partner_bank_account": "بيانات بنكية",
+      "type_purchase_order": "أمر شراء",
+      "type_payment_application": "طلب دفع",
+      "type_ap_invoice": "فاتورة مشتريات",
+      "type_service_receipt": "استلام خدمة",
+      "type_leave_request": "طلب إجازة",
+      "type_payroll_run": "مسير رواتب",
+      "type_employee_advance": "سلفة أو قرض",
+      "type_performance_review": "تقييم أداء",
+      "type_applicant": "عرض وظيفي",
+      "type_employee_request": "طلب موظف"
     },
     "pagination": "الصفحات",
     "previous": "الصفحة السابقة",
@@ -8005,5 +8046,347 @@
         "year_start": "بداية هذه السنة"
       }
     }
+  },
+  "home": {
+    "widget": {
+      "approvals_waiting": {
+        "title": "بانتظار موافقتي",
+        "empty": "لا شيء ينتظر موافقتك."
+      },
+      "cash_position": {
+        "title": "النقد والبنوك",
+        "empty": "لا يوجد حساب بنكي أو نقدي مُعدّ."
+      },
+      "receivable_total": {
+        "title": "مستحق لنا",
+        "empty": "لا توجد فواتير مبيعات مفتوحة."
+      },
+      "payable_total": {
+        "title": "مستحق علينا",
+        "empty": "لا توجد فواتير مشتريات مفتوحة."
+      },
+      "overdue_receivables": {
+        "title": "متأخر على العملاء",
+        "empty": "لا توجد فواتير مبيعات مفتوحة."
+      },
+      "overdue_payables": {
+        "title": "متأخر للموردين",
+        "empty": "لا توجد فواتير مشتريات مفتوحة."
+      },
+      "inventory_value": {
+        "title": "قيمة المخزون",
+        "empty": "لا يوجد مخزون."
+      },
+      "net_result": {
+        "title": "نتيجة السنة",
+        "empty": "لم تُرحَّل إيرادات أو مصروفات هذه السنة."
+      },
+      "pending_payments": {
+        "title": "طلبات الدفع المفتوحة",
+        "empty": "لا توجد طلبات دفع مفتوحة."
+      },
+      "imports_in_progress": {
+        "title": "استيرادات قيد التنفيذ",
+        "empty": "لا يوجد استيراد قيد التنفيذ."
+      },
+      "warehouse_today": {
+        "title": "حركات المخزون اليوم",
+        "empty": "لم يتحرك أي مخزون اليوم."
+      },
+      "purchasing_open": {
+        "title": "أوامر الشراء المفتوحة",
+        "empty": "لا توجد أوامر شراء."
+      },
+      "sales_period": {
+        "title": "مبيعات هذا الشهر",
+        "empty": "لم تُرحَّل أي فاتورة مبيعات هذا الشهر."
+      },
+      "hr_overview": {
+        "title": "الموظفون",
+        "empty": "لا يوجد موظفون مسجّلون."
+      },
+      "projects_overview": {
+        "title": "المشاريع النشطة",
+        "empty": "لا توجد مشاريع."
+      },
+      "tasks_mine": {
+        "title": "مهامي المفتوحة",
+        "empty": "ليست لديك مهام مفتوحة."
+      },
+      "notifications_unread": {
+        "title": "إشعارات غير مقروءة",
+        "empty": "ليست لديك إشعارات غير مقروءة."
+      },
+      "chat_unread": {
+        "title": "رسائل غير مقروءة",
+        "empty": "ليست لديك رسائل غير مقروءة."
+      },
+      "chart_trading": {
+        "title": "الإيرادات والمصروفات، شهراً بشهر",
+        "empty": "لم تُرحَّل إيرادات أو مصروفات في آخر اثني عشر شهراً."
+      },
+      "chart_receivable_ageing": {
+        "title": "مستحق لنا، بحسب مدة التأخر",
+        "empty": "لا توجد فواتير مبيعات مفتوحة."
+      },
+      "chart_payable_ageing": {
+        "title": "مستحق علينا، بحسب مدة التأخر",
+        "empty": "لا توجد فواتير مشتريات مفتوحة."
+      },
+      "chart_cash_accounts": {
+        "title": "أرصدة النقد والبنوك",
+        "empty": "لا يوجد حساب بنكي أو نقدي برصيد."
+      },
+      "chart_sales_trend": {
+        "title": "المبيعات المفوترة والمحصّلة",
+        "empty": "لم تُرحَّل أي فاتورة مبيعات في آخر ستة أشهر."
+      },
+      "chart_top_customers": {
+        "title": "أكبر العملاء هذه السنة",
+        "empty": "لم تُرحَّل أي فاتورة مبيعات هذه السنة."
+      },
+      "chart_stock_value": {
+        "title": "قيمة المخزون بحسب المستودع",
+        "empty": "لا يحتوي أي مستودع على مخزون."
+      },
+      "chart_import_stages": {
+        "title": "رحلة الاستيراد",
+        "empty": "لا يوجد استيراد قيد التنفيذ."
+      },
+      "attention": {
+        "title": "تحتاج إلى معالجة",
+        "empty": "لا شيء يحتاج إلى معالجة."
+      },
+      "list_approvals": {
+        "title": "بانتظار موافقتي",
+        "empty": "لا شيء ينتظر موافقتك."
+      },
+      "list_tasks": {
+        "title": "مهامي القادمة",
+        "empty": "ليست لديك مهام مفتوحة."
+      },
+      "list_pinned_views": {
+        "title": "عروضي المثبتة",
+        "empty": "لم تثبّت أي عرض."
+      },
+      "list_major_imports": {
+        "title": "أكبر الاستيرادات الجارية",
+        "empty": "لا يوجد استيراد قيد التنفيذ."
+      },
+      "list_payments_due": {
+        "title": "دفعات تستحق خلال سبعة أيام",
+        "empty": "لا تستحق أي دفعة خلال الأيام السبعة القادمة."
+      },
+      "list_delayed_containers": {
+        "title": "حاويات متأخرة",
+        "empty": "لا توجد حاوية متأخرة."
+      },
+      "list_customs_actions": {
+        "title": "حاويات بانتظار الجمارك",
+        "empty": "لا توجد حاوية بانتظار الجمارك."
+      },
+      "list_landed_cost_blocks": {
+        "title": "تكاليف الإنزال غير المقفلة",
+        "empty": "جميع تكاليف الإنزال مقفلة."
+      },
+      "list_in_transit": {
+        "title": "بضاعة في الطريق",
+        "empty": "لا توجد بضاعة في الطريق."
+      },
+      "list_pending_receipts": {
+        "title": "حاويات جاهزة للاستلام",
+        "empty": "لا توجد حاوية جاهزة للاستلام."
+      },
+      "list_low_stock": {
+        "title": "مخزون عند حدّه الأدنى أو دونه",
+        "empty": "لا يوجد صنف له حد أدنى وهو عنده أو دونه."
+      },
+      "list_todays_movements": {
+        "title": "حركات المخزون اليوم",
+        "empty": "لم يتحرك أي مخزون اليوم."
+      },
+      "list_open_orders": {
+        "title": "أوامر الشراء المفتوحة",
+        "empty": "لا توجد أوامر شراء مفتوحة."
+      },
+      "list_on_leave": {
+        "title": "في إجازة اليوم",
+        "empty": "لا أحد في إجازة اليوم."
+      },
+      "list_projects": {
+        "title": "المشاريع النشطة",
+        "empty": "لا توجد مشاريع نشطة."
+      },
+      "list_unread_notifications": {
+        "title": "إشعارات غير مقروءة",
+        "empty": "ليست لديك إشعارات غير مقروءة."
+      },
+      "list_findings": {
+        "title": "ملاحظات تحتاج إلى معالجة",
+        "empty": "لم يُعثر على شيء."
+      },
+      "list_activity": {
+        "title": "آخر النشاطات",
+        "empty": "لا توجد نشاطات حديثة."
+      }
+    },
+    "quick": {
+      "assign_task": "إسناد مهمة",
+      "open_approvals": "موافقاتي",
+      "new_sales_invoice": "فاتورة مبيعات جديدة",
+      "new_customer_receipt": "مقبوض عميل جديد",
+      "new_purchase_invoice": "فاتورة مشتريات جديدة",
+      "new_supplier_payment": "دفعة مورد جديدة",
+      "bank_reconciliation": "مطابقة البنك",
+      "shipment_tracking": "تتبع الشحنات",
+      "stock_availability": "توفر المخزون",
+      "stock_receipts": "استلامات المخزون",
+      "purchase_orders": "أوامر الشراء",
+      "leave_requests": "طلبات الإجازة",
+      "projects": "المشاريع",
+      "my_tasks": "مهامي",
+      "chat": "المحادثات"
+    },
+    "col": {
+      "action": "الإجراء",
+      "actor": "بواسطة",
+      "amount": "المبلغ",
+      "available": "المتاح",
+      "cleared_on": "تاريخ التخليص",
+      "container": "الحاوية",
+      "containers": "الحاويات",
+      "days_late": "أيام التأخير",
+      "document": "المستند",
+      "domain": "المجال",
+      "due": "الاستحقاق",
+      "employee": "الموظف",
+      "ends": "ينتهي",
+      "eta": "الوصول المتوقع",
+      "event": "الحدث",
+      "exception": "الاستثناء",
+      "expected": "المتوقع",
+      "finding": "ما هو الخطأ",
+      "import": "الاستيراد",
+      "in_transit": "في الطريق",
+      "item": "الصنف",
+      "leave_type": "نوع الإجازة",
+      "manager": "المدير",
+      "minimum": "الحد الأدنى",
+      "movement": "الحركة",
+      "next_step": "الخطوة التالية",
+      "notification": "الإشعار",
+      "on_hand": "المتوفر",
+      "open_value": "القيمة المفتوحة",
+      "order": "الأمر",
+      "outcome": "النتيجة",
+      "payable": "الذمة",
+      "priority": "الأولوية",
+      "project": "المشروع",
+      "quantity": "الكمية",
+      "reached": "وصل إلى",
+      "request": "الطلب",
+      "requested_by": "طلبه",
+      "rows": "الصفوف",
+      "severity": "الخطورة",
+      "since": "منذ",
+      "stage": "المرحلة",
+      "state": "الحالة",
+      "status": "الحالة",
+      "supplier": "المورد",
+      "task": "المهمة",
+      "type": "النوع",
+      "unlocked": "غير مقفل",
+      "until": "حتى",
+      "view": "العرض",
+      "warehouse": "المستودع",
+      "when": "متى",
+      "where_fixed": "أين يُعالَج"
+    },
+    "note": {
+      "partial": "تعذّرت قراءة بعض المصادر.",
+      "accounts": "{count, plural, one {# حساب} other {# حسابات}}",
+      "open_invoices": "{count, plural, one {# فاتورة مفتوحة} other {# فواتير مفتوحة}}",
+      "containers_late": "{count, plural, one {# حاوية متأخرة} other {# حاويات متأخرة}}",
+      "of_imports": "من أصل {total} استيراد",
+      "orders_submitted": "{count} بانتظار الموافقة",
+      "pending_split": "{draft} بانتظار الموافقة، {approved} معتمدة",
+      "invoices_this_month": "{count, plural, one {# فاتورة هذا الشهر} other {# فواتير هذا الشهر}}",
+      "hr_note": "{onLeave} في إجازة اليوم، {waiting} طلبات بانتظار القرار",
+      "of_projects": "من أصل {total} مشروع",
+      "tasks_note": "{overdue} متأخرة، {today} تستحق اليوم",
+      "warehouses": "{count, plural, one {في # مستودع} other {في # مستودعات}}",
+      "last_months": "آخر {count} أشهر",
+      "year_to_date": "منذ بداية السنة",
+      "at_cost": "بالتكلفة (الوارد أولاً صادر أولاً)"
+    },
+    "say": {
+      "containers_of": "{received} من {total} مستلمة",
+      "item_line": "{code} · {name}",
+      "task_line": "{no} · {title}",
+      "unidentified_receipts": "{count, plural, one {# مقبوض بلا دافع ولا يمكنه تسوية شيء} other {# مقبوضات بلا دافع ولا يمكنها تسوية شيء}}",
+      "account_without_ledger": "{code} بلا حساب أستاذ خلفه ولا يمكنه الترحيل."
+    },
+    "value": {
+      "income": "الإيرادات",
+      "expenses": "المصروفات",
+      "invoiced": "المفوتر",
+      "collected": "المحصّل",
+      "stock_ledger": "دفتر المخزون",
+      "receipts": "المقبوضات",
+      "bank_accounts": "الحسابات البنكية والنقدية",
+      "unavailable": "غير متاح"
+    },
+    "journey": {
+      "application": "طلب الاستيراد",
+      "shipping": "الشحن",
+      "bl": "بوليصة الشحن",
+      "container": "الحاوية",
+      "customs": "الجمارك",
+      "clearance": "التخليص",
+      "landed_cost": "تكاليف الإنزال",
+      "receipt": "الاستلام",
+      "inventory": "المخزون"
+    },
+    "severity": {
+      "critical": "حرجة",
+      "high": "عالية",
+      "medium": "متوسطة",
+      "low": "منخفضة"
+    },
+    "domain": {
+      "accounting": "المحاسبة",
+      "receivables": "الذمم المدينة",
+      "payables": "الذمم الدائنة",
+      "inventory": "المخزون",
+      "logistics": "اللوجستيات",
+      "tasks": "المهام",
+      "approvals": "الموافقات",
+      "platform": "المنصة"
+    },
+    "unavailable": {
+      "finance": "لا تتوفر بيانات مالية لدورك.",
+      "receivables": "لا تتوفر بيانات الذمم المدينة لدورك.",
+      "payables": "لا تتوفر بيانات الذمم الدائنة لدورك.",
+      "sales": "لا تتوفر بيانات المبيعات لدورك.",
+      "purchasing": "لا تتوفر بيانات المشتريات لدورك.",
+      "inventory": "لا تتوفر بيانات المخزون لدورك.",
+      "logistics": "لا تتوفر بيانات اللوجستيات لدورك.",
+      "hr": "لا تتوفر بيانات الموارد البشرية لدورك.",
+      "projects": "لا تتوفر بيانات المشاريع لدورك."
+    },
+    "section_charts": "الاتجاهات",
+    "section_unavailable": "غير متاح لدورك",
+    "see_all": "عرض الكل",
+    "journey_all": "وصلت جميع الاستيرادات إلى هذه الخطوة",
+    "journey_some": "وصل {count} من أصل {total} استيراد إلى هذه الخطوة",
+    "journey_none": "لم يصل أي استيراد إلى هذه الخطوة",
+    "journey_in_progress": "{count, plural, one {# استيراد قيد التنفيذ} other {# استيرادات قيد التنفيذ}}",
+    "journey_partial": "محسوبة من أول {read} استيراد من أصل {total}.",
+    "journey_stage": "الخطوة",
+    "journey_reached": "الاستيرادات التي وصلت إليها",
+    "journey_unseen": "الخطوات التي لا يمكن لدورك قراءتها غير معروضة.",
+    "section_quiet": "لا شيء للعرض",
+    "quiet_what": "القسم",
+    "quiet_why": "الحالة"
   }
 }
