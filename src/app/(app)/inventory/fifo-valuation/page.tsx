@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import {
@@ -14,7 +15,8 @@ import { Denied } from '@/components/denied';
 import { ExportMenu } from '@/components/print/export-menu';
 import { IntegrityBanner } from '@/components/admin/integrity-banner';
 import { SectionTabs } from '@/components/admin/section-tabs';
-import { formatMoney, type Locale } from '@/i18n/config';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
@@ -36,6 +38,10 @@ import * as warehouses from '@/server/services/warehouses';
  * drifted from the movements underneath it. A row exists only while stock does:
  * an item counted down to nothing leaves the report rather than sitting at
  * zero, because a warehouse list is a list of what is there.
+ *
+ * IMPROVEMENT-002: above the items, a summary per warehouse — items, units,
+ * value, low stock (item.min_stock_level), negative stock, last movement —
+ * and the drill-down: a warehouse opens its items, an item its movements.
  */
 export const dynamic = 'force-dynamic';
 
@@ -59,12 +65,13 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
   const itemSearch = typeof params.item === 'string' ? params.item.trim() : '';
   const warehouseCode = typeof params.warehouse === 'string' ? params.warehouse.trim() : '';
 
-  const { rows, pickers } = await withCurrentUser(async (tx) => ({
+  const { rows, summary, pickers } = await withCurrentUser(async (tx) => ({
     rows: await reports.valuation(tx, context.principal, {
       allPermittedBranches: true,
       ...(itemSearch ? { itemSearch } : {}),
       ...(warehouseCode ? { warehouseCode } : {}),
     }),
+    summary: warehouseCode || itemSearch ? [] : await reports.warehouseSummary(tx, context.principal),
     pickers: {
       // The warehouses stay a picker: a short, known list a person chooses from.
       //
@@ -138,6 +145,82 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
         </FilterRow>
       </form>
 
+      {summary.length > 0 ? (
+        <table aria-label={t('reports.warehouse_summary')} className={`${s.sapTable} ${s.sapReportTable}`}>
+          <caption className={s.sapTitleMeta}>{t('reports.warehouse_summary')}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{column('warehouse_code')}</th>
+              <th scope="col">{column('warehouse_name')}</th>
+              <th scope="col">{column('branch_code')}</th>
+              <th className={s.sapNum} scope="col">
+                {t('reports.items_count')}
+              </th>
+              <th className={s.sapNum} scope="col">
+                {t('reports.units')}
+              </th>
+              <th className={s.sapNum} scope="col">
+                {t('reports.value')}
+              </th>
+              <th className={s.sapNum} scope="col">
+                {t('reports.low_stock')}
+              </th>
+              <th className={s.sapNum} scope="col">
+                {t('reports.negative_stock')}
+              </th>
+              <th scope="col">{t('reports.last_movement')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summary.map((row) => (
+              <tr key={row.warehouseCode}>
+                <td>
+                  {/* Drill-down: the warehouse's items, on this report. */}
+                  <Link className={s.sapLink} href={`/inventory/fifo-valuation?warehouse=${encodeURIComponent(row.warehouseCode)}`}>
+                    <bdi dir="ltr">{row.warehouseCode}</bdi>
+                  </Link>
+                </td>
+                <td>
+                  <ProfileLink code={row.warehouseCode} dir="auto" kind="warehouse">
+                    {row.isTransit ? `${row.warehouseName} · ${t('reports.transit')}` : row.warehouseName}
+                  </ProfileLink>
+                </td>
+                <td>
+                  <bdi dir="ltr">{row.branchCode}</bdi>
+                </td>
+                <td className={s.sapNum}>
+                  <bdi dir="ltr">{row.items}</bdi>
+                </td>
+                <td className={s.sapNum}>
+                  <bdi dir="ltr">{units(row.units)}</bdi>
+                </td>
+                <td className={s.sapNum}>
+                  <bdi dir="ltr">{money(row.valueIqd)}</bdi>
+                </td>
+                <td className={s.sapNum}>
+                  <bdi dir="ltr">{row.lowStock}</bdi>
+                </td>
+                <td className={s.sapNum}>
+                  <bdi dir="ltr">{row.negativeStock}</bdi>
+                </td>
+                <td>
+                  <bdi dir="ltr">{row.lastMovementOn ? formatBusinessDate(row.lastMovementOn, locale as Locale) : '—'}</bdi>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className={s.sapTotalRow}>
+              <td colSpan={5}>{t('reports.totals')}</td>
+              <td className={s.sapNum}>
+                <bdi dir="ltr">{money(summary.reduce((sum, row) => sum + Number(row.valueIqd), 0).toFixed(4))}</bdi>
+              </td>
+              <td colSpan={3} />
+            </tr>
+          </tfoot>
+        </table>
+      ) : null}
+
       <table className={`${s.sapTable} ${s.sapReportTable}`}>
         <thead>
           <tr>
@@ -160,12 +243,13 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
             <th className={s.sapNum} scope="col">
               {column('total_price')}
             </th>
+            <th scope="col">{t('reports.movements')}</th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td className={s.sapEmptyRow} colSpan={8}>
+              <td className={s.sapEmptyRow} colSpan={9}>
                 {t('reports.nothing_in_stock')}
               </td>
             </tr>
@@ -173,13 +257,17 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
             rows.map((row) => (
               <tr key={`${row.itemCode}:${row.warehouseCode}:${row.branchCode}`}>
                 <td>
-                  <bdi dir="auto">{row.itemName}</bdi>
+                  <ProfileLink code={row.itemCode} dir="auto" kind="item">
+                    {row.itemName}
+                  </ProfileLink>
                 </td>
                 <td>
                   <bdi dir="ltr">{row.itemCode}</bdi>
                 </td>
                 <td>
-                  <bdi dir="auto">{row.warehouseName}</bdi>
+                  <ProfileLink code={row.warehouseCode} dir="auto" kind="warehouse">
+                    {row.warehouseName}
+                  </ProfileLink>
                 </td>
                 <td>
                   <bdi dir="ltr">{row.warehouseCode}</bdi>
@@ -196,6 +284,12 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
                 <td className={s.sapNum}>
                   <bdi dir="ltr">{money(row.valueIqd)}</bdi>
                 </td>
+                <td>
+                  {/* Drill-down: the item's movements in this warehouse. */}
+                  <Link className={s.sapLink} href={`/inventory/stock-ledger?item=${encodeURIComponent(row.itemCode)}&warehouse=${encodeURIComponent(row.warehouseCode)}`}>
+                    {t('reports.movements')}
+                  </Link>
+                </td>
               </tr>
             ))
           )}
@@ -207,6 +301,7 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
               <td className={s.sapNum}>
                 <bdi dir="ltr">{money(String(total))}</bdi>
               </td>
+              <td />
             </tr>
           </tfoot>
         )}

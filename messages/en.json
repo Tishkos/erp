@@ -1696,6 +1696,15 @@
       "check_payroll_posted": "Payroll posted for every branch that employed anybody"
     },
     "reports": {
+      "warehouse_summary": "By warehouse",
+      "items_count": "Items",
+      "units": "Units",
+      "value": "Value (IQD)",
+      "low_stock": "Low stock",
+      "negative_stock": "Negative",
+      "last_movement": "Last movement",
+      "transit": "transit",
+      "movements": "Movements",
       "period": "Period",
       "from": "From",
       "to": "To",

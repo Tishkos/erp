@@ -1696,6 +1696,15 @@
       "check_payroll_posted": "الرواتب مُرحّلة لكل فرع فيه موظفون"
     },
     "reports": {
+      "warehouse_summary": "حسب المستودع",
+      "items_count": "الأصناف",
+      "units": "الوحدات",
+      "value": "القيمة (د.ع)",
+      "low_stock": "مخزون منخفض",
+      "negative_stock": "سالب",
+      "last_movement": "آخر حركة",
+      "transit": "ترانزيت",
+      "movements": "الحركات",
       "period": "الفترة",
       "from": "من",
       "to": "إلى",
