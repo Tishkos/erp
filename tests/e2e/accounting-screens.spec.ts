@@ -16,6 +16,7 @@ const ADMIN = { email: 'admin@example.com', password: 'Ledger-Trial-Balance-7' }
 const RUN = Date.now().toString(36).toUpperCase().slice(-5);
 const SHOTS = process.env.SHOTS ?? '';
 
+let floatCode = '';
 let transferNo = '';
 let statementNo = '';
 let taxCode = '';
@@ -75,6 +76,7 @@ test.describe('REQ-ACC-001 · the Accounting screens', () => {
     await dialog.getByLabel('Custodian').selectOption({ index: 0 });
     await dialog.getByRole('button', { name: 'Create' }).click();
     await page.waitForURL(/\/master-data\/cash-accounts\/CASH-/, { timeout: 60_000 });
+    floatCode = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!);
     // Its G/L account opens its own record.
     await expect(page.getByRole('link', { name: /A\d+ · / }).first()).toHaveAttribute('href', /\/master-data\/chart-of-accounts\/A\d+/);
   });
@@ -267,5 +269,18 @@ test.describe('REQ-ACC-001 · the Accounting screens', () => {
       await shot(page, name);
     }
     expect(wide, 'screens wider than the phone').toEqual([]);
+  });
+
+  // The float sorts ahead of the seeded bank (CASH-0… < CASH-HQ), and other
+  // journeys pay from the first account offered — so it is taken out of use.
+  test('10 · the float is taken out of use, so other journeys pay from the bank', async ({ page }) => {
+    test.skip(!floatCode, 'no float was opened');
+    await signIn(page, ADMIN);
+    await page.goto(`/master-data/cash-accounts/${encodeURIComponent(floatCode)}`);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 60_000 });
+    await page.waitForTimeout(1500);
+    await page.getByRole('textbox', { name: /^Reason/ }).fill('E2E float closed');
+    await page.getByRole('button', { name: 'Deactivate', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Reactivate', exact: true })).toBeVisible({ timeout: 30_000 });
   });
 });
