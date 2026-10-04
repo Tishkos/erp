@@ -5623,6 +5623,15 @@
     "payables_record": {
       "notes": "الملاحظات",
       "supplier_profile": "ملف المورّد"
+    },
+    "record_notes": {
+      "notes": "الملاحظات",
+      "note_when": "متى",
+      "note_who": "من",
+      "note": "ملاحظة",
+      "no_notes": "لا توجد ملاحظات بعد.",
+      "note_hint": "ما الذي يحدث مع هذا السجل — مؤرخة وموقعة، ولا تُعدَّل.",
+      "add_note": "إضافة ملاحظة"
     }
   },
   "profile": {
@@ -5995,7 +6004,8 @@
       "payment_application": "طلب دفع",
       "supplier_advance": "سلفة مورد",
       "recurring_contract": "عقد متكرر",
-      "supplier_credit_note": "إشعار دائن من مورد"
+      "supplier_credit_note": "إشعار دائن من مورد",
+      "project_certificate": "شهادة الإنجاز"
     }
   }
 }

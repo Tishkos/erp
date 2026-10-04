@@ -5623,6 +5623,15 @@
     "payables_record": {
       "notes": "Notes",
       "supplier_profile": "Supplier profile"
+    },
+    "record_notes": {
+      "notes": "Notes",
+      "note_when": "When",
+      "note_who": "Who",
+      "note": "Note",
+      "no_notes": "No notes yet.",
+      "note_hint": "What is happening with this record — dated and signed, never edited.",
+      "add_note": "Add note"
     }
   },
   "profile": {
@@ -5995,7 +6004,8 @@
       "payment_application": "Payment Application",
       "supplier_advance": "Supplier Advance",
       "recurring_contract": "Recurring Contract",
-      "supplier_credit_note": "Supplier Credit Note"
+      "supplier_credit_note": "Supplier Credit Note",
+      "project_certificate": "Progress Certificate"
     }
   }
 }
