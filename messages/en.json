@@ -8293,6 +8293,9 @@
       "too_many_params": "That view carries too many filters."
     },
     "params": {
+      "domain": "Domain",
+      "severity": "Severity",
+      "owner": "Owner",
       "q": "Search",
       "view": "View",
       "min_amount": "Minimum amount (IQD)",

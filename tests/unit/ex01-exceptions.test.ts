@@ -538,17 +538,9 @@ describe('the wording', () => {
 // ---------------------------------------------------------------------------
 
 describe('the registrations', () => {
-  it('raises one notification kind per domain, in the category the domain belongs to, labelled in both languages', () => {
-    const expected: Record<string, string> = {
-      accounting: 'accounting',
-      receivables: 'invoices',
-      payables: 'invoices',
-      inventory: 'accounting',
-      logistics: 'logistics',
-      tasks: 'tasks',
-      approvals: 'approvals',
-      platform: 'system',
-    };
+  it('raises one notification kind per domain, in the category the registry reserves for exceptions, labelled in both languages', () => {
+    // All of them are Accounting's: the registry reserves the `exception.` prefix for that category and no kind has two.
+    const expected: Record<string, string> = Object.fromEntries(DOMAINS.map((domain) => [domain, 'accounting']));
     for (const domain of DOMAINS) {
       const kind = notificationKind(domain);
       expect(KINDS[kind], kind).toBeDefined();
