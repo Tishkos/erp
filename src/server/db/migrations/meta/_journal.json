@@ -1457,6 +1457,13 @@
       "when": 1795900000095,
       "tag": "0285_landed_cost_departure",
       "breakpoints": true
+    },
+    {
+      "idx": 208,
+      "version": "7",
+      "when": 1795900000096,
+      "tag": "0286_settlement_supplement",
+      "breakpoints": true
     }
   ]
 }

@@ -821,7 +821,7 @@ export async function returnFromProject(
     serialNumber?: string | null;
     batchNumber?: string | null;
   },
-): Promise<{ movementId: string; creditedIqd: bigint }> {
+): Promise<{ movementId: string; layerId: string | null; creditedIqd: bigint }> {
   const row = await load(tx, projectCode);
 
   if (row.status !== 'active') {
@@ -875,7 +875,7 @@ export async function returnFromProject(
     outcome: 'success',
   });
 
-  return { movementId: movement.movementId, creditedIqd };
+  return { movementId: movement.movementId, layerId: movement.layerId ?? null, creditedIqd };
 }
 
 /** §10 — what has gone out to the project and what has come back. */

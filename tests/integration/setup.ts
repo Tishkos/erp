@@ -314,6 +314,8 @@ export async function resetTestData(): Promise<void> {
   await client.query('truncate project_milestone_history');
   await client.query('delete from project_activity_dependency');
   await client.query('delete from project_activity');
+  // IMPROVEMENT-002 (0286) — the supplements name the settlement, the issue line, the cost row and the departure.
+  await client.query('delete from project_settlement_supplement');
   // REQ-PM-001 PM-3 — the material issues name their movements and cost rows.
   await client.query('delete from project_material_issue_line');
   await client.query('delete from project_material_issue');

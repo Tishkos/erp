@@ -845,6 +845,7 @@ export async function lock(tx: Tx, ctx: ActorContext, input: LockInput) {
       accountId: destination.accountId,
       dimensions,
       journalEntryId: result.journalEntryId,
+      postSettlement: destination.postSettlement ?? false,
       departedOn: share.movement.movementDate,
       createdBy: ctx.principal.userId,
     });

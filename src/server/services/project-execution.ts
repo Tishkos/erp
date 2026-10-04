@@ -35,6 +35,7 @@ import { ProjectSystemError } from '../domain/project-system';
 import { AdminNotFoundError, optionalText, permit, recordChange, requireText } from './administration';
 import type { ActorContext } from './chart-of-accounts';
 import { allocateDocumentNumber } from './numbering';
+import * as departures from './inventory-departures';
 import * as posting from './posting';
 import * as projects from './projects';
 
@@ -256,7 +257,20 @@ export interface IssueInput {
   readonly kind?: string | null;
   readonly movementDate?: string | null;
   readonly description?: string | null;
-  readonly lines: readonly { readonly itemCode: string; readonly quantity: string; readonly unitCostIqd?: string | null; readonly serialNumber?: string | null; readonly batchNumber?: string | null }[];
+  readonly lines: readonly {
+    readonly itemCode: string;
+    readonly quantity: string;
+    readonly unitCostIqd?: string | null;
+    readonly serialNumber?: string | null;
+    readonly batchNumber?: string | null;
+    /**
+     * IMPROVEMENT-002 — a return line names the posted issue line it gives
+     * back (0286). The unit cost then defaults to what that line went out at,
+     * the quantity is held to what it has left, and material issued before a
+     * landed-cost lock brings the lock's share back with it.
+     */
+    readonly returnsLineId?: string | null;
+  }[];
   /** The one-time id the form minted; a repeat answers with the existing document. */
   readonly documentId?: string | null;
 }
@@ -286,7 +300,8 @@ export async function createIssue(tx: Tx, ctx: ActorContext, input: IssueInput):
   if (input.lines.length === 0) throw new ProjectSystemError('lines', 'a material issue carries at least one line');
   const codes = [...new Set(input.lines.map((l) => l.itemCode.trim().toUpperCase()))];
   const known = await tx.select({ code: item.code, active: item.active }).from(item).where(inArray(item.code, codes));
-  const lines = input.lines.map((line, i) => {
+  const lines = [];
+  for (const [i, line] of input.lines.entries()) {
     const itemCode = line.itemCode.trim().toUpperCase();
     const found = known.find((k) => k.code === itemCode);
     if (!found) throw new ProjectSystemError(`line ${i + 1}`, `there is no item '${itemCode}'`);
@@ -299,18 +314,30 @@ export async function createIssue(tx: Tx, ctx: ActorContext, input: IssueInput):
     }
     if (quantity <= 0n) throw new ProjectSystemError(`line ${i + 1}`, 'the quantity is positive');
     let unitCostIqd: bigint | null = null;
+    let returnsLineId: string | null = null;
     if (kind === 'return') {
       const typed = (line.unitCostIqd ?? '').trim();
-      if (!typed) throw new ProjectSystemError(`line ${i + 1}`, 'a return names the unit cost the stock went out at (§9)');
-      try {
-        unitCostIqd = parseDecimal(typed, MONEY);
-      } catch {
-        throw new ProjectSystemError(`line ${i + 1}`, `'${typed}' is not an amount`);
+      const issued = line.returnsLineId ? await issuedLineFor(tx, assignment.projectCode, itemCode, line.returnsLineId, i) : null;
+      if (issued) {
+        returnsLineId = issued.id;
+        if (quantity > issued.left) {
+          throw new ProjectSystemError(`line ${i + 1}`, `${issued.documentNo} line ${issued.lineNo} has ${formatQuantity(issued.left)} of ${itemCode} left to return, not ${formatQuantity(quantity)}`);
+        }
       }
-      if (unitCostIqd < 0n) throw new ProjectSystemError(`line ${i + 1}`, 'a unit cost is not negative');
+      if (!typed && !issued) throw new ProjectSystemError(`line ${i + 1}`, 'a return names the unit cost the stock went out at (§9)');
+      if (typed) {
+        try {
+          unitCostIqd = parseDecimal(typed, MONEY);
+        } catch {
+          throw new ProjectSystemError(`line ${i + 1}`, `'${typed}' is not an amount`);
+        }
+        if (unitCostIqd < 0n) throw new ProjectSystemError(`line ${i + 1}`, 'a unit cost is not negative');
+      } else {
+        unitCostIqd = issued!.unitCostIqd;
+      }
     }
-    return { itemCode, quantity, unitCostIqd, serialNumber: optionalText(line.serialNumber, 100), batchNumber: optionalText(line.batchNumber, 100) };
-  });
+    lines.push({ itemCode, quantity, unitCostIqd, returnsLineId, serialNumber: optionalText(line.serialNumber, 100), batchNumber: optionalText(line.batchNumber, 100) });
+  }
   const branchCode = store.branchCode;
   const { documentNo } = await allocateDocumentNumber(tx, ISSUE_SEQUENCE_KEY, { branchCode, year: Number(movementDate.slice(0, 4)) }, ctx.principal.userId);
   const [created] = await tx
@@ -338,6 +365,7 @@ export async function createIssue(tx: Tx, ctx: ActorContext, input: IssueInput):
       unitCostIqd: line.unitCostIqd === null ? null : toDecimalString(line.unitCostIqd, MONEY),
       serialNumber: line.serialNumber,
       batchNumber: line.batchNumber,
+      returnsIssueLineId: line.returnsLineId,
     })),
   );
   await recordChange(tx, ctx, {
@@ -348,6 +376,33 @@ export async function createIssue(tx: Tx, ctx: ActorContext, input: IssueInput):
     after: { projectCode: assignment.projectCode, wbsCode: assignment.wbsCode, costCode: assignment.costCode, warehouseCode: store.code, kind, lines: lines.length },
   });
   return { id: created!.id, documentNo, existing: false };
+}
+
+/**
+ * The posted issue line a return gives back: of this project, this item, with
+ * what it has left after earlier returns, and the unit cost it went out at.
+ */
+async function issuedLineFor(tx: Tx, projectCode: string, itemCode: string, lineId: string, index: number) {
+  const [row] = (
+    await tx.execute(sql`
+      select l.id, l.line_no as "lineNo", d.document_no as "documentNo", d.project_code as "projectCode", l.item_code as "itemCode",
+             l.quantity::text as quantity, l.cost_iqd::text as "costIqd", d.status::text as status,
+             coalesce((select sum(r.quantity) from project_material_issue_line r join project_material_issue rd on rd.id = r.issue_id
+                        where r.returns_issue_line_id = l.id and rd.status <> 'cancelled'), 0)::text as returned
+        from project_material_issue_line l
+        join project_material_issue d on d.id = l.issue_id
+       where l.id = ${lineId}::uuid and d.kind = 'issue'`)
+  ).rows as { id: string; lineNo: number; documentNo: string; projectCode: string; itemCode: string; quantity: string; costIqd: string; status: string; returned: string }[];
+  if (!row) throw new ProjectSystemError(`line ${index + 1}`, 'the issue line it returns does not exist');
+  if (row.status !== 'posted') throw new ProjectSystemError(`line ${index + 1}`, `${row.documentNo} is ${row.status}; only a posted issue is returned`);
+  if (row.projectCode !== projectCode) throw new ProjectSystemError(`line ${index + 1}`, `${row.documentNo} is ${row.projectCode}'s, not ${projectCode}'s`);
+  if (row.itemCode !== itemCode) throw new ProjectSystemError(`line ${index + 1}`, `${row.documentNo} line ${row.lineNo} issued ${row.itemCode}, not ${itemCode}`);
+  const quantity = parseQuantity(row.quantity);
+  const left = quantity - parseQuantity(row.returned);
+  // What a unit went out at: the line's cost over its units, half up.
+  const raw = parseDecimal(row.costIqd, MONEY) * 1_000_000n;
+  const unitCostIqd = quantity > 0n ? (raw + quantity / 2n) / quantity : 0n;
+  return { id: row.id, lineNo: row.lineNo, documentNo: row.documentNo, left, unitCostIqd };
 }
 
 /**
@@ -375,6 +430,26 @@ export async function postIssue(tx: Tx, ctx: ActorContext, documentNo: string): 
       const moved = await projects.returnFromProject(tx, ctx, doc.projectCode, { ...common, unitCostIqd: parseDecimal(line.unitCostIqd ?? '0', MONEY) });
       movementId = moved.movementId;
       costIqd = moved.creditedIqd;
+      // IMPROVEMENT-002 — material issued before a landed-cost lock brings the
+      // lock's share back with it: the return layer is raised to the restated
+      // cost and the share comes back from the project (the inventory layer's
+      // `returnLandedShare`; the project's negative cost row follows through
+      // the departure registry). An issue no lock reached posts nothing more.
+      if (line.returnsIssueLineId && moved.layerId) {
+        const [issued] = await tx
+          .select({ movementId: projectMaterialIssueLine.movementId })
+          .from(projectMaterialIssueLine)
+          .where(eq(projectMaterialIssueLine.id, line.returnsIssueLineId))
+          .limit(1);
+        if (issued?.movementId) {
+          await departures.returnLandedShare(tx, ctx, {
+            returnMovementId: movementId,
+            units: [{ departedMovementId: issued.movementId, quantity, toLayerId: moved.layerId }],
+            postingDate: doc.movementDate,
+            description: `Landed cost returned with Material Issue ${documentNo} — ${line.itemCode} to ${doc.warehouseCode}`,
+          });
+        }
+      }
     }
     total += doc.kind === 'issue' ? costIqd : -costIqd;
     // The cost row Phase 11 wrote for this movement: the latest on the element at this amount.

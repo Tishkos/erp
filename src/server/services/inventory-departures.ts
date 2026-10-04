@@ -85,6 +85,8 @@ export interface DepartureDestination {
   readonly role: string;
   readonly accountId: string;
   readonly dimensions: DepartureDimensions;
+  /** True when the receiver was settled before the cost reached it: the row says so, and the module supplements the settlement in `afterPosting`. */
+  readonly postSettlement?: boolean;
   readonly afterPosting?: (tx: Tx, ctx: ActorContext, posted: PostedDeparture) => Promise<void>;
 }
 

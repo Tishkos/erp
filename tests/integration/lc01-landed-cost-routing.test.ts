@@ -60,6 +60,7 @@ import * as gr from '@/server/services/goods-return';
 import * as inventory from '@/server/services/inventory';
 import * as landed from '@/server/services/landed-cost';
 import * as periods from '@/server/services/periods';
+import * as closing from '@/server/services/project-close';
 import * as pb from '@/server/services/project-budget';
 import * as pe from '@/server/services/project-execution';
 import * as ps from '@/server/services/project-system';
@@ -854,13 +855,13 @@ describe('4 · a sales return before the lock: the returned units carry their sh
 
 // ===========================================================================
 describe('5 · a project material issue: the share is the project\'s cost, not cost of sales', () => {
-  /** An active internal project, one element, a Materials budget of 1,010,000. */
-  async function activeProject() {
+  /** An active project, one element, a Materials budget of 1,010,000. */
+  async function activeProject(typeCode: 'INTERNAL' | 'INVESTMENT' = 'INTERNAL') {
     const { projectCode } = await as(world.manager, (tx) =>
       ps.createDefinition(tx, world.manager, {
         name: 'Solar farm site works',
-        typeCode: 'INTERNAL',
-        code: 'SITE-26',
+        typeCode,
+        code: typeCode === 'INTERNAL' ? 'SITE-26' : 'FARM-26',
         branchCode: BAGHDAD,
         managerUserId: world.manager.principal.userId,
         baselineStartsOn: '2026-08-01',
@@ -882,6 +883,37 @@ describe('5 · a project material issue: the share is the project\'s cost, not c
   }
   const elementOf = async (projectCode: string, code: string) =>
     (await as(world.manager, (tx) => ps.tree(tx, projectCode))).find((element) => element.code === code)!;
+
+  /** 100 panels of the import to the element on 10 September, posted. */
+  async function issuePanels(imp: Import, projectCode: string, civil: string, quantity = '100') {
+    const issue = await as(world.clerk, (tx) =>
+      pe.createIssue(tx, world.clerk, {
+        projectCode,
+        wbsCode: civil,
+        costCode: 'MAT',
+        warehouseCode: WAREHOUSE,
+        movementDate: '2026-09-10',
+        description: 'Panels to site',
+        lines: [{ itemCode: PANEL, quantity, batchNumber: imp.batch }],
+        documentId: randomUUID(),
+      }),
+    );
+    await as(world.manager, (tx) => pe.postIssue(tx, world.manager, issue.documentNo));
+    const { rows } = await ownerPool.query(
+      `select l.id, l.movement_id from project_material_issue_line l join project_material_issue d on d.id = l.issue_id where d.document_no = $1`,
+      [issue.documentNo],
+    );
+    return { documentNo: issue.documentNo, lineId: rows[0].id as string, movementId: rows[0].movement_id as string };
+  }
+
+  const projectBalance = async (accountId: string, projectCode: string) =>
+    (
+      await ownerPool.query(
+        `select coalesce(sum(l.debit_iqd - l.credit_iqd), 0)::text as net from journal_line l join journal_entry e on e.id = l.journal_entry_id
+          where e.status in ('posted', 'reversed') and l.account_id = $1 and l.project_code = $2`,
+        [accountId, projectCode],
+      )
+    ).rows[0].net as string;
 
   it('100 issued: 20,000 to project_material_cost with the project dimension, and a project cost row past the budget', async () => {
     const imp = await receivedImport();
@@ -952,6 +984,176 @@ describe('5 · a project material issue: the share is the project\'s cost, not c
     });
     // 5,000,000 − 1,000,000 issued + 80,000 = 400 × 10,200.
     expect(await assertLayersMatchGl([PANEL])).toMatchObject({ layersIqd: '4080000.0000', glIqd: '4080000.0000' });
+  }, SLOW);
+
+  it('a settled investment project: the share reaches the same receiver, flagged post-settlement, and a supplement carries it to the asset — the project is not reopened', async () => {
+    const imp = await receivedImport();
+    const { projectCode, civil } = await activeProject('INVESTMENT');
+    // The asset under construction the settlement capitalises to.
+    const { rows: parents } = await ownerPool.query(`select id, account_type from chart_of_account where code = 'A000001'`);
+    const { rows: auc } = await ownerPool.query(
+      `insert into chart_of_account (code, name, account_type, parent_id, is_group, is_active, approval_status, level, currency_restriction)
+       values ('A980004','Assets Under Construction',$1,$2,false,true,'approved',1,'IQD') returning id`,
+      [parents[0].account_type, parents[0].id],
+    );
+    await as(world.manager, (tx) => coa.setRequiredDimensions(tx, world.manager, auc[0].id, []));
+    await map('projects.settlement', 'project_auc', auc[0].id);
+
+    const issue = await issuePanels(imp, projectCode, civil);
+    // Technically complete, settled on 20 September by two people, closed.
+    await as(world.manager, (tx) => ps.technicalComplete(tx, world.manager, projectCode));
+    const { settlementNo } = await as(releaser, (tx) => closing.createSettlement(tx, releaser, projectCode, { settledOn: '2026-09-20' }));
+    await as(world.manager, (tx) => closing.postSettlement(tx, world.manager, settlementNo));
+    await as(world.manager, (tx) => ps.close(tx, world.manager, projectCode, 'capitalised'));
+    expect(await projectBalance(auc[0].id, projectCode)).toBe('1000000.0000');
+    expect(await projectBalance(world.accounts.project_material_cost!, projectCode)).toBe('0.0000');
+    const { rows: settlement } = await ownerPool.query(`select id from project_settlement where settlement_no = $1`, [settlementNo]);
+
+    await writeOffPd(imp);
+    await charge(imp, '100000');
+    const done = await lockImport(imp);
+    expect([done.inventoryIqd, done.cogsIqd]).toEqual(['80000.0000', '20000.0000']);
+
+    // The departure: the issue's receiver, flagged post-settlement.
+    const { rows } = await ownerPool.query(
+      `select id, destination_role, amount_iqd::text as amount, post_settlement, dimensions from landed_cost_departure where lock_id = $1 and kind = 'departure'`,
+      [done.id],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ destination_role: 'project_material_cost', amount: '20000.0000', post_settlement: true });
+    expect(dimensionOf(rows[0].dimensions, 'project')).toBe(projectCode);
+
+    // The supplement: linked to the settlement, the issue line and the departure;
+    // its own journal to the asset. The project's cost rows stay as the
+    // settlement left them (the database refuses a row on a closed project).
+    const { rows: supplements } = await ownerPool.query(
+      `select s.settlement_id, s.lock_id, s.departure_id, s.material_issue_line_id, s.cost_id, s.amount_iqd::text as amount,
+              s.posted_on::text as on, s.journal_entry_id
+         from project_settlement_supplement s where s.project_code = $1`,
+      [projectCode],
+    );
+    expect(supplements).toHaveLength(1);
+    expect(supplements[0]).toMatchObject({
+      settlement_id: settlement[0].id,
+      lock_id: done.id,
+      departure_id: rows[0].id,
+      material_issue_line_id: issue.lineId,
+      cost_id: null,
+      amount: '20000.0000',
+      on: LOCK_ON,
+    });
+    const { rows: landedCosts } = await ownerPool.query(`select count(*)::int as n from project_cost where project_code = $1 and kind = 'landed_cost_adjustment'`, [projectCode]);
+    expect(landedCosts[0].n).toBe(0);
+    expect(supplements[0].journal_entry_id).not.toBeNull();
+    const { rows: supplementJournal } = await ownerPool.query(
+      `select e.posting_date::text as on, e.status::text as status, l.line_role, l.debit_iqd::text as dr, l.credit_iqd::text as cr, l.project_code
+         from journal_entry e join journal_line l on l.journal_entry_id = e.id where e.id = $1 order by l.line_no`,
+      [supplements[0].journal_entry_id],
+    );
+    expect(supplementJournal).toEqual([
+      { on: LOCK_ON, status: 'posted', line_role: 'project_auc', dr: '20000.0000', cr: '0.0000', project_code: projectCode },
+      { on: LOCK_ON, status: 'posted', line_role: 'project_cost', dr: '0.0000', cr: '20000.0000', project_code: projectCode },
+    ]);
+    // The asset carries the landed cost; the cost account nets to nothing; the project stays closed and wholly settled.
+    expect(await projectBalance(auc[0].id, projectCode)).toBe('1020000.0000');
+    expect(await projectBalance(world.accounts.project_material_cost!, projectCode)).toBe('0.0000');
+    const { rows: state } = await ownerPool.query(
+      `select p.status::text as status, (select count(*)::int from project_cost where project_code = p.code and settlement_id is null) as unsettled,
+              (select count(*)::int from project_settlement where project_code = p.code and status = 'posted') as settlements
+         from project p where p.code = $1`,
+      [projectCode],
+    );
+    expect(state[0]).toEqual({ status: 'closed', unsettled: 0, settlements: 1 });
+
+    await assertLockBalanced(done.id);
+    expect(await assertImportFullyAccounted(imp.payableId)).toEqual({ chargesIqd: '100000.0000', inventoryIqd: '80000.0000', departedIqd: '20000.0000' });
+    expect(await assertLayersMatchGl([PANEL])).toMatchObject({ layersIqd: '4080000.0000', glIqd: '4080000.0000' });
+  }, SLOW);
+
+  it('material returned after the lock, naming the issue line: the return layer at the restated cost, the share back from the project, never more than issued', async () => {
+    const imp = await receivedImport();
+    const { projectCode, civil } = await activeProject();
+    const issue = await issuePanels(imp, projectCode, civil);
+    await writeOffPd(imp);
+    await charge(imp, '100000');
+    const done = await lockImport(imp);
+    expect([done.inventoryIqd, done.cogsIqd]).toEqual(['80000.0000', '20000.0000']);
+    expect((await elementOf(projectCode, civil)).actualIqd).toBe('1020000.0000');
+    const departure = (await departuresOf(done.id)).find((row) => row.kind === 'departure')!;
+
+    // 40 of the 100 come back, naming the issue line; the unit cost defaults to what they went out at.
+    const today = businessToday();
+    const back = await as(world.clerk, (tx) =>
+      pe.createIssue(tx, world.clerk, {
+        projectCode,
+        wbsCode: civil,
+        costCode: 'MAT',
+        warehouseCode: WAREHOUSE,
+        kind: 'return',
+        movementDate: today,
+        lines: [{ itemCode: PANEL, quantity: '40', batchNumber: imp.batch, returnsLineId: issue.lineId }],
+        documentId: randomUUID(),
+      }),
+    );
+    await as(world.manager, (tx) => pe.postIssue(tx, world.manager, back.documentNo));
+    const { rows: returnLine } = await ownerPool.query(
+      `select l.unit_cost_iqd::text as unit, l.returns_issue_line_id, l.movement_id from project_material_issue_line l
+         join project_material_issue d on d.id = l.issue_id where d.document_no = $1`,
+      [back.documentNo],
+    );
+    expect(returnLine[0]).toMatchObject({ unit: '10000.0000', returns_issue_line_id: issue.lineId });
+    const returnLayer = await layerCreatedBy('project', projectCode, 'project_return');
+    expect(await layerOf(returnLayer)).toMatchObject({ remaining: '40.000000', unit: '10200.0000' });
+
+    const returned = (await departuresOf(done.id)).filter((row) => row.kind === 'return');
+    expect(returned).toHaveLength(1);
+    expect(returned[0]).toMatchObject({
+      quantity: '-40.000000',
+      amount_iqd: '-8000.0000',
+      destination_role: 'project_material_cost',
+      account_id: departure.account_id,
+      returns_departure_id: departure.id,
+      to_layer_id: returnLayer,
+      movement_id: returnLine[0].movement_id,
+      movement_kind: 'project_return',
+      departed_on: today,
+    });
+    // Its journal credits the project; the project's own analysis hears of it.
+    expect(await lockLinesOn(returned[0]!.journal_entry_id, world.accounts.project_material_cost!)).toEqual([
+      expect.objectContaining({ project_code: projectCode, net: '-8000.0000' }),
+    ]);
+    const { rows: costs } = await ownerPool.query(
+      `select kind, amount_iqd::text as amount, source_type from project_cost where project_code = $1 and kind = 'landed_cost_adjustment' order by created_at`,
+      [projectCode],
+    );
+    expect(costs).toEqual([
+      { kind: 'landed_cost_adjustment', amount: '20000.0000', source_type: 'landed_cost_lock' },
+      { kind: 'landed_cost_adjustment', amount: '-8000.0000', source_type: 'landed_cost_return' },
+    ]);
+    // 1,020,000 − 400,000 returned − 8,000 of its landed cost.
+    expect((await elementOf(projectCode, civil)).actualIqd).toBe('612000.0000');
+
+    // 60 are left on the issue line; 61 is refused before anything is written.
+    expect(
+      await rejection(
+        as(world.clerk, (tx) =>
+          pe.createIssue(tx, world.clerk, {
+            projectCode,
+            wbsCode: civil,
+            costCode: 'MAT',
+            warehouseCode: WAREHOUSE,
+            kind: 'return',
+            movementDate: today,
+            lines: [{ itemCode: PANEL, quantity: '61', batchNumber: imp.batch, returnsLineId: issue.lineId }],
+          }),
+        ),
+      ),
+    ).toMatch(/has 60 of/);
+
+    await assertLockBalanced(done.id);
+    expect(await assertImportFullyAccounted(imp.payableId)).toEqual({ chargesIqd: '100000.0000', inventoryIqd: '80000.0000', departedIqd: '20000.0000' });
+    // 400 × 10,200 + 40 × 10,200 = 4,488,000.
+    expect(await assertLayersMatchGl([PANEL])).toMatchObject({ layersIqd: '4488000.0000', glIqd: '4488000.0000' });
   }, SLOW);
 });
 
@@ -1692,7 +1894,3 @@ describe('13 · stock that comes back after a lock brings its landed share back'
   }, SLOW);
 });
 
-// ===========================================================================
-describe('next release', () => {
-  it.todo('a settled project gets a post-settlement supplement for a landed share that arrives after settlement (post_settlement)');
-});

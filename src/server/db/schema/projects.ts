@@ -758,6 +758,8 @@ export const projectMaterialIssueLine = pgTable(
     movementId: uuid('movement_id').references(() => inventoryMovement.id),
     costId: uuid('cost_id').references(() => projectCost.id),
     costIqd: numeric('cost_iqd', { precision: 19, scale: 4 }).notNull().default('0'),
+    /** IMPROVEMENT-002 (0286) — the issue line a return line gives back, so a landed share that reached the issue comes back with it. */
+    returnsIssueLineId: uuid('returns_issue_line_id'),
   },
   (t) => [
     uniqueIndex('project_material_issue_line_uniq').on(t.issueId, t.lineNo),
@@ -1010,6 +1012,42 @@ export const projectSettlement = pgTable(
     cancelReason: text('cancel_reason'),
   },
   (t) => [uniqueIndex('project_settlement_no_uniq').on(t.settlementNo)],
+);
+
+/**
+ * IMPROVEMENT-002 (0286) — a landed-cost share that reached material issued to
+ * a project after it was settled. The project is not reopened: the share went
+ * to the issue's receiver, and this carries it on to where the settlement put
+ * the cost (an asset settlement posts Dr AUC / Cr the cost; an expense one
+ * posts nothing more). One per departure row; append-only.
+ */
+export const projectSettlementSupplement = pgTable(
+  'project_settlement_supplement',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    settlementId: uuid('settlement_id')
+      .notNull()
+      .references(() => projectSettlement.id),
+    projectCode: text('project_code')
+      .notNull()
+      .references(() => project.code),
+    lockId: uuid('lock_id').notNull(),
+    departureId: uuid('departure_id').notNull(),
+    materialIssueLineId: uuid('material_issue_line_id').references(() => projectMaterialIssueLine.id),
+    costId: uuid('cost_id').references(() => projectCost.id),
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
+    postedOn: date('posted_on').notNull(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('project_settlement_supplement_departure_uniq').on(t.departureId),
+    index('project_settlement_supplement_settlement_idx').on(t.settlementId),
+    index('project_settlement_supplement_project_idx').on(t.projectCode),
+  ],
 );
 
 /** A month's approved hours on one project, posted at the employees' rates (D-PM-8). */

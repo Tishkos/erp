@@ -222,6 +222,7 @@ project_recognition
 project_balance_movement
 project_certificate
 project_progress
+project_settlement_supplement
 project_material_issue_line
 project_material_issue
 project_timesheet
