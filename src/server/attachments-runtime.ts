@@ -12,6 +12,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
 import { applicant, asycudaRun, bankLoan, bankTransfer, billOfLading, customsPd, employeeDocument, employeeRequest, journalEntry, otherReceipt, payable, paymentApplication, shipmentContainer } from './db/schema';
+import { apInvoice, goodsReceipt, goodsReturn, purchaseOrder, recurringContract, supplierAdvance, supplierCreditMemo, supplierPayment } from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -205,6 +206,35 @@ const otherReceiptParentAccess = async (tx: Tx, principal: Principal, objectId: 
   return Boolean(row);
 };
 
+/**
+ * REQ-PAY-001 PAY3 — the purchase documents' paperwork (2026-10-04).
+ *
+ * The purchase invoice had an upload form and no check registered here, so
+ * every file a person put on one was refused ("access … cannot be
+ * determined"). Each purchase record now answers the same two questions as
+ * the ones above: may this person view that kind of record, and does row
+ * security let them see this one. A debit note is a purchase invoice
+ * (D-PAY-2), so it is answered by `ap_invoice`.
+ */
+const PURCHASE_PARENTS = [
+  ['ap_invoice', apInvoice],
+  ['purchase_order', purchaseOrder],
+  ['goods_receipt', goodsReceipt],
+  ['goods_return', goodsReturn],
+  ['supplier_payment', supplierPayment],
+  ['supplier_advance', supplierAdvance],
+  ['recurring_contract', recurringContract],
+  ['supplier_credit_memo', supplierCreditMemo],
+] as const;
+
+const purchaseParentAccess =
+  (object: string, table: (typeof PURCHASE_PARENTS)[number][1]) =>
+  async (tx: Tx, principal: Principal, objectId: string) => {
+    if (!can(principal, 'view', object)) return false;
+    const [row] = await tx.select({ id: table.id }).from(table).where(eq(table.id, objectId)).limit(1);
+    return Boolean(row);
+  };
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -226,6 +256,9 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('applicant', applicantParentAccess);
   attachments.registerParentAccessCheck('employee_request', employeeRequestParentAccess);
   attachments.registerParentAccessCheck('employee_document', employeeDocumentParentAccess);
+  for (const [object, table] of PURCHASE_PARENTS) {
+    attachments.registerParentAccessCheck(object, purchaseParentAccess(object, table));
+  }
 }
 
 /** Streams a stored file, for a route handler that has already checked access. */
