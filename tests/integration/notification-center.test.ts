@@ -21,7 +21,7 @@ import type { PoolClient } from 'pg';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { appPool, ownerPool, rejection, resetTestData, seedBranch } from './setup';
 import { withScope } from '@/server/db/client';
-import { businessToday } from '@/server/domain/business-date';
+import { businessToday, addBusinessDays } from '@/server/domain/business-date';
 import { clearAddedKinds, registerKind } from '@/server/domain/notification-center';
 import { registerAllRecords } from '@/server/records';
 import * as authz from '@/server/services/authorization';
@@ -597,7 +597,7 @@ describe('NC8 the sweeps say it once', () => {
     expect(first.notified).toBe(2); // Bob (accounting_manager) and Ada (super user)
     const again = await run(admin, (tx) => closing.notifyFailures(tx, report(period), TODAY));
     expect(again.notified).toBe(0);
-    const tomorrow = await run(admin, (tx) => closing.notifyFailures(tx, report(period), '2026-10-05'));
+    const tomorrow = await run(admin, (tx) => closing.notifyFailures(tx, report(period), addBusinessDays(TODAY, 1)));
     expect(tomorrow.notified).toBe(2);
 
     const mine = await rowsOf(bob);
