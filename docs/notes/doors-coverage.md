@@ -50,6 +50,8 @@ rule), `view` (a read-only rendering of another record's data: printer only).
 | `finance/closing` — the period's close (the period is the record) | ✅ | ✅ | ✅ | ✅ | `period_close` | — (checks link their screens) | accounting | done |
 | `inventory/opening-stock/[documentNo]` | ✅ | ✅ | ✅ | ✅ | `opening_stock` | warehouse, items: links ✅ | inventory | done (2026-10-04) |
 | `inventory/stock-count/[countNo]` — stock count (new) | ✅ | ✅ | ✅ | ✅ | `stock_count` | warehouse, items: links ✅ | inventory | done (2026-10-04) |
+| `inventory/transfers/[transferNo]` — transfer (new, inventory-finish) | ✅ | ✅ | ✅ | ✅ | `transfer` (layers, before/after per warehouse) | item, both warehouses, branch: links ✅ | inventory | done (2026-10-04) |
+| `inventory/stock-reconciliation/[reconNo]` — Item Reconciliation (new, inventory-finish) | ✅ | ✅ | ✅ | ✅ | `item_reconciliation` (layers, before/after, journal lines) | item, warehouse, branch, journal: links ✅ | inventory | done (2026-10-04) |
 
 ## Logistics documents
 
