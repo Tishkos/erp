@@ -154,6 +154,13 @@ export interface DepartureLine {
   /** Signed like the quantity; a rounding row carries money and no quantity. */
   readonly amountIqd: bigint;
   readonly returnsDepartureId: string | null;
+  /**
+   * The movement the row names. Every lock writes its own row for the same
+   * departed units, so a group's quantity counts a movement once — the latest
+   * lock's row, less the returns against it — not once per lock. Left out, the
+   * rows' quantities are summed as they are.
+   */
+  readonly movementId?: string | null;
 }
 
 export interface DepartureEntry<T extends DepartureLine> {
@@ -167,7 +174,7 @@ export interface DepartureGroup<T extends DepartureLine> {
   /** Null for the rounding residue, which no movement took. */
   readonly movementKind: string | null;
   readonly destinationRole: string;
-  /** What left, less what came back. */
+  /** What left, less what came back — each movement's units counted once, whatever the number of locks. */
   readonly quantity: bigint;
   /** Departures and rounding: what the locks sent after the stock. */
   readonly departedIqd: bigint;
@@ -203,12 +210,21 @@ export function groupDepartures<T extends DepartureLine>(lines: readonly T[]): D
     return group;
   };
 
+  // The row that counts a movement's units: its latest departure row in the
+  // caller's order (the latest lock). Rows with no movement count themselves.
+  const counting = new Map<string, string>();
+  for (const line of lines) {
+    if (line.kind !== 'departure' || !line.movementId) continue;
+    counting.set(line.movementId, line.id);
+  }
+  const counts = (line: T) => !line.movementId || counting.get(line.movementId) === line.id;
+
   for (const line of lines) {
     if (line.kind === 'return') continue;
     const group = groupFor(line);
     const entry: DepartureEntry<T> = { departure: line, returns: [] };
     group.entries.push(entry);
-    group.quantity += line.quantity;
+    if (counts(line)) group.quantity += line.quantity;
     group.departed += line.amountIqd;
     entryOf.set(line.id, entry);
   }
@@ -222,7 +238,7 @@ export function groupDepartures<T extends DepartureLine>(lines: readonly T[]): D
     } else {
       group.entries.push({ departure: null, returns: [line] });
     }
-    group.quantity += line.quantity;
+    if (!undone || counts(undone)) group.quantity += line.quantity;
     group.returned += line.amountIqd;
   }
 

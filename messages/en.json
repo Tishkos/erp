@@ -3678,7 +3678,47 @@
       "col_invoiced_unit": "Invoiced / unit",
       "col_charges_unit": "Charges / unit",
       "col_final_unit": "Final cost / unit",
-      "col_final_value": "Value in stock"
+      "col_final_value": "Value in stock",
+      "final_print": "Final cost (print)",
+      "col_purchase_value": "Purchase (IQD)",
+      "col_charges_total": "Charges (IQD)",
+      "col_departed": "Departed (IQD)",
+      "col_consumed": "Consumed (IQD)",
+      "col_unexplained": "Unexplained (IQD)",
+      "chain_title": "Unit cost per received layer",
+      "col_agreed": "Agreed (derived)",
+      "agreed_derived": "{amount} {currency} at {rate} — derived",
+      "col_chain": "Purchase → each lock → final",
+      "col_charge_types": "Charges by type (pro rata)",
+      "col_rounding": "Rounding (IQD)",
+      "col_balanced": "Whole",
+      "departures_title": "Where the departed part went",
+      "col_transaction": "Transaction",
+      "col_destination": "Destination",
+      "col_quantity": "Quantity",
+      "no_departures": "Nothing had left when the cost was locked.",
+      "kind_rounding": "Rounding",
+      "kind_return": "{kind} — returned",
+      "post_settlement": "after settlement",
+      "role_name": {
+        "cogs": "Cost of sales",
+        "project_material_cost": "Project material cost",
+        "inventory_loss": "Inventory loss",
+        "inventory_adjustment": "Inventory adjustment",
+        "purchase_variance": "Purchase variance",
+        "return_clearing": "Return clearing"
+      },
+      "kind_name": {
+        "delivery": "Sale",
+        "project_issue": "Material issue",
+        "project_return": "Material return",
+        "write_off": "Write-off",
+        "damage": "Damage",
+        "count_adjustment": "Reconciliation / count",
+        "goods_return": "Supplier return",
+        "sales_return": "Sales return",
+        "reversal": "Reversal"
+      }
     },
     "employees": {
       "title": "Employees",
@@ -5861,7 +5901,8 @@
       "hr_unsettled_advances": "Unsettled Advances",
       "bill_of_lading": "Bill of Lading",
       "asycuda_reading": "ASYCUDA Reading",
-      "import_application": "Import Application"
+      "import_application": "Import Application",
+      "landed_cost_final": "Final Cost"
     }
   }
 }

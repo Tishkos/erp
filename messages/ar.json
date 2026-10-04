@@ -3678,7 +3678,47 @@
       "col_invoiced_unit": "سعر الفاتورة / وحدة",
       "col_charges_unit": "المصاريف / وحدة",
       "col_final_unit": "الكلفة النهائية / وحدة",
-      "col_final_value": "قيمة المخزون"
+      "col_final_value": "قيمة المخزون",
+      "final_print": "التكلفة النهائية (طباعة)",
+      "col_purchase_value": "الشراء (د.ع)",
+      "col_charges_total": "المصاريف (د.ع)",
+      "col_departed": "ما خرج (د.ع)",
+      "col_consumed": "المستهلك (د.ع)",
+      "col_unexplained": "غير مفسّر (د.ع)",
+      "chain_title": "تكلفة الوحدة لكل طبقة مستلمة",
+      "col_agreed": "المتفق عليه (مشتق)",
+      "agreed_derived": "{amount} {currency} بسعر {rate} — مشتق",
+      "col_chain": "الشراء ← كل قفل ← النهائية",
+      "col_charge_types": "المصاريف حسب النوع (تناسبيًا)",
+      "col_rounding": "التقريب (د.ع)",
+      "col_balanced": "متوازن",
+      "departures_title": "أين ذهب الجزء الذي خرج",
+      "col_transaction": "المعاملة",
+      "col_destination": "الوجهة",
+      "col_quantity": "الكمية",
+      "no_departures": "لم يخرج شيء عند قفل التكلفة.",
+      "kind_rounding": "تقريب",
+      "kind_return": "{kind} — مُرجَع",
+      "post_settlement": "بعد التسوية",
+      "role_name": {
+        "cogs": "تكلفة المبيعات",
+        "project_material_cost": "تكلفة مواد المشروع",
+        "inventory_loss": "خسارة مخزون",
+        "inventory_adjustment": "تسوية مخزون",
+        "purchase_variance": "فرق شراء",
+        "return_clearing": "تسوية المرتجعات"
+      },
+      "kind_name": {
+        "delivery": "بيع",
+        "project_issue": "صرف مواد",
+        "project_return": "إرجاع مواد",
+        "write_off": "شطب",
+        "damage": "تلف",
+        "count_adjustment": "مطابقة / جرد",
+        "goods_return": "مرتجع للمورد",
+        "sales_return": "مرتجع مبيعات",
+        "reversal": "عكس"
+      }
     },
     "employees": {
       "title": "الموظفون",
@@ -5861,7 +5901,8 @@
       "hr_unsettled_advances": "السلف غير المسوّاة",
       "bill_of_lading": "بوليصة الشحن",
       "asycuda_reading": "قراءة أسيكودا",
-      "import_application": "طلب استيراد"
+      "import_application": "طلب استيراد",
+      "landed_cost_final": "التكلفة النهائية"
     }
   }
 }

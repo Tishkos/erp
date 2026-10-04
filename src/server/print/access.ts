@@ -28,6 +28,9 @@ export const EXPORT_ACCESS = {
   // The import application itself — the record that ties the invoice, the
   // goods, the declaration and the shipment together (2026-10-03).
   import_application: { kind: 'document', route: '/payables', object: 'payable' },
+  // IMPROVEMENT-002 — the Final Cost of an import: purchase → each lock →
+  // final per layer, the locks' charges, and where the departed part went.
+  landed_cost_final: { kind: 'document', route: '/payables', object: 'payable' },
   customer_statement: { kind: 'report', route: '/sales/customer-statements', object: 'business_partner' },
   supplier_statement: { kind: 'report', route: '/payables/supplier-statements', object: 'business_partner' },
   bank_statement: { kind: 'report', route: '/master-data/bank-accounts', object: 'bank_account' },

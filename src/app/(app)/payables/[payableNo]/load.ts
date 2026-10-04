@@ -8,6 +8,7 @@ import * as banksService from '@/server/services/banks';
 import * as shipmentsService from '@/server/services/shipments';
 import * as loansService from '@/server/services/loans';
 import * as landedService from '@/server/services/landed-cost';
+import * as finalCostService from '@/server/services/final-cost';
 import * as settingsService from '@/server/services/payables-settings';
 import * as contracts from '@/server/services/recurring-contracts';
 import * as serviceReceipts from '@/server/services/service-receipt';
@@ -102,10 +103,12 @@ export async function loadPayableRecord(tx: Tx, input: PayableRecordInput) {
       /*
        * What each model finally cost (2026-10-03). The preview above is the
        * forecast and stops the moment the cost is locked; this is the figure
-       * the lock left behind, read from the layers and the adjustments it
-       * wrote. Nothing to read until there is a lock.
+       * the lock left behind — IMPROVEMENT-002: read by `services/final-cost`
+       * over the whole lineage of the received layers (A1–A3, A11), the same
+       * figures the Final Cost print carries. Nothing to read until there is
+       * a lock.
        */
-      const finalCost = locks.length > 0 ? await landedService.finalCost(tx, view.payable.id) : [];
+      const finalCost = locks.length > 0 ? await finalCostService.finalCost(tx, view.payable.id) : [];
       landed = { charges, locks, state, preview, bases, types, finalCost };
     }
     // G3 — the attachments and the history, in this same transaction.

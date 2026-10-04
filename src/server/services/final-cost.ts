@@ -641,13 +641,14 @@ async function gather(tx: Tx, payableId: string): Promise<Facts | null> {
     accountCode: string | null;
     accountName: string | null;
     returnsDepartureId: string | null;
+    movementId: string | null;
     postSettlement: boolean;
     departedOn: string;
     documentType: string | null;
     documentNo: string | null;
   }>(
     await tx.execute(sql`
-      select d.id, d.lock_id as "lockId", d.kind, d.cost_layer_id as "layerId",
+      select d.id, d.lock_id as "lockId", d.kind, d.cost_layer_id as "layerId", d.movement_id as "movementId",
              coalesce(d.movement_kind, m.kind::text) as "movementKind",
              d.quantity::text as quantity, d.amount_iqd::text as amount, d.destination_role as "destinationRole",
              a.code as "accountCode", a.name as "accountName", d.returns_departure_id as "returnsDepartureId",
@@ -694,6 +695,7 @@ async function gather(tx: Tx, payableId: string): Promise<Facts | null> {
       quantity: quantityOf(row.quantity),
       amountIqd: amountOf(row.amount),
       returnsDepartureId: row.returnsDepartureId,
+      movementId: row.movementId,
       lockId: row.lockId,
       lockNo: `${payable.payableNo}/${lock?.sequence ?? '?'}`,
       lockSequence: lock?.sequence ?? 0,
