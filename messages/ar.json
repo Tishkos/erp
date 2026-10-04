@@ -6149,7 +6149,8 @@
       "customs_pd": "بيان جمركي مسبق",
       "shipment_container": "حاوية",
       "container_receipt": "إيصال حاوية",
-      "customs_declaration": "بيان جمركي"
+      "customs_declaration": "بيان جمركي",
+      "port": "ميناء"
     }
   }
 }

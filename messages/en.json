@@ -6149,7 +6149,8 @@
       "customs_pd": "Customs Pre-Declaration",
       "shipment_container": "Container",
       "container_receipt": "Container Receipt",
-      "customs_declaration": "Customs Declaration"
+      "customs_declaration": "Customs Declaration",
+      "port": "Port"
     }
   }
 }

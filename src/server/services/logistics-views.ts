@@ -257,6 +257,7 @@ export interface ShipmentRow {
   readonly supplierName: string;
   readonly branchCode: string;
   readonly stageCode: string;
+  readonly stageName: string | null;
   readonly currency: string;
   readonly blCount: number;
   readonly blNos: string | null;
@@ -314,7 +315,9 @@ export async function shipmentsRegister(tx: Tx, filter: ShipmentFilter = {}) {
     rows: async ({ limit, offset }) => {
       const result = await tx.execute(sql`
         select p.id as "payableId", p.payable_no as "payableNo", p.supplier_reference as reference,
-               bp.code as "supplierCode", bp.legal_name as "supplierName", p.branch_code as "branchCode", p.stage_code as "stageCode", p.currency,
+               bp.code as "supplierCode", bp.legal_name as "supplierName", p.branch_code as "branchCode", p.stage_code as "stageCode",
+               (select st.name from payable_stage st where st.payable_type_code = p.payable_type_code and st.code = p.stage_code limit 1) as "stageName",
+               p.currency,
                (select count(*)::int from bill_of_lading b where b.payable_id = p.id and b.cancelled_at is null) as "blCount",
                (select string_agg(b.bl_no, ', ' order by b.bl_date) from bill_of_lading b where b.payable_id = p.id and b.cancelled_at is null) as "blNos",
                (select count(*)::int ${live}) as "containerCount",
@@ -890,7 +893,7 @@ export async function costAllocation(tx: Tx, filter: AllocationFilter = {}): Pro
 /** The locks themselves, newest first — the allocation screen's header rows. */
 export async function locks(tx: Tx, filter: { payableId?: string | null } = {}) {
   const result = await tx.execute(sql`
-    select k.id, k.sequence, k.lock_date::text as "lockDate", b.name as "basisName", k.total_iqd::text as "totalIqd",
+    select k.id, k.sequence, k.lock_date::text as "lockDate", k.basis_code as "basisCode", b.name as "basisName", k.total_iqd::text as "totalIqd",
            k.inventory_iqd::text as "inventoryIqd", k.cogs_iqd::text as "cogsIqd", j.entry_no as "entryNo", j.status::text as "journalStatus",
            k.note, u.display_name as "lockedBy", k.locked_at as "lockedAt",
            p.payable_no as "payableNo", bp.legal_name as "supplierName",
@@ -909,6 +912,7 @@ export async function locks(tx: Tx, filter: { payableId?: string | null } = {}) 
       id: string;
       sequence: number;
       lockDate: string;
+      basisCode: string;
       basisName: string;
       totalIqd: string;
       inventoryIqd: string;

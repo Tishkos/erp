@@ -35,6 +35,7 @@ export const EXPORT_ACCESS = {
   shipment_container: { kind: 'document', route: '/payables/containers', object: 'shipment_container' },
   container_receipt: { kind: 'document', route: '/payables/containers', object: 'shipment_container' },
   customs_declaration: { kind: 'document', route: '/logistics/customs-declarations', object: 'customs_declaration' },
+  port: { kind: 'document', route: '/logistics/ports', object: 'port' },
   customer_statement: { kind: 'report', route: '/sales/customer-statements', object: 'business_partner' },
   supplier_statement: { kind: 'report', route: '/payables/supplier-statements', object: 'business_partner' },
   bank_statement: { kind: 'report', route: '/master-data/bank-accounts', object: 'bank_account' },

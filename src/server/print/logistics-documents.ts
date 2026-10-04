@@ -11,6 +11,7 @@ import en from '../../../messages/en.json';
 import { formatQuantity, parseQuantity } from '../domain/uom';
 import * as customs from '../services/customs-pd';
 import * as declarations from '../services/customs-declarations';
+import * as ports from '../services/ports';
 import * as views from '../services/logistics-views';
 import * as shipments from '../services/shipments';
 import type { BuildContext, Built } from './documents';
@@ -372,5 +373,73 @@ export async function customsDeclaration(ctx: BuildContext, declarationNo: strin
     },
     branchCode: declaration.branchCode,
     objectId: declaration.id,
+  };
+}
+
+/** The port — `/logistics/ports/[code]`: its boxes and the B/Ls that discharge there. */
+export async function port(ctx: BuildContext, code: string): Promise<Built | null> {
+  const { tx, m, locale } = ctx;
+  let found: Awaited<ReturnType<typeof ports.viewByCode>>;
+  try {
+    found = await ports.viewByCode(tx, code);
+  } catch {
+    return null;
+  }
+  const t = (key: string) => m.admin(`logistics.${key}`);
+  const day = (value: string | null) => (value ? formatBusinessDate(value, locale) : '—');
+  return {
+    model: {
+      kind: 'document',
+      title: m.print('titles.port'),
+      number: found.port.code,
+      status: found.port.active ? t('active') : t('retired'),
+      posted: true,
+      orientation: 'portrait',
+      fields: [
+        { label: t('port_code'), value: found.port.code, ltr: true },
+        { label: t('port_name'), value: found.port.name },
+        { label: t('locode'), value: found.port.locode ?? '—', ltr: true },
+        { label: t('country'), value: found.port.country ?? '—', ltr: true },
+        { label: t('col_bls'), value: String(found.port.blCount), ltr: true },
+        { label: t('col_inbound'), value: String(found.port.openContainers), ltr: true },
+        { label: t('col_last_used'), value: day(found.port.lastBlDate), ltr: true },
+      ],
+      filters: [],
+      tables: [
+        {
+          title: t('port_bls_title'),
+          columns: [
+            { key: 'bl', label: m.admin('shipments.bl_no'), kind: 'code' },
+            { key: 'date', label: m.admin('shipments.bl_date'), kind: 'date' },
+            { key: 'eta', label: m.admin('shipments.eta'), kind: 'date' },
+            { key: 'import', label: t('import'), kind: 'code' },
+            { key: 'supplier', label: t('supplier'), kind: 'text', weight: 2 },
+            { key: 'from', label: t('col_from'), kind: 'text' },
+            { key: 'containers', label: m.admin('shipments.containers'), kind: 'quantity' },
+            { key: 'open', label: t('col_open'), kind: 'quantity' },
+          ],
+          rows: found.bls.map((row) => ({
+            cells: {
+              bl: row.blNo,
+              date: row.blDate,
+              eta: row.eta,
+              import: row.payableNo,
+              supplier: row.supplierName,
+              from: row.portOfLoading ?? '',
+              containers: String(row.containers),
+              open: String(row.open),
+            },
+          })),
+          empty: m.admin('shipments.no_bls'),
+        },
+      ],
+      summary: [],
+      signatures: false,
+      currency: 'IQD',
+      fileName: found.port.code,
+      sheetName: found.port.code,
+    },
+    branchCode: ctx.branchCode,
+    objectId: found.port.code,
   };
 }
