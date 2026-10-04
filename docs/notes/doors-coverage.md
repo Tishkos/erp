@@ -33,7 +33,12 @@ under the document) · ❌ missing. **Print model**: the export key, or none.
 | `payables/[payableNo]` — import application | ✅ | ✅ | ✅ | ✅ | `import_application` | supplier: text ❌; B/L, container, PD, invoice, loan: links ✅ | payables |
 | `treasury/loans/[loanNo]` — bank loan (the party-link model) | ❌ | ✅ | ❌ | ✅ | **none** | bank account: link ✅; bank: text ❌ | payables |
 | `treasury/deposits/[depositNo]` | ❌ | ✅ | ❌ | ✅ | none | journal: link ✅; bank/cash account: text ❌ | payables |
-| `finance/journals/[entryNo]` | ◐ | ✅ | ❌ | ◐ (own audit page) | `journal_entry` | G/L accounts: text ❌ | accounting |
+| `finance/journals/[entryNo]` | ✅ | ✅ | ✅ | ✅ | `journal_entry` | G/L accounts, reversal journal: `ProfileLink` ✅; recurring template: link ✅ | accounting — done |
+| `treasury/transfers/[transferNo]` — internal transfer | ✅ | ✅ | ✅ | ✅ | `internal_transfer` | bank/cash accounts, G/L accounts, journals: `ProfileLink` ✅ | accounting — done |
+| `treasury/bank-reconciliation/[statementNo]` — statement + reconciliation | ✅ | ✅ | ✅ | ✅ | `bank_reconciliation` | account, G/L account, every journal: `ProfileLink` ✅ | accounting — done |
+| `finance/recurring-journals/[templateNo]` | ✅ | ✅ | ✅ | ✅ | `recurring_journal` | G/L accounts, journals raised: `ProfileLink` ✅ | accounting — done |
+| `master-data/tax-codes/[code]` | ✅ | ✅ | ✅ | ✅ | `tax_code` | G/L account: `ProfileLink` ✅ | accounting — done |
+| `finance/closing` — the period's close (the period is the record) | ✅ | ✅ | ✅ | ✅ | `period_close` | — (checks link their screens) | accounting — done |
 | `inventory/opening-stock/[documentNo]` (record framework) | ◐ | ❌ | ❌ | ◐ | `opening_stock` | warehouse, items: text ❌ | inventory |
 | `projects/billing/[no]` — **progress certificate (client invoice)** | ✅ | ✅ | ✅ | ✅ | `project_certificate` **(new)** | project, customer, journal: `ProfileLink` ✅ | **shared — done** |
 
@@ -83,7 +88,7 @@ history (◐) and, where it has one, its statement.
 |---|---|---|---|
 | `master-data/business-partners/[code]` (`/sales/customers/…`, `/payables/suppliers/…`) | `customer`, `supplier` | ◐ | receivables / payables |
 | `master-data/banks/[code]` | `bank` | ◐ | accounting |
-| `master-data/bank-accounts/[code]`, `master-data/cash-accounts/[code]` | `bank_account`, `cash_account` | ◐ | accounting |
+| `master-data/bank-accounts/[code]`, `master-data/cash-accounts/[code]` | `bank_account`, `cash_account` | ◐ (G/L account and bank: `ProfileLink` ✅) | accounting |
 | `master-data/chart-of-accounts/[code]` | `gl_account` | ◐ (record framework) | accounting |
 | `master-data/items/[code]` (`/inventory/items/…`) | `item` | ◐ | inventory |
 | `master-data/warehouses/[code]` | `warehouse` | ◐ | inventory |

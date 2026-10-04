@@ -1073,7 +1073,10 @@ The four existing financial statements — **Income Statement, Balance Sheet, Ch
    feeds closing check 7, exactly). Print models for all three.
 7. **Tax Codes** — `services/tax-codes.ts` + list + record (four doors);
    migration `0292` (code series, input/output `direction`, rates
-   append-only, print grants).
+   append-only, print grants). *Known limitation:* no document carries a tax
+   code yet — the purchase and sales invoices have no tax line; when their
+   modules add one it reads `taxCodes.rateOn(code, date)`, never a typed
+   rate.
 8. **Period / Year-End Closing** — `/finance/closing` over
    `periods.closeReport` / `setPeriodStatus` with `periods.closeHistory`.
 9. **Recurring Journals** — migration `0291`, `services/recurring-journals.ts`,
