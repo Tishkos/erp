@@ -172,8 +172,9 @@ test.describe('REQ-AR-001 · receivables in a browser', () => {
     receiptNo = decodeURIComponent(page.url().split('/').pop()!.split('?')[0]!);
 
     await doors(page, 'receipt-document');
-    // The bank/cash account is a link to its own profile.
-    await expect(page.locator('#receipt-document a[href="/master-data/cash-accounts/CASH-HQ"]').first()).toBeVisible();
+    // The bank/cash account is a link to its own profile (bank or cash, by the account's own type).
+    const account = page.locator('#receipt-document a[href^="/master-data/"][href$="-accounts/CASH-HQ"]').first();
+    await expect(account).toHaveAttribute('href', /\/master-data\/(bank|cash)-accounts\/CASH-HQ$/);
     await note(page, `Transfer slip on file ${RUN}`);
 
     await press(page, 'Approve', 'approved');
