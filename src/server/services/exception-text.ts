@@ -60,9 +60,15 @@ export function formatFacts(facts: ExceptionFacts, locale: Locale): Record<strin
     } else if (/Role$/.test(name)) {
       out[name] = labelled(`posting_map.role.${String(value)}`, String(value), humanize(String(value)));
     } else if (/Kind$/.test(name)) {
-      out[name] = labelled(`admin.audit.kinds.${String(value)}`, String(value), humanize(String(value)));
+      const own = `admin.exceptions.doc_kind.${String(value)}`;
+      out[name] = labelled(t.has(own) ? own : `admin.audit.kinds.${String(value)}`, String(value), humanize(String(value)));
+    } else if (/Detector$/.test(name)) {
+      out[name] = labelled(`admin.exceptions.detector.${detectorKey(String(value))}.name`, String(value), humanize(String(value)));
+    } else if (name === 'priority') {
+      out[name] = labelled(`admin.tasks.priority_${String(value)}`, String(value), humanize(String(value)));
     } else if (/Check$/.test(name)) {
-      out[name] = labelled(`admin.periods.check_${String(value)}`, String(value), humanize(String(value)));
+      const health = `admin.exceptions.health_check.${String(value)}`;
+      out[name] = labelled(t.has(health) ? health : `admin.periods.check_${String(value)}`, String(value), humanize(String(value)));
     } else {
       out[name] = typeof value === 'number' ? value : String(value);
     }
@@ -80,7 +86,7 @@ export interface ExceptionText {
 /** The wording of one finding in one language. A detector with no wording yet reads as its own name, never as nothing. */
 export function render(locale: Locale, detector: string, facts: ExceptionFacts): ExceptionText {
   const t = translatorFor(locale);
-  const base = `exceptions.detector.${detectorKey(detector)}`;
+  const base = `admin.exceptions.detector.${detectorKey(detector)}`;
   const values = formatFacts(facts, locale);
   const draw = (leaf: string, fallback: string): string => (t.has(`${base}.${leaf}`) ? t(`${base}.${leaf}`, values) : fallback);
   return {
@@ -94,7 +100,7 @@ export function render(locale: Locale, detector: string, facts: ExceptionFacts):
 export function noteText(locale: Locale, note: EvidenceRow['note']): string {
   if (!note) return '';
   const t = translatorFor(locale);
-  const key = `exceptions.evidence_note.${note.code}`;
+  const key = `admin.exceptions.evidence_note.${note.code}`;
   if (!t.has(key)) return humanize(note.code);
   return t(key, formatFacts(note.params ?? {}, locale));
 }

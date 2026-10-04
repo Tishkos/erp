@@ -142,7 +142,7 @@ export async function documentLedgerMismatch(ctx: DetectContext): Promise<Findin
       severity: 'critical',
       facts: { kind: 'unbalanced', documentType: first.sourceDocumentType, document: no, items: list.length },
       evidence: list.slice(0, 25).map((t) =>
-        EVIDENCE_ROW({ ref: t.itemCode, href, quantity: t.issued, note: { code: 'stock_unbalanced_transfer', params: { received: t.received, documented: t.documented ?? '' } } }),
+        EVIDENCE_ROW({ ref: t.itemCode, href, quantity: t.issued, note: { code: 'stock_unbalanced_transfer', params: { receivedQty: t.received } } }),
       ),
       record: { type: first.sourceDocumentType, id: first.sourceDocumentId, label: no, href },
       action,

@@ -283,7 +283,7 @@ export async function periodCloseBlocked(ctx: DetectContext): Promise<Finding[]>
       detector: 'accounting.period_close_blocked',
       subject: `${period.id}|${check.code}`,
       severity,
-      facts: { period: period.name, endsOn: period.endsOn, days: daysAfter, periodCheck: check.code, figure: check.figure },
+      facts: { period: period.name, endDate: period.endsOn, days: daysAfter, periodCheck: check.code, figure: check.figure },
       evidence: check.detail.slice(0, EVIDENCE_CAP).map((line) => EVIDENCE_ROW({ ref: line, href: check.route.startsWith('/') ? check.route : null })),
       record: { type: 'fiscal_period', id: period.id, label: period.name, href: '/finance/periods' },
       action: check.route.startsWith('/') ? check.route : '/finance/periods',

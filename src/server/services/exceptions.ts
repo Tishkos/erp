@@ -562,7 +562,7 @@ function truncationFindings(truncated: Detected['truncated'], ranOk: ReadonlySet
     detector: 'platform.sweep_truncated',
     subject: code,
     severity: 'medium' as const,
-    facts: { detectorCode: code, shown: count.shown, total: count.total },
+    facts: { sourceDetector: code, shown: count.shown, total: count.total },
     evidence: [],
     record: { type: 'detector', id: code, label: code, href: '/exceptions' },
     action: `/exceptions?q=${encodeURIComponent(code.split('.')[1] ?? code)}`,
@@ -850,7 +850,7 @@ export async function lastRun(tx: Tx): Promise<{ id: string; trigger: string; fi
  * started, and audited, by the person; the findings stay narrowed by their
  * own grants when anybody reads them.
  */
-export async function refreshNow(ctx: ActorContext): Promise<SweepResult> {
+export async function refreshNow(tx: Tx, ctx: ActorContext): Promise<SweepResult> {
   await authz.authorize(ctx.principal, 'administer', PERMISSION_OBJECT, { branchCode: ctx.branchCode });
   const scope = await systemScope();
   const last = await db.transaction(async (tx) => {
@@ -878,6 +878,13 @@ export async function refreshNow(ctx: ActorContext): Promise<SweepResult> {
       reused: true,
     };
   }
-  return sweep({ trigger: 'manual', triggeredBy: ctx.principal.userId, scope });
+  const result = await sweep({ trigger: 'manual', triggeredBy: ctx.principal.userId, scope });
+  await recordChange(tx, ctx, {
+    action: 'exception.refreshed',
+    objectType: PERMISSION_OBJECT,
+    objectId: result.runId,
+    after: { found: result.found, created: result.created, reopened: result.reopened, resolved: result.resolved, failed: result.detectors.filter((d) => d.error).length },
+  });
+  return result;
 }
 

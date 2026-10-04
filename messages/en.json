@@ -314,7 +314,8 @@
     "account_reconciliation": "Account Reconciliation",
     "payments_receipts": "Payments & Receipts",
     "tax_codes": "Tax Codes",
-    "cloud_files_settings": "Cloud Files Settings"
+    "cloud_files_settings": "Cloud Files Settings",
+    "exceptions": "Exceptions"
   },
   "auth": {
     "email": "Email",
@@ -6814,6 +6815,302 @@
       "watcher_remove": "Remove",
       "watcher_add": "Add a watcher",
       "watcher_add_submit": "Add"
+    },
+    "exceptions": {
+      "title": "Exceptions",
+      "subtitle": "What needs a person in the books and the work: found by the system, kept until its cause is gone.",
+      "document_type": "Exception",
+      "filter": "Show",
+      "domain": "Domain",
+      "all_domains": "All domains",
+      "severity": "Severity",
+      "all_severities": "All severities",
+      "status": "Status",
+      "status_live": "Open and acknowledged",
+      "status_open": "Open",
+      "status_acknowledged": "Acknowledged",
+      "status_resolved": "Resolved",
+      "status_all": "All",
+      "owner": "Owner",
+      "owner_any": "Anyone",
+      "owner_me": "Mine",
+      "owner_none": "No owner",
+      "col_exception": "Exception",
+      "col_record": "Affected record",
+      "col_first": "First detected",
+      "col_last": "Last seen",
+      "severity_critical": "Critical",
+      "severity_high": "High",
+      "severity_medium": "Medium",
+      "severity_low": "Low",
+      "domain_accounting": "Accounting",
+      "domain_receivables": "Receivables",
+      "domain_payables": "Payables",
+      "domain_inventory": "Inventory",
+      "domain_logistics": "Logistics",
+      "domain_tasks": "Tasks",
+      "domain_approvals": "Approvals",
+      "domain_platform": "System",
+      "none": "Nothing needs attention. The system checked and found nothing in what you are allowed to see.",
+      "none_filtered": "No exception matches these filters.",
+      "last_check": "Last check {when}: {found} found, {created} new, {reopened} reopened, {resolved} cleared.",
+      "last_check_none": "The system has not run a check yet.",
+      "last_check_failed": "{failed, plural, one {One check} other {# checks}} could not run last time; what they cover was left exactly as it was.",
+      "refresh": "Refresh now",
+      "refreshed": "Checked just now: {found} found, {created} new, {reopened} reopened, {resolved} cleared.",
+      "refreshed_recent": "A check ran moments ago; this is its result: {found} found, {created} new, {reopened} reopened, {resolved} cleared.",
+      "party": "Party",
+      "branch": "Branch",
+      "occurrence": "Occurrence",
+      "resolved_on": "Resolved on",
+      "acknowledged_by": "Acknowledged by",
+      "acknowledged_on": "Acknowledged on",
+      "acknowledgement_note": "Note",
+      "what_is_wrong": "What is wrong",
+      "what_to_do": "What to do",
+      "action_link": "Go to the place to act",
+      "affected_record": "Affected record",
+      "evidence_title": "Evidence",
+      "evidence_none": "The check kept no single rows for this exception.",
+      "ev_ref": "Record",
+      "ev_date": "Date",
+      "ev_amount": "Amount",
+      "ev_quantity": "Quantity",
+      "ev_note": "What is wrong with it",
+      "history_title": "History",
+      "history_none": "No history yet.",
+      "hist_event": "Event",
+      "hist_when": "When",
+      "hist_who": "By",
+      "hist_note": "Note",
+      "hist_system": "The system",
+      "event_detected": "Detected",
+      "event_acknowledged": "Acknowledged",
+      "event_resolved": "Cleared: the cause is gone",
+      "event_reopened": "Found again",
+      "event_escalated": "Escalated",
+      "event_severity_raised": "Severity raised",
+      "event_severity_lowered": "Severity lowered",
+      "acknowledge": "Acknowledge",
+      "acknowledge_title": "Acknowledge {no}",
+      "ack_note": "What you know and what will be done",
+      "ack_hint": "Required. It is dated and signed. The exception stays listed until its cause is gone.",
+      "acknowledged_note": "Acknowledged: someone is on it. It clears by itself when the cause is gone.",
+      "resolved_note": "The cause is gone; the system cleared this exception by itself.",
+      "doc_kind": {
+        "chart_of_account": "Account",
+        "department_request": "Department request",
+        "invoice": "Invoice",
+        "journal_entry": "Journal entry",
+        "partner_bank_account": "Supplier bank account"
+      },
+      "health_check": {
+        "backup_missing": "No backup",
+        "backup_stale": "Backup too old",
+        "backup_incomplete": "Backup unfinished",
+        "backup_unencrypted": "Backup not encrypted",
+        "partition_horizon": "Payables history runs out",
+        "period_missing": "No open fiscal period",
+        "period_closed": "Current period closed",
+        "next_year_missing": "Next fiscal year not open",
+        "job_failed": "A scheduled job failed",
+        "disk_low": "Disk space low",
+        "deliveries_stuck": "Notifications not delivered",
+        "bank_account_unlinked": "Bank account without a ledger account"
+      },
+      "detector": {
+        "accounting_bank_reconciliation_difference": {
+          "name": "Bank reconciliation with a difference",
+          "title": "{account}: reconciliation {reconciliation} does not agree with the bank",
+          "explanation": "Reconciliation {reconciliation} for {account} as at {asOfDate} still shows a difference of {differenceIqd} between the bank statement and the ledger, {days, plural, one {# day} other {# days}} after the statement date. {unmatchedStatementLines, plural, =0 {No statement line is unmatched} one {One statement line is unmatched} other {# statement lines are unmatched}} and {unmatchedLedgerItems, plural, =0 {no ledger item is} one {one ledger item is} other {# ledger items are}} unmatched.",
+          "action": "Open Bank Reconciliation"
+        },
+        "accounting_control_account_difference": {
+          "name": "Control account differs from its sub-ledger",
+          "title": "{account}: the ledger and the {side, select, customer {customer} other {supplier}} accounts differ",
+          "explanation": "The general ledger holds {glIqd} on {account} but the {side, select, customer {customer} other {supplier}} accounts add up to {subledgerIqd}: a difference of {differenceIqd}. {lines, plural, =0 {No single journal line has been identified as the cause yet.} one {One journal line sits outside the sub-ledger; it is listed below.} other {# journal lines sit outside the sub-ledger; they are listed below.}}",
+          "action": "Open Account Reconciliation"
+        },
+        "accounting_gl_integrity": {
+          "name": "Journal that breaks the rules of the books",
+          "title": "Journal {entry} {issue, select, unbalanced_journal {does not balance} single_sided_journal {has only one side} orphan_subledger_entry {has a sub-ledger entry but is not posted} posted_to_group_account {is posted to a group account} other {fails an integrity check}}",
+          "explanation": "The ledger integrity check found that journal {entry} {issue, select, unbalanced_journal {does not balance: its debits and credits differ} single_sided_journal {has fewer than two lines} orphan_subledger_entry {has a customer or supplier ledger entry although the journal is not posted} posted_to_group_account {has a line on an account that has since become a group account} other {fails an integrity check}}. Detail: {detail}.",
+          "action": "Open Trial Balance"
+        },
+        "accounting_posting_role_unmapped": {
+          "name": "Posting role without an account",
+          "title": "{postingEvent}: no usable account for {postingRole}",
+          "explanation": "{reason, select, missing {The posting rule for {postingEvent} has no account for {postingRole}, so a document of this kind will refuse to post.} stale {The account mapped to {postingRole} for {postingEvent} ({account}) can no longer be used, so a document of this kind will refuse to post.} other {The posting rule for {postingEvent} cannot be used for {postingRole}.}}",
+          "action": "Open Posting Mappings"
+        },
+        "accounting_posting_failed": {
+          "name": "Posting that failed",
+          "title": "{document} could not be posted",
+          "explanation": "Posting {postingEvent} for {document} has failed {attempts, plural, one {once} other {# times}} since {sinceDate} ({days, plural, one {# day} other {# days}} ago) and has not been replayed. The system said: {errorMessage}",
+          "action": "Open Posting Mappings"
+        },
+        "accounting_period_close_blocked": {
+          "name": "Period that cannot close",
+          "title": "{period} cannot be closed: {periodCheck}",
+          "explanation": "{period} ended on {endDate}, {days, plural, one {# day} other {# days}} ago, and is still open because the close check {periodCheck} fails ({figure}). Closing stays blocked until it passes.",
+          "action": "Open the check"
+        },
+        "receivables_overdue_exposure": {
+          "name": "Customer with overdue invoices",
+          "title": "{party} has overdue invoices of {overdueIqd}",
+          "explanation": "{invoices, plural, one {One invoice} other {# invoices}} from {party} ({partyCode}) in branch {branch} {invoices, plural, one {is} other {are}} past due, together {overdueIqd}. The oldest, {oldestInvoice}, fell due on {oldestDueDate} and is {days, plural, one {# day} other {# days}} late.",
+          "action": "Open Receivables"
+        },
+        "receivables_ledger_inconsistency": {
+          "name": "Customer ledger does not agree with the books",
+          "title": "Journal {entry} and the customer ledger disagree",
+          "explanation": "{reason, select, no_subledger {Journal {entry} posts to control account {account}, but no customer-ledger entry stands behind it.} account {The customer-ledger entry of journal {entry} sits on a different control account than its journal line ({account}).} amount {The customer-ledger amount of journal {entry} differs from its journal line on control account {account}.} other {Journal {entry} on control account {account} does not agree with the customer ledger.}} {lines, plural, one {One line is affected.} other {# lines are affected.}}",
+          "action": "Open Customer Reconciliation"
+        },
+        "payables_overdue_exposure": {
+          "name": "Supplier invoices overdue",
+          "title": "We owe {party} {overdueIqd} past the due date",
+          "explanation": "{invoices, plural, one {One invoice} other {# invoices}} of {party} ({partyCode}) in branch {branch} {invoices, plural, one {is} other {are}} past due, together {overdueIqd}. The oldest, {oldestInvoice}, fell due on {oldestDueDate}, {days, plural, one {# day} other {# days}} ago.",
+          "action": "Open Supplier Open Items"
+        },
+        "payables_ledger_inconsistency": {
+          "name": "Supplier ledger does not agree with the books",
+          "title": "Journal {entry} and the supplier ledger disagree",
+          "explanation": "{reason, select, no_subledger {Journal {entry} posts to control account {account}, but no supplier-ledger entry stands behind it.} account {The supplier-ledger entry of journal {entry} sits on a different control account than its journal line ({account}).} amount {The supplier-ledger amount of journal {entry} differs from its journal line on control account {account}.} other {Journal {entry} on control account {account} does not agree with the supplier ledger.}} {lines, plural, one {One line is affected.} other {# lines are affected.}}",
+          "action": "Open Payables Reconciliation"
+        },
+        "payables_supplier_credit_inconsistency": {
+          "name": "Supplier credit that does not add up",
+          "title": "Credit memo {memo} does not add up",
+          "explanation": "Supplier credit {memo} from {supplier} is for {creditIqd} and is recorded as applied for {allocatedIqd}, but its live applications add up to {appliedIqd}: a difference of {differenceIqd}.",
+          "action": "Open Credit Memo"
+        },
+        "inventory_negative_stock": {
+          "name": "Negative stock",
+          "title": "{item} is below zero in {warehouse}",
+          "explanation": "The stock ledger shows {quantityQty} of {item} in {warehouse}. A warehouse cannot hold less than nothing: an issue was recorded without the receipt that should have come before it, or a document was posted in the wrong warehouse.",
+          "action": "Open Stock Ledger"
+        },
+        "inventory_layer_mismatch": {
+          "name": "Stock layers do not match the ledger",
+          "title": "{item} in {warehouse}: the cost layers do not match the stock",
+          "explanation": "In {warehouse} the stock ledger and the FIFO cost layers of {item} differ by {quantityQty}. The value of this item is unreliable until the difference is explained.",
+          "action": "Open Stock Ledger"
+        },
+        "inventory_document_ledger_mismatch": {
+          "name": "Stock document and ledger disagree",
+          "title": "{kind, select, no_ledger {Document {document} moved no stock} no_document {Stock movements name a document that does not exist} unbalanced {Transfer {document} created or lost stock} other {A stock document disagrees with the ledger}}",
+          "explanation": "{kind, select, no_ledger {Document {document} is posted but wrote no rows to the stock ledger, so the stock it should have moved is not reflected anywhere.} no_document {{movements, plural, one {# stock movement points} other {# stock movements point}} to a document that does not exist ({document}). The stock is counted but nothing explains it.} unbalanced {Transfer {document} did not issue and receive the same quantity on {items, plural, one {# item} other {# items}}, so stock was created or lost in the move.} other {Document {document} disagrees with the stock ledger.}}",
+          "action": "Open Stock Checks"
+        },
+        "inventory_gl_difference": {
+          "name": "Stock value differs from the inventory accounts",
+          "title": "Stock value and the inventory accounts differ by {unexplainedIqd}",
+          "explanation": "The FIFO layers value the stock at {layersIqd} but the inventory accounts hold {glIqd}. After setting aside {provisionalIqd} of stock received without a journal yet, {unexplainedIqd} remains unexplained.",
+          "action": "Open Account Reconciliation"
+        },
+        "inventory_transit_mismatch": {
+          "name": "Stock in transit that imports do not explain",
+          "title": "{item}: stock in transit does not match the imports",
+          "explanation": "The stock ledger has {ledgerQty} of {item} in transit; the open imports account for {importsQty}: a difference of {differenceQty}.",
+          "action": "Open In-Transit"
+        },
+        "logistics_container_delayed": {
+          "name": "Container past its expected arrival",
+          "title": "Container {container} is {days, plural, one {# day} other {# days}} past its expected arrival",
+          "explanation": "Container {container} on bill of lading {bl} from {supplier} (import {importNo}) was expected on {etaDate} and has not been received.",
+          "action": "Open Shipment Tracking"
+        },
+        "logistics_shipment_update_stale": {
+          "name": "Shipment with no recent status",
+          "title": "Container {container} has had no status update for {days, plural, one {# day} other {# days}}",
+          "explanation": "Nobody has written a status for container {container} (bill of lading {bl}, supplier {supplier}) since {lastDate}, and it has not been received.",
+          "action": "Open Shipment Tracking"
+        },
+        "logistics_customs_issue": {
+          "name": "Customs paper in trouble",
+          "title": "{issue, select, rejected {Pre-declaration {pd} was rejected} expired {Pre-declaration {pd} has expired} past_expiry {Pre-declaration {pd} is past its expiry date} expiring {Pre-declaration {pd} is about to expire} other {Pre-declaration {pd} needs attention}}",
+          "explanation": "{issue, select, rejected {Customs rejected pre-declaration {pd}. It must be corrected or replaced before the goods can be cleared.} expired {Pre-declaration {pd} expired on {expiryDate} without its value being fully written off.} past_expiry {Pre-declaration {pd} expired on {expiryDate}, {days, plural, one {# day} other {# days}} ago, and is still open.} expiring {Pre-declaration {pd} expires on {expiryDate}, in {days, plural, one {# day} other {# days}}.} other {Pre-declaration {pd} needs attention.}}",
+          "action": "Open Pre-declaration"
+        },
+        "logistics_landed_cost_blocked": {
+          "name": "Landed cost waiting to be allocated",
+          "title": "Import {importNo}: landed cost is not allocated",
+          "explanation": "{state, select, waiting_pds {Import {importNo} from {supplier} has {charges, plural, one {# charge} other {# charges}} worth {unlockedIqd} that cannot be allocated yet: its customs pre-declarations are not all written off.} waiting_containers {Import {importNo} from {supplier} has {charges, plural, one {# charge} other {# charges}} worth {unlockedIqd} that cannot be allocated yet: only {containersIn} of {containers} containers have been received.} ready {Import {importNo} from {supplier} has {charges, plural, one {# charge} other {# charges}} worth {unlockedIqd} that could be allocated now, but nobody has done it.} late_charges {Import {importNo} from {supplier} has {charges, plural, one {# charge} other {# charges}} worth {unlockedIqd} added after its landed cost was locked; they are waiting for a decision.} other {Import {importNo} from {supplier} has charges worth {unlockedIqd} that are not allocated.}} The oldest has waited {days, plural, one {# day} other {# days}}.",
+          "action": "Open Landed Cost"
+        },
+        "tasks_overdue": {
+          "name": "Overdue task",
+          "title": "Task {task} is overdue: {taskTitle}",
+          "explanation": "{task}, {taskTitle}, was due on {dueDate} and is {days, plural, one {# day} other {# days}} late. Priority: {priority}. Assigned to {assignee}.",
+          "action": "Open Task"
+        },
+        "tasks_blocked": {
+          "name": "Blocked task",
+          "title": "Task {task} has been blocked for {days, plural, one {# day} other {# days}}",
+          "explanation": "{task}, {taskTitle}, has been blocked since {sinceDate}. Priority: {priority}. Reason given: {reason}.",
+          "action": "Open Task"
+        },
+        "approvals_waiting_too_long": {
+          "name": "Document waiting for approval",
+          "title": "{document} has waited {days, plural, one {# day} other {# days}} for a decision",
+          "explanation": "{docKind} {document}, submitted by {submitter} on {sinceDate}, is still waiting for a decision from {approver}.",
+          "action": "Open Approvals"
+        },
+        "platform_system_health": {
+          "name": "System health",
+          "title": "System check: {healthCheck}",
+          "explanation": "The check run by the system reports: {message}",
+          "action": "Open Backup and Health"
+        },
+        "platform_sweep_truncated": {
+          "name": "Check showed only part of what it found",
+          "title": "The check {sourceDetector} shows only {shown} of {total} findings",
+          "explanation": "To keep the list usable, the check {sourceDetector} shows the {shown} most severe of {total} findings. Deal with the most severe first; the rest appear as these clear.",
+          "action": "Open Exceptions"
+        }
+      },
+      "evidence_note": {
+        "bank_statement_closing": "Closing balance on the bank statement",
+        "bank_ledger_balance": "Balance of the account in the ledger",
+        "bank_difference": "Difference still to explain",
+        "bank_unmatched": "{statement, plural, one {# statement line} other {# statement lines}} and {ledger, plural, one {# ledger item} other {# ledger items}} not yet matched",
+        "ledger_no_subledger": "Posted to the control account with no sub-ledger entry behind it",
+        "ledger_amount": "The sub-ledger amount differs from this journal line",
+        "ledger_account": "The sub-ledger entry sits on another control account",
+        "ledger_not_posted": "The journal is not posted",
+        "gl_unbalanced_journal": "Debits and credits differ ({detail})",
+        "gl_single_sided_journal": "Fewer than two lines ({detail})",
+        "gl_orphan_subledger_entry": "Sub-ledger entry on a journal that is not posted ({detail})",
+        "gl_posted_to_group_account": "Posted to account {detail}, which is now a group account",
+        "posting_error": "The posting stopped with: {message}",
+        "overdue_days": "{days, plural, one {# day} other {# days}} overdue",
+        "credit_amount": "Amount of the credit",
+        "credit_allocated": "Recorded as applied",
+        "credit_applications": "Sum of its live applications",
+        "stock_on_hand": "On hand",
+        "stock_ledger_less_layers": "Ledger quantity less the layers quantity",
+        "stock_no_ledger_rows": "The document has no stock movements",
+        "stock_orphan_movement": "Movement in warehouse {warehouse} with no document",
+        "stock_unbalanced_transfer": "Issued here; received {receivedQty}",
+        "value_layers": "Value of the FIFO layers",
+        "value_accounts": "Balance of the inventory accounts",
+        "value_provisional": "Stock received without a journal yet",
+        "transit_ledger": "In transit according to the stock ledger",
+        "transit_imports": "In transit according to the imports",
+        "container_eta_passed": "Expected date passed {days, plural, one {# day} other {# days}} ago",
+        "container_last_update": "Last status written {days, plural, one {# day} other {# days}} ago",
+        "pd_rejected": "Rejected by customs",
+        "pd_expired": "Expired",
+        "pd_past_expiry": "Expired {days, plural, one {# day} other {# days}} ago and still open",
+        "pd_expiring": "Expires in {days, plural, one {# day} other {# days}}",
+        "landed_unlocked": "{charges, plural, one {# charge} other {# charges}} not yet allocated, the oldest waiting {days, plural, one {# day} other {# days}}",
+        "landed_containers": "{received} of {total} containers received",
+        "task_overdue": "{days, plural, one {# day} other {# days}} past its due date",
+        "task_blocked": "Blocked for {days, plural, one {# day} other {# days}}: {reason}",
+        "approval_waiting": "Waiting for a decision for {days, plural, one {# day} other {# days}}",
+        "health_message": "{message}"
+      }
     }
   },
   "profile": {
@@ -7082,6 +7379,12 @@
       "default_cleared": "Default view removed",
       "pinned": "View pinned to Home",
       "unpinned": "View unpinned from Home"
+    },
+    "exception": {
+      "acknowledged": "Exception acknowledged",
+      "swept": "Exceptions checked",
+      "refreshed": "Exceptions refreshed on request",
+      "note_added": "Note added"
     }
   },
   "statement_line": {
@@ -7287,7 +7590,8 @@
       "tax_code": "Tax Code",
       "recurring_journal": "Recurring Journal",
       "period_close": "Period Close",
-      "task": "Task"
+      "task": "Task",
+      "exception": "Exception"
     }
   },
   "chat": {
@@ -7615,6 +7919,38 @@
       "system_health": {
         "title": "System health needs attention",
         "detail": "{extra}"
+      },
+      "exception_accounting": {
+        "title": "Accounting exception {ref}",
+        "detail": "{extra, select, critical {Critical} other {High}}: {name}"
+      },
+      "exception_receivables": {
+        "title": "Receivables exception {ref}",
+        "detail": "{extra, select, critical {Critical} other {High}}: {name}"
+      },
+      "exception_payables": {
+        "title": "Payables exception {ref}",
+        "detail": "{extra, select, critical {Critical} other {High}}: {name}"
+      },
+      "exception_inventory": {
+        "title": "Inventory exception {ref}",
+        "detail": "{extra, select, critical {Critical} other {High}}: {name}"
+      },
+      "exception_logistics": {
+        "title": "Logistics exception {ref}",
+        "detail": "{extra, select, critical {Critical} other {High}}: {name}"
+      },
+      "exception_tasks": {
+        "title": "Task exception {ref}",
+        "detail": "{extra, select, critical {Critical} other {High}}: {name}"
+      },
+      "exception_approvals": {
+        "title": "Approval exception {ref}",
+        "detail": "{extra, select, critical {Critical} other {High}}: {name}"
+      },
+      "exception_platform": {
+        "title": "System exception {ref}",
+        "detail": "{extra, select, critical {Critical} other {High}}: {name}"
       }
     }
   },
@@ -7829,7 +8165,8 @@
       "customs_declaration": "Customs declarations",
       "attachment": "Files",
       "screen": "Screens",
-      "task": "Task"
+      "task": "Task",
+      "exception": "Exceptions"
     },
     "status": {
       "draft": "Draft",
