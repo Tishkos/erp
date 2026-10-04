@@ -536,9 +536,9 @@ export async function transitWarehouses(tx: Tx): Promise<Rows<TransitWarehouseRo
       left join item it on it.code = p.item_code
      where (w.is_transit or w.shipment_stage is not null)
        and app_branch_allowed(p.branch_code)
-       -- The ledger's own balance: `stock_position` reads a transit
-       -- warehouse's units as in transit and its on_hand as nothing
-       -- (REQ-INV, 2026-10-04), so the raw sum is what this section is about.
+       -- The ledger's own balance: stock_position reads a transit
+       -- warehouse's units as in transit and its on_hand as nothing (0287),
+       -- so the raw sum, held, is what this section is about.
        and p.held <> 0
      order by w.shipment_stage nulls last, p.warehouse_code, p.item_code`);
   return {

@@ -5,6 +5,7 @@ import { AdminPage, Flash, Hidden, Submit, admin as s } from '@/components/admin
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { Attachments } from '@/components/admin/attachments';
 import * as attachmentsService from '@/server/services/attachments';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -136,6 +137,7 @@ export default async function DepositPage({ params, searchParams }: { params: Pr
                 objectType={historyType}
               />
             </AttachmentsButton>
+            <RecordNotesDoor object={historyType} recordId={deposit.id} />
             <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
               <RecordHistory objectId={deposit.id} objectType={historyType} />
             </HistoryButton>

@@ -225,6 +225,9 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
         </div>
       ) : null}
 
+      {/* Framed like the summary above: nine columns scroll within the
+          frame on a phone rather than widening the page (2026-10-04). */}
+      <div className={s.sapTableWrap}>
       <table className={`${s.sapTable} ${s.sapReportTable}`}>
         <thead>
           <tr>
@@ -310,6 +313,7 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
           </tfoot>
         )}
       </table>
+      </div>
     </AdminPage>
   );
 }
