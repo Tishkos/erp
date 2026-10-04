@@ -19,6 +19,7 @@ import * as po from '@/server/services/purchase-order';
 import * as gr from '@/server/services/goods-receipt';
 import * as ap from '@/server/services/ap-invoice';
 import * as ret from '@/server/services/goods-return';
+import * as pay from '@/server/services/supplier-payment';
 import * as inventory from '@/server/services/inventory';
 import * as coa from '@/server/services/chart-of-accounts';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
@@ -543,7 +544,7 @@ describe('05.7 gate · the credit memo links to both the return and the invoice'
     return { order, receipt, invoice, returned };
   }
 
-  it('carries both links, and neither is optional', async () => {
+  it('carries both links; the invoice link is never optional', async () => {
     const { invoice, returned } = await returnAgainstInvoice();
 
     const memo = await withScope(scope(manager), (tx) =>
@@ -562,12 +563,42 @@ describe('05.7 gate · the credit memo links to both the return and the invoice'
     expect(rows[0].goods_return_id).toBe(returned.id);
     expect(rows[0].ap_invoice_id).toBe(invoice.id);
 
+    // REQ-PAY-001 PAY8 (0295): a credit note may stand without a return —
+    // a price, a rebate — so only the invoice link is required now; a memo
+    // without a return must say why (supplier_credit_memo_standalone_has_reason).
     const { rows: nullable } = await ownerPool.query(
       `select column_name, is_nullable from information_schema.columns
         where table_name = 'supplier_credit_memo'
-          and column_name in ('goods_return_id','ap_invoice_id')`,
+          and column_name in ('goods_return_id','ap_invoice_id')
+        order by column_name`,
     );
-    expect(nullable.every((r) => r.is_nullable === 'NO')).toBe(true);
+    expect(nullable).toEqual([
+      { column_name: 'ap_invoice_id', is_nullable: 'NO' },
+      { column_name: 'goods_return_id', is_nullable: 'YES' },
+    ]);
+  });
+
+  it('records its application, so the supplier account does not count it twice (PAY8)', async () => {
+    const { invoice, returned } = await returnAgainstInvoice();
+    const memo = await withScope(scope(manager), (tx) =>
+      ret.creditMemo(tx, manager, {
+        goodsReturnId: returned.id,
+        supplierMemoNo: 'CN-5010',
+        memoDate: '2026-02-20',
+        amountIqd: price('300'),
+      }),
+    );
+    const { rows } = await ownerPool.query(
+      `select m.allocated_amount_iqd, (select sum(a.amount_iqd) from supplier_credit_application a where a.supplier_credit_memo_id = m.id) as applied
+         from supplier_credit_memo m where m.id = $1`,
+      [memo.id],
+    );
+    expect(rows[0]).toMatchObject({ allocated_amount_iqd: '300.0000', applied: '300.0000' });
+    const account = await withScope(scope(manager), (tx) => pay.supplierAccount(tx, supplierId, '2026-03-01'));
+    expect(account.unappliedCreditIqd).toBe(0n);
+    expect(account.outstandingIqd).toBe(price('700'));
+    const { rows: settled } = await ownerPool.query(`select settled_amount_iqd from ap_invoice where id = $1`, [invoice.id]);
+    expect(settled[0].settled_amount_iqd).toBe('300.0000');
   });
 
   it('posts Dr Supplier A/P / Cr Return Clearing', async () => {

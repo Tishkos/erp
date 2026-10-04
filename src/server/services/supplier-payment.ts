@@ -871,6 +871,9 @@ export async function supplierAccount(tx: Tx, supplierId: string, asOf: string) 
     .where(
       and(
         eq(supplierCreditMemo.supplierId, supplierId),
+        // REQ-PAY-001 PAY8 — a credit is held once it has posted; a draft
+        // promises nothing and a reversed one was taken back.
+        eq(supplierCreditMemo.status, 'posted'),
         sql`${supplierCreditMemo.amountIqd} - ${supplierCreditMemo.allocatedAmountIqd} > 0`,
       ),
     );
