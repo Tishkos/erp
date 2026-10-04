@@ -21,7 +21,7 @@ import * as doService from './whatsapp-do';
 import * as insight from './whatsapp-insight';
 import * as sqlService from './whatsapp-sql';
 import * as systemGuide from './system-guide';
-import { runAgent, type AgentClient, type AgentResult, type PriorTurn, type ToolOutcome } from '../domain/whatsapp-agent';
+import { runAgent, type AgentClient, type AgentResult, type AskedPicture, type PriorTurn, type ToolOutcome } from '../domain/whatsapp-agent';
 import * as apInvoices from './ap-invoice';
 import * as arInvoices from './ar-invoice';
 import * as bankAccounts from './bank-cash-accounts';
@@ -521,6 +521,10 @@ export async function runAgentFor(input: {
   readonly actions?: ActionHooks;
   /** The group or number the question came from, for what a tool writes down. */
   readonly chat?: string | null;
+  /** Pictures sent with the question, or with the message it replies to. */
+  readonly pictures?: readonly AskedPicture[];
+  /** Who is in the group, as the instructions say it (`rosterForPrompt`). */
+  readonly people?: string;
 }): Promise<AgentResult> {
   return runAgent({
     client: input.client,
@@ -531,6 +535,8 @@ export async function runAgentFor(input: {
     locale: input.ctx.locale,
     branchCode: input.ctx.branchCode,
     today: input.ctx.today,
+    ...(input.pictures && input.pictures.length > 0 ? { pictures: input.pictures } : {}),
+    ...(input.people ? { people: input.people } : {}),
     runTool: toolRunnerFor(input.ctx, input.files ?? [], input.actions, { userName: input.userName, chat: input.chat ?? input.actions?.chat ?? null }),
   });
 }

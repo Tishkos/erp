@@ -106,8 +106,8 @@ describe('the trigger', () => {
     // The one place a message leaves checks that something called it…
     expect(bridge).toMatch(/if \(current\(\)\.groupOnly && !called\.getStore\(\)\) \{\s+throw new Error\('unasked:/);
     // …the only thing that sets it is the handler that returns unless the message began with the trigger…
-    expect(bridge.match(/called\.run\(/g)).toHaveLength(1);
-    expect(bridge).toMatch(/called\.run\(true, \(\) => handleInbound\(/);
+    expect(bridge.match(/called\s*\.run\(/g)).toHaveLength(1);
+    expect(bridge).toMatch(/called\s*\.run\(\{ quoted: message, used: false \}, \(\) => handleInbound\(/);
     // …and the digest does not even try.
     expect(bridge).toMatch(/async function sendDigest[^{]+\{[\s\S]{0,260}if \(settings\.groupOnly\) return;/);
     // The notification sender says the same, whatever the switch says.

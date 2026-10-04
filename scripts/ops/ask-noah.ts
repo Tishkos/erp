@@ -2,7 +2,10 @@
  * Ask Noah from a terminal — the agent the WhatsApp group talks to, as a named
  * user, without a phone.
  *
- *   npx tsx scripts/ops/ask-noah.ts <email> "<question>"
+ *   npx tsx scripts/ops/ask-noah.ts <email> "<question>" [--picture <file>]
+ *
+ * `--picture` shows him a picture with the question, as a photo or screenshot
+ * sent to the group with !ai in its caption would be.
  *
  * For trying an answer before a phone is paired, and for seeing what a
  * particular person would be told: the question is answered exactly as the
@@ -16,18 +19,33 @@
  * (`var/issues/reported-issues.md`), if the question reports a problem.
  */
 import 'dotenv/config';
+import { readFileSync } from 'node:fs';
 import { sql } from 'drizzle-orm';
+import type { AskedPicture } from '../../src/server/domain/whatsapp-agent';
 import { db, withScope } from '../../src/server/db/client';
 import { readerFor, readerModel } from '../../src/server/services/reader';
 import * as wa from '../../src/server/services/whatsapp';
 import { runAgentFor } from '../../src/server/services/whatsapp-agent';
 
 const email = (process.argv[2] ?? '').trim().toLowerCase();
-const question = process.argv.slice(3).join(' ').trim();
+const rest = process.argv.slice(3);
+const pictureAt = rest.indexOf('--picture');
+const pictureFile = pictureAt >= 0 ? (rest[pictureAt + 1] ?? '') : '';
+const question = rest
+  .filter((_, index) => pictureAt < 0 || (index !== pictureAt && index !== pictureAt + 1))
+  .join(' ')
+  .trim();
+
+/** The picture as the bridge would hand it over: its type from its name, its bytes as base64. */
+function pictures(): AskedPicture[] {
+  if (!pictureFile) return [];
+  const type = /\.png$/i.test(pictureFile) ? 'image/png' : /\.webp$/i.test(pictureFile) ? 'image/webp' : /\.gif$/i.test(pictureFile) ? 'image/gif' : 'image/jpeg';
+  return [{ mediaType: type, base64: readFileSync(pictureFile).toString('base64') }];
+}
 
 async function main(): Promise<void> {
   if (!email.includes('@') || !question) {
-    console.error('usage: npx tsx scripts/ops/ask-noah.ts <email> "<question>"');
+    console.error('usage: npx tsx scripts/ops/ask-noah.ts <email> "<question>" [--picture <file>]');
     process.exit(1);
   }
   const found = await db.execute(sql`select id from app_user where lower(email) = ${email} and is_active limit 1`);
@@ -44,7 +62,7 @@ async function main(): Promise<void> {
     text: question,
     settings,
     agent: (ctx, asked, userName) =>
-      runAgentFor({ client, model: readerModel(settings.agentModel), ctx, question: asked, userName, chat: 'terminal' }),
+      runAgentFor({ client, model: readerModel(settings.agentModel), ctx, question: asked, userName, chat: 'terminal', pictures: pictures() }),
   });
 
   if (reply.images.length === 0) console.log(reply.text);

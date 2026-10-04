@@ -108,6 +108,8 @@ export interface DraftPayload {
   readonly isImport?: boolean;
   readonly description?: string | null;
   readonly party?: { readonly id: string; readonly code: string; readonly name: string } | null;
+  /** A purchase invoice: the number the supplier printed on their own invoice. */
+  readonly supplierInvoiceNo?: string | null;
   readonly lines: readonly DraftLine[];
 }
 

@@ -251,13 +251,17 @@ export async function prepareDraft(ctx: ReadContext, args: Record<string, unknow
       unitPrice: toDecimalString(price, 4n),
       ...(discount > 0n ? { discount: toDecimalString(discount, 4n) } : {}),
       warehouse,
+      ...(String(raw.description ?? '').trim() ? { description: String(raw.description).trim().slice(0, 200) } : {}),
     });
   }
 
   const isImport = kind === 'purchase_invoice' && args.import === true;
   const dueDate = isDate(args.dueDate) ? args.dueDate : null;
+  // The number on the supplier's own paper: what a duplicate is recognised by.
+  const supplierInvoiceNo = kind === 'purchase_invoice' ? String(args.supplierInvoiceNo ?? '').trim().slice(0, 60) : '';
   const sentence = [
     `create a DRAFT ${LABEL[kind]} — ${side} ${party.found.code} · ${party.found.name}, dated ${date}${dueDate ? `, due ${dueDate}` : ''}, in ${currency}${rateLine}, branch ${ctx.branchCode}`,
+    supplierInvoiceNo ? `the supplier's own invoice number: ${supplierInvoiceNo}` : '',
     kind === 'purchase_invoice'
       ? isImport
         ? 'an IMPORT: saving it also opens the import application and its purchase order, and the goods go to the In Process warehouse until they are received'
@@ -279,7 +283,7 @@ export async function prepareDraft(ctx: ReadContext, args: Record<string, unknow
     ok: true,
     label: LABEL[kind],
     sentence,
-    draft: { kind, date, dueDate, currency, isImport, description, party: { id: party.found.id, code: party.found.code, name: party.found.name }, lines },
+    draft: { kind, date, dueDate, currency, isImport, description, party: { id: party.found.id, code: party.found.code, name: party.found.name }, ...(supplierInvoiceNo ? { supplierInvoiceNo } : {}), lines },
   };
 }
 
@@ -318,7 +322,7 @@ export async function runDraft(tx: Tx, ctx: ActorContext, draft: DraftPayload): 
   if (draft.kind === 'purchase_invoice') {
     const typed = draft.lines.map((line) => ({
       itemCode: line.item ?? '',
-      description: null,
+      description: line.description ?? null,
       quantity: parseQuantity(line.quantity ?? '0'),
       unitPriceIqd: parseDecimal(line.unitPrice ?? '0', 4n),
       ...(line.discount ? { discountIqd: parseDecimal(line.discount, 4n) } : {}),
@@ -341,7 +345,7 @@ export async function runDraft(tx: Tx, ctx: ActorContext, draft: DraftPayload): 
     }
     const made = await apInvoices.create(tx, ctx, {
       supplierId: draft.party.id,
-      supplierInvoiceNo: '',
+      supplierInvoiceNo: draft.supplierInvoiceNo ?? '',
       purchaseOrderId: null,
       branchCode: ctx.branchCode,
       invoiceDate: draft.date,

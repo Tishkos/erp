@@ -686,8 +686,26 @@ export async function sentInLastMinute(tx: Tx, now = new Date()): Promise<number
  */
 export type Transport = (
   to: { readonly e164: string; readonly groupJid?: string | null },
-  message: { readonly text: string; readonly attachment?: Attachment | null },
+  message: {
+    readonly text: string;
+    readonly attachment?: Attachment | null;
+    /** False for a courtesy line ("let me check"): the answer itself is what replies to the question. */
+    readonly quote?: boolean;
+  },
 ) => Promise<{ waMessageId: string | null }>;
+
+/**
+ * The ERP user behind each active contact's number — so a member of the group
+ * can be called by their own name, and tagged (`domain/whatsapp-people.ts`).
+ */
+export async function contactPeople(tx: Tx): Promise<Map<string, { displayName: string; email: string }>> {
+  const rows = await tx
+    .select({ e164: whatsappContact.e164, displayName: appUser.displayName, email: appUser.email })
+    .from(whatsappContact)
+    .innerJoin(appUser, eq(appUser.id, whatsappContact.userId))
+    .where(and(eq(whatsappContact.active, true), eq(appUser.isActive, true)));
+  return new Map(rows.map((row) => [row.e164, { displayName: row.displayName, email: row.email }]));
+}
 
 /**
  * Registers the bridge's socket as the channel's sender. A recipient without

@@ -70,6 +70,8 @@ import { runAgentFor, type AgentClient } from '../../src/server/services/whatsap
 import { cliAgentClient, cliReady } from '../../src/server/services/whatsapp-cli-brain';
 import { AI_TRIGGER, listensTo, maySendTo, triggerOf } from '../../src/server/domain/whatsapp';
 import { nameOf } from '../../src/server/domain/whatsapp-names';
+import { readTags, rosterForPrompt, rosterFrom, writeTags, type Member, type Participant } from '../../src/server/domain/whatsapp-people';
+import type { AskedPicture } from '../../src/server/domain/whatsapp-agent';
 import { knownNames, rememberNames } from '../../src/server/services/whatsapp-names';
 import { questionForFiles, type SentFile } from '../../src/server/domain/whatsapp-files';
 import { expired, isConfirmation, isRefusal, type PendingAction } from '../../src/server/domain/whatsapp-do';
@@ -230,7 +232,21 @@ async function paced(perMinute: number): Promise<void> {
  * a notification, a digest, a greeting somebody adds next year. The rule is
  * held where a message leaves, not at each place one might be written.
  */
-const called = new AsyncLocalStorage<true>();
+const called = new AsyncLocalStorage<{ quoted: WAMessage | null; used: boolean }>();
+
+/**
+ * The registered group's members, as people (`domain/whatsapp-people.ts`).
+ *
+ * Read from WhatsApp for that one group only, when somebody calls him there,
+ * and kept for ten minutes: it is what turns "@159386907476204" into "@Ali"
+ * on the way in and back into a real tag on the way out.
+ */
+let roster: { readonly at: number; readonly jid: string; readonly members: readonly Member[] } | null = null;
+const ROSTER_MINUTES = 10;
+
+/** A picture worth showing the model: past this it is described, not shown. */
+const PICTURE_BYTES_CAP = 5 * 1024 * 1024;
+const PICTURE_TYPES: readonly string[] = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 function transportFor(sock: () => WASocket | null, current: () => Awaited<ReturnType<typeof wa.settings>>): wa.Transport {
   return async (to, message) => {
@@ -248,23 +264,27 @@ function transportFor(sock: () => WASocket | null, current: () => Awaited<Return
     await paced(current().throttlePerMinute);
     // WA-5 — a group id addresses the group; otherwise the person's number.
     const jid = to.groupJid && isGroupJid(to.groupJid) ? to.groupJid : e164ToJid(to.e164);
+    // "@Ali" becomes a real tag: the digits WhatsApp wants in the text, and his
+    // address beside it. A name that is nobody in the group is left as written.
+    const tagged = to.groupJid && roster && roster.jid === to.groupJid ? writeTags(message.text, roster.members) : { text: message.text, mentions: [] as readonly string[] };
+    const mentions = tagged.mentions.length > 0 ? { mentions: [...tagged.mentions] } : {};
+    // The answer replies to the question it answers — once: in a busy group it
+    // says which message it belongs to. A courtesy line does not take the place.
+    const asked = called.getStore();
+    const quoting = asked && asked.quoted && !asked.used && message.quote !== false ? { quoted: asked.quoted } : undefined;
+    if (quoting && asked) asked.used = true;
     let sent: WAMessage | undefined;
     if (message.attachment?.format === 'image') {
       // A picture of a screen: shown in the chat itself, its caption under it.
-      sent = await socket.sendMessage(jid, {
-        image: message.attachment.body,
-        mimetype: message.attachment.contentType,
-        caption: message.text,
-      });
+      sent = await socket.sendMessage(jid, { image: message.attachment.body, mimetype: message.attachment.contentType, caption: tagged.text, ...mentions }, quoting);
     } else if (message.attachment) {
-      sent = await socket.sendMessage(jid, {
-        document: message.attachment.body,
-        mimetype: message.attachment.contentType,
-        fileName: message.attachment.fileName,
-        caption: message.text,
-      });
+      sent = await socket.sendMessage(
+        jid,
+        { document: message.attachment.body, mimetype: message.attachment.contentType, fileName: message.attachment.fileName, caption: tagged.text, ...mentions },
+        quoting,
+      );
     } else {
-      sent = await socket.sendMessage(jid, { text: message.text });
+      sent = await socket.sendMessage(jid, { text: tagged.text, ...mentions }, quoting);
     }
     remember(sent?.key?.id);
     return { waMessageId: sent?.key?.id ?? null };
@@ -423,6 +443,23 @@ function noteContacts(contacts: ReadonlyArray<unknown>): void {
   }
 }
 
+/** The message somebody replied to, when they replied to one: its words, its author, and itself. */
+function quotedOf(message: WAMessage): { readonly text: string; readonly author: string | null; readonly id: string | null; readonly message: NonNullable<WAMessage['message']> } | null {
+  const m = message.message;
+  if (!m) return null;
+  const inner = m.ephemeralMessage?.message ?? m.viewOnceMessage?.message ?? m;
+  const context =
+    inner.extendedTextMessage?.contextInfo ??
+    inner.imageMessage?.contextInfo ??
+    inner.documentMessage?.contextInfo ??
+    inner.documentWithCaptionMessage?.message?.documentMessage?.contextInfo ??
+    null;
+  const quoted = context?.quotedMessage;
+  if (!quoted) return null;
+  const said = textOf({ key: message.key, message: quoted } as WAMessage) ?? fileOf({ key: message.key, message: quoted } as WAMessage)?.caption ?? '';
+  return { text: said.trim(), author: context?.participant ?? null, id: context?.stanzaId ?? null, message: quoted };
+}
+
 async function handleInbound(
   scope: RequestScope,
   send: wa.Transport,
@@ -430,6 +467,7 @@ async function handleInbound(
   message: WAMessage,
   agentClient: AgentClient | undefined,
   ownE164: string | null,
+  members: (groupJid: string) => Promise<readonly Member[]>,
 ): Promise<void> {
   const { e164, groupJid } = senderOf(message, ownE164);
   const sentFile = fileOf(message);
@@ -478,8 +516,21 @@ async function handleInbound(
    */
   const trigger = triggerOf(typed);
   if (trigger.kind !== 'ask') return;
+  // Who is in the group — only now that somebody has called him there. A tag
+  // arrives as "@" and WhatsApp's own digits for the person; it is read as
+  // their name, so he knows who was meant and the log says it in words.
+  const people = groupJid ? await members(groupJid).catch(() => [] as readonly Member[]) : [];
   // From here on the message is what was asked, the trigger taken off.
-  const text = trigger.text;
+  const text = readTags(trigger.text, people).text;
+  // The message they replied to, if they replied to one: they pointed him at
+  // it on purpose, so he is shown it — its words, and its picture or file.
+  const quoted = quotedOf(message);
+  const quotedFile = !sentFile && quoted ? fileOf({ key: message.key, message: quoted.message } as WAMessage) : null;
+  const attached = sentFile ?? quotedFile;
+  const source: WAMessage =
+    sentFile || !quoted
+      ? message
+      : ({ key: { remoteJid: message.key.remoteJid, id: quoted.id, fromMe: false, ...(quoted.author ? { participant: quoted.author } : {}) }, message: quoted.message } as WAMessage);
   // What the log records as the message. A file sent without a word would
   // otherwise be an empty row, which reads as though nothing was said.
   const body = text || (sentFile ? `[${sentFile.fileName}]` : AI_TRIGGER);
@@ -537,7 +588,7 @@ async function handleInbound(
   const locale = detectLocale(text);
 
   // The trigger and nothing after it: say how it is used, once, in both languages.
-  if (!text && !sentFile) {
+  if (!text && !sentFile && !quoted) {
     await answerWith(scope, send, {
       sender,
       e164,
@@ -622,32 +673,38 @@ async function handleInbound(
    * conversation.
    */
   const chat = groupJid ?? e164;
-  if (sentFile) {
+  const pictures: AskedPicture[] = [];
+  if (attached) {
     try {
       const buffer = (await downloadMediaMessage(
-        message,
+        source,
         'buffer',
         {},
         { logger: silent as never, reuploadRequest: reupload ?? (async (m: WAMessage) => m) },
       )) as Buffer;
       if (buffer.length > FILE_BYTES_CAP) {
         rememberFile(chat, {
-          fileName: sentFile.fileName,
+          fileName: attached.fileName,
           kind: 'other',
-          mimetype: sentFile.mimetype,
+          mimetype: attached.mimetype,
           bytes: buffer.length,
-          caption: sentFile.caption,
+          caption: attached.caption,
           text: '',
           note: `this file is ${Math.round(buffer.length / 1_000_000)} MB, too large for me to read here`,
           sheets: [],
           at: new Date().toISOString(),
         });
       } else {
+        // A picture is shown to him as a picture, beside the question.
+        const type = attached.mimetype.split(';')[0]!.trim().toLowerCase();
+        if (PICTURE_TYPES.includes(type) && buffer.length <= PICTURE_BYTES_CAP && pictures.length === 0) {
+          pictures.push({ mediaType: type as AskedPicture['mediaType'], base64: buffer.toString('base64') });
+        }
         const read = await extractSentFile({
           buffer,
-          fileName: sentFile.fileName,
-          mimetype: sentFile.mimetype,
-          caption: sentFile.caption,
+          fileName: attached.fileName,
+          mimetype: attached.mimetype,
+          caption: attached.caption,
         });
         rememberFile(chat, read);
         log(
@@ -656,13 +713,13 @@ async function handleInbound(
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      log(`inbound from ${e164}: file ${sentFile.fileName} could not be downloaded — ${detail}`);
+      log(`inbound from ${e164}: file ${attached.fileName} could not be downloaded — ${detail}`);
       rememberFile(chat, {
-        fileName: sentFile.fileName,
+        fileName: attached.fileName,
         kind: 'other',
-        mimetype: sentFile.mimetype,
+        mimetype: attached.mimetype,
         bytes: 0,
-        caption: sentFile.caption,
+        caption: attached.caption,
         text: '',
         note: `it could not be downloaded from WhatsApp (${detail.slice(0, 120)})`,
         sheets: [],
@@ -674,7 +731,15 @@ async function handleInbound(
   // The question as a person would have put it: what they typed, with the
   // file named in it — or, for a file sent with no words, one written for
   // them, because somebody putting a workbook in the group means "look".
-  const asked = sentFile ? questionForFiles(text, files.slice(0, 1)) : text;
+  let asked = attached && pictures.length === 0 ? questionForFiles(text, files.slice(0, 1)) : text;
+  if (pictures.length > 0) {
+    // A picture he can look at: no "its contents are in a tool" — it is in front of him.
+    asked = `${text || 'Look at this picture: say what it shows and what should be done about it.'}\n\n[A picture is attached to this message${quotedFile ? ', from the message they replied to' : ''}: look at it and read exactly what is written in it.]`;
+  }
+  if (quoted && quoted.text) {
+    const author = quoted.author ? people.find((member) => member.jids.includes(quoted.author!.replace(/:\d+@/, '@'))) : null;
+    asked = `[They are replying to this message from ${author?.name ?? 'somebody in the group'}:\n«${readTags(quoted.text, people).text.slice(0, 2000)}»]\n\n${asked || 'Explain this.'}`;
+  }
 
   const history = await withScope(scope, (tx) => wa.recentTurns(tx, { groupJid, e164 }));
 
@@ -692,7 +757,7 @@ async function handleInbound(
   let checked = false;
   const checking = setTimeout(() => {
     checked = true;
-    void send({ e164, ...(groupJid ? { groupJid } : {}) }, { text: checkingLine(locale) }).catch(() => {
+    void send({ e164, ...(groupJid ? { groupJid } : {}) }, { text: checkingLine(locale), quote: false }).catch(() => {
       /* a courtesy that fails is not the answer failing */
     });
   }, 6_000);
@@ -717,6 +782,8 @@ async function handleInbound(
                 userName,
                 files,
                 chat,
+                ...(pictures.length > 0 ? { pictures } : {}),
+                ...(people.length > 0 ? { people: rosterForPrompt(people, { e164 }) } : {}),
                 // WA-8 — the capability IS the hook: a contact who may not
                 // act is given nowhere to put a proposal, and the tool says
                 // so rather than appearing to work.
@@ -1163,6 +1230,22 @@ async function main(): Promise<void> {
   const send = transportFor(() => socket, () => settings);
   wa.registerWhatsappSender(send);
 
+  // The one group's members, read from WhatsApp when somebody calls him there.
+  const members = async (groupJid: string): Promise<readonly Member[]> => {
+    if (roster && roster.jid === groupJid && Date.now() - roster.at < ROSTER_MINUTES * 60_000) return roster.members;
+    if (!socket || groupJid !== settings.groupJid) return roster?.jid === groupJid ? roster.members : [];
+    const meta = await socket.groupMetadata(groupJid);
+    const users = await withScope(scope, (tx) => wa.contactPeople(tx));
+    const book = knownNames();
+    const names = new Map<string, string>();
+    for (const e164 of Object.keys(book)) {
+      const name = nameOf(book, e164);
+      if (name) names.set(e164, name);
+    }
+    roster = { at: Date.now(), jid: groupJid, members: rosterFrom((meta.participants ?? []) as unknown as Participant[], { users, names }) };
+    return roster.members;
+  };
+
   const heartbeat = (state: string) =>
     withScope(scope, (tx) => wa.heartbeat(tx, { state, me: socket?.user?.id ? jidToE164(jidNormalizedUser(socket.user.id)) : null })).catch((e) => log(`heartbeat failed: ${e}`));
 
@@ -1251,7 +1334,9 @@ async function main(): Promise<void> {
         // Inside `called` — `handleInbound` returns before it reads anything
         // unless the message begins with the trigger, so what it sends is
         // always an answer to somebody who called.
-        called.run(true, () => handleInbound(scope, send, router, message, agent ?? undefined, ownE164)).catch((e) => log(`inbound handling failed: ${e}`));
+        called
+          .run({ quoted: message, used: false }, () => handleInbound(scope, send, router, message, agent ?? undefined, ownE164, members))
+          .catch((e) => log(`inbound handling failed: ${e}`));
       }
     });
   };

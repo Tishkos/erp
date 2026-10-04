@@ -811,3 +811,34 @@ describe('he reads a thing whole before he explains it', () => {
     expect(typeof reply.detail.seconds).toBe('number');
   });
 });
+
+describe('what they sent is entered as it is written', () => {
+  it('a purchase draft carries the supplier own invoice number and each line its words', async () => {
+    const made = await propose(world.clerk, 'create_draft', {
+      kind: 'purchase_invoice',
+      party: 'jinko',
+      date: '2026-09-20',
+      supplierInvoiceNo: 'JK-2026-00917',
+      lines: [{ item: PANEL, quantity: 4, unitPrice: 12500, warehouse: WAREHOUSE, description: 'Tiger Neo 550W mono' }],
+    });
+    if (!made.ok) throw new Error(made.reason);
+    expect(made.pending.sentence).toContain("the supplier's own invoice number: JK-2026-00917");
+    expect(made.pending.draft).toMatchObject({ supplierInvoiceNo: 'JK-2026-00917' });
+    const done = await confirm(world.clerk, made.pending);
+    if (!done.ok) throw new Error(done.reason);
+    const { rows } = await ownerPool.query(
+      `select i.supplier_invoice_no, i.status, (select l.description from ap_invoice_line l where l.ap_invoice_id = i.id limit 1) as line
+         from ap_invoice i order by i.created_at desc limit 1`,
+    );
+    expect(rows[0]).toMatchObject({ supplier_invoice_no: 'JK-2026-00917', status: 'draft', line: 'Tiger Neo 550W mono' });
+  });
+
+  it('the people behind the contacts are named for the group roster', async () => {
+    await withScope(scope(admin), (tx) =>
+      wa.saveContact(tx, admin, { userId: world.manager.principal.userId, e164: '+9647701112233', allowNotifications: true, allowQueries: true, allowDigest: false }),
+    );
+    const people = await withScope(scope(admin), (tx) => wa.contactPeople(tx));
+    expect(people.get('+9647701112233')).toMatchObject({ email: expect.stringContaining('@') });
+    expect(people.get('+9647700000000')).toBeUndefined();
+  });
+});
