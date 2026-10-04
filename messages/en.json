@@ -5455,10 +5455,14 @@
       "post": "Post",
       "journal": "Journal",
       "lines": "Deposit",
-      "document_type_cash": "Bank deposit — cash",
+      "document_type_cash": "Cash deposit",
       "document_type_other": "Bank deposit — other source",
       "into_cash": "Into cash account",
-      "reference_cash": "Reference"
+      "reference_cash": "Reference",
+      "source_bank": "Bank",
+      "source_transfer": "Cash to bank",
+      "document_type_bank": "Bank deposit",
+      "document_type_transfer": "Bank deposit — cash to bank"
     },
     "availability": {
       "subtitle": "What each warehouse holds, item by item: on hand, available to issue, and what is reserved, in transit, in quarantine, damaged or returned — every figure summed from the stock ledger.",

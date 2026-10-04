@@ -188,7 +188,6 @@ export default async function DepositPage({ params, searchParams }: { params: Pr
           </tbody>
         </table>
       </DocumentWindow>
-      <RecordHistory objectId={deposit.id} objectType={historyType} />
     </AdminPage>
   );
 }

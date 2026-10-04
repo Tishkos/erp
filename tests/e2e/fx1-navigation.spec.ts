@@ -69,7 +69,7 @@ test.describe('FX2 · the module dropdowns', () => {
     await nav.getByRole('button', { name: 'Accounting' }).click();
     await expect(nav.getByRole('heading', { name: 'Treasury & Banking', exact: true })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Bank Loans', exact: true })).toHaveAttribute('href', '/treasury/loans');
-    await expect(nav.getByRole('link', { name: 'Bank Deposits', exact: true })).toHaveAttribute('href', '/treasury/deposits');
+    await expect(nav.getByRole('link', { name: 'Manual Deposits', exact: true })).toHaveAttribute('href', '/treasury/deposits');
   });
 
   test('the loans and the declarations show their new neighbours as tabs', async ({ page }) => {
@@ -86,9 +86,9 @@ test.describe('FX2 · the module dropdowns', () => {
 test('FX3 · a deposit from another source is raised on the Bank Deposits screen and opens as its record', async ({ page }) => {
   await signIn(page);
   await page.goto('/treasury/deposits');
-  await expect(page.getByRole('heading', { name: 'Bank Deposits', level: 1 })).toBeVisible();
-  await page.getByRole('button', { name: 'Other deposit' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Other deposit' });
+  await expect(page.getByRole('heading', { name: 'Manual Deposits', level: 1 })).toBeVisible();
+  await page.getByRole('button', { name: 'Bank deposit', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Bank deposit' });
   await dialog.getByLabel('Into bank account').selectOption({ index: 0 });
   const credit = dialog.getByLabel('Credit account');
   // An income account — the seeded chart's revenue accounts start with R.
@@ -100,7 +100,8 @@ test('FX3 · a deposit from another source is raised on the Bank Deposits screen
   await dialog.getByRole('button', { name: 'Create deposit' }).click();
 
   // The record: the document type, the status chip, and the register lists it.
-  await expect(page.getByText('Bank deposit — other source')).toBeVisible({ timeout: 30_000 });
+  await page.waitForURL(/\/treasury\/deposits\/ORC-/, { timeout: 30_000 });
+  await expect(page.locator('#bank-deposit-document').getByText(/^Bank deposit/).first()).toBeVisible();
   const number = (await page.getByRole('heading', { level: 1 }).textContent())!.trim();
   expect(number).toMatch(/^ORC-/);
   await page.goto(`/treasury/deposits?q=${encodeURIComponent(number)}`);

@@ -234,4 +234,28 @@ test.describe('Review · four doors from the draft and profile links, one record
     await page.waitForURL(/\/master-data\/banks\//);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });
+
+  test('payables · a bank deposit: paperclip, notes, clock; the account it lands in and the account it credits are links', async ({ page }) => {
+    test.setTimeout(240_000);
+    await signIn(page);
+    await page.goto('/treasury/deposits');
+    await page.getByRole('button', { name: 'Bank deposit', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Bank deposit' });
+    await dialog.getByLabel('Into bank account').selectOption({ index: 0 });
+    const credit = dialog.getByLabel('Credit account');
+    const income = await credit.locator('option').filter({ hasText: /^R/ }).first().getAttribute('value');
+    await credit.selectOption(income!);
+    await dialog.getByLabel('Paid in by').fill(`Review depositor ${RUN}`);
+    await dialog.getByLabel('Amount').fill('25');
+    await dialog.getByRole('button', { name: 'Create deposit' }).click();
+    await page.waitForURL(/\/treasury\/deposits\/ORC-/, { timeout: 60_000 });
+    const record = page.url().replace(/^https?:\/\/[^/]+/, '').split('?')[0]!;
+
+    // No print model yet (reported), so three doors from the draft.
+    await expectDoors(page, [LABELS.attachments, LABELS.notes, LABELS.history]);
+    const doc = page.locator('#bank-deposit-document');
+    await expect(doc.locator('a[href^="/master-data/bank-accounts/"]').first()).toBeVisible();
+    await expect(doc.locator('a[href^="/master-data/chart-of-accounts/"]').first()).toBeVisible();
+    await photograph(page, record, 'bank-deposit', 3);
+  });
 });
