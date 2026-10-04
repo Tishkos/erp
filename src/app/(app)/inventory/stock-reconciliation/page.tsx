@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { Panel } from '@/components/ui';
@@ -188,7 +189,10 @@ export default async function ReconciliationPage({ searchParams }: { searchParam
               {shown.map((row) => (
                 <tr key={row.id}>
                   <td>
-                    <bdi dir="ltr">{row.adjustmentNo}</bdi>
+                    {/* The number opens the reconciliation's own page (2026-10-04). */}
+                    <Link href={`/inventory/stock-reconciliation/${encodeURIComponent(row.adjustmentNo)}`}>
+                      <bdi dir="ltr">{row.adjustmentNo}</bdi>
+                    </Link>
                   </td>
                   <td>
                     <bdi dir="ltr">{row.adjustmentDate}</bdi>

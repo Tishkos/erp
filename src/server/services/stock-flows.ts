@@ -102,7 +102,7 @@ function hrefOf(row: Raw): string | null {
     case 'opening_stock':
       return no ? `/inventory/opening-stock/${encodeURIComponent(no)}` : null;
     case 'stock_adjustment':
-      return '/inventory/stock-reconciliation';
+      return no ? `/inventory/stock-reconciliation/${encodeURIComponent(no)}` : '/inventory/stock-reconciliation';
     case 'stock_count':
       return no ? `/inventory/stock-count/${encodeURIComponent(no)}` : null;
     case 'container_receipt':

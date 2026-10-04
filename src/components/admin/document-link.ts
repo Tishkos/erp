@@ -4,8 +4,8 @@
  * The ledger names the document that moved the stock; this is the one place
  * that says which screen shows it, so the Stock Movement page, the Stock
  * Ledger and anything else that lists movements send a reader to the same
- * door. A type with no screen of its own — the two block-7 registers — opens
- * its list with the number in the search box.
+ * door. A transfer and an Item Reconciliation have record pages of their own
+ * (2026-10-04), like the other stock documents.
  *
  * Returns null for a movement that named no document, or one whose document
  * has no number any more; the caller shows the text and no link.
@@ -29,9 +29,9 @@ export function documentHref(
     case 'opening_stock':
       return `/inventory/opening-stock/${no}`;
     case 'stock_transfer':
-      return `/inventory/transfers?q=${no}`;
+      return `/inventory/transfers/${no}`;
     case 'stock_adjustment':
-      return `/inventory/stock-reconciliation?q=${no}`;
+      return `/inventory/stock-reconciliation/${no}`;
     default:
       return null;
   }

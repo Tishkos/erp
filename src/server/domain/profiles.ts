@@ -64,6 +64,9 @@ export const PROFILE_KINDS = [
   'supplier_contract',
   'supplier_credit_note',
   'opening_stock',
+  // Inventory's stock documents (2026-10-04): a transfer and an Item Reconciliation have record pages.
+  'stock_transfer',
+  'stock_reconciliation',
   'project_certificate',
   'project_budget',
   'project_variation',
@@ -144,6 +147,8 @@ const BASES: Readonly<Record<ProfileKind, string | null>> = {
   // REQ-PAY-001 PAY8 — the standalone supplier credit note (payables, 2026-10-04).
   supplier_credit_note: '/payables/credit-memos',
   opening_stock: '/inventory/opening-stock',
+  stock_transfer: '/inventory/transfers',
+  stock_reconciliation: '/inventory/stock-reconciliation',
   project_certificate: '/projects/billing',
   project_budget: '/projects/budgets',
   project_variation: '/projects/change-orders',
