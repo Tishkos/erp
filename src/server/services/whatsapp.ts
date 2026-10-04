@@ -713,11 +713,16 @@ export function registerWhatsappSender(transport: Transport): void {
      * before, and the group its one copy beside it.
      */
     const groupOnly = settings.groupOnly;
-    if (groupOnly && settings.groupJid === '') {
-      throw new notifications.DeliverySuppressed('the bot speaks only in its group, and no group is registered yet');
-    }
-    if (groupOnly && !settings.groupNotifications) {
-      throw new notifications.DeliverySuppressed('the bot speaks only in its group, and notifications to the group are switched off');
+    /*
+     * And in its group it never speaks first (the same day: "shouldn't send
+     * any messages until called — never ever unless !ai"). A notification is
+     * the system speaking unasked, so in group-only mode there is nowhere it
+     * may be said: not a private chat, and not the group. The person still
+     * has it in the application and by e-mail; whatever `group_notifications`
+     * says, this delivery is suppressed.
+     */
+    if (groupOnly) {
+      throw new notifications.DeliverySuppressed('the bot speaks only in its group, and there only when it is called with !ai');
     }
     if (!groupOnly) {
       const outId = await recordOutbound(tx, { e164: contact.e164, body: text, sender: contact, deliveryId: message.deliveryId, intent: 'notification', detail: { eventType: message.eventType, objectType: message.objectType, objectId: message.objectId } });

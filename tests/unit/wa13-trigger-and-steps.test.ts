@@ -100,6 +100,21 @@ describe('the trigger', () => {
     expect(bridge.slice(gate, gate + 120)).toContain("if (trigger.kind !== 'ask') return;");
   });
 
+  it('cannot send what nobody asked for: the transport itself refuses outside a called message', () => {
+    // "shouldn't send any messages until called — never ever unless !ai".
+    const bridge = readFileSync('scripts/ops/whatsapp-bridge.ts', 'utf8');
+    // The one place a message leaves checks that something called it…
+    expect(bridge).toMatch(/if \(current\(\)\.groupOnly && !called\.getStore\(\)\) \{\s+throw new Error\('unasked:/);
+    // …the only thing that sets it is the handler that returns unless the message began with the trigger…
+    expect(bridge.match(/called\.run\(/g)).toHaveLength(1);
+    expect(bridge).toMatch(/called\.run\(true, \(\) => handleInbound\(/);
+    // …and the digest does not even try.
+    expect(bridge).toMatch(/async function sendDigest[^{]+\{[\s\S]{0,260}if \(settings\.groupOnly\) return;/);
+    // The notification sender says the same, whatever the switch says.
+    const service = readFileSync('src/server/services/whatsapp.ts', 'utf8');
+    expect(service).toMatch(/if \(groupOnly\) \{\s+throw new notifications\.DeliverySuppressed\('the bot speaks only in its group, and there only when it is called with !ai'\);/);
+  });
+
   it('tells him how he is reached, and to ask for a yes that can reach him', () => {
     const prompt = systemPrompt({ locale: 'en', userName: 'Baban', branchCode: 'HQ', today: '2026-10-04' });
     expect(prompt).toMatch(/You are shown a message only when it begins with !ai/);

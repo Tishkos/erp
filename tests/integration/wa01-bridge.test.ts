@@ -150,9 +150,11 @@ describe('W1 · wa01-outbox — the whatsapp channel delivers, fails with its re
     ]);
   });
 
-  it('group only — the default: one copy, in the group, and nothing to any private chat', async () => {
+  it('group only — the default: nothing is said unasked, not to a private chat and not to the group', async () => {
     // 2026-10-04, by direction: "it should only send it to the group … never
-    // reply to personal messages … it's private, just for one group".
+    // reply to personal messages … it's private, just for one group" — and
+    // then: "shouldn't send any messages until called, never ever unless !ai".
+    // So even with the group's copy switched on, a notification is not posted.
     for (const person of [manager, secondManager]) {
       await withScope(scope(admin), (tx) =>
         wa.saveContact(tx, admin, {
@@ -171,15 +173,15 @@ describe('W1 · wa01-outbox — the whatsapp channel delivers, fails with its re
     await withScope(scope(officer), (tx) => notifications.raise(tx, EVENT));
     wa.registerWhatsappSender(transport);
     const result = await withScope(systemScope(), (tx) => notifications.deliverChannel(tx, 'whatsapp'));
-    // Both people's notifications are delivered — by the group's one copy.
-    expect(result).toMatchObject({ sent: 2, failed: 0 });
+    expect(result).toMatchObject({ sent: 0, failed: 0 });
 
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ groupJid: '120363000000000001@g.us' });
-    const { rows } = await ownerPool.query(
-      `select intent, group_jid, count(*)::int as n from whatsapp_message where direction = 'out' group by 1, 2 order by 1`,
-    );
-    expect(rows).toEqual([{ intent: 'notification.group', group_jid: '120363000000000001@g.us', n: 1 }]);
+    expect(sent).toHaveLength(0);
+    const { rows } = await ownerPool.query(`select count(*)::int as n from whatsapp_message where direction = 'out'`);
+    expect(rows[0].n).toBe(0);
+    // Suppressed, with the reason — the person still has it in the application.
+    const mine = (await deliveries('whatsapp')).filter((row) => [manager.principal.userId, secondManager.principal.userId].includes(row.recipient_user_id as string));
+    expect(mine.length).toBe(2);
+    for (const row of mine) expect(row).toMatchObject({ status: 'suppressed' });
   });
 
   it('group only, with notifications to the group switched off: nothing is sent, and the delivery says why', async () => {

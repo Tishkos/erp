@@ -149,10 +149,12 @@ the e-mail rows are marked `suppressed` and the log says so once per run.
 * `!ai` on its own gets one line saying how to use it. A group member whose
   number is not on the contact list is told so once (and not again for six
   hours); add them on Settings → Administration → WhatsApp.
-* **He says nothing unasked.** *Post notifications to the group* and *Post the
-  morning digest to the group* are off (migration 0303). Turn either on at
-  Settings → Administration → WhatsApp if the company wants it back; the
-  in-app and e-mail notifications never stopped.
+* **He says nothing unasked — never.** With *group only* on (the default) the
+  bridge cannot send a message that is not the answer to an `!ai` message: no
+  greeting when it starts, no copy of a notification, no morning digest. The
+  two switches *Post notifications to the group* and *Post the morning digest
+  to the group* do nothing while *group only* is on. Notifications still reach
+  people in the application and by e-mail. A restart of the bridge is silent.
 * The model is the `agent_model` setting — `claude-opus-5-5`.
 
 ## The pictures Noah sends

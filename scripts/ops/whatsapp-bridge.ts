@@ -47,6 +47,7 @@ import makeWASocket, {
   type WAMessage,
   type WASocket,
 } from '@whiskeysockets/baileys';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import qrcode from 'qrcode-terminal';
 import { pool, withScope, type RequestScope } from '../../src/server/db/client';
 import {
@@ -218,10 +219,26 @@ async function paced(perMinute: number): Promise<void> {
   sentAt.push(Date.now());
 }
 
+/**
+ * Set while a message that began with the trigger is being answered, and at
+ * no other time.
+ *
+ * By direction (2026-10-04): "shouldn't send any messages until called —
+ * never ever unless !ai". Every outgoing message passes through the one
+ * transport below, and in group-only mode it refuses to send unless it is
+ * inside the handling of a called message — whichever part of the code asked:
+ * a notification, a digest, a greeting somebody adds next year. The rule is
+ * held where a message leaves, not at each place one might be written.
+ */
+const called = new AsyncLocalStorage<true>();
+
 function transportFor(sock: () => WASocket | null, current: () => Awaited<ReturnType<typeof wa.settings>>): wa.Transport {
   return async (to, message) => {
     const socket = sock();
     if (!socket) throw new Error('the bridge is not connected to WhatsApp');
+    if (current().groupOnly && !called.getStore()) {
+      throw new Error('unasked: the bot speaks only when a message begins with !ai, and nothing called it');
+    }
     // The last word on where the bot writes: in group-only mode, its group
     // and nowhere else, whichever part of the code asked (2026-10-04 — the
     // account it is linked to is a person's own).
@@ -969,6 +986,9 @@ async function handleCommand(
 // ---------------------------------------------------------------------------
 
 async function sendDigest(scope: RequestScope, send: wa.Transport, settings: Awaited<ReturnType<typeof wa.settings>>): Promise<void> {
+  // In group-only mode nothing is said unasked, and a digest nobody asked for
+  // is exactly that. "!ai today's summary" gives the same figures on request.
+  if (settings.groupOnly) return;
   const lastSentDay = await withScope(scope, (tx) => wa.digestLastSentDay(tx));
   const { due, day } = digestDue({ digestHour: settings.digestHour, lastSentDay, at: new Date() });
   if (!due) return;
@@ -1219,7 +1239,10 @@ async function main(): Promise<void> {
       for (const message of messages) {
         if (message.key.fromMe && !ANSWER_SELF) continue;
         const ownE164 = socket?.user?.id ? jidToE164(jidNormalizedUser(socket.user.id)) : null;
-        handleInbound(scope, send, router, message, agent ?? undefined, ownE164).catch((e) => log(`inbound handling failed: ${e}`));
+        // Inside `called` — `handleInbound` returns before it reads anything
+        // unless the message begins with the trigger, so what it sends is
+        // always an answer to somebody who called.
+        called.run(true, () => handleInbound(scope, send, router, message, agent ?? undefined, ownE164)).catch((e) => log(`inbound handling failed: ${e}`));
       }
     });
   };
