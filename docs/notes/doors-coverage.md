@@ -142,3 +142,19 @@ none of (HR's own).
   `warehouse`, `bank`, `bank_account`, `chart_of_account`) but not required.
 * Logistics fills `port` and `carrier` in `domain/profiles.ts` › `BASES` when
   their pages exist; `tests/unit/profiles.test.ts` then checks the page.
+
+## QS Cloud Files behind the paperclip (Platform phase, Agent 4, 2026-10-04)
+
+The paperclip is still the second door and still holds the ERP's own
+attachments. Under them, in the same window, `Attachments` now draws a
+**QS Cloud Files** section (`components/admin/record-cloud-files.tsx`) with the
+cloud files *linked* to the record. It appears on every record page that
+renders `Attachments` or `RecordAttachmentsDoor` **and** whose `objectType` is a
+kind registered with `registerCloudLinkTarget` (`server/records/cloud-links.ts`
+registers the 21 built-in kinds; the Task Center and others register theirs).
+It draws nothing while the integration is off, for a person without the
+`cloud_files` grant, for an unregistered kind, or for a record the person may
+not open. `RecordAttachmentsDoor` also adds the linked files to the count on the
+clip; pages that render `Attachments` directly (the journal, for one) keep their
+own count and gain the section only. A new record page needs no wiring beyond
+registering its kind and passing the id its attachments are filed under.

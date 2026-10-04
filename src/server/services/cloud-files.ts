@@ -216,7 +216,8 @@ export async function verifyLinks(client: CloudClient, serverUrl: string, links:
       const entry = await resolveForPerson(client, link);
       out[index] = {
         ...link,
-        name: entry ? link.name : '',
+        // The cloud's current name for it, as this person sees it; the name stored with the link only when the cloud gives none.
+        name: entry ? entry.name || link.name : '',
         state: entry ? 'available' : 'unavailable',
         entry,
         openUrl: entry?.fileId ? openInCloudUrl(serverUrl, entry.fileId) : null,
