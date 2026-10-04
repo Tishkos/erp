@@ -445,18 +445,18 @@ export async function inTransitInventory(tx: Tx, filter: InTransitFilter = {}): 
            coalesce((select sum(ap.quantity * coalesce(u.conversion_numerator, 1) / coalesce(u.conversion_denominator, 1))
                        from inv_lines il join ap_invoice_line ap on ap.id = il.id
                        left join item_uom u on u.item_id = it.id and u.uom_code = ap.uom_code and ap.uom_code is distinct from it.base_uom_code
-                      where il.payable_id = x.payable_id and il.item_code = x.item_code), 0)::text as ordered,
+                      where il.payable_id = x.payable_id and il.item_code = x.item_code), 0)::numeric(24,6)::text as ordered,
            coalesce((select sum(cl.planned_qty * coalesce(u.conversion_numerator, 1) / coalesce(u.conversion_denominator, 1))
                        from shipment_container_line cl join shipment_container c on c.id = cl.container_id
                        left join item_uom u on u.item_id = it.id and u.uom_code = cl.uom_code and cl.uom_code is distinct from it.base_uom_code
-                      where c.payable_id = x.payable_id and c.cancelled_at is null and cl.superseded_at is null and cl.item_code = x.item_code), 0)::text as shipped,
-           coalesce((select sum(t.remaining) from transit t where t.payable_id = x.payable_id and t.item_code = x.item_code), 0)::text as "inTransit",
-           coalesce((select sum(t.value) from transit t where t.payable_id = x.payable_id and t.item_code = x.item_code), 0)::text as "inTransitValueIqd",
+                      where c.payable_id = x.payable_id and c.cancelled_at is null and cl.superseded_at is null and cl.item_code = x.item_code), 0)::numeric(24,6)::text as shipped,
+           coalesce((select sum(t.remaining) from transit t where t.payable_id = x.payable_id and t.item_code = x.item_code), 0)::numeric(24,6)::text as "inTransit",
+           coalesce((select sum(t.value) from transit t where t.payable_id = x.payable_id and t.item_code = x.item_code), 0)::numeric(19,4)::text as "inTransitValueIqd",
            (select string_agg(t.warehouse_code || ' ' || trim(to_char(t.remaining, 'FM999999999990.######')), ', ' order by t.warehouse_code)
               from transit t where t.payable_id = x.payable_id and t.item_code = x.item_code and t.remaining > 0) as "transitWarehouses",
            coalesce((select sum(rl.moved_qty) from container_receipt_line rl join container_receipt r on r.id = rl.receipt_id
-                      where r.payable_id = x.payable_id and rl.item_code = x.item_code), 0)::text as received,
-           coalesce((select sum(l.remaining) from received_layers l where l.payable_id = x.payable_id and l.item_code = x.item_code), 0)::text as "onHandFromImport",
+                      where r.payable_id = x.payable_id and rl.item_code = x.item_code), 0)::numeric(24,6)::text as received,
+           coalesce((select sum(l.remaining) from received_layers l where l.payable_id = x.payable_id and l.item_code = x.item_code), 0)::numeric(24,6)::text as "onHandFromImport",
            (select string_agg(l.warehouse_code || ' ' || trim(to_char(l.remaining, 'FM999999999990.######')), ', ' order by l.warehouse_code)
               from received_layers l where l.payable_id = x.payable_id and l.item_code = x.item_code and l.remaining > 0) as "receivedWarehouses",
            (select count(distinct c.id)::int from shipment_container c join shipment_container_line cl on cl.container_id = c.id
@@ -515,9 +515,9 @@ export async function transitWarehouses(tx: Tx): Promise<Rows<TransitWarehouseRo
   const result = await tx.execute(sql`
     select p.warehouse_code as "warehouseCode", w.name as "warehouseName", w.shipment_stage as "shipmentStage", p.branch_code as "branchCode",
            p.item_code as "itemCode", it.name as "itemName",
-           p.on_hand::text as "ledgerQuantity", p.available::text as available,
+           p.on_hand::numeric(24,6)::text as "ledgerQuantity", p.available::numeric(24,6)::text as available,
            coalesce((select sum(cl.remaining_quantity * cl.unit_cost_iqd) from cost_layer cl
-                      where cl.warehouse_code = p.warehouse_code and cl.item_code = p.item_code), 0)::text as "valueIqd"
+                      where cl.warehouse_code = p.warehouse_code and cl.item_code = p.item_code), 0)::numeric(19,4)::text as "valueIqd"
       from stock_position p
       join warehouse w on w.code = p.warehouse_code
       left join item it on it.code = p.item_code
@@ -739,7 +739,7 @@ export async function landedCostsRegister(tx: Tx, filter: LandedCostFilter = {})
            coalesce((select sum(cl.original_quantity * cl.unit_cost_iqd) from cost_layer cl
                        join inventory_movement m on m.id = cl.created_by_movement_id
                        join container_receipt r on r.id::text = m.source_document_id
-                      where m.source_document_type = 'container_receipt' and m.kind = 'transfer_receipt' and r.payable_id = p.id), 0)::text as "finalValueIqd",
+                      where m.source_document_type = 'container_receipt' and m.kind = 'transfer_receipt' and r.payable_id = p.id), 0)::numeric(19,4)::text as "finalValueIqd",
            coalesce((select sum(cl.original_quantity) from cost_layer cl
                        join inventory_movement m on m.id = cl.created_by_movement_id
                        join container_receipt r on r.id::text = m.source_document_id
