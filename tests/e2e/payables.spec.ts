@@ -590,9 +590,11 @@ test.describe('A22 · payables in a browser', () => {
     await link.getByRole('button', { name: 'Link to an import' }).click();
     await expect(page.getByRole('link', { name: new RegExp(reference) }).first()).toBeVisible({ timeout: 30_000 });
 
-    // Invoice Status Tracking points imports to their containers — its note,
-    // and since REQ-FIX-001 FIX-1 its Shipping tabs, both name the register.
+    // In-Transit Inventory (REQ-LOG-001; /inventory/in-transit redirects to it)
+    // points imports to their containers — its Invoice Status Tracking note,
+    // and the In Transit heading's neighbours, both name the register.
     await page.goto('/inventory/in-transit');
+    await expect(page).toHaveURL(/\/logistics\/in-transit/);
     const containers = page.getByRole('link', { name: /Containers$/ });
     await expect(containers.first()).toBeVisible();
     for (const link of await containers.all()) await expect(link).toHaveAttribute('href', '/payables/containers');

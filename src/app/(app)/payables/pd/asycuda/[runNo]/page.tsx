@@ -6,6 +6,8 @@ import { Attachments, readAttachments } from '@/components/admin/attachments';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { Denied } from '@/components/denied';
@@ -16,6 +18,7 @@ import { businessDateOf } from '@/server/domain/business-date';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as asycuda from '@/server/services/asycuda-runs';
+import * as recordNotes from '@/server/services/record-notes';
 import * as customs from '@/server/services/customs-pd';
 import { applyAsycudaRun, attachToAsycudaRun } from '../../actions';
 
@@ -72,6 +75,7 @@ export default async function AsycudaReadingPage({
       lines: await asycuda.runLines(tx, reading.run),
       statuses: await customs.statuses(tx),
       files: await readAttachments(tx, asycuda.RUN_OBJECT, reading.run.id),
+      notes: await recordNotes.listNotes(tx, { object: asycuda.RUN_OBJECT, recordId: reading.run.id }),
     };
   });
   if (!found) notFound();
@@ -118,6 +122,8 @@ export default async function AsycudaReadingPage({
       <DocumentWindow
         titleActions={
           <>
+            {/* Printer, paperclip, notes, clock — the four doors in the standing order (2026-10-04). */}
+            <ExportIcon exportKey="asycuda_reading" id={number} title={`${t('asycuda_document')} ${number}`} />
             <AttachmentsButton closeLabel={admin('close')} count={found.files.rows.length} label={admin('attachments.title')} title={admin('attachments.title')}>
               <Attachments
                 action={attachToAsycudaRun}
@@ -128,10 +134,10 @@ export default async function AsycudaReadingPage({
                 preloaded={found.files}
               />
             </AttachmentsButton>
+            <RecordNotesDoor notes={found.notes} object={asycuda.RUN_OBJECT} recordId={run.id} />
             <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
               <RecordHistory objectId={run.id} objectType={asycuda.RUN_OBJECT} />
             </HistoryButton>
-            <ExportIcon exportKey="asycuda_reading" id={number} title={`${t('asycuda_document')} ${number}`} />
           </>
         }
         actions={
@@ -191,9 +197,9 @@ export default async function AsycudaReadingPage({
                 </td>
                 <td>
                   {line.pd ? (
-                    <Link className={s.sapLink} href={`/payables/pd/${encodeURIComponent(line.pd.pdNo)}?year=${line.pd.year}`}>
-                      <bdi dir="ltr">{line.pd.pdNo}</bdi>
-                    </Link>
+                    <ProfileLink code={line.pd.pdNo} kind="pd" qualifier={{ year: line.pd.year }}>
+                      {line.pd.pdNo}
+                    </ProfileLink>
                   ) : (
                     <bdi dir="ltr">{line.pdNo ?? '—'}</bdi>
                   )}
@@ -204,9 +210,9 @@ export default async function AsycudaReadingPage({
                 </td>
                 <td>
                   {line.payableNo ? (
-                    <Link className={s.sapLink} href={`/payables/${encodeURIComponent(line.payableNo)}`}>
-                      <bdi dir="ltr">{line.payableNo}</bdi>
-                    </Link>
+                    <ProfileLink code={line.payableNo} kind="import">
+                      {line.payableNo}
+                    </ProfileLink>
                   ) : (
                     '—'
                   )}

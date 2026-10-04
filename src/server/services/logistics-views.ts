@@ -982,6 +982,7 @@ export async function customsForImport(tx: Tx, payableId: string) {
   const pds = await tx.execute(sql`
     select d.id, d.pd_no as "pdNo", d.registration_year as year, d.status_code as "statusCode", s.name as "statusName",
            d.status_date::text as "statusDate", d.expiry_date::text as "expiryDate", s.is_terminal as "isTerminal",
+           s.allows_payment as "allowsPayment", s.is_expired as "isExpired",
            exists (select 1 from customs_pd n where n.supersedes_pd_id = d.id) as superseded
       from customs_pd d join pd_status s on s.code = d.status_code
      where d.payable_id = ${payableId}
@@ -1002,6 +1003,8 @@ export async function customsForImport(tx: Tx, payableId: string) {
       statusDate: string;
       expiryDate: string;
       isTerminal: boolean;
+      allowsPayment: boolean;
+      isExpired: boolean;
       superseded: boolean;
     }[],
     declarations: declarations.rows as unknown as {

@@ -46,7 +46,8 @@ export const EXPORT_ACCESS = {
   treasury_reporting: { kind: 'report', route: '/treasury/reporting', object: 'bank_account' },
   receivables: { kind: 'report', route: '/sales/receivables', object: 'ar_invoice' },
   payables: { kind: 'report', route: '/payables/open-items', object: 'ap_invoice' },
-  invoice_status_tracking: { kind: 'report', route: '/inventory/in-transit', object: 'supplier_shipment' },
+  // REQ-LOG-001 — its screen is a section of In-Transit Inventory now.
+  invoice_status_tracking: { kind: 'report', route: '/logistics/in-transit', object: 'supplier_shipment' },
   trial_balance: { kind: 'report', route: '/finance/trial-balance', object: 'trial_balance' },
   income_statement: { kind: 'report', route: '/finance/income-statement', object: 'financial_statement' },
   balance_sheet: { kind: 'report', route: '/finance/balance-sheet', object: 'financial_statement' },
