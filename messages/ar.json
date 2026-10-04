@@ -2343,9 +2343,9 @@
       "payment_method": "طريقة الدفع",
       "payment_method_none": "— غير محددة —",
       "currency": "العملة",
-      "applied_elsewhere": "مخصص على إشعارات مدينة",
+      "applied_elsewhere": "مخصص على",
       "apply_remaining": "تخصيص المتبقي {amount}",
-      "nothing_elsewhere": "لم يُخصَّص شيء خارج الفواتير."
+      "nothing_elsewhere": "لم يُخصَّص شيء بعد."
     },
     "in_transit": {
       "title": "متابعة حالة الفواتير",

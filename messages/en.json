@@ -2343,9 +2343,9 @@
       "payment_method": "Payment method",
       "payment_method_none": "— not stated —",
       "currency": "Currency",
-      "applied_elsewhere": "Applied to debit notes",
+      "applied_elsewhere": "Applied to",
       "apply_remaining": "Apply the {amount} left",
-      "nothing_elsewhere": "Nothing applied outside invoices."
+      "nothing_elsewhere": "Nothing applied yet."
     },
     "in_transit": {
       "title": "Invoice Status Tracking",

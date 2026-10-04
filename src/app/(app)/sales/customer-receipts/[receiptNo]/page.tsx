@@ -14,6 +14,7 @@ import { printSheet } from '@/server/print/sheet';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { toDecimalString } from '@domain/money';
+import { businessDateOf } from '@/server/domain/business-date';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as receipts from '@/server/services/customer-receipt';
@@ -85,6 +86,9 @@ export default async function ReceiptPage({
       // Receivables (2026-10-04): what the receipt settled besides invoices
       // (debit notes), its payment method, and its paperwork.
       elsewhere: await credits.applicationsOfSource(tx, 'receipt', seen.id),
+      // The invoices it paid: an invoice it settled in full has left the open
+      // list above, so the receipt says here what it went to.
+      allocations: await receipts.allocationsOf(tx, seen.id),
       method: seen.paymentMethodCode
         ? await paymentMethods.get(tx, seen.paymentMethodCode).catch(() => null)
         : null,
@@ -93,7 +97,25 @@ export default async function ReceiptPage({
   });
 
   if (!found) notFound();
-  const { receipt, open, plan, parties, elsewhere, method, attached } = found;
+  const { receipt, open, plan, parties, elsewhere, allocations, method, attached } = found;
+  // One register of what the receipt settled: invoices (its allocations) and
+  // debit notes (credit applications), oldest first, each opening its document.
+  const settled = [
+    ...allocations.map((row, index) => ({
+      key: `allocation-${index}`,
+      date: businessDateOf(new Date(row.allocatedAt)),
+      href: `/sales/ar-invoices/${encodeURIComponent(row.invoiceNo)}`,
+      number: row.invoiceNo,
+      amount: row.amountIqd,
+    })),
+    ...elsewhere.map((row) => ({
+      key: row.id,
+      date: row.appliedOn,
+      href: `/sales/credit-notes/${encodeURIComponent(row.targetNo)}`,
+      number: row.targetNo,
+      amount: row.amountIqd,
+    })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
   const unallocated = receipt.unappliedIqd;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
@@ -291,9 +313,10 @@ export default async function ReceiptPage({
         </table>
       </DocumentWindow>
 
-      {/* What the receipt settled besides invoices, and the way to put what is
-          left against a debit note — Customer Credits & Advances' work. */}
-      {elsewhere.length > 0 || (receipt.customerId && unallocated > 0n && receipt.status === 'posted') ? (
+      {/* What the receipt settled — the invoices it was allocated to and the
+          debit notes it was applied to — and the way to put what is left
+          against a debit note (Customer Credits & Advances' work). */}
+      {settled.length > 0 || (receipt.customerId && unallocated > 0n && receipt.status === 'posted') ? (
         <section aria-labelledby="receipt-elsewhere-title" className={s.sapDoc}>
           <div className={s.sapWindow}>
             <h2 className={s.sapTitle} id="receipt-elsewhere-title">
@@ -321,25 +344,25 @@ export default async function ReceiptPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {elsewhere.length === 0 ? (
+                  {settled.length === 0 ? (
                     <tr>
                       <td className={s.sapEmptyRow} colSpan={3}>
                         {t('customer_receipts.nothing_elsewhere')}
                       </td>
                     </tr>
                   ) : null}
-                  {elsewhere.map((row) => (
-                    <tr key={row.id}>
+                  {settled.map((row) => (
+                    <tr key={row.key}>
                       <td>
-                        <bdi dir="ltr">{formatBusinessDate(row.appliedOn, locale as Locale)}</bdi>
+                        <bdi dir="ltr">{formatBusinessDate(row.date, locale as Locale)}</bdi>
                       </td>
                       <td className={s.sapAccountCell}>
-                        <Link className={s.sapLink} href={`/sales/credit-notes/${encodeURIComponent(row.targetNo)}`}>
-                          <bdi dir="ltr">{row.targetNo}</bdi>
+                        <Link className={s.sapLink} href={row.href}>
+                          <bdi dir="ltr">{row.number}</bdi>
                         </Link>
                       </td>
                       <td className={s.sapNum}>
-                        <bdi dir="ltr">{money(row.amountIqd)}</bdi>
+                        <bdi dir="ltr">{money(row.amount)}</bdi>
                       </td>
                     </tr>
                   ))}
