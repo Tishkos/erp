@@ -28,6 +28,8 @@ import * as customs from '@/server/services/customs-pd';
 import { registerPd } from './actions';
 import { pdChip } from './status';
 import { businessToday } from '@/server/domain/business-date';
+import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
+import { savedViewsFor } from '@/server/saved-views-gate';
 
 /**
  * PDs — REQ-AP-001 §21.8 (REQ-APP-001 S4).
@@ -59,6 +61,8 @@ export default async function PdListPage({ searchParams }: { searchParams: Searc
   const mayCreate = can(principal, 'create', customs.PERMISSION_OBJECT);
   const mayImport = can(principal, 'import', customs.PERMISSION_OBJECT);
 
+  // The person's saved views of this screen — and, on a bare arrival, their default one.
+  const saved = await savedViewsFor('imports.pd', searchParams);
   const params = await searchParams;
   const view = (VIEWS as readonly string[]).includes(String(params.view)) ? (params.view as (typeof VIEWS)[number]) : 'live';
   const applied = typeof params.applied === 'string' ? params.applied : null;
@@ -166,7 +170,9 @@ export default async function PdListPage({ searchParams }: { searchParams: Searc
             placeholder={admin('search_placeholder')}
             q={outcome.q}
             searchLabel={admin('search')}
-          />
+          >
+            <SavedViewsMenu state={saved} />
+          </ListToolbar>
 
           <form className={s.filterBar} method="get">
             <FilterRow>

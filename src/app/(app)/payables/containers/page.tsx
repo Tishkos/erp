@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import {
   AdminPage,
+  Field,
   FilterRow,
   Flash,
   ListToolbar,
@@ -9,7 +10,6 @@ import {
   Submit,
   SubmitRow,
   admin as s,
-  matches,
 } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -20,6 +20,9 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { ProfileLink } from '@/components/admin/profile-link';
 import * as shipments from '@/server/services/shipments';
+import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
+import { savedViewsFor } from '@/server/saved-views-gate';
+import { containerRegister } from '@/server/services/screen-registers';
 import { containerChip } from './status';
 
 /**
@@ -53,8 +56,14 @@ export default async function ContainersPage({ searchParams }: { searchParams: S
     ? (params.view as (typeof VIEWS)[number])
     : 'in_transit';
 
-  const rows = await withCurrentUser((tx) => shipments.listContainers(tx, { view }));
-  const shown = rows.filter((row) => matches(row, outcome.q));
+  // The person's saved views of this screen — and, on a bare arrival, their default one.
+  const saved = await savedViewsFor('imports.containers', searchParams);
+  const etaFrom = saved?.current.params['eta_from'] ?? '';
+  const etaTo = saved?.current.params['eta_to'] ?? '';
+  // The rows and filters are `containerRegister` — the pinned count on Home asks the same function.
+  const { shown } = await withCurrentUser((tx) =>
+    containerRegister(tx, { view, q: outcome.q, etaFrom, etaTo }),
+  );
   const cs = (code: string, name: string) => (locale !== 'en' && t.has(`cs.${code}`) ? t(`cs.${code}`) : name);
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
 
@@ -78,10 +87,13 @@ export default async function ContainersPage({ searchParams }: { searchParams: S
             clearHref="/payables/containers"
             clearLabel={admin('clear_search')}
             countLabel={admin('rows_shown', { count: shown.length })}
+            hidden={{ view, ...(etaFrom ? { eta_from: etaFrom } : {}), ...(etaTo ? { eta_to: etaTo } : {}) }}
             placeholder={admin('search_placeholder')}
             q={outcome.q}
             searchLabel={admin('search')}
-          />
+          >
+            <SavedViewsMenu state={saved} />
+          </ListToolbar>
           <form className={s.filterBar} method="get">
             <FilterRow>
               <Select
@@ -90,6 +102,8 @@ export default async function ContainersPage({ searchParams }: { searchParams: S
                 name="view"
                 options={VIEWS.map((key) => ({ value: key, label: t(`view_${key}`) }))}
               />
+              <Field defaultValue={etaFrom} label={t('eta_from')} name="eta_from" type="date" />
+              <Field defaultValue={etaTo} label={t('eta_to')} name="eta_to" type="date" />
               <SubmitRow>
                 <Submit label={t('filter')} />
               </SubmitRow>

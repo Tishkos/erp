@@ -27,6 +27,8 @@ import * as customs from '@/server/services/customs-pd';
 import * as shipments from '@/server/services/shipments';
 import { createBlAction } from './actions';
 import { businessToday } from '@/server/domain/business-date';
+import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
+import { savedViewsFor } from '@/server/saved-views-gate';
 
 /**
  * Shipments — REQ-AP-001 §21.9: the B/Ls, newest first, each with its
@@ -54,6 +56,8 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Se
   const mayCreate = can(principal, 'create', shipments.BL_OBJECT);
   const today = businessToday();
 
+  // The person's saved views of this screen — and, on a bare arrival, their default one.
+  const saved = await savedViewsFor('imports.shipments', searchParams);
   const { result, imports, ports } = await withCurrentUser(async (tx) => ({
     result: await shipments.listBlsForScreen(tx, { search: outcome.q, page: outcome.page }),
     imports: mayCreate ? await customs.importChoices(tx) : [],
@@ -132,7 +136,9 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Se
             placeholder={admin('search_placeholder')}
             q={outcome.q}
             searchLabel={admin('search')}
-          />
+          >
+            <SavedViewsMenu state={saved} />
+          </ListToolbar>
           <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
             <table aria-labelledby="bl-list-title" className={`${s.sapTable} ${s.sapRegisterTable}`}>
               <thead>

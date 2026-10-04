@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useId, useRef } from 'react';
 import { Trash2 } from 'lucide-react';
 import styles from './admin.module.css';
 
@@ -35,6 +35,8 @@ export function ConfirmButton({
   readonly cancelLabel: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // A page with several of these (one per row) must not share a heading id.
+  const titleId = useId();
 
   return (
     <>
@@ -48,7 +50,7 @@ export function ConfirmButton({
       </button>
 
       <dialog
-        aria-labelledby="confirm-dialog-title"
+        aria-labelledby={titleId}
         className={styles.dialog}
         onClick={(event) => {
           if (event.target === ref.current) ref.current?.close();
@@ -57,7 +59,7 @@ export function ConfirmButton({
       >
         <div className={styles.dialogBody}>
           <header className={styles.dialogHeader}>
-            <h2 id="confirm-dialog-title">{title}</h2>
+            <h2 id={titleId}>{title}</h2>
           </header>
           <p className={styles.sectionHint}>{body}</p>
           <form action={action} className={styles.confirmActions}>

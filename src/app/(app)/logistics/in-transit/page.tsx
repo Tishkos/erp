@@ -16,6 +16,8 @@ import * as tracking from '@/server/services/supplier-shipment';
 import * as users from '@/server/services/users';
 import * as warehouses from '@/server/services/warehouses';
 import { advanceShipment, setShipmentWatchers } from './actions';
+import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
+import { savedViewsFor } from '@/server/saved-views-gate';
 
 /**
  * In-Transit Inventory — REQ-LOG-001 item 18. What the company owns and
@@ -69,6 +71,8 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
       ? (params.status as tracking.ShipmentStatus)
       : undefined;
 
+  // The person's saved views of this screen — and, on a bare arrival, their default one.
+  const saved = await savedViewsFor('logistics.in_transit', searchParams);
   const view = params.view === 'all' ? 'all' : 'open';
   const found = await withCurrentUser(async (tx) => ({
     imports: await views.inTransitInventory(tx, { search: outcome.q, view }),
@@ -119,7 +123,9 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
             placeholder={admin('search_placeholder')}
             q={outcome.q}
             searchLabel={admin('search')}
-          />
+          >
+            <SavedViewsMenu state={saved} />
+          </ListToolbar>
           <form className={s.filterBar} method="get">
             <FilterRow>
               <Select

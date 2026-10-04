@@ -17,6 +17,8 @@ import * as partners from '@/server/services/partners';
 import * as branches from '@/server/services/branches';
 import * as rates from '@/server/services/exchange-rates';
 import { businessToday } from '@/server/domain/business-date';
+import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
+import { savedViewsFor } from '@/server/saved-views-gate';
 
 /**
  * Receivables Ageing — Receivables, 2026-10-04.
@@ -57,6 +59,8 @@ export async function ReceivablesAgeing({ searchParams }: { readonly searchParam
   }
 
   const route = '/sales/receivables';
+  // The person's saved views of this screen — and, on a bare arrival, their default one.
+  const saved = await savedViewsFor('sales.receivables', searchParams);
   const one = (key: string) => (typeof params[key] === 'string' ? (params[key] as string).trim() : '');
   const asOf = /^\d{4}-\d{2}-\d{2}$/.test(one('as_at')) ? one('as_at') : businessToday();
   const show = openItems.showFrom(one('show') || 'all');
@@ -227,7 +231,12 @@ export async function ReceivablesAgeing({ searchParams }: { readonly searchParam
 
   return (
     <AdminPage
-      actions={<ExportMenu exportKey="receivables" query={params} />}
+      actions={
+        <>
+          <SavedViewsMenu state={saved} />
+          <ExportMenu exportKey="receivables" query={params} />
+        </>
+      }
       back={{ href: '/', label: t('dashboard_label') }}
       subtitle={t('open_items.subtitle_customer')}
       tabs={<SectionTabs route={route} />}

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { ArrowLeft, CheckCircle2, ChevronRight, Search, TriangleAlert } from 'lucide-react';
+import { rowMatches } from '@domain/register-filters';
 import { PageHeader, Panel, Workspace } from '@/components/ui';
 import styles from './admin.module.css';
 import { Submit } from './submit';
@@ -645,13 +646,10 @@ export function ListToolbar({
   );
 }
 
-/** Case-insensitive match of a search phrase against every value of a row. */
+/**
+ * Case-insensitive match of a search phrase against every value of a row. One
+ * rule with the pinned counts on Home (`rowMatches`, domain/register-filters).
+ */
 export function matches(row: Record<string, unknown>, q: string): boolean {
-  if (!q.trim()) return true;
-  const needle = q.trim().toLowerCase();
-  return Object.values(row).some((value) => {
-    if (value === null || value === undefined) return false;
-    if (value instanceof Date) return false;
-    return String(value).toLowerCase().includes(needle);
-  });
+  return rowMatches(row, q);
 }

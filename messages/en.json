@@ -1398,7 +1398,8 @@
         "exchange_rate": "Exchange rate",
         "user_department_scope": "Department membership",
         "authentication": "Sign-in",
-        "workflow_instance": "Approval"
+        "workflow_instance": "Approval",
+        "saved_view": "Saved view"
       },
       "former_record": "a record that no longer exists",
       "former_user": "a former user",
@@ -2164,7 +2165,9 @@
       "bank_verified_by": "Verified by",
       "bank_out_by": "Taken out of use by",
       "bank_self_note": "You entered or sent this account, so somebody else verifies it.",
-      "account_holder_hint": "The beneficiary as the bank holds the account — usually the supplier itself."
+      "account_holder_hint": "The beneficiary as the bank holds the account — usually the supplier itself.",
+      "status_all": "All statuses",
+      "filter": "Show"
     },
     "actions": "Actions",
     "remove_line": "Remove line",
@@ -3175,7 +3178,8 @@
       "rate_on_date": "1 {currency} = {rate} IQD",
       "total_in": "Total {currency} {amount}",
       "advance_percent": "Advance payment %",
-      "agreed_in": "Issued in"
+      "agreed_in": "Issued in",
+      "min_amount": "Minimum amount (IQD)"
     },
     "payment_applications": {
       "subtitle": "The company’s requests to its banks and cashier to pay a supplier — longest waiting first.",
@@ -3634,7 +3638,9 @@
       "container_no_hint": "Four letters and seven digits; the last digit is checked.",
       "damaged_short": "Damaged / short",
       "view_exceptions": "Short or damaged",
-      "view_cancelled": "Cancelled"
+      "view_cancelled": "Cancelled",
+      "eta_from": "ETA from",
+      "eta_to": "ETA to"
     },
     "loans": {
       "subtitle": "Every bank loan in one register: what it lends, what it costs, what it funded and what is still owed.",
@@ -6928,6 +6934,16 @@
       "link_refused": "Linking a cloud file refused",
       "unlink_refused": "Unlinking a cloud file refused",
       "upload_refused": "Upload to a record refused"
+    },
+    "saved_view": {
+      "created": "View saved",
+      "renamed": "View renamed",
+      "duplicated": "View duplicated",
+      "deleted": "View deleted",
+      "default_set": "View made the default",
+      "default_cleared": "Default view removed",
+      "pinned": "View pinned to Home",
+      "unpinned": "View unpinned from Home"
     }
   },
   "statement_line": {
@@ -7534,6 +7550,124 @@
       "totally_written_off": "Totally written off",
       "expired_validated": "Expired (validated)",
       "expired_part_written_off": "Expired (partly written off)"
+    }
+  },
+  "savedViews": {
+    "title": "Saved views",
+    "subtitle": "The filters you keep for the screens you use. Only you can see them, and they never hold records — opening one shows what you may see today.",
+    "menu_label": "Views",
+    "menu_title": "Saved views",
+    "save_heading": "Save the filters on screen",
+    "saving": "This view will keep: {filters}.",
+    "saving_nothing": "No filters are set, so this view will open the screen as it comes.",
+    "name": "View name",
+    "name_placeholder": "e.g. Overdue suppliers",
+    "slots": {
+      "eta": "ETA window",
+      "dates": "Dates",
+      "as_at": "As at"
+    },
+    "keep_dates": "The dates shown now",
+    "save_hint": "Choose a rule such as “This month” and the view works out the dates each time it is opened.",
+    "save": "Save view",
+    "mine_heading": "Your views of this screen",
+    "none_on_screen": "You have not saved a view of this screen yet.",
+    "view": "View",
+    "filters": "Filters",
+    "screen": "Screen",
+    "without_view": "Show without a view",
+    "manage": "All my views",
+    "showing": "Showing now",
+    "default": "Default",
+    "on_home": "On Home",
+    "unavailable_no_access": "Unavailable — you no longer have access",
+    "unavailable_not_delivered": "Unavailable — screen not available",
+    "unavailable_unknown_screen": "Unavailable — screen removed",
+    "dropped_all": "the stored filters",
+    "dropped_note": "These filters no longer apply to the screen and are left out: {names}.",
+    "no_filters_set": "No filters",
+    "rename": "Rename",
+    "open": "Open",
+    "set_default": "Make default",
+    "clear_default": "Remove default",
+    "pin": "Pin to Home",
+    "unpin": "Unpin",
+    "duplicate": "Duplicate",
+    "copy_name": "{name} (copy)",
+    "delete": "Delete",
+    "delete_title": "Delete this view?",
+    "delete_body": "“{name}” is deleted. Only the saved filters go; the screen and its records are not affected.",
+    "yes": "Yes",
+    "none": "You have no saved views yet. Open a list, set its filters and choose Views, then Save view.",
+    "none_found": "No view matches the search.",
+    "limits": "{views} of {maxViews} views · {pinned} of {maxPins} pinned to Home",
+    "profile_link": "Saved views",
+    "profile_count": "{count, plural, =0 {None yet} one {# view} other {# views}}",
+    "errors": {
+      "not_found": "That view does not exist, or it is not yours.",
+      "unknown_route": "That screen cannot be saved as a view.",
+      "unavailable": "You can no longer open this screen, so the view cannot be used.",
+      "name_taken": "You already have a view named “{name}” on this screen.",
+      "limit_views": "At most {views} views can be kept; delete one first.",
+      "limit_pins": "At most {pins} views can be pinned to Home; unpin one first.",
+      "name_required": "A view needs a name.",
+      "name_too_long": "A view name is at most 80 characters.",
+      "name_invalid": "A view name is one line of text.",
+      "unknown_rule": "That date rule is not one this screen offers.",
+      "too_many_params": "That view carries too many filters."
+    },
+    "params": {
+      "q": "Search",
+      "view": "View",
+      "min_amount": "Minimum amount (IQD)",
+      "show": "Show",
+      "code": "Account",
+      "as_at": "As at",
+      "status": "Status",
+      "currency": "Currency",
+      "branch": "Branch",
+      "eta_from": "ETA from",
+      "eta_to": "ETA to",
+      "warehouse": "Warehouse",
+      "category": "Category",
+      "in_stock": "In stock only",
+      "from": "From",
+      "to": "To",
+      "item": "Item",
+      "document": "Document"
+    },
+    "values": {
+      "pd_view": {
+        "live": "Open (not final)",
+        "expiring": "Expiring soon",
+        "final": "Final or superseded",
+        "holding": "Holding list",
+        "all": "All"
+      }
+    },
+    "rules": {
+      "range": {
+        "today": "Today",
+        "this_month": "This month",
+        "last_month": "Last month",
+        "next_month": "Next month",
+        "next_7_days": "Next 7 days",
+        "next_30_days": "Next 30 days",
+        "last_7_days": "Last 7 days",
+        "last_30_days": "Last 30 days",
+        "month_to_date": "Month to date",
+        "year_to_date": "Year to date",
+        "this_year": "This year",
+        "until_today": "Up to today",
+        "from_today": "From today"
+      },
+      "point": {
+        "today": "Today",
+        "month_start": "Start of this month",
+        "month_end": "End of this month",
+        "last_month_end": "End of last month",
+        "year_start": "Start of this year"
+      }
     }
   }
 }
