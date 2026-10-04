@@ -731,22 +731,22 @@ export interface EmitInput {
   readonly objectId: string;
   /** Who is told. Null and duplicates are dropped, `except` is removed. */
   readonly recipients: readonly (string | null | undefined)[];
-  readonly except?: readonly (string | null | undefined)[];
+  readonly except?: readonly (string | null | undefined)[] | undefined;
   /** One plain line and the detail, stored as written: the fallback text when a kind has no label of its own. */
   readonly subject: string;
-  readonly body?: string;
+  readonly body?: string | undefined;
   /** Facts the label uses (`reference`, `party`, `days_overdue`, …) and, optionally, a local `href`. */
-  readonly context?: Readonly<Record<string, unknown>>;
+  readonly context?: Readonly<Record<string, unknown>> | undefined;
   /**
    * Which occurrence this is. Required for a kind whose window is
    * `occurrence` (a revision, a status entered, a sequence number); a `day`
    * kind uses the business day and a `once` kind none, unless named.
    */
-  readonly occurrence?: string | null;
-  readonly branchCode?: string | null;
+  readonly occurrence?: string | null | undefined;
+  readonly branchCode?: string | null | undefined;
   /** Also require that the recipient can open the record now (asked as them, in this transaction). */
-  readonly recordAccess?: boolean;
-  readonly actorUserId?: string | null;
+  readonly recordAccess?: boolean | undefined;
+  readonly actorUserId?: string | null | undefined;
 }
 
 export interface EmitResult {

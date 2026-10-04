@@ -556,7 +556,12 @@ async function nameOf(tx: Tx, userId: string): Promise<string> {
   return row?.name ?? "";
 }
 
-/** Who a step waits for: the manager it was sent to, else whoever holds the step's role — never the submitter unless the step allows it. */
+/**
+ * Who a step waits for: the manager it was sent to, else whoever holds the
+ * step's role. Never the submitter — they know what they sent, and a company
+ * with one accountant is not told about its own submissions (the step may still
+ * let them approve it: `allowSelfApproval` decides who may act, not who is asked).
+ */
 async function approversOf(
   tx: Tx,
   step: WorkflowStep,
@@ -568,7 +573,7 @@ async function approversOf(
     : step.approverKind === "role"
       ? (await tx.select({ userId: userRole.userId }).from(userRole).where(eq(userRole.roleCode, step.approverRole))).map((r) => r.userId)
       : [];
-  return step.allowSelfApproval ? people : people.filter((id) => id !== submittedBy);
+  return people.filter((id) => id !== submittedBy);
 }
 
 /** `approval.required` — told once per (revision, step): a refresh or a retry writes nothing more. */
@@ -595,7 +600,6 @@ async function announceRequired(
     objectType: at.documentTypeCode,
     objectId: at.documentId,
     recipients,
-    except: [at.step.allowSelfApproval ? null : at.submittedBy],
     subject: `Approval required: ${reference}`,
     body: submitter ? `Submitted by ${submitter}.` : "",
     context: {
