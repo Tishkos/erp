@@ -396,6 +396,13 @@ export interface ReceiveInput {
   readonly sourceDocumentId?: string | null;
   readonly sourceLineId?: string | null;
   readonly journalEntryId?: string | null;
+  /**
+   * IMPROVEMENT-002 (0285) — for stock a relocation brings in (a transfer, a
+   * move at cost, a container receipt out of transit), the layer it left. A
+   * landed-cost lock follows the units by this fact, never by matching
+   * quantities.
+   */
+  readonly originLayerId?: string | null;
   readonly serialNumber?: string | null;
   readonly batchNumber?: string | null;
   readonly expiryDate?: string | null;
@@ -518,6 +525,7 @@ export async function receive(
     remainingQuantity: formatQuantity(layer.remainingQuantity),
     unitCostIqd: toDecimalString(layer.unitCostIqd, 4n),
     supplierId: input.supplierId ?? null,
+    originLayerId: input.originLayerId ?? null,
     createdByMovementId: movement!.id,
   });
 
@@ -1499,6 +1507,7 @@ export async function relocate(
       sourceDocumentType: input.sourceDocumentType,
       sourceDocumentId: input.sourceDocumentId,
       sourceLineId: input.sourceLineId ?? null,
+      originLayerId: layer.id,
     });
 
     costIqd += issued.costIqd ?? 0n;

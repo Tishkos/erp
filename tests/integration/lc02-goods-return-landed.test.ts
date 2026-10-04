@@ -21,6 +21,7 @@ import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ownerPool, rejection } from './setup';
 import { withScope } from '@/server/db/client';
+import { registerDepartureRuntime } from '@/server/departures-runtime';
 import * as ap from '@/server/services/ap-invoice';
 import * as customs from '@/server/services/customs-pd';
 import * as gr from '@/server/services/goods-return';
@@ -34,7 +35,7 @@ import { BAGHDAD, PANEL, WAREHOUSE, buildTradingWorld, scope, type TradingWorld 
 import { fundBank } from './hr-funds';
 
 const IN_PROCESS = 'WH-LC02-INPROC';
-const RETURN_ON = '2026-10-31';
+const RETURN_ON = '2026-08-31';
 let world: TradingWorld;
 let invoiceId: string;
 let invoiceLineId: string;
@@ -45,7 +46,7 @@ const iqd = (value: string) => parseDecimal(value, 4n);
 const q = (value: string) => parseQuantity(value);
 
 /** A posted journal, as an accountant would post one: Dr `debit` Cr `credit`. */
-async function journal(debit: string, credit: string, amount: string, on = '2026-10-20') {
+async function journal(debit: string, credit: string, amount: string, on = '2026-08-20') {
   const client = await ownerPool.connect();
   try {
     await client.query('begin');
@@ -100,9 +101,9 @@ const pdTo = (statusCode: string, on: string) =>
 async function lockCharges() {
   await charge('freight', '33333');
   await charge('customs_asycuda', '11111');
-  await pdTo('totally_written_off', '2026-10-25');
+  await pdTo('totally_written_off', '2026-08-25');
   return withScope(scope(world.manager), (tx) =>
-    landed.lock(tx, world.manager, { payableId, lockDate: '2026-10-30', basisCode: 'by_value' }),
+    landed.lock(tx, world.manager, { payableId, lockDate: '2026-08-30', basisCode: 'by_value' }),
   );
 }
 
@@ -121,7 +122,7 @@ async function receiveAll() {
         documentId: randomUUID(),
         containerId: container.id,
         warehouseCode: WAREHOUSE,
-        receiptDate: '2026-10-10',
+        receiptDate: '2026-08-10',
         lines: lines.map((line) => ({ containerLineId: line.id, receivedQty: q(line.planned_qty), damagedQty: 0n, shortQty: 0n })),
         varianceReason: null,
       }),
@@ -172,6 +173,7 @@ async function mainLayers() {
 }
 
 beforeEach(async () => {
+  registerDepartureRuntime();
   world = await buildTradingWorld();
   await fundBank(world, '1000000.0000');
   await ownerPool.query(
@@ -202,8 +204,8 @@ beforeEach(async () => {
       supplierId: world.supplierId,
       supplierInvoiceNo: 'CSA-LC02-0001',
       branchCode: BAGHDAD,
-      invoiceDate: '2026-09-01',
-      dueDate: '2026-11-01',
+      invoiceDate: '2026-07-01',
+      dueDate: '2026-09-01',
       isImport: true,
       lines: [
         {
@@ -232,18 +234,18 @@ beforeEach(async () => {
     shipments.createBl(tx, world.clerk, {
       payableId,
       blNo: 'MEDULC020001',
-      blDate: '2026-09-20',
-      eta: '2026-10-05',
+      blDate: '2026-07-20',
+      eta: '2026-08-05',
       containers: 'MSCU1234566\nTGHU7654320',
       spreadLines: true,
     }),
   );
   await receiveAll();
   const pd = await withScope(scope(world.clerk), (tx) =>
-    customs.register(tx, world.clerk, { payableId, pdNo: '6602', registrationDate: '2026-09-02', expiryDate: '2027-03-01' }),
+    customs.register(tx, world.clerk, { payableId, pdNo: '6602', registrationDate: '2026-07-02', expiryDate: '2027-01-01' }),
   );
   pdId = pd.id;
-  await pdTo('validated', '2026-09-05');
+  await pdTo('validated', '2026-07-05');
 });
 
 describe('IMPROVEMENT-002 · a supplier return after the landed cost is locked', () => {

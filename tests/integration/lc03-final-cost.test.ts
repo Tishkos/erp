@@ -18,6 +18,7 @@ import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ownerPool } from './setup';
 import { withScope, type Tx } from '@/server/db/client';
+import { registerDepartureRuntime } from '@/server/departures-runtime';
 import * as ap from '@/server/services/ap-invoice';
 import * as customs from '@/server/services/customs-pd';
 import * as inventory from '@/server/services/inventory';
@@ -42,7 +43,7 @@ const iqd = (value: string) => parseDecimal(value, 4n);
 const q = (value: string) => parseQuantity(value);
 
 /** A posted journal, as an accountant would post one: Dr `debit` Cr `credit`. */
-async function journal(debit: string, credit: string, amount: string, on = '2026-10-20') {
+async function journal(debit: string, credit: string, amount: string, on = '2026-08-20') {
   const client = await ownerPool.connect();
   try {
     await client.query('begin');
@@ -89,10 +90,10 @@ const charge = async (type: string, amount: string, reason: string | null = null
   return entryNo;
 };
 const lock = (input: Partial<landed.LockInput> = {}) =>
-  withScope(scope(world.manager), (tx) => landed.lock(tx, world.manager, { payableId, lockDate: '2026-10-30', ...input }));
+  withScope(scope(world.manager), (tx) => landed.lock(tx, world.manager, { payableId, lockDate: '2026-08-30', ...input }));
 const writeOffPd = () =>
   withScope(scope(world.clerk), (tx) =>
-    customs.changeStatus(tx, world.clerk, pdId, { statusCode: 'totally_written_off', effectiveDate: '2026-10-25' }),
+    customs.changeStatus(tx, world.clerk, pdId, { statusCode: 'totally_written_off', effectiveDate: '2026-08-25' }),
   );
 const read = <T>(fn: (tx: Tx) => Promise<T>) => withScope(scope(world.manager), fn);
 const finalCost = () => read((tx) => finalCosts.finalCost(tx, payableId));
@@ -118,7 +119,7 @@ async function transfer(layerId: string, quantity: string, documentNo: string) {
       toWarehouseCode: SECOND,
       branchCode: BAGHDAD,
       quantity: q(quantity),
-      movementDate: '2026-10-16',
+      movementDate: '2026-08-16',
       layers: (await inventory.layersOf(tx, PANEL, WAREHOUSE)).filter((layer) => layer.id === layerId),
       sourceDocumentType: 'stock_transfer',
       sourceDocumentId: documentNo,
@@ -142,7 +143,7 @@ async function receiveAll() {
         documentId: randomUUID(),
         containerId: container.id,
         warehouseCode: WAREHOUSE,
-        receiptDate: '2026-10-10',
+        receiptDate: '2026-08-10',
         lines: lines.map((line) => ({ containerLineId: line.id, receivedQty: q(line.planned_qty), damagedQty: 0n, shortQty: 0n })),
         varianceReason: null,
       }),
@@ -167,6 +168,7 @@ function expectAccountedFor(result: finalCosts.FinalCostTrace) {
 }
 
 beforeEach(async () => {
+  registerDepartureRuntime();
   world = await buildTradingWorld();
   await fundBank(world, '1000000.0000');
   await ownerPool.query(
@@ -198,8 +200,8 @@ beforeEach(async () => {
       supplierId: world.supplierId,
       supplierInvoiceNo: 'CSA-LC03-0001',
       branchCode: BAGHDAD,
-      invoiceDate: '2026-09-01',
-      dueDate: '2026-11-01',
+      invoiceDate: '2026-07-01',
+      dueDate: '2026-09-01',
       isImport: true,
       agreedCurrency: 'USD',
       agreedRate: '1250',
@@ -227,19 +229,19 @@ beforeEach(async () => {
     shipments.createBl(tx, world.clerk, {
       payableId,
       blNo: 'MEDULC030001',
-      blDate: '2026-09-20',
-      eta: '2026-10-05',
+      blDate: '2026-07-20',
+      eta: '2026-08-05',
       containers: 'MSCU1234566\nTGHU7654320',
       spreadLines: true,
     }),
   );
   await receiveAll();
   const pd = await withScope(scope(world.clerk), (tx) =>
-    customs.register(tx, world.clerk, { payableId, pdNo: '6603', registrationDate: '2026-09-02', expiryDate: '2027-03-01' }),
+    customs.register(tx, world.clerk, { payableId, pdNo: '6603', registrationDate: '2026-07-02', expiryDate: '2027-01-01' }),
   );
   pdId = pd.id;
   await withScope(scope(world.clerk), (tx) =>
-    customs.changeStatus(tx, world.clerk, pdId, { statusCode: 'validated', effectiveDate: '2026-09-05' }),
+    customs.changeStatus(tx, world.clerk, pdId, { statusCode: 'validated', effectiveDate: '2026-07-05' }),
   );
 });
 
@@ -316,7 +318,7 @@ describe('LC-3 · the final cost', () => {
       expect(step).toMatchObject({
         lockNo: `${result.payableNo}/1`,
         sequence: 1,
-        lockDate: '2026-10-30',
+        lockDate: '2026-08-30',
         basisCode: 'by_value',
         allocatedIqd: '2500.0000',
         ownAllocatedIqd: '2500.0000',
@@ -371,13 +373,13 @@ describe('LC-3 · the final cost', () => {
     await writeOffPd();
     await lock({ basisCode: 'by_value' }); // 20,000: +200 a panel
     await charge('port_forwarding', '10000');
-    await lock({ basisCode: 'by_quantity', lockDate: '2026-11-05' }); // 10,000: +100
+    await lock({ basisCode: 'by_quantity', lockDate: '2026-09-05' }); // 10,000: +100
     // 10,000 in three nearly equal parts: each layer's 5,000 splits 1,666.66665
     // / 1,666.66665 / 1,666.6667 — the tie's odd 0.0001 to the earlier type.
     await charge('freight', '3333.3333');
     await charge('customs_asycuda', '3333.3333');
     await charge('other', '3333.3334', 'Fumigation certificate');
-    await lock({ basisCode: 'by_quantity', lockDate: '2026-11-10' }); // 10,000: +100
+    await lock({ basisCode: 'by_quantity', lockDate: '2026-09-10' }); // 10,000: +100
 
     const [row] = await finalCost();
     expect(row).toMatchObject({
@@ -479,7 +481,8 @@ describe('LC-3 · the final cost', () => {
     expect(one).toMatchObject({ layerId: first, onHandQty: '50', chargesIqd: '2500.0000', unitCostChainText: '10,000 → 10,050' });
     expect(one!.lineage.map((layer) => [layer.link, layer.warehouseCode, layer.remainingQty, layer.unitCostIqd])).toEqual([
       ['received', WAREHOUSE, '40', '10050.0000'],
-      ['lock_followed', SECOND, '10', '10050.0000'],
+      // The transfer wrote the fact (0285 origin_layer_id): followed by it, not by the lock's own note.
+      ['origin_layer', SECOND, '10', '10050.0000'],
     ]);
     expect(one!.locks[0]).toMatchObject({
       allocatedIqd: '2500.0000',
@@ -510,7 +513,7 @@ describe('LC-3 · the final cost', () => {
     });
     expect(two!.lineage.map((layer) => [layer.link, layer.warehouseCode, layer.remainingQty])).toEqual([
       ['received', WAREHOUSE, '0'],
-      ['lock_followed', SECOND, '50'],
+      ['origin_layer', SECOND, '50'],
     ]);
     expectAccountedFor(result);
   });
@@ -521,8 +524,8 @@ describe('LC-3 · the final cost', () => {
         supplierId: world.supplierId,
         supplierInvoiceNo: 'CSA-LC03-0002',
         branchCode: BAGHDAD,
-        invoiceDate: '2026-09-03',
-        dueDate: '2026-11-03',
+        invoiceDate: '2026-07-03',
+        dueDate: '2026-09-03',
         isImport: true,
         lines: [
           {

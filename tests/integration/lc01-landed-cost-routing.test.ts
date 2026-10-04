@@ -425,7 +425,8 @@ async function departuresOf(lockId: string): Promise<DepartureRow[]> {
             source_line_id, quantity::text as quantity, amount_iqd::text as amount_iqd, destination_role,
             account_id, dimensions, journal_entry_id
        from landed_cost_departure where lock_id = $1
-      order by kind, quantity desc, amount_iqd desc, source_document_id`,
+      -- The table's columns, not the text aliases above: '80' sorts after '120' as text.
+      order by kind, landed_cost_departure.quantity desc, landed_cost_departure.amount_iqd desc, source_document_id`,
     [lockId],
   );
   return rows as DepartureRow[];
