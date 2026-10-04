@@ -59,6 +59,24 @@ import { QUANTITY_FACTOR, parseQuantity } from '@/server/domain/uom';
  */
 export const dynamic = 'force-dynamic';
 
+/**
+ * The warehouses a draft's lines may name: the branch's ordinary ones — and
+ * whichever its lines already name.
+ *
+ * An import's lines are saved into its stage warehouse (In Process), which is
+ * not an ordinary warehouse and so was not on the list: the box then showed
+ * the first warehouse it did have ("WH-HQ") beside a record that says
+ * "WH-INPROC" — the screen and the books disagreeing about where the goods
+ * go (found 2026-10-05, from a screenshot). A line shows what it holds.
+ */
+async function housesFor(tx: Parameters<typeof warehouses.listActive>[0], branchCode: string, named: readonly (string | null)[]) {
+  const offered = (await warehouses.listActive(tx)).filter((house) => house.branchCode === branchCode);
+  const missing = [...new Set(named.filter((code): code is string => Boolean(code)))].filter((code) => !offered.some((house) => house.code === code));
+  if (missing.length === 0) return offered;
+  const every = await warehouses.listForReports(tx);
+  return [...offered, ...every.filter((house) => missing.includes(house.code)).map((house) => ({ code: house.code, name: house.name, branchCode: house.branchCode }))];
+}
+
 export default async function ApInvoicePage({
   params,
   searchParams,
@@ -132,11 +150,7 @@ export default async function ApInvoicePage({
           .filter((id): id is string => Boolean(id))
           .map((id) => coa.loadAccount(tx, id).catch(() => null)),
       ),
-      houses: editable
-        ? (await warehouses.listActive(tx)).filter(
-            (house) => house.branchCode === document.invoice.branchCode,
-          )
-        : [],
+      houses: editable ? await housesFor(tx, document.invoice.branchCode, document.lines.map((line) => line.warehouseCode)) : [],
     };
   });
 
