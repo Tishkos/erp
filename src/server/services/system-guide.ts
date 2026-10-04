@@ -260,7 +260,8 @@ export function screenPictures(
   }
 
   // "all" is a how-to: where it is, the screen, the form. A record is asked for by name.
-  const views: Exclude<ShotView, 'dialog'>[] = view === 'all' ? (extra ? [...SHOT_VIEWS] : ['menu', 'screen', 'form']) : [view];
+  // Signing in, the top bar, the account menu, the password: each is one picture, whichever view it was asked for by.
+  const views: Exclude<ShotView, 'dialog'>[] = extra ? [...SHOT_VIEWS] : view === 'all' ? ['menu', 'screen', 'form'] : [view];
   const found = views.flatMap((one) => {
     const shot = all.find((candidate) => candidate.route === route && candidate.locale === locale && candidate.view === one);
     if (!shot) return [];

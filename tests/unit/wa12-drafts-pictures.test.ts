@@ -310,6 +310,10 @@ describe('which pictures a person is shown', () => {
       expect(shown.text, asked).toContain('1 = Email (a box to type in, required) · 2 = Password (a box to type in, required) · 3 = Sign in (a button)');
     }
     expect(screenPictures(nobody, 'ar', 'sign in').images[0]!.caption).toMatch(/^تسجيل الدخول/);
+    // Asked for by the wrong view ("the sign-in screen"), it is still the one picture there is — not a refusal.
+    for (const view of ['screen', 'menu', 'record', 'form'] as const) {
+      expect(screenPictures(nobody, 'en', 'sign in', view).images.map((image) => tail(image.file)), view).toEqual(['en/sign_in-form.jpg']);
+    }
     expect(screenPictures(nobody, 'en', 'the navbar').images.map((image) => tail(image.file))).toEqual(['en/top_bar-screen.jpg']);
     // One that was never made is said, not promised.
     expect(screenPictures(nobody, 'en', 'change password').text).toMatch(/There is no picture of Change password/);
