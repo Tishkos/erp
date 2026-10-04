@@ -63,9 +63,9 @@ test.describe('IM2 · the B/L table, its doors, correction and cancel', () => {
     await dialog.getByLabel('Size / type 2').selectOption('20GP');
     await dialog.getByLabel('ITM-SEED 2').fill('4');
     await dialog.getByRole('button', { name: 'New B/L' }).click();
-    await expect(page.getByRole('link', { name: blNo })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('link', { name: blNo }).first()).toBeVisible({ timeout: 30_000 });
 
-    await page.getByRole('link', { name: blNo }).click();
+    await page.getByRole('link', { name: blNo }).first().click();
     await page.waitForURL(/\/payables\/shipments\//);
     const lines = page.locator('#bl-document table[aria-labelledby="bl-document-lines-heading"]');
     await expect(lines.getByRole('row', { name: new RegExp(first) })).toContainText('40HC');
