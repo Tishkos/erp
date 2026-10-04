@@ -5645,6 +5645,15 @@
     },
     "monitoring": {
       "soon": "قريباً"
+    },
+    "record_notes": {
+      "notes": "الملاحظات",
+      "note_when": "متى",
+      "note_who": "من",
+      "note": "ملاحظة",
+      "no_notes": "لا توجد ملاحظات بعد.",
+      "note_hint": "ما الذي يحدث مع هذا السجل — مؤرخة وموقعة، ولا تُعدَّل.",
+      "add_note": "إضافة ملاحظة"
     }
   },
   "profile": {
@@ -6026,7 +6035,8 @@
       "import_application": "طلب استيراد",
       "customer_credit_note": "إشعار دائن للعميل",
       "customer_debit_note": "إشعار مدين للعميل",
-      "customer_credit_memo": "إشعار دائن للعميل (مرتجع)"
+      "customer_credit_memo": "إشعار دائن للعميل (مرتجع)",
+      "project_certificate": "شهادة الإنجاز"
     }
   }
 }

@@ -1,9 +1,13 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, Hidden, Submit, admin as s } from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { Attachments, readAttachments } from '@/components/admin/attachments';
+import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+import { ExportIcon } from '@/components/print/export-menu';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
@@ -12,14 +16,17 @@ import { visibleRoute } from '@/server/delivered';
 import { isNotFoundError } from '@/server/not-found';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as billing from '@/server/services/project-billing';
-import { approveCertificate, cancelCertificate } from '../actions';
+import * as recordNotes from '@/server/services/record-notes';
+import { approveCertificate, attachToCertificate, cancelCertificate } from '../actions';
 
 /**
  * One progress certificate — REQ-PM-001 §11, D-PM-11. Copies the Purchase
  * Invoice page: the document window with its fields, the status chip,
  * Approve (somebody other than its raiser; it posts) and Cancel as its
- * actions, the retention and advance movements it made as its lines; then
- * the history.
+ * actions, the retention and advance movements it made as its lines. The
+ * four doors in its title bar from the draft on — printer, paperclip, notes,
+ * clock (shared, 2026-10-04) — and the project, the customer and the journal
+ * as links to their own pages.
  */
 export const dynamic = 'force-dynamic';
 
@@ -44,7 +51,13 @@ export default async function CertificatePage({ params, searchParams }: { params
   }
   const view = await withCurrentUser(async (tx) => {
     try {
-      return await billing.certificate(tx, certificateNo);
+      const found = await billing.certificate(tx, certificateNo);
+      const ref = { object: billing.CERTIFICATE_DOCUMENT_TYPE, recordId: found.certificate.certificateNo };
+      return {
+        ...found,
+        notes: await recordNotes.listNotes(tx, ref),
+        files: await readAttachments(tx, ref.object, ref.recordId),
+      };
     } catch (error) {
       if (isNotFoundError(error)) return null;
       throw error;
@@ -70,16 +83,12 @@ export default async function CertificatePage({ params, searchParams }: { params
     { label: x('certificate_basis'), value: x(`basis_${cert.basis}`) },
     {
       label: x('project'),
-      value: (
-        <Link className={s.sapLink} href={`/projects/billing?project=${encodeURIComponent(cert.projectCode)}`}>
-          <bdi dir="ltr">{cert.projectCode}</bdi>
-        </Link>
-      ),
+      value: <ProfileLink code={cert.projectCode} kind="project" />,
     },
     { label: column('name'), value: <bdi dir="auto">{view.project.name}</bdi> },
     {
       label: x('customer'),
-      value: <bdi dir="auto">{view.project.customerCode ? `${view.project.customerCode} · ${view.project.customerName ?? ''}` : '—'}</bdi>,
+      value: <ProfileLink code={view.project.customerCode} dir="auto" kind="customer" name={view.project.customerName} />,
     },
     {
       label: x('certified_on'),
@@ -97,7 +106,7 @@ export default async function CertificatePage({ params, searchParams }: { params
           },
         ]
       : []),
-    { label: x('journal'), value: <bdi dir="ltr">{view.entryNo ?? '—'}</bdi> },
+    { label: x('journal'), value: <ProfileLink code={view.entryNo} kind="journal" /> },
     {
       label: x('raised_by'),
       value: <bdi dir="auto">{view.people.createdBy ?? '—'}</bdi>,
@@ -143,8 +152,31 @@ export default async function CertificatePage({ params, searchParams }: { params
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Printer, paperclip, notes, clock — from the draft on (2026-10-04). */}
+            <ExportIcon exportKey="project_certificate" id={cert.certificateNo} title={`${x('certificate')} ${cert.certificateNo}`} />
+            <AttachmentsButton
+              closeLabel={t('close')}
+              count={view.files.rows.length}
+              label={t('attachments.title')}
+              title={t('attachments.title')}
+            >
+              <Attachments
+                action={attachToCertificate}
+                hidden={{ certificate_no: cert.certificateNo }}
+                mayAttach={can(principal, 'edit_draft', billing.PERMISSION_OBJECT) && can(principal, 'create', 'attachment')}
+                objectId={cert.certificateNo}
+                objectType={billing.CERTIFICATE_DOCUMENT_TYPE}
+                preloaded={view.files}
+              />
+            </AttachmentsButton>
+            <RecordNotesDoor notes={view.notes} object={billing.CERTIFICATE_DOCUMENT_TYPE} recordId={cert.certificateNo} />
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={cert.certificateNo} objectType={billing.CERTIFICATE_DOCUMENT_TYPE} />
+            </HistoryButton>
+          </>
+        }
         documentType={x('certificate')}
         fields={fields}
         id="project-certificate"
@@ -197,8 +229,6 @@ export default async function CertificatePage({ params, searchParams }: { params
           </tbody>
         </table>
       </DocumentWindow>
-
-      <RecordHistory objectId={cert.certificateNo} objectType={billing.CERTIFICATE_DOCUMENT_TYPE} />
     </AdminPage>
   );
 }
