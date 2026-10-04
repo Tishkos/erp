@@ -92,7 +92,7 @@ describe('the screen catalogue covers the approved tree', () => {
   // one of them is still reachable, once.
   // Plus one more, by direction (2026-09-03): the Statement Mapping, where
   // Finance defines the headers and lines of its own reports.
-  it('classifies all 242 items in the approved tree', () => {
+  it('classifies all 243 items in the approved tree', () => {
     // 221 from the approved tree, plus the Stock Ledger (2026-09-27), plus
     // REQ-AP-001 §21.1: the Payables workbench, recurring contracts, payment
     // applications, PDs, B/Ls, containers, loans and the module settings —
@@ -102,9 +102,12 @@ describe('the screen catalogue covers the approved tree', () => {
     // REQ-FIX-001 FIX-1's Bank Deposits and the ASYCUDA list as its own item;
     // plus FIX-5's HR menu in the sponsor's order — Dashboard, Departments,
     // Positions, Recruitment, Performance, Employee Requests and Documents in,
-    // Organisation, Payslips, Expense Claims, Travel and Asset Assignment out.
-    expect(allMenuItems()).toHaveLength(242);
-    expect(Object.keys(SCREENS)).toHaveLength(242);
+    // Organisation, Payslips, Expense Claims, Travel and Asset Assignment out;
+    // plus the Accounting navbar (2026-10-04): Account Reconciliation, Tax
+    // Codes and Payments & Receipts in, Treasury's separate Receipts and
+    // Payments out (one register of the money that moved replaces both).
+    expect(allMenuItems()).toHaveLength(243);
+    expect(Object.keys(SCREENS)).toHaveLength(243);
   });
 
   it('uses only declared archetypes', () => {
@@ -123,7 +126,10 @@ describe('the screen catalogue covers the approved tree', () => {
     );
     // + Bank Deposits (a document, two) + the ASYCUDA list (a workspace, one);
     // FIX-5: + 1 + 2 + 2 + 2 + 2 + 2 + 1 in, − 1 − 1 − 2 − 2 − 2 out.
-    expect(total).toBe(357);
+    // Accounting navbar: + 1 (account reconciliation) + 1 (payments &
+    // receipts) + 2 (tax codes) + 1 (bank reconciliation is a record now),
+    // − 2 − 2 (receipts, payments).
+    expect(total).toBe(358);
   });
 });
 
@@ -176,7 +182,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(242);
+    expect(screenRoutes().size).toBe(243);
   });
 
   it('marks only the delivered screens as reading real data', () => {

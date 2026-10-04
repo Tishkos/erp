@@ -190,7 +190,8 @@ export async function payInstalmentAction(formData: FormData): Promise<void> {
  * End the loan early — by direction, 2026-10-03.
  *
  * The principal outstanding and the interest accrued are the service's to work
- * out; what comes from the form is the day, the bank's reference, and the two
+ * out; what comes from the form is the day, the bank's reference, the
+ * principal paid (all of it unless less is typed), and the two
  * figures the bank itself quotes — its charge for ending early, and the
  * interest where it asks for something other than the accrual.
  */
@@ -203,6 +204,8 @@ export async function settleLoanEarly(formData: FormData): Promise<void> {
         reference: text(formData, 'reference'),
         feeTxn: amountOf(text(formData, 'fee')),
         interestTxn: amountOf(text(formData, 'interest')),
+        // Less than the outstanding is a part-payment; the instalments are redone.
+        principalTxn: amountOf(text(formData, 'principal')),
         bankCashAccountId: text(formData, 'bank_cash_account_id') || null,
       }),
     record(loanNo),
