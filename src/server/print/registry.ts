@@ -57,6 +57,7 @@ const BUILDERS = {
   cash_forecast: (ctx, input) => accountingDocuments.cashForecast(ctx, input.query),
   account_reconciliation: (ctx, input) => accountingDocuments.accountReconciliation(ctx, input.query),
   tax_code: byId(accountingDocuments.taxCode),
+  recurring_journal: byId(accountingDocuments.recurringJournal),
   customer_statement: (ctx, input) => reports.partnerStatement(ctx, 'customer', input.query),
   supplier_statement: (ctx, input) => reports.partnerStatement(ctx, 'supplier', input.query),
   bank_statement: (ctx, input) => (input.id ? reports.bankStatement(ctx, input.id, input.query, 'bank') : Promise.resolve(null)),

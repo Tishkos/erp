@@ -35,6 +35,7 @@ export const EXPORT_ACCESS = {
   cash_forecast: { kind: 'report', route: '/treasury/cash-forecast', object: 'bank_cash_account' },
   account_reconciliation: { kind: 'report', route: '/finance/account-reconciliation', object: 'trial_balance' },
   tax_code: { kind: 'document', route: '/master-data/tax-codes', object: 'tax_code' },
+  recurring_journal: { kind: 'document', route: '/finance/recurring-journals', object: 'journal_entry' },
   customer_statement: { kind: 'report', route: '/sales/customer-statements', object: 'business_partner' },
   supplier_statement: { kind: 'report', route: '/payables/supplier-statements', object: 'business_partner' },
   bank_statement: { kind: 'report', route: '/master-data/bank-accounts', object: 'bank_account' },

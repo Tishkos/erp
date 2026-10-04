@@ -224,6 +224,8 @@ describe('every screen has one address', () => {
       // Back on the tree (by direction, 2026-09-24): the documents that cannot
       // name their own account still have to name it somewhere.
       '/finance/posting-mappings',
+      // REQ-ACC-001 Part D — Recurring Journals.
+      '/finance/recurring-journals',
       '/finance/reversals',
       '/finance/trial-balance',
       '/hr/advances',

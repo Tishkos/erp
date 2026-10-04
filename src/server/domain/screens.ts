@@ -541,6 +541,7 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/finance/account-reconciliation',
   '/master-data/tax-codes',
   '/finance/closing',
+  '/finance/recurring-journals',
 ]);
 
 export function isDelivered(route: string): boolean {

@@ -15,6 +15,7 @@ import * as treasuryReports from '../services/treasury-reports';
 import * as forecasts from '../services/cash-forecast';
 import * as subledger from '../services/subledger';
 import * as taxCodes from '../services/tax-codes';
+import * as recurring from '../services/recurring-journals';
 import { businessToday } from '../domain/business-date';
 import { addDays } from '../domain/dates';
 import type { BuildContext, Built } from './documents';
@@ -525,5 +526,83 @@ export async function taxCode(ctx: BuildContext, code: string): Promise<Built | 
     // A tax code is the company's, not a branch's: the reader's letterhead.
     branchCode: ctx.branchCode,
     objectId: row.code,
+  };
+}
+
+/** A Recurring Journal: its schedule, the journal it raises, and the journals it raised. */
+export async function recurringJournal(ctx: BuildContext, templateNo: string): Promise<Built | null> {
+  const { tx, m, locale, principal, branchCode } = ctx;
+  let view: Awaited<ReturnType<typeof recurring.view>>;
+  try {
+    view = await recurring.view(tx, { principal, branchCode }, templateNo);
+  } catch {
+    return null;
+  }
+  const { template, lines, runs, totals } = view;
+  const t = (key: string, values?: Record<string, string | number>) => m.admin(`recurring_journals.${key}`, values);
+  const every =
+    template.intervalCount === 1
+      ? t(`frequency_${template.frequency}`)
+      : t('every_n', { n: template.intervalCount, unit: t(`unit_${template.frequency}`) });
+  const title = m.print('titles.recurring_journal');
+  return {
+    model: base({
+      title,
+      number: template.templateNo,
+      status: t(`status_${template.status}`),
+      posted: template.status !== 'draft',
+      fields: [
+        { label: t('col_no'), value: template.templateNo, ltr: true },
+        { label: t('name'), value: template.name },
+        { label: t('frequency'), value: every },
+        { label: t('starts_on'), value: day(template.startsOn, locale), ltr: true },
+        { label: t('ends_on'), value: day(template.endsOn, locale), ltr: true },
+        { label: t('next_due'), value: day(template.nextDueOn, locale), ltr: true },
+        { label: t('written_by'), value: view.createdByName ?? '—' },
+        { label: t('agreed_by'), value: view.activatedByName ?? '—' },
+        ...(template.description ? [{ label: t('description'), value: template.description }] : []),
+        ...(template.endReason ? [{ label: t('end_reason'), value: template.endReason }] : []),
+      ],
+      tables: [
+        {
+          title: t('lines'),
+          columns: [
+            { key: 'line', label: '#', kind: 'code', weight: 0.45 },
+            { key: 'account', label: t('account'), kind: 'text', weight: 2 },
+            { key: 'department', label: t('department'), kind: 'code' },
+            { key: 'debit', label: t('debit'), kind: 'money' },
+            { key: 'credit', label: t('credit'), kind: 'money' },
+          ],
+          rows: lines.map((line) => ({
+            cells: {
+              line: String(line.lineNo),
+              account: `${line.accountCode} · ${line.accountName}`,
+              department: line.departmentCode ?? '',
+              debit: Number(line.debit) === 0 ? null : line.debit,
+              credit: Number(line.credit) === 0 ? null : line.credit,
+            },
+          })),
+          empty: t('no_lines'),
+          totals: { label: m.print('totals'), cells: { debit: totals.debit, credit: totals.credit }, sum: ['debit', 'credit'] },
+        },
+        {
+          title: t('runs_title'),
+          columns: [
+            { key: 'due', label: t('due_on'), kind: 'text' },
+            { key: 'journal', label: t('journal'), kind: 'code' },
+            { key: 'status', label: t('col_status'), kind: 'text' },
+            { key: 'by', label: t('raised_by'), kind: 'text' },
+          ],
+          rows: runs.map((run) => ({
+            cells: { due: day(run.dueOn, locale), journal: run.entryNo, status: m.status(run.status), by: run.raisedBy ?? '—' },
+          })),
+          empty: t('no_runs'),
+        },
+      ],
+      signatures: true,
+      fileName: template.templateNo,
+    }),
+    branchCode: template.branchCode,
+    objectId: template.id,
   };
 }
