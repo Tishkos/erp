@@ -75,7 +75,7 @@ describe('routes and the profile · what the B/Ls say', () => {
     const first = await importOf(world, '100', { reference: 'R-1' });
     const second = await importOf(world, '50', { reference: 'R-2' });
     const bl1 = await blWith(world, first.payableId, [{ no: containerNo('MSCU', 610001), qty: '100' }], { portCode: 'PRT-0001' });
-    const bl2 = await blWith(world, second.payableId, [{ no: containerNo('MSCU', 610002), qty: '50' }], { portCode: 'PRT-0002', eta: '2026-11-15' });
+    const bl2 = await blWith(world, second.payableId, [{ no: containerNo('MSCU', 610002), qty: '50' }], { portCode: 'PRT-0002', eta: '2026-09-15' });
     await receive(world, bl1.containerIds[0]!);
 
     const routes = await withScope(scope(world.clerk), (tx) => ports.routesInUse(tx));
@@ -84,10 +84,10 @@ describe('routes and the profile · what the B/Ls say', () => {
       ['Shanghai', 'PRT-0002', 1, 1, 'MSC'],
     ]);
     const aqaba = await withScope(scope(world.clerk), (tx) => ports.viewByCode(tx, 'prt-0002'));
-    expect(aqaba.port).toMatchObject({ code: 'PRT-0002', name: 'Aqaba', blCount: 1, openContainers: 1, lastBlDate: '2026-09-20' });
+    expect(aqaba.port).toMatchObject({ code: 'PRT-0002', name: 'Aqaba', blCount: 1, openContainers: 1, lastBlDate: '2026-07-20' });
     expect(aqaba.bls.map((bl) => [bl.blNo, bl.payableNo, bl.containers, bl.open])).toEqual([[bl2.blNo, expect.any(String), 1, 1]]);
     const inbound = await withScope(scope(world.clerk), (tx) => ports.inboundContainers(tx, 'PRT-0002'));
-    expect(inbound.map((c) => [c.containerNo, c.statusCode, c.eta])).toEqual([[containerNo('MSCU', 610002), 'not_loaded', '2026-11-15']]);
+    expect(inbound.map((c) => [c.containerNo, c.statusCode, c.eta])).toEqual([[containerNo('MSCU', 610002), 'not_loaded', '2026-09-15']]);
     const list = await withScope(scope(world.clerk), (tx) => ports.list(tx));
     expect(list.map((p) => [p.code, p.blCount, p.openContainers])).toEqual([
       ['PRT-0002', 1, 1],

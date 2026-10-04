@@ -27,7 +27,7 @@ const create = (input: Partial<declarations.CreateInput> = {}) =>
     declarations.create(tx, world.clerk, {
       payableId,
       pdId,
-      declarationDate: '2026-10-20',
+      declarationDate: '2026-08-20',
       currency: 'IQD',
       declaredValue: iqd('5000000'),
       declaredDuty: iqd('250000'),
@@ -37,7 +37,7 @@ const create = (input: Partial<declarations.CreateInput> = {}) =>
     }),
   );
 const move = (id: string, to: string, extra: Partial<declarations.MoveInput> = {}, actor = world.clerk) =>
-  withScope(scope(actor), (tx) => declarations.move(tx, actor, id, { to, on: '2026-10-21', ...extra }));
+  withScope(scope(actor), (tx) => declarations.move(tx, actor, id, { to, on: '2026-08-21', ...extra }));
 const statusOf = async (id: string) => (await ownerPool.query(`select status, customs_ref, reason from customs_declaration where id = $1`, [id])).rows[0];
 
 beforeEach(async () => {
@@ -59,9 +59,9 @@ describe('life · forward only, one step at a time', () => {
     expect(await rejection(move(made.id, 'accepted'))).toMatch(/Customs gives its own number/);
     await move(made.id, 'accepted', { customsRef: 'BG-1' });
     // A date before the lodgement is refused.
-    expect(await rejection(move(made.id, 'assessed', { on: '2026-10-01' }))).toMatch(/before .* was lodged/);
+    expect(await rejection(move(made.id, 'assessed', { on: '2026-08-01' }))).toMatch(/before .* was lodged/);
     await move(made.id, 'assessed');
-    await move(made.id, 'cleared', { on: '2026-10-25' });
+    await move(made.id, 'cleared', { on: '2026-08-25' });
     expect(await statusOf(made.id)).toMatchObject({ status: 'cleared', customs_ref: 'BG-1' });
     expect(await rejection(move(made.id, 'cancelled', { reason: 'Too late' }, world.manager))).toMatch(/does not move again/);
 
@@ -188,7 +188,7 @@ describe('who · the grants, the branch, the doors', () => {
     registerAllRecords();
     const made = await create();
     await withScope(scope(world.clerk), (tx) =>
-      attachments.upload(tx, world.clerk, { objectType: declarations.PERMISSION_OBJECT, objectId: made.id, fileName: 'lodgement.txt', content: Buffer.from('Customs declaration lodged 2026-10-20.') }),
+      attachments.upload(tx, world.clerk, { objectType: declarations.PERMISSION_OBJECT, objectId: made.id, fileName: 'lodgement.txt', content: Buffer.from('Customs declaration lodged 2026-08-20.') }),
     );
     const files = await withScope(scope(world.clerk), (tx) => attachments.currentFor(tx, declarations.PERMISSION_OBJECT, made.id));
     expect(files.map((file) => file.fileName)).toEqual(['lodgement.txt']);

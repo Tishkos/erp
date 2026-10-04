@@ -8,6 +8,11 @@
  * containers planned to the quantities the test names, a receipt, a charge
  * from a posted journal, a PD moved to a status. Everything goes through the
  * services; nothing is written to a document table by hand.
+ *
+ * The timeline runs July to September 2026 — in the past, and it must stay
+ * there: a landed cost is locked on a day that has come and not before the
+ * last container was received (`landed-cost.lockDateFor`), so a receipt or a
+ * lock dated after today is refused, not deferred.
  */
 import { randomUUID } from 'node:crypto';
 import { ownerPool } from './setup';
@@ -69,8 +74,8 @@ export async function importOf(world: ImportWorld, quantity: string, options: { 
       supplierId: world.supplierId,
       supplierInvoiceNo: options.reference ?? `LOG-${randomUUID().slice(0, 6)}`,
       branchCode: BAGHDAD,
-      invoiceDate: '2026-09-01',
-      dueDate: '2026-11-01',
+      invoiceDate: '2026-07-01',
+      dueDate: '2026-09-01',
       isImport: true,
       lines: [
         {
@@ -102,8 +107,8 @@ export async function blWith(world: ImportWorld, payableId: string, containers: 
     shipments.createBl(tx, world.clerk, {
       payableId,
       blNo: options.blNo ?? `MEDU${randomUUID().slice(0, 6).toUpperCase()}`,
-      blDate: '2026-09-20',
-      eta: options.eta ?? '2026-10-25',
+      blDate: '2026-07-20',
+      eta: options.eta ?? '2026-08-25',
       vessel: 'MSC AURORA',
       shippingLine: 'MSC',
       portOfLoading: 'Shanghai',
@@ -128,7 +133,7 @@ export async function receive(world: ImportWorld, containerId: string, options: 
       documentId: randomUUID(),
       containerId,
       warehouseCode: options.warehouse ?? WAREHOUSE,
-      receiptDate: options.on ?? '2026-10-28',
+      receiptDate: options.on ?? '2026-08-28',
       lines: [{ containerLineId: line.id, receivedQty: q(options.received ?? line.planned), damagedQty: 0n, ...(options.received ? {} : { shortQty: 0n }) }],
       varianceReason: options.reason ?? null,
     }),
@@ -136,7 +141,7 @@ export async function receive(world: ImportWorld, containerId: string, options: 
 }
 
 /** A posted journal, as an accountant would post one: Dr `debit` Cr `credit`. */
-export async function journal(world: ImportWorld, debit: string, credit: string, amount: string, on = '2026-10-20') {
+export async function journal(world: ImportWorld, debit: string, credit: string, amount: string, on = '2026-08-20') {
   const client = await ownerPool.connect();
   try {
     await client.query('begin');
@@ -178,7 +183,7 @@ export async function charge(world: ImportWorld, payableId: string, type: string
 
 export async function registerPd(world: ImportWorld, payableId: string, pdNo: string) {
   return withScope(scope(world.clerk), (tx) =>
-    customs.register(tx, world.clerk, { payableId, pdNo, registrationDate: '2026-09-02', expiryDate: '2027-03-01' }),
+    customs.register(tx, world.clerk, { payableId, pdNo, registrationDate: '2026-07-02', expiryDate: '2027-03-01' }),
   );
 }
 
@@ -186,8 +191,8 @@ export const pdTo = (world: ImportWorld, pdId: string, statusCode: string, on: s
   withScope(scope(world.clerk), (tx) => customs.changeStatus(tx, world.clerk, pdId, { statusCode, effectiveDate: on }));
 
 export const lock = (world: ImportWorld, payableId: string, input: Partial<landed.LockInput> = {}) =>
-  withScope(scope(world.manager), (tx) => landed.lock(tx, world.manager, { payableId, lockDate: '2026-10-30', ...input }));
+  withScope(scope(world.manager), (tx) => landed.lock(tx, world.manager, { payableId, lockDate: '2026-08-30', ...input }));
 
-/** The ledger's balance of PANEL in one warehouse — `stock_position.on_hand`, which for a transit warehouse means in transit. */
+/** The ledger's balance of PANEL in one warehouse — `stock_position.held` (0287), which for a transit warehouse means in transit, never on hand. */
 export const ledgerBalance = async (warehouseCode: string) =>
-  (await ownerPool.query(`select coalesce(sum(on_hand), 0)::numeric(24,6)::text as n from stock_position where item_code = $1 and warehouse_code = $2`, [PANEL, warehouseCode])).rows[0].n as string;
+  (await ownerPool.query(`select coalesce(sum(held), 0)::numeric(24,6)::text as n from stock_position where item_code = $1 and warehouse_code = $2`, [PANEL, warehouseCode])).rows[0].n as string;

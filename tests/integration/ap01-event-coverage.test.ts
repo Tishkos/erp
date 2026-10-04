@@ -63,6 +63,10 @@ describe('ap01 · every service that touches a payable writes its story', () => 
       // Stage 2 (0230): the charge writes CHARGED_TO_IMPORT in its own
       // transaction — ap02-charged-to-import.
       'landed_cost_charge',
+      // IMPROVEMENT-002 (0285): where a locked layer's departed units went is
+      // written by the lock itself (LANDED_COST_LOCKED) and by the return that
+      // undoes it — lc01-landed-cost-routing, lc03-final-cost.
+      'landed_cost_departure',
       // Stage 7 (0236): a lock writes LANDED_COST_LOCKED and one
       // ITEM_COST_ALLOCATED per model — ap07-landed-cost.
       'landed_cost_layer_adjustment',
