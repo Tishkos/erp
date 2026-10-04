@@ -16,6 +16,7 @@ import type { DocumentStatus } from '../domain/statuses';
 import { registerRecord } from '../services/record';
 import { registerActionEffect } from '../services/document-actions';
 import { registerAttachmentRuntime } from '../attachments-runtime';
+import { registerDepartureRuntime } from '../departures-runtime';
 import * as accounts from '../services/chart-of-accounts';
 
 /**
@@ -108,6 +109,11 @@ export function registerAllRecords(): void {
 
   // §21 — where files go, what scans them, and who may read them back.
   registerAttachmentRuntime();
+
+  // IMPROVEMENT-002 — where stock that left a layer went, by the module that
+  // took it; a landed-cost lock in a cold process would otherwise refuse
+  // every departure for want of a rule.
+  registerDepartureRuntime();
 
   registerRecord({
     documentType: 'chart_of_account',

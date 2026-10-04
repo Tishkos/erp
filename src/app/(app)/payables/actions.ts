@@ -297,6 +297,9 @@ export async function withdrawLandedCharge(form: FormData): Promise<void> {
 }
 
 export async function lockLandedCost(form: FormData): Promise<void> {
+  // IMPROVEMENT-002 — the lock asks each module where its departed stock
+  // went; a cold process has registered none of them yet.
+  registerAllRecords();
   const payableNo = text(form, 'payable_no');
   const count = rowCount(form, 0);
   await runAdminAndReturn(async (tx, ctx) => {
