@@ -118,8 +118,9 @@ describe('the screen catalogue covers the approved tree', () => {
     // Stock Issues, Stock Count, Inventory Checks and Inventory Valuation in,
     // the unbuilt Quarantine, Returns, Damaged Goods, Serial / Batch,
     // Reports and Settings placeholders out.
-    expect(allMenuItems()).toHaveLength(248);
-    expect(Object.keys(SCREENS)).toHaveLength(248);
+    // Plus Chat (platform phase, Agent 1): one workspace screen.
+    expect(allMenuItems()).toHaveLength(249);
+    expect(Object.keys(SCREENS)).toHaveLength(249);
   });
 
   it('uses only declared archetypes', () => {
@@ -145,7 +146,8 @@ describe('the screen catalogue covers the approved tree', () => {
     // Ledger, Advances, Payments, Allocations, Ageing), + 1 in (Supplier Credits).
     // REQ-LOG-001: + 2 + 2 (declarations, ports) + 8 (the registers).
     // IMPROVEMENT-002 inventory: + 1 + 1 + 2 + 1 + 1 in, − 1 − 2 − 2 − 1 − 1 − 1 out.
-    expect(total).toBe(362);
+    // Platform phase: + 1 (Chat, a workspace).
+    expect(total).toBe(363);
   });
 });
 
@@ -198,7 +200,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(248);
+    expect(screenRoutes().size).toBe(249);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -224,6 +226,8 @@ describe('every screen has one address', () => {
       // REQ-WA-001 — the WhatsApp bridge.
       '/administration/whatsapp',
       '/approvals',
+      // Internal chat (platform phase, Agent 1).
+      '/chat',
       '/documents',
       // REQ-ACC-001 Part D — Account Reconciliation.
       '/finance/account-reconciliation',

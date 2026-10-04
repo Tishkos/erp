@@ -126,6 +126,22 @@ export function clearParentAccessChecks(): void {
   parentAccessChecks.clear();
 }
 
+/**
+ * Whether this person may open the record an attachment (or a conversation)
+ * hangs on — the same registered check, asked without raising. A type nobody
+ * registered answers no, as it does for a file.
+ */
+export async function mayAccessParent(
+  tx: Tx,
+  principal: Principal,
+  objectType: string,
+  objectId: string,
+): Promise<boolean> {
+  const check = parentAccessChecks.get(objectType);
+  if (!check) return false;
+  return Boolean(await check(tx, principal, objectId));
+}
+
 async function assertParentAccess(
   tx: Tx,
   principal: Principal,

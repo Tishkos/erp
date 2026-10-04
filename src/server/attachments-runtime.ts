@@ -10,7 +10,7 @@
 import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
   apInvoice,
   applicant,
@@ -20,6 +20,7 @@ import {
   bankStatement,
   bankTransfer,
   billOfLading,
+  chatMessage,
   customerCreditMemo,
   customerNote,
   customerReceipt,
@@ -475,6 +476,24 @@ const inventoryRecordParentAccess =
     return false;
   };
 
+/**
+ * Internal chat — a file sent in a conversation hangs on its message. Read and
+ * written by the conversation's members and nobody else: the message row's own
+ * policy is membership (and not before the person was let in), so the select
+ * below finds it for a member and returns nothing for anyone else. A withdrawn
+ * message hands out no files.
+ */
+const chatMessageParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'chat')) return false;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectId)) return false;
+  const [row] = await tx
+    .select({ id: chatMessage.id })
+    .from(chatMessage)
+    .where(and(eq(chatMessage.id, objectId), isNull(chatMessage.retractedAt)))
+    .limit(1);
+  return Boolean(row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -516,6 +535,7 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('performance_review', performanceReviewParentAccess);
   attachments.registerParentAccessCheck('vacancy', vacancyParentAccess);
   attachments.registerParentAccessCheck('payroll_run', payrollRunParentAccess);
+  attachments.registerParentAccessCheck('chat_message', chatMessageParentAccess);
   for (const [object, table] of PURCHASE_PARENTS) {
     attachments.registerParentAccessCheck(object, purchaseParentAccess(object, table));
   }

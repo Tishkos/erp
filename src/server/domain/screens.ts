@@ -54,6 +54,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   my_tasks: 'inbox',
   my_approvals: 'inbox',
   notifications: 'inbox',
+  chat: 'workspace',
   recent_records: 'list',
   global_search: 'workspace',
 
@@ -406,6 +407,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/master-data/chart-of-accounts',
   '/inventory/availability',
   '/documents',
+  // Internal chat (platform phase, Agent 1).
+  '/chat',
   // Monitoring — drawn, reading nothing yet (2026-10-03).
   '/monitoring/customer-list',
   '/monitoring/history',
