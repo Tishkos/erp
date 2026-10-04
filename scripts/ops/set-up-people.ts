@@ -124,9 +124,11 @@ const BUYING = ['payables'];
  * Shene `post` on a supplier payment — she could have sent money with nobody
  * approving it, which is the opposite of what was asked (caught by reading the
  * grants back, 2026-10-03). Named here so no section grant can include them by
- * accident again.
+ * accident again. (`ap_allocation` was the never-built Allocations item's
+ * object until 2026-10-04; it left the menu, and `setGrants` refuses an object
+ * the menu does not know.)
  */
-const PAYING = ['payment_application', 'supplier_payment', 'supplier_advance', 'ap_allocation'];
+const PAYING = ['payment_application', 'supplier_payment', 'supplier_advance'];
 
 type Grant = { readonly object: string; readonly verb: PermissionVerb };
 
@@ -172,17 +174,24 @@ const NEW_ROLES = [
       'Supply chain, ASYCUDA, shipping and inventory, with no approvals. A purchase invoice is raised for the CEO. Nothing else. Shene and Diana.',
     grants: restrict(
       grants(
-        objectsOf(
-          'payables',
-          'payables_suppliers',
-          'payables_setup',
-          'logistics_customs',
-          'logistics_shipping',
-          'logistics_in_transit',
-          'logistics_landed_costs',
-          'logistics',
-          'inventory',
-        ),
+        [
+          ...objectsOf(
+            'payables',
+            'payables_suppliers',
+            'logistics_customs',
+            'logistics_shipping',
+            'logistics_in_transit',
+            'logistics_landed_costs',
+            'logistics',
+            'inventory',
+          ),
+          // Payables Settings and the sheet migration were the module's own
+          // section (`payables_setup`) until 2026-10-04, when they moved to
+          // Administration beside the other modules' settings. The rest of
+          // that section is not hers, so the two objects are named instead.
+          'payables_settings',
+          'payables_migration',
+        ],
         FULL,
       ),
       // The purchase invoice commits the company to pay; the payment objects
