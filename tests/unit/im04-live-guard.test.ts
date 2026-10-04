@@ -30,6 +30,7 @@ const LIVE_USE: Readonly<Record<string, string>> = {
   'scripts/ops/due-notices.ts': 'a scheduled job on the live books',
   'scripts/ops/hr-sweep.ts': 'a scheduled job; writes only notifications (REQ-HR-001 HR-2)',
   'scripts/ops/task-sweep.ts': 'a scheduled job; writes only notifications (Task Center)',
+  'scripts/ops/automation-run.ts': 'a scheduled job; writes the automation outbox and runs, and what a rule does as its owner: notifications, tasks, a review hold, exceptions (Workflow Automation)',
   'scripts/ops/exception-sweep.ts': 'a scheduled job; writes only the exception tables and notifications (Exception Center)',
   'scripts/ops/inventory-integrity-check.ts': 'a scheduled job; writes only notifications',
   'scripts/ops/health-check.ts': 'a scheduled job; writes only notifications',

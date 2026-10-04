@@ -854,9 +854,10 @@ async function tell(
  * exception, and narrow on purpose:
  *
  *   * only the three detectors of the `automation` family (`EXCEPTION_EVENTS`);
- *   * only for a person who holds `execute` on the exception centre and `view`
- *     on the object the finding is about (the same grants the table's own
- *     policy checks on every write);
+ *   * only for a person who holds `administer` on the exception centre (what
+ *     "Refresh now" asks) and `view` on the object the finding is about; the
+ *     table's own policy asks for `execute` and `view` on every write, so the
+ *     database holds the weaker half;
  *   * the database's "raised by the sweep" guard is lifted for these statements
  *     alone, inside their own savepoint, and put back before they return;
  *   * a finding that is live is left as it is (nothing is rewritten, nobody is
@@ -873,8 +874,8 @@ export async function raiseFromAutomation(
 ): Promise<{ id: string; exceptionNo: string; outcome: 'created' | 'reopened' | 'exists' }> {
   const def = detectorOf(finding.detector);
   if (!def || !(finding.detector in EXCEPTION_EVENTS)) throw new ExceptionError('NOT_PERMITTED', `${finding.detector} is not a finding a rule may raise.`);
-  if (!can(ctx.principal, 'execute', PERMISSION_OBJECT) || !can(ctx.principal, 'view', def.object)) {
-    throw new ExceptionError('NOT_PERMITTED', 'Raising an exception needs execute on the Exception Center and view on the record it is about.');
+  if (!can(ctx.principal, 'administer', PERMISSION_OBJECT) || !can(ctx.principal, 'view', def.object)) {
+    throw new ExceptionError('NOT_PERMITTED', 'Raising an exception needs administer on the Exception Center and view on the record it is about.');
   }
   const problem = refusal(finding);
   if (problem) throw new ExceptionError('INVALID', problem);

@@ -386,7 +386,8 @@ export function requirementsOf(eventKey: EventKey, action: Action): readonly (re
       // Asking for a review of a purchase invoice is what submitting (or approving) one is.
       return [[{ verb: 'submit', object: 'ap_invoice' }], [{ verb: 'approve', object: 'ap_invoice' }]];
     case 'create_exception':
-      return [[{ verb: 'execute', object: 'exception' }, { verb: 'view', object: event.object }]];
+      // Raising a finding is what "Refresh now" is: the Exception Center's administrators, and only for what they may open.
+      return [[{ verb: 'administer', object: 'exception' }, { verb: 'view', object: event.object }]];
   }
 }
 

@@ -26,6 +26,7 @@ import { businessToday } from '../domain/business-date';
 import { EVENTS, sweepWindow, type EventKey } from '../domain/automation-events';
 import { can, type Principal } from '../domain/permissions';
 import { daysUntil, dueState, type TaskStatus } from '../domain/tasks';
+import * as authz from './authorization';
 import * as dispatcher from './automation-dispatch';
 import * as views from './logistics-views';
 import * as openItems from './open-items';
@@ -136,6 +137,11 @@ const invoiceOverdue: Producer = async (tx, principal, today) => {
     },
   }));
 };
+
+/** The system operator as the producers read: the whole company, whether the operator holds the super-user flag or only the administrator's role. */
+export async function operatorPrincipal(tx: Tx, userId: string): Promise<Principal> {
+  return { ...(await authz.loadPrincipal(tx, userId)), isSuperUser: true };
+}
 
 /** The producers, by event. Every sweep event of the catalogue has one (`wf01-automation.test.ts` holds it). */
 export const PRODUCERS: Readonly<Partial<Record<EventKey, Producer>>> = Object.freeze({

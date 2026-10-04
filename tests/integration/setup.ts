@@ -525,6 +525,11 @@ export async function resetTestData(): Promise<void> {
     // The Exception Center (platform phase, Agent 7): a finding, its history and the sweep log are never deleted by the
     // application (triggers), so a reset truncates them together. The series EXCEPTION is kept below.
     await client.query('truncate exception_history, exception_sweep_run, exception');
+    // Workflow Automation (platform phase, Agent 10): a rule, its versions, the outbox and the runs are never deleted by the
+    // application (triggers), so a reset truncates them together; the switch and the pause threshold go back to their seed.
+    // The series AUTOMATION_RULE is kept below.
+    await client.query('truncate automation_run, automation_event, automation_rule_version, automation_rule');
+    await client.query(`update automation_setting set value = case key when 'enabled' then 'on' when 'pause_after_failures' then '3' else value end, updated_by = null, updated_at = now()`);
     await client.query(`delete from whatsapp_setting where key like 'bridge_%'`);
     /*
      * Every seeded key, not some of them.
@@ -977,6 +982,8 @@ export async function resetTestData(): Promise<void> {
                          'TASK',
                          -- Platform phase, Agent 7 — the Exception Center, migration 0380.
                          'EXCEPTION',
+                         -- Platform phase, Agent 10 — Workflow Automation, migration 0400.
+                         'AUTOMATION_RULE',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',
