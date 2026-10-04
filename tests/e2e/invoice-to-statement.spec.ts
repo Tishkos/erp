@@ -213,6 +213,10 @@ test.describe('a purchase invoice reaches the supplier statement', () => {
       await itemField.selectOption('ITM-SEED');
     } else {
       await itemField.fill('ITM-SEED');
+      // The name following the code proves the grid is hydrated: quantity
+      // and price are controlled inputs, and a value typed before hydration
+      // is reset by it (the invoice then posts at 1 × the default price).
+      await expect(page.getByLabel('Item Name').first()).toHaveValue(/Seed/, { timeout: 30_000 });
     }
     await page.locator('input[name="quantity_0"]').fill('3');
     await page.locator('input[name="unit_price_0"]').fill('2500');

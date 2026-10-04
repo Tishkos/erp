@@ -65,10 +65,18 @@ async function expectPrints(page: Page, exportKey: string, id: string) {
 
 const doors = (page: Page) => page.locator('[class*="sapTitleActions"]').first().locator(':scope > button, :scope > a');
 
-/** What the seeded item holds after the count below: the book quantity less two, at 12.5 a unit. */
+/**
+ * What the seeded item holds in WH-HQ after the count below: every batch's
+ * book quantity, less the two the seed's batch is counted short. On a fresh
+ * database the seed's batch (250 at 12.5) is the only one, and the value is
+ * checked too; after other specs have bought the item in, the warehouse holds
+ * their batches at their prices, and only the quantity is a figure this spec
+ * can work out from the screens.
+ */
 let onHand = 0;
+let seedBatchAlone = true;
 const held = () => String(onHand);
-const heldValue = () => (onHand * 12.5).toLocaleString('en-US', { minimumFractionDigits: 0 });
+const heldValue = () => (seedBatchAlone ? (onHand * 12.5).toLocaleString('en-US', { minimumFractionDigits: 0 }) : null);
 
 test.describe('IMPROVEMENT-002 · the inventory screens', () => {
   test.describe.configure({ mode: 'serial' });
@@ -121,16 +129,24 @@ test.describe('IMPROVEMENT-002 · the inventory screens', () => {
     await expectPrints(page, 'stock_count', countNo);
     await photograph(page, `/inventory/stock-count/${encodeURIComponent(countNo)}`, 'stock-count-record-planned');
 
-    // Count: two short of the book (the seed's 250, less what earlier runs took).
-    const bookCell = page.locator('table[aria-labelledby="stock-count-lines-heading"] tbody tr').first().locator('td').nth(4);
-    const book = Number((await bookCell.innerText()).replace(/[^\d.]/g, ''));
+    // Count: the seed's batch two short of its book (250, less what earlier
+    // runs took). The item is batch-tracked, so the count has a row per batch
+    // and the seed's is found by name, not by position.
+    const lines = page.locator('table[aria-labelledby="stock-count-lines-heading"] tbody tr');
+    const seedRow = lines.filter({ hasText: 'B-SEED' }).first();
+    await expect(seedRow).toBeVisible();
+    const seedNo = (await seedRow.locator('td').first().innerText()).trim();
+    const figure = (text: string) => Number(text.replace(/[^\d.]/g, '')) || 0;
+    const book = figure(await seedRow.locator('td').nth(4).innerText());
     expect(book).toBeGreaterThan(2);
-    onHand = book - 2;
-    await page.getByLabel('Counted 1').fill(String(onHand));
-    await page.getByLabel('Note 1').fill('Two damaged in the rack');
+    const books = (await lines.locator('td:nth-child(5)').allInnerTexts()).map(figure);
+    seedBatchAlone = books.length === 1;
+    onHand = books.reduce((sum, qty) => sum + qty, 0) - 2;
+    await page.getByLabel(`Counted ${seedNo}`).fill(String(book - 2));
+    await page.getByLabel(`Note ${seedNo}`).fill('Two damaged in the rack');
     await page.getByRole('button', { name: 'Record the count' }).click();
     await expect(page.locator('[data-status="counted"]').first()).toBeVisible();
-    await expect(page.locator('table[aria-labelledby="stock-count-lines-heading"] tbody tr').first().locator('td').nth(7)).toContainText('-2');
+    await expect(seedRow.locator('td').nth(7)).toContainText('-2');
 
     // Approve the variance, then adjust: the books lose two.
     await page.getByPlaceholder('Why the variance is accepted').fill('Damaged units written down after inspection');
@@ -178,7 +194,7 @@ test.describe('IMPROVEMENT-002 · the inventory screens', () => {
     await expect(row).toBeVisible();
     // What is left at 12.5 a unit.
     await expect(row).toContainText(held());
-    await expect(row).toContainText(heldValue());
+    if (heldValue()) await expect(row).toContainText(heldValue()!);
     await expect(row.locator('a[href^="/inventory/stock-ledger?item=ITM-SEED"]')).toHaveCount(1);
     // A category nothing is in.
     await page.goto('/inventory/availability?category=NO-SUCH');
@@ -193,7 +209,7 @@ test.describe('IMPROVEMENT-002 · the inventory screens', () => {
     const table = page.locator('table[aria-labelledby="valuation-title"]');
     const row = table.locator('tbody tr', { hasText: 'ITM-SEED' }).first();
     await expect(row).toContainText(held());
-    await expect(row).toContainText(heldValue());
+    if (heldValue()) await expect(row).toContainText(heldValue()!);
     await expect(page.locator('table[aria-labelledby="valuation-gl-title"] tbody tr').first()).toBeVisible();
     // The copies: the menu is offered, and the PDF comes with the screen's own filters.
     await expect(page.locator('[data-export-menu="inventory_valuation"]')).toBeVisible();

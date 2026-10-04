@@ -126,7 +126,7 @@ test.describe('A22 · payables in a browser', () => {
     await stop.getByRole('textbox', { name: 'Next action' }).fill('Call the trade desk');
     await stop.getByRole('textbox', { name: 'Expected by' }).fill('2026-10-15');
     await stop.getByRole('button', { name: 'Record the stop' }).click();
-    await expect(page.getByText('STOPPED: BANK', { exact: false }).first()).toBeVisible({
+    await expect(page.getByText('STOPPED: BANK', { exact: false }).filter({ visible: true }).first()).toBeVisible({
       timeout: 30_000,
     });
 
@@ -177,7 +177,7 @@ test.describe('A22 · payables in a browser', () => {
     await page.waitForURL(/saved=1/, { timeout: 60_000 });
     await expect(page.getByRole('button', { name: 'Notes (1)' })).toBeVisible({ timeout: 30_000 });
     await page.getByRole('button', { name: 'Notes (1)' }).click();
-    await expect(page.getByRole('dialog', { name: 'Notes' }).getByText(`Landlord travelling ${RUN}`).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('dialog', { name: 'Notes' }).getByText(`Landlord travelling ${RUN}`).filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
     await page.keyboard.press('Escape');
 
     // The register: Expenses view, the row, its Payment state.
@@ -241,7 +241,7 @@ test.describe('A22 · payables in a browser', () => {
     await signIn(manager, 'manager@example.com');
     await manager.goto(`/payables/payment-applications/${encodeURIComponent(applicationNo)}`);
     await manager.getByRole('button', { name: 'Approve — reserve funds' }).click();
-    await expect(manager.getByText('Approved — funds reserved').first()).toBeVisible({ timeout: 30_000 });
+    await expect(manager.getByText('Approved — funds reserved').filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
 
     await manager.getByRole('button', { name: 'Send to bank' }).click();
     const send = manager.getByRole('dialog');
@@ -250,7 +250,7 @@ test.describe('A22 · payables in a browser', () => {
       await override.fill(`Owner deposit arrives today ${RUN}`);
     }
     await send.getByRole('button', { name: 'Send to bank' }).click();
-    await expect(manager.getByText('Sent — not paid').first()).toBeVisible({ timeout: 30_000 });
+    await expect(manager.getByText('Sent — not paid').filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
     await expect(manager.getByText('The money’s path')).toBeVisible();
 
     // The Confirm dialog says what it will post before it posts it.
@@ -302,7 +302,7 @@ test.describe('A22 · payables in a browser', () => {
     const change = page.getByRole('dialog');
     await change.getByLabel('New status').selectOption('validated');
     await change.getByRole('button', { name: 'Change status' }).click();
-    await expect(page.getByText(/^Validated · /).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/^Validated · /).filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
 
     // §21.8 — the list pasted (a file works the same way) becomes a numbered
     // reading: its lines as ASYCUDA gave them and what each does, applied
@@ -370,7 +370,7 @@ test.describe('A22 · payables in a browser', () => {
     await create.getByLabel('Container no. 2').fill(second);
     await create.getByRole('button', { name: 'New B/L' }).click();
     await expect(page.getByRole('link', { name: blNo })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText('0 of 2 received').first()).toBeVisible();
+    await expect(page.getByText('0 of 2 received').filter({ visible: true }).first()).toBeVisible();
 
     // §17.3 — one container reaches the port.
     await page.getByRole('link', { name: first }).click();
@@ -379,20 +379,20 @@ test.describe('A22 · payables in a browser', () => {
     const stage = page.getByRole('dialog');
     await stage.getByLabel('Stage').selectOption('at_port');
     await stage.getByRole('button', { name: 'Change stage' }).click();
-    await expect(page.getByText('At port ·').first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('At port ·').filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
 
     // §18 — received whole into WH-HQ: out of transit, at the invoice's cost.
     await page.getByRole('button', { name: 'Receive container' }).click();
     const receive = page.getByRole('dialog');
     await receive.getByLabel('Warehouse').selectOption('WH-HQ');
     await receive.getByRole('button', { name: 'Receive container' }).click();
-    await expect(page.getByText(/^Received ·/).first()).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByText(/^CREC-/).first()).toBeVisible();
+    await expect(page.getByText(/^Received ·/).filter({ visible: true }).first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/^CREC-/).filter({ visible: true }).first()).toBeVisible();
 
     // The B/L counts it; the register finds it among the received.
     await page.goto(`/payables/shipments/${encodeURIComponent(blNo)}`);
     await expect(page.getByRole('heading', { level: 1, name: `B/L ${blNo}` })).toBeVisible();
-    await expect(page.getByText('1 of 2 received').first()).toBeVisible();
+    await expect(page.getByText('1 of 2 received').filter({ visible: true }).first()).toBeVisible();
     await page.goto(`/payables/containers?view=received&q=${first}`);
     await expect(page.getByRole('row', { name: new RegExp(first) })).toBeVisible();
     await page.goto(`/payables/containers?view=in_transit&q=${second}`);
@@ -446,13 +446,13 @@ test.describe('A22 · payables in a browser', () => {
     await signIn(admin);
     await admin.goto(`/treasury/loans/${encodeURIComponent(loanNo)}`);
     await admin.getByRole('button', { name: 'Approve', exact: true }).click();
-    await expect(admin.getByText('Approved', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(admin.getByText('Approved', { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
 
     await admin.getByRole('button', { name: 'Record disbursement' }).click();
     const disburse = admin.getByRole('dialog');
     await disburse.getByRole('textbox', { name: 'Bank reference' }).fill(`RAF-CR-${RUN}`);
     await disburse.getByRole('button', { name: 'Record disbursement' }).click();
-    await expect(admin.getByText('Disbursed', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(admin.getByText('Disbursed', { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
 
     await admin.getByRole('button', { name: 'Pay instalment' }).click();
     const pay = admin.getByRole('dialog');
@@ -507,7 +507,7 @@ test.describe('A22 · payables in a browser', () => {
     await page.getByRole('button', { name: 'Receive container' }).click();
     await page.getByRole('dialog').getByLabel('Warehouse').selectOption('WH-HQ');
     await page.getByRole('dialog').getByRole('button', { name: 'Receive container' }).click();
-    await expect(page.getByText(/^Received ·/).first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/^Received ·/).filter({ visible: true }).first()).toBeVisible({ timeout: 60_000 });
 
     // The PD, validated, then totally written off.
     await page.goto(importUrl);
@@ -539,12 +539,12 @@ test.describe('A22 · payables in a browser', () => {
     await add.getByRole('textbox', { name: 'Journal no.' }).fill(entryNo);
     await add.getByRole('textbox', { name: 'Amount (IQD)' }).fill('500');
     await add.getByRole('button', { name: 'Add charge' }).click();
-    await expect(page.getByText('Not locked', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Not locked', { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole('table', { name: 'Allocation preview' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Lock landed cost' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Lock landed cost' }).click();
-    await expect(page.getByText('Locked · 1', { exact: true }).first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText('Locked · 1', { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 60_000 });
     await expect(page.getByRole('table', { name: 'Locks' })).toContainText('500');
   });
 
@@ -686,7 +686,7 @@ test.describe('A22 · payables in a browser', () => {
     const first = page.locator('table tbody tr td a').first();
     if (await first.isVisible().catch(() => false)) {
       await first.click();
-      await expect(page.getByText('سجل الحالة', { exact: false }).first()).toBeVisible();
+      await expect(page.getByText('سجل الحالة', { exact: false }).filter({ visible: true }).first()).toBeVisible();
       await noSidewaysScroll(page);
     }
   });

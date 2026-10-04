@@ -120,11 +120,12 @@ test.describe('REQ-HR-001 Stage HR-6 · requests, documents, dashboard and repor
     await officer.page.getByLabel('Amount 1').fill('25000');
     await officer.page.getByRole('button', { name: 'Save', exact: true }).click();
     await officer.page.waitForURL(/saved=1/);
-    await expect(officer.page.getByText('25,000').first()).toBeVisible();
-    // Its receipt, then sent.
+    await expect(officer.page.getByText('25,000').filter({ visible: true }).first()).toBeVisible();
+    // Its receipt — behind the paperclip door (2026-10-04) — then sent.
     await openRequest(officer.page, requestNo);
-    await officer.page.locator('input[name="file"]').setInputFiles({ name: `receipt-${RUN}.pdf`, mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n% receipt\n%%EOF\n') });
-    await officer.page.getByRole('button', { name: 'Attach' }).click();
+    await officer.page.getByRole('button', { name: /^Attachments/ }).click();
+    await officer.page.locator('dialog[open] input[name="file"]').setInputFiles({ name: `receipt-${RUN}.pdf`, mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n% receipt\n%%EOF\n') });
+    await officer.page.locator('dialog[open]').getByRole('button', { name: 'Attach' }).click();
     await officer.page.waitForURL(/saved=1/);
     await openRequest(officer.page, requestNo);
     await officer.page.getByRole('button', { name: 'Send for approval' }).click();
@@ -186,7 +187,7 @@ test.describe('REQ-HR-001 Stage HR-6 · requests, documents, dashboard and repor
     await signIn(page, MANAGER);
     await page.goto('/hr/dashboard');
     await expect(page.getByRole('heading', { name: 'HR Dashboard', level: 1 })).toBeVisible();
-    await expect(page.getByText('Headcount').first()).toBeVisible();
+    await expect(page.getByText('Headcount').filter({ visible: true }).first()).toBeVisible();
     for (const report of ['headcount', 'leave', 'payroll', 'advances']) {
       await page.goto(`/hr/reports?report=${report}`);
       await expect(page.locator('main table').first()).toBeVisible();

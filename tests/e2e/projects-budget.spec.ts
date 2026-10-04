@@ -63,7 +63,7 @@ test.describe('REQ-PM-001 Stage PM-2 · budget documents, change orders and the 
     await page.waitForURL(/\/projects\/budgets\/PBD-/);
     const budgetNo = decodeURIComponent(page.url().split('/projects/budgets/')[1]!.split('?')[0]!);
     expect(budgetNo).toMatch(/^PBD-HQ-2026-\d{6}$/);
-    await expect(page.getByText('Draft', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Draft', { exact: true }).filter({ visible: true }).first()).toBeVisible();
     await page.getByRole('button', { name: 'Submit for approval' }).click();
     await page.waitForURL(/saved=1/);
     // The raiser sees no Approve; the administrator approves.
@@ -71,7 +71,7 @@ test.describe('REQ-PM-001 Stage PM-2 · budget documents, change orders and the 
     await adminPage.goto(`/projects/budgets/${encodeURIComponent(budgetNo)}`);
     await adminPage.getByRole('button', { name: 'Approve' }).click();
     await adminPage.waitForURL(/saved=1/);
-    await expect(adminPage.getByText('Approved', { exact: true }).first()).toBeVisible();
+    await expect(adminPage.getByText('Approved', { exact: true }).filter({ visible: true }).first()).toBeVisible();
     // The record's budget by element adds up.
     await page.goto(`/projects/${encodeURIComponent(code)}`);
     await expect(page.getByRole('cell', { name: /6,000,000 IQD/ }).first()).toBeVisible();
@@ -92,7 +92,7 @@ test.describe('REQ-PM-001 Stage PM-2 · budget documents, change orders and the 
     await adminPage.waitForURL(/saved=1/);
     await adminPage.getByRole('button', { name: 'Approve budget' }).click();
     await adminPage.waitForURL(/saved=1/);
-    await expect(adminPage.getByText('Approved', { exact: true }).first()).toBeVisible();
+    await expect(adminPage.getByText('Approved', { exact: true }).filter({ visible: true }).first()).toBeVisible();
     await expect(adminPage.getByRole('link', { name: /PBD-HQ-2026-\d{6}/ })).toBeVisible();
     await other.close();
 

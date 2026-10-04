@@ -69,7 +69,7 @@ async function note(page: Page, body: string) {
   await expect(page.getByRole('dialog', { name: 'Notes' }).getByRole('cell', { name: body })).toBeVisible();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Audit log' }).click();
-  await expect(page.getByRole('dialog', { name: 'Audit log' }).getByText(/note added/i).first()).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Audit log' }).getByText(/note added/i).filter({ visible: true }).first()).toBeVisible();
   await page.keyboard.press('Escape');
 }
 
@@ -253,7 +253,7 @@ test.describe('REQ-AR-001 · receivables in a browser', () => {
     await signIn(page);
     await page.goto('/sales/receivables');
     for (const label of ['Gross receivables', 'Not yet due', 'Overdue', 'Unapplied credits', 'Net position']) {
-      await expect(page.getByText(label, { exact: false }).first()).toBeVisible();
+      await expect(page.getByText(label, { exact: false }).filter({ visible: true }).first()).toBeVisible();
     }
     await shoot(page, 'receivables-ageing-desktop-en');
 

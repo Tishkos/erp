@@ -84,7 +84,7 @@ test.describe('IM2-1 · a short container, worked out and claimed', () => {
     await create.getByLabel('Container no. 1').fill(first);
     await create.getByLabel('Container no. 2').fill(second);
     await create.getByRole('button', { name: 'New B/L' }).click();
-    await expect(page.getByText('0 of 2 received').first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('0 of 2 received').filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
     const quantities = page.getByRole('table', { name: 'Quantities by model' });
     await expect(quantities).toBeVisible();
     await expect(quantities.getByRole('row').nth(1)).toContainText('ITM-SEED');
@@ -103,7 +103,7 @@ test.describe('IM2-1 · a short container, worked out and claimed', () => {
         await receive.getByRole('textbox', { name: 'What happened' }).fill('Two cartons missing, seal intact');
       }
       await receive.getByRole('button', { name: 'Receive container' }).click();
-      await expect(page.getByText(/^CREC-/).first()).toBeVisible({ timeout: 60_000 });
+      await expect(page.getByText(/^CREC-/).filter({ visible: true }).first()).toBeVisible({ timeout: 60_000 });
     }
 
     // The board: ordered 10, received 8, short 2, still in transit 2.

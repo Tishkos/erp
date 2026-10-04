@@ -108,12 +108,12 @@ test.describe('REQ-PAY-001 · doors, links, credit notes, credits and reconcilia
     await page.waitForURL(/saved=1/, { timeout: 60_000 });
     await expect(page.getByRole('button', { name: 'Notes (1)' })).toBeVisible();
     await page.getByRole('button', { name: 'Notes (1)' }).click();
-    await expect(page.getByRole('dialog', { name: 'Notes' }).getByText(`Supplier called about the rent ${RUN}`).first()).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Notes' }).getByText(`Supplier called about the rent ${RUN}`).filter({ visible: true }).first()).toBeVisible();
     await page.keyboard.press('Escape');
 
     // The clock lists the note as an event of the invoice.
     await page.getByRole('button', { name: 'Audit log' }).click();
-    await expect(page.getByRole('dialog', { name: 'Audit log' }).getByText(/note/i).first()).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Audit log' }).getByText(/note/i).filter({ visible: true }).first()).toBeVisible();
     await page.keyboard.press('Escape');
 
     // The supplier's profile is where the link lands.

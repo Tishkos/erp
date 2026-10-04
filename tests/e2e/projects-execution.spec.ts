@@ -68,12 +68,12 @@ test.describe('REQ-PM-001 Stage PM-3 · execution screens', () => {
     await page.waitForURL(/\/projects\/material-issues\/PMI-/);
     const issueNo = decodeURIComponent(page.url().split('/projects/material-issues/')[1]!.split('?')[0]!);
     expect(issueNo).toMatch(/^PMI-HQ-2026-\d{6}$/);
-    await expect(page.getByText('Draft', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Draft', { exact: true }).filter({ visible: true }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Post' })).toBeVisible();
     await page.locator('input[name="reason"]').fill('raised for the test');
     await page.getByRole('button', { name: 'Cancel' }).click();
     await page.waitForURL(/saved=1/);
-    await expect(page.getByText('Cancelled', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Cancelled', { exact: true }).filter({ visible: true }).first()).toBeVisible();
 
     // The line items and the procurement register.
     await page.goto(`/projects/costs?project=${encodeURIComponent(code)}`);

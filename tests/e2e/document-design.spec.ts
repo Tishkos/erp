@@ -143,7 +143,7 @@ test.describe('an invoice is built like a journal entry', () => {
     // three at a thousand, less nothing, is three thousand on screen.
     await page.fill('input[name="quantity_0"]', '3');
     await page.fill('input[name="unit_price_0"]', '1000');
-    await expect(page.getByText('IQD 3,000').first()).toBeVisible();
+    await expect(page.getByText('IQD 3,000').filter({ visible: true }).first()).toBeVisible();
 
     // How many rows there are travels with the form, because the grid grew
     // after the server drew it and the action has to read what was typed.

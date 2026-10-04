@@ -59,7 +59,7 @@ test.describe('REQ-PM-001 Stage PM-5 · billing, recognition and forecast', () =
     await add.locator('button[type="submit"]').first().click();
     await page.waitForURL(/saved=1/);
     await expect(page.getByRole('cell', { name: 'Mobilisation' })).toBeVisible();
-    await expect(page.getByText('Due', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Due', { exact: true }).filter({ visible: true }).first()).toBeVisible();
     await expect(page.getByText(/not yet ratified by Finance/)).toBeVisible();
 
     const line = page.getByRole('row', { name: /Mobilisation/ });
@@ -78,7 +78,7 @@ test.describe('REQ-PM-001 Stage PM-5 · billing, recognition and forecast', () =
 
     await page.goto(`/projects/billing?project=${encodeURIComponent(code)}`);
     await expect(page.getByRole('link', { name: certificateNo }).first()).toBeVisible();
-    await expect(page.getByText('Billed', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Billed', { exact: true }).filter({ visible: true }).first()).toBeVisible();
 
     // The forecast: an estimate typed for the root replaces the formula.
     await page.goto(`/projects/forecast?project=${encodeURIComponent(code)}`);
@@ -89,7 +89,7 @@ test.describe('REQ-PM-001 Stage PM-5 · billing, recognition and forecast', () =
     await etc.locator('input[name="reason"]').fill('Panels quoted higher');
     await etc.locator('button[type="submit"]').first().click();
     await page.waitForURL(/saved=1/);
-    await expect(page.getByText(/^Typed, /).first()).toBeVisible();
+    await expect(page.getByText(/^Typed, /).filter({ visible: true }).first()).toBeVisible();
     await expect(page.getByRole('cell', { name: 'Panels quoted higher' })).toBeVisible();
 
     await page.goto('/administration/project-settings');

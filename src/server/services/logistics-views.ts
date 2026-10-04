@@ -508,7 +508,7 @@ export interface TransitWarehouseRow {
   readonly branchCode: string;
   readonly itemCode: string;
   readonly itemName: string | null;
-  /** The ledger's sum for this warehouse and item — `stock_position.on_hand`, which here means *in transit*. */
+  /** The ledger's sum for this warehouse and item — `stock_position.held`, which here means *in transit*. */
   readonly ledgerQuantity: string;
   /** Always zero: the view gives a transit warehouse no availability. Shown so the reader sees it. */
   readonly available: string;
@@ -517,9 +517,10 @@ export interface TransitWarehouseRow {
 
 /**
  * The authoritative ledger sum per transit warehouse and item, from
- * `stock_position` (Inventory's view). Its `on_hand` column is the
- * warehouse's balance; for a transit warehouse that balance **is** the
- * in-transit quantity and is reported as such — never as on hand. The
+ * `stock_position` (Inventory's view). Its `held` column is the warehouse's
+ * physical balance (0287 made `on_hand` nothing for a transit warehouse);
+ * for a transit warehouse that balance **is** the in-transit quantity and is
+ * reported as such — never as on hand. The
  * import rows above must add up to these; `inTransitReconciliation` says
  * whether they do.
  */
@@ -527,7 +528,7 @@ export async function transitWarehouses(tx: Tx): Promise<Rows<TransitWarehouseRo
   const result = await tx.execute(sql`
     select p.warehouse_code as "warehouseCode", w.name as "warehouseName", w.shipment_stage as "shipmentStage", p.branch_code as "branchCode",
            p.item_code as "itemCode", it.name as "itemName",
-           p.on_hand::numeric(24,6)::text as "ledgerQuantity", p.available::numeric(24,6)::text as available,
+           p.held::numeric(24,6)::text as "ledgerQuantity", p.available::numeric(24,6)::text as available,
            coalesce((select sum(cl.remaining_quantity * cl.unit_cost_iqd) from cost_layer cl
                       where cl.warehouse_code = p.warehouse_code and cl.item_code = p.item_code), 0)::numeric(19,4)::text as "valueIqd"
       from stock_position p
@@ -535,7 +536,10 @@ export async function transitWarehouses(tx: Tx): Promise<Rows<TransitWarehouseRo
       left join item it on it.code = p.item_code
      where (w.is_transit or w.shipment_stage is not null)
        and app_branch_allowed(p.branch_code)
-       and p.on_hand <> 0
+       -- The ledger's own balance: `stock_position` reads a transit
+       -- warehouse's units as in transit and its on_hand as nothing
+       -- (REQ-INV, 2026-10-04), so the raw sum is what this section is about.
+       and p.held <> 0
      order by w.shipment_stage nulls last, p.warehouse_code, p.item_code`);
   return {
     rows: (result.rows as unknown as TransitWarehouseRow[]).map((row) => ({

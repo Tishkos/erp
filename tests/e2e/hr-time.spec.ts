@@ -57,7 +57,7 @@ test.describe('REQ-HR-001 Stage HR-2 · leave and attendance', () => {
     await dialog.getByRole('button', { name: 'Create' }).click();
     await page.waitForURL(/\/hr\/leave\/LVE-/);
     const requestNo = decodeURIComponent(page.url().split('/hr/leave/')[1]!.split('?')[0]!);
-    await expect(page.getByText('Working day').first()).toBeVisible();
+    await expect(page.getByText('Working day').filter({ visible: true }).first()).toBeVisible();
 
     await page.getByRole('button', { name: 'Send for decision' }).click();
     await page.waitForURL(/saved=1/);

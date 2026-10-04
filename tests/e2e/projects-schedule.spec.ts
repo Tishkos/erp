@@ -80,7 +80,7 @@ test.describe('REQ-PM-001 Stage PM-4 · schedule and progress', () => {
       await d.locator('input[name="reason"]').fill('first plan');
     }, 'Schedule');
     await expect(page.getByText(/finishes .* · run 1/)).toBeVisible();
-    await expect(page.getByText('Critical', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Critical', { exact: true }).filter({ visible: true }).first()).toBeVisible();
 
     // Progress: measured by the manager, approved by the administrator.
     await page.goto(`/projects/progress?project=${encodeURIComponent(code)}`);
@@ -102,7 +102,7 @@ test.describe('REQ-PM-001 Stage PM-4 · schedule and progress', () => {
     await adminPage.getByRole('button', { name: 'Approve' }).first().click();
     await adminPage.waitForURL(/saved=1/);
     await expect(adminPage.getByRole('heading', { name: 'Milestone trend', level: 2 })).toBeVisible();
-    await expect(adminPage.getByText('Done', { exact: true }).first()).toBeVisible();
+    await expect(adminPage.getByText('Done', { exact: true }).filter({ visible: true }).first()).toBeVisible();
     await other.close();
 
     // Arabic, at a phone's width, right to left.

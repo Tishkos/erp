@@ -146,6 +146,9 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
       </form>
 
       {summary.length > 0 ? (
+        /* Nine columns scroll inside their own frame on a phone; unframed,
+           the summary pushed the whole page sideways (2026-10-04). */
+        <div className={s.sapTableWrap}>
         <table aria-label={t('reports.warehouse_summary')} className={`${s.sapTable} ${s.sapReportTable}`}>
           <caption className={s.sapTitleMeta}>{t('reports.warehouse_summary')}</caption>
           <thead>
@@ -219,6 +222,7 @@ export default async function WarehousesReportPage({ searchParams }: { searchPar
             </tr>
           </tfoot>
         </table>
+        </div>
       ) : null}
 
       <table className={`${s.sapTable} ${s.sapReportTable}`}>

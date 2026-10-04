@@ -44,7 +44,7 @@ test.describe('FIX-5 · HR structure and the user link', () => {
     await page.waitForURL(/\/hr\/employees\/EMP-HQ-/);
     await expect(page.getByRole('heading', { name: new RegExp(`Staff ${RUN}`), level: 1 })).toBeVisible();
     await expect(page.getByText('Hired', { exact: true })).toBeVisible();
-    await expect(page.getByText(`staff.${RUN}@example.com`).first()).toBeVisible();
+    await expect(page.getByText(`staff.${RUN}@example.com`).filter({ visible: true }).first()).toBeVisible();
   });
 
   test('the HR tabs follow the sponsor’s order, and a position is made and seated in its department', async ({ page }) => {
