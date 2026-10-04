@@ -141,6 +141,7 @@ bank_loan
 payment_application
 payable_instalment
 asycuda_run
+customs_declaration
 customs_pd_status_history
 customs_pd
 ap_invoice_note

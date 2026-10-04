@@ -9,7 +9,7 @@
  * list, or the sweep.
  */
 import { sql } from 'drizzle-orm';
-import { boolean, date, index, integer, jsonb, pgTable, smallint, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, date, index, integer, jsonb, numeric, pgTable, smallint, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { appUser, branch } from './platform';
 import { bank } from './item';
 import { payable } from './payables';
@@ -127,4 +127,50 @@ export const asycudaRun = pgTable(
     appliedAt: timestamp('applied_at', { withTimezone: true }),
   },
   (t) => [index('asycuda_run_read_idx').on(t.readAt)],
+);
+
+/**
+ * REQ-LOG-001 item 8 — the customs declaration (0301). What the broker lodged
+ * for the import's goods, against its PD: the declared figures are words on
+ * the declaration, frozen once it leaves draft; the money is the import's
+ * landed-cost charges. Never deleted — cancelled or rejected with a reason.
+ */
+export const customsDeclaration = pgTable(
+  'customs_declaration',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    declarationNo: text('declaration_no').notNull(),
+    customsRef: text('customs_ref'),
+    payableId: uuid('payable_id')
+      .notNull()
+      .references(() => payable.id),
+    pdId: uuid('pd_id').references(() => customsPd.id),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    declarationDate: date('declaration_date', { mode: 'string' }).notNull(),
+    status: text('status')
+      .$type<'draft' | 'submitted' | 'accepted' | 'assessed' | 'cleared' | 'cancelled' | 'rejected'>()
+      .notNull()
+      .default('draft'),
+    statusDate: date('status_date', { mode: 'string' }).notNull(),
+    hsCode: text('hs_code'),
+    currency: text('currency').notNull().default('IQD'),
+    declaredValue: numeric('declared_value', { precision: 19, scale: 4 }).notNull().default('0'),
+    declaredDuty: numeric('declared_duty', { precision: 19, scale: 4 }).notNull().default('0'),
+    declaredTaxes: numeric('declared_taxes', { precision: 19, scale: 4 }).notNull().default('0'),
+    declaredFees: numeric('declared_fees', { precision: 19, scale: 4 }).notNull().default('0'),
+    note: text('note'),
+    reason: text('reason'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('customs_declaration_no_uniq').on(t.declarationNo),
+    index('customs_declaration_payable_idx').on(t.payableId),
+    index('customs_declaration_pd_idx').on(t.pdId),
+  ],
 );

@@ -1457,6 +1457,13 @@
       "when": 1795900000110,
       "tag": "0300_logistics_menu_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 208,
+      "version": "7",
+      "when": 1795900000111,
+      "tag": "0301_customs_declaration",
+      "breakpoints": true
     }
   ]
 }
