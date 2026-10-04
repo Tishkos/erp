@@ -248,6 +248,9 @@ investment_proposal
 invoice_line
 invoice
 subledger_entry
+recurring_journal_run
+recurring_journal_line
+recurring_journal
 journal_line
 journal_entry
 posting_log

@@ -83,3 +83,4 @@ export * from './landed-cost';
 export * from './legacy';
 export * from './hr';
 export * from './whatsapp';
+export * from './recurring-journals';

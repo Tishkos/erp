@@ -15,12 +15,14 @@ import {
   applicant,
   asycudaRun,
   bankLoan,
+  bankStatement,
   bankTransfer,
   billOfLading,
   customsPd,
   employeeAdvance,
   employeeDocument,
   employeeRequest,
+  fiscalPeriod,
   journalEntry,
   otherReceipt,
   payable,
@@ -32,7 +34,9 @@ import {
   projectCertificate,
   projectMaterialIssue,
   projectVariation,
+  recurringJournal,
   shipmentContainer,
+  taxCode,
   vacancy,
 } from './db/schema';
 import type { Tx } from './db/client';
@@ -217,7 +221,10 @@ const employeeDocumentParentAccess = async (tx: Tx, principal: Principal, object
  * asks before it draws the record, which is the deposit register's own.
  */
 const bankTransferParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
-  if (!can(principal, 'view', 'bank_transfer')) return false;
+  // `bank_cash_account` is what `treasury.ts` and Manual Deposits authorise a
+  // transfer on; no role holds a `bank_transfer` grant, so asking for one
+  // refused everybody but the Super User (REQ-ACC-001, 2026-10-04).
+  if (!can(principal, 'view', 'bank_cash_account')) return false;
   const [row] = await tx.select({ id: bankTransfer.id }).from(bankTransfer).where(eq(bankTransfer.id, objectId)).limit(1);
   return Boolean(row);
 };
@@ -225,6 +232,39 @@ const bankTransferParentAccess = async (tx: Tx, principal: Principal, objectId: 
 const otherReceiptParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
   if (!can(principal, 'view', 'other_receipt')) return false;
   const [row] = await tx.select({ id: otherReceipt.id }).from(otherReceipt).where(eq(otherReceipt.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/**
+ * REQ-ACC-001 — the bank's statement file and the reconciliation's working
+ * papers, on the statement: whoever may read reconciliations, and row
+ * security answers the branch.
+ */
+const bankStatementParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'bank_reconciliation') && !can(principal, 'view', 'bank_statement')) return false;
+  const [row] = await tx.select({ id: bankStatement.id }).from(bankStatement).where(eq(bankStatement.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/** REQ-ACC-001 — a tax code's papers (the authority's letter, the rate notice): whoever reads tax codes. */
+const taxCodeParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'tax_code')) return false;
+  const [row] = await tx.select({ code: taxCode.code }).from(taxCode).where(eq(taxCode.code, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/** REQ-ACC-001 — a period's closing papers (the sign-off, the reconciliations' file): whoever reads Accounting Periods. */
+const fiscalPeriodParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'fiscal_period')) return false;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectId)) return false;
+  const [row] = await tx.select({ id: fiscalPeriod.id }).from(fiscalPeriod).where(eq(fiscalPeriod.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+/** REQ-ACC-001 — a recurring journal's papers (the lease, the agreement): whoever reads journals; row security answers the branch. */
+const recurringJournalParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'journal_entry')) return false;
+  const [row] = await tx.select({ id: recurringJournal.id }).from(recurringJournal).where(eq(recurringJournal.id, objectId)).limit(1);
   return Boolean(row);
 };
 
@@ -333,6 +373,10 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('bank_loan', loanParentAccess);
   attachments.registerParentAccessCheck('bank_transfer', bankTransferParentAccess);
   attachments.registerParentAccessCheck('other_receipt', otherReceiptParentAccess);
+  attachments.registerParentAccessCheck('bank_statement', bankStatementParentAccess);
+  attachments.registerParentAccessCheck('tax_code', taxCodeParentAccess);
+  attachments.registerParentAccessCheck('recurring_journal', recurringJournalParentAccess);
+  attachments.registerParentAccessCheck('fiscal_period', fiscalPeriodParentAccess);
   attachments.registerParentAccessCheck('applicant', applicantParentAccess);
   attachments.registerParentAccessCheck('employee_request', employeeRequestParentAccess);
   attachments.registerParentAccessCheck('employee_document', employeeDocumentParentAccess);

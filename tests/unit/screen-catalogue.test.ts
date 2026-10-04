@@ -209,10 +209,14 @@ describe('every screen has one address', () => {
       '/administration/whatsapp',
       '/approvals',
       '/documents',
+      // REQ-ACC-001 Part D — Account Reconciliation.
+      '/finance/account-reconciliation',
       // The accounting core.
       '/finance/balance-sheet',
       '/finance/cash-flow',
       '/finance/changes-in-equity',
+      // REQ-ACC-001 Part D — Period / Year-End Closing.
+      '/finance/closing',
       '/finance/gl-inquiry',
       '/finance/income-statement',
       '/finance/journals',
@@ -220,6 +224,8 @@ describe('every screen has one address', () => {
       // Back on the tree (by direction, 2026-09-24): the documents that cannot
       // name their own account still have to name it somewhere.
       '/finance/posting-mappings',
+      // REQ-ACC-001 Part D — Recurring Journals.
+      '/finance/recurring-journals',
       '/finance/reversals',
       '/finance/trial-balance',
       '/hr/advances',
@@ -262,6 +268,8 @@ describe('every screen has one address', () => {
       '/master-data/payment-methods',
       '/master-data/payment-terms',
       '/master-data/statement-mapping',
+      // REQ-ACC-001 Part D — Tax Codes.
+      '/master-data/tax-codes',
       '/master-data/warehouses',
       /*
        * Monitoring — by direction, 2026-10-03.
@@ -328,10 +336,17 @@ describe('every screen has one address', () => {
       '/sales/receivables',
       // Block 9 — Sales Returns.
       '/sales/sales-returns',
+      // REQ-ACC-001 Part D — Bank Reconciliation, the Cash Forecast.
+      '/treasury/bank-reconciliation',
+      '/treasury/cash-forecast',
       // §17 — Bank and Cash Reporting, beside the accounts it reports on.
       '/treasury/deposits',
       '/treasury/loans',
+      // REQ-ACC-001 Part D — Payments & Receipts.
+      '/treasury/payments-receipts',
       '/treasury/reporting',
+      // REQ-ACC-001 Part D — Internal Transfers.
+      '/treasury/transfers',
     ]);
   });
 });

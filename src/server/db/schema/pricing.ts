@@ -27,6 +27,7 @@ import {
 import { DUE_DATE_BASIS } from '../../domain/payment-terms';
 import { chartOfAccount } from './accounting';
 import { item, unitOfMeasure } from './item';
+import { appUser } from './platform';
 
 // ---------------------------------------------------------------------------
 // 03.6 — price lists
@@ -104,7 +105,12 @@ export const taxCode = pgTable(
       .notNull()
       .references(() => chartOfAccount.id),
     active: boolean('active').notNull().default(true),
+    /** REQ-ACC-001 (0292) — input tax on purchases, output tax on sales. */
+    direction: text('direction').notNull().default('input'),
+    createdBy: uuid('created_by').references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
+  (t) => [check('tax_code_direction', sql`${t.direction} in ('input', 'output')`)],
 );
 
 /** Effective-dated, so a rate change cannot alter a return already filed. */
@@ -118,6 +124,8 @@ export const taxRate = pgTable(
     /** Percentage: 15 is fifteen per cent. Six places for fractional rates. */
     ratePercent: numeric('rate_percent', { precision: 9, scale: 6 }).notNull(),
     effectiveFrom: date('effective_from').notNull(),
+    createdBy: uuid('created_by').references(() => appUser.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex('tax_rate_effective_uniq').on(t.taxCodeRef, t.effectiveFrom),

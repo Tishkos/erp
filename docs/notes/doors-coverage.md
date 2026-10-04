@@ -39,7 +39,12 @@ rule), `view` (a read-only rendering of another record's data: printer only).
 | `payables/[payableNo]` — import application | ✅ | ✅ | ✅ | ✅ | `import_application` | supplier: text ❌; B/L, container, PD, invoice, loan: links ✅ | payables | owner module |
 | `treasury/loans/[loanNo]` — bank loan (the party-link model) | ❌ | ✅ | ❌ | ✅ | **none** | bank account: link ✅; bank: text ❌ | payables | owner module |
 | `treasury/deposits/[depositNo]` | ❌ | ✅ | ❌ | ✅ | none | journal: link ✅; bank/cash account: text ❌ | payables | owner module |
-| `finance/journals/[entryNo]` | ◐ | ✅ | ❌ | ◐ (own audit page) | `journal_entry` | G/L accounts: text ❌ | accounting | owner module |
+| `finance/journals/[entryNo]` | ✅ | ✅ | ✅ | ✅ | `journal_entry` | G/L accounts, reversal journal: `ProfileLink` ✅; recurring template: link ✅ | accounting | done |
+| `treasury/transfers/[transferNo]` — internal transfer | ✅ | ✅ | ✅ | ✅ | `internal_transfer` | bank/cash accounts, G/L accounts, journals: `ProfileLink` ✅ | accounting | done |
+| `treasury/bank-reconciliation/[statementNo]` — statement + reconciliation | ✅ | ✅ | ✅ | ✅ | `bank_reconciliation` | account, G/L account, every journal: `ProfileLink` ✅ | accounting | done |
+| `finance/recurring-journals/[templateNo]` | ✅ | ✅ | ✅ | ✅ | `recurring_journal` | G/L accounts, journals raised: `ProfileLink` ✅ | accounting | done |
+| `master-data/tax-codes/[code]` | ✅ | ✅ | ✅ | ✅ | `tax_code` | G/L account: `ProfileLink` ✅ | accounting | done |
+| `finance/closing` — the period's close (the period is the record) | ✅ | ✅ | ✅ | ✅ | `period_close` | — (checks link their screens) | accounting | done |
 | `inventory/opening-stock/[documentNo]` (record framework) | ◐ | ❌ | ❌ | ◐ | `opening_stock` | warehouse, items: text ❌ | inventory | owner module |
 
 ## Logistics documents
@@ -96,7 +101,7 @@ The employee link on an HR record is shown only to readers who hold `view` on
 |---|---|---|---|---|---|
 | `master-data/business-partners/[code]` (`/sales/customers/…`, `/payables/suppliers/…`) | `customer`, `supplier` | ❌ | ◐ | receivables / payables | owner module |
 | `master-data/banks/[code]` | `bank` | ❌ | ◐ | accounting | owner module |
-| `master-data/bank-accounts/[code]`, `master-data/cash-accounts/[code]` | `bank_account`, `cash_account` | ❌ | ◐ | accounting | owner module |
+| `master-data/bank-accounts/[code]`, `master-data/cash-accounts/[code]` | `bank_account`, `cash_account` | ❌ | ◐ (G/L account and bank: `ProfileLink` ✅) | accounting | owner module |
 | `master-data/chart-of-accounts/[code]` | `gl_account` | ❌ | ◐ (record framework) | accounting | owner module |
 | `master-data/items/[code]` (`/inventory/items/…`) | `item` | ❌ | ◐ | inventory | owner module |
 | `master-data/warehouses/[code]` | `warehouse` | ❌ | ◐ | inventory | owner module |

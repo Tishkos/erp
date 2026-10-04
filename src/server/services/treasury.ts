@@ -13,7 +13,7 @@
 import { and, eq, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { bankCashAccount, bankTransfer, cashCount } from '../db/schema';
-import { parseDecimal, toDecimalString } from '../domain/money';
+import { divideHalfUp, LEDGER_CURRENCY as LEDGER, parseDecimal, toDecimalString } from '../domain/money';
 import {
   assertCurrencyMatches,
   assertSufficientFunds,
@@ -27,11 +27,17 @@ import * as authz from './authorization';
 import * as audit from './audit';
 import * as posting from './posting';
 import * as statuses from './statuses';
+import * as journal from './journal';
+import * as periods from './periods';
+import * as rateService from './exchange-rates';
 import { allocateDocumentNumber } from './numbering';
+import { countOf, registerPage, searchOf, whereOf, type RegisterPaging } from './register-page';
 
 export const PERMISSION_OBJECT = 'bank_cash_account';
 const CASH_COUNT_TYPE = 'cash_count';
 const TRANSFER_TYPE = 'bank_transfer';
+/** The audit and attachment object a transfer is filed under (its history, its paperwork). */
+export const TRANSFER_OBJECT_TYPE = TRANSFER_TYPE;
 
 // ---------------------------------------------------------------------------
 // Balances — the 07.1 gate
@@ -129,9 +135,25 @@ async function balancesQuery(
                 and e.status in ('posted', 'reversed')
                 and (${filter.branchCode ?? null}::text is null or e.branch_code = ${filter.branchCode ?? null})
            ), 0::numeric(19,4))::text              as "balanceIqd",
+           -- An approved transfer holds what will leave, in dinars: a dollar
+           -- account's transfer is its dollars at the ledger rate of the
+           -- transfer date (Currencies & Rates, as valueTransfer posts it),
+           -- not its dollar figure read as dinars (REQ-ACC-001 E-4).
            (coalesce((
-             select sum(t.amount)
+             select sum(case when t.from_currency = 'IQD' then t.amount
+                             else round(t.amount * coalesce(r.iqd_per_unit, 1), 4) end)
                from bank_transfer t
+               left join lateral (
+                 select x.iqd_per_unit
+                   from exchange_rate x
+                  where x.currency_code = t.from_currency
+                    and x.rate_type = 'accounting'
+                    and x.superseded_at is null
+                  order by (x.effective_from <= t.transfer_date) desc,
+                           case when x.effective_from <= t.transfer_date then x.effective_from end desc nulls last,
+                           x.effective_from asc
+                  limit 1
+               ) r on t.from_currency <> 'IQD'
               where t.from_account_id = b.id
                 and t.status = 'approved'
                 and (${filter.branchCode ?? null}::text is null or t.branch_code = ${filter.branchCode ?? null})
@@ -496,12 +518,52 @@ export interface CreateTransferInput {
   readonly fromAccountId: string;
   readonly toAccountId: string;
   readonly transferDate: string;
+  /**
+   * What leaves the source account, **in the source account's currency** —
+   * the name predates cross-currency transfers, when every account was IQD.
+   */
   readonly amountIqd: bigint;
-  /** Required when the two accounts are held in different currencies (§17). */
+  /** What arrives, in the destination's currency. Required (or implied by the rate) across currencies. */
   readonly receivedAmount?: bigint;
+  /**
+   * The approved rate (§17, §14.3). With one side in dinars it is dinars per
+   * unit of the other currency — Currencies & Rates' own convention; between
+   * two foreign currencies it is destination units per source unit. Left out
+   * when both amounts are given, it is read off them.
+   */
   readonly fxRate?: string | null;
   readonly bankReference?: string | null;
   readonly note?: string | null;
+  /**
+   * The one-time id the Internal Transfers form mints: a second submit of the
+   * same form answers with the transfer the first one made, rather than
+   * moving the money twice.
+   */
+  readonly documentId?: string | null;
+}
+
+const RATE = 8n;
+const RATE_UNIT = 10n ** RATE;
+/** A converted figure may differ from the typed one by rounding, never by more than one unit. */
+const CONVERSION_TOLERANCE = 10n ** 4n;
+
+/** What arrives, from what left and the rate — in the rate's convention above. */
+function convertWithRate(amount: bigint, rate: bigint, fromCurrency: string, toCurrency: string): bigint {
+  if (fromCurrency === LEDGER && toCurrency !== LEDGER) return divideHalfUp(amount * RATE_UNIT, rate);
+  return divideHalfUp(amount * rate, RATE_UNIT);
+}
+
+/** The rate two amounts imply — the same convention, to eight places. */
+function rateOf(amount: bigint, received: bigint, fromCurrency: string, toCurrency: string): bigint {
+  if (fromCurrency === LEDGER && toCurrency !== LEDGER) return divideHalfUp(amount * RATE_UNIT, received);
+  return divideHalfUp(received * RATE_UNIT, amount);
+}
+
+export class TransferNotFoundError extends Error {
+  readonly code = 'BANK_TRANSFER_NOT_FOUND';
+  constructor(readonly transferNo: string) {
+    super(`No internal transfer numbered ${transferNo}.`);
+  }
 }
 
 export async function createTransfer(
@@ -509,6 +571,20 @@ export async function createTransfer(
   ctx: ActorContext,
   input: CreateTransferInput,
 ): Promise<{ id: string; transferNo: string }> {
+  // A repeated submit of the same form: the transfer it already made.
+  if (input.documentId) {
+    const [existing] = await tx
+      .select({ id: bankTransfer.id, transferNo: bankTransfer.transferNo })
+      .from(bankTransfer)
+      .where(eq(bankTransfer.id, input.documentId))
+      .limit(1);
+    if (existing) return existing;
+  }
+
+  if (input.fromAccountId === input.toAccountId) {
+    throw new Error('The money is already in that account. Choose a different destination.');
+  }
+
   const [from] = await tx
     .select()
     .from(bankCashAccount)
@@ -521,14 +597,32 @@ export async function createTransfer(
     .limit(1);
 
   if (!from || !to) throw new Error('Both accounts must exist to transfer between them.');
+  // Only the accounts Master Data keeps open: a closed account is a place
+  // money used to be, and a transfer into it would be money nobody looks for.
+  for (const account of [from, to]) {
+    if (!account.active) {
+      throw new Error(`${account.code} is inactive. Reactivate it under Master Data, or choose another account.`);
+    }
+  }
 
   await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, {
     branchCode: ctx.branchCode,
   });
 
+  if (input.amountIqd <= 0n) {
+    throw new Error('State the amount that leaves the source account; it must be more than nothing.');
+  }
+
+  // A closed period takes nothing new. Caught here, when the form is filled
+  // in, rather than at posting, after somebody else has approved it.
+  const period = await periods.periodFor(tx, input.transferDate);
+  if (period.status === 'closed') {
+    throw new Error(`${period.name} is closed; a transfer cannot be dated in it.`);
+  }
+
   const crossCurrency = from.currency !== to.currency;
 
-  if (crossCurrency && !input.fxRate) {
+  if (crossCurrency && !input.fxRate && !(input.receivedAmount && input.receivedAmount > 0n)) {
     throw new Error(
       `${from.code} is held in ${from.currency} and ${to.code} in ${to.currency}. §17 allows the ` +
         'transfer through an approved FX conversion, and the rate is part of the approval — ' +
@@ -542,26 +636,58 @@ export async function createTransfer(
     );
   }
 
-  // §17 — the money has to be there before it can go anywhere.
-  const { balanceIqd, committedIqd } = await positionOf(tx, ctx, input.fromAccountId);
-  assertSufficientFunds(from.code, { balanceIqd, committedIqd }, input.amountIqd);
+  let receivedAmount = input.amountIqd;
+  let fxRate: string | null = null;
+  if (crossCurrency) {
+    const typedRate = input.fxRate ? parseDecimal(input.fxRate, RATE) : null;
+    if (typedRate !== null && typedRate <= 0n) throw new Error('A rate is more than nothing.');
+    const typedReceived = input.receivedAmount && input.receivedAmount > 0n ? input.receivedAmount : null;
 
-  const receivedAmount = crossCurrency ? (input.receivedAmount ?? 0n) : input.amountIqd;
+    if (typedRate !== null && typedReceived !== null) {
+      // Both stated: they must say the same thing. Otherwise one of them is a
+      // typing mistake and the journal would book whichever was believed.
+      const implied = convertWithRate(input.amountIqd, typedRate, from.currency, to.currency);
+      const gap = implied > typedReceived ? implied - typedReceived : typedReceived - implied;
+      if (gap > CONVERSION_TOLERANCE) {
+        throw new Error(
+          `At ${input.fxRate}, ${from.currency} ${toDecimalString(input.amountIqd, 4n)} is ` +
+            `${to.currency} ${toDecimalString(implied, 4n)}, not ${toDecimalString(typedReceived, 4n)}. ` +
+            'Correct the rate or the amount received.',
+        );
+      }
+      receivedAmount = typedReceived;
+      fxRate = toDecimalString(typedRate, RATE);
+    } else if (typedRate !== null) {
+      receivedAmount = convertWithRate(input.amountIqd, typedRate, from.currency, to.currency);
+      fxRate = toDecimalString(typedRate, RATE);
+    } else {
+      receivedAmount = typedReceived!;
+      fxRate = toDecimalString(rateOf(input.amountIqd, receivedAmount, from.currency, to.currency), RATE);
+    }
 
-  if (crossCurrency && receivedAmount <= 0n) {
-    throw new Error(
-      'A cross-currency transfer records what arrived as well as what left — the two are different ' +
-        'numbers, and only recording one leaves the other to be inferred.',
-    );
+    if (receivedAmount <= 0n) {
+      throw new Error(
+        'A cross-currency transfer records what arrived as well as what left — the two are different ' +
+          'numbers, and only recording one leaves the other to be inferred.',
+      );
+    }
   }
+
+  // §17 — the money has to be there before it can go anywhere. The balance is
+  // the ledger's, in dinars, so what leaves is valued in dinars too — through
+  // Currencies & Rates, never a rate of this module's own.
+  const sourceIqd = (await rateService.convertOn(tx, input.amountIqd, from.currency, input.transferDate)).amountIqd;
+  const { balanceIqd, committedIqd } = await positionOf(tx, ctx, input.fromAccountId);
+  assertSufficientFunds(from.code, { balanceIqd, committedIqd }, sourceIqd);
 
   // §17 — a float has a ceiling, and receiving is how it is breached.
   if (to.accountType === 'cash') {
+    const receivedIqd = (await rateService.convertOn(tx, receivedAmount, to.currency, input.transferDate)).amountIqd;
     const [toPosition] = await balances(tx, ctx, input.transferDate, { accountCode: to.code });
     assertWithinCashLimit(
       to.code,
       to.cashLimitIqd === null ? null : parseDecimal(to.cashLimitIqd, 4n),
-      parseDecimal(toPosition?.balanceIqd ?? '0', 4n) + receivedAmount,
+      parseDecimal(toPosition?.balanceIqd ?? '0', 4n) + receivedIqd,
     );
   }
 
@@ -575,6 +701,7 @@ export async function createTransfer(
   const [created] = await tx
     .insert(bankTransfer)
     .values({
+      ...(input.documentId ? { id: input.documentId } : {}),
       transferNo: allocated.documentNo,
       fromAccountId: input.fromAccountId,
       toAccountId: input.toAccountId,
@@ -584,7 +711,7 @@ export async function createTransfer(
       fromCurrency: from.currency,
       receivedAmount: toDecimalString(receivedAmount, 4n),
       toCurrency: to.currency,
-      fxRate: input.fxRate ?? null,
+      fxRate,
       bankReference: input.bankReference ?? null,
       note: input.note ?? null,
       createdBy: ctx.principal.userId,
@@ -604,7 +731,7 @@ export async function createTransfer(
       to: to.code,
       amount: toDecimalString(input.amountIqd, 4n),
       receivedAmount: toDecimalString(receivedAmount, 4n),
-      fxRate: input.fxRate ?? null,
+      fxRate,
     },
   });
 
@@ -612,7 +739,7 @@ export async function createTransfer(
 }
 
 export async function approveTransfer(tx: Tx, ctx: ActorContext, id: string): Promise<void> {
-  const transfer = await loadTransfer(tx, id);
+  const transfer = await loadTransfer(tx, id, { lock: true });
 
   await authz.authorize(ctx.principal, 'approve', PERMISSION_OBJECT, {
     branchCode: transfer.branchCode,
@@ -644,20 +771,75 @@ export async function approveTransfer(tx: Tx, ctx: ActorContext, id: string): Pr
 }
 
 /**
+ * Approval from the Internal Transfers screen: by somebody other than whoever
+ * raised it — one person moves the money, another agrees to it. The Super
+ * User approves alone, as everywhere (by direction, 2026-10-03).
+ */
+export async function approveTransferAsChecker(tx: Tx, ctx: ActorContext, id: string): Promise<void> {
+  const transfer = await loadTransfer(tx, id);
+  if (transfer.createdBy === ctx.principal.userId && !ctx.principal.isSuperUser) {
+    throw new Error(`${transfer.transferNo} was raised by you; somebody else approves it.`);
+  }
+  await approveTransfer(tx, ctx, id);
+}
+
+export interface TransferValuation {
+  /** What left, in dinars at the ledger rate of the day (Currencies & Rates). */
+  readonly sourceIqd: bigint;
+  /** What arrived, in dinars at the ledger rate of the day. */
+  readonly destinationIqd: bigint;
+  /** Destination less source: a gain when positive, a loss when negative, nothing between one currency. */
+  readonly differenceIqd: bigint;
+}
+
+/**
+ * The dinar value of each leg — the figures the journal will carry.
+ *
+ * The ledger is kept in dinars, so a leg in another currency is converted at
+ * the ledger rate of the transfer date by `exchange-rates.convertOn`, the one
+ * conversion every module uses. A dinar leg is its own value. Between one
+ * currency the two legs are the same number and there is no difference.
+ */
+export async function valueTransfer(
+  tx: Tx,
+  transfer: {
+    readonly amount: string;
+    readonly fromCurrency: string;
+    readonly receivedAmount: string;
+    readonly toCurrency: string;
+    readonly transferDate: string;
+  },
+): Promise<TransferValuation> {
+  const amount = parseDecimal(transfer.amount, 4n);
+  const received = parseDecimal(transfer.receivedAmount, 4n);
+  const sourceIqd = (await rateService.convertOn(tx, amount, transfer.fromCurrency, transfer.transferDate)).amountIqd;
+  const destinationIqd =
+    transfer.fromCurrency === transfer.toCurrency
+      ? sourceIqd
+      : (await rateService.convertOn(tx, received, transfer.toCurrency, transfer.transferDate)).amountIqd;
+  return { sourceIqd, destinationIqd, differenceIqd: destinationIqd - sourceIqd };
+}
+
+/**
  * §17 — *"debits one account and credits the other in a single balanced
  * journal."*
  *
- * One journal, both legs. A cross-currency transfer still balances in IQD
- * because both legs are converted at the recorded rate; any difference between
- * them is an FX result and posts as one, rather than being absorbed silently
- * into whichever side happened to be rounded.
+ * One journal, both legs, in dinars. Between one currency the two legs are the
+ * same figure: destination up by exactly what the source went down, and
+ * nothing for revenue or expense. Across currencies each leg is valued at the
+ * ledger rate of the day (`valueTransfer`), and what the bank's rate gave
+ * beyond or short of that is an exchange gain or loss — through the same two
+ * roles a loan repayment and an import's exchange difference use, mapped on
+ * Posting Mappings under `treasury.bank_transfer`. (It used to put both legs'
+ * own-currency figures straight into a dinar journal, so a dollar transfer
+ * could never balance — 2026-10-04.)
  */
 export async function postTransfer(
   tx: Tx,
   ctx: ActorContext,
   id: string,
 ): Promise<{ journalEntryId: string }> {
-  const transfer = await loadTransfer(tx, id);
+  const transfer = await loadTransfer(tx, id, { lock: true });
 
   await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, {
     branchCode: transfer.branchCode,
@@ -679,6 +861,7 @@ export async function postTransfer(
 
   const criteria = { branchCode: transfer.branchCode };
   const dimensions = { branch: transfer.branchCode };
+  const value = await valueTransfer(tx, transfer);
 
   // The accounts are named directly rather than through a §3.3 mapping: which
   // G/L account a bank account sits in is already configured on the account
@@ -687,7 +870,7 @@ export async function postTransfer(
     {
       role: 'bank_cash',
       accountId: to!.glAccountId,
-      debit: transfer.receivedAmount,
+      debit: toDecimalString(value.destinationIqd, 4n),
       criteria,
       dimensions,
       bankAccountCode: to!.code,
@@ -696,12 +879,18 @@ export async function postTransfer(
     {
       role: 'bank_cash',
       accountId: from!.glAccountId,
-      credit: transfer.amount,
+      credit: toDecimalString(value.sourceIqd, 4n),
       criteria,
       dimensions,
       bankAccountCode: from!.code,
       description: `Out of ${from!.code}`,
     },
+    ...(value.differenceIqd > 0n
+      ? [{ role: 'exchange_gain', credit: toDecimalString(value.differenceIqd, 4n), criteria, dimensions }]
+      : []),
+    ...(value.differenceIqd < 0n
+      ? [{ role: 'exchange_loss', debit: toDecimalString(-value.differenceIqd, 4n), criteria, dimensions }]
+      : []),
   ];
 
   const result = await posting.post(tx, ctx, {
@@ -734,18 +923,218 @@ export async function postTransfer(
     branchCode: transfer.branchCode,
     outcome: 'success',
     before: { status: transfer.status },
-    after: { status: 'posted', journalEntryId: result.journalEntryId },
+    after: {
+      status: 'posted',
+      journalEntryId: result.journalEntryId,
+      sourceIqd: toDecimalString(value.sourceIqd, 4n),
+      destinationIqd: toDecimalString(value.destinationIqd, 4n),
+    },
   });
 
   return { journalEntryId: result.journalEntryId };
 }
 
-async function loadTransfer(tx: Tx, id: string) {
-  const [transfer] = await tx
-    .select()
-    .from(bankTransfer)
-    .where(eq(bankTransfer.id, id))
-    .limit(1);
+/**
+ * Correcting a posted transfer — never by editing it.
+ *
+ * The journal is mirrored by `journal.reverse`, the one reversal the ledger
+ * has (its own grant, `reverse_cancel` on journal entries, and its own rule:
+ * dated today, so today's period must be open). The transfer keeps every
+ * figure it had and says it was reversed, by whom and why; a corrected one is
+ * raised afresh. Both journals stay, linked.
+ */
+export async function reverseTransfer(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  input: { readonly reason: string },
+): Promise<{ reversalEntryNo: string }> {
+  const transfer = await loadTransfer(tx, id, { lock: true });
+
+  await authz.authorize(ctx.principal, 'post', PERMISSION_OBJECT, {
+    branchCode: transfer.branchCode,
+    objectId: id,
+  });
+
+  const reason = input.reason?.trim() ?? '';
+  if (!reason) throw new Error('A reversal says why the transfer was wrong; give a reason.');
+
+  await statuses.assertTransitionAllowed(tx, TRANSFER_TYPE, transfer.status, 'reversed', reason);
+  if (!transfer.journalEntryId) {
+    throw new Error(`${transfer.transferNo} has no journal to reverse.`);
+  }
+
+  const reversal = await journal.reverse(tx, ctx, transfer.journalEntryId, { reason });
+
+  const now = new Date();
+  await tx
+    .update(bankTransfer)
+    .set({
+      status: 'reversed',
+      reversedBy: ctx.principal.userId,
+      reversedAt: now,
+      reversalReason: reason,
+      updatedAt: now,
+    })
+    .where(eq(bankTransfer.id, id));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'bank_transfer.reversed',
+    objectType: TRANSFER_TYPE,
+    objectId: id,
+    branchCode: transfer.branchCode,
+    outcome: 'success',
+    before: { status: transfer.status, journalEntryId: transfer.journalEntryId },
+    after: { status: 'reversed', reversalEntryNo: reversal.entryNo },
+    reason,
+    relatedObjectId: reversal.id,
+  });
+
+  return { reversalEntryNo: reversal.entryNo };
+}
+
+// ---------------------------------------------------------------------------
+// Internal Transfers — the register and the record (2026-10-04)
+// ---------------------------------------------------------------------------
+
+export const TRANSFER_VIEWS = ['open', 'posted', 'reversed'] as const;
+export type TransferView = (typeof TRANSFER_VIEWS)[number];
+
+export interface TransferRow {
+  readonly id: string;
+  readonly transferNo: string;
+  readonly transferDate: string;
+  readonly status: string;
+  readonly branchCode: string;
+  readonly fromCode: string;
+  readonly fromName: string;
+  readonly fromKind: 'bank' | 'cash';
+  readonly fromCurrency: string;
+  readonly toCode: string;
+  readonly toName: string;
+  readonly toKind: 'bank' | 'cash';
+  readonly toCurrency: string;
+  /** The G/L account each side posts to — what the journal will carry. */
+  readonly fromGlCode: string | null;
+  readonly fromGlName: string | null;
+  readonly toGlCode: string | null;
+  readonly toGlName: string | null;
+  readonly amount: string;
+  readonly receivedAmount: string;
+  readonly fxRate: string | null;
+  readonly bankReference: string | null;
+  readonly note: string | null;
+  readonly createdBy: string;
+  readonly createdByName: string | null;
+  readonly approvedByName: string | null;
+  readonly postedByName: string | null;
+  readonly reversedByName: string | null;
+  readonly reversalReason: string | null;
+  readonly journalEntryNo: string | null;
+  readonly reversalEntryNo: string | null;
+}
+
+/** Every transfer, with its two accounts, its people and its journals — one relation the screens read. */
+const TRANSFERS = sql`(
+  select t.id::text as id, t.transfer_no, t.transfer_date::text as transfer_date, t.status::text as status,
+         t.branch_code, fa.code as from_code, fa.name as from_name, fa.account_type::text as from_kind,
+         t.from_currency, ta.code as to_code, ta.name as to_name, ta.account_type::text as to_kind,
+         t.to_currency, fg.code as from_gl_code, fg.name as from_gl_name, tg.code as to_gl_code, tg.name as to_gl_name,
+         t.amount::text as amount, t.received_amount::text as received_amount,
+         t.fx_rate::text as fx_rate, t.bank_reference, t.note, t.created_by::text as created_by,
+         cu.display_name as created_by_name, au.display_name as approved_by_name,
+         pu.display_name as posted_by_name, ru.display_name as reversed_by_name, t.reversal_reason,
+         je.entry_no as journal_entry_no, rje.entry_no as reversal_entry_no, t.created_at
+    from bank_transfer t
+    join bank_cash_account fa on fa.id = t.from_account_id
+    join bank_cash_account ta on ta.id = t.to_account_id
+    left join chart_of_account fg on fg.id = fa.gl_account_id
+    left join chart_of_account tg on tg.id = ta.gl_account_id
+    left join app_user cu on cu.id = t.created_by
+    left join app_user au on au.id = t.approved_by
+    left join app_user pu on pu.id = t.posted_by
+    left join app_user ru on ru.id = t.reversed_by
+    left join journal_entry je on je.id = t.journal_entry_id
+    left join journal_entry rje on rje.id = je.reversed_by_id
+) x`;
+
+const transferRow = (row: Record<string, unknown>): TransferRow => ({
+  id: String(row.id),
+  transferNo: String(row.transfer_no),
+  transferDate: String(row.transfer_date),
+  status: String(row.status),
+  branchCode: String(row.branch_code),
+  fromCode: String(row.from_code),
+  fromName: String(row.from_name),
+  fromKind: row.from_kind === 'cash' ? 'cash' : 'bank',
+  fromCurrency: String(row.from_currency),
+  toCode: String(row.to_code),
+  toName: String(row.to_name),
+  toKind: row.to_kind === 'cash' ? 'cash' : 'bank',
+  toCurrency: String(row.to_currency),
+  fromGlCode: (row.from_gl_code as string | null) ?? null,
+  fromGlName: (row.from_gl_name as string | null) ?? null,
+  toGlCode: (row.to_gl_code as string | null) ?? null,
+  toGlName: (row.to_gl_name as string | null) ?? null,
+  amount: String(row.amount),
+  receivedAmount: String(row.received_amount),
+  fxRate: (row.fx_rate as string | null) ?? null,
+  bankReference: (row.bank_reference as string | null) ?? null,
+  note: (row.note as string | null) ?? null,
+  createdBy: String(row.created_by),
+  createdByName: (row.created_by_name as string | null) ?? null,
+  approvedByName: (row.approved_by_name as string | null) ?? null,
+  postedByName: (row.posted_by_name as string | null) ?? null,
+  reversedByName: (row.reversed_by_name as string | null) ?? null,
+  reversalReason: (row.reversal_reason as string | null) ?? null,
+  journalEntryNo: (row.journal_entry_no as string | null) ?? null,
+  reversalEntryNo: (row.reversal_entry_no as string | null) ?? null,
+});
+
+export interface TransferFilter extends RegisterPaging {
+  readonly view?: TransferView | null;
+  readonly accountCode?: string | null;
+  readonly search?: string | null;
+}
+
+/** The register: fifty to a page, a true count, the filters in the SQL. Rows the reader's branches cannot see are not here (row security). */
+export async function listTransfers(tx: Tx, ctx: ActorContext, filter: TransferFilter = {}) {
+  await authz.authorize(ctx.principal, 'view', PERMISSION_OBJECT, { branchCode: ctx.branchCode });
+  const account = filter.accountCode?.trim() || null;
+  const where = whereOf([
+    filter.view === 'open' ? sql`x.status in ('draft', 'approved')` : null,
+    filter.view === 'posted' ? sql`x.status = 'posted'` : null,
+    filter.view === 'reversed' ? sql`x.status = 'reversed'` : null,
+    account ? sql`(x.from_code = ${account} or x.to_code = ${account})` : null,
+    searchOf([sql`x.transfer_no`, sql`x.from_code`, sql`x.from_name`, sql`x.to_code`, sql`x.to_name`, sql`x.bank_reference`, sql`x.note`], filter.search),
+  ]);
+  return registerPage<TransferRow>({
+    paging: filter,
+    count: () => countOf(tx, sql`from ${TRANSFERS} ${where}`),
+    rows: async ({ limit, offset }) => {
+      const result = await tx.execute(
+        sql`select * from ${TRANSFERS} ${where} order by x.transfer_date desc, x.created_at desc, x.transfer_no desc limit ${limit} offset ${offset}`,
+      );
+      return (result as unknown as { rows: Record<string, unknown>[] }).rows.map(transferRow);
+    },
+  });
+}
+
+/** One transfer by its number, for its record page and its printed copy. */
+export async function transferByNo(tx: Tx, ctx: ActorContext, transferNo: string): Promise<TransferRow> {
+  await authz.authorize(ctx.principal, 'view', PERMISSION_OBJECT, { branchCode: ctx.branchCode });
+  const result = await tx.execute(sql`select * from ${TRANSFERS} where x.transfer_no = ${transferNo} limit 1`);
+  const [row] = (result as unknown as { rows: Record<string, unknown>[] }).rows;
+  if (!row) throw new TransferNotFoundError(transferNo);
+  return transferRow(row);
+}
+
+async function loadTransfer(tx: Tx, id: string, options: { readonly lock?: boolean } = {}) {
+  // A transition reads its row FOR UPDATE before it checks the status, so a
+  // double submit approves, posts or reverses once (HARDEN-2).
+  const query = tx.select().from(bankTransfer).where(eq(bankTransfer.id, id)).limit(1);
+  const [transfer] = options.lock ? await query.for('update') : await query;
   if (!transfer) throw new Error(`No bank transfer with id '${id}'.`);
   return transfer;
 }

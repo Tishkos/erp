@@ -167,6 +167,12 @@ const TARGETS = new Map<string, NoteTarget>([
   ['bank_transfer', target('bank_cash_account', 'create', inTable('bank_transfer', 'id', 'branch_code'))],
   ['other_receipt', target('other_receipt', 'create', inTable('other_receipt', 'id', 'branch_code'))],
   ['bank_reconciliation', target('bank_reconciliation', 'edit_draft', inTable('bank_reconciliation', 'id', 'branch_code'))],
+  // REQ-ACC-001 — the statement is the reconciliation's record from its draft; a recurring journal is
+  // a journal's; a tax code and a period are master records, written in the writer's branch.
+  ['bank_statement', target('bank_statement', 'create', inTable('bank_statement', 'id', 'branch_code'))],
+  ['recurring_journal', target('journal_entry', 'edit_draft', inTable('recurring_journal', 'id', 'branch_code'))],
+  ['tax_code', target('tax_code', 'configure', inTable('tax_code', 'code', null))],
+  ['fiscal_period', target('fiscal_period', 'configure', inTable('fiscal_period', 'id', null))],
   ['cash_advance', target('cash_advance', 'create', inTable('cash_advance', 'id', 'branch_code'))],
   // Logistics and customs.
   ['customs_pd', target('customs_pd', 'edit_draft', inTable('customs_pd', 'id', 'branch_code'), (tx, ctx, id, body) => customs.addNote(tx, ctx, id, body))],

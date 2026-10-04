@@ -12,20 +12,42 @@ export function ReportWindow({
   meta,
   filter,
   foot,
+  titleActions,
   children,
 }: {
   readonly title: string;
   readonly meta?: ReactNode;
   readonly filter?: ReactNode;
   readonly foot?: ReactNode;
+  /**
+   * The small doors in the title bar — the printer, the paperclip, the notes,
+   * the clock — where the window is a record's workspace (a period's close),
+   * the same span the DocumentWindow draws them in.
+   */
+  readonly titleActions?: ReactNode;
   readonly children: ReactNode;
 }) {
   return (
     <div className={s.sapDoc}>
       <section className={s.sapWindow}>
         <h2 className={s.sapTitle}>
-          <span>{title}</span>
-          {meta ? <span className={s.sapTitleMeta}>{meta}</span> : null}
+          {titleActions ? (
+            // With doors, the DocumentWindow's bar: the name and its meta
+            // together, the doors at the end. Without, the bar as it has
+            // always been drawn.
+            <>
+              <span>
+                {title}
+                {meta ? <> <span className={s.sapTitleMeta}>{meta}</span></> : null}
+              </span>
+              <span className={s.sapTitleActions}>{titleActions}</span>
+            </>
+          ) : (
+            <>
+              <span>{title}</span>
+              {meta ? <span className={s.sapTitleMeta}>{meta}</span> : null}
+            </>
+          )}
         </h2>
         {filter}
         <div className={`${s.sapTableWrap} ${s.sapReportWrap}`}>{children}</div>

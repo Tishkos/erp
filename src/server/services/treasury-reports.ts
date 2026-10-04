@@ -4,6 +4,7 @@ import { daysBetween } from '../domain/ageing';
 import { parseDecimal, toDecimalString } from '../domain/money';
 import * as authz from './authorization';
 import type { ActorContext } from './chart-of-accounts';
+import { countOf, registerPage, searchOf, whereOf, type RegisterPaging } from './register-page';
 
 /**
  * Treasury and Banking reporting — every bank and cash account, and what its
@@ -365,4 +366,184 @@ export async function ledger(
 /** Whole days since an account last moved, or null if it never has. */
 export function daysSinceMovement(position: AccountPosition, asOf: string): number | null {
   return position.lastMovementDate ? daysBetween(position.lastMovementDate, asOf) : null;
+}
+
+// ---------------------------------------------------------------------------
+// Payments & Receipts — REQ-ACC-001 Part D-4 (2026-10-04)
+//
+// One treasury view of the money that actually moved: every posted line on a
+// bank or cash account's G/L account, across all of them, with the document
+// that moved it. Nothing here pays or receives — a customer receipt stays
+// Receivables', a supplier payment Payables', a transfer Treasury's; this
+// reads what their postings left on the bank and cash accounts, so it cannot
+// disagree with Bank and Cash Reporting (the same lines) or the G/L.
+// ---------------------------------------------------------------------------
+
+export const MONEY_VIEWS = ['receipts', 'payments', 'transfers'] as const;
+export type MoneyView = (typeof MONEY_VIEWS)[number];
+
+/** The documents a money movement is traced back to, and their record pages. */
+export const MONEY_DOCUMENT_TYPES = [
+  'customer_receipt',
+  'supplier_payment',
+  'supplier_advance',
+  'bank_transfer',
+  'other_receipt',
+  'bank_loan',
+  'payroll_run',
+  'employee_request',
+  'employee_advance',
+  'cash_advance',
+  'bank_reconciliation',
+] as const;
+export type MoneyDocumentType = (typeof MONEY_DOCUMENT_TYPES)[number];
+
+export interface MoneyMovement {
+  readonly journalLineId: string;
+  readonly postingDate: string;
+  readonly entryNo: string;
+  readonly description: string | null;
+  readonly accountCode: string;
+  readonly accountName: string;
+  readonly accountKind: 'bank' | 'cash';
+  readonly currency: string;
+  readonly direction: 'in' | 'out';
+  readonly kind: MovementKind;
+  readonly amountIqd: string;
+  /** The line in the account's own currency, when it was entered in one. */
+  readonly amountTxn: string;
+  readonly txnCurrency: string;
+  readonly partyCode: string | null;
+  readonly partyName: string | null;
+  readonly partyIsCustomer: boolean;
+  readonly partyIsSupplier: boolean;
+  readonly documentType: MoneyDocumentType | null;
+  readonly documentNo: string | null;
+  /** This line is a reversal's mirror of an earlier movement. */
+  readonly isReversal: boolean;
+}
+
+export interface MoneyFilter extends RegisterPaging {
+  readonly from: string;
+  readonly to: string;
+  readonly view?: MoneyView | null;
+  readonly accountCode?: string | null;
+  readonly search?: string | null;
+}
+
+/**
+ * The lines, each with its account, its party and its document. The
+ * document is found by the journal it posted (a reversal by the journal it
+ * mirrors), from the documents that move money — never by guessing from a
+ * description.
+ */
+const MOVEMENTS = (from: string, to: string) => sql`(
+  select l.id::text as journal_line_id, e.posting_date::text as posting_date, e.entry_no,
+         coalesce(l.line_description, e.description) as description,
+         b.code as account_code, b.name as account_name, b.account_type::text as account_kind, b.currency,
+         case when l.debit_iqd > 0 then 'in' else 'out' end as direction,
+         greatest(l.debit_iqd, l.credit_iqd)::text as amount_iqd,
+         greatest(l.debit_txn, l.credit_txn)::text as amount_txn, l.currency as txn_currency,
+         l.debit_iqd as debit, l.credit_iqd as credit,
+         exists (select 1 from bank_transfer t where t.journal_entry_id = coalesce(e.reverses_id, e.id)) as is_transfer,
+         e.source_module, e.reverses_id is not null as is_reversal, coalesce(e.reverses_id, e.id) as source_entry_id,
+         e.source_doc_id,
+         coalesce(l.business_partner_code,
+                  (select min(x.business_partner_code) from journal_line x
+                    where x.journal_entry_id = e.id and x.business_partner_code is not null)) as party_code
+    from journal_line l
+    join journal_entry e on e.id = l.journal_entry_id
+    join bank_cash_account b on b.gl_account_id = l.account_id
+   where e.status in ('posted', 'reversed')
+     and e.posting_date between ${from}::date and ${to}::date
+) m`;
+
+const DOCUMENT_OF = sql`left join lateral (
+  select d.type, d.no from (
+    select 'customer_receipt' as type, r.receipt_no as no from customer_receipt r where r.journal_entry_id = m.source_entry_id
+    union all select 'supplier_payment', p.payment_no from supplier_payment p where p.journal_entry_id = m.source_entry_id
+    union all select 'supplier_advance', a.advance_no from supplier_advance a where a.journal_entry_id = m.source_entry_id
+    union all select 'bank_transfer', t.transfer_no from bank_transfer t where t.journal_entry_id = m.source_entry_id
+    union all select 'other_receipt', o.receipt_no from other_receipt o where o.journal_entry_id = m.source_entry_id
+    union all select 'bank_loan', bl.loan_no from bank_loan bl
+               where bl.disbursement_journal_entry_id = m.source_entry_id or bl.commission_journal_entry_id = m.source_entry_id
+    union all select 'bank_loan', bl.loan_no from bank_loan_repayment rp join bank_loan bl on bl.id = rp.loan_id
+               where rp.journal_entry_id = m.source_entry_id
+    union all select 'payroll_run', pr.run_no from payroll_payment pp join payroll_run pr on pr.id = pp.run_id
+               where pp.journal_entry_id = m.source_entry_id
+    union all select 'employee_request', q.request_no from employee_request q where q.journal_entry_id = m.source_entry_id
+    union all select 'employee_advance', ea.advance_no from employee_advance ea where ea.journal_entry_id = m.source_entry_id
+    union all select 'cash_advance', ca.advance_no from cash_advance ca where ca.journal_entry_id = m.source_entry_id
+    union all select 'bank_reconciliation', s.statement_no from bank_reconciliation br join bank_statement s on s.id = br.statement_id
+               where m.source_module = 'treasury' and br.id::text = m.source_doc_id
+  ) d limit 1
+) doc on true
+left join business_partner bp on bp.code = m.party_code`;
+
+function moneyWhere(filter: MoneyFilter) {
+  const account = filter.accountCode?.trim() || null;
+  return whereOf([
+    filter.view === 'receipts' ? sql`m.direction = 'in' and not m.is_transfer` : null,
+    filter.view === 'payments' ? sql`m.direction = 'out' and not m.is_transfer` : null,
+    filter.view === 'transfers' ? sql`m.is_transfer` : null,
+    account ? sql`m.account_code = ${account}` : null,
+    searchOf(
+      [sql`m.entry_no`, sql`m.description`, sql`m.account_code`, sql`m.account_name`, sql`m.party_code`, sql`bp.legal_name`, sql`doc.no`],
+      filter.search,
+    ),
+  ]);
+}
+
+/**
+ * The register: fifty to a page, a true count, and the totals in and out
+ * over every page of what the filters chose — in dinars, the ledger's figure.
+ */
+export async function moneyRegister(tx: Tx, ctx: ActorContext, filter: MoneyFilter) {
+  await authz.authorize(ctx.principal, 'view', PERMISSION_OBJECT, { branchCode: ctx.branchCode });
+  const where = moneyWhere(filter);
+  const from = sql`from ${MOVEMENTS(filter.from, filter.to)} ${DOCUMENT_OF} ${where}`;
+  const [totals] = (
+    await tx.execute(sql`select coalesce(sum(m.debit), 0)::text as "inIqd", coalesce(sum(m.credit), 0)::text as "outIqd" ${from}`)
+  ).rows as unknown as { inIqd: string; outIqd: string }[];
+  const page = await registerPage<MoneyMovement>({
+    paging: filter,
+    count: () => countOf(tx, from),
+    rows: async ({ limit, offset }) => {
+      const result = await tx.execute(sql`
+        select m.*, doc.type as document_type, doc.no as document_no, bp.legal_name as party_name,
+               coalesce(bp.is_customer, false) as party_is_customer, coalesce(bp.is_supplier, false) as party_is_supplier
+          ${from}
+         order by m.posting_date desc, m.entry_no desc, m.journal_line_id
+         limit ${limit} offset ${offset}`);
+      return (result as unknown as { rows: Record<string, unknown>[] }).rows.map(movementRow);
+    },
+  });
+  return { ...page, totalInIqd: totals?.inIqd ?? '0', totalOutIqd: totals?.outIqd ?? '0' };
+}
+
+function movementRow(row: Record<string, unknown>): MoneyMovement {
+  const transfer = Boolean(row.is_transfer);
+  const direction = row.direction === 'in' ? 'in' : 'out';
+  return {
+    journalLineId: String(row.journal_line_id),
+    postingDate: String(row.posting_date),
+    entryNo: String(row.entry_no),
+    description: (row.description as string | null) ?? null,
+    accountCode: String(row.account_code),
+    accountName: String(row.account_name),
+    accountKind: row.account_kind === 'cash' ? 'cash' : 'bank',
+    currency: String(row.currency),
+    direction,
+    kind: transfer ? (direction === 'in' ? 'transfer_in' : 'transfer_out') : direction === 'in' ? 'receipt' : 'payment',
+    amountIqd: String(row.amount_iqd),
+    amountTxn: String(row.amount_txn),
+    txnCurrency: String(row.txn_currency),
+    partyCode: (row.party_code as string | null) ?? null,
+    partyName: (row.party_name as string | null) ?? null,
+    partyIsCustomer: Boolean(row.party_is_customer),
+    partyIsSupplier: Boolean(row.party_is_supplier),
+    documentType: ((row.document_type as string | null) ?? null) as MoneyDocumentType | null,
+    documentNo: (row.document_no as string | null) ?? null,
+    isReversal: Boolean(row.is_reversal),
+  };
 }

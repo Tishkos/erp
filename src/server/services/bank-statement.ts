@@ -30,6 +30,7 @@ import type { ActorContext } from './chart-of-accounts';
 import * as authz from './authorization';
 import * as audit from './audit';
 import { allocateDocumentNumber } from './numbering';
+import { parseDelimited } from '../domain/import';
 
 export const DOCUMENT_TYPE = 'bank_statement';
 export const PERMISSION_OBJECT = 'bank_statement';
@@ -178,7 +179,7 @@ export async function appendLine(
       bookingDate: line.bookingDate,
       amountIqd: line.amountIqd,
       reference: line.reference,
-      ordinal: line.lineNo,
+      ordinal: line.ordinal ?? line.lineNo,
     },
     line.bankReference,
   );
@@ -451,3 +452,144 @@ export async function rejectedReport(tx: Tx, branchCode?: string | null) {
     .where(branchCode ? eq(bankStatement.branchCode, branchCode) : sql`true`)
     .orderBy(bankStatement.statementNo, bankStatementRejectedLine.lineNo);
 }
+
+// ---------------------------------------------------------------------------
+// Entry from the Bank Reconciliation screen — REQ-ACC-001 Part D-3
+// ---------------------------------------------------------------------------
+
+/** The columns a pasted statement is read by — the import centre's own names. */
+export const PASTE_COLUMNS = ['booking_date', 'value_date', 'amount_iqd', 'reference', 'counterparty', 'description', 'bank_reference'] as const;
+
+export interface AddedLines {
+  readonly added: number;
+  readonly duplicates: number;
+  readonly rejected: number;
+}
+
+async function draftStatement(tx: Tx, statementId: string) {
+  const [statement] = await tx.select().from(bankStatement).where(eq(bankStatement.id, statementId)).limit(1).for('update');
+  if (!statement) throw new Error(`No bank statement with id '${statementId}'.`);
+  if (statement.status !== 'draft') {
+    throw new Error(
+      `Statement ${statement.statementNo} is '${statement.status}'. Lines are added while it is a draft; ` +
+        'a closed statement has been agreed (§17).',
+    );
+  }
+  return statement;
+}
+
+async function nextLineNo(tx: Tx, statementId: string): Promise<number> {
+  const result = (await tx.execute(sql`
+    select coalesce(max(line_no), 0) + 1 as next from (
+      select line_no from bank_statement_line where statement_id = ${statementId}
+      union all
+      select line_no from bank_statement_rejected_line where statement_id = ${statementId}
+    ) l`)) as unknown as { rows: { next: number }[] };
+  return Number(result.rows[0]?.next ?? 1);
+}
+
+/**
+ * Lines typed on the screen or pasted from the bank's file, onto a draft
+ * statement — through `appendLine`, the one path every line takes, so the
+ * import key, the value-date rule and the zero rule are the same as the
+ * import centre's. A row that cannot be read is kept with its reason
+ * (`rejectLine`), never dropped. One audit event says what came in.
+ */
+export async function addLines(
+  tx: Tx,
+  ctx: ActorContext,
+  statementId: string,
+  input: {
+    readonly lines: readonly Omit<StatementLineInput, 'lineNo'>[];
+    readonly rejected?: readonly { readonly rawText: string; readonly problem: string }[];
+    readonly source: 'typed' | 'pasted';
+  },
+): Promise<AddedLines> {
+  const statement = await draftStatement(tx, statementId);
+  await authz.authorize(ctx.principal, input.source === 'pasted' ? 'import' : 'create', PERMISSION_OBJECT, {
+    branchCode: statement.branchCode,
+  });
+
+  let lineNo = await nextLineNo(tx, statementId);
+  let added = 0;
+  let duplicates = 0;
+  for (const [index, line] of input.lines.entries()) {
+    // A pasted row keeps its position in the file as the key's ordinal, so the
+    // same file pasted twice adds nothing the second time.
+    const ordinal = input.source === 'pasted' ? (line.ordinal ?? index + 1) : lineNo;
+    const result = await appendLine(tx, ctx, statementId, { ...line, lineNo, ordinal });
+    if (result.duplicate) duplicates += 1;
+    else {
+      added += 1;
+      lineNo += 1;
+    }
+  }
+  for (const row of input.rejected ?? []) {
+    await rejectLine(tx, statementId, { lineNo, rawText: row.rawText, problem: row.problem });
+    lineNo += 1;
+  }
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'bank_statement.lines_added',
+    objectType: DOCUMENT_TYPE,
+    objectId: statementId,
+    branchCode: statement.branchCode,
+    after: { source: input.source, added, duplicates, rejected: (input.rejected ?? []).length },
+    outcome: 'success',
+  });
+  return { added, duplicates, rejected: (input.rejected ?? []).length };
+}
+
+/**
+ * The bank's file, pasted: a header row naming `PASTE_COLUMNS` (only
+ * `booking_date` and `amount_iqd` are required; a missing value date is the
+ * booking date, as the import centre reads it), then one line per row,
+ * comma- or tab-separated. Pure — `addLines` does the writing.
+ */
+export function readPastedLines(content: string): {
+  readonly lines: Omit<StatementLineInput, 'lineNo'>[];
+  readonly rejected: { rawText: string; problem: string }[];
+} {
+  const text = content.replace(/^\uFEFF/, '');
+  const firstLine = text.split(/\r?\n/, 1)[0] ?? '';
+  const delimiter = firstLine.includes('\t') ? '\t' : ',';
+  const { columns, rows } = parseDelimited(text, { delimiter });
+  const known = columns.map((column) => column.toLowerCase());
+  for (const required of ['booking_date', 'amount_iqd']) {
+    if (!known.includes(required)) throw new Error(`The pasted statement has no "${required}" column. Its first row names the columns.`);
+  }
+  const raw = text.split(/\r?\n/).slice(1).filter((line) => line.trim() !== '');
+  const lines: Omit<StatementLineInput, 'lineNo'>[] = [];
+  const rejected: { rawText: string; problem: string }[] = [];
+  for (const [index, row] of rows.entries()) {
+    const cell = (name: string) => {
+      const column = columns[known.indexOf(name)];
+      return column === undefined ? null : (row.values[column] ?? null);
+    };
+    try {
+      const bookingDate = cell('booking_date');
+      const amount = cell('amount_iqd');
+      if (!bookingDate || !/^\d{4}-\d{2}-\d{2}$/.test(bookingDate)) throw new Error('booking_date is not a date (YYYY-MM-DD).');
+      if (!amount || !/^-?\d+(\.\d{1,4})?$/.test(amount.replace(/[,\s]/g, ''))) throw new Error('amount_iqd is not an amount.');
+      const valueDate = cell('value_date') ?? bookingDate;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(valueDate)) throw new Error('value_date is not a date (YYYY-MM-DD).');
+      const line = {
+        ordinal: index + 1,
+        bookingDate,
+        valueDate,
+        amountIqd: parseDecimal(amount.replace(/[,\s]/g, ''), 4n),
+        reference: cell('reference'),
+        counterparty: cell('counterparty'),
+        description: cell('description'),
+        bankReference: cell('bank_reference'),
+      };
+      assertLineUsable({ ...line, lineNo: index + 1 });
+      lines.push(line);
+    } catch (error) {
+      rejected.push({ rawText: raw[index] ?? '', problem: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return { lines, rejected };
+}
+

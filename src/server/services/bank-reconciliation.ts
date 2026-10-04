@@ -41,6 +41,7 @@ import * as posting from './posting';
 import * as statuses from './statuses';
 import * as treasury from './treasury';
 import { allocateDocumentNumber } from './numbering';
+import { countOf, registerPage, searchOf, whereOf, type RegisterPaging } from './register-page';
 
 export const DOCUMENT_TYPE = 'bank_reconciliation';
 export const PERMISSION_OBJECT = 'bank_reconciliation';
@@ -981,4 +982,295 @@ export async function unmatchedReport(tx: Tx, ctx: ActorContext, id: string) {
       kind: item.amountIqd > 0n ? ('deposit_in_transit' as const) : ('unpresented' as const),
     })),
   };
+}
+
+// ---------------------------------------------------------------------------
+// The screens — REQ-ACC-001 Part D-3 (2026-10-04)
+//
+// One record per bank statement: it is entered (or imported) as a draft,
+// closed when it adds up, and reconciled — the reconciliation is the second
+// half of the same piece of work, so the register and the record are keyed by
+// the statement's number and show the reconciliation beside it.
+// ---------------------------------------------------------------------------
+
+export class StatementNotFoundError extends Error {
+  readonly code = 'BANK_STATEMENT_NOT_FOUND';
+  constructor(readonly statementNo: string) {
+    super(`No bank statement numbered ${statementNo}.`);
+  }
+}
+
+/** Where one statement stands, from entry to agreement. */
+export const RECONCILIATION_STAGES = ['statement', 'ready', 'reconciling', 'reconciled', 'cancelled'] as const;
+export type ReconciliationStage = (typeof RECONCILIATION_STAGES)[number];
+
+export const RECONCILIATION_VIEWS = ['open', 'reconciled'] as const;
+export type ReconciliationView = (typeof RECONCILIATION_VIEWS)[number];
+
+export interface ReconciliationRow {
+  readonly statementId: string;
+  readonly statementNo: string;
+  readonly statementStatus: string;
+  readonly branchCode: string;
+  readonly accountCode: string;
+  readonly accountName: string;
+  readonly currency: string;
+  readonly periodFrom: string;
+  readonly periodTo: string;
+  readonly openingIqd: string;
+  readonly closingIqd: string;
+  readonly bankReference: string | null;
+  readonly reconciliationId: string | null;
+  readonly reconciliationNo: string | null;
+  readonly reconciliationStatus: string | null;
+  readonly differenceIqd: string | null;
+  readonly reopenCount: number;
+  readonly lineCount: number;
+  readonly unmatchedCount: number;
+  readonly stage: ReconciliationStage;
+}
+
+const STATEMENTS = sql`(
+  select s.id::text as statement_id, s.statement_no, s.status::text as statement_status, s.branch_code,
+         b.code as account_code, b.name as account_name, s.currency,
+         s.period_from::text as period_from, s.period_to::text as period_to,
+         s.opening_balance_iqd::text as opening_iqd, s.closing_balance_iqd::text as closing_iqd,
+         s.bank_reference, r.id::text as reconciliation_id, r.reconciliation_no,
+         r.status::text as reconciliation_status, r.difference_iqd::text as difference_iqd,
+         coalesce(r.reopen_count, 0)::int as reopen_count, s.created_at,
+         (select count(*)::int from bank_statement_line l where l.statement_id = s.id) as line_count,
+         (select count(*)::int from bank_statement_line l
+           where l.statement_id = s.id and l.match_status <> 'matched') as unmatched_count,
+         case when s.status = 'cancelled' then 'cancelled'
+              when s.status = 'draft' then 'statement'
+              when r.id is null then 'ready'
+              when r.status = 'approved' then 'reconciled'
+              else 'reconciling' end as stage
+    from bank_statement s
+    join bank_cash_account b on b.id = s.bank_cash_account_id
+    left join bank_reconciliation r on r.statement_id = s.id
+) x`;
+
+const reconciliationRow = (row: Record<string, unknown>): ReconciliationRow => ({
+  statementId: String(row.statement_id),
+  statementNo: String(row.statement_no),
+  statementStatus: String(row.statement_status),
+  branchCode: String(row.branch_code),
+  accountCode: String(row.account_code),
+  accountName: String(row.account_name),
+  currency: String(row.currency),
+  periodFrom: String(row.period_from),
+  periodTo: String(row.period_to),
+  openingIqd: String(row.opening_iqd),
+  closingIqd: String(row.closing_iqd),
+  bankReference: (row.bank_reference as string | null) ?? null,
+  reconciliationId: (row.reconciliation_id as string | null) ?? null,
+  reconciliationNo: (row.reconciliation_no as string | null) ?? null,
+  reconciliationStatus: (row.reconciliation_status as string | null) ?? null,
+  differenceIqd: (row.difference_iqd as string | null) ?? null,
+  reopenCount: Number(row.reopen_count ?? 0),
+  lineCount: Number(row.line_count ?? 0),
+  unmatchedCount: Number(row.unmatched_count ?? 0),
+  stage: String(row.stage) as ReconciliationStage,
+});
+
+export interface ReconciliationFilter extends RegisterPaging {
+  readonly view?: ReconciliationView | null;
+  readonly accountCode?: string | null;
+  readonly search?: string | null;
+}
+
+/** The register: every statement and its reconciliation, fifty to a page, newest period first. */
+export async function listForScreen(tx: Tx, ctx: ActorContext, filter: ReconciliationFilter = {}) {
+  await authz.authorize(ctx.principal, 'view', PERMISSION_OBJECT, { branchCode: ctx.branchCode });
+  const account = filter.accountCode?.trim() || null;
+  const where = whereOf([
+    filter.view === 'open' ? sql`x.stage in ('statement', 'ready', 'reconciling')` : null,
+    filter.view === 'reconciled' ? sql`x.stage = 'reconciled'` : null,
+    account ? sql`x.account_code = ${account}` : null,
+    searchOf([sql`x.statement_no`, sql`x.reconciliation_no`, sql`x.account_code`, sql`x.account_name`, sql`x.bank_reference`], filter.search),
+  ]);
+  return registerPage<ReconciliationRow>({
+    paging: filter,
+    count: () => countOf(tx, sql`from ${STATEMENTS} ${where}`),
+    rows: async ({ limit, offset }) => {
+      const result = await tx.execute(
+        sql`select * from ${STATEMENTS} ${where} order by x.period_to desc, x.created_at desc limit ${limit} offset ${offset}`,
+      );
+      return (result as unknown as { rows: Record<string, unknown>[] }).rows.map(reconciliationRow);
+    },
+  });
+}
+
+export interface WorkspaceLine {
+  readonly id: string;
+  readonly lineNo: number;
+  readonly bookingDate: string;
+  readonly valueDate: string;
+  readonly amountIqd: string;
+  readonly reference: string | null;
+  readonly counterparty: string | null;
+  readonly description: string | null;
+  readonly matchStatus: string;
+  readonly matchNo: number | null;
+}
+
+export interface WorkspaceLedgerItem {
+  readonly id: string;
+  readonly postingDate: string;
+  readonly amountIqd: string;
+  readonly reference: string | null;
+  readonly counterparty: string | null;
+  readonly entryNo: string;
+  readonly ageDays: number;
+}
+
+export interface WorkspaceMatch {
+  readonly id: string;
+  readonly matchNo: number;
+  readonly state: string;
+  readonly confidence: number | null;
+  readonly why: string | null;
+  readonly confirmedBy: string | null;
+  readonly statementLines: readonly { readonly lineNo: number; readonly amountIqd: string }[];
+  readonly journalLines: readonly { readonly entryNo: string; readonly amountIqd: string }[];
+  /** The adjustment's own journal, when the match is one. */
+  readonly adjustmentEntryNo: string | null;
+}
+
+/**
+ * One statement and everything its record shows: the account (with its G/L
+ * account), the lines and how each stands, what could not be read, and —
+ * once opened — the reconciliation, its arithmetic, its matches and the
+ * ledger items still waiting for the bank.
+ */
+export async function workspace(tx: Tx, ctx: ActorContext, statementNo: string) {
+  await authz.authorize(ctx.principal, 'view', PERMISSION_OBJECT, { branchCode: ctx.branchCode });
+  const found = (await tx.execute(sql`select * from ${STATEMENTS} where x.statement_no = ${statementNo} limit 1`)) as unknown as {
+    rows: Record<string, unknown>[];
+  };
+  const head = found.rows[0];
+  if (!head) throw new StatementNotFoundError(statementNo);
+  const row = reconciliationRow(head);
+
+  const [extra] = (
+    await tx.execute(sql`
+      select b.id::text as "accountId", b.account_type::text as "accountKind", a.code as "glCode", a.name as "glName",
+             cu.display_name as "createdBy", s.created_by::text as "createdById",
+             pu.display_name as "preparedBy", au.display_name as "approvedBy", ru.display_name as "reopenedBy",
+             r.reopen_reason as "reopenReason", r.ledger_balance_iqd::text as "storedLedgerIqd"
+        from bank_statement s
+        join bank_cash_account b on b.id = s.bank_cash_account_id
+        left join chart_of_account a on a.id = b.gl_account_id
+        left join app_user cu on cu.id = s.created_by
+        left join bank_reconciliation r on r.statement_id = s.id
+        left join app_user pu on pu.id = r.prepared_by
+        left join app_user au on au.id = r.approved_by
+        left join app_user ru on ru.id = r.reopened_by
+       where s.id = ${row.statementId}`)
+  ).rows as unknown as {
+    accountId: string;
+    accountKind: 'bank' | 'cash';
+    glCode: string | null;
+    glName: string | null;
+    createdBy: string | null;
+    createdById: string;
+    preparedBy: string | null;
+    approvedBy: string | null;
+    reopenedBy: string | null;
+    reopenReason: string | null;
+    storedLedgerIqd: string | null;
+  }[];
+
+  const lines = (
+    await tx.execute(sql`
+      select l.id::text as id, l.line_no as "lineNo", l.booking_date::text as "bookingDate",
+             l.value_date::text as "valueDate", l.amount_iqd::text as "amountIqd", l.reference,
+             l.counterparty, l.description, l.match_status::text as "matchStatus",
+             (select m.match_no from bank_reconciliation_match_line ml
+                join bank_reconciliation_match m on m.id = ml.match_id
+               where ml.statement_line_id = l.id limit 1) as "matchNo"
+        from bank_statement_line l
+       where l.statement_id = ${row.statementId}
+       order by l.line_no`)
+  ).rows as unknown as WorkspaceLine[];
+
+  const rejected = (
+    await tx.execute(sql`
+      select line_no as "lineNo", raw_text as "rawText", problem
+        from bank_statement_rejected_line where statement_id = ${row.statementId} order by line_no`)
+  ).rows as unknown as { lineNo: number; rawText: string; problem: string }[];
+
+  let reconciliation: {
+    readonly position: ReconciliationPosition;
+    readonly matches: readonly WorkspaceMatch[];
+    readonly ledger: readonly WorkspaceLedgerItem[];
+  } | null = null;
+
+  if (row.reconciliationId) {
+    const current = await position(tx, ctx, row.reconciliationId);
+    const matchRows = (
+      await tx.execute(sql`
+        select m.id::text as id, m.match_no as "matchNo", m.state::text as state, m.confidence, m.why,
+               u.display_name as "confirmedBy", aj.entry_no as "adjustmentEntryNo"
+          from bank_reconciliation_match m
+          left join app_user u on u.id = m.confirmed_by
+          left join journal_entry aj on aj.id::text = m.from_adjustment
+         where m.reconciliation_id = ${row.reconciliationId}
+         order by m.match_no`)
+    ).rows as unknown as Omit<WorkspaceMatch, 'statementLines' | 'journalLines'>[];
+    const sides = (
+      await tx.execute(sql`
+        select ml.match_id::text as "matchId", sl.line_no as "lineNo", je.entry_no as "entryNo",
+               ml.amount_iqd::text as "amountIqd"
+          from bank_reconciliation_match_line ml
+          join bank_reconciliation_match m on m.id = ml.match_id
+          left join bank_statement_line sl on sl.id = ml.statement_line_id
+          left join journal_line jl on jl.id = ml.journal_line_id
+          left join journal_entry je on je.id = jl.journal_entry_id
+         where m.reconciliation_id = ${row.reconciliationId}
+         order by sl.line_no nulls last, je.entry_no`)
+    ).rows as unknown as { matchId: string; lineNo: number | null; entryNo: string | null; amountIqd: string }[];
+    const matches = matchRows.map((match) => ({
+      ...match,
+      statementLines: sides
+        .filter((side) => side.matchId === match.id && side.lineNo !== null)
+        .map((side) => ({ lineNo: side.lineNo!, amountIqd: side.amountIqd })),
+      journalLines: sides
+        .filter((side) => side.matchId === match.id && side.entryNo !== null)
+        .map((side) => ({ entryNo: side.entryNo!, amountIqd: side.amountIqd })),
+    }));
+    // The ledger items the bank has not shown yet — with the journal each
+    // belongs to, so it can be opened.
+    const ledger = (
+      await tx.execute(sql`
+        select l.id::text as id, e.posting_date::text as "postingDate",
+               (l.debit_iqd - l.credit_iqd)::text as "amountIqd",
+               coalesce(l.line_description, e.description) as reference,
+               l.business_partner_code as counterparty, e.entry_no as "entryNo",
+               (${row.periodTo}::date - e.posting_date)::int as "ageDays"
+          from journal_line l
+          join journal_entry e on e.id = l.journal_entry_id
+          join bank_cash_account b on b.id = ${extra!.accountId}::uuid
+         where l.account_id = b.gl_account_id
+           and e.status in ('posted', 'reversed')
+           and e.posting_date <= ${row.periodTo}::date
+           and not exists (select 1 from bank_reconciliation_match_line m where m.journal_line_id = l.id)
+         order by e.posting_date, e.entry_no, l.line_no`)
+    ).rows as unknown as WorkspaceLedgerItem[];
+    reconciliation = { position: current, matches, ledger };
+  }
+
+  return { statement: row, ...extra!, lines, rejected, reconciliation };
+}
+
+/** The statement's id by its number — what the actions resolve a form's number through. */
+export async function statementIdByNo(tx: Tx, statementNo: string): Promise<{ id: string; reconciliationId: string | null }> {
+  const result = (await tx.execute(sql`
+    select s.id::text as id, r.id::text as "reconciliationId"
+      from bank_statement s left join bank_reconciliation r on r.statement_id = s.id
+     where s.statement_no = ${statementNo} limit 1`)) as unknown as { rows: { id: string; reconciliationId: string | null }[] };
+  const row = result.rows[0];
+  if (!row) throw new StatementNotFoundError(statementNo);
+  return row;
 }

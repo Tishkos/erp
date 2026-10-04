@@ -227,7 +227,7 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     // And a posted entry stops offering anything that would change it.
     await expect(page.getByRole('combobox', { name: 'Account' })).toHaveCount(0);
     // The audit log is one press away from the entry.
-    await expect(page.getByRole('link', { name: 'Audit log' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Audit log' })).toBeVisible();
   });
 
   test('4 · it appears in the General Ledger and the Trial Balance', async ({ page }) => {

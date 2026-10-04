@@ -747,6 +747,10 @@ export async function resetTestData(): Promise<void> {
       delete from inventory_movement;
     `);
 
+    // REQ-ACC-001 — a recurring journal's runs name the journals they raised;
+    // the templates name their accounts and departments.
+    await client.query('truncate recurring_journal_run');
+    await client.query('delete from recurring_journal_line; delete from recurring_journal;');
     await client.query('delete from journal_line; delete from journal_entry;');
     await client.query(`
     `);
@@ -918,6 +922,8 @@ export async function resetTestData(): Promise<void> {
                          'PAYABLE_LOCAL_GOODS', 'PAYABLE_ADVANCE', 'RECURRING_CONTRACT',
                          -- REQ-AP-001 Stage 3, migration 0232.
                          'PAYMENT_APPLICATION', 'BANK_CODE',
+                         -- REQ-ACC-001, migrations 0291 and 0292.
+                         'RECURRING_JOURNAL', 'TAX_CODE',
                          -- REQ-AP-001 Stage 5, migration 0234.
                          'CONTAINER_RECEIPT', 'PORT_CODE',
                          -- IMPROVEMENT-002, migration 0268 — the ASYCUDA reading as a document.

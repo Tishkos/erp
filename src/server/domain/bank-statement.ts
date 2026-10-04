@@ -145,6 +145,13 @@ export interface StatementLineInput {
   readonly counterparty: string | null;
   readonly description: string | null;
   readonly bankReference?: string | null;
+  /**
+   * Which occurrence this is for the import key, when it is not the line's
+   * own number — a file pasted into a statement that already holds lines
+   * keeps its rows' positions as the ordinal (so pasting it again is
+   * recognised) while the line takes the next free number.
+   */
+  readonly ordinal?: number;
 }
 
 /**

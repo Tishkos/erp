@@ -28,6 +28,16 @@ export const EXPORT_ACCESS = {
   // The import application itself — the record that ties the invoice, the
   // goods, the declaration and the shipment together (2026-10-03).
   import_application: { kind: 'document', route: '/payables', object: 'payable' },
+  // REQ-ACC-001 — Accounting's records, each printed from its own page.
+  internal_transfer: { kind: 'document', route: '/treasury/transfers', object: 'bank_cash_account' },
+  bank_reconciliation: { kind: 'document', route: '/treasury/bank-reconciliation', object: 'bank_reconciliation' },
+  payments_receipts: { kind: 'report', route: '/treasury/payments-receipts', object: 'bank_account' },
+  cash_forecast: { kind: 'report', route: '/treasury/cash-forecast', object: 'bank_cash_account' },
+  account_reconciliation: { kind: 'report', route: '/finance/account-reconciliation', object: 'trial_balance' },
+  tax_code: { kind: 'document', route: '/master-data/tax-codes', object: 'tax_code' },
+  recurring_journal: { kind: 'document', route: '/finance/recurring-journals', object: 'journal_entry' },
+  // The period's close checklist and history, read under the trial balance's grant (a reading of the ledger).
+  period_close: { kind: 'document', route: '/finance/closing', object: 'trial_balance' },
   customer_statement: { kind: 'report', route: '/sales/customer-statements', object: 'business_partner' },
   supplier_statement: { kind: 'report', route: '/payables/supplier-statements', object: 'business_partner' },
   bank_statement: { kind: 'report', route: '/master-data/bank-accounts', object: 'bank_account' },
