@@ -3,8 +3,8 @@
  *
  * `system-health.check` looks at the files and the disk of the machine the
  * sweep runs on (the newest backup, free space, the jobs' last exit), so what
- * this detector finds depends on where it runs. It is registered as host
- * dependent; the integration tests run the other detectors.
+ * this detector finds depends on where it runs. It is registered as host dependent;
+ * the integration tests run the other detectors.
  */
 import { EVIDENCE_ROW, type Finding, type Severity } from '../../domain/exceptions';
 import * as health from '../system-health';
