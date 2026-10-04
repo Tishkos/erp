@@ -36,6 +36,8 @@ export const EXPORT_ACCESS = {
   account_reconciliation: { kind: 'report', route: '/finance/account-reconciliation', object: 'trial_balance' },
   tax_code: { kind: 'document', route: '/master-data/tax-codes', object: 'tax_code' },
   recurring_journal: { kind: 'document', route: '/finance/recurring-journals', object: 'journal_entry' },
+  // The period's close checklist and history, read under the trial balance's grant (a reading of the ledger).
+  period_close: { kind: 'document', route: '/finance/closing', object: 'trial_balance' },
   customer_statement: { kind: 'report', route: '/sales/customer-statements', object: 'business_partner' },
   supplier_statement: { kind: 'report', route: '/payables/supplier-statements', object: 'business_partner' },
   bank_statement: { kind: 'report', route: '/master-data/bank-accounts', object: 'bank_account' },

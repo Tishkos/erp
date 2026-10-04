@@ -6246,6 +6246,7 @@
       "account_reconciliation": "مطابقة الحسابات",
       "tax_code": "رمز ضريبي",
       "recurring_journal": "قيد متكرر",
+      "period_close": "إقفال الفترة",
       "project_certificate": "شهادة الإنجاز"
     }
   }

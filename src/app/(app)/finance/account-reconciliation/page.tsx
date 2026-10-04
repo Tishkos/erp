@@ -12,7 +12,7 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { businessToday } from '@/server/domain/business-date';
-import { glAccountHref } from '@/server/domain/accounting-links';
+import { ProfileLink } from '@/components/admin/profile-link';
 import * as subledger from '@/server/services/account-reconciliation';
 
 /**
@@ -121,10 +121,7 @@ export default async function AccountReconciliationPage({ searchParams }: { sear
               return (
                 <tr key={row.accountCode}>
                   <td>
-                    <Link className={s.sapLink} href={glAccountHref(row.accountCode)}>
-                      <bdi dir="ltr">{row.accountCode}</bdi>
-                    </Link>{' '}
-                    <bdi dir="auto">{row.accountName}</bdi>
+                    <ProfileLink code={row.accountCode} kind="gl_account" name={row.accountName} />
                   </td>
                   <td>{t.has(`kind_${row.subledgerType}`) ? t(`kind_${row.subledgerType}`) : row.subledgerType}</td>
                   <td className={s.sapNum}>

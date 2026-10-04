@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Field, Flash, Form, Grid, Hidden, ReasonForm, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
@@ -7,6 +6,8 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { RecordHistory } from '@/components/admin/history';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
 import { Attachments } from '@/components/admin/attachments';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -19,8 +20,8 @@ import { toDecimalString } from '@domain/money';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { isNotFoundError } from '@/server/not-found';
-import { accountHref, glAccountHref, journalHref } from '@/server/domain/accounting-links';
 import * as attachmentsService from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
 import * as chart from '@/server/services/chart-of-accounts';
 import * as departments from '@/server/services/departments';
 import * as rec from '@/server/services/bank-reconciliation';
@@ -85,6 +86,7 @@ export default async function BankReconciliationPage({
       return {
         view,
         attached: (await attachmentsService.currentFor(tx, statements.DOCUMENT_TYPE, view.statement.statementId)).length,
+        notes: await recordNotes.listNotes(tx, { object: statements.DOCUMENT_TYPE, recordId: view.statement.statementId }),
         // The account an adjustment's other side goes to: never a control
         // account (a fee is not a customer), and the departments it may name.
         accounts: mayAdjust && view.reconciliation ? (await chart.postableAccounts(tx)).filter((a) => !a.controlAccount) : [],
@@ -96,7 +98,7 @@ export default async function BankReconciliationPage({
     }
   });
   if (!found) notFound();
-  const { view, attached, accounts, depts } = found;
+  const { view, attached, notes, accounts, depts } = found;
   const { statement, lines, rejected, reconciliation } = view;
 
   const day = (value: string) => formatBusinessDate(value, locale as Locale);
@@ -117,11 +119,9 @@ export default async function BankReconciliationPage({
   const mayReopen = reconciled && can(principal, 'reverse_cancel', rec.PERMISSION_OBJECT);
   const openLines = lines.filter((line) => line.matchStatus !== 'matched');
 
-  const journalLink = (entryNo: string) => (
-    <Link className={s.sapLink} href={journalHref(entryNo)}>
-      <bdi dir="ltr">{entryNo}</bdi>
-    </Link>
-  );
+  // Every journal, the account and its G/L account open their own pages —
+  // the bank loan's account field, through the shared `ProfileLink`.
+  const journalLink = (entryNo: string) => <ProfileLink code={entryNo} kind="journal" />;
 
   const fields: DocumentField[] = [
     { label: t('col_statement'), value: <bdi dir="ltr">{statement.statementNo}</bdi> },
@@ -129,21 +129,14 @@ export default async function BankReconciliationPage({
     {
       label: t('account'),
       value: (
-        <Link className={s.sapLink} href={accountHref(view.accountKind, statement.accountCode)}>
-          <bdi dir="auto">{`${statement.accountName} (${statement.accountCode})`}</bdi>
-        </Link>
+        <ProfileLink
+          code={statement.accountCode}
+          kind={view.accountKind === 'cash' ? 'cash_account' : 'bank_account'}
+          name={statement.accountName}
+        />
       ),
     },
-    {
-      label: t('gl_account'),
-      value: view.glCode ? (
-        <Link className={s.sapLink} href={glAccountHref(view.glCode)}>
-          <bdi dir="auto">{`${view.glCode} · ${view.glName ?? ''}`}</bdi>
-        </Link>
-      ) : (
-        '—'
-      ),
-    },
+    { label: t('gl_account'), value: <ProfileLink code={view.glCode} kind="gl_account" name={view.glName} /> },
     { label: t('col_period'), value: <bdi dir="ltr">{`${day(statement.periodFrom)} – ${day(statement.periodTo)}`}</bdi> },
     { label: t('bank_reference'), value: <bdi dir="auto">{statement.bankReference ?? '—'}</bdi> },
     { label: t('opening'), value: <bdi dir="ltr">{money(statement.openingIqd)}</bdi> },
@@ -309,6 +302,7 @@ export default async function BankReconciliationPage({
                 objectType={statements.DOCUMENT_TYPE}
               />
             </AttachmentsButton>
+            <RecordNotesDoor notes={notes} object={statements.DOCUMENT_TYPE} recordId={statement.statementId} />
             <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
               <RecordHistory
                 objectId={statement.statementId}

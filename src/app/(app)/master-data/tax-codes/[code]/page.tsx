@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { ActionButton, AdminPage, Field, Flash, Form, Grid, Hidden, ReasonForm, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
@@ -7,7 +6,10 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { RecordHistory } from '@/components/admin/history';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
 import { Attachments } from '@/components/admin/attachments';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import * as attachmentsService from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -18,7 +20,6 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { AdminNotFoundError } from '@/server/services/administration';
 import { businessToday } from '@/server/domain/business-date';
-import { glAccountHref } from '@/server/domain/accounting-links';
 import * as chart from '@/server/services/chart-of-accounts';
 import * as taxCodes from '@/server/services/tax-codes';
 import { addTaxRate, attachToTaxCode, setTaxCodeActive, updateTaxCode } from '../actions';
@@ -67,6 +68,7 @@ export default async function TaxCodePage({
         accounts: mayEdit ? (await chart.postableAccounts(tx)).filter((account) => !account.controlAccount) : [],
         today: await taxCodes.rateOn(tx, code, businessToday()),
         attached: (await attachmentsService.currentFor(tx, taxCodes.PERMISSION_OBJECT, code)).length,
+        notes: await recordNotes.listNotes(tx, { object: taxCodes.PERMISSION_OBJECT, recordId: code }),
       };
     } catch (error) {
       if (error instanceof AdminNotFoundError) return null;
@@ -74,7 +76,7 @@ export default async function TaxCodePage({
     }
   });
   if (!found) notFound();
-  const { row, accounts, today, attached } = found;
+  const { row, accounts, today, attached, notes } = found;
   const percent = (rate: string | null) => (rate === null ? '—' : `${rate.replace(/\.?0+$/, '')}%`);
   const hidden = { code: row.code };
 
@@ -84,14 +86,8 @@ export default async function TaxCodePage({
     { label: t('name'), value: <bdi dir="auto">{row.name}</bdi> },
     { label: t('direction'), value: t(`direction_${row.direction}`) },
     { label: t('recoverable'), value: row.isRecoverable ? t('recoverable_yes') : t('recoverable_no') },
-    {
-      label: t('account'),
-      value: (
-        <Link className={s.sapLink} href={glAccountHref(row.account.code)}>
-          <bdi dir="auto">{`${row.account.code} · ${row.account.name}`}</bdi>
-        </Link>
-      ),
-    },
+    // Its account is a link to the G/L account's profile — the shared `ProfileLink`.
+    { label: t('account'), value: <ProfileLink code={row.account.code} kind="gl_account" name={row.account.name} /> },
     { label: t('current_rate'), value: <bdi dir="ltr">{percent(today)}</bdi> },
     { label: t('created_by'), value: <bdi dir="auto">{row.createdByName ?? '—'}</bdi> },
   ];
@@ -189,6 +185,7 @@ export default async function TaxCodePage({
                 objectType={taxCodes.PERMISSION_OBJECT}
               />
             </AttachmentsButton>
+            <RecordNotesDoor notes={notes} object={taxCodes.PERMISSION_OBJECT} recordId={row.code} />
             <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
               <RecordHistory objectId={row.code} objectType={taxCodes.PERMISSION_OBJECT} />
             </HistoryButton>

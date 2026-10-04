@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, Hidden, ReasonForm, Submit, admin as s } from '@/components/admin';
@@ -6,6 +5,8 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { RecordHistory } from '@/components/admin/history';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
 import { Attachments } from '@/components/admin/attachments';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -18,8 +19,8 @@ import { toDecimalString } from '@domain/money';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { isNotFoundError } from '@/server/not-found';
-import { accountHref, glAccountHref, journalHref } from '@/server/domain/accounting-links';
 import * as attachmentsService from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
 import * as treasury from '@/server/services/treasury';
 import { approveTransferAction, attachToTransfer, postTransferAction, reverseTransferAction } from '../actions';
 
@@ -74,10 +75,11 @@ export default async function TransferPage({
     // rate on Currencies & Rates has no value yet, and the lines say so.
     const value = await treasury.valueTransfer(tx, transfer).catch(() => null);
     const attached = await attachmentsService.currentFor(tx, treasury.TRANSFER_OBJECT_TYPE, transfer.id);
-    return { transfer, value, attached: attached.length };
+    const notes = await recordNotes.listNotes(tx, { object: treasury.TRANSFER_OBJECT_TYPE, recordId: transfer.id });
+    return { transfer, value, attached: attached.length, notes };
   });
   if (!found) notFound();
-  const { transfer, value, attached } = found;
+  const { transfer, value, attached, notes } = found;
 
   const day = (date: string) => formatBusinessDate(date, locale as Locale);
   const money = (amount: string, currency: string) => formatMoney(amount, currency, locale as Locale);
@@ -95,19 +97,12 @@ export default async function TransferPage({
     can(principal, 'post', treasury.PERMISSION_OBJECT) &&
     can(principal, 'reverse_cancel', 'journal_entry');
 
+  // Each account and journal is a link to its profile — the bank loan's
+  // account field, through the shared `ProfileLink`.
   const accountLink = (kind: 'bank' | 'cash', code: string, name: string) => (
-    <Link className={s.sapLink} href={accountHref(kind, code)}>
-      <bdi dir="auto">{`${name} (${code})`}</bdi>
-    </Link>
+    <ProfileLink code={code} kind={kind === 'cash' ? 'cash_account' : 'bank_account'} name={name} />
   );
-  const journalLink = (entryNo: string | null) =>
-    entryNo ? (
-      <Link className={s.sapLink} href={journalHref(entryNo)}>
-        <bdi dir="ltr">{entryNo}</bdi>
-      </Link>
-    ) : (
-      '—'
-    );
+  const journalLink = (entryNo: string | null) => <ProfileLink code={entryNo} kind="journal" />;
 
   const fields: DocumentField[] = [
     { label: t('col_no'), value: <bdi dir="ltr">{transfer.transferNo}</bdi> },
@@ -140,26 +135,14 @@ export default async function TransferPage({
   const legs: { account: React.ReactNode; gl: React.ReactNode; entered: string; debit: string; credit: string }[] = [
     {
       account: accountLink(transfer.toKind, transfer.toCode, transfer.toName),
-      gl: transfer.toGlCode ? (
-        <Link className={s.sapLink} href={glAccountHref(transfer.toGlCode)}>
-          <bdi dir="ltr">{transfer.toGlCode}</bdi>
-        </Link>
-      ) : (
-        '—'
-      ),
+      gl: <ProfileLink code={transfer.toGlCode} kind="gl_account" />,
       entered: money(transfer.receivedAmount, transfer.toCurrency),
       debit: value ? iqd(value.destinationIqd) : '—',
       credit: '',
     },
     {
       account: accountLink(transfer.fromKind, transfer.fromCode, transfer.fromName),
-      gl: transfer.fromGlCode ? (
-        <Link className={s.sapLink} href={glAccountHref(transfer.fromGlCode)}>
-          <bdi dir="ltr">{transfer.fromGlCode}</bdi>
-        </Link>
-      ) : (
-        '—'
-      ),
+      gl: <ProfileLink code={transfer.fromGlCode} kind="gl_account" />,
       entered: money(transfer.amount, transfer.fromCurrency),
       debit: '',
       credit: value ? iqd(value.sourceIqd) : '—',
@@ -230,6 +213,7 @@ export default async function TransferPage({
                 objectType={treasury.TRANSFER_OBJECT_TYPE}
               />
             </AttachmentsButton>
+            <RecordNotesDoor notes={notes} object={treasury.TRANSFER_OBJECT_TYPE} recordId={transfer.id} />
             <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
               <RecordHistory objectId={transfer.id} objectType={treasury.TRANSFER_OBJECT_TYPE} />
             </HistoryButton>

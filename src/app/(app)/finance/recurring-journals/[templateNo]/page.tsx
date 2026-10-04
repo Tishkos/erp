@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Field, Flash, Form, Grid, Hidden, ReasonForm, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
@@ -7,6 +6,8 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { RecordHistory } from '@/components/admin/history';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
 import { Attachments } from '@/components/admin/attachments';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -17,8 +18,8 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { isNotFoundError } from '@/server/not-found';
 import { businessToday } from '@/server/domain/business-date';
-import { glAccountHref, journalHref } from '@/server/domain/accounting-links';
 import * as attachmentsService from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
 import * as chart from '@/server/services/chart-of-accounts';
 import * as departments from '@/server/services/departments';
 import * as recurring from '@/server/services/recurring-journals';
@@ -78,6 +79,7 @@ export default async function RecurringJournalPage({
       return {
         view,
         attached: (await attachmentsService.currentFor(tx, recurring.DOCUMENT_TYPE, view.template.id)).length,
+        notes: await recordNotes.listNotes(tx, { object: recurring.DOCUMENT_TYPE, recordId: view.template.id }),
         accounts: draft ? await chart.postableAccounts(tx) : [],
         depts: draft ? (await departments.listAll(tx)).filter((d) => d.active) : [],
       };
@@ -87,7 +89,7 @@ export default async function RecurringJournalPage({
     }
   });
   if (!found) notFound();
-  const { view, attached, accounts, depts } = found;
+  const { view, attached, notes, accounts, depts } = found;
   const { template, lines, runs, totals } = view;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
@@ -231,6 +233,7 @@ export default async function RecurringJournalPage({
                 objectType={recurring.DOCUMENT_TYPE}
               />
             </AttachmentsButton>
+            <RecordNotesDoor notes={notes} object={recurring.DOCUMENT_TYPE} recordId={template.id} />
             <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
               <RecordHistory objectId={template.id} objectType={recurring.DOCUMENT_TYPE} />
             </HistoryButton>
@@ -275,10 +278,7 @@ export default async function RecurringJournalPage({
               <tr key={line.id}>
                 <td>{line.lineNo}</td>
                 <td className={s.sapAccountCell}>
-                  <Link className={s.sapLink} href={glAccountHref(line.accountCode)}>
-                    <bdi dir="ltr">{line.accountCode}</bdi>
-                  </Link>{' '}
-                  · <bdi dir="auto">{line.accountName}</bdi>
+                  <ProfileLink code={line.accountCode} kind="gl_account" name={line.accountName} />
                 </td>
                 <td>
                   <bdi dir="ltr">{line.departmentCode ?? ''}</bdi>
@@ -351,9 +351,7 @@ export default async function RecurringJournalPage({
                       <bdi dir="ltr">{day(run.dueOn)}</bdi>
                     </td>
                     <td>
-                      <Link className={s.sapLink} href={journalHref(run.entryNo)}>
-                        <bdi dir="ltr">{run.entryNo}</bdi>
-                      </Link>
+                      <ProfileLink code={run.entryNo} kind="journal" />
                     </td>
                     <td>
                       <span className={`status status--${run.status}`} data-status={run.status}>

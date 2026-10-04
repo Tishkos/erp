@@ -2,7 +2,12 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Field, Flash, Hidden, Select, Submit, admin as s } from '@/components/admin';
+import { Attachments } from '@/components/admin/attachments';
+import { RecordHistory } from '@/components/admin/history';
+import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { ReportWindow } from '@/components/admin/report-filter';
+import { ExportIcon } from '@/components/print/export-menu';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -11,8 +16,10 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { businessToday } from '@/server/domain/business-date';
+import * as attachmentsService from '@/server/services/attachments';
 import * as periods from '@/server/services/periods';
-import { closePeriodAction } from './actions';
+import * as recordNotes from '@/server/services/record-notes';
+import { attachToPeriod, closePeriodAction } from './actions';
 
 /**
  * Period / Year-End Closing — REQ-ACC-001 Part D-6.
@@ -25,6 +32,8 @@ import { closePeriodAction } from './actions';
  * refuses on a blocking failure), soft close and its controlled reopening,
  * and the history of every close. The year is closed by closing its months
  * in order; the lock is Accounting Periods' — there is no second one here.
+ * The period is the record: its four doors (the checklist printed, its
+ * closing papers, its notes, its history) sit in the window's title bar.
  *
  * Decided by default (owner to confirm, REQ-ACC-001): no retained-earnings
  * roll. Moving the year's profit into retained earnings by journal would
@@ -53,7 +62,7 @@ export default async function ClosingPage({ searchParams }: { searchParams: Sear
 
   const params = await searchParams;
   const asked = typeof params.period === 'string' ? params.period : '';
-  const { calendar, report, history } = await withCurrentUser(async (tx, request) => {
+  const { calendar, report, history, attached, notes } = await withCurrentUser(async (tx, request) => {
     const calendar = await periods.calendar(tx);
     const today = businessToday();
     // The one asked for, else the next to close — the earliest not yet closed.
@@ -66,6 +75,8 @@ export default async function ClosingPage({ searchParams }: { searchParams: Sear
       calendar,
       report: chosen ? await periods.closeReport(tx, chosen.id) : null,
       history: await periods.closeHistory(tx, { principal: request.principal, branchCode: request.scope.branchCode }),
+      attached: chosen ? (await attachmentsService.currentFor(tx, periods.PERMISSION_OBJECT, chosen.id)).length : 0,
+      notes: chosen ? await recordNotes.listNotes(tx, { object: periods.PERMISSION_OBJECT, recordId: chosen.id }) : [],
     };
   });
   const day = (value: string) => formatBusinessDate(value, locale as Locale);
@@ -155,6 +166,30 @@ export default async function ClosingPage({ searchParams }: { searchParams: Sear
           }
           meta={`${day(period.startsOn)} – ${day(period.endsOn)}`}
           title={t('checklist', { period: period.name })}
+          titleActions={
+            <>
+              {/* Printer, paperclip, notes, clock — the period's own doors. */}
+              <ExportIcon exportKey="period_close" id={period.id} title={`${page('year_end_close')} ${period.name} · ${period.fiscalYearCode}`} />
+              <AttachmentsButton
+                closeLabel={admin('close')}
+                count={attached}
+                label={admin('attachments.title')}
+                title={admin('attachments.title')}
+              >
+                <Attachments
+                  action={attachToPeriod}
+                  hidden={{ period_id: period.id }}
+                  mayAttach={can(principal, 'create', 'attachment')}
+                  objectId={period.id}
+                  objectType={periods.PERMISSION_OBJECT}
+                />
+              </AttachmentsButton>
+              <RecordNotesDoor notes={notes} object={periods.PERMISSION_OBJECT} recordId={period.id} />
+              <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
+                <RecordHistory objectId={period.id} objectType={periods.PERMISSION_OBJECT} />
+              </HistoryButton>
+            </>
+          }
         >
           <table className={`${s.sapTable} ${s.sapReportTable}`}>
             <thead>

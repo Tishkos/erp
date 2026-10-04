@@ -6,6 +6,8 @@ import { ActionReadyButton } from '@/components/admin/action-ready-button';
 import { Attachments } from '@/components/admin/attachments';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
 import { RecordHistory } from '@/components/admin/history';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { JournalHeaderForm } from '@/components/admin/journal-header-form';
 import { JournalLinesGrid } from '@/components/admin/journal-lines-grid';
 import { ConfirmButton } from '@/components/admin/confirm-button';
@@ -23,6 +25,7 @@ import * as coa from '@/server/services/chart-of-accounts';
 import * as departments from '@/server/services/departments';
 import * as journal from '@/server/services/journal';
 import * as attachments from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
 import * as recurring from '@/server/services/recurring-journals';
 import {
   approveJournal,
@@ -85,6 +88,7 @@ export default async function JournalPage({
         ...detail,
         accounts: await coa.postableAccounts(tx),
         attached: (await attachments.currentFor(tx, journal.PERMISSION_OBJECT, detail.header.id)).length,
+        notes: await recordNotes.listNotes(tx, { object: journal.PERMISSION_OBJECT, recordId: detail.header.id }),
         // REQ-ACC-001 — the recurring journal that raised it, if one did.
         template: await recurring.templateOfJournal(tx, detail.header.id),
         depts: (await departments.listAll(tx)).filter((d) => d.active),
@@ -96,7 +100,7 @@ export default async function JournalPage({
     }
   });
   if (!data) notFound();
-  const { header, lines, raisedBy, approvedBy, linked, accounts, depts, attached, template } = data;
+  const { header, lines, raisedBy, approvedBy, linked, accounts, depts, attached, notes, template } = data;
   const sheet = await printSheet('journal_entry', header.entryNo);
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
@@ -158,6 +162,7 @@ export default async function JournalPage({
                   objectType={journal.PERMISSION_OBJECT}
                 />
               </AttachmentsButton>
+              <RecordNotesDoor notes={notes} object={journal.PERMISSION_OBJECT} recordId={header.id} />
               <HistoryButton closeLabel={t('close')} label={t('journals.audit_log')} title={t('journals.audit_log')}>
                 <RecordHistory objectId={header.id} objectType={journal.PERMISSION_OBJECT} />
               </HistoryButton>
@@ -268,9 +273,7 @@ export default async function JournalPage({
                     {t(linked.relation === 'reversed_by' ? 'journals.reversed_by_hint' : 'journals.reverses_hint')}
                   </span>
                   <span className={s.sapBox}>
-                    <Link className={s.sapLink} href={`/finance/journals/${encodeURIComponent(linked.entryNo)}`}>
-                      <bdi dir="ltr">{linked.entryNo}</bdi>
-                    </Link>
+                    <ProfileLink code={linked.entryNo} kind="journal" />
                   </span>
                 </div>
               ) : null}
@@ -350,8 +353,9 @@ export default async function JournalPage({
                         <td>
                           <bdi dir="ltr">{line.lineNo}</bdi>
                         </td>
+                        {/* The account opens its own profile (REQ-ACC-001, the shared `ProfileLink`). */}
                         <td className={s.sapAccountCell}>
-                          <bdi dir="ltr">{line.accountCode}</bdi> · <bdi dir="auto">{line.accountName}</bdi>
+                          <ProfileLink code={line.accountCode} kind="gl_account" name={line.accountName} />
                         </td>
                         <td>
                           <bdi dir="ltr">{line.departmentCode ?? ''}</bdi>

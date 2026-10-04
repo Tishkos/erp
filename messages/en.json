@@ -6246,6 +6246,7 @@
       "account_reconciliation": "Account Reconciliation",
       "tax_code": "Tax Code",
       "recurring_journal": "Recurring Journal",
+      "period_close": "Period Close",
       "project_certificate": "Progress Certificate"
     }
   }

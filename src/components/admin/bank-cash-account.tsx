@@ -43,7 +43,7 @@ import {
   updateAccount,
 } from '@/app/(app)/master-data/bank-accounts/actions';
 import { businessToday } from '@/server/domain/business-date';
-import { bankHref, glAccountHref } from '@/server/domain/accounting-links';
+import { ProfileLink } from './profile-link';
 
 /**
  * Bank accounts and cash accounts — Phase 2 requirements 5 and 6.
@@ -369,9 +369,7 @@ export async function AccountRecord({
                 <span>
                   {row.glAccountCode ? (
                     // The G/L account opens its own record (REQ-ACC-001 profiles).
-                    <Link className={s.sapLink} href={glAccountHref(row.glAccountCode)}>
-                      {`${row.glAccountCode} · ${row.glAccountName}`}
-                    </Link>
+                    <ProfileLink code={row.glAccountCode} kind="gl_account" name={row.glAccountName} />
                   ) : (
                     <Pill label={t('accounts_shared.gl_missing')} on={false} />
                   )}
@@ -387,9 +385,9 @@ export async function AccountRecord({
                     <span>{t('bank_accounts.bank')}</span>
                     <span>
                       {row.bankMasterName && row.bankCode ? (
-                        <Link className={s.sapLink} href={bankHref(row.bankCode)}>
+                        <ProfileLink code={row.bankCode} dir="auto" kind="bank">
                           {`${row.bankMasterName}${row.bankMasterSwift ? ` · ${row.bankMasterSwift}` : ''}`}
-                        </Link>
+                        </ProfileLink>
                       ) : (
                         t('none')
                       )}

@@ -11,7 +11,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
-import { applicant, asycudaRun, bankLoan, bankStatement, bankTransfer, billOfLading, recurringJournal, taxCode, customsPd, employeeDocument, employeeRequest, journalEntry, otherReceipt, payable, paymentApplication, projectCertificate, shipmentContainer } from './db/schema';
+import { applicant, asycudaRun, bankLoan, bankStatement, bankTransfer, billOfLading, fiscalPeriod, recurringJournal, taxCode, customsPd, employeeDocument, employeeRequest, journalEntry, otherReceipt, payable, paymentApplication, projectCertificate, shipmentContainer } from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -226,6 +226,14 @@ const taxCodeParentAccess = async (tx: Tx, principal: Principal, objectId: strin
   return Boolean(row);
 };
 
+/** REQ-ACC-001 — a period's closing papers (the sign-off, the reconciliations' file): whoever reads Accounting Periods. */
+const fiscalPeriodParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'fiscal_period')) return false;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectId)) return false;
+  const [row] = await tx.select({ id: fiscalPeriod.id }).from(fiscalPeriod).where(eq(fiscalPeriod.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
 /** REQ-ACC-001 — a recurring journal's papers (the lease, the agreement): whoever reads journals; row security answers the branch. */
 const recurringJournalParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
   if (!can(principal, 'view', 'journal_entry')) return false;
@@ -269,6 +277,7 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('bank_statement', bankStatementParentAccess);
   attachments.registerParentAccessCheck('tax_code', taxCodeParentAccess);
   attachments.registerParentAccessCheck('recurring_journal', recurringJournalParentAccess);
+  attachments.registerParentAccessCheck('fiscal_period', fiscalPeriodParentAccess);
   attachments.registerParentAccessCheck('applicant', applicantParentAccess);
   attachments.registerParentAccessCheck('employee_request', employeeRequestParentAccess);
   attachments.registerParentAccessCheck('employee_document', employeeDocumentParentAccess);

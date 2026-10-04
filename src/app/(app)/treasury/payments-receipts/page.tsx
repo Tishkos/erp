@@ -12,7 +12,8 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { businessToday } from '@/server/domain/business-date';
-import { accountHref, journalHref, moneyDocumentHref, partnerHref } from '@/server/domain/accounting-links';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { moneyDocumentHref } from '@/server/domain/accounting-links';
 import * as reports from '@/server/services/treasury-reports';
 
 /**
@@ -161,25 +162,19 @@ export default async function PaymentsReceiptsPage({ searchParams }: { searchPar
                           <bdi dir="ltr">{row.documentNo ?? '—'}</bdi>
                         )}
                         <div className="muted">
-                          <Link className={s.sapLink} href={journalHref(row.entryNo)}>
-                            <bdi dir="ltr">{row.entryNo}</bdi>
-                          </Link>
+                          <ProfileLink code={row.entryNo} kind="journal" />
                           {row.documentType ? ` · ${t(`type_${row.documentType}`)}` : ''}
                         </div>
                       </td>
                       <td>
-                        <Link className={s.sapLink} href={accountHref(row.accountKind, row.accountCode)}>
-                          <bdi dir="auto">{`${row.accountName} (${row.accountCode})`}</bdi>
-                        </Link>
+                        <ProfileLink code={row.accountCode} kind={row.accountKind === 'cash' ? 'cash_account' : 'bank_account'} name={row.accountName} />
                       </td>
                       <td>
                         {row.partyCode ? (
-                          <Link
-                            className={s.sapLink}
-                            href={partnerHref(row.partyCode, { isCustomer: row.partyIsCustomer, isSupplier: row.partyIsSupplier })}
-                          >
-                            <bdi dir="auto">{row.partyName ?? row.partyCode}</bdi>
-                          </Link>
+                          // The party's profile — the customer's, or the supplier's when it is only that.
+                          <ProfileLink code={row.partyCode} dir="auto" kind={row.partyIsSupplier && !row.partyIsCustomer ? 'supplier' : 'customer'}>
+                            {row.partyName ?? row.partyCode}
+                          </ProfileLink>
                         ) : (
                           <bdi dir="auto">{row.description ?? '—'}</bdi>
                         )}

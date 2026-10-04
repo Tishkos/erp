@@ -2,31 +2,34 @@
  * Where Accounting's own records live — REQ-ACC-001 (profiles, 2026-10-04).
  *
  * Every bank account, cash account, bank, G/L account and journal shown on an
- * accounting record is a link to its own page. These are those pages, in one
- * place, so a transfer, a reconciliation and a tax code send a reader to the
- * same door. The shared `profileHref` (feat/shared-module) answers the same
- * question for every module and reads these for Accounting's kinds.
+ * accounting record is a link to its own page. The shared `profileHref`
+ * (`domain/profiles.ts`, feat/shared-module) is the one place that says which
+ * page; these are Accounting's names for its own kinds, so a transfer, a
+ * reconciliation and a tax code send a reader to the same door and a moved
+ * route is changed once, in `BASES`. A screen renders them with `ProfileLink`.
  */
+import { profileHref } from './profiles';
+
 const enc = encodeURIComponent;
 
 /** A bank or cash account's master record. */
 export function accountHref(kind: 'bank' | 'cash', code: string): string {
-  return kind === 'cash' ? `/master-data/cash-accounts/${enc(code)}` : `/master-data/bank-accounts/${enc(code)}`;
+  return profileHref(kind === 'cash' ? 'cash_account' : 'bank_account', code) ?? '#';
 }
 
 /** A bank in the bank master. */
 export function bankHref(code: string): string {
-  return `/master-data/banks/${enc(code)}`;
+  return profileHref('bank', code) ?? '#';
 }
 
 /** A G/L account's record on the Chart of Accounts. */
 export function glAccountHref(code: string): string {
-  return `/master-data/chart-of-accounts/${enc(code)}`;
+  return profileHref('gl_account', code) ?? '#';
 }
 
 /** A journal entry. */
 export function journalHref(entryNo: string): string {
-  return `/finance/journals/${enc(entryNo)}`;
+  return profileHref('journal', entryNo) ?? '#';
 }
 
 /**
@@ -38,17 +41,17 @@ export function moneyDocumentHref(type: string | null, no: string | null): strin
   if (!type || !no) return null;
   switch (type) {
     case 'customer_receipt':
-      return `/sales/customer-receipts/${enc(no)}`;
+      return profileHref('customer_receipt', no);
     case 'supplier_payment':
-      return `/payables/supplier-payments/${enc(no)}`;
+      return profileHref('supplier_payment', no);
     case 'supplier_advance':
-      return `/payables/advances/${enc(no)}`;
+      return profileHref('supplier_advance', no);
     case 'bank_transfer':
       return `/treasury/transfers/${enc(no)}`;
     case 'other_receipt':
-      return `/treasury/deposits/${enc(no)}`;
+      return profileHref('deposit', no);
     case 'bank_loan':
-      return `/treasury/loans/${enc(no)}`;
+      return profileHref('loan', no);
     case 'payroll_run':
       return `/hr/payroll/${enc(no)}`;
     case 'employee_request':
@@ -64,5 +67,5 @@ export function moneyDocumentHref(type: string | null, no: string | null): strin
 
 /** A business partner's profile — the customer's, or the supplier's when it is only that. */
 export function partnerHref(code: string, roles: { readonly isCustomer: boolean; readonly isSupplier: boolean }): string {
-  return roles.isSupplier && !roles.isCustomer ? `/payables/suppliers/${enc(code)}?role=supplier` : `/sales/customers/${enc(code)}?role=customer`;
+  return (roles.isSupplier && !roles.isCustomer ? profileHref('supplier', code) : profileHref('customer', code)) ?? '#';
 }

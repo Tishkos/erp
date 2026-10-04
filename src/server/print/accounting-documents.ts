@@ -7,7 +7,7 @@
  * and the screen are one set of figures. Read through the reader's own row
  * security: another branch's record is not found rather than refused.
  */
-import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
+import { formatBusinessDate, formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
 import { parseDecimal, toDecimalString } from '../domain/money';
 import * as treasury from '../services/treasury';
 import * as rec from '../services/bank-reconciliation';
@@ -16,6 +16,7 @@ import * as forecasts from '../services/cash-forecast';
 import * as subledger from '../services/account-reconciliation';
 import * as taxCodes from '../services/tax-codes';
 import * as recurring from '../services/recurring-journals';
+import * as periods from '../services/periods';
 import { businessToday } from '../domain/business-date';
 import { addDays } from '../domain/dates';
 import type { BuildContext, Built } from './documents';
@@ -604,5 +605,100 @@ export async function recurringJournal(ctx: BuildContext, templateNo: string): P
     }),
     branchCode: template.branchCode,
     objectId: template.id,
+  };
+}
+
+/**
+ * Period / Year-End Closing: one period's checklist as it stands, and the
+ * closes and reopenings it has been through — the page's own figures, read
+ * from the same `periods.closeReport` and `periods.closeHistory`.
+ */
+export async function periodClose(ctx: BuildContext, periodId: string): Promise<Built | null> {
+  const { tx, m, locale, principal, branchCode } = ctx;
+  let report: Awaited<ReturnType<typeof periods.closeReport>>;
+  try {
+    report = await periods.closeReport(tx, periodId);
+  } catch {
+    return null;
+  }
+  const { period } = report;
+  const p = (key: string, values?: Record<string, string | number>) => m.admin(`periods.${key}`, values);
+  const c = (key: string, values?: Record<string, string | number>) => m.admin(`closing.${key}`, values);
+  const history = (await periods.closeHistory(tx, { principal, branchCode })).filter(
+    (row) => row.periodName === period.name && row.yearCode === period.fiscalYearCode,
+  );
+  const title = m.print('titles.period_close');
+  const checkName = (code: string) => p(`check_${code}`);
+  return {
+    model: base({
+      title,
+      number: `${period.name} · ${period.fiscalYearCode}`,
+      status: p(`state_${period.status}`),
+      posted: period.status === 'closed',
+      fields: [
+        { label: p('period'), value: period.name },
+        { label: p('year'), value: period.fiscalYearCode, ltr: true },
+        { label: p('starts_on'), value: day(period.startsOn, locale), ltr: true },
+        { label: p('ends_on'), value: day(period.endsOn, locale), ltr: true },
+        { label: p('state'), value: p(`state_${period.status}`) },
+        { label: m.admin('reports.as_at_label'), value: day(report.asOf, locale), ltr: true },
+        {
+          label: p('close_checks'),
+          value: report.mayClose
+            ? p('close_checks_pass', { period: period.name, asOf: day(report.asOf, locale) })
+            : p('close_checks_fail', { period: period.name, count: report.blockingFailures.length }),
+        },
+      ],
+      tables: [
+        {
+          title: c('checklist', { period: period.name }),
+          columns: [
+            { key: 'check', label: p('check'), kind: 'text', weight: 2.2 },
+            { key: 'severity', label: p('check_severity'), kind: 'text' },
+            { key: 'figure', label: p('check_figure'), kind: 'code' },
+            { key: 'detail', label: p('check_detail'), kind: 'text', weight: 2 },
+            { key: 'state', label: p('state'), kind: 'text' },
+          ],
+          rows: report.checks.map((check) => ({
+            cells: {
+              check: checkName(check.code),
+              severity: p(`check_severity_${check.severity}`),
+              figure: check.figure,
+              detail:
+                check.detail.length === 0
+                  ? '—'
+                  : check.detail.slice(0, 8).join('; ') + (check.detail.length > 8 ? ` ${p('check_more', { count: check.detail.length - 8 })}` : ''),
+              state: p(`check_state_${check.state}`),
+            },
+          })),
+          empty: '—',
+        },
+        {
+          title: c('history_title'),
+          columns: [
+            { key: 'when', label: c('when'), kind: 'text' },
+            { key: 'change', label: c('change'), kind: 'text' },
+            { key: 'who', label: c('who'), kind: 'text' },
+            { key: 'reason', label: m.admin('reason'), kind: 'text', weight: 2 },
+            { key: 'warnings', label: c('warnings'), kind: 'text', weight: 2 },
+          ],
+          rows: history.map((row) => ({
+            cells: {
+              when: formatTimestamp(new Date(row.occurredAt).toISOString(), locale),
+              change: `${row.fromStatus ? p(`state_${row.fromStatus}`) : '—'} → ${row.toStatus ? p(`state_${row.toStatus}`) : '—'}`,
+              who: row.actorName ?? '—',
+              reason: row.reason ?? '—',
+              warnings: row.warnings.length === 0 ? '—' : row.warnings.map(checkName).join('; '),
+            },
+          })),
+          empty: c('no_history'),
+        },
+      ],
+      signatures: true,
+      fileName: `period-close-${period.fiscalYearCode}-${period.name}`,
+    }),
+    // A period is the company's, not a branch's: the reader's letterhead.
+    branchCode,
+    objectId: period.id,
   };
 }
