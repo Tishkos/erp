@@ -91,6 +91,9 @@ chat_participant
 chat_conversation
 chat_presence
 task
+exception_history
+exception
+exception_sweep_run
 cloud_file_link
 employee_request_line
 employee_document

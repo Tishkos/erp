@@ -210,6 +210,35 @@ export const VIEWABLE_ROUTES: readonly ViewableRoute[] = [
     },
     slots: [{ id: 'dates', kind: 'range', from: 'from', to: 'to' }],
   },
+  // --- Platform ------------------------------------------------------------
+  {
+    // The Exception Center's register: "critical receivables", "mine, still open".
+    key: 'exceptions.list',
+    route: '/exceptions',
+    params: {
+      q: { kind: 'text' },
+      domain: {
+        kind: 'enum',
+        values: ['accounting', 'receivables', 'payables', 'inventory', 'logistics', 'tasks', 'approvals', 'platform'],
+        labels: { namespace: 'admin.exceptions', prefix: 'domain_' },
+      },
+      severity: {
+        kind: 'enum',
+        values: ['critical', 'high', 'medium', 'low'],
+        labels: { namespace: 'admin.exceptions', prefix: 'severity_' },
+      },
+      status: {
+        kind: 'enum',
+        values: ['live', 'open', 'acknowledged', 'resolved', 'all'],
+        labels: { namespace: 'admin.exceptions', prefix: 'status_' },
+      },
+      owner: {
+        kind: 'enum',
+        values: ['me', 'none'],
+        labels: { namespace: 'admin.exceptions', prefix: 'owner_' },
+      },
+    },
+  },
 ];
 
 const BY_KEY: ReadonlyMap<string, ViewableRoute> = new Map(VIEWABLE_ROUTES.map((route) => [route.key, route]));

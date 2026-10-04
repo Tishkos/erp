@@ -124,6 +124,8 @@ export const EXPORT_ACCESS = {
   employee_request: { kind: 'document', route: '/hr/requests', object: 'employee_request', selfService: true },
   // The Task Center (platform phase): a task prints from its own page, to whoever can open it.
   task: { kind: 'document', route: '/tasks', object: 'task' },
+  // The Exception Center (platform phase): an exception prints from its own page, to whoever can open it.
+  exception: { kind: 'document', route: '/exceptions', object: 'exception' },
 } as const satisfies Record<
   string,
   { readonly kind: 'document' | 'report'; readonly route: string; readonly object: string; readonly selfService?: boolean }

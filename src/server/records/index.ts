@@ -18,6 +18,7 @@ import { registerActionEffect } from '../services/document-actions';
 import { registerAttachmentRuntime } from '../attachments-runtime';
 import { registerDepartureRuntime } from '../departures-runtime';
 import { registerCloudLinkTargets } from './cloud-links';
+import { registerExceptionRecords } from './exceptions';
 import { registerTaskRecords } from './tasks';
 import * as accounts from '../services/chart-of-accounts';
 
@@ -117,6 +118,9 @@ export function registerAllRecords(): void {
 
   // Task Center — a task is a record a cloud file can be linked to.
   registerTaskRecords();
+
+  // Exception Center — an exception is a record a cloud file can be linked to and a notification can open.
+  registerExceptionRecords();
 
   // IMPROVEMENT-002 — where stock that left a layer went, by the module that
   // took it; a landed-cost lock in a cold process would otherwise refuse

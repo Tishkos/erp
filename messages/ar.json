@@ -8222,7 +8222,10 @@
       "expired_part_written_off": "منتهي الصلاحية (مشطوب جزئيًا)",
       "assigned": "مُسندة",
       "in_progress": "قيد التنفيذ",
-      "completed": "مكتملة"
+      "completed": "مكتملة",
+      "open": "مفتوح",
+      "acknowledged": "قيد المتابعة",
+      "resolved": "تمت معالجته"
     }
   },
   "savedViews": {

@@ -118,9 +118,10 @@ describe('the screen catalogue covers the approved tree', () => {
     // Stock Issues, Stock Count, Inventory Checks and Inventory Valuation in,
     // the unbuilt Quarantine, Returns, Damaged Goods, Serial / Batch,
     // Reports and Settings placeholders out.
-    // Plus Chat (platform phase, Agent 1): one workspace screen; Cloud Files Settings (Agent 4): one.
-    expect(allMenuItems()).toHaveLength(250);
-    expect(Object.keys(SCREENS)).toHaveLength(250);
+    // Plus Chat (platform phase, Agent 1): one workspace screen; Cloud Files Settings (Agent 4): one;
+    // Exceptions (Agent 7): one document screen.
+    expect(allMenuItems()).toHaveLength(251);
+    expect(Object.keys(SCREENS)).toHaveLength(251);
   });
 
   it('uses only declared archetypes', () => {
@@ -147,7 +148,8 @@ describe('the screen catalogue covers the approved tree', () => {
     // REQ-LOG-001: + 2 + 2 (declarations, ports) + 8 (the registers).
     // IMPROVEMENT-002 inventory: + 1 + 1 + 2 + 1 + 1 in, − 1 − 2 − 2 − 1 − 1 − 1 out.
     // Platform phase: + 1 (Chat, a workspace) + 1 (Cloud Files Settings) + 1 (My Tasks, an inbox that became a document).
-    expect(total).toBe(365);
+    // + 2 (Exceptions, a document: the register and the record).
+    expect(total).toBe(367);
   });
 });
 
@@ -200,7 +202,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(250);
+    expect(screenRoutes().size).toBe(251);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -230,6 +232,8 @@ describe('every screen has one address', () => {
       // Internal chat (platform phase, Agent 1).
       '/chat',
       '/documents',
+      // The Exception Center (platform phase, Agent 7).
+      '/exceptions',
       // REQ-ACC-001 Part D — Account Reconciliation.
       '/finance/account-reconciliation',
       // The accounting core.

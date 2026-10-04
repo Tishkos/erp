@@ -8222,7 +8222,10 @@
       "expired_part_written_off": "Expired (partly written off)",
       "assigned": "Assigned",
       "in_progress": "In progress",
-      "completed": "Completed"
+      "completed": "Completed",
+      "open": "Open",
+      "acknowledged": "Acknowledged",
+      "resolved": "Resolved"
     }
   },
   "savedViews": {

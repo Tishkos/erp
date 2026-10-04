@@ -812,7 +812,7 @@ async function tell(
     recipients: people,
     subject: `${item.no}: ${item.title}`,
     body: item.explanation,
-    context: { reference: item.no, severity: item.row.severity, domain: detectorOf(item.row.detector)!.domain, title: item.title, href: `/exceptions/${encodeURIComponent(item.no)}` },
+    context: { reference: item.no, severity: item.row.severity, reason: item.row.severity, domain: detectorOf(item.row.detector)!.domain, title: item.title, href: `/exceptions/${encodeURIComponent(item.no)}` },
     occurrence: `${item.occurrence}:${item.row.severity}`,
     branchCode: branch,
     recordAccess: true,

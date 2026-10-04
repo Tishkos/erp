@@ -522,6 +522,9 @@ export async function resetTestData(): Promise<void> {
     await client.query('truncate chat_reaction, chat_receipt, chat_message, chat_participant, chat_conversation, chat_presence');
     // The Task Center (platform phase, Agent 3): a task is never deleted by the application (trigger), so a reset truncates.
     await client.query('truncate task');
+    // The Exception Center (platform phase, Agent 7): a finding, its history and the sweep log are never deleted by the
+    // application (triggers), so a reset truncates them together. The series EXCEPTION is kept below.
+    await client.query('truncate exception_history, exception_sweep_run, exception');
     await client.query(`delete from whatsapp_setting where key like 'bridge_%'`);
     /*
      * Every seeded key, not some of them.
@@ -972,6 +975,8 @@ export async function resetTestData(): Promise<void> {
                          'EMPLOYEE', 'POSITION_CODE', 'LEAVE_REQUEST', 'PAYROLL_RUN', 'PAYSLIP', 'EMPLOYEE_ADVANCE', 'VACANCY', 'APPLICANT', 'PERFORMANCE_REVIEW', 'EXPENSE_CLAIM', 'TRAVEL_REQUEST', 'HR_LETTER', 'EMPLOYEE_REQUEST', 'EMPLOYEE_DOCUMENT', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
                          -- Platform phase, Agent 3 — the Task Center, migration 0340.
                          'TASK',
+                         -- Platform phase, Agent 7 — the Exception Center, migration 0380.
+                         'EXCEPTION',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',

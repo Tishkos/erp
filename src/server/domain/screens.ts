@@ -55,6 +55,8 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   my_tasks: 'document',
   my_approvals: 'inbox',
   notifications: 'inbox',
+  // The Exception Center (platform phase): a numbered finding with a register and a page of its own.
+  exceptions: 'document',
   chat: 'workspace',
   recent_records: 'list',
   global_search: 'workspace',
@@ -413,6 +415,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/chat',
   // The Task Center (platform phase, Agent 3).
   '/tasks',
+  // The Exception Center (platform phase, Agent 7).
+  '/exceptions',
   // Monitoring — drawn, reading nothing yet (2026-10-03).
   '/monitoring/customer-list',
   '/monitoring/history',
