@@ -191,7 +191,7 @@ test.describe('REQ-LOG-001 · the Logistics module', () => {
     await page.getByRole('button', { name: 'New port' }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByLabel('Name').fill(`Jebel Ali ${RUN}`);
-    await dialog.getByLabel('UN/LOCODE').fill('AEJEA');
+    await dialog.getByLabel('Country').fill('AE');
     await dialog.getByRole('button', { name: 'New port' }).click();
     await page.waitForURL(/\/logistics\/ports\/PRT-/, { timeout: 60_000 });
     portCode = decodeURIComponent(page.url().split('/ports/')[1]!.split('?')[0]!);
