@@ -20,7 +20,7 @@ import type { ActorContext } from '@/server/services/chart-of-accounts';
 import { parseDecimal } from '@domain/money';
 import * as reports from '@/server/services/treasury-reports';
 import * as forecasts from '@/server/services/cash-forecast';
-import * as subledger from '@/server/services/subledger';
+import * as subledger from '@/server/services/account-reconciliation';
 import * as periods from '@/server/services/periods';
 import { runExport } from '@/server/print/export';
 

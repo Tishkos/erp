@@ -13,7 +13,7 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { businessToday } from '@/server/domain/business-date';
 import { glAccountHref } from '@/server/domain/accounting-links';
-import * as subledger from '@/server/services/subledger';
+import * as subledger from '@/server/services/account-reconciliation';
 
 /**
  * Account Reconciliation — REQ-ACC-001 Part D-4.

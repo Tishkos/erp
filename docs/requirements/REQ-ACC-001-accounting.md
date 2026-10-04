@@ -4,8 +4,8 @@
 |---|---|
 | **Requirement ID** | `REQ-ACC-001` |
 | **Branch** | `feat/accounting-module` (started 2026-10-04 from `main` @ `946633a`) |
-| **Test case(s)** | `tests/integration/nav-internal-transfers.test.ts`; the menu layout in `tests/unit/ui-frameworks.test.ts`, `fx1-menu.test.ts`, `screen-catalogue.test.ts` |
-| **Status** | IN BUILD — menu and the Internal Transfers engine done (Part C); screens in Part D to come |
+| **Test case(s)** | `tests/integration/nav-internal-transfers.test.ts`, `acc-bank-reconciliation-screens.test.ts`, `acc-treasury-reads.test.ts`, `acc-tax-codes.test.ts`, `acc-closing.test.ts`, `acc-recurring-journals.test.ts`; `tests/e2e/accounting-screens.spec.ts`; the menu layout in `tests/unit/ui-frameworks.test.ts`, `fx1-menu.test.ts`, `screen-catalogue.test.ts` |
+| **Status** | BUILT on `feat/accounting-module` — Part D items 2–8 done (Part C); the Notes door waits on `feat/shared-module` (Part D-1) |
 | **Approved by** | *The sponsor's direction of 2026-10-04 (Part A); the reading in Part B not yet approved.* |
 
 This file is the hand-off. Part A is the sponsor's requirement, verbatim.
@@ -1052,13 +1052,62 @@ The four existing financial statements — **Income Statement, Balance Sheet, Ch
    change. Test: `tests/integration/nav-internal-transfers.test.ts`
    (10 pass, 1 skipped for E-3).
 
+3. **C-20 counts reversed journals** (migration `0290`, E-3 fixed): the
+   guard sums `('posted','reversed')`; the reversal test is un-skipped;
+   `docs/CONTROLS.md` C-20 says so. **Committed funds in dinars** (E-4
+   fixed): `treasury.balances` values an approved foreign-currency
+   transfer at the ledger rate of its date.
+4. **Internal Transfers screens** — `/treasury/transfers` and
+   `/treasury/transfers/[transferNo]` (approve not by the raiser, post,
+   reverse with a reason; the journal as the lines; account, G/L account and
+   journal links; Printer `internal_transfer`, Paperclip, Clock).
+5. **Bank Reconciliation** — `/treasury/bank-reconciliation` and its record
+   keyed by the statement number: statement header, lines typed or pasted
+   (one `appendLine` path; a file pasted twice adds nothing; unreadable rows
+   kept), close, start, suggest, confirm, match by hand, adjustment, agree,
+   reopen; Printer `bank_reconciliation`, Paperclip (`bank_statement`),
+   Clock (statement + reconciliation).
+6. **Payments & Receipts** (`treasury-reports.moneyRegister` + screen),
+   **Cash Forecast** screen, **Account Reconciliation** screen
+   (`subledger.accountReconciliation`; `subledger.inventoryValue` now also
+   feeds closing check 7, exactly). Print models for all three.
+7. **Tax Codes** — `services/tax-codes.ts` + list + record (four doors);
+   migration `0292` (code series, input/output `direction`, rates
+   append-only, print grants).
+8. **Period / Year-End Closing** — `/finance/closing` over
+   `periods.closeReport` / `setPeriodStatus` with `periods.closeHistory`.
+9. **Recurring Journals** — migration `0291`, `services/recurring-journals.ts`,
+   list + record (four doors); the Journal Entry record now wears Printer,
+   Paperclip and Clock in its title bar and names the template that raised it.
+10. Every new route in `DELIVERED` and the catalogue test; AGENTS.md
+    "Accounting (REQ-ACC-001)"; `docs/CONTROLS.md` C-41 to C-43.
+
+### Decided by default, owner to confirm (2026-10-04)
+
+* **Q1 — retained earnings.** No retained-earnings roll is built. The year
+  is closed by closing its months on Accounting Periods; moving the year's
+  result into retained earnings by journal would change the four protected
+  statements.
+* **Q2 — notes and Recurring Journals in one migration.** Moot: no
+  `record_note` table is built here; the Notes door comes from
+  `feat/shared-module`.
+* **Q3 — transfer FX roles.** Not pre-mapped. `exchange_gain` /
+  `exchange_loss` under `treasury.bank_transfer` are Finance's to map on
+  Posting Mappings; until then a transfer with a difference refuses to post
+  and names the role.
+* **Q4 — Loans and Manual Deposits.** Untouched (payables owns their
+  engines). The legacy `treasury.approveTransfer` that Manual Deposits'
+  cash-to-bank rows use still lets the creator approve; reported, not fixed.
+
 ---
 
 ## Part D — Left to do, in this order
 
-1. Generic **record notes** (one `record_note` table, append-only, RLS like
-   `attachment`; access by the attachment service's parent checks) and a
-   `RecordNotes` component, so every new record gets its Notes door.
+Done except where marked: items 2–8 are Part C 4–10.
+
+1. **Notes door** — *not built here by decision (orchestrator, 2026-10-04)*:
+   `feat/shared-module` builds the notes table and component once; each
+   Accounting record takes the door when that branch is merged.
 2. **Internal Transfers screens** — `/treasury/transfers` (copies
    Purchase Invoices list) and `/treasury/transfers/[transferNo]` (copies the
    Purchase Invoice record): Printer (`internal_transfer` print model, object
@@ -1084,16 +1133,23 @@ The four existing financial statements — **Income Statement, Balance Sheet, Ch
 * **E-2 (fixed).** A cross-currency `bank_transfer` posted the source's and
   destination's own-currency figures into a dinar journal — it could not
   balance. The funds check compared a foreign amount with a dinar balance.
-* **E-3 (open, needs a migration).** C-20 `assert_bank_not_negative`
+* **E-3 (fixed, 0290).** C-20 `assert_bank_not_negative`
   (0259) sums only `status = 'posted'` journals. Reversing a journal turns
   the original `reversed`, so the guard sees the reversal alone and refuses
   any reversal that empties an account. It should sum `('posted','reversed')`
   as `treasury.balances` does. Affects every reversal touching a bank or cash
   account (transfers, receipts, payments).
-* **E-4 (open, noted).** `treasury.balances` counts an approved foreign-
+* **E-4 (fixed).** `treasury.balances` counted an approved foreign-
   currency transfer's own-currency amount as dinars in "committed".
-* **E-5 (noted).** The close checklist links `/inventory/fifo-valuation`
+* **E-5 (fixed).** The close checklist links `/inventory/fifo-valuation`
   correctly but `/treasury/bank-reconciliation` had no page (Part D-3).
+* **E-6 (fixed).** The attachment rule for `bank_transfer` (Manual Deposits'
+  slips) asked for `view` on `bank_transfer`, an object no role holds, so
+  only the Super User could file or read a deposit slip. It asks
+  `bank_cash_account`, the grant transfers are read under.
+* **E-7 (fixed).** Closing check 7 (`inventory_value_equals_gl`) took its
+  difference through `Number()`; it now reads `subledger.inventoryValue`,
+  exact, which the Account Reconciliation screen shares.
 
 ---
 
