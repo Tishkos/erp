@@ -46,6 +46,7 @@ import { chromium, type Page } from '@playwright/test';
 import { MENU } from '../../src/server/domain/menu';
 import { MODULES } from '../../src/server/domain/modules';
 import { isDelivered, routeFor } from '../../src/server/domain/screens';
+import { refuseOnLive } from '../lib/live-guard';
 
 const BASE = process.env.GUIDE_BASE_URL ?? 'http://localhost:3000';
 const OUT = process.env.GUIDE_SHOTS_OUT?.trim() || join(process.cwd(), 'var', 'guide-shots');
@@ -735,6 +736,8 @@ async function signIn(page: Page, onForm?: () => Promise<void>): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // The pictures show sample data on purpose: they are never taken from the company's books.
+  refuseOnLive('take the guide pictures');
   // `--only dashboard` is the home page: its route is "/", which every route contains.
   const wants = (route: string) => !ONLY || (ONLY === 'dashboard' && route === '/') || (ONLY !== '/' && route !== '/' && route.includes(ONLY));
   const screens = MODULES.flatMap((module) =>
