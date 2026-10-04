@@ -73,6 +73,11 @@ export interface EventDef {
   readonly exceptionDetector?: string;
   /** Where the record opens, from the payload. */
   readonly href: (payload: Readonly<Record<string, unknown>>) => string;
+  /**
+   * Where a NOTICE about it leads, when the record's own page is not one the notification centre serves (a container's page sits
+   * under a list screen, which the centre does not follow into): the screen that is, narrowed to this record. Default: `href`.
+   */
+  readonly noticeHref?: (payload: Readonly<Record<string, unknown>>) => string;
 }
 
 const enc = encodeURIComponent;
@@ -158,6 +163,7 @@ export const EVENTS: Readonly<Record<EventKey, EventDef>> = Object.freeze({
     actions: ['create_notification', 'create_task', 'create_exception'],
     exceptionDetector: 'logistics.automation_container_eta',
     href: (p) => `/payables/containers/${enc(text(p.reference))}?id=${enc(text(p.subjectId))}`,
+    noticeHref: (p) => `/logistics/shipment-tracking?q=${enc(text(p.reference))}`,
   },
   'ar_invoice.overdue': {
     key: 'ar_invoice.overdue',
@@ -195,6 +201,9 @@ export const EVENT_NOTICE_KINDS: readonly string[] = EVENT_KEYS.map(noticeKind);
 
 /** The kind that tells the administrators a rule was paused. */
 export const PAUSED_KIND = 'automation.paused';
+
+/** The most new sweep events one event kind records in one morning's run: work per run is bounded, and what is left over is reported, not dropped silently. */
+export const SWEEP_EVENT_CAP = 2000;
 
 /** The window a record event is told in: the moment it happened, so a second submission is a second event. */
 export const recordWindow = (occurredAtIso: string): string => `at:${occurredAtIso}`;

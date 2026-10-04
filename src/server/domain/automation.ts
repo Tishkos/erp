@@ -432,10 +432,54 @@ export const PAUSE_AFTER_MAX = 20;
 
 export const shouldPause = (consecutiveFailures: number, threshold: number): boolean => threshold > 0 && consecutiveFailures >= threshold;
 
+// ---------------------------------------------------------------------------
+// The loop guard
+// ---------------------------------------------------------------------------
+
+/**
+ * How far automation may follow itself. A record a person made has depth 0; a
+ * record an action made from it has depth 1; one made from THAT, depth 2. Automation
+ * acts on depth 0 and depth 1 records and never on depth 2, so a chain is at most
+ * two steps long, and a rule never acts on a record it made itself (a task that
+ * a "task overdue" rule raised does not wake that rule when it, too, is overdue).
+ */
+export const MAX_DEPTH = 2;
+
+/** What the runner knows about a record automation made (`automation_made`); null for a record a person made. */
+export interface Made {
+  readonly ruleId: string;
+  readonly ruleNo: string;
+  readonly depth: number;
+}
+
+export type Guard = { readonly allowed: true; readonly depth: number } | { readonly allowed: false; readonly reason: string };
+
+/**
+ * May this rule act on this record? `depth` is the depth the records ITS actions
+ * make will have. Pure.
+ */
+export function guardOf(made: Made | null, ruleId: string): Guard {
+  if (made === null) return { allowed: true, depth: 1 };
+  if (made.ruleId === ruleId) {
+    return { allowed: false, reason: `Not run: this record was made by this rule itself (${made.ruleNo}); a rule never acts on what it made, so it cannot start a loop.` };
+  }
+  if (made.depth >= MAX_DEPTH) {
+    return { allowed: false, reason: `Not run: this record was made by automation (${made.ruleNo}) from something automation made; a chain stops after ${MAX_DEPTH} steps.` };
+  }
+  return { allowed: true, depth: made.depth + 1 };
+}
+
 export const ACTION_STATUSES = ['done', 'skipped', 'failed', 'carried'] as const;
 export type ActionStatus = (typeof ACTION_STATUSES)[number];
 export const OUTCOMES = ['done', 'skipped', 'failed'] as const;
 export type Outcome = (typeof OUTCOMES)[number];
+
+/** A record an action created: the loop guard's memory (`automation_made`). */
+export interface MadeRecord {
+  readonly type: 'task' | 'exception';
+  readonly id: string;
+  readonly label: string;
+}
 
 export interface ActionResult {
   readonly index: number;
@@ -445,6 +489,10 @@ export interface ActionResult {
   readonly detail: string;
   /** What was made (a task number, an exception number, how many were told). */
   readonly ref?: string | undefined;
+  /** The record this step created, when it created one. */
+  readonly made?: MadeRecord | undefined;
+  /** A failed step that trying again cannot change (the assignment scope refused the person): it is not retried. */
+  readonly permanent?: boolean | undefined;
 }
 
 /** Failed if any step failed; done if any step did something; otherwise skipped. */

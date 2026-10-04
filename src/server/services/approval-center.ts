@@ -125,9 +125,9 @@ const HANDLERS: Readonly<Record<string, WorkflowHandler>> = {
       const [row] = (
         await tx.execute(sql`
           select i.invoice_no as "no",
-                 case when i.total_iqd <> 0 then i.total_iqd::text
-                      else coalesce((select sum(l.quantity * l.unit_price - l.discount_iqd) from ap_invoice_line l where l.ap_invoice_id = i.id), 0)::text
-                 end as "amount"
+                 round(case when i.total_iqd <> 0 then i.total_iqd
+                            else coalesce((select sum(l.quantity * l.unit_price - l.discount_iqd) from ap_invoice_line l where l.ap_invoice_id = i.id), 0)
+                       end, 4)::text as "amount"
             from ap_invoice i where i.id = ${documentId}::uuid`)
       ).rows as { no: string; amount: string }[];
       return row ? { no: row.no, href: `/payables/invoices/${encodeURIComponent(row.no)}`, amount: { value: row.amount, currency: 'IQD' }, decideId: documentId } : null;

@@ -23,7 +23,7 @@
  *   AU10 nothing automation does touches the ledger or the stock
  */
 import { randomUUID } from 'node:crypto';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ownerPool, rejection } from './setup';
 import { BAGHDAD, PANEL, WAREHOUSE, blWith, buildImportWorld, importOf, iqd, q, receive, scope, type ImportWorld } from './logistics-fixture';
 import { containerNo } from '../support/container-number';
@@ -138,7 +138,12 @@ let before: Record<string, string>;
 let savedLate: { containerId: string; payableId: string };
 let overdueSale: { id: string; no: string };
 
+/** A fault injected for AU7 must never outlive a failed run: the next run would start broken. */
+const clearFault = () => ownerPool.query(`drop trigger if exists au_boom on workflow_instance; drop function if exists au_boom();`);
+afterAll(clearFault);
+
 beforeAll(async () => {
+  await clearFault();
   world = await buildImportWorld();
   registerAllRecords();
   registerAttachmentRuntime();

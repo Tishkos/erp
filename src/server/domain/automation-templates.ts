@@ -1,5 +1,5 @@
 /**
- * The four rule templates automation ships — platform phase, Agent 10.
+ * The rule templates automation ships (the brief's four, and a notice when a large purchase invoice is posted) — platform phase, Agent 10.
  *
  * A template is a rule with its shape fixed and its numbers left blank. The
  * administrator fills the parameters on screen (a threshold, a number of days, a
@@ -17,7 +17,7 @@ import type { EventKey } from './automation-events';
 import { SEVERITIES } from './exceptions';
 import { TASK_PRIORITIES } from './tasks';
 
-export const TEMPLATE_CODES = ['invoice_over_threshold', 'container_eta_exceeded', 'task_overdue', 'invoice_overdue_follow_up'] as const;
+export const TEMPLATE_CODES = ['invoice_over_threshold', 'container_eta_exceeded', 'task_overdue', 'invoice_overdue_follow_up', 'invoice_posted_notice'] as const;
 export type TemplateCode = (typeof TEMPLATE_CODES)[number];
 
 export const isTemplateCode = (value: unknown): value is TemplateCode => typeof value === 'string' && (TEMPLATE_CODES as readonly string[]).includes(value);
@@ -64,6 +64,21 @@ export const TEMPLATES: Readonly<Record<TemplateCode, TemplateDef>> = Object.fre
         { kind: 'request_approval', note: noteOf(p) },
         { kind: 'open_workflow', recipients: [{ kind: 'role', roleCode: str(p, 'notifyRole') }], note: noteOf(p) },
       ],
+    }),
+  },
+
+  // A purchase invoice posted over a configured amount: a notice to a role, once it is in the books. Nothing is held; nothing is posted by it.
+  invoice_posted_notice: {
+    code: 'invoice_posted_notice',
+    eventKey: 'ap_invoice.posted',
+    params: [
+      { name: 'thresholdIqd', type: 'money', required: true },
+      { name: 'notifyRole', type: 'role', required: true },
+      NOTE,
+    ],
+    build: (p) => ({
+      conditions: [{ field: 'amountIqd', op: 'gte', value: str(p, 'thresholdIqd') }],
+      actions: [{ kind: 'create_notification', recipients: [{ kind: 'role', roleCode: str(p, 'notifyRole') }], note: noteOf(p) }],
     }),
   },
 

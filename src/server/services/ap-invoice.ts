@@ -1381,10 +1381,15 @@ export async function submit(tx: Tx, ctx: ActorContext, id: string): Promise<voi
 
   // Automation (platform phase, Agent 10): the fact is RECORDED here, in this transaction, and nothing else —
   // no rule runs now, so a rule can never hold up or undo a submission.
-  const current = await load(tx, id);
-  await dispatchAutomation(tx, 'ap_invoice.submitted', await automationPayload(tx, current.invoice, current.lines), {
-    window: recordWindow(submittedAt.toISOString()),
-  });
+  await dispatchAutomation(
+    tx,
+    'ap_invoice.submitted',
+    async (sp) => {
+      const current = await load(sp, id);
+      return automationPayload(sp, current.invoice, current.lines);
+    },
+    { window: recordWindow(submittedAt.toISOString()) },
+  );
 }
 
 /** What an automation rule is told about an invoice: who, how much, from whom (IQD, exact). */
@@ -2047,7 +2052,7 @@ export async function post(
   await dispatchAutomation(
     tx,
     'ap_invoice.posted',
-    { ...(await automationPayload(tx, invoice, lines)), amountIqd: toDecimalString(payableIqd < 0n ? 0n : payableIqd, 4n) },
+    async (sp) => ({ ...(await automationPayload(sp, invoice, lines)), amountIqd: toDecimalString(payableIqd < 0n ? 0n : payableIqd, 4n) }),
     { window: recordWindow(new Date().toISOString()) },
   );
 

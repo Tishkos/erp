@@ -43,6 +43,7 @@ import {
   MAX_ATTEMPTS,
   describeUnmet,
   evaluate,
+  guardOf,
   nextAttemptAt,
   outcomeOf,
   runKeyOf,
@@ -125,8 +126,12 @@ function pgOf(error: unknown): PgLike | null {
   return null;
 }
 
-/** Is this the owner's reach or a rule of the owning service (skipped), or a fault (failed)? And what to say. */
-export function classify(error: unknown): { readonly refused: boolean; readonly message: string } {
+/**
+ * Is this the owner's reach or a rule of the owning service (skipped), a refusal that is recorded as a failure but that
+ * trying again cannot change (`permanent`), or a fault (failed, and retried)? And what to say.
+ */
+export function classify(error: unknown): { readonly refused: boolean; readonly permanent: boolean; readonly message: string } {
+  if (error instanceof actions.ActionFailedForGood) return { refused: false, permanent: true, message: clip(error.message) };
   if (
     error instanceof actions.ActionRefused ||
     error instanceof AutomationError ||
@@ -136,14 +141,14 @@ export function classify(error: unknown): { readonly refused: boolean; readonly 
     error instanceof ExceptionError ||
     error instanceof NoWorkflowDefinedError
   ) {
-    return { refused: true, message: clip(error.message) };
+    return { refused: true, permanent: false, message: clip(error.message) };
   }
   const pg = pgOf(error);
   if (pg && (pg.code === '23514' || pg.code === '42501')) {
-    return { refused: true, message: clip(typeof pg.message === 'string' ? pg.message : 'The database refused it.') };
+    return { refused: true, permanent: false, message: clip(typeof pg.message === 'string' ? pg.message : 'The database refused it.') };
   }
-  if (pg && typeof pg.message === 'string') return { refused: false, message: clip(pg.message) };
-  return { refused: false, message: clip(error instanceof Error ? error.message : String(error)) };
+  if (pg && typeof pg.message === 'string') return { refused: false, permanent: false, message: clip(pg.message) };
+  return { refused: false, permanent: false, message: clip(error instanceof Error ? error.message : String(error)) };
 }
 
 // ---------------------------------------------------------------------------
@@ -175,13 +180,35 @@ async function writeRun(
   p: Pass,
   rule: RuleRow,
   input: { attempt: number; outcome: Outcome; reason: string; planned: readonly unknown[]; results: readonly ActionResult[]; startedAt: Date; runKey: string },
-): Promise<void> {
-  await p.tx.execute(sql`
+): Promise<string> {
+  const written = (await p.tx.execute(sql`
     insert into automation_run (rule_id, rule_version, event_id, event_key, subject_key, window_key, episode_key, run_key, attempt,
                                 owner_user_id, outcome, reason, planned, results, started_at, finished_at)
     values (${rule.id}::uuid, ${rule.version}, ${p.event.id}::bigint, ${p.event.eventKey}, ${p.event.subjectKey}, ${p.event.windowKey},
             ${p.event.episodeKey}, ${input.runKey}, ${input.attempt}, ${rule.ownerUserId}::uuid, ${input.outcome}, ${input.reason},
-            ${JSON.stringify(input.planned)}::jsonb, ${JSON.stringify(input.results)}::jsonb, ${iso(input.startedAt)}::timestamptz, now())`);
+            ${JSON.stringify(input.planned)}::jsonb, ${JSON.stringify(input.results)}::jsonb, ${iso(input.startedAt)}::timestamptz, now())
+    returning id::text as id`)) as unknown as Rows<{ id: string }>;
+  return written.rows[0]!.id;
+}
+
+/** Remembers what a run made, so the loop guard knows it: one row per record, named with the run that made it. */
+async function rememberMade(p: Pass, rule: RuleRow, runId: string, depth: number, results: readonly ActionResult[]): Promise<void> {
+  for (const result of results) {
+    if (!result.made || result.status !== 'done') continue; // a carried step was remembered by the attempt that did it
+    await p.tx.execute(sql`
+      insert into automation_made (record_type, record_id, record_label, rule_id, run_id, depth)
+      values (${result.made.type}, ${result.made.id}, ${result.made.label}, ${rule.id}::uuid, ${runId}::bigint, ${depth})
+      on conflict (record_type, record_id) do nothing`);
+  }
+}
+
+/** What automation made of this record, if it did: the rule and how many steps from a person. */
+async function madeOf(p: Pass): Promise<{ ruleId: string; ruleNo: string; depth: number } | null> {
+  const found = (await p.tx.execute(sql`
+    select m.rule_id::text as "ruleId", r.rule_no as "ruleNo", m.depth
+      from automation_made m join automation_rule r on r.id = m.rule_id
+     where m.record_type = ${p.event.subjectType} and m.record_id = ${p.event.subjectId}`)) as unknown as Rows<{ ruleId: string; ruleNo: string; depth: number }>;
+  return found.rows[0] ?? null;
 }
 
 async function administrators(tx: Tx): Promise<string[]> {
@@ -297,6 +324,17 @@ async function runRule(p: Pass, rule: RuleRow): Promise<RuleResult> {
   const already = (await p.tx.execute(sql`select 1 from automation_run where run_key = ${runKey} and outcome = 'done' limit 1`)) as unknown as Rows<unknown>;
   if (already.rows.length > 0) return { seen: true, matched: true, outcome: null, retry: false, finalFailure: null, paused: false };
 
+  // The loop guard: a record automation made does not wake the rule that made it, and a chain stops after two steps.
+  const guard = guardOf(await madeOf(p), rule.id);
+  if (!guard.allowed) {
+    const last = (await p.tx.execute(sql`select reason from automation_run where run_key = ${runKey} order by id desc limit 1`)) as unknown as Rows<{ reason: string }>;
+    if (last.rows[0]?.reason !== guard.reason) {
+      await writeRun(p, rule, { attempt, outcome: 'skipped', reason: guard.reason, planned: [], results: [], startedAt, runKey });
+      await tally(p, rule, 'skipped', false);
+    }
+    return { seen: true, matched: true, outcome: 'skipped', retry: false, finalFailure: null, paused: false };
+  }
+
   // The owner's scope for the actions; back to the system's for the log.
   const ownerScope: RequestScope = { userId: owner.userId, branchCode: p.event.branchCode ?? owner.defaultBranchCode ?? '', isSuperUser: owner.isSuperUser };
   const doing = {
@@ -320,19 +358,27 @@ async function runRule(p: Pass, rule: RuleRow): Promise<RuleResult> {
       results.push(result);
     } catch (error) {
       const verdict = classify(error);
-      results.push({ index, kind: action.kind, status: verdict.refused ? 'skipped' : 'failed', detail: verdict.refused ? `Not done: ${verdict.message}` : `Failed: ${verdict.message}` });
+      results.push({
+        index,
+        kind: action.kind,
+        status: verdict.refused ? 'skipped' : 'failed',
+        detail: verdict.refused ? `Not done: ${verdict.message}` : `Failed: ${verdict.message}`,
+        ...(verdict.permanent ? { permanent: true } : {}),
+      });
     }
   }
   await applyScope(p.tx, p.scopes.system);
 
   const outcome = outcomeOf(results);
-  const final = attempt >= MAX_ATTEMPTS;
+  // A step refused for good (the assignment scope said no) is not tried again: nothing about the next minute would change it.
+  const permanent = outcome === 'failed' && results.filter((r) => r.status === 'failed').every((r) => r.permanent === true);
+  const final = attempt >= MAX_ATTEMPTS || permanent;
   const failedStep = results.find((r) => r.status === 'failed');
   const next = outcome === 'failed' && !final ? nextAttemptAt(attempt, p.now) : null;
   const doneSteps = results.filter((r) => r.status === 'done' || r.status === 'carried');
   const reason =
     outcome === 'failed'
-      ? `${failedStep!.detail}${next ? ` It will be tried again at ${next.toISOString().slice(11, 16)} UTC (attempt ${attempt} of ${MAX_ATTEMPTS}).` : ` Attempt ${attempt} of ${MAX_ATTEMPTS}: the rule gives up on this one.`}`
+      ? `${failedStep!.detail}${next ? ` It will be tried again at ${next.toISOString().slice(11, 16)} UTC (attempt ${attempt} of ${MAX_ATTEMPTS}).` : permanent ? ' It was refused, and trying again would change nothing, so the rule gives up on this one.' : ` Attempt ${attempt} of ${MAX_ATTEMPTS}: the rule gives up on this one.`}`
       : outcome === 'done'
         ? clip(doneSteps.map((r) => r.detail).join(' '), 900)
         : clip(results.map((r) => r.detail).join(' '), 900);
@@ -344,7 +390,8 @@ async function runRule(p: Pass, rule: RuleRow): Promise<RuleResult> {
     if (last.rows[0]?.outcome === 'skipped' && last.rows[0].reason === reason) record = false;
   }
   if (record) {
-    await writeRun(p, rule, { attempt, outcome, reason, planned: evaluation.planned, results, startedAt, runKey });
+    const runId = await writeRun(p, rule, { attempt, outcome, reason, planned: evaluation.planned, results, startedAt, runKey });
+    await rememberMade(p, rule, runId, guard.depth, results);
     await audit.record(p.tx, {
       actorUserId: rule.ownerUserId,
       action: 'automation.ran',

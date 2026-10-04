@@ -1,5 +1,5 @@
 /**
- * Workflow automation — platform phase, Agent 10 (migrations 0400–0401).
+ * Workflow automation — platform phase, Agent 10 (migrations 0400–0402).
  *
  * `automation_rule` is one rule, built from a template and born OFF; its
  * definition lives in `automation_rule_version` (append-only: a change is a new
@@ -11,7 +11,7 @@
  * `automation_record_event` (a definer function) of a new event. The database
  * holds the closed vocabulary itself (`automation_rule_version_guard`).
  */
-import { bigint, bigserial, boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, boolean, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import type { Action, Condition, Outcome } from '../../domain/automation';
 import { appUser } from './platform';
 
@@ -113,4 +113,19 @@ export const automationRun = pgTable(
     finishedAt: timestamp('finished_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex('automation_run_attempt_uniq').on(t.eventId, t.ruleId, t.attempt)],
+);
+
+/** What automation made (migration 0402): the loop guard's memory. Append-only; written by the runner with the run it belongs to. */
+export const automationMade = pgTable(
+  'automation_made',
+  {
+    recordType: text('record_type').notNull(),
+    recordId: text('record_id').notNull(),
+    recordLabel: text('record_label').notNull(),
+    ruleId: uuid('rule_id').notNull().references(() => automationRule.id),
+    runId: bigint('run_id', { mode: 'bigint' }).notNull().references(() => automationRun.id),
+    depth: integer('depth').notNull(),
+    madeAt: timestamp('made_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.recordType, t.recordId] }), index('automation_made_rule_idx').on(t.ruleId, t.madeAt)],
 );

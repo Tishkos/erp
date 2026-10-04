@@ -32,7 +32,10 @@ import { reachOf, type Action, type ApprovalAction, type ExceptionAction, type N
 import { EVENTS, noticeKind, type EventKey } from '../domain/automation-events';
 import { addBusinessDays, businessToday } from '../domain/business-date';
 import { say } from '../domain/money';
+import type { Principal } from '../domain/permissions';
+import { TaskError } from '../domain/tasks';
 import * as audit from './audit';
+import * as authz from './authorization';
 import type { ActorContext } from './chart-of-accounts';
 import * as links from './cloud-link-targets';
 import * as exceptions from './exceptions';
@@ -46,6 +49,18 @@ export class ActionRefused extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'ActionRefused';
+  }
+}
+
+/**
+ * The owning service refused, for a reason retrying cannot change — the assignment scope will not let the owner give a task to
+ * that person. Recorded as a FAILED step (never forced, never quietly dropped), and not tried again.
+ */
+export class ActionFailedForGood extends Error {
+  readonly code = 'ACTION_FAILED_FOR_GOOD';
+  constructor(message: string) {
+    super(message);
+    this.name = 'ActionFailedForGood';
   }
 }
 
@@ -165,14 +180,53 @@ function contextOf(d: Doing, note: string, href: string): Record<string, unknown
   };
 }
 
+/**
+ * Of the people a rule names, those who may open the record, asked AS each of them (their grant, their branches, the owning
+ * module's own rule for who may open it). Somebody who may not is not told — a notice is never a way to learn that a record exists.
+ */
+async function whoMayOpen(d: Doing, ids: readonly string[]): Promise<{ allowed: string[]; left: number }> {
+  const def = EVENTS[d.event.key];
+  const allowed: string[] = [];
+  for (const id of ids) {
+    if (await asPerson(d, id, async (tx, principal) => (await links.openRecord(tx, principal, def.subjectType, d.event.subjectId)) !== null, false)) allowed.push(id);
+  }
+  return { allowed, left: ids.length - allowed.length };
+}
+
+/**
+ * Runs a read as one person (their scope, their principal), then goes back to the rule owner's. Somebody who is not an active
+ * user, or cannot be loaded, is `otherwise`: they may open nothing.
+ */
+async function asPerson<T>(d: Doing, userId: string, read: (tx: Tx, principal: Principal) => Promise<T>, otherwise: T): Promise<T> {
+  try {
+    await applyScope(d.tx, d.scopes.system);
+    let principal: Principal;
+    try {
+      principal = await authz.loadPrincipal(d.tx, userId);
+    } catch {
+      return otherwise;
+    }
+    if (!principal.isActive) return otherwise;
+    await applyScope(d.tx, { userId, branchCode: principal.defaultBranchCode ?? '', isSuperUser: principal.isSuperUser });
+    return await read(d.tx, principal);
+  } finally {
+    await applyScope(d.tx, d.scopes.owner);
+  }
+}
+
 async function notify(d: Doing, action: NotifyAction): Promise<Outcome> {
   const def = EVENTS[d.event.key];
-  const { ids, gaps } = await resolve(d, action.recipients);
-  if (ids.length === 0) {
+  const named = await resolve(d, action.recipients);
+  const gaps = named.gaps;
+  if (named.ids.length === 0) {
     return { kind: action.kind, status: 'skipped', detail: `Nobody to tell: ${gaps.join('; ') || 'no recipient'}.` };
   }
-  const href = action.kind === 'open_workflow' ? '/approvals' : def.href(d.event.payload);
+  const { allowed: ids, left } = await whoMayOpen(d, named.ids);
+  const href = action.kind === 'open_workflow' ? '/approvals' : (def.noticeHref ?? def.href)(d.event.payload);
   const reference = text(d.event.payload.reference);
+  if (ids.length === 0) {
+    return { kind: action.kind, status: 'skipped', detail: `None of the ${count(named.ids.length, 'person', 'people')} named could open ${reference}, so nobody was told.` };
+  }
   const result = await notifications.emit(d.tx, {
     kind: noticeKind(d.event.key),
     objectType: def.subjectType,
@@ -184,15 +238,17 @@ async function notify(d: Doing, action: NotifyAction): Promise<Outcome> {
     // Once per rule, per record, per stretch of lateness; a pending approval is its own notice.
     occurrence: `${d.rule.id}:${d.event.episode}${action.kind === 'open_workflow' ? ':approvals' : ''}`,
     branchCode: d.event.branchCode,
-    recordAccess: true,
+    // The centre's own check follows a record into the screens it serves; a record whose page it does not follow into is checked above.
+    recordAccess: def.noticeHref === undefined,
     actorUserId: d.rule.ownerUserId,
   });
   if (result.created === 0 && result.suppressed === 0) {
-    return { kind: action.kind, status: 'skipped', detail: `None of the ${count(ids.length, 'person', 'people')} named could open ${reference}, so nobody was told.` };
+    return { kind: action.kind, status: 'skipped', detail: `None of the ${count(named.ids.length, 'person', 'people')} named could open ${reference}, so nobody was told.` };
   }
   const parts = [`Told ${count(result.created, 'person', 'people')}`];
   if (result.suppressed > 0) parts.push(`${result.suppressed} already told`);
-  if (result.skipped > 0) parts.push(`${count(result.skipped, 'person', 'people')} left out because they could not open it`);
+  const unable = left + result.skipped;
+  if (unable > 0) parts.push(`${count(unable, 'person', 'people')} left out because they could not open it`);
   if (gaps.length > 0) parts.push(gaps.join('; '));
   return { kind: action.kind, status: 'done', detail: `${parts.join(', ')}.`, ref: String(result.created) };
 }
@@ -217,17 +273,30 @@ async function createTask(d: Doing, action: TaskAction): Promise<Outcome> {
   const related = await links.findRecord(d.tx, principal, def.subjectType, reference);
   const title = `${action.title} — ${reference}`.slice(0, 120);
   const description = [`Raised by automation rule ${d.rule.ruleNo} (${d.rule.name}), version ${d.rule.version}.`, action.note, `Record: ${reference} (${href})`].filter((line) => line !== '').join('\n');
-  const made = await tasks.create(d.tx, { ...d.ctx, branchCode }, {
-    title,
-    description,
-    priority: action.priority,
-    dueDate: addBusinessDays(businessToday(), action.dueInDays),
-    departmentCode: action.departmentCode,
-    assigneeId,
-    relatedType: related ? def.subjectType : null,
-    relatedNo: related ? reference : null,
-  });
-  return { kind: 'create_task', status: 'done', detail: `Task ${made.taskNo} raised${made.assigned ? ' and given out' : ''}${related ? '' : ' (the record has no link a task can hold, so none was made)'}.`, ref: made.taskNo };
+  let made: { id: string; taskNo: string; assigned: boolean };
+  try {
+    made = await tasks.create(d.tx, { ...d.ctx, branchCode }, {
+      title,
+      description,
+      priority: action.priority,
+      dueDate: addBusinessDays(businessToday(), action.dueInDays),
+      departmentCode: action.departmentCode,
+      assigneeId,
+      relatedType: related ? def.subjectType : null,
+      relatedNo: related ? reference : null,
+    });
+  } catch (error) {
+    // The Task Center's own rules (the owner's sections, the people they may give a task to) said no: that is the answer, never forced.
+    if (error instanceof TaskError) throw new ActionFailedForGood(`The Task Center refused the task: ${error.message}`);
+    throw error;
+  }
+  return {
+    kind: 'create_task',
+    status: 'done',
+    detail: `Task ${made.taskNo} raised${made.assigned ? ' and given out' : ''}${related ? '' : ' (the record has no link a task can hold, so none was made)'}.`,
+    ref: made.taskNo,
+    made: { type: 'task', id: made.id, label: made.taskNo },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +366,13 @@ async function createException(d: Doing, action: ExceptionAction): Promise<Outco
       : raised.outcome === 'reopened'
         ? `Exception ${raised.exceptionNo} came back (${action.severity}).`
         : `Exception ${raised.exceptionNo} was already open for this record.`;
-  return { kind: 'create_exception', status: 'done', detail, ref: raised.exceptionNo };
+  return {
+    kind: 'create_exception',
+    status: 'done',
+    detail,
+    ref: raised.exceptionNo,
+    ...(raised.outcome === 'exists' ? {} : { made: { type: 'exception' as const, id: raised.id, label: raised.exceptionNo } }),
+  };
 }
 
 // ---------------------------------------------------------------------------

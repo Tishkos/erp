@@ -18,6 +18,8 @@ import {
   AutomationError,
   CONDITIONS_MAX,
   MAX_ATTEMPTS,
+  MAX_DEPTH,
+  guardOf,
   evaluate,
   nextAttemptAt,
   outcomeOf,
@@ -263,9 +265,37 @@ describe('runs, retries and pausing', () => {
   });
 });
 
+describe('the loop guard', () => {
+  const made = (ruleId: string, depth: number) => ({ ruleId, ruleNo: 'AUT-004', depth });
+
+  it('lets automation act on what a person made, and what its actions then make is one step from a person', () => {
+    expect(guardOf(null, 'r1')).toEqual({ allowed: true, depth: 1 });
+  });
+
+  it('never lets a rule act on a record it made itself', () => {
+    const verdict = guardOf(made('r1', 1), 'r1');
+    expect(verdict.allowed).toBe(false);
+    if (!verdict.allowed) expect(verdict.reason).toMatch(/made by this rule itself \(AUT-004\).*cannot start a loop/);
+  });
+
+  it('lets another rule act on it once, one step further, and then stops the chain', () => {
+    expect(guardOf(made('r1', 1), 'r2')).toEqual({ allowed: true, depth: 2 });
+    const stopped = guardOf(made('r1', MAX_DEPTH), 'r2');
+    expect(stopped.allowed).toBe(false);
+    if (!stopped.allowed) expect(stopped.reason).toMatch(/chain stops after 2 steps/);
+  });
+
+  it('is pure: the same inputs give the same verdict', () => {
+    for (let i = 0; i < 10; i += 1) expect(guardOf(made('a', 1), 'b')).toEqual(guardOf(made('a', 1), 'b'));
+  });
+});
+
 describe('the templates', () => {
-  it('are the four the brief names, each on an event of the catalogue', () => {
-    expect([...TEMPLATE_CODES]).toEqual(['invoice_over_threshold', 'container_eta_exceeded', 'task_overdue', 'invoice_overdue_follow_up']);
+  it('are the four the brief names and a notice for a large posted invoice, each on an event of the catalogue', () => {
+    expect([...TEMPLATE_CODES]).toEqual(['invoice_over_threshold', 'container_eta_exceeded', 'task_overdue', 'invoice_overdue_follow_up', 'invoice_posted_notice']);
+    expect(TEMPLATES.invoice_posted_notice.eventKey).toBe('ap_invoice.posted');
+    // Every event a rule can be built on has a template: nothing in the catalogue is unreachable.
+    expect(new Set(TEMPLATE_CODES.map((c) => TEMPLATES[c].eventKey))).toEqual(new Set(EVENT_KEYS));
     expect(TEMPLATES.invoice_over_threshold.eventKey).toBe('ap_invoice.submitted');
     expect(TEMPLATES.container_eta_exceeded.eventKey).toBe('container.eta_exceeded');
     expect(TEMPLATES.task_overdue.eventKey).toBe('task.overdue');
@@ -325,6 +355,13 @@ describe('the templates', () => {
     const minimum = buildDefinition('invoice_overdue_follow_up', parseParams('invoice_overdue_follow_up', { ...base, minimumAmountIqd: '250000' }));
     expect(minimum.conditions).toEqual([{ field: 'daysLate', op: 'gte', value: 7 }, { field: 'amountIqd', op: 'gte', value: '250000.0000' }]);
     expect(minimum.actions.map((a) => a.kind)).toEqual(['create_task', 'create_notification']);
+  });
+
+  it('template 5: a purchase invoice posted over an amount tells a role, and holds and posts nothing', () => {
+    const built = buildDefinition('invoice_posted_notice', parseParams('invoice_posted_notice', { thresholdIqd: '20,000,000', notifyRole: 'ceo' }));
+    expect(built.eventKey).toBe('ap_invoice.posted');
+    expect(built.conditions).toEqual([{ field: 'amountIqd', op: 'gte', value: '20000000.0000' }]);
+    expect(built.actions.map((a) => a.kind)).toEqual(['create_notification']);
   });
 
   it('refuses parameters that will not do, in the parameter\'s own words', () => {

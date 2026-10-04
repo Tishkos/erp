@@ -23,7 +23,7 @@
 import { sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { businessToday } from '../domain/business-date';
-import { EVENTS, sweepWindow, type EventKey } from '../domain/automation-events';
+import { EVENTS, SWEEP_EVENT_CAP, sweepWindow, type EventKey } from '../domain/automation-events';
 import { can, type Principal } from '../domain/permissions';
 import { daysUntil, dueState, type TaskStatus } from '../domain/tasks';
 import * as authz from './authorization';
@@ -165,6 +165,8 @@ export interface ProduceResult {
   readonly recorded: number;
   /** A payload that did not fit its event: a producer bug, said aloud. */
   readonly problems: string[];
+  /** Subjects left unrecorded because the morning's cap (`SWEEP_EVENT_CAP`) was reached; the next run picks them up. */
+  readonly capped: number;
 }
 
 /**
@@ -178,18 +180,22 @@ export async function produce(tx: Tx, principal: Principal, today: string = busi
     if (only && !only.includes(key)) continue;
     if (EVENTS[key].source !== 'sweep') continue;
     if (!(await dispatcher.listening(tx, key))) {
-      results.push({ event: key, listening: false, read: 0, recorded: 0, problems: [] });
+      results.push({ event: key, listening: false, read: 0, recorded: 0, problems: [], capped: 0 });
       continue;
     }
     const found = await PRODUCERS[key]!(tx, principal, today);
     let recorded = 0;
+    let visited = 0;
     const problems: string[] = [];
     for (const item of found) {
+      // Bounded work: a morning records at most the cap; what is not reached is counted, and a second run today goes on from there.
+      if (recorded >= SWEEP_EVENT_CAP) break;
+      visited += 1;
       const written = await dispatcher.dispatch(tx, key, item.payload, { window: sweepWindow(today) });
       if (written.recorded) recorded += 1;
       if (written.problem) problems.push(`${String(item.payload.reference)}: ${written.problem}`);
     }
-    results.push({ event: key, listening: true, read: found.length, recorded, problems });
+    results.push({ event: key, listening: true, read: found.length, recorded, problems, capped: found.length - visited });
   }
   return results;
 }

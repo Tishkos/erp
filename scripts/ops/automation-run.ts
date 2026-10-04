@@ -35,7 +35,8 @@ async function main(): Promise<number> {
     const scope = await systemScope();
     const results = await withScope(scope, async (tx) => events.produce(tx, await events.operatorPrincipal(tx, scope.userId), date));
     for (const r of results) {
-      console.log(`${date} ${r.event}: ${r.listening ? `${r.read} found, ${r.recorded} recorded` : 'no enabled rule is listening'}.`);
+      console.log(`${date} ${r.event}: ${r.listening ? `${r.read} found, ${r.recorded} recorded${r.capped > 0 ? `, ${r.capped} left for the next run (the morning's cap)` : ''}` : 'no enabled rule is listening'}.`);
+      if (r.capped > 0) exit = 2;
       for (const problem of r.problems) {
         console.error(`  ${problem}`);
         exit = 2;
