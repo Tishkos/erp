@@ -37,6 +37,7 @@ import {
   requireText,
   type ActorContext,
 } from './administration';
+import { can } from '../domain/permissions';
 import { allocateFreeCode } from './numbering';
 import { createPartner, loadPartner, updatePartner, PERMISSION_OBJECT } from './business-partner';
 
@@ -213,6 +214,19 @@ export async function createInRole(
     tradeName: input.tradeName ?? null,
     isCustomer: role === 'customer',
     isSupplier: role === 'supplier',
+    // §6 — a partner is usable on a document once it is approved (status
+    // `active`); a prospect is not, and a purchase order or sales order
+    // against one is refused. Approving is the `approve` grant on the record
+    // (§4.4: status is a sensitive field). Whoever holds it enters the partner
+    // approved — it is their decision to make, and making them take a second
+    // step to agree with themselves is ceremony. Whoever does not (the
+    // accounting officer) enters a prospect, which somebody who does approves
+    // on its record (`approve` below).
+    //
+    // Until 2026-10-04 every partner made here was a prospect and nothing
+    // could approve it, so a supplier the screens called "Active" could not
+    // be ordered from.
+    status: can(ctx.principal, 'approve', PERMISSION_OBJECT) ? 'active' : 'prospect',
     registrationNo: input.registrationNo ?? null,
     taxIdentifier: input.taxIdentifier ?? null,
     email: input.email ?? null,
@@ -327,7 +341,38 @@ export async function setActive(
   return getByCode(tx, code);
 }
 
-/** Active partners in a role — for the pickers later modules will need. */
+/**
+ * §6 — a prospect becomes an approved partner (status `active`), usable on a
+ * purchase order, a sales order and the documents' pickers.
+ *
+ * Status is a sensitive field (§4.4), so this is the `approve` grant on the
+ * record; `updatePartner` asks for it again and keeps the before and after.
+ * Only a prospect is approved here, and only a partner in use — a
+ * deactivated one is reactivated first, so the two switches are never
+ * flipped by one click.
+ */
+export async function approve(tx: Tx, ctx: ActorContext, code: string) {
+  await permit(ctx, 'approve', PERMISSION_OBJECT, code);
+  const before = await getByCode(tx, code);
+  if (before.status !== 'prospect') {
+    throw new AdminValidationError('status', `is ${before.status.replace('_', ' ')}; only a prospect is approved`);
+  }
+  if (!before.active) {
+    throw new AdminValidationError('active', 'the partner is deactivated; reactivate it before approving it');
+  }
+  await updatePartner(tx, ctx, before.id, { status: 'active' }, 'approved');
+  return getByCode(tx, code);
+}
+
+/**
+ * Partners in a role that a new document may name — for the pickers.
+ *
+ * Usable means in use (`active`) **and** approved (status `active`): the rule
+ * `domain/business-partner.assertUsableForTransaction` states and the
+ * purchase order's check (and migration 0031's trigger) enforces. A picker
+ * that offered a prospect let the buyer fill in a whole purchase invoice for
+ * an import and be refused at the end (2026-10-04).
+ */
 export async function listActiveInRole(tx: Tx, role: PartnerRole) {
   return tx
     .select({
@@ -342,6 +387,7 @@ export async function listActiveInRole(tx: Tx, role: PartnerRole) {
     .where(
       and(
         eq(businessPartner.active, true),
+        eq(businessPartner.status, 'active'),
         role === 'customer'
           ? eq(businessPartner.isCustomer, true)
           : eq(businessPartner.isSupplier, true),

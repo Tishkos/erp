@@ -70,6 +70,15 @@ export async function setPartnerRole(formData: FormData): Promise<void> {
   );
 }
 
+/** §6 — a prospect approved: usable on an order and in the pickers. */
+export async function approvePartner(formData: FormData): Promise<void> {
+  const code = text(formData, 'code');
+  await runAdminAndReturn(
+    (tx, ctx) => partners.approve(tx, ctx, code),
+    record(returnRoleOf(formData), code),
+  );
+}
+
 export async function setPartnerActive(formData: FormData): Promise<void> {
   const code = text(formData, 'code');
   await runAdminAndReturn(

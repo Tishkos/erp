@@ -981,7 +981,6 @@
     "company_name_secondary": "قمة السفینە",
     "primary_navigation": "Primary navigation",
     "super_user": "System Administrator",
-    "app_launcher": "Open app launcher",
     "open_menu": "Open navigation menu",
     "close": "Close",
     "notifications": "Notifications",
@@ -2104,6 +2103,8 @@
       "status_on_hold": "On hold",
       "status_blocked": "Blocked",
       "status_inactive": "Inactive",
+      "approve": "Approve",
+      "awaiting_approval": "awaiting approval",
       "deactivate_title": "Deactivate this partner",
       "statement": "Account statement",
       "statement_subtitle_customer": "What each customer owes. Sales are Debit; receipts and credits are Credit.",
@@ -2397,9 +2398,9 @@
     },
     "setup": {
       "no_customers": "Add a customer first.",
-      "no_active_customers": "{count} customer(s) exist and none is active. Reactivate one on the Customers screen.",
+      "no_active_customers": "{count} customer(s) exist and none is active and approved. Approve or reactivate one on the Customers screen.",
       "no_suppliers": "Add a supplier first.",
-      "no_active_suppliers": "{count} supplier(s) exist and none is active. Reactivate one on the Suppliers screen.",
+      "no_active_suppliers": "{count} supplier(s) exist and none is active and approved. Approve or reactivate one on the Suppliers screen.",
       "no_items": "Add a stock item first.",
       "no_active_items": "{count} item(s) exist and none is a stock item that is active. Check them on the Items screen.",
       "no_warehouses": "Set up a warehouse first.",
@@ -3459,7 +3460,13 @@
       "asycuda_as_given": "As ASYCUDA wrote it",
       "asycuda_was": "When read",
       "asycuda_to_pds": "PD register",
-      "outcome_changed": "Updated"
+      "outcome_changed": "Updated",
+      "asycuda_save_lines": "Save corrections",
+      "asycuda_edit_hint": "Correct a line in its cells — the PD number, what ASYCUDA says, the date — or take it out from its status; add a missing one in the last row. Saving works the difference out again; nothing moves until it is applied.",
+      "asycuda_drop_line": "Remove this line",
+      "asycuda_new_line": "New line",
+      "asycuda_edited_from": "Corrected by hand; the file said:",
+      "asycuda_added_by_hand": "Added by hand"
     },
     "shipments": {
       "subtitle": "The bills of lading of every import, each with its containers counted as they arrive.",

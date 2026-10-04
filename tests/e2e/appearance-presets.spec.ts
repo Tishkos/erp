@@ -9,6 +9,8 @@ async function signIn(page: import('@playwright/test').Page) {
 }
 
 async function openAppearance(page: import('@playwright/test').Page) {
+  // Appearance lives in the user menu (it left the header on 2026-10-04).
+  await page.getByRole('button', { name: 'Open user menu' }).click();
   await page.getByRole('button', { name: 'Appearance', exact: true }).click();
   await expect(page.getByRole('radiogroup', { name: 'Interface style' })).toBeVisible();
 }

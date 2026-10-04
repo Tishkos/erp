@@ -21,7 +21,7 @@
  */
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
-import { appUser, businessPartner, customsDeclaration, customsPd, landedCostCharge, payable, pdStatus } from '../db/schema';
+import { appUser, businessPartner, currency as currencyTable, customsDeclaration, customsPd, landedCostCharge, payable, pdStatus } from '../db/schema';
 import { businessToday } from '../domain/business-date';
 import {
   DECLARATION_FINAL,
@@ -83,9 +83,15 @@ export interface DeclaredFigures {
   readonly hsCode?: string | null;
 }
 
-function figuresOf(input: DeclaredFigures, current?: typeof customsDeclaration.$inferSelect) {
+async function figuresOf(tx: Tx, input: DeclaredFigures, current?: typeof customsDeclaration.$inferSelect) {
   const currency = (input.currency ?? current?.currency ?? 'IQD').trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) throw new DeclarationRuleError(`'${currency}' is not a currency code (three letters, like IQD or USD).`);
+  // The ERP's own currencies, as every other document takes them. A currency
+  // retired since the draft was written stays on it until somebody changes it.
+  const [known] = await tx.select().from(currencyTable).where(eq(currencyTable.code, currency)).limit(1);
+  if (!known || (!known.isActive && currency !== current?.currency)) {
+    throw new DeclarationRuleError(`${currency} is not an active currency. Choose one from Currencies and Rates.`);
+  }
   const pick = (given: bigint | null | undefined, stored: string | undefined, label: string) => {
     const value = given ?? (stored !== undefined ? amountOf(stored) : 0n);
     if (value < 0n) throw new DeclarationRuleError(`The declared ${label} cannot be negative.`);
@@ -134,7 +140,7 @@ export async function create(tx: Tx, ctx: ActorContext, input: CreateInput) {
   }
 
   const declarationDate = input.declarationDate || businessToday();
-  const figures = figuresOf(input);
+  const figures = await figuresOf(tx, input);
   const allocated = await allocateDocumentNumber(
     tx,
     SERIES,
@@ -212,7 +218,7 @@ export async function update(tx: Tx, ctx: ActorContext, id: string, input: Updat
       pdId = null;
     }
   }
-  const figures = figuresOf(input, row);
+  const figures = await figuresOf(tx, input, row);
   const before = {
     pdId: row.pdId,
     customsRef: row.customsRef,

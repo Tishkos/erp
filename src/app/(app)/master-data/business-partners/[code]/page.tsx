@@ -39,6 +39,7 @@ import { businessToday } from '@/server/domain/business-date';
 import { toDecimalString } from '@domain/money';
 import {
   addPartnerBankAccount,
+  approvePartner,
   deactivatePartnerBankAccount,
   defaultPartnerBankAccount,
   returnPartnerBankAccount,
@@ -172,7 +173,13 @@ export default async function BusinessPartnerPage({
               <p>
                 {t('code')}: {row.code}
               </p>
-              <Pill label={row.active ? t('active') : t('inactive')} on={row.active} />
+              {/* §6 — what the documents ask: in use *and* approved. A prospect
+                  wore a green "Active" here and could not be ordered from
+                  (2026-10-04); the card now says the lifecycle status. */}
+              <Pill
+                label={row.active ? t(`partners.status_${row.status}`) : t('inactive')}
+                on={row.active && row.status === 'active' ? true : row.active && row.status === 'prospect' ? null : false}
+              />
             </div>
           </Panel>
 
@@ -239,7 +246,26 @@ export default async function BusinessPartnerPage({
             <ul className={s.profileFacts}>
               <li>
                 <span>{column('status')}</span>
-                <span>{t(`partners.status_${row.status}`)}</span>
+                <span>
+                  {t(`partners.status_${row.status}`)}
+                  {/* §6 — a prospect is approved here, by whoever holds
+                      `approve` on the record; until then no order names it. */}
+                  {row.status === 'prospect' && row.active ? (
+                    mayVerify ? (
+                      <>
+                        {' '}
+                        <ActionButton
+                          action={approvePartner}
+                          hidden={{ code: row.code, returnRole: routeRole }}
+                          label={t('partners.approve')}
+                          tone="primary"
+                        />
+                      </>
+                    ) : (
+                      <> · {t('partners.awaiting_approval')}</>
+                    )
+                  ) : null}
+                </span>
               </li>
               <li>
                 <span>{t('partners.email')}</span>

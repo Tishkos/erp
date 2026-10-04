@@ -864,8 +864,7 @@ table.list a {
 
 .erp-icon-button,
 .erp-locale-toggle,
-.erp-mobile-trigger,
-.erp-launcher-trigger {
+.erp-mobile-trigger {
   position: relative;
   display: inline-grid;
   inline-size: 2.5rem;
@@ -883,8 +882,7 @@ table.list a {
 
 .erp-icon-button svg,
 .erp-locale-toggle svg,
-.erp-mobile-trigger svg,
-.erp-launcher-trigger svg {
+.erp-mobile-trigger svg {
   inline-size: 1.22rem;
   block-size: 1.22rem;
   stroke-width: 1.9;
@@ -893,17 +891,11 @@ table.list a {
 .erp-icon-button:hover,
 .erp-locale-toggle:hover,
 .erp-mobile-trigger:hover,
-.erp-launcher-trigger:hover,
 .erp-icon-button[aria-expanded="true"],
 .erp-locale-toggle[aria-expanded="true"] {
   border-color: var(--accent-border);
   color: var(--accent);
   background: var(--accent-soft);
-}
-
-.erp-launcher-trigger {
-  margin-inline-end: 0.7rem;
-  color: var(--accent);
 }
 
 .erp-brand {
@@ -963,17 +955,21 @@ table.list a {
   display: none;
 }
 
-/* No overflow clipping here: the module popovers are positioned inside it. */
+/* No overflow clipping here: the module popovers are positioned inside it.
+   It fills its column so the shell can measure the room it really has and
+   choose the form that fits (data-fit, set by erp-shell.tsx). */
 .erp-nav {
   min-inline-size: 0;
-  justify-self: start;
+  justify-self: stretch;
 }
 
 .erp-nav__list {
   display: flex;
   block-size: 100%;
   align-items: stretch;
-  gap: 0.45rem;
+  /* Each name carries its own padding; the room between them is what gives
+     way so the names themselves keep their size (2026-10-04). */
+  gap: 0.1rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -982,7 +978,7 @@ table.list a {
 .erp-nav__item {
   position: relative;
   display: flex;
-  min-inline-size: 0;
+  flex: 0 0 auto;
   align-items: stretch;
 }
 
@@ -992,7 +988,7 @@ table.list a {
   min-inline-size: 0;
   align-items: center;
   gap: 0.22rem;
-  padding-inline: clamp(0.4rem, 0.6vw, 0.62rem);
+  padding-inline: 0.45rem;
   color: var(--text-soft);
   background: transparent;
   font-size: clamp(0.74rem, 0.82vw, 0.84rem);
@@ -1054,16 +1050,15 @@ table.list a {
 
 .erp-branch {
   display: flex;
-  min-inline-size: 4.5rem;
   align-items: center;
-  gap: 0.48rem;
-  margin-inline-end: 0.35rem;
-  padding-inline: 0.45rem;
+  gap: 0.3rem;
+  margin-inline-end: 0.15rem;
+  padding-inline: 0.25rem;
 }
 
 .erp-branch__icon {
-  inline-size: 1rem;
-  block-size: 1rem;
+  inline-size: 0.9rem;
+  block-size: 0.9rem;
   color: var(--accent);
 }
 
@@ -1077,7 +1072,7 @@ table.list a {
 
 .erp-branch__label {
   color: var(--text-muted);
-  font-size: 0.63rem;
+  font-size: 0.58rem;
   font-weight: 650;
 }
 
@@ -1085,7 +1080,7 @@ table.list a {
   overflow: hidden;
   max-inline-size: 5.5rem;
   color: var(--text-soft);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1400,58 +1395,6 @@ html[lang="ar"] .erp-module-section__title {
   background: var(--surface-sunken);
   border-radius: var(--radius-sm);
   text-align: center;
-}
-
-.erp-launcher {
-  inset-inline-start: 1rem;
-  inset-inline-end: auto;
-  inline-size: min(35rem, calc(100vw - 2rem));
-}
-
-.erp-launcher__grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.55rem;
-}
-
-.erp-launcher__item {
-  display: grid;
-  min-block-size: 5rem;
-  place-items: center;
-  align-content: center;
-  gap: 0.4rem;
-  padding: 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-soft);
-  background: var(--surface);
-  font-size: 0.77rem;
-  font-weight: 750;
-  text-align: center;
-  text-decoration: none;
-  transition: color 150ms ease, border-color 150ms ease, background 150ms ease,
-    transform 150ms ease;
-}
-
-.erp-launcher__item:hover {
-  border-color: var(--accent-border);
-  color: var(--accent);
-  background: var(--accent-soft);
-  transform: translateY(-1px);
-}
-
-.erp-launcher__item > svg {
-  inline-size: 1.35rem;
-  block-size: 1.35rem;
-}
-
-.erp-launcher__item--pending {
-  opacity: 0.58;
-}
-
-.erp-launcher__item small {
-  color: var(--text-muted);
-  font-size: 0.6rem;
 }
 
 .erp-user-panel {
@@ -1809,78 +1752,59 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
     display: none;
   }
 
-  html[lang="ar"] .erp-brand {
-    min-inline-size: 11.5rem;
-  }
-
-  html[lang="ar"] .erp-brand__wordmark,
-  html[lang="ar"] :is(.erp-user-trigger__identity, .erp-user-trigger__chevron) {
+  /* Until the shell has measured the bar (data-squeeze), these guess. */
+  html[lang="ar"] .erp-header__bar:not([data-squeeze]) :is(.erp-brand__wordmark, .erp-user-trigger__identity, .erp-user-trigger__chevron) {
     display: none;
   }
 
-  html[lang="ar"] .erp-user-trigger {
+  html[lang="ar"] .erp-header__bar:not([data-squeeze]) .erp-user-trigger {
     min-inline-size: 2.65rem;
   }
 }
 
 @media (max-width: 87rem) {
-  .erp-user-trigger {
+  .erp-header__bar:not([data-squeeze]) .erp-user-trigger {
     min-inline-size: 2.65rem;
   }
 
-  .erp-user-trigger__identity,
-  .erp-user-trigger__chevron {
+  .erp-header__bar:not([data-squeeze]) :is(.erp-user-trigger__identity, .erp-user-trigger__chevron) {
     display: none;
   }
 }
 
-/* Appearance and Language leave the header only when it is genuinely narrow.
-   They used to go at 108rem — 1728px — which is wider than almost every
-   laptop, so for nearly everybody the palette button simply was not there and
-   the appearance settings could not be reached at all except through the user
-   menu (reported 2026-09-29: "appearance doesn't work in production"). The
-   user menu still carries both, which is what makes hiding them safe here and
-   what made hiding them at 1728px invisible rather than obviously wrong. */
+/* Language leaves the header only when it is genuinely narrow; the user menu
+   carries it too. Appearance is no longer in the header at all (by direction,
+   2026-10-04: "we have it in the profile drop down") — the user menu and the
+   mobile drawer open it, which they already did when it was hidden here. */
 @media (max-width: 60rem) {
-  .erp-header__utilities > :is(.erp-appearance-trigger, .erp-locale-toggle) {
+  .erp-header__utilities > .erp-locale-toggle {
     display: none;
   }
 }
 
-@media (max-width: 108rem) {
-  .erp-nav__trigger {
-    gap: 0.1rem;
-    padding-inline: 0.22rem;
-    font-size: 0.74rem;
-  }
 
-  .erp-nav__chevron {
-    inline-size: 0.62rem;
-    block-size: 0.62rem;
-  }
-}
-
+/* The name goes and takes its room with it: the brand is the Q mark alone.
+   (It used to keep 11.5rem — the width of the full logo it once was — so the
+   name left an empty gap the module bar could not use.) */
 @media (max-width: 87rem) {
-  .erp-brand {
-    min-inline-size: 11.5rem;
-  }
-
-  .erp-brand__wordmark {
+  .erp-header__bar:not([data-squeeze]) .erp-brand__wordmark {
     display: none;
   }
 
-  .erp-nav__list {
+  /* Until the shell has measured the bar (data-fit), this breakpoint guesses. */
+
+  .erp-nav:not([data-fit]) .erp-nav__list {
     gap: 0.12rem;
   }
 
-  .erp-nav__trigger {
+  .erp-nav:not([data-fit]) .erp-nav__trigger {
     inline-size: 2.7rem;
     justify-content: center;
     gap: 0;
     padding-inline: 0.5rem;
   }
 
-  .erp-nav__label {
+  .erp-nav:not([data-fit]) .erp-nav__label {
     position: absolute;
     inline-size: 1px;
     block-size: 1px;
@@ -1892,16 +1816,77 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
     white-space: nowrap;
   }
 
-  .erp-nav__icon {
+  .erp-nav:not([data-fit]) .erp-nav__icon {
     display: block;
     inline-size: 1.15rem;
     block-size: 1.15rem;
     stroke-width: 1.9;
   }
 
-  .erp-nav__chevron {
+  .erp-nav:not([data-fit]) .erp-nav__chevron {
     display: none;
   }
+}
+
+/* The bar as measured (erp-shell.tsx, HEADER_SQUEEZE). The module names keep
+   their size; to make room for them beside the company's name the header gives
+   up, in order: the user's name and role beside the avatar (they head the user
+   menu), the "Active branch" caption (the icon and the branch stay, the
+   caption is their title), the chevrons after the module names, and only then
+   the company's name. When even that is not enough the names are icons (each
+   with its name as its title), the compact form the breakpoint above has
+   always drawn. */
+.erp-header__bar[data-squeeze~="user"] :is(.erp-user-trigger__identity, .erp-user-trigger__chevron) {
+  display: none;
+}
+
+.erp-header__bar[data-squeeze~="user"] .erp-user-trigger {
+  min-inline-size: 2.65rem;
+}
+
+.erp-header__bar[data-squeeze~="branch"] .erp-branch__label {
+  display: none;
+}
+
+.erp-header__bar[data-squeeze~="chevrons"] .erp-nav__chevron {
+  display: none;
+}
+
+.erp-header__bar[data-squeeze~="name"] .erp-brand__wordmark {
+  display: none;
+}
+.erp-nav[data-fit="icons"] .erp-nav__list {
+  gap: 0.12rem;
+}
+
+.erp-nav[data-fit="icons"] .erp-nav__trigger {
+  inline-size: 2.7rem;
+  justify-content: center;
+  gap: 0;
+  padding-inline: 0.5rem;
+}
+
+.erp-nav[data-fit="icons"] .erp-nav__label {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  padding: 0;
+  margin: -1px;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.erp-nav[data-fit="icons"] .erp-nav__icon {
+  display: block;
+  inline-size: 1.15rem;
+  block-size: 1.15rem;
+  stroke-width: 1.9;
+}
+
+.erp-nav[data-fit="icons"] .erp-nav__chevron {
+  display: none;
 }
 
 @media (max-width: 76rem) {
@@ -1957,7 +1942,6 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
     padding-inline: 0.45rem;
   }
 
-  .erp-launcher-trigger,
   .erp-header__utilities > .erp-icon-button,
   .erp-header__utilities > .erp-branch,
   .erp-header__utilities > .erp-theme-toggle,
@@ -1971,10 +1955,6 @@ html[dir="rtl"] :is(.erp-mobile-drawer, .erp-appearance-drawer) {
 
   .erp-brand {
     padding-inline-end: 0;
-  }
-
-  .erp-launcher__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .erp-preference__options--accent {
@@ -3516,18 +3496,18 @@ html[dir="rtl"] .coa-directional-icon {
 
 /* Global search (Ctrl/⌘ K) ------------------------------------------------ */
 
+/* One icon, as it already was on all but the widest screens (by direction,
+   2026-10-04); the shortcut is in its title. */
 .erp-search-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
   block-size: 2.3rem;
-  margin-inline-end: 0.35rem;
-  padding-inline: 0.7rem 0.5rem;
-  border: 1px solid var(--border-strong);
+  margin-inline-end: 0.2rem;
+  padding-inline: 0.55rem;
+  border: 1px solid transparent;
   border-radius: 999px;
   color: var(--text-muted);
-  background: var(--surface);
-  font-size: 0.78rem;
+  background: transparent;
   cursor: pointer;
   transition: border-color var(--motion), color var(--motion), background var(--motion);
 }
@@ -3541,29 +3521,6 @@ html[dir="rtl"] .coa-directional-icon {
 .erp-search-trigger svg {
   inline-size: 0.95rem;
   block-size: 0.95rem;
-}
-
-.erp-search-trigger kbd {
-  padding: 0.05rem 0.35rem;
-  border: 1px solid var(--border);
-  border-radius: 0.3rem;
-  background: var(--surface-muted);
-  font-family: inherit;
-  font-size: 0.64rem;
-}
-
-/* Icon-only unless there is honestly room for the pill. */
-@media (max-width: 100rem) {
-  .erp-search-trigger__label,
-  .erp-search-trigger kbd {
-    display: none;
-  }
-
-  .erp-search-trigger {
-    padding-inline: 0.55rem;
-    border-color: transparent;
-    background: transparent;
-  }
 }
 
 .erp-search {
@@ -3754,7 +3711,7 @@ html[dir="rtl"] .coa-directional-icon {
 }
 
 /* ── The shell, in the same window as the screens ─────────────────────────
-   The navigation, the module launcher and the footer are drawn from the
+   The navigation and the footer are drawn from the
    palette the company chose, so the chrome and the pages inside it are one
    application rather than two.
 
@@ -3784,7 +3741,6 @@ html[dir="rtl"] .coa-directional-icon {
 
 /* The module bar. A chosen module is the tab you are standing on, so it takes
    the same amber the tab strip inside the page takes. */
-.erp-nav .erp-launcher-trigger,
 .erp-nav > button,
 .erp-icon-button {
   border: 1px solid transparent;
@@ -3794,9 +3750,7 @@ html[dir="rtl"] .coa-directional-icon {
 
 .erp-icon-button:hover,
 .erp-nav > button:hover,
-.erp-launcher-trigger:hover,
-.erp-icon-button[aria-expanded="true"],
-.erp-launcher-trigger[aria-expanded="true"] {
+.erp-icon-button[aria-expanded="true"] {
   border-color: var(--w-line-strong, var(--border));
   background: var(--w-selected, var(--accent-soft));
   color: var(--w-label, var(--text));
@@ -3897,11 +3851,9 @@ html[dir="rtl"] .coa-directional-icon {
 /* Every control in the bar is the same square button. A toolbar in this kind
    of software is a row of identical stamps, not a set of shapes. */
 .erp-icon-button,
-.erp-launcher-trigger,
 .erp-locale-toggle,
 .erp-theme-toggle,
-.erp-mobile-trigger,
-.erp-appearance-trigger {
+.erp-mobile-trigger {
   inline-size: 1.9rem;
   block-size: 1.9rem;
   min-inline-size: 1.9rem;
@@ -3914,7 +3866,6 @@ html[dir="rtl"] .coa-directional-icon {
 }
 
 .erp-icon-button svg,
-.erp-launcher-trigger svg,
 .erp-locale-toggle svg,
 .erp-theme-toggle svg,
 .erp-mobile-trigger svg {
@@ -3924,13 +3875,11 @@ html[dir="rtl"] .coa-directional-icon {
 }
 
 .erp-icon-button:hover,
-.erp-launcher-trigger:hover,
 .erp-locale-toggle:hover,
 .erp-theme-toggle:hover,
 .erp-mobile-trigger:hover,
 .erp-icon-button[aria-expanded="true"],
-.erp-locale-toggle[aria-expanded="true"],
-.erp-launcher-trigger[aria-expanded="true"] {
+.erp-locale-toggle[aria-expanded="true"] {
   border-color: var(--w-chrome-line, var(--border));
   background: var(--w-field, #fff);
   color: var(--w-chrome-text, var(--text));
@@ -4022,8 +3971,7 @@ html[dir="rtl"] .coa-directional-icon {
 .erp-utility-popover,
 .erp-module-popover,
 .erp-mobile-drawer,
-.erp-appearance-drawer,
-.erp-launcher {
+.erp-appearance-drawer {
   border: 1px solid var(--w-line-strong, var(--border));
   border-radius: 0.2rem;
   background: var(--w-bg, var(--surface-raised));
@@ -4202,39 +4150,6 @@ html:has([data-palette]) body {
   font-size: 0.74rem;
 }
 
-/* ── The app launcher: a board of square tiles ────────────────────────────*/
-.erp-launcher__grid {
-  gap: 0.45rem;
-  padding: 0.6rem;
-}
-
-.erp-launcher__item {
-  border: 1px solid var(--w-rule, var(--border));
-  border-radius: 0.15rem;
-  background: var(--w-bg, var(--surface));
-  color: var(--w-label, var(--text));
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.erp-launcher__item svg {
-  color: var(--w-label, var(--text-soft));
-}
-
-.erp-launcher__item:hover {
-  border-color: var(--w-line-strong, var(--border-strong));
-  background: var(--w-selected, var(--accent-soft));
-  color: var(--w-label, var(--text));
-  transform: none;
-  box-shadow: none;
-}
-
-/* A module that is planned but not built must not look like a door. */
-.erp-launcher__item--pending {
-  background: var(--w-filler, var(--surface-muted));
-  color: var(--w-muted, var(--text-muted));
-}
-
 /* ── The branch picker in the header ──────────────────────────────────────
    The select dresses as the value it replaces: the person reads "Branch HQ"
    either way, and the affordance is the chevron the browser draws. */
@@ -4243,13 +4158,13 @@ html:has([data-palette]) body {
 }
 
 .erp-branch__select {
-  max-inline-size: 9rem;
+  max-inline-size: 7rem;
   padding: 0 0.1rem;
   border: 1px solid transparent;
   border-radius: 0.12rem;
   background: transparent;
   color: var(--w-chrome-text, var(--text));
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   font-weight: 700;
   cursor: pointer;
 }

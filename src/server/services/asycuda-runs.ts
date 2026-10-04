@@ -246,6 +246,8 @@ export interface RunLine {
   readonly payableNo: string | null;
   /** The PD as it stands now, for the link and the "now" column. */
   readonly pd: { readonly pdNo: string; readonly year: number; readonly statusCode: string } | null;
+  /** What the file said before the line was corrected by hand ('' for a line added by hand); null when untouched. */
+  readonly editedFrom: string | null;
 }
 
 /**
@@ -258,7 +260,9 @@ export async function runLines(tx: Tx, run: { readonly lineText: string; readonl
   const report = (run.report ?? {}) as {
     rows?: { line: number; pdNo: string; pdId: string | null; payableNo: string | null; currentStatus: string | null; newStatus: string; effectiveDate: string | null; outcome: RunLine['outcome'] }[];
     unreadable?: { line: number; text: string; why: string }[];
+    edits?: Record<string, { was: string }>;
   };
+  const editedFrom = (line: number) => report.edits?.[String(line)]?.was ?? null;
   const raw = run.lineText.split(/\r?\n/);
   const fieldsOf = (line: number, fallback: string) =>
     (raw[line - 1] ?? fallback)
@@ -286,6 +290,7 @@ export async function runLines(tx: Tx, run: { readonly lineText: string; readonl
       why: null,
       payableNo: row.payableNo,
       pd: pd ? { pdNo: pd.pdNo, year: Number(pd.year), statusCode: pd.statusCode } : null,
+      editedFrom: editedFrom(row.line),
     };
   });
   const unread: RunLine[] = (report.unreadable ?? []).map((row) => ({
@@ -299,8 +304,166 @@ export async function runLines(tx: Tx, run: { readonly lineText: string; readonl
     why: row.why,
     payableNo: null,
     pd: null,
+    editedFrom: editedFrom(row.line),
   }));
   return [...read, ...unread].sort((a, b) => a.line - b.line);
+}
+
+/** What a line's cells hold when the reading is corrected by hand: blank for a line nobody could read. */
+export function draftOf(line: RunLine): { readonly pdNo: string; readonly statusCode: string; readonly effectiveDate: string } {
+  return line.outcome === 'unreadable'
+    ? { pdNo: '', statusCode: '', effectiveDate: '' }
+    : { pdNo: line.pdNo ?? '', statusCode: line.asycudaStatus ?? '', effectiveDate: line.effectiveDate ?? '' };
+}
+
+/** The choice in a line's status cell that takes the line out of the reading. */
+export const DROP_LINE = 'drop';
+
+/** One line as the officer left it on the reading. */
+export interface LineEdit {
+  readonly line: number;
+  readonly pdNo: string;
+  readonly statusCode: string;
+  readonly effectiveDate: string | null;
+}
+
+const PD_NUMBER = /^[A-Z0-9/-]*\d[A-Z0-9/-]*$/;
+
+function isCalendarDate(value: string): boolean {
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!parts) return false;
+  const [year, month, day] = [Number(parts[1]), Number(parts[2]), Number(parts[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+/**
+ * The reading corrected by hand, before it is applied (sponsor, 2026-10-04:
+ * "when uploading the ASYCUDA file the table should be editable after
+ * uploading it").
+ *
+ * A line is corrected in its cells — the PD number, the status ASYCUDA gives,
+ * the date — taken out ("Remove this line"), or added at the foot. The
+ * corrected line is written back into the stored text in the reader's own
+ * form, so the engine that applies the run reads exactly what the screen
+ * shows; a removed line is left blank, so every other line keeps its number.
+ * The difference is then worked out again, as on the day the file was read.
+ * What the file said for each corrected line stays on the report (`edits`),
+ * and the audit row carries both texts.
+ *
+ * `expectedSha` is the text the page was drawn from: a correction made over
+ * somebody else's is refused rather than silently undoing it.
+ */
+export async function editLines(
+  tx: Tx,
+  ctx: ActorContext,
+  id: string,
+  input: { readonly expectedSha: string; readonly edits: readonly LineEdit[]; readonly added?: Omit<LineEdit, 'line'> | null },
+) {
+  await authz.authorize(ctx.principal, 'import', customs.PERMISSION_OBJECT, { branchCode: ctx.branchCode });
+  const [existing] = await tx.select().from(asycudaRun).where(eq(asycudaRun.id, id)).limit(1).for('update');
+  if (!existing) throw new AsycudaFileError('That reading is not on the system.');
+  if (existing.status === 'applied') {
+    throw new AsycudaFileError('That reading has been applied, so what it said is the record now. Read the list again to correct it.');
+  }
+  if (input.expectedSha !== existing.textSha256) {
+    throw new AsycudaFileError('Somebody changed this reading after you opened it. Look at it again, then make your correction.');
+  }
+
+  const statuses = (await customs.statuses(tx)).filter((status) => status.active !== false);
+  const current = await runLines(tx, existing);
+  const lines = existing.lineText.split(/\r?\n/);
+  const report = (existing.report ?? {}) as { edits?: Record<string, { was: string }> };
+  const edits: Record<string, { was: string }> = { ...(report.edits ?? {}) };
+  const changed: { line: number; was: string; now: string }[] = [];
+
+  const lineFor = (where: string, edit: Omit<LineEdit, 'line'>) => {
+    const pdNo = edit.pdNo.trim().toUpperCase();
+    if (!pdNo) throw new AsycudaFileError(`${where} needs a PD number. To take a line out, choose “Remove this line”.`);
+    if (!PD_NUMBER.test(pdNo)) throw new AsycudaFileError(`${where}: "${pdNo}" is not a PD number.`);
+    const status = statuses.find((row) => row.code === edit.statusCode);
+    if (!status) throw new AsycudaFileError(`${where}: choose the status ASYCUDA gives for PD ${pdNo}.`);
+    const date = edit.effectiveDate?.trim() || null;
+    if (date && !isCalendarDate(date)) throw new AsycudaFileError(`${where}: "${date}" is not a date.`);
+    return { text: [pdNo, status.asycudaLabel || status.name, date].filter(Boolean).join('\t'), pdNo, statusCode: status.code, effectiveDate: date };
+  };
+  const intended = new Map<number, ReturnType<typeof lineFor>>();
+
+  for (const edit of input.edits) {
+    const shown = current.find((line) => line.line === edit.line);
+    if (!shown) throw new AsycudaFileError(`Line ${edit.line} is not on this reading.`);
+    const draft = draftOf(shown);
+    const given = { pdNo: edit.pdNo.trim().toUpperCase(), statusCode: edit.statusCode.trim(), effectiveDate: edit.effectiveDate?.trim() ?? '' };
+    if (given.statusCode !== DROP_LINE && given.pdNo === draft.pdNo && given.statusCode === draft.statusCode && given.effectiveDate === draft.effectiveDate) {
+      continue;
+    }
+    // A line nobody could read stays as it was until something is put in it.
+    if (shown.outcome === 'unreadable' && given.statusCode !== DROP_LINE && !given.pdNo && !given.statusCode && !given.effectiveDate) continue;
+    const was = lines[edit.line - 1] ?? '';
+    let now = '';
+    if (given.statusCode !== DROP_LINE) {
+      const next = lineFor(`Line ${edit.line}`, edit);
+      intended.set(edit.line, next);
+      now = next.text;
+    }
+    lines[edit.line - 1] = now;
+    edits[String(edit.line)] ??= { was };
+    changed.push({ line: edit.line, was, now });
+  }
+
+  const added = input.added;
+  if (added && (added.pdNo.trim() || added.statusCode.trim() || added.effectiveDate?.trim())) {
+    const next = lineFor('The new line', added);
+    lines.push(next.text);
+    intended.set(lines.length, next);
+    edits[String(lines.length)] ??= { was: '' };
+    changed.push({ line: lines.length, was: '', now: next.text });
+  }
+
+  if (changed.length === 0) throw new AsycudaFileError('Nothing was changed on the lines.');
+  const text = lines.join('\n');
+  if (text.trim() === '') throw new AsycudaFileError('That would leave the reading with no lines. Read the list again instead.');
+
+  const diff = await customs.asycudaDiff(tx, text);
+  // The line as written back must read as what was chosen; a status whose
+  // name another status also answers to would otherwise apply as the other.
+  for (const [line, next] of intended) {
+    const read = diff.rows.find((row) => row.line === line);
+    if (!read || read.pdNo !== next.pdNo || read.newStatus !== next.statusCode || read.effectiveDate !== next.effectiveDate) {
+      throw new AsycudaFileError(`Line ${line} would not read back as you entered it. Choose another status or ask master data to give it its own ASYCUDA label.`);
+    }
+  }
+  const changeCount = diff.rows.filter((row) => row.outcome === 'change').length;
+  const sha = listSha(text);
+  await tx
+    .update(asycudaRun)
+    .set({
+      lineText: text,
+      textSha256: sha,
+      report: { rows: diff.rows, unreadable: diff.unreadable, edits },
+      lineCount: diff.rows.length,
+      changeCount,
+      unreadableCount: diff.unreadable.length,
+    })
+    .where(eq(asycudaRun.id, id));
+
+  await audit.record(tx, {
+    actorUserId: ctx.principal.userId,
+    action: 'asycuda.lines_edited',
+    objectType: RUN_OBJECT,
+    objectId: id,
+    branchCode: ctx.branchCode,
+    outcome: 'success',
+    before: { sha256: existing.textSha256, lines: changed.map((edit) => ({ line: edit.line, text: edit.was })) },
+    after: {
+      sha256: sha,
+      lines: changed.map((edit) => ({ line: edit.line, text: edit.now })),
+      changes: changeCount,
+      unreadable: diff.unreadable.length,
+      runNo: existing.runNo,
+    },
+  });
+  return { changed: changed.length, changeCount };
 }
 
 /** One reading by its number, with who read and applied it. */

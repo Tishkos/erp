@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useEffect, useLayoutEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -18,7 +18,6 @@ import {
   Activity,
   Files,
   FolderKanban,
-  Grid3X3,
   Handshake,
   Languages,
   LayoutDashboard,
@@ -81,7 +80,14 @@ type ModuleKey =
   | 'monitoring'
   | 'settings';
 
-type UtilityPanel = 'launcher' | 'notifications' | 'messages' | 'user';
+type UtilityPanel = 'notifications' | 'messages' | 'user';
+
+/**
+ * What the header gives up, in order, so the module names keep their size
+ * beside the company's name (`fitNav`): the user's name beside the avatar,
+ * the "Active branch" caption, the chevrons, and last the company's name.
+ */
+const HEADER_SQUEEZE = ['user', 'branch', 'chevrons', 'name'] as const;
 type OpenPopover = ModuleKey | UtilityPanel | null;
 
 interface ModuleDefinition {
@@ -176,7 +182,8 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
   // Purchasing became Payables — one module for everything owed (REQ-AP-001 D7).
   // Three headings (2026-10-04): purchasing & invoices, supplier payments &
   // credits, supplier balances. Its settings and sheet migration are
-  // Administration's; the supplier master is Master Data's.
+  // Administration's; the supplier master heads Supplier Balances (by
+  // direction, 2026-10-04), as Customers heads Sales & Receivables.
   { key: 'payables', icon: ShoppingBag, sectionKeys: ['payables', 'payables_payments', 'payables_suppliers'] },
   // Everything logistics in the system (by direction, 2026-10-02) — the
   // owner's four headings (REQ-LOG-001). The client jobs (`logistics`) are
@@ -282,16 +289,6 @@ function activeLink(pathname: string, modules: readonly ModuleGroup[]): { readon
     }
   }
   return best;
-}
-
-function firstModuleHref(module: ModuleGroup): string | null {
-  for (const section of module.sections) {
-    const item = section.items.find(
-      (candidate): candidate is MenuItem & { readonly href: string } => Boolean(candidate.href),
-    );
-    if (item) return item.href;
-  }
-  return null;
 }
 
 function readStoredPreference<T extends string>(
@@ -445,7 +442,6 @@ export function ErpShell({
 }: ErpShellProps) {
   const shell = useTranslations('shell');
   const page = useTranslations('page');
-  const pending = useTranslations('screen');
   const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
@@ -541,6 +537,50 @@ export function ErpShell({
     setMobileOpen(false);
   }, [pathname]);
 
+  // The module bar shows the modules' names when they fit the space it
+  // actually has, and their icons when they do not. It cannot clip (the module
+  // popovers live inside it), so names that did not fit ran under the branch
+  // picker and the icons — at 1440px, and in English even at 1920px. The width
+  // needed depends on the language and on which modules the person sees, so it
+  // is measured rather than guessed from a breakpoint. The names are never
+  // drawn smaller to fit (by direction, 2026-10-04: "make space for the name
+  // of the company and the names of the modules without shrinking them"): the
+  // header makes the room instead, giving up HEADER_SQUEEZE in order, and only
+  // when all of it is not enough are the names icons. Every render re-fits:
+  // density and component size change the names' widths, not the bar's.
+  const barRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const fitNav = () => {
+    const bar = barRef.current;
+    const nav = navRef.current;
+    const list = nav?.firstElementChild;
+    if (!bar || !nav || !list) return;
+    if (nav.clientWidth === 0) {
+      // The phone layout: the drawer has the modules, the breakpoints the rest.
+      delete bar.dataset.squeeze;
+      delete nav.dataset.fit;
+      return;
+    }
+    for (const fit of ['labels', 'icons'] as const) {
+      nav.dataset.fit = fit;
+      for (let given = 0; given <= HEADER_SQUEEZE.length; given += 1) {
+        bar.dataset.squeeze = HEADER_SQUEEZE.slice(0, given).join(' ');
+        if (list.scrollWidth <= nav.clientWidth) return;
+      }
+    }
+  };
+  useLayoutEffect(fitNav);
+  useEffect(() => {
+    // The bar, not the module list: its width is the window's, so what the
+    // header gives up to make room cannot set the observer off again.
+    const bar = barRef.current;
+    if (!bar) return;
+    const observer = new ResizeObserver(() => fitNav());
+    observer.observe(bar);
+    void document.fonts?.ready.then(() => fitNav());
+    return () => observer.disconnect();
+  }, []);
+
   const togglePopover = (panel: Exclude<OpenPopover, null>) => {
     setOpenPopover((current) => (current === panel ? null : panel));
   };
@@ -593,7 +633,7 @@ export function ErpShell({
   // one is a choice, and the picker submits itself — the whole layout re-reads
   // under the new branch, which is the point of changing it.
   const branchControl = (
-    <div className="erp-branch" title={branchCode}>
+    <div className="erp-branch" title={`${shell('branch')}: ${branchCode || '—'}`}>
       <Building2 className="erp-branch__icon" aria-hidden="true" />
       <span className="erp-branch__content">
         <small className="erp-branch__label">{shell('branch')}</small>
@@ -661,19 +701,8 @@ export function ErpShell({
   return (
     <div className="erp-shell">
       <header className="erp-header">
-        <div className="erp-header__bar">
+        <div className="erp-header__bar" ref={barRef}>
           <div className="erp-header__identity">
-            <button
-              className="erp-icon-button erp-launcher-trigger"
-              type="button"
-              aria-label={shell('app_launcher')}
-              aria-expanded={openPopover === 'launcher'}
-              aria-controls="erp-launcher-panel"
-              onClick={() => togglePopover('launcher')}
-            >
-              <Grid3X3 aria-hidden="true" />
-            </button>
-
             <Link className="erp-brand" href="/" onClick={closeNavigation}>
               <Image
                 className="erp-brand__logo"
@@ -712,7 +741,7 @@ export function ErpShell({
             </button>
           </div>
 
-          <nav className="erp-nav" aria-label={shell('primary_navigation')}>
+          <nav className="erp-nav" aria-label={shell('primary_navigation')} ref={navRef}>
             <ul className="erp-nav__list">
               {modules.map((module) => {
                 const Icon = module.icon;
@@ -779,17 +808,6 @@ export function ErpShell({
             </button>
 
             <button
-              className="erp-icon-button erp-appearance-trigger"
-              type="button"
-              aria-label={shell('appearance')}
-              aria-expanded={appearanceOpen}
-              aria-controls="erp-appearance-drawer"
-              onClick={openAppearance}
-            >
-              <Palette aria-hidden="true" />
-            </button>
-
-            <button
               className="erp-locale-toggle"
               type="button"
               aria-label={shell('language')}
@@ -828,50 +846,6 @@ export function ErpShell({
             aria-hidden="true"
             onPointerDown={() => setOpenPopover(null)}
           />
-        ) : null}
-
-        {openPopover === 'launcher' ? (
-          <section
-            className="erp-utility-popover erp-launcher"
-            id="erp-launcher-panel"
-            aria-label={shell('app_launcher')}
-          >
-            <div className="erp-utility-popover__heading">
-              <Grid3X3 aria-hidden="true" />
-              <h2>{shell('app_launcher')}</h2>
-            </div>
-            <div className="erp-launcher__grid">
-              {modules.map((module) => {
-                const Icon = module.icon;
-                const href = firstModuleHref(module);
-                const content = (
-                  <>
-                    <Icon aria-hidden="true" />
-                    <span>{shell(`module.${module.key}`)}</span>
-                  </>
-                );
-
-                return href ? (
-                  <Link
-                    className="erp-launcher__item"
-                    href={href}
-                    key={module.key}
-                    onClick={closeNavigation}
-                  >
-                    {content}
-                  </Link>
-                ) : (
-                  <span
-                    className="erp-launcher__item erp-launcher__item--pending"
-                    title={pending('not_built')}
-                    key={module.key}
-                  >
-                    {content}
-                  </span>
-                );
-              })}
-            </div>
-          </section>
         ) : null}
 
         {openPopover === 'notifications' ? (

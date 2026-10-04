@@ -27,7 +27,7 @@ test.describe('section tabs navigate without reloading', () => {
     await signIn(page);
 
     // The Supplier Statements' tabs are the Supplier Balances heading's
-    // screens (2026-10-04: the supplier master moved to Master Data).
+    // screens (2026-10-04: the supplier master heads that heading again).
     await page.goto('/payables/open-items');
     await expect(page.getByRole('link', { name: 'Supplier Statements' })).toBeVisible({ timeout: 60_000 });
 

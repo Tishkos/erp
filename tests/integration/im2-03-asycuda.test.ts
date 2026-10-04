@@ -164,6 +164,70 @@ describe('IMPROVEMENT-002 · the ASYCUDA reading is a numbered document', () => 
     );
   });
 
+  it('is corrected by hand before it is applied, and applies what the corrected lines say', async () => {
+    const reading = await read({ text: ['PD No\tStatus\tDate', '9330 Lost in the post', '7777 Validated'].join('\n') });
+    const load = () =>
+      withScope(scope(world.clerk), async (tx) => {
+        const found = await asycuda.runByNo(tx, reading.runNo);
+        return { run: found!.run, lines: await asycuda.runLines(tx, found!.run) };
+      });
+    const edit = (expectedSha: string, edits: asycuda.LineEdit[], added: Omit<asycuda.LineEdit, 'line'> | null = null) =>
+      withScope(scope(world.clerk), (tx) => asycuda.editLines(tx, world.clerk, reading.id, { expectedSha, edits, added }));
+
+    const first = await load();
+    expect(first.lines.map((line) => line.outcome)).toEqual(['unreadable', 'unreadable', 'not_found']);
+
+    // Every cell as the page sends it: the header taken out, 9330 given what
+    // ASYCUDA meant, 7777 left alone, and a line the export left out.
+    const saved = await edit(
+      first.run.textSha256,
+      [
+        { line: 1, pdNo: '', statusCode: asycuda.DROP_LINE, effectiveDate: null },
+        { line: 2, pdNo: '9330', statusCode: 'validated', effectiveDate: '2026-09-08' },
+        { line: 3, pdNo: '7777', statusCode: 'validated', effectiveDate: null },
+      ],
+      { pdNo: '5555', statusCode: 'rejected', effectiveDate: null },
+    );
+    expect(saved).toEqual({ changed: 3, changeCount: 1 });
+
+    const corrected = await load();
+    expect(corrected.lines.map((line) => [line.line, line.outcome, line.editedFrom])).toEqual([
+      [2, 'change', '9330 Lost in the post'],
+      [3, 'not_found', null],
+      [4, 'not_found', ''],
+    ]);
+    expect(corrected.lines[0]).toMatchObject({
+      fields: ['9330', 'Validated', '2026-09-08'],
+      asycudaStatus: 'validated',
+      wasStatus: 'submitted',
+      effectiveDate: '2026-09-08',
+    });
+    expect(corrected.run).toMatchObject({ lineCount: 3, changeCount: 1, unreadableCount: 0, status: 'previewed' });
+    const { rows: trail } = await ownerPool.query(
+      `select before_value, after_value from audit_event where action = 'asycuda.lines_edited' and object_id = $1`,
+      [reading.id],
+    );
+    expect(trail).toHaveLength(1);
+    expect(trail[0].before_value.lines[1]).toEqual({ line: 2, text: '9330 Lost in the post' });
+    expect(trail[0].after_value.lines[1]).toEqual({ line: 2, text: '9330\tValidated\t2026-09-08' });
+
+    // A correction over somebody else's, one that changes nothing, and cells that are not a line, are refused.
+    expect(await rejection(edit(first.run.textSha256, [{ line: 3, pdNo: '7777', statusCode: 'rejected', effectiveDate: null }]))).toMatch(
+      /changed this reading after you opened it/,
+    );
+    const sha = corrected.run.textSha256;
+    expect(await rejection(edit(sha, [{ line: 3, pdNo: '7777', statusCode: 'validated', effectiveDate: null }]))).toMatch(/Nothing was changed/);
+    expect(await rejection(edit(sha, [{ line: 3, pdNo: '', statusCode: 'validated', effectiveDate: null }]))).toMatch(/needs a PD number/);
+    expect(await rejection(edit(sha, [{ line: 3, pdNo: '7777', statusCode: 'validated', effectiveDate: '2026-02-30' }]))).toMatch(/not a date/);
+    expect(await rejection(edit(sha, [{ line: 3, pdNo: '7777', statusCode: 'lost', effectiveDate: null }]))).toMatch(/choose the status/);
+
+    // Applied, the engine reads the corrected text: 9330 is validated as of the date typed in.
+    await withScope(scope(world.clerk), (tx) => asycuda.applyRun(tx, world.clerk, reading.id));
+    const { rows } = await ownerPool.query(`select status_code, status_date::text as status_date from customs_pd where id = $1`, [pdId]);
+    expect(rows[0]).toEqual({ status_code: 'validated', status_date: '2026-09-08' });
+    expect(await rejection(edit(sha, [{ line: 3, pdNo: '7777', statusCode: 'rejected', effectiveDate: null }]))).toMatch(/has been applied/);
+  });
+
   it('prints the reading with its lines', async () => {
     const reading = await read({ text: LIST });
     const built = await withScope(scope(world.clerk), (tx) =>

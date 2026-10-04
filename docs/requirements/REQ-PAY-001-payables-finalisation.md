@@ -90,7 +90,7 @@ are not tied to a return).
 | Item | Verdict |
 |---|---|
 | Three headings | **IMPROVE** — done (PAY1). |
-| Suppliers | **REDIRECT** the menu item to Master Data; the route stays `/payables/suppliers` (D-FX-1). |
+| Suppliers | **REDIRECT** the menu item to Master Data; the route stays `/payables/suppliers` (D-FX-1). **Superseded 2026-10-04, by direction** ("move the suppliers to payable"): Suppliers is the first item of Supplier Balances (`payables_suppliers`), still one home, same route. |
 | Payables Settings (`/administration/payables-settings`) | Inspected: payable types, stages, time limits, hold reason codes, expense categories, event codes — genuinely payables configuration. **REDIRECT** to the Administration heading. |
 | Sheet Migration (`/administration/payables-migration`) | One-time import (§24.3). **REDIRECT** to Administration beside Legacy Books Import, labelled "Payables Sheet Migration (data import)". |
 | `ap_payments`, `ap_advances`, `ap_allocations`, `ap_ageing`, `supplier_ledger` | **REMOVE** — never built, and each was a built screen under a second name. |
@@ -146,7 +146,8 @@ Each stage lands with its test. The criteria are the specification's §26.
 4.1 D-PAY-1 approved (notes from the audit trail; no table). 4.2 D-PAY-2
 approved (debit note = AP invoice). 4.3 a standalone credit note goes
 Draft → Approve → Post; nothing posts on creation. 4.4 the five duplicate menu
-items are removed, not hidden. 4.5 Suppliers stays under Master Data. 4.6
+items are removed, not hidden. 4.5 Suppliers stays under Master Data (reversed
+by the owner later on 2026-10-04: Suppliers heads Supplier Balances). 4.6
 Payment Application = the request to the bank; allocation lives on the
 supplier payment — said on the application's record and register. 4.7 four
 doors and the supplier link on every purchase-side record from draft to

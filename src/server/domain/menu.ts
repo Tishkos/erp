@@ -103,14 +103,15 @@ export const MENU: readonly MenuSection[] = Object.freeze([
   {
     /*
      * Sales & Receivables — the module's one heading, in the order a
-     * receivable lives (by direction, 2026-10-04): the invoice that creates
-     * it, the receipt that pays it, the credits a customer holds, the
-     * statement and the ageing that read it, the notes and returns that
-     * correct it, and the reconciliation that proves it to the ledger.
+     * receivable lives (by direction, 2026-10-04): the customer it is owed
+     * by, the invoice that creates it, the receipt that pays it, the credits
+     * a customer holds, the statement and the ageing that read it, the notes
+     * and returns that correct it, and the reconciliation that proves it to
+     * the ledger.
      *
-     * Customers are Master Data's — "Customers belong only in Master Data" —
-     * so the customer master is listed there, once, and every screen here
-     * reads it. Its route did not move (D-FX-1).
+     * Customers came back here from Master Data (by direction, 2026-10-04:
+     * "move … customer [to] receivable"), first, before the documents that
+     * name them. Listed once; the route did not move (D-FX-1).
      *
      * Credits & Advances and Customer Reconciliation are Appendix A's
      * Allocations and Reconciliation (finance_ar), brought here and given
@@ -119,6 +120,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'sales',
     ordinal: 3,
     items: [
+      page('customers', 'business_partner', '/sales/customers'),
       page('ar_invoices', 'ar_invoice'),
       page('customer_receipts', 'customer_receipt'),
       // An object anybody who reads receipts already holds: the credits are
@@ -161,10 +163,12 @@ export const MENU: readonly MenuSection[] = Object.freeze([
      * the order a payable lives: what is bought and invoiced, how it is paid
      * and what the supplier holds, and the balances. The customs
      * declarations, bills of lading and containers went to Logistics and the
-     * bank loans to Treasury & Banking (FIX-1); the supplier master went to
-     * Master Data and the module's settings and sheet migration to
-     * Administration. Routes did not move (D-FX-1), so every item that left
-     * the section it was derived from names its route.
+     * bank loans to Treasury & Banking (FIX-1); the module's settings and
+     * sheet migration went to Administration. The supplier master went to
+     * Master Data and came back the same day, by direction (2026-10-04:
+     * "move the suppliers to payable"), first under Supplier Balances.
+     * Routes did not move (D-FX-1), so every item that left the section it
+     * was derived from names its route.
      *
      * Five never-built items were the same screens under a second name and
      * are gone: Payments (Supplier Payments), Advances (Supplier Advances),
@@ -210,6 +214,10 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'payables_suppliers',
     ordinal: 21,
     items: [
+      // The supplier master — whom the balances below are owed to; its
+      // profile shows the payables position (by direction, 2026-10-04). The
+      // address stays /payables/suppliers (D-FX-1).
+      page('suppliers', 'business_partner', '/payables/suppliers'),
       // The supplier's side of the same mirror. See the note under Sales.
       page('ap_statements', 'business_partner', '/payables/supplier-statements'),
       page('ap_open_items', 'ap_invoice', '/payables/open-items'),
@@ -570,9 +578,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'master_data',
     ordinal: 18,
     items: [
-      // "Customers belong only in Master Data" (2026-10-04). The route is the
-      // one every customer link already uses (D-FX-1).
-      page('customers', 'business_partner', '/sales/customers'),
+      // Customers and Suppliers went back to Receivables and Payables, by
+      // direction (2026-10-04), so this heading holds reference data only.
       page('chart_of_accounts', 'chart_of_account', '/master-data/chart-of-accounts'),
       page('statement_mapping', 'financial_statement', '/master-data/statement-mapping'),
       page('currencies_rates', 'exchange_rate', '/master-data/exchange-rates'),
@@ -582,10 +589,6 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('supplier_item_codes', 'supplier_item_code'),
       page('barcodes', 'barcode'),
       page('price_lists', 'price_list'),
-      // The supplier master (2026-10-04) — reference data every purchasing
-      // document quotes, beside the other partners' terms and methods. The
-      // address stays /payables/suppliers (D-FX-1).
-      page('suppliers', 'business_partner', '/payables/suppliers'),
     ],
   },
   {
