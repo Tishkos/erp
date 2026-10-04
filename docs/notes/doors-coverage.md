@@ -41,13 +41,14 @@ under the document) · ❌ missing. **Print model**: the export key, or none.
 
 | Record page | P | A | N | H | Print model | Parties → profile | Owner |
 |---|---|---|---|---|---|---|---|
-| `payables/shipments/[blNo]` — B/L | ✅ | ✅ | ❌ | ✅ | `bill_of_lading` | import, containers: links ✅; supplier, port: text ❌ | logistics |
-| `payables/containers/[containerNo]` | ❌ | ✅ | ❌ | ✅ | none | import, B/L: links ✅; supplier, warehouse: text ❌ | logistics |
-| `payables/pd/[pdNo]` — PD | ❌ | ✅ | ◐ (box + `last_note`) | ✅ | none | import, applications: links ✅; supplier, bank: text ❌ | logistics |
-| `payables/pd/asycuda/[runNo]` — ASYCUDA reading | ✅ | ✅ | ❌ | ✅ | `asycuda_reading` | PDs: links ✅ | logistics |
+| `payables/shipments/[blNo]` — B/L | ✅ | ✅ | ✅ | ✅ | `bill_of_lading` | import, supplier, port, containers, warehouse: `ProfileLink` ✅ | logistics — done (REQ-LOG-001) |
+| `payables/containers/[containerNo]` | ✅ | ✅ | ✅ | ✅ | `shipment_container` **(new)**; the receipt prints as `container_receipt` from its field | import, supplier, B/L, warehouse, PD: `ProfileLink` ✅ | logistics — done |
+| `payables/pd/[pdNo]` — PD | ✅ | ✅ | ✅ | ✅ | `customs_pd` **(new)** | import, supplier, bank, PDs, applications, B/Ls, containers: `ProfileLink` ✅ | logistics — done |
+| `payables/pd/asycuda/[runNo]` — ASYCUDA reading | ✅ | ✅ | ✅ | ✅ | `asycuda_reading` | PDs, imports: `ProfileLink` ✅ | logistics — done |
+| `logistics/customs-declarations/[declarationNo]` — customs declaration | ✅ | ✅ | ✅ | ✅ | `customs_declaration` **(new)** | import, supplier, PD: `ProfileLink` ✅ | logistics — done |
+| `logistics/ports/[code]` — port (profile) | ✅ | ✅ | ✅ | ✅ | `port` **(new)** | B/Ls, imports, suppliers, containers: `ProfileLink` ✅ | logistics — done |
 
-The B/L, the PD, the container and the ASYCUDA reading draw the clock before
-the printer; the rule's order is printer, paperclip, notes, clock.
+All six draw printer, paperclip, notes, clock in the rule's order (REQ-LOG-001, 2026-10-04).
 
 ## Project System (no module agent — shared, Phase 2)
 
@@ -89,7 +90,8 @@ history (◐) and, where it has one, its statement.
 | `master-data/warehouses/[code]` | `warehouse` | ◐ | inventory |
 | `hr/employees/[employeeNo]` | `employee` | ◐ | shared |
 | `projects/[code]` | `project` | ◐ | shared |
-| — | `port`, `carrier` | missing — **logistics builds it** | logistics |
+| `logistics/ports/[code]` | `port` | ◐ (four doors) | logistics — done |
+| — | `carrier` | missing — no carrier record exists (a B/L's shipping line is text) | logistics |
 | — | `currency`, `fixed_asset`, `investment` | missing — those modules have no delivered screens; nothing to link from yet | shared |
 
 ## What changed on `feat/shared-module`
