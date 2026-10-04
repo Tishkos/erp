@@ -502,11 +502,35 @@ function tail(file: string, bytes: number): string {
   return buffer.toString('utf8');
 }
 
-/** The application's own error log, newest last: what failed, where, and its reference. */
-function recentErrors(limit: number): string[] {
+/**
+ * When the running build was put there: the deploy writes REVISION last. In
+ * the log's own clock (the server's local time, as pm2 stamps its lines), so
+ * the two compare as text.
+ */
+function deployedAt(): string | null {
+  for (const candidate of ['REVISION', '../REVISION']) {
+    const file = join(process.cwd(), candidate);
+    if (!existsSync(file)) continue;
+    const at = statSync(file).mtime;
+    const two = (value: number) => String(value).padStart(2, '0');
+    return `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())}T${two(at.getHours())}:${two(at.getMinutes())}`;
+  }
+  return null;
+}
+
+/**
+ * The application's own error log: what failed, and whether it failed under
+ * the build that is running now.
+ *
+ * An error from before the last deploy is very often one that deploy fixed —
+ * the first time this was read on the live server he reported a crash of a
+ * screen that had since been moved and mended. So the two are told apart.
+ */
+function recentErrors(limit: number): { readonly since: string | null; readonly current: string[]; readonly earlier: string[] } {
   const file = process.env.ERP_ERROR_LOG?.trim() || '/root/.pm2/logs/qs-erp-error.log';
-  if (!existsSync(file)) return [];
-  const seen = new Map<string, { line: string; count: number }>();
+  const since = process.env.ERP_DEPLOYED_AT?.trim() || deployedAt();
+  if (!existsSync(file)) return { since, current: [], earlier: [] };
+  const seen = new Map<string, { stamp: string; said: string; count: number }>();
   for (const raw of tail(file, 200_000).split(/\r?\n/)) {
     // A stack frame, a brace, a warning about listeners: not what went wrong.
     if (!/(Error|error|MISSING_MESSAGE|digest|failed)/.test(raw) || /^\S*\s+at |MaxListenersExceeded|DeprecationWarning/.test(raw)) continue;
@@ -514,9 +538,17 @@ function recentErrors(limit: number): string[] {
     const said = raw.replace(/^\d{4}-\d{2}-\d{2}T[\d:]+:\s*/, '').trim().slice(0, 220);
     if (!said) continue;
     const before = seen.get(said);
-    seen.set(said, { line: `${stamp} ${said}`, count: (before?.count ?? 0) + 1 });
+    // Kept under its latest time: an error still happening is a current one.
+    seen.set(said, { stamp, said, count: (before?.count ?? 0) + 1 });
   }
-  return [...seen.values()].slice(-limit).map((one) => `${one.line}${one.count > 1 ? ` (×${one.count})` : ''}`);
+  const all = [...seen.values()];
+  const line = (one: { stamp: string; said: string; count: number }) => `${one.stamp} ${one.said}${one.count > 1 ? ` (×${one.count})` : ''}`;
+  const isCurrent = (one: { stamp: string }) => !since || !one.stamp || one.stamp >= since;
+  return {
+    since,
+    current: all.filter(isCurrent).slice(-limit).map(line),
+    earlier: all.filter((one) => !isCurrent(one)).slice(-5).map(line),
+  };
 }
 
 /**
@@ -556,7 +588,21 @@ export async function systemStatus(tx: Tx, principal: Principal): Promise<string
   if (waiting) out.push('', `NOTIFICATIONS: ${text(waiting.pending)} waiting to be delivered, ${text(waiting.failed)} failed.`);
 
   const errors = recentErrors(12);
-  out.push('', errors.length === 0 ? 'ERROR LOG: nothing recent that I can read from here.' : `ERROR LOG — the latest ${errors.length} distinct error(s) the application wrote (UTC), oldest first:`, ...errors);
-  if (errors.length > 0) out.push('An error a person saw carries a reference (its digest): ask them for it and look for it here. A repeated one is a defect — write it down with report_issue.');
+  const under = errors.since ? ` since this build was deployed (${errors.since.replace('T', ' ')}, server time)` : '';
+  out.push(
+    '',
+    errors.current.length === 0
+      ? `ERROR LOG: no error${under || ' that I can read from here'}.`
+      : `ERROR LOG — ${errors.current.length} distinct error(s)${under}, oldest first (server time):`,
+    ...errors.current,
+  );
+  if (errors.earlier.length > 0) {
+    out.push(
+      '',
+      `BEFORE this build — ${errors.earlier.length} error(s) from an earlier build. A deploy since then may well have fixed them: do NOT report one as a current defect unless it also appears above, or you have checked that it still happens.`,
+      ...errors.earlier,
+    );
+  }
+  if (errors.current.length > 0) out.push('An error a person saw carries a reference (its digest): ask them for it and look for it here. One that repeats under the current build is a defect — write it down with report_issue.');
   return out.join(NL);
 }

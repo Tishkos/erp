@@ -745,9 +745,11 @@ describe('he reads a thing whole before he explains it', () => {
         '2026-10-04T20:39:18: Error: The Server Reference ID did not match the expected format.',
       ].join('\n'),
     );
-    const before = { jobs: process.env.JOB_STATE_DIR, log: process.env.ERP_ERROR_LOG };
+    const before = { jobs: process.env.JOB_STATE_DIR, log: process.env.ERP_ERROR_LOG, deployed: process.env.ERP_DEPLOYED_AT };
     process.env.JOB_STATE_DIR = jobs;
     process.env.ERP_ERROR_LOG = log;
+    // The build that is running was deployed between the two errors.
+    process.env.ERP_DEPLOYED_AT = '2026-10-04T20:00';
     try {
       const brief = await tool(nobody, 'system_status');
       expect(brief).toMatch(/The system is (HEALTHY|DEGRADED): the database answers; migrations \d+ applied of \d+/);
@@ -758,15 +760,19 @@ describe('he reads a thing whole before he explains it', () => {
       expect(full).toMatch(/SCHEDULED JOBS \(2\): 1 FAILED on its last run\./);
       expect(full).toMatch(/backup: ok · last run 04\/10\/2026 05:00 · 41s/);
       expect(full).toMatch(/closing-checks: FAILED \(exit 1\)/);
-      // The same error twice is said once, with its count; a stack frame and a warning are not errors.
-      expect(full).toMatch(/2026-10-04T19:48 Error: MISSING_MESSAGE: posting_map\.role\.inventory \(ar\) \(×2\)/);
-      expect(full).toMatch(/The Server Reference ID did not match/);
+      // An error under the running build is a current one…
+      expect(full).toMatch(/ERROR LOG — 1 distinct error\(s\) since this build was deployed \(2026-10-04 20:00, server time\)[^\n]*\n2026-10-04T20:39 Error: The Server Reference ID did not match/);
+      // …and one from before it is set apart, said once with its count, and not to be reported as it stands.
+      expect(full).toMatch(/BEFORE this build — 1 error\(s\) from an earlier build\.[^\n]*do NOT report one as a current defect[^\n]*\n2026-10-04T19:48 Error: MISSING_MESSAGE: posting_map\.role\.inventory \(ar\) \(×2\)/);
+      // A stack frame and a warning are not errors.
       expect(full).not.toMatch(/MaxListenersExceededWarning|chunks\/ssr/);
     } finally {
       if (before.jobs === undefined) delete process.env.JOB_STATE_DIR;
       else process.env.JOB_STATE_DIR = before.jobs;
       if (before.log === undefined) delete process.env.ERP_ERROR_LOG;
       else process.env.ERP_ERROR_LOG = before.log;
+      if (before.deployed === undefined) delete process.env.ERP_DEPLOYED_AT;
+      else process.env.ERP_DEPLOYED_AT = before.deployed;
     }
   });
 
