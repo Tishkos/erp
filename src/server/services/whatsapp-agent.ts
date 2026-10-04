@@ -19,6 +19,7 @@ import * as itemsService from './items';
 import * as openingStockService from './opening-stock';
 import * as doService from './whatsapp-do';
 import * as insight from './whatsapp-insight';
+import * as review from './whatsapp-review';
 import * as sqlService from './whatsapp-sql';
 import * as systemGuide from './system-guide';
 import { runAgent, type AgentClient, type AgentResult, type AskedPicture, type PriorTurn, type ToolOutcome } from '../domain/whatsapp-agent';
@@ -385,6 +386,21 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
       }
       case 'document_story':
         return { text: await insight.documentStory(ctx.tx, ctx.principal, String(args.no ?? ''), systemGuide.appUrl()) };
+      case 'stuck_documents':
+        return {
+          text: await review.stuckDocuments(
+            ctx.tx,
+            ctx.principal,
+            {
+              ...(typeof args.olderThanDays === 'number' ? { olderThanDays: args.olderThanDays } : {}),
+              ...(args.mine === true ? { mine: true } : {}),
+              ...(typeof args.kind === 'string' && args.kind.trim() ? { kind: args.kind } : {}),
+            },
+            systemGuide.appUrl(),
+          ),
+        };
+      case 'review_document':
+        return { text: await review.reviewDocument(ctx.tx, ctx.principal, String(args.no ?? ''), systemGuide.appUrl()) };
       case 'activity_log':
         return {
           text: await insight.activityLog(ctx.tx, ctx.principal, {

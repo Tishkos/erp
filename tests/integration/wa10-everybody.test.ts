@@ -674,7 +674,7 @@ describe('he reads a thing whole before he explains it', () => {
     expect(submitted).toContain('status: SUBMITTED');
     expect(submitted).toMatch(/submitted by /);
     expect(submitted).toMatch(/HISTORY \(\d+ event\(s\), oldest first\):[\s\S]*whatsapp\.action\.document_step/);
-    expect(submitted).toMatch(/Waiting to be posted by a second person/);
+    expect(submitted).toMatch(/Waiting to be posted by somebody who holds post and approve on purchase invoices/);
 
     // As the asker: no grant, no story; no such document, said plainly.
     expect(await tool(nobody, 'document_story', { no: invoice.invoiceNo })).toMatch(/role does not include "purchase invoice"/);

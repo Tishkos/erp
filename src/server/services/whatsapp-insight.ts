@@ -222,8 +222,8 @@ function nextFor(key: Key, status: string): string {
       reversed: 'It was reversed: its journal is mirrored and its stock put back. It cannot be used again; raise a new one.',
     },
     ap_invoice: {
-      draft: 'NOTHING HAS POSTED: no journal, no stock in, nothing owed. Next: submit it, then it is posted by somebody who may approve and did not raise it (a super user may post their own). WHAT POSTING WILL DO: credit the supplier with what is owed, and every stock line that names a warehouse receives its goods into that warehouse at that moment — no separate goods receipt is needed for such a line (a line whose goods already came in on a goods receipt names no warehouse and clears GRNI instead). On an IMPORT the warehouse is In Process: the goods are then owned and in transit, not yet available to sell, and move on to the real warehouse as the import’s containers are received.',
-      submitted: 'Waiting to be posted by a second person — or by a super user, who may post their own (posting IS the approval). Nothing is owed and no stock has arrived until then. WHAT POSTING WILL DO: credit the supplier, and bring each stock line that names a warehouse into that warehouse (an import’s into In Process — in transit, not yet available).',
+      draft: 'NOTHING HAS POSTED: no journal, no stock in, nothing owed. Next: submit it, then it is posted by somebody who holds post and approve on purchase invoices. WHAT POSTING WILL DO: credit the supplier with what is owed, and every stock line that names a warehouse receives its goods into that warehouse at that moment — no separate goods receipt is needed for such a line (a line whose goods already came in on a goods receipt names no warehouse and clears GRNI instead). On an IMPORT the warehouse is In Process: the goods are then owned and in transit, not yet available to sell, and move on to the real warehouse as the import’s containers are received.',
+      submitted: 'Waiting to be posted by somebody who holds post and approve on purchase invoices (posting IS the approval). Nothing is owed and no stock has arrived until then. WHAT POSTING WILL DO: credit the supplier, and bring each stock line that names a warehouse into that warehouse (an import’s into In Process — in transit, not yet available).',
       posted: 'It is in the books: the supplier is owed, and its stock lines are in their warehouse — see STOCK MOVEMENTS above (an import’s are in In Process: owned, in transit, not available until the containers are received). Next: payment; or reverse it with a reason.',
       reversed: 'It was reversed: its journal is mirrored and its stock put back.',
     },
@@ -262,8 +262,10 @@ export async function documentStory(tx: Tx, principal: Principal, raw: string, b
   if (!family) {
     return `I cannot tell what kind of document ${no} is from its number. The kinds I can read whole: ${DOCUMENT_FAMILIES.map((one) => `${one.label} (${one.prefix}-…)`).join(', ')}. For a payable (IMP-, PUR-, SVC-…) use payable_status; for a payment application, application_status.`;
   }
-  if (!can(principal, 'view', family.key)) {
-    return `This person's role does not include "${family.label}" (the permission view on ${family.key}), so it is not theirs to see. Tell them so, and that an administrator gives it on Settings → Administration → Roles.`;
+  // An internal transfer has no grant of its own: it is read by whoever reads the bank and cash accounts.
+  const grant = family.key === 'bank_transfer' ? 'bank_cash_account' : family.key;
+  if (!can(principal, 'view', grant)) {
+    return `This person's role does not include "${family.label}" (the permission view on ${grant}), so it is not theirs to see. Tell them so, and that an administrator gives it on Settings → Administration → Roles.`;
   }
   const shape = SHAPES[family.key];
   const [header] = await rowsOf(tx, sql`select to_jsonb(t) as row from ${sql.identifier(shape.table)} t where upper(t.${sql.identifier(shape.number)}) = ${no} limit 1`);

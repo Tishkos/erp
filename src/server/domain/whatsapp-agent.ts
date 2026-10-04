@@ -431,6 +431,26 @@ export const AGENT_TOOLS = [
     input_schema: { type: 'object', properties: { no: { ...string, description: 'The document number.' } }, required: ['no'], additionalProperties: false },
   },
   {
+    name: 'stuck_documents',
+    description:
+      'Everything that is WAITING, in one list: documents saved as a draft and never sent on, submitted and waiting for a second person, approved and never POSTED (so the books have not moved), opening stock not approved, payment applications sent and not confirmed, customers and suppliers still prospects, and what waits in approval inboxes. Each with its number, party, amount, age and what it is waiting for. Use it for "what is stuck", "what is pending", "what do we still have to do", "why is nothing showing up" when no document was named, a morning check, and before a period is closed. Every filter is optional.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        olderThanDays: { type: 'integer', description: 'Only what has waited at least this many days. Leave out for everything.' },
+        mine: { ...boolean, description: 'True for only what the person asking raised themselves.' },
+        kind: { ...string, description: 'One kind only: a number prefix (INV, API, JE, PO…), or a name such as "sales", "purchase", "journal", "payment applications", "prospects", "inbox".' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'review_document',
+    description:
+      'Would this document go through, and is anything odd about it — BEFORE the next step is taken. For one document by its number it reports BLOCKERS (what the system would refuse: a closed period, not enough stock in the warehouse with how many there are against how many are needed, no lines, a journal that does not balance, a missing account), WARNINGS (legal but worth a second look: the supplier\'s invoice number used before, the same invoice entered twice, a due date missing or equal to the invoice date, a price far from the last one or a sale below cost, a date in the future or long past, a customer on hold or over their limit) and what was checked and found in order. Use it whenever somebody asks you to submit, approve or post something, or asks "check this", "is this right", "can I post it" — and before you propose a post yourself.',
+    input_schema: { type: 'object', properties: { no: { ...string, description: 'The document number.' } }, required: ['no'], additionalProperties: false },
+  },
+  {
     name: 'activity_log',
     description:
       'The audit trail, searched: who did what and when, and what the system REFUSED and why. Use it for "who changed / posted / deleted this", "what did <person> do today", "why was I refused", "what happened this morning", and to see whether an action somebody says they took really reached the system. Every filter is optional; with none it is the latest events. For administrators (the Audit Log screen\'s permission).',
@@ -528,7 +548,7 @@ export function systemPrompt(input: {
     '',
     'THE RULES THE COMPANY WORKS BY, so you can explain a refusal rather than just report it:',
     '• Whoever raises a document does not approve it. Approval is a second person, and above an account\'s limit — or when no limit is set — it is the CEO.',
-    '• The exception to that, by the owner\'s direction of 2026-10-03: a SUPER USER approves alone — a super user may approve or post what they raised themselves, because the company has few approvers and a rule nobody can satisfy approves nothing. In this testing phase everybody is a super user. So never tell a super user they must find a second person, and never report a super user\'s approval of their own document as a defect: check with document_story who approved it, and if that person is a super user it is the rule working. Each document keeps this rule in its own service; a sales invoice\'s approval asks only for the approve permission.',
+    '• The exception to that, by the owner\'s direction of 2026-10-03: a SUPER USER approves alone — a super user may approve or post what they raised themselves, because the company has few approvers and a rule nobody can satisfy approves nothing. In this testing phase everybody is a super user. So never tell a super user they must find a second person, and never report a super user\'s approval of their own document as a defect: check with document_story who approved it, and if that person is a super user it is the rule working. Each document keeps this rule in its own service, and not every one keeps it: a purchase order\'s approval and a journal\'s do refuse the person who raised it; a sales invoice\'s approval and a purchase invoice\'s posting ask only for the permission (approve; post and approve) and do not look at who raised it. So say "somebody who holds the permission", not "a second person", for those two — review_document tells you what the next step needs.',
     '• Opening stock is the exception, and do not tell anybody otherwise: the owner removed the second-person rule for it on 2026-09-27, because the company opens its books with one person who holds both roles and a control nobody can satisfy would mean the books never open. Approving opening stock needs the `approve` right on opening_stock and nothing else — it does not matter who raised it.',
     '• When something is refused for a permission, say which role holds that right rather than just repeating the refusal. `approve` on opening_stock belongs to accounting_manager; the ceo role does not carry it. A right is granted by giving somebody the role on Administration → Users, and being a super user does not substitute for it.',
     '• A posted document is never edited. It is reversed, which mirrors its journal, and raised again. A posted invoice with a payment against it cannot even be reversed until the payment is undone.',
@@ -579,6 +599,7 @@ export function systemPrompt(input: {
     '',
     'HOW TO ANSWER:',
     '• INVESTIGATE BEFORE YOU ANSWER. "Why is X empty / missing / wrong / not showing" is a question about a document\'s state: find the document and read it whole with document_story — its status, its journal, its stock movements and its history say why in one reading. Nine times in ten the answer is that the document was saved or approved but never POSTED, or that the stock it needs was never brought in. Say exactly which, with the document number and what you read, and then the one next step. Do not answer such a question from general knowledge when you can read the document.',
+    '• CHECK BEFORE A STEP. When somebody asks you to submit, approve or post a document — or asks whether they can — call review_document first. A blocker means the system would refuse: say which one, with its figures, and what fixes it, instead of proposing a step that will fail. A warning is theirs to decide: put it to them in one line each before you ask for the yes. When no document is named and the question is what is waiting or what is left to do, stuck_documents is the list.',
     '• When somebody says "it gave me an error" or "it did not let me": activity_log (outcome problems, their name) shows what the system refused and its reason; system_status shows the errors the application logged. Read them before you explain, and report a real defect with report_issue.',
     '• When a query is refused you are handed the real columns: write it again at once. Ask the schema tool for several tables in one call when you are going to join them. Never tell the group the database is down because one query failed — system_status says whether it is.',
     '• Be a colleague, not a form. Answer the question that was asked, in the language it was asked in (Arabic or English), briefly — this is WhatsApp, not a report.',

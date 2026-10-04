@@ -212,8 +212,10 @@ export async function describeDocument(tx: Tx, principal: Principal, raw: string
   if (!family) {
     return `I cannot tell what kind of document ${no} is from its number. The kinds I can look up by number: ${DOCUMENT_FAMILIES.map((one) => `${one.label} (${one.prefix}-…)`).join(', ')}. For a payable (IMP-, PUR-, SVC-…) use payable_status; for a payment application, application_status.`;
   }
-  if (!can(principal, 'view', family.key)) {
-    return `This person's role does not include "${family.label}" (the permission view on ${family.key}), so it is not theirs to see. Tell them so, and that an administrator gives it on Settings → Administration → Roles.`;
+  // An internal transfer has no grant of its own: it is read by whoever reads the bank and cash accounts.
+  const grant = family.key === 'bank_transfer' ? 'bank_cash_account' : family.key;
+  if (!can(principal, 'view', grant)) {
+    return `This person's role does not include "${family.label}" (the permission view on ${grant}), so it is not theirs to see. Tell them so, and that an administrator gives it on Settings → Administration → Roles.`;
   }
   const found = await locate(tx, family, no);
   if (!found) return `There is no ${family.label} ${no} that this person can see.`;

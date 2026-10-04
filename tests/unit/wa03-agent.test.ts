@@ -107,7 +107,7 @@ describe('WA-3 · the tool list', () => {
   it('names each tool once, and covers the books as well as the payables', () => {
     const names = AGENT_TOOLS.map((tool) => tool.name);
     expect(new Set(names).size).toBe(names.length);
-    for (const needed of ['trial_balance', 'open_items', 'stock_valuation', 'approvals_waiting', 'list_warehouses', 'screens', 'guide', 'report_issue', 'reported_issues', 'show_screen', 'document_status', 'document_story', 'activity_log', 'system_status', 'accounts', 'exchange_rate']) {
+    for (const needed of ['trial_balance', 'open_items', 'stock_valuation', 'approvals_waiting', 'list_warehouses', 'screens', 'guide', 'report_issue', 'reported_issues', 'show_screen', 'document_status', 'document_story', 'activity_log', 'system_status', 'accounts', 'exchange_rate', 'stuck_documents', 'review_document']) {
       expect(names, needed).toContain(needed);
     }
   });
