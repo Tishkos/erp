@@ -125,6 +125,8 @@ export interface MessageView {
   readonly retracted: { readonly at: string; readonly byName: string; readonly reason: string } | null;
   readonly mentionsMe: boolean;
   readonly mentionNames: string[];
+  /** The browser's id for a message this person sent, so a pending copy and the stored one are one. */
+  readonly clientId: string | null;
   readonly replyTo: QuoteView | null;
   readonly files: FileView[];
   readonly reactions: ReactionView[];
@@ -156,6 +158,8 @@ export interface ThreadView {
   readonly messages: MessageView[];
   readonly hasMore: boolean;
   readonly typing: string[];
+  /** The oldest message this person has not seen — where "unread" begins on opening. */
+  readonly firstUnseenSeq: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -364,6 +368,9 @@ export async function threadOf(
     .map((r) => members.find((m) => m.userId === r.userId)?.name ?? '')
     .filter(Boolean);
 
+  const first = await tx.execute(sql`select app_chat_first_unseen(${conversationId}::uuid, ${me(ctx)}::uuid) as seq`);
+  const firstUnseen = (first.rows[0] as { seq: string | null } | undefined)?.seq ?? null;
+
   return {
     id: conversation.id,
     kind: conversation.kind as 'direct' | 'group',
@@ -378,7 +385,20 @@ export async function threadOf(
     messages: messages.messages,
     hasMore: messages.hasMore,
     typing,
+    firstUnseenSeq: firstUnseen === null ? null : Number(firstUnseen),
   };
+}
+
+/** One page of older messages — "earlier" on a long conversation. */
+export async function earlier(
+  tx: Tx,
+  ctx: ActorContext,
+  conversationId: string,
+  beforeSeq: number,
+  limit = CHAT_PAGE_SIZE,
+): Promise<{ messages: MessageView[]; hasMore: boolean }> {
+  const mine = await chat.membership(tx, ctx, conversationId);
+  return messageWindow(tx, ctx, conversationId, mine.firstSeq, { beforeSeq, limit });
 }
 
 async function messageWindow(
@@ -400,6 +420,7 @@ async function messageWindow(
       meta: chatMessage.meta,
       replyToId: chatMessage.replyToId,
       mentions: chatMessage.mentions,
+      clientId: chatMessage.clientId,
       createdAt: chatMessage.createdAt,
       retractedAt: chatMessage.retractedAt,
       retractedBy: chatMessage.retractedBy,
@@ -562,6 +583,7 @@ async function messageWindow(
       retracted,
       mentionsMe: r.mentions.includes(me(ctx)),
       mentionNames: retracted ? [] : r.mentions.map((id) => names.get(id) ?? '').filter(Boolean),
+      clientId: isMine ? r.clientId : null,
       replyTo: r.replyToId
         ? (quoted.get(r.replyToId) ?? { id: r.replyToId, seq: 0, senderName: '', preview: '', retracted: false, available: false })
         : null,
@@ -591,7 +613,9 @@ export interface SyncRequest {
   readonly ack: Readonly<Record<string, number>>;
   /** The open conversation was read on screen up to this message. */
   readonly seen?: { readonly id: string; readonly upTo: number } | null;
-  readonly limit?: number;
+  /** Whether the person is typing in the open conversation; absent leaves it as it was. */
+  readonly typing?: boolean | null;
+  readonly limit?: number | undefined;
 }
 
 export interface SyncResponse {
@@ -625,6 +649,14 @@ export async function sync(tx: Tx, ctx: ActorContext, request: SyncRequest): Pro
   if (request.seen && request.visible) {
     try {
       await chat.markSeen(tx, ctx, request.seen.id, request.seen.upTo);
+    } catch (error) {
+      if (!(error instanceof ChatError)) throw error;
+    }
+  }
+
+  if (request.open && typeof request.typing === 'boolean') {
+    try {
+      await chat.setTyping(tx, ctx, request.open, request.typing);
     } catch (error) {
       if (!(error instanceof ChatError)) throw error;
     }
@@ -672,6 +704,40 @@ export async function sync(tx: Tx, ctx: ActorContext, request: SyncRequest): Pro
     thread,
     live,
     closed,
+  };
+}
+
+export interface InitialView {
+  readonly me: SyncResponse['me'];
+  readonly badge: number;
+  readonly conversations: ConversationRow[];
+  readonly thread: ThreadView | null;
+  readonly openId: string | null;
+}
+
+/**
+ * What the chat page is drawn with before the browser has asked for anything:
+ * the list, and the conversation named in the address when it is one of this
+ * person's. Read-only — the first poll is what records presence and receipts.
+ */
+export async function initialView(tx: Tx, ctx: ActorContext, requested: string | null): Promise<InitialView> {
+  if (!chat.mayUse(ctx.principal)) throw new ChatError('Chat is not available to you.');
+  const now = new Date();
+  const conversations = await listConversations(tx, ctx, now);
+  const stored = await chat.presenceOfSelf(tx, ctx);
+  const [self] = await tx.select({ name: appUser.displayName }).from(appUser).where(eq(appUser.id, me(ctx))).limit(1);
+  let thread: ThreadView | null = null;
+  let openId: string | null = null;
+  if (requested && conversations.some((c) => c.id === requested)) {
+    thread = await threadOf(tx, ctx, requested, {}, now);
+    openId = requested;
+  }
+  return {
+    me: { userId: me(ctx), name: self?.name ?? '', busy: stored?.busy ?? false },
+    badge: badgeOf(conversations),
+    conversations,
+    thread,
+    openId,
   };
 }
 

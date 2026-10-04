@@ -590,7 +590,8 @@ describe('CH8 conversations about a record', () => {
     expect(JSON.stringify(view)).not.toContain('Khor Al Zubair');
     expect(JSON.stringify(view)).not.toContain('KHOR');
     // Bob still sees it.
-    expect((await thread(bob, conversationId)).record?.label).toBe('Port of Khor Al Zubair');
+    const bobsRecord = (await thread(bob, conversationId)).record;
+    expect(bobsRecord && bobsRecord.accessible ? bobsRecord.label : null).toBe('Port of Khor Al Zubair');
   });
 });
 

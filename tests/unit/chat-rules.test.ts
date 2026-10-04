@@ -227,6 +227,8 @@ describe('C4b typing and polling', () => {
   it('asks fastest on an open thread, slowest in a hidden tab, and backs off on failure', () => {
     expect(pollIntervalMs({ visible: true, open: true })).toBe(2_000);
     expect(pollIntervalMs({ visible: true, open: false })).toBe(6_000);
+    expect(pollIntervalMs({ visible: true, open: false, elsewhere: true })).toBe(15_000);
+    expect(pollIntervalMs({ visible: false, open: false, elsewhere: true })).toBe(30_000);
     expect(pollIntervalMs({ visible: false, open: true })).toBe(30_000);
     expect(pollIntervalMs({ visible: true, open: true, failures: 2 })).toBe(8_000);
     expect(pollIntervalMs({ visible: true, open: true, failures: 40 })).toBe(60_000);

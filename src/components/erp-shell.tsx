@@ -62,6 +62,7 @@ import { Button, Panel } from '@/components/ui';
  */
 import mainLogo from '../../mainLogoMark.png';
 import { GlobalSearch } from './global-search';
+import { ChatCount, ChatGlyph, ChatPopover, useChatLabel } from './chat/chat-header';
 import { switchBranch } from '@/app/(app)/actions';
 
 type ModuleKey =
@@ -480,6 +481,9 @@ export function ErpShell({
   const notificationItem = sections
     .flatMap((section) => section.items)
     .find((item) => item.key === 'notifications');
+  // Internal chat: the messages button carries the unread count for a person who holds chat.
+  const chatEnabled = sections.some((section) => section.items.some((item) => item.key === 'chat'));
+  const messagesLabel = useChatLabel(chatEnabled, shell('messages'));
 
   const persistAppearanceSettings = async (settings: UserAppearanceSettings) => {
     setAppearanceSaveState('saving');
@@ -802,12 +806,12 @@ export function ErpShell({
             <button
               className="erp-icon-button"
               type="button"
-              aria-label={shell('messages')}
+              aria-label={messagesLabel}
               aria-expanded={openPopover === 'messages'}
               aria-controls="erp-messages-panel"
               onClick={() => togglePopover('messages')}
             >
-              <Mail aria-hidden="true" />
+              <ChatGlyph enabled={chatEnabled} />
             </button>
 
             <button
@@ -902,7 +906,11 @@ export function ErpShell({
               <Mail aria-hidden="true" />
               <h2>{shell('messages')}</h2>
             </div>
-            <p className="erp-utility-popover__empty">{shell('messages_empty')}</p>
+            {chatEnabled ? (
+              <ChatPopover onNavigate={closeNavigation} />
+            ) : (
+              <p className="erp-utility-popover__empty">{shell('messages_empty')}</p>
+            )}
           </section>
         ) : null}
 
@@ -1045,6 +1053,7 @@ export function ErpShell({
               >
                 <Mail aria-hidden="true" />
                 <span>{shell('messages')}</span>
+                <ChatCount enabled={chatEnabled} />
               </button>
               <button className="erp-mobile-action" type="button" onClick={changeLocale}>
                 <Languages aria-hidden="true" />

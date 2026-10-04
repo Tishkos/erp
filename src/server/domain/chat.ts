@@ -259,15 +259,18 @@ export interface PollContext {
   readonly open: boolean;
   /** The last request failed. */
   readonly failures?: number;
+  /** The page is not the chat screen: only the header's badge and heartbeat are asking. */
+  readonly elsewhere?: boolean;
 }
 
 /**
  * One request a few seconds: quick while someone is looking at a thread, slower
- * on a list, slowest in a hidden tab. A failing connection backs off, up to a
+ * on a list, slower still on any other page (the header's badge), slowest in a
+ * hidden tab. A failing connection backs off, up to a
  * minute, and resumes at once when it recovers.
  */
 export function pollIntervalMs(context: PollContext): number {
-  const base = !context.visible ? 30_000 : context.open ? 2_000 : 6_000;
+  const base = !context.visible ? 30_000 : context.elsewhere ? 15_000 : context.open ? 2_000 : 6_000;
   const failures = Math.max(0, context.failures ?? 0);
   if (failures === 0) return base;
   return Math.min(60_000, base * 2 ** Math.min(failures, 5));

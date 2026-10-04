@@ -82,6 +82,9 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('my_tasks', 'task', '/tasks'),
       page('my_approvals', 'workflow_instance', '/approvals'),
       page('notifications', 'notification', '/notifications'),
+      // Internal chat (platform phase, Agent 1): conversations between people
+      // inside the ERP, one object `chat` every role may view.
+      page('chat', 'chat', '/chat'),
       page('recent_records', 'dashboard', '/recent'),
       page('global_search', 'dashboard', '/search'),
     ],
