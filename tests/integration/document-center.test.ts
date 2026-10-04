@@ -139,6 +139,15 @@ describe('the integration is configured on a screen, by those who may', () => {
     expect(await rejection(bad('https://user:pw@files.example.com'))).toMatch(/./);
     expect(await rejection(inTx(admin, (tx) => settings.save(tx, admin, { enabled: true, baseUrl: stub.url, rootPath: '/Docs', recordRoot: '/Elsewhere' })))).toMatch(/inside the Document Center folder/);
 
+    // A live server talks https only: the loopback stub address is for development.
+    const mode = process.env.NODE_ENV;
+    (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
+    try {
+      expect(await rejection(bad(stub.url))).toMatch(/https/);
+    } finally {
+      (process.env as Record<string, string | undefined>).NODE_ENV = mode;
+    }
+
     delete process.env.ERP_SECRET_KEY;
     try {
       expect(await rejection(inTx(admin, (tx) => settings.save(tx, admin, { enabled: true, baseUrl: stub.url, rootPath: '/', recordRoot: '/Qimah' })))).toMatch(/ERP_SECRET_KEY/);

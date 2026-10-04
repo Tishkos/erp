@@ -98,6 +98,8 @@ export async function save(tx: Tx, ctx: ActorContext, input: SaveSettingsInput):
       throw error;
     }
   }
+  // The plain-http loopback address exists for the development stub; a live server only ever talks https.
+  if (baseUrl && process.env.NODE_ENV === 'production' && !baseUrl.startsWith('https://')) invalid('address', 'must start with https:// on a live server');
   if (input.enabled && !baseUrl) invalid('address', 'is required to switch Cloud Files on');
   if (input.enabled) {
     // A person's app password is kept sealed with the server's key; without it nobody could link.
