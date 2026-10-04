@@ -401,29 +401,36 @@ test.describe('A22 · payables in a browser', () => {
 
   test('Stage 6 · a loan entered, approved by a second person, disbursed and repaid', async ({ page, browser }) => {
     test.setTimeout(240_000);
-    const purpose = `Import finance ${RUN}`;
 
     // The officer enters the bank's offer (§15.7).
     await signIn(page, 'officer@example.com');
     await page.goto('/treasury/loans');
     await expect(page.getByRole('heading', { level: 1, name: 'Bank Loans' })).toBeVisible();
-    await page.getByRole('button', { name: 'New loan' }).click();
-    const create = page.getByRole('dialog');
+    // "New loan" is a page of its own since PR #42 (`/treasury/loans/new`,
+    // drawn as the Purchase Invoice's new page): the terms are the header
+    // fields, *Update schedule* lays the instalments out as its lines.
+    await page.getByRole('link', { name: 'New loan' }).click();
+    await page.waitForURL(/\/treasury\/loans\/new/);
+    const create = page.locator('form').filter({ has: page.getByRole('button', { name: 'Create loan' }) });
     await create.getByLabel('Bank', { exact: true }).selectOption({ label: 'Rafidain Bank' });
     await create.getByLabel('Proceeds land in').selectOption({ index: 0 });
     await create.getByRole('textbox', { name: 'Principal' }).fill('1000000');
     await create.getByRole('textbox', { name: 'Commission %' }).fill('2');
     await create.getByLabel('Commission taken').selectOption('deducted_at_disbursement');
-    // The count is a number box, and a due date is asked per instalment,
-    // seeded quarterly from the first (2026-10-03).
     await create.getByRole('spinbutton', { name: 'Instalments' }).fill('4');
     await create.getByLabel('Repaid').selectOption('quarterly');
     await create.getByLabel('First instalment due').fill('2026-12-31');
-    await expect(create.getByLabel('Instalment 2 due')).toHaveValue('2027-03-31');
-    await expect(create.getByLabel('Final instalment due')).toHaveValue('2027-09-30');
-    await create.getByRole('textbox', { name: 'Purpose' }).fill(purpose);
+    // The schedule is worked out on the server, quarterly from the first due
+    // date, and comes back as the document's lines.
+    await create.getByRole('button', { name: 'Update schedule' }).click();
+    await page.waitForURL(/first_due_date=2026-12-31/);
+    await expect(page.getByLabel('Due date 2')).toHaveValue('2027-03-31');
+    await expect(page.getByLabel('Due date 4')).toHaveValue('2027-09-30');
+    // The bank picker is a client field and comes back on its first bank.
+    await create.getByLabel('Bank', { exact: true }).selectOption({ label: 'Rafidain Bank' });
+    await create.getByLabel('Purpose').selectOption('import_finance');
     await create.getByRole('button', { name: 'Create loan' }).click();
-    await page.waitForURL(/\/payables\/loans\/LOAN-/, { timeout: 60_000 });
+    await page.waitForURL(/\/treasury\/loans\/LOAN-/, { timeout: 60_000 });
     const loanNo = decodeURIComponent(page.url().split('/treasury/loans/')[1]!.split('?')[0]!);
     await expect(page.getByRole('heading', { level: 1, name: loanNo })).toBeVisible();
     await expect(page.getByText('980,000', { exact: false }).first()).toBeVisible();

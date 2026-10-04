@@ -98,9 +98,10 @@ test.describe('Appendix A · the shell', () => {
   test('shows the approved menu tree, and marks what is not built yet', async ({ page }) => {
     const nav = page.getByRole('navigation');
     // Master Data sits under Accounting, alongside the sample document that
-    // exercises it — Settings is administration only.
+    // exercises it — Settings is administration only. The Accounting navbar
+    // (2026-10-04) draws it in four headings; the chart is under the first.
     await nav.getByRole('button', { name: 'Accounting' }).click();
-    await expect(nav.getByText('Master Data', { exact: true })).toBeVisible();
+    await expect(nav.getByText('Master Data — Financial', { exact: true })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Chart of Accounts' })).toBeVisible();
 
     // Appendix A's tree is mandatory at functional level, so a page whose
