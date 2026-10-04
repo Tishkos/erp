@@ -3,18 +3,21 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { Attachments } from '@/components/admin/attachments';
+import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { ExportMenu } from '@/components/print/export-menu';
+import { ExportIcon } from '@/components/print/export-menu';
 import { PrintSheet } from '@/components/print/print-sheet';
 import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { printSheet } from '@/server/print/sheet';
 import { requireContext, withCurrentUser } from '@/server/session';
+import * as attachmentsService from '@/server/services/attachments';
 import * as sr from '@/server/services/sales-return';
 import * as warehouses from '@/server/services/warehouses';
-import { acceptReturn, rejectReturn } from '../actions';
+import { acceptReturn, attachToReturn, rejectReturn } from '../actions';
 
 /**
  * One Sales Return — Operations build, block 9.
@@ -72,12 +75,15 @@ export default async function SalesReturnPage({
         tx,
         document.lines.map((line) => line.arInvoiceLineId),
       ),
+      // The paperwork behind the paperclip: how many there are.
+      attached: await attachmentsService.currentFor(tx, sr.PERMISSION_OBJECT, document.id),
     };
   });
 
   if (!found) notFound();
   const { lines, ...returnDoc } = found.document;
   const sheet = await printSheet('sales_return', returnDoc.returnNo);
+  const mayAttach = can(principal, 'create', 'attachment');
 
   const mayDecide =
     ['submitted', 'partially_executed', 'executed'].includes(returnDoc.status) &&
@@ -108,7 +114,6 @@ export default async function SalesReturnPage({
 
   return (
     <AdminPage
-      actions={<ExportMenu exportKey="sales_return" id={returnDoc.returnNo} />}
       back={{ href: '/sales/sales-returns', label: t('back') }}
       title={returnDoc.returnNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -141,14 +146,40 @@ export default async function SalesReturnPage({
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
         documentType={page('sales_returns')}
         fields={fields}
         id="sales-return-document"
         linesCount={lines.length}
         linesTitle={t('sales_returns.lines_title')}
         number={returnDoc.returnNo}
+        titleActions={
+          <>
+            {/* Printer, paperclip, clock — the standing order (2026-10-03),
+                from the moment the return is raised. */}
+            <ExportIcon
+              exportKey="sales_return"
+              id={returnDoc.returnNo}
+              title={`${page('sales_returns')} ${returnDoc.returnNo}`}
+            />
+            <AttachmentsButton
+              closeLabel={t('close')}
+              count={found.attached.length}
+              label={t('attachments.title')}
+              title={t('attachments.title')}
+            >
+              <Attachments
+                action={attachToReturn}
+                hidden={{ return_no: returnDoc.returnNo }}
+                mayAttach={mayAttach}
+                objectId={returnDoc.id}
+                objectType={sr.PERMISSION_OBJECT}
+              />
+            </AttachmentsButton>
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={returnDoc.id} objectType={sr.PERMISSION_OBJECT} />
+            </HistoryButton>
+          </>
+        }
       >
         <table aria-labelledby="sales-return-document-lines-heading" className={s.sapTable}>
           <thead>
@@ -208,7 +239,6 @@ export default async function SalesReturnPage({
         </table>
       </DocumentWindow>
 
-      <RecordHistory objectId={returnDoc.id} objectType={sr.PERMISSION_OBJECT} />
       {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>
   );

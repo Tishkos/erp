@@ -13,7 +13,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
 import { applicant, asycudaRun, bankLoan, bankTransfer, billOfLading, customsPd, employeeDocument, employeeRequest, journalEntry, otherReceipt, payable, paymentApplication, shipmentContainer } from './db/schema';
 // Receivables (2026-10-04) — on its own line, to keep the list above merge-friendly.
-import { arInvoice, customerCreditMemo, customerNote, customerReceipt } from './db/schema';
+import { arInvoice, customerCreditMemo, customerNote, customerReceipt, salesReturn } from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -208,8 +208,9 @@ const otherReceiptParentAccess = async (tx: Tx, principal: Principal, objectId: 
 };
 
 /*
- * Receivables (2026-10-04) — the sales invoice, the receipt and the credit or
- * debit note carry their files behind the paperclip, like every record. The
+ * Receivables (2026-10-04) — the sales invoice, the receipt, the credit or
+ * debit note, the credit memo and the sales return carry their files behind
+ * the paperclip, like every record. The
  * invoice and the receipt are read under their own objects; a note under the
  * credit memo's, which governs it. Row security decides the branch.
  */
@@ -245,6 +246,12 @@ const customerCreditMemoParentAccess = async (tx: Tx, principal: Principal, obje
   return Boolean(row);
 };
 
+const salesReturnParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'sales_return')) return false;
+  const [row] = await tx.select({ id: salesReturn.id }).from(salesReturn).where(eq(salesReturn.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -267,6 +274,7 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('customer_receipt', customerReceiptParentAccess);
   attachments.registerParentAccessCheck('customer_note', customerNoteParentAccess);
   attachments.registerParentAccessCheck('customer_credit_memo', customerCreditMemoParentAccess);
+  attachments.registerParentAccessCheck('sales_return', salesReturnParentAccess);
   attachments.registerParentAccessCheck('applicant', applicantParentAccess);
   attachments.registerParentAccessCheck('employee_request', employeeRequestParentAccess);
   attachments.registerParentAccessCheck('employee_document', employeeDocumentParentAccess);
