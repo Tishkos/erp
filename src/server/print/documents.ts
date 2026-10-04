@@ -11,7 +11,6 @@ import * as opening from '../services/opening-stock';
 import * as receipts from '../services/customer-receipt';
 import * as customerNotes from '../services/customer-notes';
 import * as salesReturns from '../services/sales-return';
-import * as stock from '../services/stock-operations';
 import * as payments from '../services/supplier-payment';
 import * as journals from '../services/journal';
 import * as payroll from '../services/payroll';
@@ -665,51 +664,6 @@ export async function purchaseReturn(ctx: BuildContext, returnNo: string): Promi
 
 // ------------------------------------------------------------------ block 7
 
-/** Transfer — Operations block 7. Executed when it is saved, so never a draft. */
-export async function transfer(ctx: BuildContext, transferNo: string): Promise<Built | null> {
-  const { tx, m, locale } = ctx;
-  const row = await stock.transferByNo(tx, transferNo);
-  if (!row) return null;
-  return {
-    model: base({
-      title: m.print('titles.transfer'),
-      number: row.transferNo,
-      posted: true,
-      fields: [
-        { label: m.column('document_no'), value: row.transferNo, ltr: true },
-        { label: m.column('date'), value: date(row.transferDate, locale), ltr: true },
-      ],
-      tables: [
-        {
-          columns: [
-            { key: 'item_code', label: m.column('item_code'), kind: 'code' },
-            { key: 'item_name', label: m.column('item_name'), kind: 'text' },
-            { key: 'from_warehouse', label: m.column('from_warehouse'), kind: 'code' },
-            { key: 'to_warehouse', label: m.column('to_warehouse'), kind: 'code' },
-            { key: 'quantity', label: m.column('quantity'), kind: 'quantity' },
-          ],
-          rows: [
-            {
-              cells: {
-                item_code: row.itemCode,
-                item_name: row.itemName,
-                from_warehouse: row.fromWarehouseCode,
-                to_warehouse: row.toWarehouseCode,
-                quantity: row.quantity,
-              },
-            },
-          ],
-          empty: m.admin('journals.no_lines'),
-          totals: { label: m.admin('reports.totals'), cells: { quantity: row.quantity } },
-        },
-      ],
-      fileName: row.transferNo,
-    }),
-    branchCode: row.branchCode,
-    objectId: row.id,
-  };
-}
-
 /** Opening Stock — Operations block 7. Posts when a second person approves it. */
 export async function openingStock(ctx: BuildContext, documentNo: string): Promise<Built | null> {
   const { tx, m, locale } = ctx;
@@ -762,51 +716,6 @@ export async function openingStock(ctx: BuildContext, documentNo: string): Promi
     }),
     branchCode: document.branchCode,
     objectId: document.id,
-  };
-}
-
-/** Item Reconciliation — Operations block 7. Executed when it is saved. */
-export async function itemReconciliation(ctx: BuildContext, adjustmentNo: string): Promise<Built | null> {
-  const { tx, m, locale } = ctx;
-  const row = await stock.adjustmentByNo(tx, adjustmentNo);
-  if (!row) return null;
-  return {
-    model: base({
-      title: m.print('titles.item_reconciliation'),
-      number: row.adjustmentNo,
-      posted: true,
-      fields: [
-        { label: m.column('document_no'), value: row.adjustmentNo, ltr: true },
-        { label: m.column('date'), value: date(row.adjustmentDate, locale), ltr: true },
-      ],
-      tables: [
-        {
-          columns: [
-            { key: 'item_code', label: m.column('item_code'), kind: 'code' },
-            { key: 'item_name', label: m.column('item_name'), kind: 'text' },
-            { key: 'warehouse', label: m.column('warehouse'), kind: 'text' },
-            { key: 'in_out', label: m.column('in_out'), kind: 'text' },
-            { key: 'quantity', label: m.column('adjustment_quantity'), kind: 'quantity' },
-          ],
-          rows: [
-            {
-              cells: {
-                item_code: row.itemCode,
-                item_name: row.itemName,
-                warehouse: `${row.warehouseCode} · ${row.warehouseName}`,
-                in_out: row.direction === 'in' ? m.admin('reconciliation.in') : m.admin('reconciliation.out'),
-                quantity: row.quantity,
-              },
-            },
-          ],
-          empty: m.admin('journals.no_lines'),
-          totals: { label: m.admin('reports.totals'), cells: { quantity: row.quantity } },
-        },
-      ],
-      fileName: row.adjustmentNo,
-    }),
-    branchCode: row.branchCode,
-    objectId: row.id,
   };
 }
 

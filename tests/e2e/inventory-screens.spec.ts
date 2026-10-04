@@ -23,7 +23,7 @@ import { expect, test, type Page } from '@playwright/test';
  * English and a phone in Arabic, into /home/claude/shots/inventory.
  */
 const MANAGER = { email: 'manager@example.com', password: 'Ledger-Trial-Balance-7' };
-const SHOTS = '/home/claude/shots/inventory';
+const SHOTS = process.env.SHOTS_DIR ?? '/home/claude/shots/inventory';
 
 async function signIn(page: Page) {
   await page.goto('/sign-in');
@@ -76,7 +76,8 @@ const doors = (page: Page) => page.locator('[class*="sapTitleActions"]').first()
 let onHand = 0;
 let seedBatchAlone = true;
 const held = () => String(onHand);
-const heldValue = () => (seedBatchAlone ? (onHand * 12.5).toLocaleString('en-US', { minimumFractionDigits: 0 }) : null);
+// The page shows whole dinars ("2,938 IQD" for 2,937.5), so an odd quantity at 12.5 is rounded half up the way the page does.
+const heldValue = () => (seedBatchAlone ? Math.round(onHand * 12.5).toLocaleString('en-US') : null);
 
 test.describe('IMPROVEMENT-002 · the inventory screens', () => {
   test.describe.configure({ mode: 'serial' });
@@ -190,7 +191,8 @@ test.describe('IMPROVEMENT-002 · the inventory screens', () => {
     await page.goto('/inventory/availability?category=CABLES&branch=HQ');
     const table = page.locator('table[aria-labelledby="availability-title"]');
     for (const header of ['On order', 'Unit cost (IQD)', 'Value (IQD)', 'Ledger']) await expect(table.locator('th', { hasText: header })).toBeVisible();
-    const row = table.locator('tbody tr', { hasText: 'ITM-SEED' }).first();
+    // The count above was in WH-HQ; a transfer (inventory-record-pages) may have put the item in another store too.
+    const row = table.locator('tbody tr', { hasText: 'ITM-SEED' }).filter({ hasText: 'WH-HQ' }).first();
     await expect(row).toBeVisible();
     // What is left at 12.5 a unit.
     await expect(row).toContainText(held());

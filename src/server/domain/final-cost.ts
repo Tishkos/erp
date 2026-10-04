@@ -266,6 +266,12 @@ export interface LockFigures {
   readonly departureIqd: bigint;
   /** Σ rounding rows. */
   readonly roundingIqd: bigint;
+  /**
+   * A lock written before 0280 sent its departed part to cost of sales and
+   * wrote no row to say which movement took it: the lock's own `cogs_iqd`,
+   * unattributed. Zero (the default) on every lock that has departure rows.
+   */
+  readonly unattributedIqd?: bigint;
 }
 
 /**
@@ -273,9 +279,14 @@ export interface LockFigures {
  * departed stock (rounding included) are its total, to the last 0.0001 — the
  * same rule 0280's deferred `landed_cost_lock_accounted` holds at commit.
  * Returns are later events and are not part of the lock's own sum.
+ *
+ * A lock written before 0280 has its departed part on the lock and no rows:
+ * that part is counted as accounted for (it is the lock's own record that it
+ * went to cost of sales) but stays visible as `unattributedIqd` in the trace —
+ * the reader is told the dinars are placed, not which movement took them.
  */
 export function reconcileLock(figures: LockFigures) {
-  const accountedIqd = figures.inventoryIqd + figures.departureIqd + figures.roundingIqd;
+  const accountedIqd = figures.inventoryIqd + figures.departureIqd + figures.roundingIqd + (figures.unattributedIqd ?? 0n);
   return {
     accountedIqd,
     differenceIqd: figures.totalIqd - accountedIqd,
