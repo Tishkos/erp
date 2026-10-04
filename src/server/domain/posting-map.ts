@@ -176,6 +176,17 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     event: 'inventory.stock_adjustment',
     lines: [line('inventory_adjustment', 'either', true)],
   },
+  {
+    /*
+     * Internal Transfers (2026-10-04). Both legs are the accounts' own G/L
+     * accounts, so neither is asked here. Between two currencies each leg is
+     * valued at the ledger rate of the day, and what the bank's rate gave
+     * beyond or short of that is a gain or a loss — the same two accounts a
+     * loan repayment and an import's exchange difference use.
+     */
+    event: 'treasury.bank_transfer',
+    lines: [line('exchange_gain', 'credit'), line('exchange_loss', 'debit')],
+  },
   // REQ-AP-001 §15.7 — loans. The bank side of each is the loan's own account
   // (a property of the loan, like a receipt's bank), so it is not asked here.
   {
