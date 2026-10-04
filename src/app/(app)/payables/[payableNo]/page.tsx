@@ -360,6 +360,13 @@ export default async function PayablePage({
       <DocumentWindow
         titleActions={
           <>
+            {/* Printer, paperclip, notes, clock — the standing order (2026-10-03):
+                the import application's own copy first. */}
+            <ExportIcon
+              exportKey="import_application"
+              id={row.payableNo}
+              title={`${type.name} ${row.payableNo}`}
+            />
             <AttachmentsButton
               closeLabel={admin('close')}
               count={found.attachments.rows.length}
@@ -375,13 +382,6 @@ export default async function PayablePage({
                 objectType={payables.PERMISSION_OBJECT}
               />
             </AttachmentsButton>
-            {/* The printer, first — the import application's own copy
-                (2026-10-03). */}
-            <ExportIcon
-              exportKey="import_application"
-              id={row.payableNo}
-              title={`${type.name} ${row.payableNo}`}
-            />
             {/*
               The notes somebody wrote on this import, behind the same door the
               purchase invoice uses (2026-10-03). They are `NOTE_ADDED` events

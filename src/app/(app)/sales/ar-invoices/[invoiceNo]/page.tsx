@@ -140,8 +140,8 @@ export default async function ArInvoicePage({
   if (!found) notFound();
   const { lines, raisedBy, approvedByName, postedByName, ...invoice } = found.document;
   const customer = found.customers.find((row) => row.id === invoice.customerId);
-  const supplierOf = (id: string | null) =>
-    id ? (found.suppliers.find((row) => row.id === id)?.code ?? '—') : '—';
+  const supplierOf = (id: string | null): string | null =>
+    id ? (found.suppliers.find((row) => row.id === id)?.code ?? null) : null;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
 
@@ -474,8 +474,9 @@ export default async function ArInvoicePage({
                   <td>
                     <bdi dir="ltr">{line.lineNo}</bdi>
                   </td>
+                  {/* The item, the supplier and the warehouse open their own profiles (the shared `ProfileLink`, 2026-10-04). */}
                   <td className={s.sapAccountCell}>
-                    <bdi dir="ltr">{line.itemCode}</bdi>
+                    <ProfileLink code={line.itemCode} kind="item" />
                   </td>
                   <td>
                     <bdi dir="auto">{line.description}</bdi>
@@ -493,10 +494,10 @@ export default async function ArInvoicePage({
                     <bdi dir="ltr">{money(line.netIqd)}</bdi>
                   </td>
                   <td>
-                    <bdi dir="ltr">{supplierOf(line.supplierId)}</bdi>
+                    <ProfileLink code={supplierOf(line.supplierId)} kind="supplier" />
                   </td>
                   <td>
-                    <bdi dir="ltr">{line.warehouseCode ?? '—'}</bdi>
+                    <ProfileLink code={line.warehouseCode} kind="warehouse" />
                   </td>
                 </tr>
               ))}

@@ -557,8 +557,9 @@ export default async function ApInvoicePage({
                   <td>
                     <bdi dir="ltr">{line.lineNo}</bdi>
                   </td>
+                  {/* The item and the warehouse open their own profiles (the shared `ProfileLink`, 2026-10-04). */}
                   <td className={s.sapAccountCell}>
-                    <bdi dir="ltr">{line.itemCode ?? '—'}</bdi>
+                    <ProfileLink code={line.itemCode} kind="item" />
                   </td>
                   <td>
                     <bdi dir="auto">{line.description}</bdi>
@@ -576,7 +577,7 @@ export default async function ApInvoicePage({
                     <bdi dir="ltr">{money(toDecimalString(lineTotal(line), MONEY_SCALE))}</bdi>
                   </td>
                   <td>
-                    <bdi dir="ltr">{line.warehouseCode ?? '—'}</bdi>
+                    <ProfileLink code={line.warehouseCode} kind="warehouse" />
                   </td>
                 </tr>
               ))}

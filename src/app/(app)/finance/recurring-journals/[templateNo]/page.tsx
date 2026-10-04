@@ -118,7 +118,8 @@ export default async function RecurringJournalPage({
     { label: t('starts_on'), value: <bdi dir="ltr">{day(template.startsOn)}</bdi> },
     { label: t('ends_on'), value: <bdi dir="ltr">{day(template.endsOn)}</bdi> },
     { label: t('next_due'), value: <bdi dir="ltr">{day(template.nextDueOn)}</bdi> },
-    { label: t('branch'), value: <bdi dir="ltr">{template.branchCode}</bdi> },
+    // The branch and each line's department open their own profiles (the shared `ProfileLink`, 2026-10-04).
+    { label: t('branch'), value: <ProfileLink code={template.branchCode} kind="branch" /> },
     { label: t('written_by'), value: <bdi dir="auto">{view.createdByName ?? '—'}</bdi> },
     { label: t('agreed_by'), value: <bdi dir="auto">{view.activatedByName ?? admin('none')}</bdi> },
     ...(template.description ? [{ label: t('description'), value: <bdi dir="auto">{template.description}</bdi>, wide: true }] : []),
@@ -281,7 +282,7 @@ export default async function RecurringJournalPage({
                   <ProfileLink code={line.accountCode} kind="gl_account" name={line.accountName} />
                 </td>
                 <td>
-                  <bdi dir="ltr">{line.departmentCode ?? ''}</bdi>
+                  {line.departmentCode ? <ProfileLink code={line.departmentCode} kind="department" /> : null}
                 </td>
                 <td>
                   <bdi dir="auto">{line.description ?? ''}</bdi>

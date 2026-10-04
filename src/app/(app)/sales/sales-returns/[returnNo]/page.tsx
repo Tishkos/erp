@@ -234,8 +234,9 @@ export default async function SalesReturnPage({
                 <td>
                   <bdi dir="ltr">{line.lineNo}</bdi>
                 </td>
+                {/* The item and the warehouse open their own profiles (the shared `ProfileLink`, 2026-10-04). */}
                 <td className={s.sapAccountCell}>
-                  <bdi dir="ltr">{line.itemCode}</bdi>
+                  <ProfileLink code={line.itemCode} kind="item" />
                 </td>
                 <td>
                   <bdi dir="auto">{line.description ?? '—'}</bdi>
@@ -265,7 +266,7 @@ export default async function SalesReturnPage({
                       ))}
                     </select>
                   ) : (
-                    <bdi dir="ltr">{line.destinationWarehouseCode ?? '—'}</bdi>
+                    <ProfileLink code={line.destinationWarehouseCode} kind="warehouse" />
                   )}
                 </td>
               </tr>
