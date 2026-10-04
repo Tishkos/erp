@@ -210,13 +210,19 @@ const CHART: readonly Group[] = [
     name: 'Trading revenue',
     root: 'R000001',
     children: [
-      { name: 'Sales — solar equipment', roles: ['sales_revenue'], lines: REVENUE },
+      // Each product line's sales are the item's own sales account; a sale of
+      // an item that names none lands in "other goods", where it is seen,
+      // rather than in one of the lines, where it would be believed.
+      { name: 'Sales — solar equipment', lines: REVENUE },
       { name: 'Sales — motorcycles', lines: REVENUE },
       { name: 'Sales — spare parts and accessories', lines: REVENUE },
+      { name: 'Sales — other goods', roles: ['sales_revenue'], lines: REVENUE },
       { name: 'Installation and service revenue', lines: REVENUE },
       { name: 'Project revenue', roles: ['project_revenue'], lines: REVENUE },
       { name: 'Other income', lines: OTHER_INCOME },
       { name: 'Foreign exchange gain', roles: ['exchange_gain'], lines: OTHER_INCOME },
+      // A loan's revaluation moves no money; its gain is kept apart from a realised one.
+      { name: 'Unrealised foreign exchange gain', lines: OTHER_INCOME },
     ],
   },
   {
@@ -224,7 +230,14 @@ const CHART: readonly Group[] = [
     root: 'X000001',
     children: [
       { name: 'Cost of goods sold', lines: COST },
+      // Each item names its own cost account (ar-invoice › stockAccountsFor);
+      // these give each product line its own gross margin.
+      { name: 'Cost of goods sold — solar equipment', lines: COST },
+      { name: 'Cost of goods sold — motorcycles', lines: COST },
+      { name: 'Cost of goods sold — spare parts and accessories', lines: COST },
       { name: 'Sales returns', roles: ['sales_returns'], lines: COST },
+      // A credit note gives money back without goods coming back.
+      { name: 'Sales discounts and allowances', lines: COST },
       { name: 'Freight and shipping', lines: COST },
       { name: 'Customs duty and clearance', lines: COST },
       // §8.4 — ordered against billed. It never enters the value of stock.
@@ -270,8 +283,10 @@ const CHART: readonly Group[] = [
     children: [
       { name: 'Bank charges and commission', roles: ['bank_commission'], lines: FINANCE },
       { name: 'Letter of credit charges', lines: FINANCE },
+      { name: 'Loan fees and commission', lines: FINANCE },
       { name: 'Interest on loans', roles: ['loan_interest'], lines: FINANCE },
       { name: 'Foreign exchange loss', roles: ['exchange_loss'], lines: FINANCE },
+      { name: 'Unrealised foreign exchange loss', lines: FINANCE },
     ],
   },
   {
@@ -288,6 +303,32 @@ const RETENTION: Leaf = {
   control: 'customer',
   lines: RECEIVABLE,
 };
+
+/*
+ * Where one role means two things. A rule is per event and role, so the same
+ * role can post to a different account in a different document — which is
+ * the only narrowing worth having here. (Rules narrowed by warehouse were
+ * considered and left out: goods valued into "Goods in transit" by the
+ * warehouse they arrive in would never be moved out of it, because no
+ * document posts the transfer from the transit warehouse to the store.)
+ */
+const EVENT_ACCOUNTS: readonly { readonly event: string; readonly role: string; readonly account: string }[] = [
+  // A credit note is a price allowance; a credit memo is goods coming back.
+  { event: 'sales.customer_credit_note', role: 'sales_returns', account: 'Sales discounts and allowances' },
+  // Revaluing a loan moves no money: unrealised, apart from the realised kind.
+  { event: 'treasury.loan_revaluation', role: 'exchange_gain', account: 'Unrealised foreign exchange gain' },
+  { event: 'treasury.loan_revaluation', role: 'exchange_loss', account: 'Unrealised foreign exchange loss' },
+  // What borrowing costs, apart from what banking costs day to day.
+  { event: 'treasury.loan_disbursement', role: 'bank_commission', account: 'Loan fees and commission' },
+  { event: 'treasury.loan_repayment', role: 'bank_commission', account: 'Loan fees and commission' },
+  { event: 'treasury.loan_commission', role: 'bank_commission', account: 'Loan fees and commission' },
+];
+
+/**
+ * Defaults this file once gave a role and has since moved. A rule still naming
+ * the old account was set by this file, not decided by anybody, so it follows.
+ */
+const MOVED: Readonly<Record<string, string>> = { sales_revenue: 'Sales — solar equipment' };
 
 function argument(name: string): string | null {
   const index = process.argv.indexOf(`--${name}`);
@@ -407,6 +448,7 @@ async function main(): Promise<void> {
     const ctx: ActorContext = { principal, branchCode };
 
     const roleAccount = new Map<string, { id: string; code: string }>();
+    const byName = new Map<string, { id: string; code: string }>();
     let madeGroups = 0;
     let madeLeaves = 0;
 
@@ -458,6 +500,7 @@ async function main(): Promise<void> {
         }
 
         for (const role of leaf.roles ?? []) roleAccount.set(role, { id: account.id, code: account.code });
+        byName.set(leaf.name, { id: account.id, code: account.code });
       }
     }
 
@@ -478,10 +521,18 @@ async function main(): Promise<void> {
     }
 
     let mapped = 0;
+    let repointed = 0;
     const unmapped: string[] = [];
     for (const { event, role } of wanted) {
+      const special = EVENT_ACCOUNTS.find((entry) => entry.event === event && entry.role === role);
+      const account = special ? byName.get(special.account) : roleAccount.get(role);
+      if (!account) {
+        unmapped.push(`${event} / ${role}`);
+        continue;
+      }
+
       const [existing] = await tx
-        .select({ id: postingRule.id })
+        .select({ id: postingRule.id, accountId: postingRule.accountId })
         .from(postingRule)
         .where(
           and(
@@ -495,13 +546,24 @@ async function main(): Promise<void> {
           ),
         )
         .limit(1);
-      if (existing) continue;
 
-      const account = roleAccount.get(role);
-      if (!account) {
-        unmapped.push(`${event} / ${role}`);
+      if (existing) {
+        if (existing.accountId === account.id) continue;
+        // A rule pointing where this file put it is this file's, and follows
+        // it; one pointing anywhere else is somebody's decision and stands.
+        const moved = MOVED[role];
+        const ours = [roleAccount.get(role)?.id, moved ? byName.get(moved)?.id : undefined];
+        if (!ours.includes(existing.accountId)) continue;
+        if (dryRun) {
+          console.log(`would re-point  ${event} / ${role}  ->  ${account.code}`);
+          continue;
+        }
+        await posting.setMapping(tx, ctx, { eventType: event, lineRole: role, accountId: account.id });
+        repointed += 1;
+        console.log(`re-pointed  ${event.padEnd(34)} ${role.padEnd(28)} -> ${account.code}`);
         continue;
       }
+
       if (dryRun) {
         console.log(`would map  ${event} / ${role}  ->  ${account.code}`);
         continue;
@@ -510,14 +572,14 @@ async function main(): Promise<void> {
         eventType: event,
         lineRole: role,
         accountId: account.id,
-        description: 'Set up with the chart of accounts.',
+        description: special ? 'Set up with the chart of accounts — this document only.' : 'Set up with the chart of accounts.',
       });
       mapped += 1;
       console.log(`mapped  ${event.padEnd(38)} ${role.padEnd(28)} -> ${account.code}`);
     }
 
     console.log('');
-    console.log(`mappings: ${mapped} added`);
+    console.log(`mappings: ${mapped} added, ${repointed} re-pointed`);
     if (unmapped.length > 0) {
       console.log('');
       console.log('no account for these roles — they need a decision:');
