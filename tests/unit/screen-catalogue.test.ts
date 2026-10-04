@@ -386,6 +386,8 @@ describe('every screen has one address', () => {
       '/sales/receivables',
       // Block 9 — Sales Returns.
       '/sales/sales-returns',
+      // Global Search — the results page behind the palette.
+      '/search',
       // REQ-ACC-001 Part D — Bank Reconciliation, the Cash Forecast.
       '/treasury/bank-reconciliation',
       '/treasury/cash-forecast',

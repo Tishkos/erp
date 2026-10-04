@@ -141,7 +141,12 @@ export async function mayAccessParent(
 ): Promise<boolean | null> {
   const check = parentAccessChecks.get(objectType);
   if (!check) return null;
-  return Boolean(await check(tx, principal, objectId));
+  try {
+    return Boolean(await check(tx, principal, objectId));
+  } catch {
+    // A check that throws is no: a listing never shows what it could not vouch for.
+    return false;
+  }
 }
 
 async function assertParentAccess(
