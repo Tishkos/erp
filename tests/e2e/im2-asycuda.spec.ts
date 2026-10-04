@@ -44,7 +44,7 @@ test.describe('IM2 · the ASYCUDA reading, its file and its doors', () => {
     runNo = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!);
     await expect(page.getByRole('heading', { level: 1, name: `ASYCUDA reading ${runNo}` })).toBeVisible();
 
-    const lines = page.locator('#asycuda-document table').first();
+    const lines = page.locator('#asycuda-document table[aria-labelledby="asycuda-document-lines-heading"]');
     await expect(lines.getByRole('row', { name: new RegExp(`8${RUN}`) })).toContainText('No such PD');
     await expect(lines.getByText('Not read', { exact: true })).toBeVisible();
 

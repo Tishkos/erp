@@ -306,7 +306,7 @@ test.describe('A22 · payables in a browser', () => {
     await read.getByRole('button', { name: 'Show the difference' }).click();
     await page.waitForURL(/\/payables\/pd\/asycuda\/ASY-\d{4}-\d+/);
     const runNo = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!);
-    const lines = page.locator('#asycuda-document table').first();
+    const lines = page.locator('#asycuda-document table[aria-labelledby="asycuda-document-lines-heading"]');
     await expect(lines.getByRole('row', { name: new RegExp(pdNo) })).toContainText('Will be updated');
     await expect(lines.getByText('Not read', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Apply 1 changes' }).click();
