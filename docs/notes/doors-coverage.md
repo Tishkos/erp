@@ -134,6 +134,18 @@ yet. A file sent in a conversation is an attachment of object type
 `chat_message` (member-only), so it appears in no record's attachments door.
 `docs/audits/CHAT-IMPLEMENTATION.md` has the rest.
 
+## Task Center (platform phase, Agent 3)
+
+| Record page | P | A | N | H | Print model | Parties → profile | Owner | Status |
+|---|---|---|---|---|---|---|---|---|
+| `tasks/[taskNo]` — task | ✅ | ✅ | ✅ | ✅ | `task` | assignee, assigner, raiser, watchers: `ProfileLink` to the employee when the reader may view employees, else the name; related record: link only if the reader may open it | tasks | done |
+
+`/tasks` is a list screen (My tasks, Assigned by me, Team) and has no doors. The
+task's files are attachments of object `task` filed under the task's id; its
+notes are `task.note_added` events under its number (as its history is); the
+kind `task` is registered for QS Cloud Files links and for Reply in Chat
+(`chat.openRecordConversation`, the same transaction).
+
 ## Export keys added on `feat/shared-module`
 
 `project_certificate`, `project_budget`, `project_change_order`,

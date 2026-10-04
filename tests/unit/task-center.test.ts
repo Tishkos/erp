@@ -46,6 +46,10 @@ import {
   type TaskStatus,
 } from '@/server/domain/tasks';
 import { STATUS_CODES, chipOf } from '@/server/domain/search';
+import * as documentTypes from '@/server/search/entities/documents';
+import * as filesType from '@/server/search/entities/files';
+import * as logisticsTypes from '@/server/search/entities/logistics';
+import * as masterTypes from '@/server/search/entities/masters';
 import { task as searchType } from '@/server/search/entities/tasks';
 
 const ROOT = process.cwd();
@@ -374,6 +378,16 @@ describe('TC7 · the catalogue and the migrations', () => {
     expect(CORE.replace(/\s+/g, ' ')).toContain('CREATE UNIQUE INDEX "task_no_uniq" ON "task" ("task_no")');
     expect(text(searchType.recent!)).toBe('t.created_at');
     expect(CORE.replace(/\s+/g, ' ')).toMatch(/CREATE INDEX "task_recent_idx" ON "task" \("created_at" DESC NULLS LAST\)/);
+  });
+
+  it('has a search priority of its own, apart from the search suite’s TASK-100 stand-in (50)', () => {
+    const others = [documentTypes, filesType, logisticsTypes, masterTypes]
+      .flatMap((module) => Object.values(module))
+      .filter((value): value is { kind: string; priority: number } => typeof value === 'object' && value !== null && 'priority' in value)
+      .map((type) => type.priority);
+    expect(others.length).toBeGreaterThan(20);
+    expect(others).not.toContain(searchType.priority);
+    expect(searchType.priority).not.toBe(50);
   });
 
   it('numbers tasks from the TASK series, never deleted, never changed in place by the application role', () => {

@@ -1,12 +1,14 @@
 /**
  * Tasks — the Task Center's record in Global Search (platform phase, Agent 3).
  *
- * Priority 50, among the documents. A task is found by its number (`TASK-100`,
- * `100`), by its title, and by the name of the person it is assigned to. The
- * table's row policy (`app_task_visible_to`, migration 0341) decides which
- * tasks exist for the asker — a draft is its creator's alone, the rest are
- * their parties', their watchers' and their leaders' — and the grant is `view`
- * on `task`, the object the Tasks screen is gated by.
+ * Priority 42, after the documents (50 is the slot the search suite's TASK-100
+ * stand-in registers, and every type has a priority of its own). A task is
+ * found by its number (`TASK-100`, `100`), by its title, and by the name of the
+ * person it is assigned to. The table's row policy (`app_task_visible_to`,
+ * migration 0341) decides which tasks exist for the asker — a draft is its
+ * creator's alone, the rest are their parties', their watchers' and their
+ * leaders' — and the grant is `view` on `task`, the object the Tasks screen is
+ * gated by.
  */
 import { sql } from 'drizzle-orm';
 import { profileHref } from '../../domain/profiles';
@@ -15,7 +17,7 @@ import type { SearchTableType } from '../types';
 export const task: SearchTableType = {
   kind: 'table',
   key: 'task',
-  priority: 50,
+  priority: 42,
   grant: { object: 'task' },
   route: '/tasks',
   table: 'task',
