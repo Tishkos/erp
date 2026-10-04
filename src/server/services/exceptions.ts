@@ -35,6 +35,7 @@ import { createHash } from 'node:crypto';
 import { and, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { applyScope, db, markSystemSweep, type RequestScope, type Tx } from '../db/client';
 import { exception, exceptionHistory, exceptionSweepRun } from '../db/schema';
+import { EXCEPTION_EVENTS } from '../domain/automation-exceptions';
 import { businessToday } from '../domain/business-date';
 import {
   DETECTORS,
@@ -84,7 +85,7 @@ export const SEQUENCE_KEY = 'EXCEPTION';
 type Row = typeof exception.$inferSelect;
 
 export class ExceptionError extends Error {
-  readonly code: 'NOT_FOUND' | 'NOT_ACKNOWLEDGEABLE' | 'NOTE_REQUIRED' | 'NOTE_TOO_LONG';
+  readonly code: 'NOT_FOUND' | 'NOT_ACKNOWLEDGEABLE' | 'NOTE_REQUIRED' | 'NOTE_TOO_LONG' | 'NOT_PERMITTED' | 'INVALID';
   constructor(code: ExceptionError['code'], message: string) {
     super(message);
     this.name = 'ExceptionError';
@@ -841,6 +842,123 @@ async function tell(
     recordAccess: true,
   });
   return result.created;
+}
+
+// ---------------------------------------------------------------------------
+// Raised by an automation rule (platform phase, Agent 10)
+// ---------------------------------------------------------------------------
+
+/**
+ * Raises one finding on behalf of an automation rule's `create_exception`
+ * action, as the rule's owner. The only way anything but the sweep writes an
+ * exception, and narrow on purpose:
+ *
+ *   * only the three detectors of the `automation` family (`EXCEPTION_EVENTS`);
+ *   * only for a person who holds `execute` on the exception centre and `view`
+ *     on the object the finding is about (the same grants the table's own
+ *     policy checks on every write);
+ *   * the database's "raised by the sweep" guard is lifted for these statements
+ *     alone, inside their own savepoint, and put back before they return;
+ *   * a finding that is live is left as it is (nothing is rewritten, nobody is
+ *     told twice); a resolved one comes back, on its next occurrence.
+ *
+ * The same findings are then kept true by `exception-detectors/automation.ts`:
+ * when the lateness is gone the next sweep resolves them.
+ */
+export async function raiseFromAutomation(
+  tx: Tx,
+  ctx: ActorContext,
+  finding: Finding,
+  ruleNo: string,
+): Promise<{ id: string; exceptionNo: string; outcome: 'created' | 'reopened' | 'exists' }> {
+  const def = detectorOf(finding.detector);
+  if (!def || !(finding.detector in EXCEPTION_EVENTS)) throw new ExceptionError('NOT_PERMITTED', `${finding.detector} is not a finding a rule may raise.`);
+  if (!can(ctx.principal, 'execute', PERMISSION_OBJECT) || !can(ctx.principal, 'view', def.object)) {
+    throw new ExceptionError('NOT_PERMITTED', 'Raising an exception needs execute on the Exception Center and view on the record it is about.');
+  }
+  const problem = refusal(finding);
+  if (problem) throw new ExceptionError('INVALID', problem);
+  registerAllRecords();
+
+  const key = findingKey(finding.detector, finding.subject);
+  const words = text.render('en', finding.detector, finding.facts);
+  const hash = hashOf(finding, words);
+  const startedAt = new Date();
+  const content = {
+    severity: finding.severity,
+    title: words.title,
+    explanation: words.explanation,
+    facts: finding.facts as ExceptionFacts,
+    evidence: [...finding.evidence] as EvidenceRow[],
+    contentHash: hash,
+    recordType: finding.record.type,
+    recordId: finding.record.id,
+    recordLabel: finding.record.label,
+    recordHref: finding.record.href,
+    href: finding.action,
+    partyCode: finding.partyCode ?? null,
+    branchCode: finding.branchCode,
+    ownerUserId: finding.owner?.userId ?? null,
+    ownerName: finding.owner?.name || null,
+    permissionObject: def.object,
+    lastSeenAt: startedAt,
+  };
+
+  const written = await tx.transaction(async (sp) => {
+    const inner = sp as unknown as Tx;
+    const [existing] = await inner.select().from(exception).where(eq(exception.findingKey, key)).limit(1).for('update');
+    if (existing && existing.status !== 'resolved') return { id: existing.id, exceptionNo: existing.exceptionNo, occurrence: existing.occurrence, outcome: 'exists' as const };
+    await markSystemSweep(inner);
+    let result: { id: string; exceptionNo: string; occurrence: number; outcome: 'created' | 'reopened' };
+    if (!existing) {
+      const allocated = await allocateDocumentNumber(inner, SEQUENCE_KEY, {}, null);
+      const [made] = await inner
+        .insert(exception)
+        .values({
+          exceptionNo: allocated.documentNo,
+          findingKey: key,
+          detector: finding.detector,
+          subject: finding.subject,
+          domain: def.domain,
+          status: 'open',
+          firstDetectedAt: startedAt,
+          ...content,
+        })
+        .returning({ id: exception.id, occurrence: exception.occurrence });
+      result = { id: made!.id, exceptionNo: allocated.documentNo, occurrence: made!.occurrence, outcome: 'created' };
+    } else {
+      const [after] = await inner.update(exception).set({ ...content, status: 'open' as const }).where(eq(exception.id, existing.id)).returning({ occurrence: exception.occurrence });
+      result = { id: existing.id, exceptionNo: existing.exceptionNo, occurrence: after?.occurrence ?? existing.occurrence, outcome: 'reopened' };
+    }
+    await inner.execute(sql`select set_config('app.system_sweep', 'off', true)`);
+    return result;
+  });
+
+  if (written.outcome === 'exists') return { id: written.id, exceptionNo: written.exceptionNo, outcome: 'exists' };
+  await recordChange(tx, ctx, {
+    action: 'exception.raised_by_automation',
+    objectType: PERMISSION_OBJECT,
+    objectId: written.exceptionNo,
+    branchCode: finding.branchCode ?? ctx.branchCode,
+    after: { detector: finding.detector, severity: finding.severity, rule: ruleNo, record: finding.record.label, outcome: written.outcome },
+  });
+  const action: SweepAction = written.outcome === 'created' ? { kind: 'create', key } : { kind: 'reopen', key, from: 'resolved' };
+  if (interrupts(action, finding.severity)) {
+    // Telling people is never what decides whether the finding exists.
+    await notifications.safely(tx, (sp) =>
+      tell(sp, {
+        id: written.id,
+        no: written.exceptionNo,
+        row: finding,
+        occurrence: written.occurrence,
+        permissionObject: def.object,
+        ownerUserId: content.ownerUserId,
+        title: words.title,
+        explanation: words.explanation,
+      }),
+    );
+  }
+  return { id: written.id, exceptionNo: written.exceptionNo, outcome: written.outcome };
 }
 
 // ---------------------------------------------------------------------------

@@ -219,6 +219,7 @@ export const DETECTORS: readonly DetectorDef[] = Object.freeze([
   // Receivables
   { code: 'receivables.overdue_exposure', domain: 'receivables', object: 'ar_invoice', record: 'business_partner', severities: ['critical', 'high', 'medium', 'low'], source: 'open-items.openItems (customer side)' },
   { code: 'receivables.ledger_inconsistency', domain: 'receivables', object: 'ar_invoice', record: 'journal_entry', severities: ['high'], source: 'customer-reconciliation.exceptions' },
+  { code: 'receivables.automation_invoice_overdue', domain: 'receivables', object: 'ar_invoice', record: 'ar_invoice', severities: ['critical', 'high', 'medium', 'low'], source: 'an automation rule on ar_invoice.overdue, kept true by open-items.openItems (customer side)' },
   // Payables
   { code: 'payables.overdue_exposure', domain: 'payables', object: 'ap_invoice', record: 'business_partner', severities: ['critical', 'high', 'medium', 'low'], source: 'open-items.openItems (supplier side)' },
   { code: 'payables.ledger_inconsistency', domain: 'payables', object: 'ap_invoice', record: 'journal_entry', severities: ['high'], source: 'supplier-balances.exceptions' },
@@ -234,9 +235,11 @@ export const DETECTORS: readonly DetectorDef[] = Object.freeze([
   { code: 'logistics.shipment_update_stale', domain: 'logistics', object: 'shipment_container', record: 'shipment_container', severities: ['high', 'medium', 'low'], source: 'logistics-views.shipmentTracking' },
   { code: 'logistics.customs_issue', domain: 'logistics', object: 'customs_pd', record: 'customs_pd', severities: ['high', 'medium'], source: 'customs_pd with pd_status' },
   { code: 'logistics.landed_cost_blocked', domain: 'logistics', object: 'landed_cost', record: 'payable', severities: ['high', 'medium'], source: 'logistics-views.landedCostsRegister' },
+  { code: 'logistics.automation_container_eta', domain: 'logistics', object: 'shipment_container', record: 'shipment_container', severities: ['critical', 'high', 'medium', 'low'], source: 'an automation rule on container.eta_exceeded, kept true by logistics-views.shipmentTracking' },
   // Tasks
   { code: 'tasks.overdue', domain: 'tasks', object: 'task', record: 'task', severities: ['critical', 'high', 'medium', 'low'], source: 'tasks.overdueTasks' },
   { code: 'tasks.blocked', domain: 'tasks', object: 'task', record: 'task', severities: ['critical', 'high', 'medium'], source: 'tasks.blockedTasks' },
+  { code: 'tasks.automation_task_overdue', domain: 'tasks', object: 'task', record: 'task', severities: ['critical', 'high', 'medium', 'low'], source: 'an automation rule on task.overdue, kept true by tasks.owedWithDueDate' },
   // Approvals
   { code: 'approvals.waiting_too_long', domain: 'approvals', object: 'workflow_instance', record: 'workflow_instance', severities: ['critical', 'high', 'medium', 'low'], source: 'workflow_instance (the approvals inbox)' },
   // Platform

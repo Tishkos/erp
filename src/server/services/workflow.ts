@@ -547,7 +547,9 @@ async function referenceOf(tx: Tx, documentTypeCode: string, documentId: string)
       ? await tx.execute(sql`select entry_no as ref from journal_entry where id = ${documentId}::uuid limit 1`)
       : documentTypeCode === "chart_of_account"
         ? await tx.execute(sql`select code as ref from chart_of_account where id = ${documentId}::uuid limit 1`)
-        : null;
+        : documentTypeCode === "ap_invoice"
+          ? await tx.execute(sql`select invoice_no as ref from ap_invoice where id = ${documentId}::uuid limit 1`)
+          : null;
   return (found?.rows[0] as { ref: string } | undefined)?.ref ?? documentId;
 }
 

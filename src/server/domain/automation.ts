@@ -340,6 +340,23 @@ export function evaluate(definition: Definition, payload: Readonly<Record<string
   return { matched, unmet, planned: matched ? definition.actions : [] };
 }
 
+const OP_WORDS: Readonly<Record<ConditionOp, string>> = {
+  gte: 'at least',
+  gt: 'more than',
+  lte: 'at most',
+  lt: 'less than',
+  eq: 'exactly',
+  ne: 'anything but',
+  in: 'one of',
+};
+
+/** One condition that did not hold, in a plain sentence: "daysLate is 2, the rule needs at least 3". */
+export function describeUnmet(unmet: Unmet): string {
+  const wanted = Array.isArray(unmet.expected) ? unmet.expected.join(', ') : String(unmet.expected);
+  const actual = unmet.actual === null ? 'not known' : String(unmet.actual);
+  return `${unmet.field} is ${actual}; the rule needs ${OP_WORDS[unmet.op]} ${wanted}`;
+}
+
 // ---------------------------------------------------------------------------
 // Reach: what the owner could do by hand
 // ---------------------------------------------------------------------------

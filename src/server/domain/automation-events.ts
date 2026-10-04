@@ -126,7 +126,7 @@ export const EVENTS: Readonly<Record<EventKey, EventDef>> = Object.freeze({
     fields: {
       ...COMMON,
       taskTitle: { type: 'text', conditionable: false },
-      assigneeId: { type: 'user', conditionable: false },
+      assigneeId: { type: 'user', conditionable: false, optional: true },
       raisedBy: { type: 'user', conditionable: false, optional: true },
       priority: { type: 'code', conditionable: true },
       departmentCode: { type: 'code', conditionable: true },
@@ -157,7 +157,7 @@ export const EVENTS: Readonly<Record<EventKey, EventDef>> = Object.freeze({
     recipients: ['role', 'user', 'rule_owner'],
     actions: ['create_notification', 'create_task', 'create_exception'],
     exceptionDetector: 'logistics.automation_container_eta',
-    href: (p) => `/payables/containers/${enc(text(p.reference))}`,
+    href: (p) => `/payables/containers/${enc(text(p.reference))}?id=${enc(text(p.subjectId))}`,
   },
   'ar_invoice.overdue': {
     key: 'ar_invoice.overdue',
