@@ -50,6 +50,7 @@ const OBJECTS = [
   'in_transit',
   'inventory_movement',
   'stock_movement',
+  'exception',
 ];
 
 let admin: Actor;
