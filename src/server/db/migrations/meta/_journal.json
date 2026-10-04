@@ -1464,6 +1464,13 @@
       "when": 1795900000096,
       "tag": "0286_settlement_supplement",
       "breakpoints": true
+    },
+    {
+      "idx": 209,
+      "version": "7",
+      "when": 1795900000097,
+      "tag": "0287_stock_position_transit",
+      "breakpoints": true
     }
   ]
 }

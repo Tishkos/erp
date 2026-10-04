@@ -136,8 +136,13 @@ export async function positionOf(
   // trigger and the Stock Movement page both read the warehouse whole, so the
   // position does too: whatever rows there are, summed. `reserved` is not
   // summed, because the view already counts it once per row.
+  //
+  // `held`, not `on_hand` (0287): the position is what the physical rule
+  // reads — nothing leaves a warehouse that is not in it — and goods in a
+  // transit warehouse are in it, though the view shows them in transit, not
+  // on hand, to a reader.
   const result = await tx.execute(sql`
-    select sum(on_hand)::text        as on_hand,
+    select sum(held)::text           as on_hand,
            max(reserved)::text       as reserved,
            sum(in_quarantine)::text  as in_quarantine,
            sum(damaged)::text        as damaged,
