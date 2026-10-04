@@ -244,7 +244,7 @@ build.
 | `99710b5` | Home loaders and composer, approval center service, safe-read; additive exports |
 | `55a9eb6` | Integration test for composition, figures, scope, empty states and My Approvals |
 | `9e6c5b9` | Screens, presenters, EN+AR messages, e2e spec, AGENTS.md section, invoice amount |
-| (the commit that adds this file) | This document |
+| `be83dbc` | This document; low stock excludes the in-transit warehouse; in-transit quantities compared as scaled bigints |
 
 Screenshots: `/home/claude/shots/dashboard/` — `home-{ceo,officer,warehouse,outsider}-desktop-en.png`,
 `home-ceo-mobile-ar.png`, `home-warehouse-mobile-ar.png`,
