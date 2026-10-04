@@ -366,6 +366,8 @@ export async function shipmentsRegister(tx: Tx, filter: ShipmentFilter = {}) {
 export interface InTransitFilter {
   readonly search?: string | null;
   readonly payableId?: string | null;
+  /** `open` (the default): imports with something still in transit or a container still to arrive; `all`: every posted import. */
+  readonly view?: 'open' | 'all' | null;
 }
 
 export interface InTransitLine {
@@ -495,7 +497,8 @@ export async function inTransitInventory(tx: Tx, filter: InTransitFilter = {}): 
     received: qty(row.received),
     onHandFromImport: qty(row.onHandFromImport),
   }));
-  return { rows };
+  const view = filter.view ?? (filter.payableId ? 'all' : 'open');
+  return { rows: view === 'all' ? rows : rows.filter((row) => parseQuantity(row.inTransit) > 0n || row.containersOpen > 0) };
 }
 
 export interface TransitWarehouseRow {

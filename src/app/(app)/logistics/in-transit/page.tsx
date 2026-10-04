@@ -69,8 +69,9 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
       ? (params.status as tracking.ShipmentStatus)
       : undefined;
 
+  const view = params.view === 'all' ? 'all' : 'open';
   const found = await withCurrentUser(async (tx) => ({
-    imports: await views.inTransitInventory(tx, { search: outcome.q }),
+    imports: await views.inTransitInventory(tx, { search: outcome.q, view }),
     ledger: await views.transitWarehouses(tx),
     gaps: await views.inTransitReconciliation(tx),
     shipments: seesTracking ? await tracking.list(tx, status ? { status } : {}) : [],
@@ -114,6 +115,22 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
             q={outcome.q}
             searchLabel={admin('search')}
           />
+          <form className={s.filterBar} method="get">
+            <FilterRow>
+              <Select
+                defaultValue={view}
+                label={t('view')}
+                name="view"
+                options={[
+                  { value: 'open', label: t('view_open') },
+                  { value: 'all', label: t('view_all') },
+                ]}
+              />
+              <SubmitRow>
+                <Submit label={t('filter')} />
+              </SubmitRow>
+            </FilterRow>
+          </form>
           <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
             <table aria-labelledby="in-transit-title" className={`${s.sapTable} ${s.sapRegisterTable}`}>
               <thead>
