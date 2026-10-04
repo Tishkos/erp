@@ -607,6 +607,8 @@ export async function resetTestData(): Promise<void> {
     await client.query('delete from shipment_container');
     await client.query('delete from bill_of_lading');
     await client.query('delete from port where created_by is not null');
+    // REQ-LOG-001 — a seeded port retired by a test is back in use for the next.
+    await client.query('update port set active = true where created_by is null');
     await client.query('delete from container_status where created_by is not null');
     await client.query('update container_status set active = true where created_by is null');
     // REQ-LOG-001 (0301) — the customs declarations, which name their PD.

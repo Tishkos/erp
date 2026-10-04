@@ -87,20 +87,28 @@ export async function add(tx: Tx, ctx: ActorContext, input: PortInput) {
   await authz.authorize(ctx.principal, 'create', PERMISSION_OBJECT, { branchCode: ctx.branchCode });
   const fields = cleaned(input);
   await assertUnique(tx, fields, null);
-  const allocated = await allocateDocumentNumber(tx, SERIES, {}, ctx.principal.userId);
-  await tx.insert(port).values({ code: allocated.documentNo, ...fields, active: true, createdBy: ctx.principal.userId });
+  // The series started after the two seeded ports; a counter wound back (a
+  // test reset, a restored database) must not mint a code a row already holds.
+  let code = '';
+  for (let attempt = 0; attempt < 50 && !code; attempt += 1) {
+    const allocated = await allocateDocumentNumber(tx, SERIES, {}, ctx.principal.userId);
+    const [taken] = await tx.select({ code: port.code }).from(port).where(eq(port.code, allocated.documentNo)).limit(1);
+    if (!taken) code = allocated.documentNo;
+  }
+  if (!code) throw new PortError('No free port code could be minted; check the PORT_CODE series.');
+  await tx.insert(port).values({ code, ...fields, active: true, createdBy: ctx.principal.userId });
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
     action: 'port.created',
     objectType: PERMISSION_OBJECT,
-    objectId: allocated.documentNo,
+    objectId: code,
     branchCode: ctx.branchCode,
-    after: { code: allocated.documentNo, ...fields },
+    after: { code, ...fields },
     outcome: 'success',
     requestId: ctx.requestId ?? null,
     clientIp: ctx.clientIp ?? null,
   });
-  return { code: allocated.documentNo };
+  return { code };
 }
 
 /** Corrects a port's name, LOCODE or country in place. */
