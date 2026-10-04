@@ -48,12 +48,28 @@ async function openDialog(page: Page, name: string) {
   return dialog;
 }
 
-/** The four doors in the title bar, in order: printer, paperclip, (notes), clock. */
+/** The four doors in the title bar, in the rule's order: printer, paperclip, notes, clock. */
 async function expectDoors(page: Page) {
   const bar = page.locator('[class*="sapTitleActions"]').first();
-  await expect(bar.getByRole('button', { name: 'Print / Export' })).toBeVisible();
-  await expect(bar.getByRole('button', { name: /^Attachments/ })).toBeVisible();
-  await expect(bar.getByRole('button', { name: /Audit log|History/ })).toBeVisible();
+  const doors = bar.locator(':scope > button, :scope > a');
+  await expect(doors).toHaveCount(4);
+  const names = await doors.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('title') ?? ''));
+  expect(names[0]).toBe('Print / Export');
+  expect(names[1]).toBe('Attachments');
+  expect(names[2]).toBe('Notes');
+  expect(names[3]).toMatch(/^(History|Audit log)$/);
+}
+
+/** A note through the shared Notes door: written, listed, counted. */
+async function addNote(page: Page, body: string) {
+  await page.getByRole('button', { name: /^Notes/ }).click();
+  const notes = page.getByRole('dialog', { name: 'Notes' });
+  await notes.locator('input[name="note"]').fill(body);
+  await notes.getByRole('button', { name: 'Add note' }).click();
+  await expect(page.getByRole('button', { name: /^Notes \(\d+\)$/ })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: /^Notes \(\d+\)$/ }).click();
+  await expect(page.getByRole('dialog', { name: 'Notes' }).getByRole('cell', { name: body })).toBeVisible();
+  await page.keyboard.press('Escape');
 }
 
 test.describe.configure({ mode: 'serial' });
@@ -102,6 +118,8 @@ test.describe('REQ-ACC-001 · the Accounting screens', () => {
     await expect(page.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0);
     // The accounts are links to their profiles.
     await expect(page.getByRole('link', { name: /CASH-HQ/ }).first()).toHaveAttribute('href', /\/master-data\/bank-accounts\/CASH-HQ/);
+    // A note through the shared door, from the draft.
+    await addNote(page, `Float opened for the fair ${RUN}`);
     await shot(page, 'transfer-record-en');
 
     await signIn(page, ADMIN);
@@ -193,6 +211,8 @@ test.describe('REQ-ACC-001 · the Accounting screens', () => {
     await expect(page.getByRole('heading', { name: 'Period / Year-End Closing', level: 1 })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByRole('heading', { name: 'Close history' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Sub-ledgers equal their control accounts' })).toBeVisible();
+    // The period is a record: its four doors on the checklist's title bar.
+    await expectDoors(page);
     await shot(page, 'closing-en');
   });
 
@@ -233,11 +253,12 @@ test.describe('REQ-ACC-001 · the Accounting screens', () => {
     await expect(page.getByText('Active', { exact: true }).first()).toBeVisible({ timeout: 30_000 });
   });
 
-  test('8 · the journal record wears its doors', async ({ page }) => {
+  test('8 · the journal record wears its doors and links its accounts', async ({ page }) => {
     await signIn(page, ADMIN);
     await page.goto('/finance/journals/OPEN-DEV-2026');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 60_000 });
     await expectDoors(page);
+    await expect(page.getByRole('link', { name: /^[ALXRE]\d+ · / }).first()).toHaveAttribute('href', /\/master-data\/chart-of-accounts\//);
   });
 
   test('9 · every new screen reads right to left at a phone’s width with no sideways scroll', async ({ page, context }) => {

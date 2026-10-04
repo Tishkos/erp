@@ -19,6 +19,8 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ownerPool, rejection, resetTestData, seedBranch } from './setup';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
@@ -293,25 +295,52 @@ async function postedTransfer(input: Parameters<typeof treasury.createTransfer>[
   return { ...made, ...posted };
 }
 
-/** Maps the exchange gain and loss for transfers, as Finance would on Posting Mappings. */
-async function mapExchange() {
+/**
+ * Maps the exchange gain and loss, as Finance would on Posting Mappings — for
+ * transfers by default, or for the event named (the loan repayment's, say,
+ * from which 0293 copies them).
+ */
+async function mapExchange(event = 'treasury.bank_transfer') {
   const { rows: income } = await ownerPool.query(`select id, account_type from chart_of_account where code = 'L000001'`);
   for (const [code, role] of [
     ['X9FXGAIN', 'exchange_gain'],
     ['X9FXLOSS', 'exchange_loss'],
   ] as const) {
-    const { rows } = await ownerPool.query(
-      `insert into chart_of_account
-         (code, name, account_type, parent_id, is_group, is_active, approval_status, level, currency_restriction)
-       values ($1, $1, $2, $3, false, true, 'approved', 1, 'IQD') returning id`,
-      [code, income[0].account_type, income[0].id],
-    );
+    const { rows: existing } = await ownerPool.query(`select id from chart_of_account where code = $1`, [code]);
+    const accountId =
+      existing[0]?.id ??
+      (
+        await ownerPool.query(
+          `insert into chart_of_account
+             (code, name, account_type, parent_id, is_group, is_active, approval_status, level, currency_restriction)
+           values ($1, $1, $2, $3, false, true, 'approved', 1, 'IQD') returning id`,
+          [code, income[0].account_type, income[0].id],
+        )
+      ).rows[0].id;
     await ownerPool.query(
       `insert into posting_rule (event_type, line_role, account_id, is_active, created_by)
-       values ('treasury.bank_transfer', $1, $2, true, $3)`,
-      [role, rows[0].id, manager.principal.userId],
+       values ($1, $2, $3, true, $4)`,
+      [event, role, accountId, manager.principal.userId],
     );
   }
+}
+
+/** Runs migration 0293 again, as the migrator would on a database it has not reached. */
+async function premapTransferFx() {
+  const sql = readFileSync(join(process.cwd(), 'src/server/db/migrations/0293_transfer_fx_roles_premapped.sql'), 'utf8');
+  for (const statement of sql.split('--> statement-breakpoint')) {
+    if (statement.trim()) await ownerPool.query(statement);
+  }
+}
+
+async function transferFxRules() {
+  const { rows } = await ownerPool.query<{ role: string; code: string; active: boolean }>(
+    `select r.line_role as role, a.code, r.is_active as active
+       from posting_rule r join chart_of_account a on a.id = r.account_id
+      where r.event_type = 'treasury.bank_transfer' and r.line_role in ('exchange_gain', 'exchange_loss')
+      order by r.line_role`,
+  );
+  return rows;
 }
 
 describe('Internal Transfers · one currency', () => {
@@ -502,6 +531,73 @@ describe('Internal Transfers · across currencies, through Currencies & Rates', 
 
   it('names the role Finance has still to map, rather than posting a difference somewhere', async () => {
     await fund('A9BNKUSD', '1000000');
+    const made = await withScope(scope(manager), (tx) =>
+      treasury.createTransfer(tx, manager, {
+        fromAccountId: bankUsd,
+        toAccountId: bankIqd,
+        transferDate: '2026-02-10',
+        amountIqd: price('100'),
+        receivedAmount: price('131000'),
+      }),
+    );
+    await withScope(scope(checker), (tx) => treasury.approveTransferAsChecker(tx, checker, made.id));
+    expect(await rejection(withScope(scope(manager), (tx) => treasury.postTransfer(tx, manager, made.id)))).toMatch(/exchange_gain/);
+  });
+});
+
+describe('Internal Transfers · the FX roles pre-mapped by 0293 (owner, 2026-10-04)', () => {
+  it('copies the exchange gain and loss from the loan repayment’s rules, so a transfer with a difference posts with nobody mapping anything', async () => {
+    await fund('A9BNKUSD', '1000000');
+    // The accounts the other exchange differences already use — the loan repayment's.
+    await mapExchange('treasury.loan_repayment');
+    expect(await transferFxRules()).toEqual([]);
+
+    await premapTransferFx();
+    expect(await transferFxRules()).toEqual([
+      { role: 'exchange_gain', code: 'X9FXGAIN', active: true },
+      { role: 'exchange_loss', code: 'X9FXLOSS', active: true },
+    ]);
+
+    const transfer = await postedTransfer({
+      fromAccountId: bankUsd,
+      toAccountId: bankIqd,
+      transferDate: '2026-02-10',
+      amountIqd: price('100'),
+      receivedAmount: price('131000'),
+    });
+    expect(await journalLines(transfer.journalEntryId)).toEqual([
+      { code: 'A9BNKIQD', debit: '131000.0000', credit: '0.0000' },
+      { code: 'A9BNKUSD', debit: '0.0000', credit: '100000.0000' },
+      { code: 'X9FXGAIN', debit: '0.0000', credit: '31000.0000' },
+    ]);
+  });
+
+  it('is idempotent, and leaves a rule Finance already decided for the transfer alone', async () => {
+    await mapExchange('treasury.loan_repayment');
+    await premapTransferFx();
+    await premapTransferFx();
+    expect(await transferFxRules()).toHaveLength(2);
+
+    // Finance had pointed the transfer's loss elsewhere and switched it off:
+    // the migration does not overrule them.
+    const { rows: other } = await ownerPool.query(`select id from chart_of_account where code = 'L9SUSPEN'`);
+    await ownerPool.query(`delete from posting_rule where event_type = 'treasury.bank_transfer' and line_role = 'exchange_loss'`);
+    await ownerPool.query(
+      `insert into posting_rule (event_type, line_role, account_id, is_active, created_by)
+       values ('treasury.bank_transfer', 'exchange_loss', $1, false, $2)`,
+      [other[0].id, manager.principal.userId],
+    );
+    await premapTransferFx();
+    expect(await transferFxRules()).toEqual([
+      { role: 'exchange_gain', code: 'X9FXGAIN', active: true },
+      { role: 'exchange_loss', code: 'L9SUSPEN', active: false },
+    ]);
+  });
+
+  it('copies nothing where no exchange difference is mapped yet, and the transfer still names the role', async () => {
+    await fund('A9BNKUSD', '1000000');
+    await premapTransferFx();
+    expect(await transferFxRules()).toEqual([]);
     const made = await withScope(scope(manager), (tx) =>
       treasury.createTransfer(tx, manager, {
         fromAccountId: bankUsd,

@@ -1471,6 +1471,13 @@
       "when": 1795900000102,
       "tag": "0292_tax_codes",
       "breakpoints": true
+    },
+    {
+      "idx": 210,
+      "version": "7",
+      "when": 1795900000103,
+      "tag": "0293_transfer_fx_roles_premapped",
+      "breakpoints": true
     }
   ]
 }

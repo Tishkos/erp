@@ -1081,6 +1081,17 @@ The four existing financial statements — **Income Statement, Balance Sheet, Ch
    Paperclip and Clock in its title bar and names the template that raised it.
 10. Every new route in `DELIVERED` and the catalogue test; AGENTS.md
     "Accounting (REQ-ACC-001)"; `docs/CONTROLS.md` C-41 to C-43.
+11. **The shared doors and profiles** (`feat/shared-module` merged): every
+    Accounting record — transfer, bank reconciliation, recurring journal, tax
+    code, journal entry, and the period on Period / Year-End Closing — wears
+    Printer, Paperclip, the shared `RecordNotesDoor` and Clock in its title
+    bar, and every bank, bank/cash account, G/L account and journal on them
+    is a `ProfileLink` (`domain/accounting-links.ts` reads `profileHref`).
+    Note targets `bank_statement`, `recurring_journal`, `tax_code`,
+    `fiscal_period`; the period's `period_close` print model and papers
+    (`fiscal_period`); `ReportWindow` takes `titleActions` for it.
+12. **Transfer FX roles pre-mapped** — migration `0293` (owner's decision,
+    Q3 below).
 
 ### Decided by default, owner to confirm (2026-10-04)
 
@@ -1091,10 +1102,17 @@ The four existing financial statements — **Income Statement, Balance Sheet, Ch
 * **Q2 — notes and Recurring Journals in one migration.** Moot: no
   `record_note` table is built here; the Notes door comes from
   `feat/shared-module`.
-* **Q3 — transfer FX roles.** Not pre-mapped. `exchange_gain` /
-  `exchange_loss` under `treasury.bank_transfer` are Finance's to map on
-  Posting Mappings; until then a transfer with a difference refuses to post
-  and names the role.
+* **Q3 — transfer FX roles.** Decided by the owner (2026-10-04): pre-mapped.
+  Migration `0293` copies `exchange_gain` / `exchange_loss` for
+  `treasury.bank_transfer` from the FX events already mapped (the loan
+  repayment's rules first, then the loan revaluation's, then the import's
+  `payables.exchange_difference`), so a cross-currency transfer with a
+  difference posts without Finance mapping anything. Idempotent; a rule
+  Finance already defined for the transfer — active or not — is left as they
+  decided it; on a database where no FX event is mapped yet nothing is copied
+  and the transfer still refuses with the role's name until Posting Mappings
+  carries one. Test: `nav-internal-transfers.test.ts` › "the FX roles
+  pre-mapped by 0293".
 * **Q4 — Loans and Manual Deposits.** Untouched (payables owns their
   engines). The legacy `treasury.approveTransfer` that Manual Deposits'
   cash-to-bank rows use still lets the creator approve; reported, not fixed.
@@ -1103,11 +1121,11 @@ The four existing financial statements — **Income Statement, Balance Sheet, Ch
 
 ## Part D — Left to do, in this order
 
-Done except where marked: items 2–8 are Part C 4–10.
+All done: items 2–8 are Part C 4–10; item 1 is Part C 11.
 
-1. **Notes door** — *not built here by decision (orchestrator, 2026-10-04)*:
-   `feat/shared-module` builds the notes table and component once; each
-   Accounting record takes the door when that branch is merged.
+1. **Notes door** — *done*: `feat/shared-module` (merged) keeps notes as
+   `<object>.note_added` audit events and builds the door once; every
+   Accounting record wears it (Part C 11).
 2. **Internal Transfers screens** — `/treasury/transfers` (copies
    Purchase Invoices list) and `/treasury/transfers/[transferNo]` (copies the
    Purchase Invoice record): Printer (`internal_transfer` print model, object
