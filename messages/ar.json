@@ -332,6 +332,8 @@
     "temporary_expired": "انتهت صلاحية كلمة المرور المؤقتة. اطلب كلمة جديدة من مدير النظام."
   },
   "column": {
+    "from": "من",
+    "to": "إلى",
     "branch": "الفرع",
     "code": "الرمز",
     "name": "الاسم",
@@ -3653,6 +3655,31 @@
         "adjusted": "معدَّل",
         "cancelled": "ملغى"
       }
+    },
+    "stock_flows": {
+      "stock_receipts_subtitle": "ما دخل إلى المخزون من دفتر الحركات: استلامات البضائع، المخزون الافتتاحي، وصول الاستيراد من الترانزيت، المرتجعات، ما وُجد في الجرد، وعكس صرف. يفتح كل سطر المستند الذي حرّكه.",
+      "stock_issues_subtitle": "ما خرج من المخزون من دفتر الحركات: المبيعات، صرف مواد المشاريع، المرتجعات للموردين، الشطب والتلف، النقص في الجرد، وعكس استلام. يفتح كل سطر المستند الذي حرّكه.",
+      "stock_receipts_none": "لم يدخل شيء إلى المخزون بهذه التصفية.",
+      "stock_issues_none": "لم يخرج شيء من المخزون بهذه التصفية.",
+      "all_warehouses": "كل المستودعات",
+      "all_kinds": "كل الأنواع",
+      "filter": "تصفية",
+      "kind": "النوع",
+      "unit_cost": "تكلفة الوحدة (د.ع)",
+      "value": "القيمة (د.ع)",
+      "journal": "القيد",
+      "kind_goods_receipt": "استلام بضاعة",
+      "kind_opening_stock": "مخزون افتتاحي",
+      "kind_transfer_receipt": "استلام حاوية",
+      "kind_sales_return": "مرتجع مبيعات",
+      "kind_project_return": "إرجاع من مشروع",
+      "kind_count_adjustment": "جرد / مطابقة",
+      "kind_reversal": "عكس",
+      "kind_delivery": "بيع",
+      "kind_project_issue": "صرف مواد لمشروع",
+      "kind_goods_return": "مرتجع للمورد",
+      "kind_write_off": "شطب",
+      "kind_damage": "تلف"
     },
     "landed_cost": {
       "section_title": "الكلفة الواصلة",

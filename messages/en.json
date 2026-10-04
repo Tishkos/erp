@@ -332,6 +332,8 @@
     "temporary_expired": "The temporary password has expired. Ask an administrator for a new one."
   },
   "column": {
+    "from": "From",
+    "to": "To",
     "branch": "Branch",
     "code": "Code",
     "name": "Name",
@@ -3653,6 +3655,31 @@
         "adjusted": "Adjusted",
         "cancelled": "Cancelled"
       }
+    },
+    "stock_flows": {
+      "stock_receipts_subtitle": "What came into stock, from the movement ledger: goods receipts, opening stock, an import's arrival from transit, returns, stock found by a count, an issue reversed. Each row opens the document that moved it.",
+      "stock_issues_subtitle": "What left stock, from the movement ledger: sales, project material issues, supplier returns, write-offs and damage, stock counted short, a receipt reversed. Each row opens the document that moved it.",
+      "stock_receipts_none": "Nothing has come into stock for these filters.",
+      "stock_issues_none": "Nothing has left stock for these filters.",
+      "all_warehouses": "All warehouses",
+      "all_kinds": "All kinds",
+      "filter": "Filter",
+      "kind": "Kind",
+      "unit_cost": "Unit cost (IQD)",
+      "value": "Value (IQD)",
+      "journal": "Journal",
+      "kind_goods_receipt": "Goods receipt",
+      "kind_opening_stock": "Opening stock",
+      "kind_transfer_receipt": "Container receipt",
+      "kind_sales_return": "Sales return",
+      "kind_project_return": "Project return",
+      "kind_count_adjustment": "Count / reconciliation",
+      "kind_reversal": "Reversal",
+      "kind_delivery": "Sale",
+      "kind_project_issue": "Project material issue",
+      "kind_goods_return": "Supplier return",
+      "kind_write_off": "Write-off",
+      "kind_damage": "Damage"
     },
     "landed_cost": {
       "section_title": "Landed cost",
