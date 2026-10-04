@@ -85,3 +85,4 @@ export * from './legacy';
 export * from './hr';
 export * from './whatsapp';
 export * from './recurring-journals';
+export * from './chat';
