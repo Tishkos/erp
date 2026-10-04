@@ -260,7 +260,7 @@ export async function ReceivablesAgeing({ searchParams }: { readonly searchParam
               <bdi dir="ltr">{chosen.code}</bdi>
             </span>
             {' · '}
-            <Link className={s.sapLink} href={`/master-data/business-partners/${encodeURIComponent(chosen.code)}`}>
+            <Link className={s.sapLink} href={`/sales/customers/${encodeURIComponent(chosen.code)}?role=customer`}>
               {r('customer_record')}
             </Link>
             {' · '}

@@ -169,8 +169,9 @@ test.describe('REQ-AR-001 · receivables in a browser', () => {
     await expect(page.locator('[data-status="draft"]').first()).toBeVisible();
     await doors(page, 'note-document');
     await press(page, 'Approve', 'approved');
-    await press(page, 'Post', 'posted');
-    await expect(page.locator('#note-document').getByRole('link', { name: invoiceNo })).toBeVisible();
+    // Posting applies it to the invoice in full (D-AR-7), so it is settled at once.
+    await press(page, 'Post', 'settled');
+    await expect(page.locator('#note-document').getByRole('link', { name: invoiceNo }).first()).toBeVisible();
     await shoot(page, 'credit-note-desktop-en');
 
     await page.goto(`/sales/credit-notes/new?kind=debit&customer=${CUSTOMER}`);
