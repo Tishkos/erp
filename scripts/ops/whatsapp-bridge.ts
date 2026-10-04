@@ -1000,6 +1000,14 @@ async function main(): Promise<void> {
   );
 
   let socket: WASocket | null = null;
+  /**
+   * Is the link to WhatsApp actually open? A socket exists from the first
+   * attempt, paired or not — while it shows a QR code it is not a connection.
+   * The minute's heartbeat used to say "connected" whenever a socket existed,
+   * so the Bridge window read Connected on an install nobody had paired, and
+   * the outbox was run against a socket that could send nothing (2026-10-04).
+   */
+  let linked = false;
   let stopping = false;
   const send = transportFor(() => socket, () => settings.throttlePerMinute);
   wa.registerWhatsappSender(send);
@@ -1038,11 +1046,13 @@ async function main(): Promise<void> {
       if (qr) {
         log('scan this QR code with the company phone (WhatsApp → Linked devices → Link a device):');
         qrcode.generate(qr, { small: true });
+        linked = false;
         void heartbeat('waiting for QR scan');
       }
       if (connection === 'connecting') log('socket connecting…');
       if (connection === 'open') {
         log(`connected as ${socket?.user?.id ?? '?'}`);
+        linked = true;
         void heartbeat('connected');
         if (!LIST_GROUPS) void greet(scope, send, jidToE164(jidNormalizedUser(socket?.user?.id ?? '')));
         // `--list-groups` is a question, not a service: it answers and leaves.
@@ -1068,6 +1078,7 @@ async function main(): Promise<void> {
         const code = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
         const loggedOut = code === DisconnectReason.loggedOut;
         log(`connection closed (${code ?? 'no code'})${loggedOut ? ' — logged out; run with --reset-pairing and scan again' : ', reconnecting in 5s'}`);
+        linked = false;
         void heartbeat(loggedOut ? 'logged out' : 'reconnecting');
         socket = null;
         if (!loggedOut && !stopping) setTimeout(() => connect().catch((e) => log(`reconnect failed: ${e}`)), 5000);
@@ -1092,12 +1103,12 @@ async function main(): Promise<void> {
     if (stopping) return;
     try {
       settings = await withScope(scope, (tx) => wa.settings(tx));
-      if (socket) {
+      if (socket && linked) {
         const result = await runner.runOnce(scope, { channels: ['whatsapp'] });
         const r = result.channels.whatsapp;
         if (result.dispatched || (r && (r.sent || r.failed || r.suppressed))) log(runner.describe(result));
       }
-      if (socket) await sendDigest(scope, send, settings);
+      if (socket && linked) await sendDigest(scope, send, settings);
       if (Date.now() - lastRedaction > 3_600_000) {
         lastRedaction = Date.now();
         const blanked = await withScope(scope, (tx) => wa.redactExpired(tx, settings.retentionDays));
@@ -1108,7 +1119,7 @@ async function main(): Promise<void> {
     }
   };
   const poll = setInterval(() => void tick(), POLL_SECONDS * 1000);
-  const beat = setInterval(() => void heartbeat(socket ? 'connected' : 'disconnected'), 60_000);
+  const beat = setInterval(() => void heartbeat(linked ? 'connected' : socket ? 'waiting for QR scan' : 'disconnected'), 60_000);
   await tick();
 
   const stop = async () => {
