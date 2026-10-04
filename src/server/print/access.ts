@@ -28,6 +28,13 @@ export const EXPORT_ACCESS = {
   // The import application itself — the record that ties the invoice, the
   // goods, the declaration and the shipment together (2026-10-03).
   import_application: { kind: 'document', route: '/payables', object: 'payable' },
+  // REQ-PAY-001 PAY4 — the purchase records that had no copy (2026-10-04).
+  purchase_order: { kind: 'document', route: '/payables/purchase-orders', object: 'purchase_order' },
+  goods_receipt: { kind: 'document', route: '/payables/goods-receipts', object: 'goods_receipt' },
+  payment_application: { kind: 'document', route: '/payables/payment-applications', object: 'payment_application' },
+  supplier_advance: { kind: 'document', route: '/payables/advances', object: 'supplier_advance' },
+  recurring_contract: { kind: 'document', route: '/payables/contracts', object: 'recurring_contract' },
+  supplier_credit_note: { kind: 'document', route: '/payables/credit-memos', object: 'supplier_credit_memo' },
   customer_statement: { kind: 'report', route: '/sales/customer-statements', object: 'business_partner' },
   supplier_statement: { kind: 'report', route: '/payables/supplier-statements', object: 'business_partner' },
   bank_statement: { kind: 'report', route: '/master-data/bank-accounts', object: 'bank_account' },
@@ -63,6 +70,8 @@ export const EXPORT_ACCESS = {
   hr_leave_balances: { kind: 'report', route: '/hr/reports', object: 'hr_report' },
   hr_payroll_register: { kind: 'report', route: '/hr/reports', object: 'payroll_run' },
   hr_unsettled_advances: { kind: 'report', route: '/hr/reports', object: 'employee_advance' },
+  // REQ-PM-001 PM-5 — the progress certificate, the client's invoice for work done (shared, 2026-10-04).
+  project_certificate: { kind: 'document', route: '/projects/billing', object: 'project' },
 } as const satisfies Record<
   string,
   { readonly kind: 'document' | 'report'; readonly route: string; readonly object: string; readonly selfService?: boolean }

@@ -34,6 +34,9 @@ import * as rates from '@/server/services/exchange-rates';
 import * as legacy from '@/server/services/legacy-import';
 import * as partners from '@/server/services/partners';
 import * as terms from '@/server/services/payment-terms';
+import * as supplierPayments from '@/server/services/supplier-payment';
+import { businessToday } from '@/server/domain/business-date';
+import { toDecimalString } from '@domain/money';
 import {
   addPartnerBankAccount,
   deactivatePartnerBankAccount,
@@ -102,6 +105,12 @@ export default async function BusinessPartnerPage({
         accounts: await bankDetails.bankAccountsOf(tx, row.id),
         bankList: mayEdit ? await banks.listActive(tx) : [],
         currencyRows: mayEdit ? (await rates.currencies(tx)).filter((currency) => currency.isActive) : [],
+        // REQ-PAY-001 PAY3 (2026-10-04) — where the supplier links land: what
+        // we owe them and what we hold with them, read from the documents.
+        position:
+          row.isSupplier && can(principal, 'view', supplierPayments.PERMISSION_OBJECT)
+            ? await supplierPayments.supplierAccount(tx, row.id, businessToday())
+            : null,
       };
     } catch (error) {
       if (error instanceof AdminNotFoundError) return null;
@@ -109,7 +118,8 @@ export default async function BusinessPartnerPage({
     }
   });
   if (!data) notFound();
-  const { row, paymentTerms, history, accounts, bankList, currencyRows } = data;
+  const { row, paymentTerms, history, accounts, bankList, currencyRows, position } = data;
+  const iqd = (amount: bigint) => formatMoney(toDecimalString(amount, 4n), 'IQD', locale as Locale);
   const bankT = await getTranslations('admin.partners');
   const selected = accounts.find((account) => account.id === query.account) ?? null;
   const legacyT = await getTranslations('admin.legacy_import');
@@ -262,6 +272,52 @@ export default async function BusinessPartnerPage({
               </li>
             </ul>
           </Panel>
+
+          {/* REQ-PAY-001 — the supplier's position, as the records that link
+              here would want it answered: owed, held, net; each figure opens
+              the screen it is read from. */}
+          {position && routeRole === 'supplier' ? (
+            <Panel title={t('payables_record.position_title')}>
+              <ul className={s.profileFacts}>
+                <li>
+                  <span>{t('payables_record.position_owed')}</span>
+                  <span>
+                    <Link href={`/payables/open-items?code=${encodeURIComponent(row.code)}`}>
+                      <bdi dir="ltr">{iqd(position.outstandingIqd)}</bdi>
+                    </Link>
+                  </span>
+                </li>
+                <li>
+                  <span>{t('payables_record.position_open_invoices')}</span>
+                  <span>
+                    <bdi dir="ltr">{String(position.openInvoices.length)}</bdi>
+                  </span>
+                </li>
+                <li>
+                  <span>{t('payables_record.position_held')}</span>
+                  <span>
+                    <Link href={`/payables/supplier-credits?supplier=${encodeURIComponent(row.code)}`}>
+                      <bdi dir="ltr">{iqd(position.unallocatedPaymentIqd + position.unappliedAdvanceIqd + position.unappliedCreditIqd)}</bdi>
+                    </Link>
+                  </span>
+                </li>
+                <li>
+                  <span>{t('payables_record.position_net')}</span>
+                  <span>
+                    <bdi dir="ltr">
+                      {iqd(position.outstandingIqd - position.unallocatedPaymentIqd - position.unappliedAdvanceIqd - position.unappliedCreditIqd)}
+                    </bdi>
+                  </span>
+                </li>
+                <li>
+                  <span>{t('payables_record.position_notes')}</span>
+                  <span>
+                    <Link href={`/payables/credit-memos?q=${encodeURIComponent(row.code)}`}>{t('payables_record.position_open_notes')}</Link>
+                  </span>
+                </li>
+              </ul>
+            </Panel>
+          ) : null}
 
           {mayAdminister ? (
             <Panel title={row.active ? t('partners.deactivate_title') : t('reactivate')}>

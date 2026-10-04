@@ -174,8 +174,10 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
   // Customers had to read past the general ledger to find them.
   { key: 'sales', icon: ShoppingCart, sectionKeys: ['sales'] },
   // Purchasing became Payables — one module for everything owed (REQ-AP-001 D7).
-  // REQ-FIX-001 FIX-1 — four headings, like Accounting's.
-  { key: 'payables', icon: ShoppingBag, sectionKeys: ['payables', 'payables_suppliers', 'payables_setup'] },
+  // Three headings (2026-10-04): purchasing & invoices, supplier payments &
+  // credits, supplier balances. Its settings and sheet migration are
+  // Administration's; the supplier master is Master Data's.
+  { key: 'payables', icon: ShoppingBag, sectionKeys: ['payables', 'payables_payments', 'payables_suppliers'] },
   // Everything logistics in the system (by direction, 2026-10-02).
   { key: 'logistics', icon: Truck, sectionKeys: ['logistics_customs', 'logistics_shipping', 'logistics'] },
   { key: 'money_transfer', icon: ArrowLeftRight, sectionKeys: ['money_transfer'] },

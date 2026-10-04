@@ -3,10 +3,12 @@ import * as documents from './documents';
 import * as shipmentDocuments from './shipment-documents';
 import * as customsDocuments from './customs-documents';
 import * as importDocuments from './import-documents';
+import * as purchaseDocuments from './purchase-documents';
 import type { BuildContext, Built } from './documents';
 import * as reports from './reports';
 import * as projectReports from './project-reports';
 import * as hrReports from './hr-reports';
+import * as projectDocuments from './project-documents';
 
 export type { ExportKey } from './access';
 
@@ -50,6 +52,12 @@ const BUILDERS = {
   bill_of_lading: byId(shipmentDocuments.billOfLading),
   asycuda_reading: byId(customsDocuments.asycudaReading),
   import_application: byId(importDocuments.importApplication),
+  purchase_order: byId(purchaseDocuments.purchaseOrder),
+  goods_receipt: byId(purchaseDocuments.goodsReceipt),
+  payment_application: byId(purchaseDocuments.paymentApplication),
+  supplier_advance: byId(purchaseDocuments.supplierAdvance),
+  recurring_contract: byId(purchaseDocuments.recurringContract),
+  supplier_credit_note: byId(purchaseDocuments.supplierCreditNote),
   customer_statement: (ctx, input) => reports.partnerStatement(ctx, 'customer', input.query),
   supplier_statement: (ctx, input) => reports.partnerStatement(ctx, 'supplier', input.query),
   bank_statement: (ctx, input) => (input.id ? reports.bankStatement(ctx, input.id, input.query, 'bank') : Promise.resolve(null)),
@@ -79,6 +87,7 @@ const BUILDERS = {
   hr_leave_balances: (ctx, input) => hrReports.leaveBalances(ctx, input.query),
   hr_payroll_register: (ctx, input) => hrReports.payrollRegister(ctx, input.query),
   hr_unsettled_advances: (ctx, input) => hrReports.unsettledAdvances(ctx, input.query),
+  project_certificate: byId(projectDocuments.projectCertificate),
 } satisfies Record<ExportKey, Builder>;
 
 export function exportable(key: ExportKey): Exportable {

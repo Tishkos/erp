@@ -86,8 +86,8 @@ dont forget these this must be our standard". A record screen carries them in
   record's export key. A record with no print model does not get an empty door;
   it gets a print model (`src/server/print/`, `EXPORT_ACCESS`, `registry.ts`).
 * **Paperclip** — `AttachmentsButton` with the count and the `Attachments` form.
-* **Notes** — `NotesButton` with the record's own notes and the box to add one,
-  where the record has notes.
+* **Notes** — `RecordNotesDoor` (`NotesButton` with the record's own notes and
+  the box to add one); see "Shared doors and profiles" below.
 * **Clock** — `HistoryButton` with `RecordHistory`.
 
 The long blocks those replace — an attachments panel, a notes table, an audit
@@ -98,6 +98,61 @@ history doors open `wide`, because a table in a narrow dialog is read sideways.
 Done so far: the purchase invoice, the import application, the B/L, the PD, the
 ASYCUDA reading, the loan (no printer — no print model yet). A new record screen
 starts with them.
+
+## Shared doors and profiles (feat/shared-module, 2026-10-04)
+
+**Notes door.** A note is an append-only audit event `<object>.note_added`, `after: { note }` — no notes table, ever. `services/record-notes.ts`: `addNote(tx, ctx, { object, recordId, body })` (trimmed, 1–2,000 characters, the record must be visible under the caller's scope, the grant is the record's own — `edit_draft`, or `create`/`configure` where no role edits drafts — in the record's branch, refusal audited) and `listNotes(tx, { object, recordId })` → `{ id, createdAt, author, body }[]`, newest first. `object`/`recordId` are exactly what the record's `RecordHistory` gets (its uuid, or its number where its history is kept by number). The PD (`last_note`, `PD_NOTE`) and the purchase invoice (`ap_invoice_note`, read by the Overdue list) keep their side effects. A record not in the service's `TARGETS` table is added with `registerNoteTarget(object, { permissionObject, verb, find })` — an additive edit to that table is fine too. Wiring, in `titleActions` between the paperclip and the clock:
+
+```tsx
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+// in the page's transaction: notes: await recordNotes.listNotes(tx, { object: ar.PERMISSION_OBJECT, recordId: invoice.id })
+<RecordNotesDoor notes={found.notes} object={ar.PERMISSION_OBJECT} recordId={invoice.id} />
+```
+
+The door is the purchase invoice's (`NotesButton`, the When/Who/Note table, the add form) and posts to the one shared action `addRecordNoteAction`, which returns to the page it was opened on (query included). The add box shows to whoever `mayAddNote` allows; pass `mayAdd` to override. Messages: `admin.record_notes`. Test: `tests/integration/shared-record-notes.test.ts`.
+
+**Profile links.** Every party or account a record shows links to its profile through `profileHref(kind, key, qualifier?)` (`src/server/domain/profiles.ts`, null where no page exists) — render it with `ProfileLink` (`@/components/admin/profile-link`), the bank loan's account link markup (`s.sapLink` + `<bdi dir="ltr">code · name</bdi>`), plain text where there is no page or the screen is not served:
+
+```tsx
+<ProfileLink code={supplier.code} kind="supplier" name={supplier.name} />
+<ProfileLink code={pd.pdNo} kind="pd" qualifier={{ year: pd.year }} />
+<ProfileLink code={supplier.code} dir="auto" kind="supplier">{supplier.name}</ProfileLink>
+```
+
+When a module builds a missing profile page, it fills in the route in `BASES` (and `tests/unit/profiles.test.ts` checks the page exists and is delivered).
+
+| Kind (`profileHref`) | Profile route | Owner |
+|---|---|---|
+| `customer` | `/sales/customers/<code>?role=customer` | receivables |
+| `supplier` | `/payables/suppliers/<code>?role=supplier` | payables |
+| `bank` | `/master-data/banks/<code>` | accounting |
+| `bank_account` / `cash_account` | `/master-data/bank-accounts/<code>` / `/master-data/cash-accounts/<code>` | accounting |
+| `gl_account` | `/master-data/chart-of-accounts/<code>` (its ledger is one click on) | accounting |
+| `journal` | `/finance/journals/<entryNo>` | accounting |
+| `item` / `warehouse` / `uom` | `/inventory/items/<code>` / `/master-data/warehouses/<code>` / `/inventory/uom/<code>` | inventory |
+| `import` | `/payables/<payableNo>` (the import application) | payables |
+| `bl` / `container` / `pd` / `asycuda_run` | `/payables/shipments/<blNo>` / `/payables/containers/<no>[?id=]` / `/payables/pd/<no>[?year=]` / `/payables/pd/asycuda/<runNo>` | logistics |
+| `port`, `carrier` | **missing — logistics builds it** | logistics |
+| `loan`, `deposit` | `/treasury/loans/<loanNo>`, `/treasury/deposits/<no>` | payables |
+| `employee`, `position`, `user` | `/hr/employees/<no>`, `/hr/positions/<code>`, `/administration/users/<id>` | shared |
+| `project` and its documents | `/projects/<code>`, `/projects/billing/<no>`, `/projects/budgets/<no>`, `/projects/change-orders/<no>`, `/projects/material-issues/<no>` | shared |
+| `branch`, `department`, `cost_centre`, `payment_term`, `payment_method` | `/master-data/<…>/<code>` | shared |
+| every document kind (`purchase_invoice`, `sales_invoice`, `supplier_payment`, `customer_receipt`, returns, PO, GR, payment application, advance, contract, opening stock) | its record page | the document's module |
+| `currency`, `fixed_asset`, `investment` | **missing** — no record screens for these modules yet (not delivered) | shared |
+
+The coverage of the four doors and profile links per record page is `docs/notes/doors-coverage.md`.
+
+## Payables (REQ-PAY-001)
+
+The module is three headings — Purchasing & Invoices, Supplier Payments & Credits, Supplier Balances (`domain/menu.ts`; the five never-built duplicates are gone; Suppliers is Master Data's; Payables Settings and the Sheet Migration are Administration's). The engines were already there; the work was doors, links, three screens and two accounting gaps. The requirement, the inspection and the decisions are `docs/requirements/REQ-PAY-001-payables-finalisation.md`.
+
+* **Doors and links.** Every purchase-side record — purchase invoice (and the debit note, which is one), import application, PO, GR, purchase return, supplier payment, payment application, supplier advance, recurring contract, supplier credit note — wears printer / paperclip / notes / clock from its draft, through one wiring: `src/app/(app)/payables/record-doors.tsx` (`readDoors` in the page's transaction, `PurchaseDoors` in `titleActions`) and one paperclip action, `payables/attach-action.ts` (`object_type`, `object_id`, `return_to`; only the parents `attachments-runtime.ts` › `PURCHASE_PARENTS` registers). Notes are the shared `record-notes` audit events (D-PAY-1, no table); the purchase invoice's go through `expenses.addNote` so `ap_invoice_note` and the Overdue list keep working. Parties link with `ProfileLink`: supplier → `/payables/suppliers/<code>?role=supplier`, the bank/cash account, the order, the import, the invoice, the item, the warehouse, the journal. The supplier's profile (`master-data/business-partners/[code]`, read as a supplier) shows its payables position — owed, held, net — with the screens each figure comes from. Print models for the six records that had none: `print/purchase-documents.ts` (`purchase_order`, `goods_receipt`, `payment_application`, `supplier_advance`, `recurring_contract`, `supplier_credit_note`), tested by `tests/integration/pay04-purchase-print.test.ts`.
+* **PO and GR records** are on `DocumentWindow`: the order with Ordered / Received / **Remaining** (ordered − received − closed, the order's own `openCommitments` arithmetic) / Invoiced / price per line and the receipts and invoices that answered it (`purchase-order.viewByNo`); the receipt with Ordered / This receipt / Received to date / Remaining per line (`goods-receipt.viewByNo` › `orderLines`). Both read-only.
+* **Credit and debit notes** (`services/supplier-notes.ts`, `/payables/credit-memos`). A standalone credit note is a `supplier_credit_memo` with no goods return: Draft → Approve (somebody else; super user alone) → Post (Dr Supplier A/P / Cr purchase variance or the account it names, D-PAY-3) → applied to its invoice up to what is owed, the rest an unapplied supplier credit applied later (`applyCredit`) → Reverse with a reason, never edited. Every application is a `supplier_credit_application` row and the memo's `allocated_amount_iqd` is their sum — that is the fix for the return route's memo, which raised the invoice's settled amount and left the memo at 0 so `supplierAccount` counted it twice; 0295 corrected the memos already written. A **debit note is a purchase invoice** (D-PAY-2, `ap_invoice.adjusts_invoice_id`) raised from the same register and opened on the invoice page, which lists what adjusts it (`adjustmentsOf`). Migration `0295_supplier_credit_debit_notes` (`when` 1795900000105); controls C-41–C-44.
+* **Supplier Credits** (`/payables/supplier-credits`, on `supplier_payment`, D-PAY-6) and **Supplier Reconciliation** (`/payables/reconciliation`, on `ap_invoice`, D-PAY-5) read `services/supplier-balances.ts`: the credits straight from the documents (no balance table); the reconciliation from `subledger.reconciliation` — the close check's own read — with the journal lines behind a difference (`exceptions`: no supplier on the line, amounts differ, filed under another account, journal not posted) and, by supplier, `open-items.reconcile`. Nothing on either screen writes.
+* **Payment Application** means the request to the bank or cashier (draft → approved → sent → confirmed → debited); the allocation to invoices lives on the supplier payment its confirmation creates, which lists its allocations. The application's record and register say so (owner's decision 4.6).
+* **PAY7** — the purchase return's "Supplier reimburses the landed cost: Yes / No" (`goods_return.reimburses_landed_cost`, routing to `return_clearing` / `purchase_variance`, the later lock's departures) is built on `feat/inventory-module` (fdee68c), with the landed-cost engine it belongs to; not duplicated here.
+* **Tests.** `pay04-purchase-print`, `pay08-supplier-credits` (PAY8–PAY12: the payment chain 100,000 → 40,000 → 60,000 → 0 with its ageing buckets; notes on statements and in the ageing; credits not double-counted; the reconciliation detecting a manual journal), `pay03-purchase-attachments`, `shared-record-notes`; e2e `tests/e2e/pay-doors.spec.ts` (doors, links, a note through the door, the credit note from draft to posted by a second person, the three screens, desktop EN and phone AR) beside `payables.spec.ts`.
 
 ## Screens copy existing models — the design must not change
 

@@ -23,24 +23,25 @@ describe('ap01 · one module, one place, nothing bookmarked breaks', () => {
     expect(MENU.find((section) => section.key === 'payables')?.ordinal).toBe(4);
   });
 
-  it('the former finance_ap items live inside Payables', () => {
-    // REQ-FIX-001 FIX-1 — the module is four headings now; the items are in one of them.
-    const keys = MENU.filter((section) => ['payables', 'payables_payments', 'payables_suppliers', 'payables_setup'].includes(section.key)).flatMap((section) =>
+  it('the former finance_ap items live inside Payables, once', () => {
+    // The Purchasing & Payables finalisation (2026-10-04): three headings.
+    // Of the former finance_ap items, the reconciliation is built here and
+    // the rest were the Payables screens under second names — Supplier
+    // Ledger is Supplier Statements, Advances and Payments are Supplier
+    // Advances and Supplier Payments, Allocations is each payment's own
+    // table, Ageing is Payables Ageing — so they left the tree.
+    const keys = MENU.filter((section) => ['payables', 'payables_payments', 'payables_suppliers'].includes(section.key)).flatMap((section) =>
       section.items.map((item) => item.key),
     );
-    for (const moved of [
-      'supplier_ledger',
-      'ap_advances',
-      'ap_payments',
-      'ap_allocations',
-      'ap_ageing',
-      'ap_reconciliation',
-    ]) {
-      expect(keys, moved).toContain(moved);
+    for (const kept of ['ap_statements', 'supplier_advances', 'supplier_payments', 'ap_open_items', 'ap_reconciliation']) {
+      expect(keys, kept).toContain(kept);
     }
-    // And Stage 1's own doors.
+    for (const gone of ['supplier_ledger', 'ap_advances', 'ap_payments', 'ap_allocations', 'ap_ageing']) {
+      expect(allMenuItems().map((item) => item.key), gone).not.toContain(gone);
+    }
+    // And Stage 1's own doors — the settings now under Administration.
     expect(keys).toContain('payables_workbench');
-    expect(keys).toContain('payables_settings');
+    expect(MENU.find((section) => section.key === 'administration')?.items.map((item) => item.key)).toContain('payables_settings');
   });
 
   it('both languages name the section and the new screens', () => {

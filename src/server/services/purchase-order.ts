@@ -677,5 +677,29 @@ export async function viewByNo(tx: Tx, orderNo: string) {
     select payable_no as "payableNo" from payable where purchase_order_id = ${order.id} limit 1`);
   const payableNo =
     ((linked.rows[0] as { payableNo?: string } | undefined)?.payableNo ?? null) as string | null;
-  return { order, lines, supplier: supplier ?? null, payableNo };
+  // REQ-PAY-001 PAY5 — what answered the order: every receipt against it
+  // (with what it brought) and every invoice raised on it, under the
+  // reader's own row security.
+  const receipts = await tx.execute(sql`
+    select r.id, r.receipt_no as "receiptNo", r.receipt_date::text as "receiptDate", r.status::text as status,
+           coalesce(sum(l.quantity), 0)::text as quantity
+      from goods_receipt r
+      left join goods_receipt_line l on l.goods_receipt_id = r.id
+     where r.purchase_order_id = ${order.id}
+     group by r.id
+     order by r.receipt_date, r.receipt_no`);
+  const invoices = await tx.execute(sql`
+    select i.id, i.invoice_no as "invoiceNo", i.invoice_date::text as "invoiceDate", i.status::text as status,
+           i.total_iqd::text as "totalIqd", i.settled_amount_iqd::text as "settledAmountIqd"
+      from ap_invoice i
+     where i.purchase_order_id = ${order.id}
+     order by i.invoice_date, i.invoice_no`);
+  return {
+    order,
+    lines,
+    supplier: supplier ?? null,
+    payableNo,
+    receipts: receipts.rows as Array<{ id: string; receiptNo: string; receiptDate: string; status: string; quantity: string }>,
+    invoices: invoices.rows as Array<{ id: string; invoiceNo: string; invoiceDate: string; status: string; totalIqd: string; settledAmountIqd: string }>,
+  };
 }

@@ -142,65 +142,66 @@ export const MENU: readonly MenuSection[] = Object.freeze([
      * one payable type. The former finance_ap section's items live here now —
      * one module, one place — and every old /purchasing/* route redirects.
      *
-     * REQ-FIX-001 FIX-1 — the module is four headings, as Accounting is, in
-     * the order a payable lives: what is bought and invoiced, how it is
-     * paid, who it is owed to, and the module's setup. The customs
-     * declarations, bills of lading and containers went to Logistics and
-     * the bank loans to Treasury & Banking; their routes did not move
-     * (D-FX-1), so every item that left the section it was derived from
-     * names its route.
+     * The Purchasing & Payables finalisation (2026-10-04) — three headings, in
+     * the order a payable lives: what is bought and invoiced, how it is paid
+     * and what the supplier holds, and the balances. The customs
+     * declarations, bills of lading and containers went to Logistics and the
+     * bank loans to Treasury & Banking (FIX-1); the supplier master went to
+     * Master Data and the module's settings and sheet migration to
+     * Administration. Routes did not move (D-FX-1), so every item that left
+     * the section it was derived from names its route.
+     *
+     * Five never-built items were the same screens under a second name and
+     * are gone: Payments (Supplier Payments), Advances (Supplier Advances),
+     * Allocations (each payment's own "allocated to" table), Ageing (Payables
+     * Ageing) and Supplier Ledger (Supplier Statements).
      */
     key: 'payables',
     ordinal: 4,
     items: [
+      // The import application is born at its purchase invoice (D12/D13);
+      // the list of them is the module's front door.
       page('payables_workbench', 'payable', '/payables'),
-      // Where the work starts: an import is born at its purchase invoice
-      // (D12/D13), so it reads before the order and the receipt.
-      page('ap_invoices', 'ap_invoice', '/payables/invoices'),
       page('purchase_orders', 'purchase_order'),
       page('goods_receipts', 'goods_receipt'),
+      page('ap_invoices', 'ap_invoice', '/payables/invoices'),
+      // Labelled Expenses: an expense is a purchase invoice raised and
+      // confirmed here (D12), route kept.
       page('service_receipts', 'service_receipt'),
       page('recurring_contracts', 'recurring_contract', '/payables/contracts'),
-      // The payment is the end of the same job as the invoice (2026-10-03),
-      // so it is one heading: order, receipt, invoice, payment.
-      page('payment_applications', 'payment_application', '/payables/payment-applications'),
-      page('supplier_payments', 'supplier_payment', '/payables/supplier-payments'),
-      page('supplier_advances', 'supplier_advance', '/payables/advances'),
-      // A credit memo is raised against an invoice, so it reads beside them
-      // rather than under a heading of its own (2026-10-03).
-      page('supplier_credit_memos', 'supplier_credit_memo', '/payables/credit-memos'),
-      // Not built yet; carried from the former finance_ap section (§21.1).
-      page('ap_payments', 'supplier_payment'),
-      page('ap_advances', 'supplier_advance'),
-      page('ap_allocations', 'ap_allocation'),
       page('goods_returns', 'goods_return', '/payables/goods-returns'),
+      // Not built yet (Appendix A).
       page('match_exceptions', 'match_exception'),
       page('procurement_dashboard', 'procurement_dashboard'),
     ],
   },
   {
-    // REQ-FIX-001 FIX-1 — who it is owed to, and how much is outstanding.
-    key: 'payables_suppliers',
-    ordinal: 21,
+    // How the supplier is paid, and what the supplier holds of ours.
+    key: 'payables_payments',
+    // The ordinal the former setup heading held (it went to Administration).
+    ordinal: 22,
     items: [
-      page('suppliers', 'business_partner', '/payables/suppliers'),
-      // The supplier's side of the same mirror. See the note under Sales.
-      page('ap_statements', 'business_partner', '/payables/supplier-statements'),
-      page('ap_open_items', 'ap_invoice', '/payables/open-items'),
-      page('supplier_ledger', 'supplier_ledger'),
-      page('ap_ageing', 'ap_ageing', '/payables/ageing'),
-      page('ap_reconciliation', 'ap_reconciliation'),
-      page('purchasing_reports', 'purchasing_report'),
+      page('supplier_payments', 'supplier_payment', '/payables/supplier-payments'),
+      page('payment_applications', 'payment_application', '/payables/payment-applications'),
+      page('supplier_advances', 'supplier_advance', '/payables/advances'),
+      // Read from the payments, advances and credit notes themselves — the
+      // money of ours the supplier still holds, never a balance kept apart.
+      page('supplier_credits', 'supplier_payment', '/payables/supplier-credits'),
+      page('supplier_credit_memos', 'supplier_credit_memo', '/payables/credit-memos'),
     ],
   },
   {
-    // REQ-FIX-001 FIX-1 — the module's own configuration.
-    key: 'payables_setup',
-    ordinal: 22,
+    // Who is owed, how much, how late — and does it tie to the ledger.
+    key: 'payables_suppliers',
+    ordinal: 21,
     items: [
-      page('payables_settings', 'payables_settings', '/administration/payables-settings'),
-      // REQ-AP-001 Stage 8 — the one-time sheet import (§24.3).
-      page('payables_migration', 'payables_migration', '/administration/payables-migration'),
+      // The supplier's side of the same mirror. See the note under Sales.
+      page('ap_statements', 'business_partner', '/payables/supplier-statements'),
+      page('ap_open_items', 'ap_invoice', '/payables/open-items'),
+      // Over the same invoices as the ageing, so whoever reads one reads both.
+      page('ap_reconciliation', 'ap_invoice', '/payables/reconciliation'),
+      // Not built yet (Appendix A).
+      page('purchasing_reports', 'purchasing_report'),
     ],
   },
   {
@@ -518,6 +519,10 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('supplier_item_codes', 'supplier_item_code'),
       page('barcodes', 'barcode'),
       page('price_lists', 'price_list'),
+      // The supplier master (2026-10-04) — reference data every purchasing
+      // document quotes, beside the other partners' terms and methods. The
+      // address stays /payables/suppliers (D-FX-1).
+      page('suppliers', 'business_partner', '/payables/suppliers'),
     ],
   },
   {
@@ -559,12 +564,19 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('backup_health', 'system_health'),
       // REQ-LEGACY-001 — the old system's books, once.
       page('legacy_import', 'legacy_import', '/administration/legacy-import'),
+      // REQ-AP-001 Stage 8 — the one-time sheet import (§24.3), a data
+      // migration utility beside the other one, not Payables work (2026-10-04).
+      page('payables_migration', 'payables_migration', '/administration/payables-migration'),
       // REQ-HR-001 §12 — positions, pay components, leave types, calendars.
       page('hr_settings', 'hr_setting', '/administration/hr-settings'),
       // REQ-WA-001 §6 — the bridge, the allow-list, the rules, the log.
       page('whatsapp', 'whatsapp', '/administration/whatsapp'),
       // REQ-PM-001 R4 — project types, tolerance profiles, cost codes.
       page('project_settings', 'project_setting', '/administration/project-settings'),
+      // REQ-AP-001 §21.11 — payable types, stages, time limits, reason codes,
+      // expense categories and event codes: the module's own configuration,
+      // beside the other modules' settings (2026-10-04).
+      page('payables_settings', 'payables_settings', '/administration/payables-settings'),
     ],
   },
   /*

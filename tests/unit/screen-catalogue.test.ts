@@ -105,9 +105,13 @@ describe('the screen catalogue covers the approved tree', () => {
     // Organisation, Payslips, Expense Claims, Travel and Asset Assignment out;
     // plus the Accounting navbar (2026-10-04): Account Reconciliation, Tax
     // Codes and Payments & Receipts in, Treasury's separate Receipts and
-    // Payments out (one register of the money that moved replaces both).
-    expect(allMenuItems()).toHaveLength(243);
-    expect(Object.keys(SCREENS)).toHaveLength(243);
+    // Payments out (one register of the money that moved replaces both);
+    // less five and plus one with the Purchasing & Payables finalisation
+    // (2026-10-04): Supplier Ledger, Advances, Payments, Allocations and
+    // Ageing were the Payables screens under second names, and Supplier
+    // Credits is new.
+    expect(allMenuItems()).toHaveLength(239);
+    expect(Object.keys(SCREENS)).toHaveLength(239);
   });
 
   it('uses only declared archetypes', () => {
@@ -129,7 +133,9 @@ describe('the screen catalogue covers the approved tree', () => {
     // Accounting navbar: + 1 (account reconciliation) + 1 (payments &
     // receipts) + 2 (tax codes) + 1 (bank reconciliation is a record now),
     // − 2 − 2 (receipts, payments).
-    expect(total).toBe(358);
+    // Payables finalisation (2026-10-04): − 1 − 2 − 2 − 1 − 1 out (Supplier
+    // Ledger, Advances, Payments, Allocations, Ageing), + 1 in (Supplier Credits).
+    expect(total).toBe(352);
   });
 });
 
@@ -182,7 +188,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(243);
+    expect(screenRoutes().size).toBe(239);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -281,6 +287,8 @@ describe('every screen has one address', () => {
       '/payables/advances',
       '/payables/containers',
       '/payables/contracts',
+      // REQ-PAY-001 PAY8 — supplier credit and debit notes.
+      '/payables/credit-memos',
       '/payables/goods-receipts',
       // Operations build — block 4's Purchase Invoice.
       '/payables/goods-returns',
@@ -295,10 +303,14 @@ describe('every screen has one address', () => {
       '/payables/pd',
       '/payables/pd/asycuda',
       '/payables/purchase-orders',
+      // REQ-PAY-001 PAY11 — the supplier reconciliation.
+      '/payables/reconciliation',
       '/payables/service-receipts',
       // REQ-AP-001 Stage 5 — B/Ls.
       '/payables/shipments',
       // Block 6 — Payments and Receipts.
+      // REQ-PAY-001 PAY10 — the supplier's credits.
+      '/payables/supplier-credits',
       '/payables/supplier-payments',
       // Blocks 2 and 3 — the Account Statement, one screen on each side.
       '/payables/supplier-statements',
