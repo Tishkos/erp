@@ -60,8 +60,11 @@ describe('Appendix A · the approved menu tree', () => {
     // back into Payables on 2026-10-03, by direction: a payment is the end of
     // the same job as the invoice, so it reads beside it. Monitoring was added
     // the same day and is the twenty-fifth.
-    expect(MENU).toHaveLength(25);
-    expect([...MENU.map((s) => s.ordinal)].sort((a, b) => a - b)).toEqual(Array.from({ length: 25 }, (_, i) => i + 1));
+    // Master Data & Configuration became four headings on 2026-10-04 —
+    // Financial keeps `master_data`; Banking, Organization and Inventory
+    // Reference are the twenty-sixth to twenty-eighth.
+    expect(MENU).toHaveLength(28);
+    expect([...MENU.map((s) => s.ordinal)].sort((a, b) => a - b)).toEqual(Array.from({ length: 28 }, (_, i) => i + 1));
   });
 
   it('names every required submenu of Finance — General Ledger', () => {
@@ -71,15 +74,17 @@ describe('Appendix A · the approved menu tree', () => {
     // Master Data, both leading to the same page. It is master data, so
     // Master Data keeps it and this menu does not repeat it.
     const gl = MENU.find((s) => s.key === 'finance_gl');
+    // The Accounting navbar's order (by direction, 2026-10-04).
     expect(gl?.items.map((i) => i.key)).toEqual([
       'journal_entry',
-      'recurring_journals',
       'reversals',
       'gl_inquiry',
       'trial_balance',
       'soft_close',
       'year_end_close',
       'posting_mappings',
+      'recurring_journals',
+      'account_reconciliation',
       // Each statement on its own page — all four of them (by direction,
       // 2026-08-29, extended 2026-08-31).
       'income_statement',
@@ -118,8 +123,9 @@ describe('Appendix A · the approved menu tree', () => {
 
 describe('§25 · navigation reflects permission, and is not the control', () => {
   it('shows a Super User everything', () => {
-    // Twenty-five since Monitoring was added (2026-10-03).
-    expect(visibleMenu(superUser)).toHaveLength(25);
+    // Twenty-five since Monitoring was added (2026-10-03); twenty-eight since
+    // Master Data split into its four headings (2026-10-04).
+    expect(visibleMenu(superUser)).toHaveLength(28);
   });
 
   it('shows a user only the sections they hold a grant in', () => {

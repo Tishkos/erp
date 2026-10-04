@@ -149,17 +149,22 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
   {
     key: 'accounting',
     icon: Calculator,
+    // The Accounting navbar (by direction, 2026-10-04): General Ledger, then
+    // Treasury & Banking, then Master Data & Configuration in its four
+    // headings. The sections after them have no built screen yet, so they
+    // draw nothing until one is delivered.
     sectionKeys: [
       'finance_gl',
-      'finance_ar',
       // finance_ap merged into the Payables module (REQ-AP-001 §21.1).
       'treasury',
+      'master_data',
+      'master_banking',
+      'master_organization',
+      'master_inventory',
+      'finance_ar',
       'fixed_assets',
       'budgeting',
       'investments',
-      // And the reference data no single module owns — the chart, currencies,
-      // branches, departments, cost centres, payment terms and methods.
-      'master_data',
     ],
   },
   // Selling and buying are their own work, with their own screens and their

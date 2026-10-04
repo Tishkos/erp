@@ -327,22 +327,38 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ],
   },
   {
+    /*
+     * The Accounting navbar (by direction, 2026-10-04): what was accounted
+     * for — the journals and their controls first, the close, the
+     * configuration that says how business events post, the reconciliation of
+     * every control account to its subledger, then the four statements.
+     *
+     * Each item names the object its service authorises on, never one nobody
+     * holds (see Posting Mappings below): the closing screen is the periods'
+     * own (`fiscal_period`, which the periods service authorises on), recurring journals
+     * raise journal entries (`journal_entry`), and Account Reconciliation is a
+     * ledger report read under the Trial Balance's grant.
+     */
     key: 'finance_gl',
     ordinal: 10,
     items: [
       page('journal_entry', 'journal_entry', '/finance/journals'),
-      page('recurring_journals', 'recurring_journal'),
       page('reversals', 'journal_reversal', '/finance/reversals'),
       page('gl_inquiry', 'gl_inquiry', '/finance/gl-inquiry'),
       page('trial_balance', 'trial_balance', '/finance/trial-balance'),
-      page('soft_close', 'accounting_period', '/finance/periods'),
-      page('year_end_close', 'year_end_close'),
+      // `fiscal_period` is what the periods service and its page authorise
+      // on; the tree named `accounting_period`, which no role holds, so
+      // Accounting Periods was missing from every menu but a Super User's.
+      page('soft_close', 'fiscal_period', '/finance/periods'),
+      page('year_end_close', 'fiscal_period', '/finance/closing'),
       // `posting_rule` is the object the grants are written against and the
       // one the service authorises on. The tree used to name a second object
       // nobody could hold, so the screen was invisible to everyone but a
       // Super User — including the Accounting Manager whose role may
       // configure it.
       page('posting_mappings', 'posting_rule', '/finance/posting-mappings'),
+      page('recurring_journals', 'journal_entry', '/finance/recurring-journals'),
+      page('account_reconciliation', 'trial_balance', '/finance/account-reconciliation'),
       // Each statement is its own screen (by direction, 2026-08-29, extended
       // 2026-08-31 to all four): one report to a window, so a reader is never
       // shown two answers to one question.
@@ -366,25 +382,38 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ],
   },
   {
+    /*
+     * Treasury & Banking — what money moved, or is expected to (by direction,
+     * 2026-10-04). The accounts themselves are master records and live under
+     * Master Data › Banking; this heading holds what happens to them.
+     *
+     * Every item names the object its service authorises on: the transfers,
+     * the deposits and the forecast are `bank_cash_account` work
+     * (treasury.ts, bank-deposits.ts, cash-forecast.ts), the two reports read
+     * under `bank_account` (treasury-reports.ts), the reconciliation under its
+     * own grant. Payments & Receipts replaces Appendix A's separate Receipts
+     * and Payments: it is one view of the money that moved, and the receipts
+     * and payments themselves stay with Sales and Payables, which own them.
+     */
     key: 'treasury',
     ordinal: 12,
     items: [
-      page('bank_cash_accounts', 'bank_account', '/master-data/bank-accounts'),
-      page('cash_accounts', 'bank_account', '/master-data/cash-accounts'),
+      page('bank_reconciliation', 'bank_reconciliation', '/treasury/bank-reconciliation'),
+      page('bank_transfers', 'bank_cash_account', '/treasury/transfers'),
       // REQ-FIX-001 FIX-1 — the bank's side of the company's money: its loans
       // (route kept, D-FX-1) and the deposits made into it by hand (D-FX-2).
       page('loans', 'bank_loan', '/treasury/loans'),
       page('bank_deposits', 'bank_cash_account', '/treasury/deposits'),
+      page('payments_receipts', 'bank_account', '/treasury/payments-receipts'),
       // Bank and Cash Reporting — every account's balance and what it is
-      // made of, beside the accounts themselves (2026-09-29).
+      // made of (2026-09-29).
       page('treasury_reports', 'bank_account', '/treasury/reporting'),
-      page('treasury_receipts', 'treasury_receipt'),
-      page('treasury_payments', 'treasury_payment'),
-      page('bank_transfers', 'bank_transfer'),
+      page('cash_forecast', 'bank_cash_account', '/treasury/cash-forecast'),
+      // Not built as screens of their own: a statement is entered and read
+      // inside the reconciliation it is for, and the daily position is the
+      // forecast's opening and Bank and Cash Reporting's closing.
       page('bank_statements', 'bank_statement'),
-      page('bank_reconciliation', 'bank_reconciliation'),
       page('daily_position', 'daily_position'),
-      page('cash_forecast', 'cash_forecast'),
     ],
   },
   {
@@ -467,6 +496,16 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('scheduled_reports', 'scheduled_report'),
     ],
   },
+  /*
+   * Master Data & Configuration — what exists (by direction, 2026-10-04), in
+   * four headings: Financial, Banking, Organization and Inventory Reference.
+   * `master_data` keeps its key, so the unbuilt items that derive their route
+   * from it keep their addresses; the other three are sections 26–28.
+   *
+   * Bank and Cash Accounts are master records — a transfer, a receipt, a
+   * reconciliation each *refer* to one — so they moved here from Treasury,
+   * keeping their routes (D-FX-1).
+   */
   {
     key: 'master_data',
     ordinal: 18,
@@ -474,21 +513,40 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('chart_of_accounts', 'chart_of_account', '/master-data/chart-of-accounts'),
       page('statement_mapping', 'financial_statement', '/master-data/statement-mapping'),
       page('currencies_rates', 'exchange_rate', '/master-data/exchange-rates'),
-      page('branches', 'branch', '/master-data/branches'),
-      page('departments', 'department', '/master-data/departments'),
-      page('cost_centres', 'cost_centre', '/master-data/cost-centres'),
+      page('tax_codes', 'tax_code', '/master-data/tax-codes'),
+      page('payment_terms', 'payment_term', '/master-data/payment-terms'),
+      page('payment_methods', 'payment_method', '/master-data/payment-methods'),
       page('supplier_item_codes', 'supplier_item_code'),
       page('barcodes', 'barcode'),
       page('price_lists', 'price_list'),
-      page('warehouses', 'warehouse', '/master-data/warehouses'),
-      page('banks', 'bank', '/master-data/banks'),
-      page('payment_terms', 'payment_term', '/master-data/payment-terms'),
-      page('payment_methods', 'payment_method', '/master-data/payment-methods'),
       // The supplier master (2026-10-04) — reference data every purchasing
       // document quotes, beside the other partners' terms and methods. The
       // address stays /payables/suppliers (D-FX-1).
       page('suppliers', 'business_partner', '/payables/suppliers'),
     ],
+  },
+  {
+    key: 'master_banking',
+    ordinal: 26,
+    items: [
+      page('banks', 'bank', '/master-data/banks'),
+      page('bank_cash_accounts', 'bank_account', '/master-data/bank-accounts'),
+      page('cash_accounts', 'bank_account', '/master-data/cash-accounts'),
+    ],
+  },
+  {
+    key: 'master_organization',
+    ordinal: 27,
+    items: [
+      page('branches', 'branch', '/master-data/branches'),
+      page('departments', 'department', '/master-data/departments'),
+      page('cost_centres', 'cost_centre', '/master-data/cost-centres'),
+    ],
+  },
+  {
+    key: 'master_inventory',
+    ordinal: 28,
+    items: [page('warehouses', 'warehouse', '/master-data/warehouses')],
   },
   {
     key: 'administration',

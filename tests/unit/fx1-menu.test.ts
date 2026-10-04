@@ -73,8 +73,19 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(keysOf('logistics')).toContain('logistics_jobs');
   });
 
-  it('Treasury & Banking holds the accounts, the loans, the deposits and the reporting, first', () => {
-    expect(keysOf('treasury').slice(0, 5)).toEqual(['bank_cash_accounts', 'cash_accounts', 'loans', 'bank_deposits', 'treasury_reports']);
+  it('Treasury & Banking holds what money moved, in the Accounting navbar’s order (2026-10-04)', () => {
+    expect(keysOf('treasury').slice(0, 7)).toEqual([
+      'bank_reconciliation',
+      'bank_transfers',
+      'loans',
+      'bank_deposits',
+      'payments_receipts',
+      'treasury_reports',
+      'cash_forecast',
+    ]);
+    // The accounts are master records: they sit under Master Data › Banking.
+    expect(keysOf('treasury')).not.toContain('bank_cash_accounts');
+    expect(keysOf('master_banking')).toEqual(['banks', 'bank_cash_accounts', 'cash_accounts']);
   });
 
   it('the moved screens keep their routes (D-FX-1)', () => {
@@ -88,6 +99,8 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(route('logistics_shipping', 'containers')).toBe('/payables/containers');
     expect(route('logistics_shipping', 'in_transit')).toBe('/inventory/in-transit');
     expect(route('treasury', 'loans')).toBe('/treasury/loans');
+    expect(route('master_banking', 'bank_cash_accounts')).toBe('/master-data/bank-accounts');
+    expect(route('master_banking', 'cash_accounts')).toBe('/master-data/cash-accounts');
     expect(route('payables_payments', 'payment_applications')).toBe('/payables/payment-applications');
     expect(route('payables', 'purchase_orders')).toBe('/payables/purchase-orders');
     expect(route('payables', 'goods_receipts')).toBe('/payables/goods-receipts');

@@ -196,6 +196,9 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   soft_close: 'workspace',
   year_end_close: 'workspace',
   posting_mappings: 'settings',
+  // The close's own screen and the control-account reconciliation
+  // (2026-10-04): both read figures and act on nothing but the period lock.
+  account_reconciliation: 'workspace',
   income_statement: 'report',
   balance_sheet: 'report',
   changes_in_equity: 'report',
@@ -221,11 +224,14 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   // 13 — Treasury
   bank_cash_accounts: 'document',
   cash_accounts: 'document',
-  treasury_receipts: 'document',
-  treasury_payments: 'document',
+  // One view of the money that moved — Appendix A's Receipts and Payments
+  // in one register, the documents themselves staying with their owners.
+  payments_receipts: 'report',
   bank_transfers: 'document',
   bank_statements: 'document',
-  bank_reconciliation: 'workspace',
+  // A reconciliation is a numbered record with a lifecycle (draft, approved,
+  // reopened), so it is a list and the record behind it.
+  bank_reconciliation: 'document',
   daily_position: 'report',
   cash_forecast: 'report',
   treasury_reports: 'report',
@@ -294,6 +300,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   // of its reports, so the layout is a settings screen beside the chart.
   statement_mapping: 'settings',
   currencies_rates: 'document',
+  tax_codes: 'document',
   branches: 'document',
   departments: 'document',
   cost_centres: 'document',
