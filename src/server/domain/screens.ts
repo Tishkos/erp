@@ -540,6 +540,7 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/treasury/cash-forecast',
   '/finance/account-reconciliation',
   '/master-data/tax-codes',
+  '/finance/closing',
 ]);
 
 export function isDelivered(route: string): boolean {

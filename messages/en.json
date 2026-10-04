@@ -5774,6 +5774,24 @@
       "add_rate_note": "A new rate from a date. Documents dated earlier keep the rate they had.",
       "edit": "Change",
       "deactivate_reason": "Reason for deactivating"
+    },
+    "closing": {
+      "subtitle": "Close a month — or the year, month by month — once its checklist passes. The lock is Accounting Periods’; every close and reopening is kept below with its reason.",
+      "checklist": "Closing checklist — {period}",
+      "period_state": "Period",
+      "year_progress": "{year} closed",
+      "soft_close": "Soft close",
+      "close": "Close",
+      "reopen": "Reopen (soft-closed)",
+      "apply": "Apply",
+      "history_title": "Close history",
+      "when": "When",
+      "change": "Change",
+      "who": "By",
+      "warnings": "Closed over",
+      "no_history": "No period has been closed or reopened yet.",
+      "no_calendar_title": "No accounting calendar",
+      "no_calendar": "Open a financial year on Accounting Periods first:"
     }
   },
   "profile": {

@@ -215,6 +215,8 @@ describe('every screen has one address', () => {
       '/finance/balance-sheet',
       '/finance/cash-flow',
       '/finance/changes-in-equity',
+      // REQ-ACC-001 Part D — Period / Year-End Closing.
+      '/finance/closing',
       '/finance/gl-inquiry',
       '/finance/income-statement',
       '/finance/journals',
