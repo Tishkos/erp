@@ -40,7 +40,7 @@
  * seeded administrator). It reads screens and presses "New …" to open a form;
  * it never presses a form's own button, so it saves nothing.
  */
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, type Page } from '@playwright/test';
 import { MENU } from '../../src/server/domain/menu';
@@ -758,6 +758,16 @@ async function main(): Promise<void> {
     have.add(key);
     writeFileSync(join(OUT, 'index.json'), `${JSON.stringify(index, null, 1)}\n`);
   };
+  /** A view the screen turns out not to have: out of the index, and its old picture off the disk. */
+  const drop = (locale: string, view: Shot['view'], route: string) => {
+    const key = `${locale}:${view}:${route}`;
+    const at = index.findIndex((one) => `${one.locale}:${one.view}:${one.route}` === key);
+    if (at < 0) return;
+    const [gone] = index.splice(at, 1);
+    have.delete(key);
+    if (gone) rmSync(join(OUT, gone.file), { force: true });
+    writeFileSync(join(OUT, 'index.json'), `${JSON.stringify(index, null, 1)}\n`);
+  };
   const done = (locale: string, view: string, route: string) => !FORCE && have.has(`${locale}:${view}:${route}`);
   const withMarks = (marks: readonly Mark[]) => (marks.length > 0 ? { marks } : {});
 
@@ -871,7 +881,8 @@ async function main(): Promise<void> {
 
         // The way in to a new record: a link to its own page, or the button that opens its dialog.
         const link = page.locator('main a[href$="/new"]').first();
-        const button = page.locator('main button:has(+ dialog)').first();
+        // Not a door: the printer, paperclip, notes and clock open dialogs too, and none of them is a new record.
+        const button = page.locator('main button:has(+ dialog):not([class*="sapIconButton"])').first();
         const opener = (await link.count()) > 0 ? link : (await button.count()) > 0 ? button : null;
         // A "+ New …" button that does its work at once (it raises the draft and
         // opens it) is ringed but never pressed: this script saves nothing.
@@ -900,6 +911,13 @@ async function main(): Promise<void> {
           return null;
         })(${JSON.stringify(screen.route)})`) as string | null;
 
+        /*
+         * A form is a picture of fields to fill. A page that opens with only a
+         * reason it cannot start yet ("Post a sales invoice first") has none,
+         * and is not kept as one: sent as "the form", it would explain nothing.
+         */
+        let formed = false;
+        if (!opener) drop(locale, 'form', screen.route);
         if (opener && !done(locale, 'form', screen.route)) {
           const formFile = `${slugOf(screen.route)}-form.jpg`;
           if (opener === link) {
@@ -907,9 +925,14 @@ async function main(): Promise<void> {
             await page.goto(`${BASE}${href}`, { timeout: 180_000 });
             await settle(page);
             const marks = await markForm(page, 'main', true);
-            await page.waitForTimeout(150);
-            await shoot(formFile, { fullPage: true });
-            keep({ route: screen.route, locale, view: 'form', file: `${locale}/${formFile}`, ...withMarks(marks) });
+            if (marks.length > 0) {
+              await page.waitForTimeout(150);
+              await shoot(formFile, { fullPage: true });
+              keep({ route: screen.route, locale, view: 'form', file: `${locale}/${formFile}`, marks });
+              formed = true;
+            } else {
+              drop(locale, 'form', screen.route);
+            }
             await unmark(page);
           } else {
             await opener.click();
@@ -917,16 +940,23 @@ async function main(): Promise<void> {
             if (await dialog.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true, () => false)) {
               await page.waitForTimeout(250);
               const marks = await markForm(page, 'dialog[open]');
-              // A long form scrolls inside its dialog: the window is made taller
-              // for the picture, so every numbered field is in it.
-              const over = Number(await page.evaluate(DIALOG_OVERFLOW).catch(() => 0)) || 0;
-              if (over > 4) await page.setViewportSize({ width: WIDTH, height: Math.min(2400, HEIGHT + Math.ceil(over) + 40) });
-              await page.waitForTimeout(200);
-              await shoot(formFile);
-              keep({ route: screen.route, locale, view: 'form', file: `${locale}/${formFile}`, ...withMarks(marks) });
+              if (marks.length > 0) {
+                // A long form scrolls inside its dialog: the window is made taller
+                // for the picture, so every numbered field is in it.
+                const over = Number(await page.evaluate(DIALOG_OVERFLOW).catch(() => 0)) || 0;
+                if (over > 4) await page.setViewportSize({ width: WIDTH, height: Math.min(2400, HEIGHT + Math.ceil(over) + 40) });
+                await page.waitForTimeout(200);
+                await shoot(formFile);
+                keep({ route: screen.route, locale, view: 'form', file: `${locale}/${formFile}`, marks });
+                formed = true;
+                if (over > 4) await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+              } else {
+                drop(locale, 'form', screen.route);
+              }
               await unmark(page);
-              if (over > 4) await page.setViewportSize({ width: WIDTH, height: HEIGHT });
               await page.keyboard.press('Escape');
+            } else {
+              drop(locale, 'form', screen.route);
             }
           }
         }
@@ -942,8 +972,10 @@ async function main(): Promise<void> {
           keep({ route: screen.route, locale, view: 'record', file: `${locale}/${recordFile}`, ...withMarks(marks) });
           await unmark(page);
           recorded = true;
+        } else if (!done(locale, 'record', screen.route)) {
+          drop(locale, 'record', screen.route);
         }
-        console.log(`${locale} ${screen.route}${opener ? ' (+form)' : ringed ? ' (ringed)' : ''}${recorded ? ' (+record)' : ''}`);
+        console.log(`${locale} ${screen.route}${formed ? ' (+form)' : ringed ? ' (ringed)' : ''}${recorded ? ' (+record)' : ''}`);
       } catch (error) {
         await page.setViewportSize({ width: WIDTH, height: HEIGHT }).catch(() => {});
         console.log(`${locale} ${screen.route}: skipped — ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`);
