@@ -88,6 +88,19 @@ async function itemAccounts(page: Page, code = 'ITM-SEED') {
   }
 }
 
+/** As theme-readability.spec.ts: is this surface dark, and is the ink readable on it? */
+function luminance(color: string) {
+  const channels = color.match(/[\d.]+/g)!.slice(0, 3).map(Number).map((n) => {
+    const c = color.startsWith('color(srgb') ? n : n / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722;
+}
+const contrast = (a: string, b: string) => {
+  const [x, y] = [luminance(a), luminance(b)];
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+};
+
 let invoiceNo = '';
 let receiptNo = '';
 let creditNo = '';
@@ -260,6 +273,35 @@ test.describe('REQ-AR-001 · receivables in a browser', () => {
     await page.goto('/sales/customer-reconciliation');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await shoot(page, 'customer-reconciliation-desktop-en');
+  });
+
+  test('status chips on the receivables screens follow the palette into the dark', async ({ page }) => {
+    await signIn(page);
+    for (const route of [
+      '/sales/receivables',
+      '/sales/customer-credits?show=all',
+      '/sales/credit-notes',
+      `/sales/ar-invoices/${encodeURIComponent(invoiceNo)}`,
+      `/sales/customer-receipts/${encodeURIComponent(receiptNo)}`,
+      `/sales/credit-notes/${encodeURIComponent(creditNo)}`,
+      `/sales/sales-returns/${encodeURIComponent(returnNo)}`,
+    ]) {
+      await page.goto(route);
+      await page.locator('.erp-root').evaluate((root) => {
+        (root as HTMLElement).dataset.palette = 'midnight';
+        (root as HTMLElement).dataset.accent = 'gold';
+      });
+      const chips = await page.locator('[data-status]').evaluateAll((els) =>
+        els
+          .filter((el) => (el.textContent?.trim().length ?? 0) > 0)
+          .map((el) => ({ text: el.textContent!.trim(), background: getComputedStyle(el).backgroundColor, color: getComputedStyle(el).color })),
+      );
+      expect(chips.length, `${route} draws a status`).toBeGreaterThan(0);
+      for (const chip of chips) {
+        expect(luminance(chip.background), `${route} · ${chip.text} background is dark`).toBeLessThan(0.35);
+        expect(contrast(chip.color, chip.background), `${route} · ${chip.text} is readable`).toBeGreaterThan(4.5);
+      }
+    }
   });
 
   test('the customer on every record and register opens the customer’s profile', async ({ page }) => {
