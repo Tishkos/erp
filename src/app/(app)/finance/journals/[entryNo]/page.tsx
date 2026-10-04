@@ -132,7 +132,8 @@ export default async function JournalPage({
         <div className={s.sapWindow}>
           <div className={s.sapTitle}>
             <span>
-              {page('journal_entry')}{' '}
+              {/* One entry is a Journal Entry; the menu item names the register (2026-10-04). */}
+              {t('journals.record_type')}{' '}
               <span className={s.sapTitleMeta}>
                 <bdi dir="ltr">{header.entryNo}</bdi>
               </span>
