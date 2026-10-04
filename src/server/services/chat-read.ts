@@ -133,14 +133,14 @@ export interface MessageView {
   readonly receipts: ReceiptView[];
 }
 
-export interface RecordView {
-  readonly type: string;
-  readonly id: string;
-  /** Null when this person cannot open the record. */
-  readonly label: string | null;
-  readonly href: string | null;
-  readonly accessible: boolean;
-}
+/**
+ * What a member is told about the record a conversation is about: everything
+ * when they can open it, and nothing at all — not its type, id or name — when
+ * they cannot.
+ */
+export type RecordView =
+  | { readonly accessible: true; readonly type: string; readonly id: string; readonly label: string; readonly href: string | null }
+  | { readonly accessible: false };
 
 export interface ThreadView {
   readonly id: string;
@@ -214,28 +214,27 @@ export async function listConversations(tx: Tx, ctx: ActorContext, now = new Dat
   if (mine.length === 0) return [];
   const ids = mine.map((c) => c.id);
 
-  const [unreadRows, lastRows, memberRows] = await Promise.all([
-    tx.execute(sql`
+  // One connection runs one statement at a time; these are asked in turn.
+  const unreadRows = await tx.execute(sql`
       select r.conversation_id::text as id, count(*)::int as n, bool_or(${me(ctx)}::uuid = any(m.mentions)) as mentioned
         from chat_receipt r
         join chat_message m on m.id = r.message_id
        where r.user_id = ${me(ctx)}::uuid and r.seen_at is null and m.retracted_at is null
          and r.conversation_id in (${uuidList(ids)})
-       group by r.conversation_id`),
-    tx.execute(sql`
+       group by r.conversation_id`);
+  const lastRows = await tx.execute(sql`
       select distinct on (m.conversation_id)
              m.conversation_id::text as conversation_id, m.id::text as id, m.seq, m.kind, m.body, m.sender_id::text as sender_id,
              m.retracted_at, m.created_at, u.display_name as sender_name
         from chat_message m
         join app_user u on u.id = m.sender_id
        where m.conversation_id in (${uuidList(ids)})
-       order by m.conversation_id, m.seq desc`),
-    tx.execute(sql`
+       order by m.conversation_id, m.seq desc`);
+  const memberRows = await tx.execute(sql`
       select p.conversation_id::text as conversation_id, p.user_id::text as user_id, u.display_name as name
         from chat_participant p
         join app_user u on u.id = p.user_id
-       where p.conversation_id in (${uuidList(ids)}) and p.left_at is null`),
-  ]);
+       where p.conversation_id in (${uuidList(ids)}) and p.left_at is null`);
 
   const unread = new Map((unreadRows.rows as { id: string; n: number; mentioned: boolean }[]).map((r) => [r.id, r]));
   const lasts = new Map(
@@ -345,13 +344,15 @@ export async function threadOf(
   if (conversation.recordType && conversation.recordId) {
     // A record is shown to a member who could open it from its own screen, and to nobody else.
     const accessible = await chat.mayOpenRecord(tx, ctx, conversation.recordType, conversation.recordId);
-    record = {
-      type: conversation.recordType,
-      id: conversation.recordId,
-      label: accessible ? (conversation.recordLabel ?? conversation.recordId) : null,
-      href: accessible ? conversation.recordHref : null,
-      accessible,
-    };
+    record = accessible
+      ? {
+          accessible: true,
+          type: conversation.recordType,
+          id: conversation.recordId,
+          label: conversation.recordLabel ?? conversation.recordId,
+          href: conversation.recordHref,
+        }
+      : { accessible: false };
   }
 
   const typingRows = await tx
@@ -460,10 +461,10 @@ async function messageWindow(
     }
   }
 
-  const [fileRows, reactionRows, receiptRows] = await Promise.all([
+  const fileRows =
     textIds.length === 0
       ? []
-      : tx
+      : await tx
           .select({
             id: attachment.id,
             objectId: attachment.objectId,
@@ -481,10 +482,11 @@ async function messageWindow(
               isNull(attachment.disposedAt),
             ),
           )
-          .orderBy(asc(attachment.createdAt)),
+          .orderBy(asc(attachment.createdAt));
+  const reactionRows =
     textIds.length === 0
       ? []
-      : tx
+      : await tx
           .select({
             messageId: chatReaction.messageId,
             reaction: chatReaction.reaction,
@@ -495,10 +497,11 @@ async function messageWindow(
           .from(chatReaction)
           .innerJoin(appUser, eq(appUser.id, chatReaction.userId))
           .where(inArray(chatReaction.messageId, textIds))
-          .orderBy(asc(chatReaction.createdAt)),
+          .orderBy(asc(chatReaction.createdAt));
+  const receiptRows =
     mineIds.length === 0
       ? []
-      : tx
+      : await tx
           .select({
             messageId: chatReceipt.messageId,
             userId: chatReceipt.userId,
@@ -508,8 +511,7 @@ async function messageWindow(
           })
           .from(chatReceipt)
           .innerJoin(appUser, eq(appUser.id, chatReceipt.userId))
-          .where(inArray(chatReceipt.messageId, mineIds)),
-  ]);
+          .where(inArray(chatReceipt.messageId, mineIds));
 
   const filesBy = new Map<string, FileView[]>();
   for (const f of fileRows) {

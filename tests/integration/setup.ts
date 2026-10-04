@@ -511,6 +511,9 @@ export async function resetTestData(): Promise<void> {
     // settings are restored, the bridge's heartbeat keys go.
     await client.query('truncate whatsapp_message, whatsapp_contact restart identity cascade');
     await client.query('delete from whatsapp_session');
+    // Internal chat (platform phase): a conversation, its messages and receipts are never deleted by
+    // the application (triggers), so a reset truncates them together; presence is a heartbeat.
+    await client.query('truncate chat_reaction, chat_receipt, chat_message, chat_participant, chat_conversation, chat_presence');
     await client.query(`delete from whatsapp_setting where key like 'bridge_%'`);
     /*
      * Every seeded key, not some of them.

@@ -376,7 +376,8 @@ export async function openRecordConversation(
   if (existing) return { conversationId: existing.id, created: false };
 
   const direct = others.length === 1;
-  const title = direct ? null : assertTitle(input.title?.trim() || label || recordId);
+  // Never derived from the record: a title is shown to every member, the record only to those who can open it.
+  const title = direct ? null : assertTitle(input.title?.trim() || 'Record conversation');
   const id = crypto.randomUUID();
   await tx.insert(chatConversation).values({
     id,
@@ -404,14 +405,12 @@ export async function openRecordConversation(
 
 async function lockedGroup(tx: Tx, ctx: ActorContext, conversationId: string, ownerOnly: boolean) {
   const mine = await membership(tx, ctx, conversationId);
-  if (ownerOnly && mine.role !== 'owner') throw new ChatError('Only an owner of the group does that.');
   // The counter's row: held so nobody's first message moves while a person is let in or out.
-  const locked = await tx.execute(
-    sql`select kind, last_seq, record_type, record_id from chat_conversation where id = ${conversationId}::uuid for update`,
-  );
+  const locked = await tx.execute(sql`select * from app_chat_lock(${conversationId}::uuid)`);
   const row = locked.rows[0] as { kind: string; last_seq: string; record_type: string | null; record_id: string | null } | undefined;
   if (!row) throw new ChatError(NOT_IN_CONVERSATION);
   if (row.kind !== 'group') throw new ChatError('A conversation between two people has no members to change.');
+  if (ownerOnly && mine.role !== 'owner') throw new ChatError('Only an owner of the group does that.');
   return { lastSeq: Number(row.last_seq), recordType: row.record_type, recordId: row.record_id };
 }
 

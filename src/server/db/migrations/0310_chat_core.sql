@@ -311,6 +311,25 @@ END;
 $$;
 --> statement-breakpoint
 
+-- The conversation's row, locked for a change of membership: a member's call,
+-- through the definer, because only an owner may update the row itself and a
+-- member leaving must hold the counter still as well.
+CREATE FUNCTION app_chat_lock(p_conversation uuid)
+RETURNS TABLE (kind text, last_seq bigint, record_type text, record_id text)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+BEGIN
+	IF NOT app_chat_member(p_conversation) THEN
+		RAISE EXCEPTION 'You are not in this conversation.' USING ERRCODE = 'insufficient_privilege';
+	END IF;
+	RETURN QUERY
+		SELECT c.kind, c.last_seq, c.record_type, c.record_id
+		  FROM chat_conversation c
+		 WHERE c.id = p_conversation
+		   FOR UPDATE;
+END;
+$$;
+--> statement-breakpoint
+
 -- The oldest message a person has not yet seen in a conversation: the notice
 -- for a run of unread messages is raised once, keyed on this, however many
 -- people wrote into it. Reads other people's messages' receipts, so definer.
