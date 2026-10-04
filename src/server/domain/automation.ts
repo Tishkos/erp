@@ -387,7 +387,8 @@ export function requirementsOf(eventKey: EventKey, action: Action): readonly (re
       return [[{ verb: 'submit', object: 'ap_invoice' }], [{ verb: 'approve', object: 'ap_invoice' }]];
     case 'create_exception':
       // Raising a finding is what "Refresh now" is: the Exception Center's administrators, and only for what they may open.
-      return [[{ verb: 'administer', object: 'exception' }, { verb: 'view', object: event.object }]];
+      // `execute` is what the table's own policy asks of a writer, so a missing one is a clean refusal here, not a database error.
+      return [[{ verb: 'administer', object: 'exception' }, { verb: 'execute', object: 'exception' }, { verb: 'view', object: event.object }]];
   }
 }
 

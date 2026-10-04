@@ -24,12 +24,12 @@
  */
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ownerPool, rejection } from './setup';
+import { ownerPool, rejection, seedBranch } from './setup';
 import { BAGHDAD, PANEL, WAREHOUSE, blWith, buildImportWorld, importOf, iqd, q, receive, scope, type ImportWorld } from './logistics-fixture';
 import { containerNo } from '../support/container-number';
 import { withScope } from '@/server/db/client';
 import { registerAttachmentRuntime } from '@/server/attachments-runtime';
-import { businessToday } from '@/server/domain/business-date';
+import { addBusinessDays, businessToday } from '@/server/domain/business-date';
 import { registerAllRecords } from '@/server/records';
 import * as ap from '@/server/services/ap-invoice';
 import * as approvalCenter from '@/server/services/approval-center';
@@ -82,6 +82,7 @@ let reviewer: Person; // a second accounting manager: the review step's role
 let sysadmin: Person; // administers automation, but opens no purchase invoices
 let limited: Person; // administers automation and opens containers, but may not raise a task
 let outsider: Person; // no role at all
+let elsewhere: Person; // an accounting manager of another branch: holds the grants, may not open this branch's records
 
 const sample = { thresholdIqd: '1000000', notifyRole: 'accounting_manager', note: 'Large invoice' } as const;
 
@@ -125,6 +126,23 @@ async function ledgerDigest(): Promise<Record<string, string>> {
   return out;
 }
 
+/** Runs the runner and shows it moved nothing in the books, the stock or the payments. */
+async function drain(options?: Parameters<typeof runOnce>[0]) {
+  const was = await ledgerDigest();
+  const summary = await runOnce(options);
+  expect(await ledgerDigest(), 'the runner changed the ledger, the stock or the payments').toEqual(was);
+  return summary;
+}
+
+/** Records one business day's sweep events (for the events named, or all). */
+async function sweepDay(day: string, only?: readonly events.ProduceResult['event'][]) {
+  const sys = await systemScope();
+  return withScope(sys, async (tx) => events.produce(tx, await events.operatorPrincipal(tx, sys.userId), day, only));
+}
+
+/** Switches off every rule that is on, so a scenario starts with only its own. (Direct SQL: the guard stamps the rest.) */
+const quiesce = () => ownerPool.query(`update automation_rule set enabled = false where enabled`);
+
 /** A purchase invoice keyed by the clerk and submitted; `price` per panel. */
 async function submittedInvoice(quantity: string, price: string, reference?: string) {
   const made = await importOf(world, quantity, { reference: reference ?? `AU-${randomUUID().slice(0, 6)}`, post: false, price });
@@ -139,7 +157,7 @@ let savedLate: { containerId: string; payableId: string };
 let overdueSale: { id: string; no: string };
 
 /** A fault injected for AU7 must never outlive a failed run: the next run would start broken. */
-const clearFault = () => ownerPool.query(`drop trigger if exists au_boom on workflow_instance; drop function if exists au_boom();`);
+const clearFault = () => ownerPool.query(`drop trigger if exists au_boom on workflow_instance; drop trigger if exists au_boom_event on automation_event; drop function if exists au_boom();`);
 afterAll(clearFault);
 
 beforeAll(async () => {
@@ -158,8 +176,10 @@ beforeAll(async () => {
   reviewer = await person('Rita Reviewer', ['accounting_manager']);
   sysadmin = await person('Sys Admin', ['system_administrator']);
   outsider = await person('Nobody', []);
+  if ((await ownerPool.query(`select 1 from branch where code = 'AUX'`)).rows.length === 0) await seedBranch('AUX', 'Another branch');
+  elsewhere = await person('Elsa Elsewhere', ['accounting_manager'], { branch: 'AUX' });
   await ownerPool.query(`insert into role (code, name, is_system) values ('automation_limited','Automation, no tasks',false)`);
-  for (const [object, verb] of [['automation', 'view'], ['automation', 'administer'], ['shipment_container', 'view'], ['exception', 'view'], ['exception', 'administer'], ['task', 'view']] as const) {
+  for (const [object, verb] of [['automation', 'view'], ['automation', 'administer'], ['shipment_container', 'view'], ['exception', 'view'], ['exception', 'execute'], ['exception', 'administer'], ['task', 'view']] as const) {
     await ownerPool.query(`insert into role_grant (role_code, object, verb) values ('automation_limited', $1, $2::permission_verb)`, [object, verb]);
   }
   limited = await person('Limited Admin', ['automation_limited']);
@@ -170,7 +190,7 @@ beforeAll(async () => {
   const blLate = await blWith(world, late.payableId, [{ no: containerNo('MSCU', 760001), qty: '10' }], { eta: '2026-08-25' });
   savedLate = { containerId: blLate.containerIds[0]!, payableId: late.payableId };
   const early = await importOf(world, '10', { reference: 'AU-NOT-LATE' });
-  await blWith(world, early.payableId, [{ no: containerNo('MSCU', 760002), qty: '10' }], { eta: '2026-12-31' });
+  await blWith(world, early.payableId, [{ no: containerNo('MSCU', 760002), qty: '10' }], { eta: addBusinessDays(today, 120) });
 
   // Stock received and two panels sold, due on 30 August, never paid.
   const stock = await importOf(world, '10', { reference: 'AU-STOCK' });
@@ -304,7 +324,7 @@ describe('AU2 · an invoice over the threshold waits for a second person, and sh
   });
 
   it('the runner holds the big one for review and tells the role, and leaves the small one alone with its reason in the log', async () => {
-    const run = await runOnce();
+    const run = await drain();
     expect(run.events).toBe(2);
     expect(run.runs).toMatchObject({ done: 1, skipped: 1, failed: 0 });
     const runs = await runsOf(ruleNo);
@@ -321,7 +341,10 @@ describe('AU2 · an invoice over the threshold waits for a second person, and sh
     // Told, once each, the people of the role who may open the invoice; the log of the rule itself.
     const told = await noticesOf('automation.ap_invoice_submitted');
     expect(new Set(told.map((n) => n.who))).toEqual(new Set([owner.id, supervisor.id, reviewer.id]));
-    expect(told.every((n) => n.object_id === 'ap_invoice' || n.object_id === big.invoiceId || n.object_id.length > 0)).toBe(true);
+    // The accounting manager of another branch holds the role and not the record: not told, and the log says so.
+    expect(told.map((n) => n.who)).not.toContain(elsewhere.id);
+    expect(done.results[1]!.detail).toMatch(/Told 3 people.*1 person left out because they could not open it/);
+    expect(told.every((n) => n.object_id === big.invoiceId)).toBe(true);
     const row = await ruleRow(ruleNo);
     expect(row).toMatchObject({ last_outcome: 'skipped', consecutive_failures: 0 });
     expect((await auditOf('automation.ran')).some((a) => a.object_id === ruleNo && a.actor === owner.id)).toBe(true);
@@ -365,7 +388,7 @@ describe('AU2 · an invoice over the threshold waits for a second person, and sh
 
   it('a review that is refused sends the invoice back to draft with the reason, and tells whoever keyed it', async () => {
     const another = await submittedInvoice('150', '10000', 'AU-BIG-2');
-    await runOnce();
+    await drain();
     expect(await openReviews(another.invoiceId)).toBe(1);
     await expect(as(reviewer, (tx) => approvalCenter.decide(tx, { principal: reviewer.principal, branchCode: BAGHDAD }, { documentType: 'ap_invoice', documentId: another.invoiceId, decision: 'reject' }))).rejects.toThrow(/Say why/);
     await as(reviewer, (tx) => approvalCenter.decide(tx, { principal: reviewer.principal, branchCode: BAGHDAD }, { documentType: 'ap_invoice', documentId: another.invoiceId, decision: 'reject', reason: 'The quantity is not what was ordered' }));
@@ -376,16 +399,35 @@ describe('AU2 · an invoice over the threshold waits for a second person, and sh
     expect(told.rows[0].body).toBe('The quantity is not what was ordered');
   });
 
-  it('a purchase invoice posted raises its own event for a rule that listens to it, with the amount posted', async () => {
-    const made = await create(owner, 'invoice_over_threshold', 'Posted listener', sample as unknown as Record<string, string>);
-    expect(made.ruleNo).toBeTruthy();
-    const listening = await withScope(scope(owner), (tx) => events.operatorPrincipal(tx, owner.id));
-    expect(listening.isSuperUser).toBe(true);
-    // No rule listens to ap_invoice.posted, so posting an invoice records nothing for it.
-    const fresh = await importOf(world, '3', { post: false, price: '10000' });
-    await as(clerk, (tx) => ap.submit(tx, clerk, fresh.invoiceId));
-    await as(world.manager, (tx) => ap.post(tx, world.manager, fresh.invoiceId));
+  it('a purchase invoice posted raises its own event for a rule that listens to it, with the amount posted, and only then', async () => {
+    await quiesce(); // the review rule of the scenarios above is done with
+    // No rule listens to ap_invoice.posted yet, so posting an invoice records nothing for it.
+    const quietInvoice = await importOf(world, '3', { post: false, price: '10000' });
+    await as(clerk, (tx) => ap.submit(tx, clerk, quietInvoice.invoiceId));
+    await as(world.manager, (tx) => ap.post(tx, world.manager, quietInvoice.invoiceId));
     expect(await eventsOf('ap_invoice.posted')).toEqual([]);
+
+    const made = await create(owner, 'invoice_posted_notice', 'Large invoices posted', { thresholdIqd: '1500000', notifyRole: 'accounting_manager', note: 'In the books' });
+    await enable(owner, made.ruleNo);
+    const large = await importOf(world, '200', { post: false, price: '10000' }); // 2,000,000
+    const little = await importOf(world, '5', { post: false, price: '10000' }); // 50,000
+    for (const doc of [large, little]) {
+      await as(clerk, (tx) => ap.submit(tx, clerk, doc.invoiceId));
+      await as(world.manager, (tx) => ap.post(tx, world.manager, doc.invoiceId));
+    }
+    const posted = await eventsOf('ap_invoice.posted');
+    expect(posted).toHaveLength(2);
+    expect(posted.find((e) => e.subject_key === `ap_invoice:${large.invoiceId}`)!.payload).toMatchObject({ amountIqd: '2000000.0000', reference: large.invoiceNo });
+    await drain();
+    const runs = await runsOf(made.ruleNo);
+    expect(runs.map((r) => r.outcome).sort()).toEqual(['done', 'skipped']);
+    expect(runs.find((r) => r.outcome === 'done')!.results.map((r) => `${r.kind}:${r.status}`)).toEqual(['create_notification:done']);
+    const told = await noticesOf('automation.ap_invoice_posted');
+    expect(new Set(told.map((n) => n.who))).toEqual(new Set([owner.id, supervisor.id, reviewer.id]));
+    // A notice about a posting posts, holds and changes nothing: the invoice is exactly as it was.
+    expect(await statusOf(large.invoiceId)).toBe('posted');
+    expect(await openReviews(large.invoiceId)).toBe(0);
+    await quiesce();
   });
 });
 
@@ -421,7 +463,7 @@ describe('AU3 · a container past its ETA: an exception that keeps itself true, 
   });
 
   it('the runner raises one exception, tells the role, and gives the clerk a task due in two days, linked to the container', async () => {
-    const run = await runOnce();
+    const run = await drain();
     expect(run.runs).toMatchObject({ done: 1, failed: 0 });
     const [log] = await runsOf(ruleNo);
     expect(log!.results.map((r) => `${r.kind}:${r.status}`)).toEqual(['create_exception:done', 'create_notification:done', 'create_task:done']);
@@ -464,10 +506,9 @@ describe('AU4 · a task is overdue: the assignee, and the supervisor where the s
     const rule = await create(sysadmin, 'task_overdue', 'Tasks late', { daysLate: '2', notifyAssignee: 'on', notifySupervisor: 'on', note: 'Please clear it' });
     ruleNo = rule.ruleNo;
     await enable(sysadmin, ruleNo);
-    const sys = await systemScope();
-    const produced = await withScope(sys, async (tx) => events.produce(tx, await events.operatorPrincipal(tx, sys.userId), today, ['task.overdue']));
+    const produced = await sweepDay(today, ['task.overdue']);
     expect(produced[0]).toMatchObject({ read: 1, recorded: 1 });
-    await runOnce();
+    await drain();
     const [log] = await runsOf(ruleNo);
     expect(log).toMatchObject({ outcome: 'done', owner: sysadmin.id });
     const told = await noticesOf('automation.task_overdue');
@@ -476,16 +517,23 @@ describe('AU4 · a task is overdue: the assignee, and the supervisor where the s
   });
 
   it('a task that is not late, or not owed any more, is not an event', async () => {
-    const sys = await systemScope();
-    await ownerPool.query(`update task set status = 'completed', completed_at = now() where task_no = $1`, [taskNo]);
-    const produced = await withScope(sys, async (tx) => events.produce(tx, await events.operatorPrincipal(tx, sys.userId), '2026-10-09', ['task.overdue']));
-    expect(produced[0]).toMatchObject({ read: 0, recorded: 0 });
+    // Not late yet: asked on a day before its due date, the task is not overdue.
+    const early = await sweepDay('2026-09-01', ['task.overdue']);
+    expect(early[0]).toMatchObject({ read: 0, recorded: 0 });
+    // Not owed any more: its raiser withdraws it.
+    const taskId = (await ownerPool.query(`select id::text from task where task_no = $1`, [taskNo])).rows[0].id as string;
+    const eventsFor = async () => (await eventsOf('task.overdue')).filter((e) => e.subject_key === `task:${taskId}`).length;
+    expect(await eventsFor()).toBe(1);
+    await as(owner, (tx) => tasks.act(tx, owner, taskNo, 'cancel', { reason: 'No longer needed' }));
+    // Other tasks of the file are late by then (the clerk's follow-up of AU3); this one is not owed, so it adds nothing.
+    await sweepDay(addBusinessDays(today, 4), ['task.overdue']);
+    expect(await eventsFor()).toBe(1);
   });
 });
 
 async function tasks_(creator: Person, title: string): Promise<string> {
   const made = await as(creator, (tx) => tasks.create(tx, creator, { title, departmentCode: 'FIN', assigneeId: clerk.id }));
-  await ownerPool.query(`update task set due_date = '2026-09-20' where task_no = $1`, [made.taskNo]);
+  await ownerPool.query(`update task set due_date = $2 where task_no = $1`, [made.taskNo, addBusinessDays(today, -15)]);
   return made.taskNo;
 }
 
@@ -510,7 +558,7 @@ describe('AU5 · a customer invoice is overdue: a follow-up task for, and a noti
     expect(produced[0]).toMatchObject({ listening: true, read: 1, recorded: 1, problems: [] });
     const [event] = await eventsOf('ar_invoice.overdue');
     expect(event!.payload).toMatchObject({ reference: overdueSale.no, customerCode: expect.any(String), amountIqd: '30000.0000', dueDate: '2026-08-30', raisedBy: world.clerk.principal.userId });
-    await runOnce();
+    await drain();
     const [log] = await runsOf(ruleNo);
     expect(log!.outcome).toBe('done');
     expect(log!.results.map((r) => `${r.kind}:${r.status}`)).toEqual(['create_task:done', 'create_notification:done']);
@@ -521,9 +569,8 @@ describe('AU5 · a customer invoice is overdue: a follow-up task for, and a noti
   });
 
   it('a payment ends it: the invoice no longer produces the event', async () => {
-    await ownerPool.query(`update ar_invoice set due_date = '2026-12-31' where id = $1`, [overdueSale.id]);
-    const sys = await systemScope();
-    const produced = await withScope(sys, async (tx) => events.produce(tx, await events.operatorPrincipal(tx, sys.userId), today, ['ar_invoice.overdue']));
+    await ownerPool.query(`update ar_invoice set due_date = $2 where id = $1`, [overdueSale.id, addBusinessDays(today, 90)]);
+    const produced = await sweepDay(today, ['ar_invoice.overdue']);
     expect(produced[0]).toMatchObject({ read: 0 });
     await ownerPool.query(`update ar_invoice set due_date = '2026-08-30' where id = $1`, [overdueSale.id]);
   });
@@ -531,6 +578,12 @@ describe('AU5 · a customer invoice is overdue: a follow-up task for, and a noti
 
 // ---------------------------------------------------------------------------
 describe('AU6 · each thing is done once: a double dispatch, a replay, the same lateness on another day, concurrent runners', () => {
+  beforeAll(async () => {
+    // Somebody must be listening for invoices to be recorded; a threshold nothing reaches keeps it from acting on them.
+    const listener = await create(owner, 'invoice_over_threshold', 'Listening, never reached', { thresholdIqd: '900,000,000', notifyRole: 'accounting_manager', note: 'Never' });
+    await enable(owner, listener.ruleNo);
+  });
+
   it('a double dispatch of one fact writes one event; a later one is a second event', async () => {
     const invoice = await submittedInvoice('1', '10000');
     const payload = (await eventsOf('ap_invoice.submitted')).find((e) => e.subject_key === `ap_invoice:${invoice.invoiceId}`)!.payload;
@@ -543,6 +596,15 @@ describe('AU6 · each thing is done once: a double dispatch, a replay, the same 
     expect(third.recorded).toBe(true);
   });
 
+  it('five dispatches of one fact at the same moment, each in its own transaction, write one event', async () => {
+    const invoice = await submittedInvoice('2', '10000');
+    const payload = (await eventsOf('ap_invoice.submitted')).find((e) => e.subject_key === `ap_invoice:${invoice.invoiceId}`)!.payload;
+    const window = `at:2098-06-01T00:00:00.000Z`;
+    const results = await Promise.all(Array.from({ length: 5 }, () => as(owner, (tx) => dispatch(tx, 'ap_invoice.submitted', payload, { window }))));
+    expect(results.filter((r) => r.recorded)).toHaveLength(1);
+    expect((await eventsOf('ap_invoice.submitted')).filter((e) => e.window_key === window)).toHaveLength(1);
+  });
+
   it('a payload that does not fit its event is refused out loud, never recorded', async () => {
     const bad = await as(owner, (tx) => dispatch(tx, 'ap_invoice.submitted', { subjectId: randomUUID(), reference: 'X', amountIqd: 'lots' }));
     expect(bad.recorded).toBe(false);
@@ -552,8 +614,8 @@ describe('AU6 · each thing is done once: a double dispatch, a replay, the same 
   });
 
   it('drains the outbox, and a second run finds nothing to repeat', async () => {
-    await runOnce();
-    const second = await runOnce();
+    await drain();
+    const second = await drain();
     expect(second.events).toBe(0);
     expect(await count('automation_event', `status in ('pending','retry')`)).toBe(0);
   });
@@ -562,10 +624,10 @@ describe('AU6 · each thing is done once: a double dispatch, a replay, the same 
     const tasksBefore = await count('task');
     const runsBefore = await count('automation_run');
     const sys = await systemScope();
-    const nextDay = '2026-10-06';
+    const nextDay = addBusinessDays(today, 1);
     const produced = await withScope(sys, async (tx) => events.produce(tx, await events.operatorPrincipal(tx, sys.userId), nextDay, ['ar_invoice.overdue']));
     expect(produced[0]).toMatchObject({ read: 1, recorded: 1 });
-    const run = await runOnce();
+    const run = await drain();
     expect(run.events).toBe(1);
     expect(await count('task')).toBe(tasksBefore);
     expect(await count('automation_run')).toBe(runsBefore);
@@ -578,6 +640,7 @@ describe('AU6 · each thing is done once: a double dispatch, a replay, the same 
   });
 
   it('three runners at once take different events and do each thing exactly once', async () => {
+    await quiesce();
     const rule = await create(sysadmin, 'task_overdue', 'Concurrent tasks', { daysLate: '1', notifyAssignee: 'on' });
     await enable(sysadmin, rule.ruleNo);
     const numbers: string[] = [];
@@ -585,8 +648,11 @@ describe('AU6 · each thing is done once: a double dispatch, a replay, the same 
     const sys = await systemScope();
     const produced = await withScope(sys, async (tx) => events.produce(tx, await events.operatorPrincipal(tx, sys.userId), today, ['task.overdue']));
     expect(produced[0]!.recorded).toBeGreaterThanOrEqual(6);
-    const results = await Promise.all([runOnce(), runOnce(), runOnce()]);
-    expect(results.reduce((n, r) => n + r.events, 0)).toBe(await count('automation_event', `event_key = 'task.overdue' and status = 'done'`));
+    const waiting = await count('automation_event', `status in ('pending','retry')`);
+    expect(waiting).toBeGreaterThanOrEqual(6);
+    const results = await Promise.all([drain(), drain(), drain()]);
+    // Every waiting event was taken by exactly one runner: no event twice, none left.
+    expect(results.reduce((n, r) => n + r.events, 0)).toBe(waiting);
     const runs = (await runsOf(rule.ruleNo)).filter((r) => r.outcome === 'done');
     expect(new Set(runs.map((r) => r.subject_key)).size).toBe(runs.length);
     expect(runs.length).toBeGreaterThanOrEqual(6);
@@ -601,7 +667,26 @@ describe('AU7 · a failing action is contained, visible, retried, and finally pa
   let ruleNo: string;
   let invoice: { invoiceId: string; invoiceNo: string };
 
-  it('the business transaction commits whatever the rule does: with the review route broken, the invoice is still submitted and recorded', async () => {
+  it('the business transaction commits whatever the engine does: with the outbox itself broken, the invoice is still submitted and nothing is recorded', async () => {
+    await quiesce();
+    const rule = await create(owner, 'invoice_over_threshold', 'Outbox down', { thresholdIqd: '1', notifyRole: 'accounting_manager' });
+    await enable(owner, rule.ruleNo);
+    await ownerPool.query(`create or replace function au_boom() returns trigger language plpgsql as $$ begin raise exception 'the outbox is down'; end $$`);
+    await ownerPool.query(`create trigger au_boom_event before insert on automation_event for each row execute function au_boom()`);
+    try {
+      const survived = await submittedInvoice('7', '10000');
+      expect(await statusOf(survived.invoiceId)).toBe('submitted');
+      expect((await eventsOf('ap_invoice.submitted')).some((e) => e.subject_key === `ap_invoice:${survived.invoiceId}`)).toBe(false);
+      // And the posting after it, in a transaction of its own, goes through as ever.
+      await as(world.manager, (tx) => ap.post(tx, world.manager, survived.invoiceId));
+      expect(await statusOf(survived.invoiceId)).toBe('posted');
+    } finally {
+      await ownerPool.query(`drop trigger if exists au_boom_event on automation_event`);
+    }
+    await disable(owner, rule.ruleNo, 'Done with the outbox fault');
+  });
+
+  it('the business transaction commits whatever a rule does: with the review route broken, the invoice is still submitted and recorded', async () => {
     const made = await create(owner, 'invoice_over_threshold', 'Fails first', { thresholdIqd: '500000', notifyRole: 'accounting_manager', note: 'x' });
     ruleNo = made.ruleNo;
     await enable(owner, ruleNo);
@@ -615,7 +700,7 @@ describe('AU7 · a failing action is contained, visible, retried, and finally pa
 
   it('is logged as failed with the reason, the step that worked is kept, and the event waits for its retry', async () => {
     const now = new Date();
-    const run = await runOnce({ now });
+    const run = await drain({ now });
     expect(run.runs.failed).toBe(1);
     expect(run.retrying).toBe(1);
     const [first] = (await runsOf(ruleNo)).filter((r) => r.subject_key === `ap_invoice:${invoice.invoiceId}`);
@@ -626,7 +711,7 @@ describe('AU7 · a failing action is contained, visible, retried, and finally pa
     expect(event).toMatchObject({ status: 'retry', attempts: 1 });
     expect(await openReviews(invoice.invoiceId)).toBe(0);
     // Nothing is due yet: the retry waits a minute.
-    expect((await runOnce({ now })).events).toBe(0);
+    expect((await drain({ now })).events).toBe(0);
     expect((await ruleRow(ruleNo)).consecutive_failures).toBe(0);
   });
 
@@ -634,7 +719,7 @@ describe('AU7 · a failing action is contained, visible, retried, and finally pa
     await ownerPool.query(`drop trigger au_boom on workflow_instance`);
     const toldBefore = (await noticesOf('automation.ap_invoice_submitted')).length;
     const later = new Date(Date.now() + 2 * 60_000);
-    const run = await runOnce({ now: later });
+    const run = await drain({ now: later });
     expect(run.runs.done).toBe(1);
     const runs = (await runsOf(ruleNo)).filter((r) => r.subject_key === `ap_invoice:${invoice.invoiceId}`);
     expect(runs.map((r) => `${r.attempt}:${r.outcome}`)).toEqual(['1:failed', '2:done']);
@@ -649,10 +734,10 @@ describe('AU7 · a failing action is contained, visible, retried, and finally pa
     await ownerPool.query(`create trigger au_boom before insert on workflow_instance for each row execute function au_boom()`);
     const broken = await submittedInvoice('120', '10000');
     const t0 = new Date();
-    await runOnce({ now: t0 });
-    await runOnce({ now: new Date(t0.getTime() + 2 * 60_000) });
+    await drain({ now: t0 });
+    await drain({ now: new Date(t0.getTime() + 2 * 60_000) });
     expect((await ruleRow(ruleNo)).enabled).toBe(true);
-    const last = await runOnce({ now: new Date(t0.getTime() + 20 * 60_000) });
+    const last = await drain({ now: new Date(t0.getTime() + 20 * 60_000) });
     expect(last.paused).toEqual([ruleNo]);
     const runs = (await runsOf(ruleNo)).filter((r) => r.subject_key === `ap_invoice:${broken.invoiceId}`);
     expect(runs.map((r) => `${r.attempt}:${r.outcome}`)).toEqual(['1:failed', '2:failed', '3:failed']);
@@ -696,7 +781,7 @@ describe('AU8 · the global switch and a disabled rule do nothing', () => {
     await as(owner, (tx) => automation.setSwitch(tx, owner, false, 'Maintenance on the review route'));
     const tasksBefore = await count('task');
     const runsBefore = await count('automation_run');
-    const run = await runOnce();
+    const run = await drain();
     expect(run.switchedOff).toBe(true);
     expect(await count('automation_run')).toBe(runsBefore);
     expect(await count('task')).toBe(tasksBefore);
@@ -715,7 +800,7 @@ describe('AU8 · the global switch and a disabled rule do nothing', () => {
     expect((await auditOf('automation.switched_on')).length).toBe(1);
     const after = await submittedInvoice('300', '10000');
     expect((await eventsOf('ap_invoice.submitted')).some((e) => e.subject_key === `ap_invoice:${after.invoiceId}`)).toBe(true);
-    await runOnce();
+    await drain();
   });
 });
 
@@ -725,7 +810,7 @@ describe('AU9 · a rule does only what its owner could do by hand', () => {
     const made = await create(limited, 'container_eta_exceeded', 'No tasks for me', {
       daysLate: '1',
       severity: 'medium',
-      notifyRole: 'logistics_officer',
+      notifyRole: 'accounting_manager',
       followUp: 'on',
       taskAssignee: clerk.id,
       taskDepartment: 'FIN',
@@ -740,11 +825,10 @@ describe('AU9 · a rule does only what its owner could do by hand', () => {
     const sys = await systemScope();
     await withScope(sys, async (tx) => events.produce(tx, await events.operatorPrincipal(tx, sys.userId), today, ['container.eta_exceeded']));
     const tasksBefore = await count('task');
-    await runOnce();
+    await drain();
     const runs = (await runsOf(made.ruleNo)).filter((r) => r.subject_key === `shipment_container:${bl.containerIds[0]}`);
     expect(runs).toHaveLength(1);
-    expect(runs[0]!.outcome).toBe('done');
-    expect(runs[0]!.owner).toBe(limited.id);
+    expect(runs[0], runs[0]!.reason).toMatchObject({ outcome: 'done', owner: limited.id });
     expect(runs[0]!.results.map((r) => `${r.kind}:${r.status}`)).toEqual(['create_exception:done', 'create_notification:done', 'create_task:skipped']);
     expect(runs[0]!.results[2]!.detail).toMatch(/owner could not do this by hand \(create on task, submit on task missing\)/);
     expect(await count('task')).toBe(tasksBefore);
@@ -770,7 +854,7 @@ describe('AU9 · a rule does only what its owner could do by hand', () => {
     const sys = await systemScope();
     await withScope(sys, async (tx) => events.produce(tx, await events.operatorPrincipal(tx, sys.userId), today, ['task.overdue']));
     const told = await count('notification', `event_type = 'automation.task_overdue' and context->>'rule' = '${rule.ruleNo}'`);
-    await runOnce();
+    await drain();
     const taskId = (await ownerPool.query(`select id from task where task_no = $1`, [taskNo])).rows[0].id;
     const runs = (await runsOf(rule.ruleNo)).filter((r) => r.subject_key.endsWith(`:${taskId}`));
     expect(runs).toHaveLength(1);

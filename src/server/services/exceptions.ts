@@ -874,8 +874,8 @@ export async function raiseFromAutomation(
 ): Promise<{ id: string; exceptionNo: string; outcome: 'created' | 'reopened' | 'exists' }> {
   const def = detectorOf(finding.detector);
   if (!def || !(finding.detector in EXCEPTION_EVENTS)) throw new ExceptionError('NOT_PERMITTED', `${finding.detector} is not a finding a rule may raise.`);
-  if (!can(ctx.principal, 'administer', PERMISSION_OBJECT) || !can(ctx.principal, 'view', def.object)) {
-    throw new ExceptionError('NOT_PERMITTED', 'Raising an exception needs administer on the Exception Center and view on the record it is about.');
+  if (!can(ctx.principal, 'administer', PERMISSION_OBJECT) || !can(ctx.principal, 'execute', PERMISSION_OBJECT) || !can(ctx.principal, 'view', def.object)) {
+    throw new ExceptionError('NOT_PERMITTED', 'Raising an exception needs administer and execute on the Exception Center and view on the record it is about.');
   }
   const problem = refusal(finding);
   if (problem) throw new ExceptionError('INVALID', problem);
