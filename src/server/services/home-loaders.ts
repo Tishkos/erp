@@ -63,6 +63,7 @@ import { parseQuantity } from '../domain/uom';
 import * as approvalCenter from './approval-center';
 import * as chatRead from './chat-read';
 import * as dashboard from './dashboard';
+import * as exceptions from './exceptions';
 import * as hrReports from './hr-reports';
 import * as inventoryReports from './inventory-reports';
 import * as logistics from './logistics-views';
@@ -835,4 +836,9 @@ const LOADERS_BY_KEY: Record<WidgetKey, Loader> = {
 
 export const LOADERS: Readonly<Record<WidgetKey, Loader>> = LOADERS_BY_KEY;
 
-// The Exception Center's feed is registered here after the merge — see `registerAttentionFeed`.
+// The Exception Center's feed (RULES-PLATFORM §10), registered here when the two branches met: the `attention` widget
+// draws exactly what `exceptions.openFor/countsFor` hand the principal.
+registerAttentionFeed({
+  open: (tx, principal, options) => exceptions.openFor(tx, principal, options),
+  counts: (tx, principal) => exceptions.countsFor(tx, principal),
+});
