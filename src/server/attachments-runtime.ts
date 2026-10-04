@@ -194,7 +194,10 @@ const employeeDocumentParentAccess = async (tx: Tx, principal: Principal, object
  * asks before it draws the record, which is the deposit register's own.
  */
 const bankTransferParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
-  if (!can(principal, 'view', 'bank_transfer')) return false;
+  // `bank_cash_account` is what `treasury.ts` and Manual Deposits authorise a
+  // transfer on; no role holds a `bank_transfer` grant, so asking for one
+  // refused everybody but the Super User (REQ-ACC-001, 2026-10-04).
+  if (!can(principal, 'view', 'bank_cash_account')) return false;
   const [row] = await tx.select({ id: bankTransfer.id }).from(bankTransfer).where(eq(bankTransfer.id, objectId)).limit(1);
   return Boolean(row);
 };

@@ -36,6 +36,8 @@ import { countOf, registerPage, searchOf, whereOf, type RegisterPaging } from '.
 export const PERMISSION_OBJECT = 'bank_cash_account';
 const CASH_COUNT_TYPE = 'cash_count';
 const TRANSFER_TYPE = 'bank_transfer';
+/** The audit and attachment object a transfer is filed under (its history, its paperwork). */
+export const TRANSFER_OBJECT_TYPE = TRANSFER_TYPE;
 
 // ---------------------------------------------------------------------------
 // Balances — the 07.1 gate
@@ -1013,6 +1015,11 @@ export interface TransferRow {
   readonly toName: string;
   readonly toKind: 'bank' | 'cash';
   readonly toCurrency: string;
+  /** The G/L account each side posts to — what the journal will carry. */
+  readonly fromGlCode: string | null;
+  readonly fromGlName: string | null;
+  readonly toGlCode: string | null;
+  readonly toGlName: string | null;
   readonly amount: string;
   readonly receivedAmount: string;
   readonly fxRate: string | null;
@@ -1033,7 +1040,8 @@ const TRANSFERS = sql`(
   select t.id::text as id, t.transfer_no, t.transfer_date::text as transfer_date, t.status::text as status,
          t.branch_code, fa.code as from_code, fa.name as from_name, fa.account_type::text as from_kind,
          t.from_currency, ta.code as to_code, ta.name as to_name, ta.account_type::text as to_kind,
-         t.to_currency, t.amount::text as amount, t.received_amount::text as received_amount,
+         t.to_currency, fg.code as from_gl_code, fg.name as from_gl_name, tg.code as to_gl_code, tg.name as to_gl_name,
+         t.amount::text as amount, t.received_amount::text as received_amount,
          t.fx_rate::text as fx_rate, t.bank_reference, t.note, t.created_by::text as created_by,
          cu.display_name as created_by_name, au.display_name as approved_by_name,
          pu.display_name as posted_by_name, ru.display_name as reversed_by_name, t.reversal_reason,
@@ -1041,6 +1049,8 @@ const TRANSFERS = sql`(
     from bank_transfer t
     join bank_cash_account fa on fa.id = t.from_account_id
     join bank_cash_account ta on ta.id = t.to_account_id
+    left join chart_of_account fg on fg.id = fa.gl_account_id
+    left join chart_of_account tg on tg.id = ta.gl_account_id
     left join app_user cu on cu.id = t.created_by
     left join app_user au on au.id = t.approved_by
     left join app_user pu on pu.id = t.posted_by
@@ -1063,6 +1073,10 @@ const transferRow = (row: Record<string, unknown>): TransferRow => ({
   toName: String(row.to_name),
   toKind: row.to_kind === 'cash' ? 'cash' : 'bank',
   toCurrency: String(row.to_currency),
+  fromGlCode: (row.from_gl_code as string | null) ?? null,
+  fromGlName: (row.from_gl_name as string | null) ?? null,
+  toGlCode: (row.to_gl_code as string | null) ?? null,
+  toGlName: (row.to_gl_name as string | null) ?? null,
   amount: String(row.amount),
   receivedAmount: String(row.received_amount),
   fxRate: (row.fx_rate as string | null) ?? null,

@@ -5493,6 +5493,52 @@
     },
     "monitoring": {
       "soon": "Coming soon"
+    },
+    "internal_transfers": {
+      "subtitle": "The company’s own money moving between its own bank and cash accounts — no income, no expense.",
+      "new": "New transfer",
+      "new_note": "From one of the company’s bank or cash accounts to another. Between two currencies, state what arrived or the bank’s rate; the difference at the ledger rate is an exchange gain or loss.",
+      "from": "From account",
+      "to": "To account",
+      "date": "Transfer date",
+      "amount": "Amount sent",
+      "amount_hint": "In the source account’s currency.",
+      "received": "Amount received",
+      "received_hint": "In the destination’s currency. Only between two currencies.",
+      "rate": "Exchange rate",
+      "rate_hint": "Dinars per unit of the other currency. Only between two currencies; read off the two amounts when left empty.",
+      "reference": "Bank reference",
+      "purpose": "Purpose",
+      "create": "Create transfer",
+      "view": "View",
+      "view_all": "All transfers",
+      "view_open": "Not yet posted",
+      "view_posted": "Posted",
+      "view_reversed": "Reversed",
+      "account": "Account",
+      "any_account": "Any account",
+      "filter": "Filter",
+      "col_no": "Transfer no.",
+      "col_status": "Status",
+      "none": "No transfers yet.",
+      "document_type": "Internal Transfer",
+      "lines": "Journal",
+      "gl_account": "G/L account",
+      "entered": "In its currency",
+      "debit": "Debit (IQD)",
+      "credit": "Credit (IQD)",
+      "exchange_gain": "Exchange gain",
+      "exchange_loss": "Exchange loss",
+      "journal": "Journal",
+      "reversal_journal": "Reversal journal",
+      "raised_by": "Raised by",
+      "approved_by": "Approved by",
+      "posted_by": "Posted by",
+      "reversal_reason": "Reversed because",
+      "approve": "Approve",
+      "post": "Post",
+      "reverse": "Reverse",
+      "reverse_reason": "Reason for reversing"
     }
   },
   "profile": {
@@ -5859,7 +5905,8 @@
       "hr_unsettled_advances": "Unsettled Advances",
       "bill_of_lading": "Bill of Lading",
       "asycuda_reading": "ASYCUDA Reading",
-      "import_application": "Import Application"
+      "import_application": "Import Application",
+      "internal_transfer": "Internal Transfer"
     }
   }
 }

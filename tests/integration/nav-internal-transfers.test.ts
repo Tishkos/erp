@@ -25,6 +25,10 @@ import * as authz from '@/server/services/authorization';
 import * as treasury from '@/server/services/treasury';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
 import { parseDecimal } from '@domain/money';
+import { runExport } from '@/server/print/export';
+import { mayExport } from '@/server/print/access';
+import { registerAttachmentRuntime } from '@/server/attachments-runtime';
+import * as attachments from '@/server/services/attachments';
 
 const BAGHDAD = 'BGW';
 
@@ -563,5 +567,73 @@ describe('Internal Transfers · correction by reversal', () => {
     expect((await list({ view: 'posted' })).rows.map((r) => r.toCode)).toEqual(['BANK-TWO']);
     expect((await list({ accountCode: 'BANK-TWO' })).total).toBe(1);
     expect((await list({ search: 'petty' })).total).toBe(1);
+  });
+});
+
+describe('Internal Transfers · the record’s doors', () => {
+  it('prints the transfer with its journal, for whoever reads transfers', async () => {
+    await fund('A9BNKIQD', '10000');
+    const transfer = await postedTransfer({
+      fromAccountId: bankIqd,
+      toAccountId: cashFloat,
+      transferDate: '2026-02-10',
+      amountIqd: price('1500'),
+      bankReference: 'CHQ-77',
+    });
+    expect(mayExport(officer.principal, 'internal_transfer', 'pdf')).toBe(true);
+
+    const result = await withScope(scope(manager), (tx) =>
+      runExport(tx, manager, {
+        key: 'internal_transfer',
+        format: 'xlsx',
+        locale: 'en',
+        at: '2026-02-11T09:00:00.000Z',
+        input: { id: transfer.transferNo, query: new URLSearchParams() },
+      }),
+    );
+    expect(result.status).toBe(200);
+    if (result.status !== 200) return;
+    expect(result.fileName).toBe(`${transfer.transferNo}.xlsx`);
+    const facts = new Map(result.model.fields.map((f) => [f.label, f.value]));
+    expect(facts.get('Transfer no.')).toBe(transfer.transferNo);
+    expect(facts.get('Bank reference')).toBe('CHQ-77');
+    const rows = result.model.tables[0]!.rows.map((r) => [r.cells.gl, r.cells.debit, r.cells.credit]);
+    expect(rows).toEqual([
+      ['A9CASHFL', '1500.0000', null],
+      ['A9BNKIQD', null, '1500.0000'],
+    ]);
+
+    // A transfer that is not there is not printed.
+    const missing = await withScope(scope(manager), (tx) =>
+      runExport(tx, manager, {
+        key: 'internal_transfer',
+        format: 'pdf',
+        locale: 'en',
+        at: '2026-02-11T09:00:00.000Z',
+        input: { id: 'BTR-NOWHERE', query: new URLSearchParams() },
+      }),
+    );
+    expect(missing.status).toBe(404);
+  });
+
+  it('takes paperwork from whoever may read transfers, from the draft on', async () => {
+    registerAttachmentRuntime();
+    await fund('A9BNKIQD', '10000');
+    const made = await withScope(scope(manager), (tx) =>
+      treasury.createTransfer(tx, manager, { fromAccountId: bankIqd, toAccountId: secondBank, transferDate: '2026-02-10', amountIqd: price('100') }),
+    );
+    // The parent check asks for the grant transfers are read under —
+    // `bank_cash_account` — which an accounting officer holds.
+    const uploaded = await withScope(scope(officer), (tx) =>
+      attachments.upload(tx, officer, {
+        objectType: treasury.TRANSFER_OBJECT_TYPE,
+        objectId: made.id,
+        fileName: 'advice.pdf',
+        content: Buffer.from('%PDF-1.4\n%%EOF\n'),
+      }),
+    );
+    expect(uploaded.quarantined).toBe(false);
+    const files = await withScope(scope(officer), (tx) => attachments.currentFor(tx, treasury.TRANSFER_OBJECT_TYPE, made.id));
+    expect(files.map((f) => f.fileName)).toEqual(['advice.pdf']);
   });
 });

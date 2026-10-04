@@ -332,6 +332,8 @@ describe('every screen has one address', () => {
       '/treasury/deposits',
       '/treasury/loans',
       '/treasury/reporting',
+      // REQ-ACC-001 Part D — Internal Transfers.
+      '/treasury/transfers',
     ]);
   });
 });
