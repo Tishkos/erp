@@ -200,7 +200,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(249);
+    expect(screenRoutes().size).toBe(250);
   });
 
   it('marks only the delivered screens as reading real data', () => {
