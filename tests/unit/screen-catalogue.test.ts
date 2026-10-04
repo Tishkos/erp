@@ -264,6 +264,8 @@ describe('every screen has one address', () => {
       '/master-data/payment-methods',
       '/master-data/payment-terms',
       '/master-data/statement-mapping',
+      // REQ-ACC-001 Part D — Tax Codes.
+      '/master-data/tax-codes',
       '/master-data/warehouses',
       /*
        * Monitoring — by direction, 2026-10-03.

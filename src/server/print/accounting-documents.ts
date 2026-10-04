@@ -14,7 +14,9 @@ import * as rec from '../services/bank-reconciliation';
 import * as treasuryReports from '../services/treasury-reports';
 import * as forecasts from '../services/cash-forecast';
 import * as subledger from '../services/subledger';
+import * as taxCodes from '../services/tax-codes';
 import { businessToday } from '../domain/business-date';
+import { addDays } from '../domain/dates';
 import type { BuildContext, Built } from './documents';
 import { EXPORT_ROW_CAP, type Fact, type PrintModel } from './model';
 
@@ -356,7 +358,7 @@ export async function cashForecast(ctx: BuildContext, query: URLSearchParams): P
   const t = (key: string) => m.admin(`cash_forecast.${key}`);
   const today = businessToday();
   const from = queryValue(query, 'from') || today;
-  const to = queryValue(query, 'to') || new Date(Date.parse(`${from}T00:00:00Z`) + 90 * 86_400_000).toISOString().slice(0, 10);
+  const to = queryValue(query, 'to') || addDays(from, 90);
   const bucket = (forecasts.FORECAST_BUCKETS as readonly string[]).includes(queryValue(query, 'bucket'))
     ? (queryValue(query, 'bucket') as forecasts.ForecastBucket)
     : 'week';
@@ -473,5 +475,55 @@ export async function accountReconciliation(ctx: BuildContext, query: URLSearchP
     }),
     branchCode,
     objectId: 'account_reconciliation',
+  };
+}
+
+/** A Tax Code: its boxes, and every rate it has had. */
+export async function taxCode(ctx: BuildContext, code: string): Promise<Built | null> {
+  const { tx, m, locale } = ctx;
+  let row: Awaited<ReturnType<typeof taxCodes.detail>>;
+  try {
+    row = await taxCodes.detail(tx, code);
+  } catch {
+    return null;
+  }
+  const t = (key: string) => m.admin(`tax_codes.${key}`);
+  const percent = (rate: string | null) => (rate === null ? '—' : `${rate.replace(/\.?0+$/, '')}%`);
+  const today = await taxCodes.rateOn(tx, code, businessToday());
+  const title = m.print('titles.tax_code');
+  return {
+    model: base({
+      title,
+      number: row.code,
+      status: row.active ? m.admin('active') : m.status('cancelled'),
+      posted: true,
+      fields: [
+        { label: t('code'), value: row.code, ltr: true },
+        { label: t('name'), value: row.name },
+        { label: t('direction'), value: t(`direction_${row.direction}`) },
+        { label: t('recoverable'), value: row.isRecoverable ? t('recoverable_yes') : t('recoverable_no') },
+        { label: t('account'), value: `${row.account.code} · ${row.account.name}` },
+        { label: t('current_rate'), value: percent(today), ltr: true },
+        { label: t('created_by'), value: row.createdByName ?? '—' },
+      ],
+      tables: [
+        {
+          title: t('rates'),
+          columns: [
+            { key: 'from', label: t('effective_from'), kind: 'text' },
+            { key: 'rate', label: t('rate'), kind: 'text' },
+            { key: 'by', label: t('added_by'), kind: 'text' },
+          ],
+          rows: row.rates.map((rate) => ({
+            cells: { from: day(rate.effectiveFrom, locale), rate: percent(rate.ratePercent), by: rate.createdBy ?? '—' },
+          })),
+          empty: t('no_rates'),
+        },
+      ],
+      fileName: row.code,
+    }),
+    // A tax code is the company's, not a branch's: the reader's letterhead.
+    branchCode: ctx.branchCode,
+    objectId: row.code,
   };
 }

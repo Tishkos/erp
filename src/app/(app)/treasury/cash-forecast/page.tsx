@@ -11,6 +11,7 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { businessToday } from '@/server/domain/business-date';
+import { addDays } from '@/server/domain/dates';
 import * as forecasts from '@/server/services/cash-forecast';
 
 /**
@@ -25,11 +26,6 @@ import * as forecasts from '@/server/services/cash-forecast';
  * not read yet rather than reporting nought. Drawn as the Trial Balance is.
  */
 export const dynamic = 'force-dynamic';
-
-const DAY = 86_400_000;
-function plusDays(date: string, days: number): string {
-  return new Date(Date.parse(`${date}T00:00:00Z`) + days * DAY).toISOString().slice(0, 10);
-}
 
 export default async function CashForecastPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/treasury/cash-forecast')) notFound();
@@ -49,7 +45,7 @@ export default async function CashForecastPage({ searchParams }: { searchParams:
   const one = (key: string) => (typeof params[key] === 'string' ? (params[key] as string).trim() : '');
   const today = businessToday();
   const from = one('from') || today;
-  const to = one('to') || plusDays(from, 90);
+  const to = one('to') || addDays(from, 90);
   const bucket = (forecasts.FORECAST_BUCKETS as readonly string[]).includes(one('bucket'))
     ? (one('bucket') as forecasts.ForecastBucket)
     : 'week';
@@ -58,7 +54,7 @@ export default async function CashForecastPage({ searchParams }: { searchParams:
     const actor = { principal: request.principal, branchCode: request.scope.branchCode };
     return {
       forecast: await forecasts.forecast(tx, actor, { from, to, bucket }),
-      position: await forecasts.dailyPosition(tx, actor, plusDays(from, -1)),
+      position: await forecasts.dailyPosition(tx, actor, addDays(from, -1)),
     };
   });
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);

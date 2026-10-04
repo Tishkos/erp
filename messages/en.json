@@ -5737,6 +5737,43 @@
       "kind_project": "Projects",
       "kind_service": "Services",
       "kind_loan": "Bank loans"
+    },
+    "tax_codes": {
+      "subtitle": "The tax rates transactions refer to, each with its treatment and its account. A rate is added from a date and never changed, so a document always reads the rate of its own day.",
+      "new": "New tax code",
+      "new_note": "Its code is given by the system. The first rate applies from the date stated; later rates are added on its record.",
+      "document_type": "Tax Code",
+      "code": "Code",
+      "name": "Name",
+      "direction": "Treatment",
+      "direction_input": "Input (purchases)",
+      "direction_output": "Output (sales)",
+      "recoverable": "Recoverable",
+      "recoverable_yes": "Recoverable",
+      "recoverable_no": "Not recoverable (a cost)",
+      "account": "G/L account",
+      "rate": "Rate",
+      "rate_hint": "A percentage, such as 15 or 2.5.",
+      "effective_from": "Effective from",
+      "current_rate": "Rate today",
+      "status": "Status",
+      "created_by": "Created by",
+      "create": "Create tax code",
+      "view": "View",
+      "view_all": "All tax codes",
+      "view_input": "Input",
+      "view_output": "Output",
+      "view_inactive": "Inactive",
+      "filter": "Filter",
+      "none": "No tax codes yet.",
+      "rates": "Rates",
+      "no_rates": "No rates yet.",
+      "added_by": "Added by",
+      "added_at": "Added at",
+      "add_rate": "Add rate",
+      "add_rate_note": "A new rate from a date. Documents dated earlier keep the rate they had.",
+      "edit": "Change",
+      "deactivate_reason": "Reason for deactivating"
     }
   },
   "profile": {
@@ -6108,7 +6145,8 @@
       "bank_reconciliation": "Bank Reconciliation",
       "payments_receipts": "Payments & Receipts",
       "cash_forecast": "Cash Forecast",
-      "account_reconciliation": "Account Reconciliation"
+      "account_reconciliation": "Account Reconciliation",
+      "tax_code": "Tax Code"
     }
   }
 }

@@ -11,7 +11,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
-import { applicant, asycudaRun, bankLoan, bankStatement, bankTransfer, billOfLading, customsPd, employeeDocument, employeeRequest, journalEntry, otherReceipt, payable, paymentApplication, shipmentContainer } from './db/schema';
+import { applicant, asycudaRun, bankLoan, bankStatement, bankTransfer, billOfLading, taxCode, customsPd, employeeDocument, employeeRequest, journalEntry, otherReceipt, payable, paymentApplication, shipmentContainer } from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -219,6 +219,13 @@ const bankStatementParentAccess = async (tx: Tx, principal: Principal, objectId:
   return Boolean(row);
 };
 
+/** REQ-ACC-001 — a tax code's papers (the authority's letter, the rate notice): whoever reads tax codes. */
+const taxCodeParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'tax_code')) return false;
+  const [row] = await tx.select({ code: taxCode.code }).from(taxCode).where(eq(taxCode.code, objectId)).limit(1);
+  return Boolean(row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -238,6 +245,7 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('bank_transfer', bankTransferParentAccess);
   attachments.registerParentAccessCheck('other_receipt', otherReceiptParentAccess);
   attachments.registerParentAccessCheck('bank_statement', bankStatementParentAccess);
+  attachments.registerParentAccessCheck('tax_code', taxCodeParentAccess);
   attachments.registerParentAccessCheck('applicant', applicantParentAccess);
   attachments.registerParentAccessCheck('employee_request', employeeRequestParentAccess);
   attachments.registerParentAccessCheck('employee_document', employeeDocumentParentAccess);

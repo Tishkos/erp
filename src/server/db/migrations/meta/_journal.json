@@ -1457,6 +1457,20 @@
       "when": 1795900000100,
       "tag": "0290_bank_guard_counts_reversed",
       "breakpoints": true
+    },
+    {
+      "idx": 208,
+      "version": "7",
+      "when": 1795900000101,
+      "tag": "0291_recurring_journals",
+      "breakpoints": true
+    },
+    {
+      "idx": 209,
+      "version": "7",
+      "when": 1795900000102,
+      "tag": "0292_tax_codes",
+      "breakpoints": true
     }
   ]
 }
