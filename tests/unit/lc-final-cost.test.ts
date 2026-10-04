@@ -183,6 +183,20 @@ describe('reconciliation', () => {
     ).toEqual({ accountedIqd: iqd('149999.9999'), differenceIqd: 1n, balanced: false });
   });
 
+  it('a lock written before 0280 is accounted for by its own record: the unattributed part is placed, not missing', () => {
+    // 200,000 total: 150,000 restated into stock, 50,000 to cost of sales with no row behind it.
+    const figures = { totalIqd: iqd('200000'), inventoryIqd: iqd('150000'), departureIqd: 0n, roundingIqd: 0n };
+    expect(reconcileLock({ ...figures, unattributedIqd: iqd('50000') })).toEqual({
+      accountedIqd: iqd('200000'),
+      differenceIqd: 0n,
+      balanced: true,
+    });
+    // Without it the same lock reads as 50,000 missing — what a reader must never be told of a lock that is whole.
+    expect(reconcileLock(figures)).toEqual({ accountedIqd: iqd('150000'), differenceIqd: iqd('50000'), balanced: false });
+    // The lock's record can still be wrong: the unattributed part counts, it does not forgive.
+    expect(reconcileLock({ ...figures, unattributedIqd: iqd('49999.9999') })).toMatchObject({ differenceIqd: 1n, balanced: false });
+  });
+
   it('the model identity leaves nothing unexplained when every flow is counted', () => {
     // 100 at 10,000; 30 sold at 10,000 before a 5,000 lock (1,500 departed);
     // 70 left at 10,050.

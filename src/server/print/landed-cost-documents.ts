@@ -16,6 +16,7 @@ import { formatBusinessDate } from '@/i18n/config';
 import * as finalCost from '../services/final-cost';
 import * as payables from '../services/payables';
 import type { BuildContext, Built } from './documents';
+import { sumMoney } from './decimal';
 
 /** The destination roles and movement kinds the catalogue names (`admin.landed_cost.role_name` / `kind_name`). */
 const ROLES: ReadonlySet<string> = new Set(['cogs', 'project_material_cost', 'inventory_loss', 'inventory_adjustment', 'purchase_variance', 'return_clearing']);
@@ -158,7 +159,8 @@ export async function finalCostOfImport(ctx: BuildContext, payableNo: string): P
                 .join('; '),
               total: lock.reconciliation.totalIqd,
               stock: lock.reconciliation.inventoryIqd,
-              departures: lock.reconciliation.departureIqd,
+              // A pre-0280 lock has no rows: its departed part is unattributed, but it is departed.
+              departures: sumMoney([lock.reconciliation.departureIqd, lock.reconciliation.unattributedIqd]),
               rounding: lock.reconciliation.roundingIqd,
               balanced: yesNo(lock.reconciliation.balanced),
             },
@@ -201,7 +203,8 @@ export async function finalCostOfImport(ctx: BuildContext, payableNo: string): P
               ),
             ),
           ),
-          empty: t('no_departures'),
+          // A lock written before 0280 left its departed part as one figure on the lock: say so rather than "nothing left".
+          empty: t(trace.locks.some((lock) => lock.reconciliation.unattributedIqd !== '0.0000') ? 'unattributed_departures' : 'no_departures'),
         },
       ],
       summary: trace.models.map((model) => ({

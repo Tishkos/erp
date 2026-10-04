@@ -4067,6 +4067,7 @@
       "col_destination": "Destination",
       "col_quantity": "Quantity",
       "no_departures": "Nothing had left when the cost was locked.",
+      "unattributed_departures": "The part of this cost that had already left stock was recorded as one figure on the lock, with no movement behind it (a lock written before departures were itemised).",
       "kind_rounding": "Rounding",
       "kind_return": "{kind} — returned",
       "post_settlement": "after settlement",

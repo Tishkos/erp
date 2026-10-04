@@ -177,14 +177,16 @@ export interface LockReconciliation {
   readonly roundingIqd: string;
   readonly accountedIqd: string;
   readonly differenceIqd: string;
-  /** inventory + departures + rounding = total, exactly. */
+  /** inventory + departures + rounding (+ the unattributed part of a pre-0280 lock) = total, exactly. */
   readonly balanced: boolean;
   /** What the lock row itself says went to stock and left. */
   readonly recordedInventoryIqd: string;
   readonly recordedDepartedIqd: string;
   /**
    * A lock written before 0280 sent its departed part to cost of sales with no
-   * departure rows: that part, unattributed to any movement. Zero otherwise.
+   * departure rows: that part, unattributed to any movement — counted in
+   * `accountedIqd` (the lock's own record places it) and shown here so the
+   * reader sees which dinars no row explains. Zero otherwise.
    */
   readonly unattributedIqd: string;
 }
@@ -999,7 +1001,15 @@ export async function finalCostTrace(tx: Tx, payableId: string): Promise<FinalCo
     const own = facts.departures.filter((row) => row.lockId === lock.id);
     const departure = own.filter((row) => row.kind === 'departure').reduce((sum, row) => sum + row.amountIqd, 0n);
     const rounding = own.filter((row) => row.kind === 'rounding').reduce((sum, row) => sum + row.amountIqd, 0n);
-    const check = reconcileLock({ totalIqd: lock.total, inventoryIqd: inventory, departureIqd: departure, roundingIqd: rounding });
+    // A lock written before 0280: cost of sales on the lock, no rows (see `figuresOf`'s `legacy`).
+    const unattributed = own.length === 0 ? lock.cogs : 0n;
+    const check = reconcileLock({
+      totalIqd: lock.total,
+      inventoryIqd: inventory,
+      departureIqd: departure,
+      roundingIqd: rounding,
+      unattributedIqd: unattributed,
+    });
     return {
       lockId: lock.id,
       lockNo: lockNo(lock),
@@ -1023,7 +1033,7 @@ export async function finalCostTrace(tx: Tx, payableId: string): Promise<FinalCo
         balanced: check.balanced,
         recordedInventoryIqd: money(lock.inventory),
         recordedDepartedIqd: money(lock.cogs),
-        unattributedIqd: money(own.length === 0 ? lock.cogs : 0n),
+        unattributedIqd: money(unattributed),
       },
     };
   });
