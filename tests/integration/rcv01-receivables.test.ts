@@ -20,7 +20,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { ownerPool, resetTestData, seedBranch } from './setup';
+import { appPool, ownerPool, resetTestData, seedBranch } from './setup';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
 import * as coa from '@/server/services/chart-of-accounts';
@@ -735,6 +735,166 @@ describe('the four doors, from the draft (owner, 2026-10-04)', () => {
         attachments.upload(tx, erbil, { objectType: sr.PERMISSION_OBJECT, objectId: created.id, fileName: 'x.pdf', content: Buffer.from('%PDF-1.4 x') }),
       ),
     ).rejects.toThrow(/cannot access the record/);
+  });
+});
+
+describe('0280 · the database holds the rules whatever route writes the row', () => {
+  /** The owner bypasses row security but not triggers or checks: what a stray script would meet. */
+  const refused = (statement: string, params: unknown[]) =>
+    ownerPool.query(statement, params).then(
+      () => 'accepted',
+      (error: Error) => error.message,
+    );
+  const applicationRow = (columns: Record<string, unknown>) => {
+    const keys = ['customer_id', 'branch_code', 'amount_iqd', 'applied_on', 'applied_by', ...Object.keys(columns)];
+    const values = [customerId, BAGHDAD, '1000', '2026-09-20', manager.principal.userId, ...Object.values(columns)];
+    return [
+      `insert into customer_credit_application (${keys.join(', ')}) values (${keys.map((_, i) => `$${i + 1}`).join(', ')})`,
+      values,
+    ] as const;
+  };
+
+  it('a posted note is frozen; it is reversed, never edited', async () => {
+    const posted = await note('debit', '5000');
+    expect(await refused(`update customer_note set amount_iqd = 6000 where id = $1`, [posted.id])).toMatch(
+      /is posted\. A posted note is reversed, never edited/,
+    );
+  });
+
+  it('a note names its own customer’s invoice, written by any route', async () => {
+    const other = await sell('50000', { customer: otherCustomerId });
+    const draft = await as(clerk, (tx) =>
+      notes.create(tx, clerk, {
+        kind: 'credit', customerId, branchCode: BAGHDAD, noteDate: '2026-09-15', dueDate: null,
+        arInvoiceId: null, amountIqd: iqd('1000'), reason: 'Allowance',
+      }),
+    );
+    expect(await refused(`update customer_note set ar_invoice_id = $2 where id = $1`, [draft.id, other.id])).toMatch(
+      /belongs to a different customer/,
+    );
+  });
+
+  it('a receipt against an invoice is the allocation table’s, never an application', async () => {
+    const invoice = await sell('100000');
+    const receipt = await receive('10000');
+    const [statement, values] = applicationRow({ customer_receipt_id: receipt.id, ar_invoice_id: invoice.id });
+    expect(await refused(statement, values)).toMatch(/customer_credit_application_receipt_invoice_elsewhere/);
+  });
+
+  it('an application is one credit against one debt, within what the credit holds, for one customer', async () => {
+    const debit = await note('debit', '5000');
+    const credit = await note('credit', '500');
+    const otherDebit = await as(clerk, (tx) =>
+      notes.create(tx, clerk, {
+        kind: 'debit', customerId: otherCustomerId, branchCode: BAGHDAD, noteDate: '2026-09-15', dueDate: null,
+        arInvoiceId: null, amountIqd: iqd('1000'), reason: 'Freight',
+      }),
+    );
+    await as(manager, (tx) => notes.approve(tx, manager, otherDebit.id));
+    await as(manager, (tx) => notes.post(tx, manager, otherDebit.id));
+
+    let [statement, values] = applicationRow({ credit_note_id: credit.id, debit_note_id: debit.id });
+    expect(await refused(statement, values)).toMatch(/has 500\.0000 left to apply/);
+    [statement, values] = applicationRow({ credit_note_id: debit.id, debit_note_id: debit.id });
+    expect(await refused(statement, values)).toMatch(/is a debit note/);
+    [statement, values] = applicationRow({ credit_note_id: credit.id, debit_note_id: otherDebit.id });
+    expect(await refused(statement, [...values.slice(0, 2), '100', ...values.slice(3)])).toMatch(
+      /belongs to a different customer/,
+    );
+  });
+
+  it('an application is kept: never rewritten, never removed', async () => {
+    const debit = await note('debit', '3000');
+    const credit = await note('credit', '3000');
+    await as(manager, (tx) =>
+      credits.apply(tx, manager, {
+        source: { kind: 'credit_note', id: credit.id },
+        target: { kind: 'debit_note', id: debit.id },
+        amountIqd: iqd('3000'),
+      }),
+    );
+    const { rows } = await ownerPool.query(`select id from customer_credit_application where credit_note_id = $1`, [credit.id]);
+    expect(await refused(`update customer_credit_application set amount_iqd = 1 where id = $1`, [rows[0].id])).not.toBe('accepted');
+    expect(await refused(`delete from customer_credit_application where id = $1`, [rows[0].id])).not.toBe('accepted');
+  });
+
+  it('a receipt’s ceiling counts what it settled in both tables', async () => {
+    const invoice = await sell('100000');
+    const debit = await note('debit', '6000');
+    const receipt = await receive('10000');
+    await as(manager, (tx) =>
+      credits.apply(tx, manager, {
+        source: { kind: 'receipt', id: receipt.id },
+        target: { kind: 'debit_note', id: debit.id },
+        amountIqd: iqd('6000'),
+      }),
+    );
+    await expect(allocate(receipt.id, invoice.id, '5000')).rejects.toThrow(/has 4000\.0000 left to apply/);
+  });
+
+  it('a receipt into an account of another currency is refused at entry (§17, D-AR-11)', async () => {
+    const usdGl = await ownerPool.query(
+      `insert into chart_of_account
+         (code, name, account_type, parent_id, is_group, is_active, approval_status, level, currency_restriction)
+       select 'A8RCUSD', 'RCV USD bank', account_type, id, false, true, 'approved', 1, 'USD'
+         from chart_of_account where code = 'A000001' returning id`,
+    );
+    const dollars = await as(manager, (tx) =>
+      banks.create(tx, manager, 'bank', {
+        name: 'Rafidain Dollar Account',
+        bankName: 'Rafidain Bank',
+        accountNumber: 'RF-7002',
+        currency: 'USD',
+        glAccountId: usdGl.rows[0].id,
+      }),
+    );
+    const { rows } = await ownerPool.query(`select id from bank_cash_account where code = $1`, [dollars.code]);
+    await expect(
+      as(clerk, (tx) =>
+        receipts.create(tx, clerk, {
+          customerId,
+          branchCode: BAGHDAD,
+          receiptDate: '2026-09-10',
+          bankCashAccountId: rows[0].id,
+          amountIqd: iqd('1000'),
+        }),
+      ),
+    ).rejects.toThrow(/holds USD and this receipt is in IQD/);
+  });
+
+  it('notes and applications are read in their own branch only', async () => {
+    const debit = await note('debit', '2000');
+    const credit = await note('credit', '2000');
+    await as(manager, (tx) =>
+      credits.apply(tx, manager, {
+        source: { kind: 'credit_note', id: credit.id },
+        target: { kind: 'debit_note', id: debit.id },
+        amountIqd: iqd('2000'),
+      }),
+    );
+    await seedBranch('ERB', 'Erbil');
+    const erbil = randomUUID();
+    await ownerPool.query(`insert into app_user (id, email, display_name) values ($1,$2,'Erbil')`, [erbil, `${erbil}@example.com`]);
+    await ownerPool.query(`insert into user_role (user_id, role_code) values ($1,'accounting_manager')`, [erbil]);
+    await ownerPool.query(`insert into user_branch_scope (user_id, branch_code) values ($1,'ERB')`, [erbil]);
+    const count = async (userId: string, branch: string) => {
+      const client = await appPool.connect();
+      try {
+        await client.query('begin');
+        await client.query(`select set_config('app.user_id', $1, true)`, [userId]);
+        await client.query(`select set_config('app.branch_code', $1, true)`, [branch]);
+        await client.query(`select set_config('app.is_super_user', 'false', true)`);
+        const { rows } = await client.query(
+          `select (select count(*) from customer_note)::int notes, (select count(*) from customer_credit_application)::int applications`,
+        );
+        await client.query('rollback');
+        return rows[0];
+      } finally {
+        client.release();
+      }
+    };
+    expect(await count(erbil, 'ERB')).toEqual({ notes: 0, applications: 0 });
+    expect(await count(manager.principal.userId, BAGHDAD)).toEqual({ notes: 2, applications: 1 });
   });
 });
 
