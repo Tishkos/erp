@@ -144,8 +144,8 @@ describe('capabilities are what a person is, not who they are', () => {
     const grants = holding(['ar_invoice', 'ap_invoice', 'payable', 'audit_event']);
     const plain = composeFor(grants);
     const ceo = composeFor({ ...grants, roleCodes: ['ceo'] });
-    expect(keys(plain.kpi)).not.toContain('overdue_exposure');
-    expect(keys(ceo.kpi)).toContain('overdue_exposure');
+    expect(keys(plain.kpi)).not.toContain('overdue_receivables');
+    expect(keys(ceo.kpi)).toContain('overdue_receivables');
     expect(keys(plain.list)).not.toContain('list_major_imports');
     expect(keys(ceo.list)).toContain('list_major_imports');
   });
@@ -227,7 +227,7 @@ describe('composition per capability set', () => {
     const c = composeFor(root);
     expect(c.unavailable).toEqual([]);
     expect(keys(c.kpi)).toContain('cash_position');
-    expect(keys(c.kpi)).not.toContain('overdue_exposure');
+    expect(keys(c.kpi)).not.toContain('overdue_receivables');
   });
 
   it('offers at most five quick actions, only for screens the shell serves', () => {

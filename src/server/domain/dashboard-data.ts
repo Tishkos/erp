@@ -31,8 +31,10 @@ export type Cell =
   | { readonly t: 'instant'; readonly v: string }
   /** A status code, drawn as the shared status chip with `status.<code>` as its words. */
   | { readonly t: 'status'; readonly v: string }
-  /** A code of this page's own (`home.value.<v>`), words from the catalogue. */
-  | { readonly t: 'word'; readonly v: string }
+  /** A code with words in the catalogue: `home.value.<v>`, or `<ns>.<v>` when another screen's words are reused. */
+  | { readonly t: 'word'; readonly v: string; readonly ns?: string }
+  /** A short sentence from the catalogue (`home.say.<v>`) with its numbers. */
+  | { readonly t: 'say'; readonly v: string; readonly values?: Readonly<Record<string, string | number>> }
   | { readonly t: 'none' };
 
 export const text = (v: string | null | undefined): Cell => (v ? { t: 'text', v } : { t: 'none' });
@@ -43,7 +45,8 @@ export const count = (v: number): Cell => ({ t: 'count', v });
 export const day = (v: string | null | undefined): Cell => (v ? { t: 'date', v } : { t: 'none' });
 export const instant = (v: string | null | undefined): Cell => (v ? { t: 'instant', v } : { t: 'none' });
 export const status = (v: string | null | undefined): Cell => (v ? { t: 'status', v } : { t: 'none' });
-export const word = (v: string | null | undefined): Cell => (v ? { t: 'word', v } : { t: 'none' });
+export const say = (v: string, values?: Readonly<Record<string, string | number>>): Cell => (values ? { t: 'say', v, values } : { t: 'say', v });
+export const word = (v: string | null | undefined, ns?: string): Cell => (v ? (ns ? { t: 'word', v, ns } : { t: 'word', v }) : { t: 'none' });
 
 /** A sentence from the catalogue (`home.note.<key>`) with its numbers. */
 export interface Note {
@@ -115,13 +118,15 @@ export interface ChartData {
   readonly wide: boolean;
 }
 
-/** The import journey: each stage and the imports now at it. */
+/** The import journey: each stage and the imports in progress that have reached it. */
 export interface JourneyData {
   readonly kind: 'journey';
-  /** In journey order. `count` is how many imports are now *at* the stage. */
+  /** In journey order. `count` is how many imports have reached the stage. */
   readonly stages: readonly { readonly key: string; readonly count: number }[];
-  /** Imports counted, and the imports there are (differs only past the read cap). */
-  readonly counted: number;
+  /** Imports still in progress that were counted. */
+  readonly inProgress: number;
+  /** Imports read, and the imports the viewer has — differ only past the read cap. */
+  readonly read: number;
   readonly total: number;
   readonly href: string | null;
 }
