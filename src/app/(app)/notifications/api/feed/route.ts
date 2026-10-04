@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { can } from '@domain/permissions';
 import { runChatApi, sameOrigin } from '@/server/chat-api';
 import { BELL_LIMIT, NOTIFICATION_CATEGORIES } from '@/server/domain/notification-center';
 import { BUSINESS_TIME_ZONE } from '@/server/domain/business-date';
@@ -34,6 +35,8 @@ export async function POST(request: Request): Promise<Response> {
   }
   try {
     const outcome = await runChatApi(async (tx, ctx) => {
+      // The screen refuses a person with no `view` on notifications; the bell's poll answers them the same way.
+      if (!can(ctx.principal, 'view', 'notification')) return null;
       if (!parsed.list) {
         const counts = await notifications.countsFor(tx, ctx.principal.userId);
         return { unread: counts.unread, categories: counts.categories, items: null, zone: BUSINESS_TIME_ZONE };
@@ -48,6 +51,7 @@ export async function POST(request: Request): Promise<Response> {
     });
     if (outcome.status === 'signed_out') return Response.json({ error: 'signed_out' }, { status: 401, headers: NO_STORE });
     if (outcome.status === 'restricted') return Response.json({ error: 'restricted' }, { status: 403, headers: NO_STORE });
+    if (outcome.value === null) return Response.json({ error: 'forbidden' }, { status: 403, headers: NO_STORE });
     return Response.json({ ...outcome.value, scope: parsed.scope, category: parsed.category }, { headers: NO_STORE });
   } catch {
     return Response.json({ error: 'unavailable' }, { status: 503, headers: NO_STORE });

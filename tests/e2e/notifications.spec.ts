@@ -88,6 +88,21 @@ test.describe('Notification centre', () => {
   test('an approval and a chat message reach the manager’s bell; the approval opens the real record', async ({ browser }) => {
     test.setTimeout(300_000);
 
+    // A chat notification is told once per run of unseen messages (C-71): on a database this spec has
+    // run against before, the manager first reads what is there, so the officer's message starts a new run.
+    const reader = await person(browser, MANAGER);
+    await reader.page.goto('/chat');
+    await expect(reader.page.getByRole('heading', { level: 1 })).toHaveText('Chat', { timeout: 60_000 });
+    await reader.page.waitForTimeout(2000);
+    const earlier = reader.page.getByRole('link', { name: new RegExp(OFFICER.name) }).first();
+    if ((await earlier.count()) > 0) {
+      await earlier.click();
+      await reader.page.waitForURL(/\/chat\?c=/);
+      await expect(reader.page.getByRole('textbox', { name: 'Message' })).toBeVisible({ timeout: 30_000 });
+      await reader.page.waitForTimeout(4000);
+    }
+    await reader.context.close();
+
     // The officer raises an account and sends it for approval.
     const officer = await person(browser, OFFICER);
     const page = officer.page;
@@ -217,18 +232,12 @@ test.describe('Notification centre', () => {
     for (const id of managerIds) await expect(o.locator(`[data-notification-id="${id}"]`)).toHaveCount(0);
     await expect(o.getByText(account)).toHaveCount(0);
     expect(await badge(o)).toBe(0);
-    // The poll answers for them alone (or refuses): never anyone else's rows.
+    // The outsider holds no role, so no `view` on notifications: the bell's poll refuses them, and never answers with anyone else's rows.
     const poll = await o.request.post('/notifications/api/feed', {
       data: { list: true, scope: 'all', category: null },
       headers: { origin: new URL(o.url()).origin },
     });
-    if (poll.status() === 200) {
-      const body = (await poll.json()) as { unread: number; items: Array<{ id: string }> | null };
-      expect(body.unread).toBe(0);
-      for (const item of body.items ?? []) expect(managerIds).not.toContain(item.id);
-    } else {
-      expect(poll.status()).toBe(403);
-    }
+    expect(poll.status()).toBe(403);
     // Opening the manager's notification by its address: refused, and nothing of it is shown.
     await o.goto(`/notifications/open/${managerIds[0]}`);
     await o.waitForLoadState('domcontentloaded');

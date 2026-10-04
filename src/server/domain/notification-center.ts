@@ -140,11 +140,11 @@ export const KINDS: Readonly<Record<string, KindDef>> = Object.freeze({
   'inventory.integrity_failed': { category: 'accounting', window: 'day' },
   'project.availability_warning': { category: 'accounting', window: 'day' },
 
-  // Slots: no module raises these yet (Bank Reconciliation's unmatched lines, the health probe).
+  // Slot: no module raises this yet (Bank Reconciliation's unmatched lines).
   // The label and the category are ready; the module that owns the event calls emit() with the kind.
   'reconciliation.issue': { category: 'accounting', window: 'day' },
 
-  // The system itself.
+  // The system itself (raised by the health check, services/system-health.ts).
   'system.health': { category: 'system', window: 'day' },
 });
 
