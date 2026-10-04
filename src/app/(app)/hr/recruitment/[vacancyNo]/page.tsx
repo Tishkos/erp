@@ -3,9 +3,15 @@ import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Field, Flash, Form, Grid, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { NewRecordDialog } from '@/components/admin/dialog';
+import { readAttachments } from '@/components/admin/attachments';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { HistoryButton } from '@/components/admin/icon-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordAttachmentsDoor } from '@/components/admin/record-attachments-door';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+import { ExportIcon } from '@/components/print/export-menu';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -14,13 +20,17 @@ import { businessToday } from '@/server/domain/business-date';
 import { EMPLOYMENT_KINDS } from '@/server/domain/hr';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as departments from '@/server/services/departments';
+import * as recordNotes from '@/server/services/record-notes';
 import * as recruitment from '@/server/services/recruitment';
 import { addApplicant, amendVacancy, cancelVacancy, closeVacancy, openVacancy, updateVacancy } from '../actions';
 
 /**
  * One vacancy — REQ-HR-001 Stage HR-5. Copies the Purchase Invoice page: the
  * document window with its header fields and status chip, its lines the
- * applicants and the stage each is at, the verbs at its foot; the audit log.
+ * applicants and the stage each is at, the verbs at its foot. The four doors
+ * in its title bar from the draft on — printer, paperclip (the approved
+ * requisition), notes, clock (shared, 2026-10-04) — and the position, the
+ * department and the people hired as links to their own pages.
  */
 export const dynamic = 'force-dynamic';
 
@@ -62,10 +72,13 @@ export default async function VacancyPage({ params, searchParams }: { params: Pr
       detail,
       positions: draft ? await recruitment.positionsOpen(tx) : [],
       departmentRows: draft ? await departments.listAll(tx) : [],
+      // Notes by number, as its history is; files by its id, as HR's records file them.
+      notes: await recordNotes.listNotes(tx, { object: recruitment.VACANCY_OBJECT, recordId: detail.row.vacancyNo }),
+      files: await readAttachments(tx, recruitment.VACANCY_OBJECT, detail.row.id),
     };
   });
   if (!found) notFound();
-  const { detail, positions, departmentRows } = found;
+  const { detail, positions, departmentRows, notes, files } = found;
   const { row } = detail;
   const statusLabel = (value: string) => (value === 'open' || value === 'filled' ? x(`status_${value}`) : statusOf(value));
   const tone = VACANCY_TONE[row.status] ?? 'draft';
@@ -79,9 +92,9 @@ export default async function VacancyPage({ params, searchParams }: { params: Pr
   const fields: DocumentField[] = [
     { label: column('reference'), value: <bdi dir="ltr">{row.vacancyNo}</bdi> },
     { label: column('status'), value: statusLabel(row.status), status: tone },
-    { label: column('branch'), value: <bdi dir="auto">{detail.branchName}</bdi> },
-    { label: x('position'), value: <bdi dir="auto">{`${row.positionCode} · ${title}`}</bdi> },
-    { label: x('department'), value: <bdi dir="auto">{`${row.departmentCode} · ${detail.departmentName}`}</bdi> },
+    { label: column('branch'), value: <ProfileLink code={row.branchCode} dir="auto" kind="branch">{detail.branchName}</ProfileLink> },
+    { label: x('position'), value: <ProfileLink code={row.positionCode} dir="auto" kind="position" name={title} /> },
+    { label: x('department'), value: <ProfileLink code={row.departmentCode} dir="auto" kind="department" name={detail.departmentName} /> },
     { label: x('holding'), value: <bdi dir="ltr">{detail.holding}</bdi> },
     { label: x('headcount'), value: <bdi dir="ltr">{row.headcount}</bdi> },
     { label: x('hired'), value: <bdi dir="ltr">{row.hired}</bdi> },
@@ -207,8 +220,17 @@ export default async function VacancyPage({ params, searchParams }: { params: Pr
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Printer, paperclip, notes, clock — from the draft on (2026-10-04). */}
+            <ExportIcon exportKey="vacancy" id={row.vacancyNo} title={`${x('document_type')} ${row.vacancyNo}`} />
+            <RecordAttachmentsDoor files={files} mayAttach={(draft || open) && mayAdd} object={recruitment.VACANCY_OBJECT} recordId={row.id} />
+            <RecordNotesDoor notes={notes} object={recruitment.VACANCY_OBJECT} recordId={row.vacancyNo} />
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={row.vacancyNo} objectType={recruitment.VACANCY_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         documentType={x('document_type')}
         fields={fields}
         id="vacancy-document"
@@ -269,26 +291,12 @@ export default async function VacancyPage({ params, searchParams }: { params: Pr
                     {x(`stage_${a.stage}`)}
                   </span>
                 </td>
-                <td>
-                  {a.employeeNo ? (
-                    mayOpenPeople ? (
-                      <Link className={s.sapLink} href={`/hr/employees/${encodeURIComponent(a.employeeNo)}`}>
-                        <bdi dir="ltr">{a.employeeNo}</bdi>
-                      </Link>
-                    ) : (
-                      <bdi dir="ltr">{a.employeeNo}</bdi>
-                    )
-                  ) : (
-                    '—'
-                  )}
-                </td>
+                <td>{a.employeeNo ? mayOpenPeople ? <ProfileLink code={a.employeeNo} kind="employee" /> : <bdi dir="ltr">{a.employeeNo}</bdi> : '—'}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </DocumentWindow>
-
-      <RecordHistory objectId={row.vacancyNo} objectType={recruitment.VACANCY_OBJECT} />
     </AdminPage>
   );
 }

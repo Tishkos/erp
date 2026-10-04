@@ -1,14 +1,17 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Field, Flash, Form, Grid, Hidden, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
-import { Attachments } from '@/components/admin/attachments';
+import { readAttachments } from '@/components/admin/attachments';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { HistoryButton } from '@/components/admin/icon-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordAttachmentsDoor } from '@/components/admin/record-attachments-door';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { Denied } from '@/components/denied';
-import { ExportMenu } from '@/components/print/export-menu';
+import { ExportIcon } from '@/components/print/export-menu';
 import { formatBusinessDate, formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
@@ -17,9 +20,9 @@ import { LETTER_TYPES } from '@/server/domain/hr-requests';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as requests from '@/server/services/employee-requests';
 import * as payroll from '@/server/services/payroll';
+import * as recordNotes from '@/server/services/record-notes';
 import {
   approveRequest,
-  attachToRequest,
   cancelRequest,
   issueLetter,
   openTravelAdvance,
@@ -77,13 +80,16 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
       trips: draft && row.kind === 'expense_claim' ? await requests.tripsOf(tx, row.employeeId) : [],
       accounts: row.status === 'approved' && row.kind === 'expense_claim' && can(principal, 'execute', requests.PERMISSION_OBJECT) ? await payroll.payingAccounts(tx) : [],
       letter: row.status === 'approved' && row.kind === 'letter' && can(principal, 'edit_draft', requests.PERMISSION_OBJECT) ? await requests.draftLetter(tx, row) : null,
+      // Notes by number, as its history is; the receipts and papers by its id, as HR's records file them.
+      notes: await recordNotes.listNotes(tx, { object: requests.PERMISSION_OBJECT, recordId: row.requestNo }),
+      files: await readAttachments(tx, requests.PERMISSION_OBJECT, row.id),
     };
   });
   if (!found) {
     if (!can(principal, 'view', requests.PERMISSION_OBJECT)) return <Denied object={page('employee_requests')} />;
     notFound();
   }
-  const { detail, categories, trips, accounts, letter } = found;
+  const { detail, categories, trips, accounts, letter, notes, files } = found;
   const { row, person } = detail;
   const me = principal.userId;
   const self = person.appUserId === me;
@@ -107,11 +113,6 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
   const when = (name: string | null, value: Date | string | null) => (value ? `${name ?? '—'} · ${formatTimestamp(new Date(value).toISOString(), locale as Locale)}` : '—');
   const name = locale === 'ar' && person.fullNameAr ? person.fullNameAr : person.fullNameEn;
   const mayOpenPerson = can(principal, 'view', 'employee');
-  const link = (href: string, text: string) => (
-    <Link className={s.sapLink} href={href}>
-      <bdi dir="ltr">{text}</bdi>
-    </Link>
-  );
 
   const fields: DocumentField[] = [
     { label: column('reference'), value: <bdi dir="ltr">{row.requestNo}</bdi> },
@@ -119,19 +120,13 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
     { label: x('kind'), value: x(`kind_${kind}`) },
     {
       label: x('employee'),
-      value: mayOpenPerson ? (
-        <Link className={s.sapLink} href={`/hr/employees/${encodeURIComponent(person.employeeNo)}`}>
-          <bdi dir="auto">{`${person.employeeNo} · ${name}`}</bdi>
-        </Link>
-      ) : (
-        <bdi dir="auto">{`${person.employeeNo} · ${name}`}</bdi>
-      ),
+      value: mayOpenPerson ? <ProfileLink code={person.employeeNo} dir="auto" kind="employee" name={name} /> : <bdi dir="auto">{`${person.employeeNo} · ${name}`}</bdi>,
     },
     { label: x('subject'), value: <bdi dir="auto">{row.subject}</bdi> },
     ...(kind === 'expense_claim'
       ? [
           { label: x('total'), value: <bdi dir="ltr">{iqd(row.amountIqd)}</bdi> },
-          { label: x('trip'), value: detail.tripNo ? link(`/hr/requests/${encodeURIComponent(detail.tripNo)}`, detail.tripNo) : '—' },
+          { label: x('trip'), value: <ProfileLink code={detail.tripNo} kind="employee_request" /> },
         ]
       : []),
     ...(kind === 'travel'
@@ -141,7 +136,7 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
           { label: x('estimated'), value: <bdi dir="ltr">{iqd(row.estimatedIqd)}</bdi> },
           {
             label: x('advance'),
-            value: detail.advanceNo ? (requests.mayOpenAdvance({ principal }) ? link(`/hr/advances/${encodeURIComponent(detail.advanceNo)}`, detail.advanceNo) : <bdi dir="ltr">{detail.advanceNo}</bdi>) : '—',
+            value: detail.advanceNo ? (requests.mayOpenAdvance({ principal }) ? <ProfileLink code={detail.advanceNo} kind="employee_advance" /> : <bdi dir="ltr">{detail.advanceNo}</bdi>) : '—',
           },
         ]
       : []),
@@ -156,9 +151,10 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
     ...(row.paidAt
       ? [
           { label: x('paid_by'), value: <bdi dir="auto">{when(detail.paidByName, row.paidAt)}</bdi> },
-          { label: x('paid_on'), value: <bdi dir="ltr">{`${day(row.paidOn)} · ${detail.accountCode ?? '—'}${row.paymentReference ? ` · ${row.paymentReference}` : ''}`}</bdi> },
+          { label: x('paid_on'), value: <bdi dir="ltr">{`${day(row.paidOn)}${row.paymentReference ? ` · ${row.paymentReference}` : ''}`}</bdi> },
+          { label: x('account'), value: <ProfileLink code={detail.accountCode} kind={detail.accountType === 'cash' ? 'cash_account' : 'bank_account'} /> },
           { label: x('advance_offset'), value: <bdi dir="ltr">{iqd(row.advanceOffsetIqd)}</bdi> },
-          { label: x('journal'), value: detail.entryNo ? link(`/finance/journals/${encodeURIComponent(detail.entryNo)}`, detail.entryNo) : '—' },
+          { label: x('journal'), value: <ProfileLink code={detail.entryNo} kind="journal" /> },
         ]
       : []),
     ...(row.issuedAt ? [{ label: x('issued_by'), value: <bdi dir="auto">{when(detail.issuedByName, row.issuedAt)}</bdi> }] : []),
@@ -179,7 +175,6 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
 
   return (
     <AdminPage
-      actions={kind === 'letter' && row.status === 'issued' ? <ExportMenu exportKey="hr_letter" id={row.requestNo} /> : undefined}
       back={{ href: '/hr/requests', label: t('back') }}
       title={`${row.requestNo} · ${name}`}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -291,8 +286,17 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Printer, paperclip, notes, clock — from the draft on (2026-10-04). An issued letter prints as the letter. */}
+            <ExportIcon exportKey="employee_request" id={row.requestNo} title={`${x(`document_type_${kind}`)} ${row.requestNo}`} />
+            <RecordAttachmentsDoor files={files} mayAttach={!['cancelled', 'refused', 'paid', 'issued'].includes(row.status)} object={requests.PERMISSION_OBJECT} recordId={row.id} />
+            <RecordNotesDoor notes={notes} object={requests.PERMISSION_OBJECT} recordId={row.requestNo} />
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={row.requestNo} objectType={requests.PERMISSION_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         documentType={x(`document_type_${kind}`)}
         fields={fields}
         id="request-document"
@@ -430,7 +434,9 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
               ) : null}
               {detail.claims.map((c) => (
                 <tr key={c.requestNo}>
-                  <td>{link(`/hr/requests/${encodeURIComponent(c.requestNo)}`, c.requestNo)}</td>
+                  <td>
+                    <ProfileLink code={c.requestNo} kind="employee_request" />
+                  </td>
                   <td className={s.sapNum}>
                     <bdi dir="ltr">{iqd(c.amountIqd)}</bdi>
                   </td>
@@ -456,20 +462,6 @@ export default async function RequestPage({ params, searchParams }: { params: Pr
           </table>
         ) : null}
       </DocumentWindow>
-
-      <section aria-label={x('attachments')} className={s.sapDoc}>
-        <div className={s.sapWindow}>
-          <Attachments
-            action={attachToRequest}
-            hidden={{ id: row.id, request_no: row.requestNo }}
-            mayAttach={!['cancelled', 'refused', 'paid', 'issued'].includes(row.status) && can(principal, 'create', 'attachment')}
-            objectId={row.id}
-            objectType={requests.PERMISSION_OBJECT}
-          />
-        </div>
-      </section>
-
-      <RecordHistory objectId={row.requestNo} objectType={requests.PERMISSION_OBJECT} />
     </AdminPage>
   );
 }

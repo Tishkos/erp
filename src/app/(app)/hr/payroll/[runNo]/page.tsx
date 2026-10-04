@@ -3,11 +3,16 @@ import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Field, Flash, Form, Grid, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { NewRecordDialog } from '@/components/admin/dialog';
+import { readAttachments } from '@/components/admin/attachments';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { HistoryButton } from '@/components/admin/icon-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordAttachmentsDoor } from '@/components/admin/record-attachments-door';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { Denied } from '@/components/denied';
-import { ExportMenu } from '@/components/print/export-menu';
+import { ExportIcon } from '@/components/print/export-menu';
 import { PrintSheet } from '@/components/print/print-sheet';
 import { formatBusinessDate, formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -17,6 +22,7 @@ import { daysFrom, showDays } from '@/server/domain/hr-time';
 import { printSheet } from '@/server/print/sheet';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as payroll from '@/server/services/payroll';
+import * as recordNotes from '@/server/services/record-notes';
 import { approvePayroll, cancelPayroll, payPayroll, postPayroll, recomputePayroll, returnPayroll, reversePayroll, savePayrollTyped, submitPayroll, updatePayrollDraft } from '../actions';
 
 /**
@@ -24,7 +30,10 @@ import { approvePayroll, cancelPayroll, payPayroll, postPayroll, recomputePayrol
  * page: the document window with its header fields, status chip and the
  * verbs at its foot; its lines the people, each line its payslip once posted;
  * stacked under it in the supplier-statement manner, the figures typed on the
- * draft, what each component came to, the payments; then the audit log.
+ * draft, what each component came to, the payments. The four doors in its
+ * title bar from the draft on — printer, paperclip (the signed sheet), notes,
+ * clock (shared, 2026-10-04) — and the branch, the people, the departments,
+ * the paying accounts and the journals as links to their own pages.
  */
 export const dynamic = 'force-dynamic';
 
@@ -63,10 +72,13 @@ export default async function PayrollRunPage({ params, searchParams }: { params:
       detail,
       manual: (await payroll.componentRules(tx)).rules.filter((r) => r.calculation === 'manual'),
       accounts: can(principal, 'execute', payroll.PERMISSION_OBJECT) ? await payroll.payingAccounts(tx) : [],
+      // Notes by number, as its history is; the signed sheet by its id, as HR's records file them.
+      notes: await recordNotes.listNotes(tx, { object: payroll.PERMISSION_OBJECT, recordId: detail.run.runNo }),
+      files: await readAttachments(tx, payroll.PERMISSION_OBJECT, detail.run.id),
     };
   });
   if (!found) notFound();
-  const { detail, manual, accounts } = found;
+  const { detail, manual, accounts, notes, files } = found;
   const run = detail.run;
   const status = run.status;
   const mayEdit = status === 'draft' && can(principal, 'edit_draft', payroll.PERMISSION_OBJECT) && can(principal, 'view', 'employee_compensation');
@@ -94,7 +106,7 @@ export default async function PayrollRunPage({ params, searchParams }: { params:
   const fields: DocumentField[] = [
     { label: column('reference'), value: <bdi dir="ltr">{run.runNo}</bdi> },
     { label: column('status'), value: status === 'paid' ? x('status_paid') : statusOf(status), status: tone },
-    { label: column('branch'), value: <bdi dir="ltr">{run.branchCode}</bdi> },
+    { label: column('branch'), value: <ProfileLink code={run.branchCode} kind="branch" /> },
     { label: x('month'), value: <bdi dir="ltr">{month}</bdi> },
     { label: x('pay_date'), value: <bdi dir="ltr">{day(run.payDate)}</bdi> },
     { label: x('working_days'), value: <bdi dir="ltr">{run.workingDays}</bdi> },
@@ -111,32 +123,14 @@ export default async function PayrollRunPage({ params, searchParams }: { params:
     ...(run.postedAt
       ? [
           { label: x('posted_by'), value: <bdi dir="auto">{when(detail.postedByName, run.postedAt)}</bdi> },
-          {
-            label: x('journal'),
-            value: detail.entryNo ? (
-              <Link className={s.sapLink} href={`/finance/journals/${encodeURIComponent(detail.entryNo)}`}>
-                <bdi dir="ltr">{detail.entryNo}</bdi>
-              </Link>
-            ) : (
-              '—'
-            ),
-          },
+          { label: x('journal'), value: <ProfileLink code={detail.entryNo} kind="journal" /> },
         ]
       : []),
     ...(run.returnNote && status === 'draft' ? [{ label: x('returned_by'), value: <bdi dir="auto">{`${when(detail.returnedByName, run.returnedAt)} — ${run.returnNote}`}</bdi>, wide: true }] : []),
     ...(run.reversedAt
       ? [
           { label: x('reversed_by'), value: <bdi dir="auto">{when(detail.reversedByName, run.reversedAt)}</bdi> },
-          {
-            label: x('reversal_journal'),
-            value: detail.reversalEntryNo ? (
-              <Link className={s.sapLink} href={`/finance/journals/${encodeURIComponent(detail.reversalEntryNo)}`}>
-                <bdi dir="ltr">{detail.reversalEntryNo}</bdi>
-              </Link>
-            ) : (
-              '—'
-            ),
-          },
+          { label: x('reversal_journal'), value: <ProfileLink code={detail.reversalEntryNo} kind="journal" /> },
           { label: x('reversal_reason'), value: <bdi dir="auto">{run.reversalReason ?? '—'}</bdi>, wide: true },
         ]
       : []),
@@ -154,7 +148,6 @@ export default async function PayrollRunPage({ params, searchParams }: { params:
 
   return (
     <AdminPage
-      actions={<ExportMenu exportKey="payroll_run" id={run.runNo} />}
       back={{ href: '/hr/payroll', label: t('back') }}
       title={`${run.runNo} · ${run.branchCode} ${month}`}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -248,8 +241,17 @@ export default async function PayrollRunPage({ params, searchParams }: { params:
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Printer, paperclip, notes, clock — from the draft on (2026-10-04). */}
+            <ExportIcon exportKey="payroll_run" id={run.runNo} title={`${x('document_type')} ${run.runNo}`} />
+            <RecordAttachmentsDoor files={files} mayAttach={status !== 'cancelled' && can(principal, 'edit_draft', payroll.PERMISSION_OBJECT)} object={payroll.PERMISSION_OBJECT} recordId={run.id} />
+            <RecordNotesDoor notes={notes} object={payroll.PERMISSION_OBJECT} recordId={run.runNo} />
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={run.runNo} objectType={payroll.PERMISSION_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         documentType={x('document_type')}
         fields={fields}
         id="payroll-document"
@@ -300,13 +302,10 @@ export default async function PayrollRunPage({ params, searchParams }: { params:
             {detail.lines.map(({ line }) => (
               <tr key={line.id}>
                 <td>
-                  <Link className={s.sapLink} href={`/hr/employees/${encodeURIComponent(line.employeeNo)}`}>
-                    <bdi dir="ltr">{line.employeeNo}</bdi>
-                  </Link>{' '}
-                  <bdi dir="auto">{nameOf(line)}</bdi>
+                  <ProfileLink code={line.employeeNo} kind="employee" /> <bdi dir="auto">{nameOf(line)}</bdi>
                 </td>
                 <td>
-                  <bdi dir="ltr">{line.departmentCode}</bdi>
+                  <ProfileLink code={line.departmentCode} kind="department" />
                 </td>
                 <td className={s.sapNum}>
                   <bdi dir="ltr">{`${line.employedDays} / ${line.workingDays}`}</bdi>
@@ -482,7 +481,7 @@ export default async function PayrollRunPage({ params, searchParams }: { params:
                     <tr key={p.id}>
                       <td>{x(`method_${p.payMethod}`)}</td>
                       <td>
-                        <bdi dir="ltr">{p.accountCode}</bdi> <bdi dir="auto">{p.accountName}</bdi>
+                        <ProfileLink code={p.accountCode} kind={p.payMethod === 'cash' ? 'cash_account' : 'bank_account'} name={p.accountName} />
                       </td>
                       <td>
                         <bdi dir="ltr">{day(p.paidOn)}</bdi>
@@ -497,9 +496,7 @@ export default async function PayrollRunPage({ params, searchParams }: { params:
                         <bdi dir="ltr">{iqd(p.amountIqd)}</bdi>
                       </td>
                       <td>
-                        <Link className={s.sapLink} href={`/finance/journals/${encodeURIComponent(p.entryNo)}`}>
-                          <bdi dir="ltr">{p.entryNo}</bdi>
-                        </Link>
+                        <ProfileLink code={p.entryNo} kind="journal" />
                       </td>
                       <td>
                         <bdi dir="auto">{p.paidByName}</bdi>
@@ -513,7 +510,6 @@ export default async function PayrollRunPage({ params, searchParams }: { params:
         </section>
       ) : null}
 
-      <RecordHistory objectId={run.runNo} objectType={payroll.PERMISSION_OBJECT} />
       {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>
   );
