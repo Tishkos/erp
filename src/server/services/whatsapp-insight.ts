@@ -216,24 +216,24 @@ const HANDS: readonly (readonly [column: string, did: string, at: string | null]
 function nextFor(key: Key, status: string): string {
   const say: Partial<Record<Key, Record<string, string>>> = {
     ar_invoice: {
-      draft: 'NOTHING HAS POSTED: no journal, no receivable on the customer, no stock out. Next: it is approved (by somebody other than whoever raised it), then posted — posting is what writes the customer’s account and moves the stock.',
+      draft: 'NOTHING HAS POSTED: no journal, no receivable on the customer, no stock out. Next: it is approved (by whoever holds approve on sales invoices), then posted — posting is what writes the customer’s account and moves the stock.',
       approved: 'NOTHING HAS POSTED YET: it is approved but not posted, so the customer’s account and the stock movements are still empty. Next: post it (document_step post) — that writes Dr receivable / Cr revenue and takes the goods out at FIFO cost. Posting is refused if the item has no stock in that warehouse.',
       posted: 'It is in the books. Next: a customer receipt against it; or, if it should not have been posted, reverse it with a reason.',
       reversed: 'It was reversed: its journal is mirrored and its stock put back. It cannot be used again; raise a new one.',
     },
     ap_invoice: {
-      draft: 'NOTHING HAS POSTED: no journal, no stock in, nothing owed. Next: submit it, then it is posted by somebody who may approve and did not raise it. WHAT POSTING WILL DO: credit the supplier with what is owed, and every stock line that names a warehouse receives its goods into that warehouse at that moment — no separate goods receipt is needed for such a line (a line whose goods already came in on a goods receipt names no warehouse and clears GRNI instead). On an IMPORT the warehouse is In Process: the goods are then owned and in transit, not yet available to sell, and move on to the real warehouse as the import’s containers are received.',
-      submitted: 'Waiting to be posted by a second person (posting IS the approval). Nothing is owed and no stock has arrived until then. WHAT POSTING WILL DO: credit the supplier, and bring each stock line that names a warehouse into that warehouse (an import’s into In Process — in transit, not yet available).',
+      draft: 'NOTHING HAS POSTED: no journal, no stock in, nothing owed. Next: submit it, then it is posted by somebody who may approve and did not raise it (a super user may post their own). WHAT POSTING WILL DO: credit the supplier with what is owed, and every stock line that names a warehouse receives its goods into that warehouse at that moment — no separate goods receipt is needed for such a line (a line whose goods already came in on a goods receipt names no warehouse and clears GRNI instead). On an IMPORT the warehouse is In Process: the goods are then owned and in transit, not yet available to sell, and move on to the real warehouse as the import’s containers are received.',
+      submitted: 'Waiting to be posted by a second person — or by a super user, who may post their own (posting IS the approval). Nothing is owed and no stock has arrived until then. WHAT POSTING WILL DO: credit the supplier, and bring each stock line that names a warehouse into that warehouse (an import’s into In Process — in transit, not yet available).',
       posted: 'It is in the books: the supplier is owed, and its stock lines are in their warehouse — see STOCK MOVEMENTS above (an import’s are in In Process: owned, in transit, not available until the containers are received). Next: payment; or reverse it with a reason.',
       reversed: 'It was reversed: its journal is mirrored and its stock put back.',
     },
     journal_entry: {
-      draft: 'A draft: nothing is in the ledger. Next: submit it; a second person approves, which posts it.',
+      draft: 'A draft: nothing is in the ledger. Next: submit it; a second person (or a super user) approves, which posts it.',
       submitted: 'Waiting for a second person to approve it, which posts it.',
       posted: 'It is in the ledger. It is never edited: reverse it and raise another.',
     },
     purchase_order: {
-      draft: 'A draft: nothing is committed. Next: submit, then a second person approves.',
+      draft: 'A draft: nothing is committed. Next: submit, then a second person (or a super user) approves.',
       submitted: 'Waiting for approval by a second person.',
       approved: 'Approved: goods can be received against it and invoices raised from it.',
     },
