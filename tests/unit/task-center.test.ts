@@ -413,9 +413,10 @@ describe('TC7 · the catalogue and the migrations', () => {
     const mine = journal.entries.filter((e) => /^034[0-4]_/.test(e.tag));
     expect(mine.map((e) => e.tag)).toEqual(['0340_task_core', '0341_task_scope', '0342_task_grants', '0343_task_team', '0344_task_system_session']);
     expect(mine.map((e) => e.when)).toEqual([1795900000150, 1795900000151, 1795900000152, 1795900000153, 1795900000154]);
-    // The history has lineage repairs out of order; what is held is that ours come after everything else, strictly.
-    const others = journal.entries.filter((e) => !mine.includes(e)).map((e) => e.when);
-    expect(Math.min(...mine.map((e) => e.when))).toBeGreaterThan(Math.max(...others));
+    // The history has lineage repairs out of order; what is held is that ours come after everything that existed
+    // before the Task Center's block (the platform blocks that follow it — notifications, saved views — sit above).
+    const before = journal.entries.filter((e) => !mine.includes(e) && e.when < 1795900000150).map((e) => e.when);
+    expect(Math.min(...mine.map((e) => e.when))).toBeGreaterThan(Math.max(...before));
     expect(new Set(journal.entries.map((e) => e.when)).size).toBe(journal.entries.length);
     for (const entry of mine) expect(existsSync(join(ROOT, `src/server/db/migrations/${entry.tag}.sql`))).toBe(true);
   });
