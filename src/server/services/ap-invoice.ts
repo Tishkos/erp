@@ -36,6 +36,7 @@ import {
   inventoryMovement,
   journalEntry,
   landedCostCharge,
+  landedCostLock,
   payable,
   paymentProposalItem,
   supplierCreditMemo,
@@ -2010,6 +2011,36 @@ export async function reverse(
     );
   }
 
+  // IMPROVEMENT-002 — a charge this invoice placed on an import that a
+  // landed-cost lock has already spread into stock is part of what the goods
+  // cost. It is refused here, before anything changes, with a sentence; the
+  // correction is a new, dated charge (a credit note) the next lock allocates.
+  if (lines.length > 0) {
+    const [locked] = await tx
+      .select({ sourceNo: landedCostCharge.sourceNo, sequence: landedCostLock.sequence, payableNo: payable.payableNo })
+      .from(landedCostCharge)
+      .innerJoin(landedCostLock, eq(landedCostLock.id, landedCostCharge.lockId))
+      .innerJoin(payable, eq(payable.id, landedCostCharge.payableId))
+      .where(
+        and(
+          eq(landedCostCharge.sourceType, 'ap_invoice_line'),
+          inArray(
+            landedCostCharge.sourceId,
+            lines.map((line) => line.id),
+          ),
+          isNull(landedCostCharge.cancelledAt),
+        ),
+      )
+      .limit(1);
+    if (locked) {
+      throw new ApInvoiceNotReversibleError(
+        invoice.invoiceNo,
+        `its charge on ${locked.payableNo} is already in that import's landed cost (lock ${locked.payableNo}/${locked.sequence}). ` +
+          'A locked cost is not taken back by undoing the invoice; record the correction as a new, dated charge, which the next lock allocates.',
+      );
+    }
+  }
+
   await statuses.assertTransitionAllowed(tx, DOCUMENT_TYPE, invoice.status, 'reversed', reason);
   if (!invoice.journalEntryId) {
     throw new ApInvoiceNotReversibleError(invoice.invoiceNo, 'it has no journal to reverse.');
@@ -2030,11 +2061,20 @@ export async function reverse(
     )
     .orderBy(inventoryMovement.createdAt);
 
+  // IMPROVEMENT-002 — the stock goes back on the day the journal reversal
+  // posts, one date for both; the original movements keep theirs, so a past
+  // position stays what it was and a month already closed is not touched.
+  const [postedJournal] = await tx
+    .select({ postingDate: journalEntry.postingDate })
+    .from(journalEntry)
+    .where(eq(journalEntry.id, invoice.journalEntryId))
+    .limit(1);
+  const reversalDate = journal.reversalPostingDate(postedJournal!.postingDate);
   for (const movement of receipts) {
-    await inventory.reverseMovement(tx, ctx, movement.id, reason);
+    await inventory.reverseMovement(tx, ctx, movement.id, reason, { reversalDate });
   }
 
-  const reversal = await journal.reverse(tx, ctx, invoice.journalEntryId, { reason });
+  const reversal = await journal.reverse(tx, ctx, invoice.journalEntryId, { reason, postingDate: reversalDate });
 
   // The ordered lines were credited with this invoice's quantity when it
   // posted; they give it back, so a later invoice can bill the order again.

@@ -1461,47 +1461,75 @@
     {
       "idx": 208,
       "version": "7",
+      "when": 1795900000095,
+      "tag": "0285_landed_cost_departure",
+      "breakpoints": true
+    },
+    {
+      "idx": 209,
+      "version": "7",
+      "when": 1795900000096,
+      "tag": "0286_settlement_supplement",
+      "breakpoints": true
+    },
+    {
+      "idx": 210,
+      "version": "7",
+      "when": 1795900000097,
+      "tag": "0287_stock_position_transit",
+      "breakpoints": true
+    },
+    {
+      "idx": 211,
+      "version": "7",
+      "when": 1795900000098,
+      "tag": "0288_stock_count_print_min_level",
+      "breakpoints": true
+    },
+    {
+      "idx": 212,
+      "version": "7",
       "when": 1795900000100,
       "tag": "0290_bank_guard_counts_reversed",
       "breakpoints": true
     },
     {
-      "idx": 209,
+      "idx": 213,
       "version": "7",
       "when": 1795900000101,
       "tag": "0291_recurring_journals",
       "breakpoints": true
     },
     {
-      "idx": 210,
+      "idx": 214,
       "version": "7",
       "when": 1795900000102,
       "tag": "0292_tax_codes",
       "breakpoints": true
     },
     {
-      "idx": 211,
+      "idx": 215,
       "version": "7",
       "when": 1795900000103,
       "tag": "0293_transfer_fx_roles_premapped",
       "breakpoints": true
     },
     {
-      "idx": 212,
+      "idx": 216,
       "version": "7",
       "when": 1795900000105,
       "tag": "0295_supplier_credit_debit_notes",
       "breakpoints": true
     },
     {
-      "idx": 213,
+      "idx": 217,
       "version": "7",
       "when": 1795900000110,
       "tag": "0300_logistics_menu_grants",
       "breakpoints": true
     },
     {
-      "idx": 214,
+      "idx": 218,
       "version": "7",
       "when": 1795900000111,
       "tag": "0301_customs_declaration",

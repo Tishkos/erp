@@ -114,8 +114,12 @@ describe('the screen catalogue covers the approved tree', () => {
     // Duties & Taxes, Customs Documents, Shipments, Ports & Routes, Freight &
     // Shipping Costs, Shipment Documents, Shipment Tracking, Landed Costs and
     // Cost Allocation.
-    expect(allMenuItems()).toHaveLength(249);
-    expect(Object.keys(SCREENS)).toHaveLength(249);
+    // plus IMPROVEMENT-002's inventory menu (2026-10-04): Stock Receipts,
+    // Stock Issues, Stock Count, Inventory Checks and Inventory Valuation in,
+    // the unbuilt Quarantine, Returns, Damaged Goods, Serial / Batch,
+    // Reports and Settings placeholders out.
+    expect(allMenuItems()).toHaveLength(248);
+    expect(Object.keys(SCREENS)).toHaveLength(248);
   });
 
   it('uses only declared archetypes', () => {
@@ -140,7 +144,8 @@ describe('the screen catalogue covers the approved tree', () => {
     // Payables finalisation (2026-10-04): − 1 − 2 − 2 − 1 − 1 out (Supplier
     // Ledger, Advances, Payments, Allocations, Ageing), + 1 in (Supplier Credits).
     // REQ-LOG-001: + 2 + 2 (declarations, ports) + 8 (the registers).
-    expect(total).toBe(364);
+    // IMPROVEMENT-002 inventory: + 1 + 1 + 2 + 1 + 1 in, − 1 − 2 − 2 − 1 − 1 − 1 out.
+    expect(total).toBe(362);
   });
 });
 
@@ -193,7 +198,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(249);
+    expect(screenRoutes().size).toBe(248);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -253,17 +258,23 @@ describe('every screen has one address', () => {
       '/hr/reports',
       '/hr/requests',
       '/inventory/availability',
+      // IMPROVEMENT-002 — the inventory screens.
+      '/inventory/checks',
       // Operations build — block 7's Warehouses Report.
       '/inventory/fifo-valuation',
       '/inventory/items',
       // Block 7 — Opening Stock, Item Reconciliation, Stock Movement, Transfer.
       '/inventory/opening-stock',
       // The Stock Ledger (2026-09-27).
+      '/inventory/stock-count',
+      '/inventory/stock-issues',
       '/inventory/stock-ledger',
       '/inventory/stock-movements',
+      '/inventory/stock-receipts',
       '/inventory/stock-reconciliation',
       '/inventory/transfers',
       '/inventory/uom',
+      '/inventory/valuation',
       // REQ-LOG-001 — the Logistics module's own screens; In-Transit
       // Inventory absorbed Block 8's Invoice Status Tracking.
       '/logistics/cost-allocation',

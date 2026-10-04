@@ -67,6 +67,8 @@ export const item = pgTable(
     name: text('name').notNull(),
     description: text('description'),
     category: text('category'),
+    /** IMPROVEMENT-002 (0288) — below this, in the base unit, the Warehouses Report calls the holding low; null sets no level. */
+    minStockLevel: numeric('min_stock_level', { precision: 24, scale: 6 }),
 
     /** Stock item or service. A service has no tracking and no stock. */
     isStock: boolean('is_stock').notNull().default(true),

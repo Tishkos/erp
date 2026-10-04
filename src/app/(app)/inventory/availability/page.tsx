@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Checkbox, Field, FilterRow, Flash, Form, Grid, ListToolbar, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
@@ -6,6 +7,8 @@ import { NewRecordDialog } from '@/components/admin/dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { SectionTabs } from '@/components/admin/section-tabs';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { formatQuantity, parseQuantity } from '@domain/uom';
 import { visibleRoute } from '@/server/delivered';
@@ -22,6 +25,10 @@ import { issueStock } from './actions';
  * count. Issuing stock — Phase 04.4's UI gate, *"an issue exceeding
  * available stock is rejected via the UI"* — is a dialog in the header, and
  * the refusal comes back on the page in the service's own words.
+ *
+ * IMPROVEMENT-002: On Order (what approved purchase orders still owe), the
+ * unit cost and value from the layers, category and branch filters, and
+ * each row opening its Stock Ledger.
  */
 export const dynamic = 'force-dynamic';
 
@@ -46,16 +53,30 @@ export default async function AvailabilityPage({ searchParams }: { searchParams:
 
   const params = await searchParams;
   const warehouseCode = typeof params.warehouse === 'string' && params.warehouse ? params.warehouse : null;
+  const category = typeof params.category === 'string' && params.category ? params.category : null;
+  const branchCode = typeof params.branch === 'string' && params.branch ? params.branch : null;
   const inStock = params.in_stock === '1';
 
-  const { result, warehouses, items } = await withCurrentUser(async (tx) => ({
-    result: await availability.forScreen(tx, principal, { search: outcome.q, warehouseCode, inStock, page: outcome.page }),
+  const { result, warehouses, items, categories, branches } = await withCurrentUser(async (tx) => ({
+    result: await availability.forScreen(tx, principal, { search: outcome.q, warehouseCode, category, branchCode, inStock, page: outcome.page }),
     warehouses: await availability.warehouses(tx, principal),
     items: mayIssue ? await availability.issuableItems(tx, principal) : [],
+    categories: await availability.categories(tx, principal),
+    branches: await availability.branches(tx, principal),
   }));
   const query = (p: number) =>
-    [outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '', warehouseCode ? `warehouse=${encodeURIComponent(warehouseCode)}` : '', inStock ? 'in_stock=1' : '', `page=${p}`].filter(Boolean).join('&');
+    [
+      outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '',
+      warehouseCode ? `warehouse=${encodeURIComponent(warehouseCode)}` : '',
+      category ? `category=${encodeURIComponent(category)}` : '',
+      branchCode ? `branch=${encodeURIComponent(branchCode)}` : '',
+      inStock ? 'in_stock=1' : '',
+      `page=${p}`,
+    ]
+      .filter(Boolean)
+      .join('&');
   const qty = (value: string) => formatQuantity(parseQuantity(value));
+  const money = (value: string) => formatMoney(value, 'IQD', locale as Locale);
   const warehouseOptions = warehouses.map((warehouse) => ({ value: warehouse.code, label: `${warehouse.code} · ${warehouse.name}` }));
 
   return (
@@ -105,6 +126,8 @@ export default async function AvailabilityPage({ searchParams }: { searchParams:
           <form className={s.filterBar} method="get">
             <FilterRow>
               <Select defaultValue={warehouseCode ?? ''} emptyLabel={t('all_warehouses')} label={column('warehouse')} name="warehouse" options={warehouseOptions} />
+              <Select defaultValue={category ?? ''} emptyLabel={t('all_categories')} label={t('category')} name="category" options={categories.map((code) => ({ value: code, label: code }))} />
+              <Select defaultValue={branchCode ?? ''} emptyLabel={t('all_branches')} label={column('branch_code')} name="branch" options={branches.map((branch) => ({ value: branch.code, label: `${branch.code} · ${branch.name}` }))} />
               <Checkbox defaultChecked={inStock} label={t('in_stock')} name="in_stock" />
               <SubmitRow>
                 <Submit label={t('filter')} />
@@ -125,12 +148,22 @@ export default async function AvailabilityPage({ searchParams }: { searchParams:
                       {column(key)}
                     </th>
                   ))}
+                  <th className={s.sapNum} scope="col">
+                    {t('on_order')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {t('unit_cost')}
+                  </th>
+                  <th className={s.sapNum} scope="col">
+                    {t('value')}
+                  </th>
+                  <th scope="col">{t('ledger')}</th>
                 </tr>
               </thead>
               <tbody>
                 {result.rows.length === 0 ? (
                   <tr>
-                    <td className={s.sapEmptyRow} colSpan={11}>
+                    <td className={s.sapEmptyRow} colSpan={15}>
                       {t('none')}
                     </td>
                   </tr>
@@ -138,13 +171,13 @@ export default async function AvailabilityPage({ searchParams }: { searchParams:
                 {result.rows.map((row) => (
                   <tr key={`${row.itemCode}:${row.warehouseCode}`}>
                     <td>
-                      <bdi dir="ltr">{row.itemCode}</bdi>
+                      <ProfileLink code={row.itemCode} kind="item" />
                     </td>
                     <td>
                       <bdi dir="auto">{row.itemName}</bdi>
                     </td>
                     <td>
-                      <bdi dir="auto">{`${row.warehouseCode} · ${row.warehouseName}`}</bdi>
+                      <ProfileLink code={row.warehouseCode} kind="warehouse" name={row.warehouseName} />
                     </td>
                     <td>
                       <bdi dir="ltr">{row.branchCode}</bdi>
@@ -152,11 +185,23 @@ export default async function AvailabilityPage({ searchParams }: { searchParams:
                     <td className={s.sapNum}>
                       <bdi dir="ltr">{`${qty(row.onHand)} ${row.baseUomCode}`}</bdi>
                     </td>
-                    {[row.available, row.reserved, row.inTransit, row.inQuarantine, row.damaged, row.returnsStock].map((value, index) => (
+                    {[row.available, row.reserved, row.inTransit, row.inQuarantine, row.damaged, row.returnsStock, row.onOrder].map((value, index) => (
                       <td className={s.sapNum} key={index}>
                         <bdi dir="ltr">{qty(value)}</bdi>
                       </td>
                     ))}
+                    <td className={s.sapNum}>
+                      <bdi dir="ltr">{money(row.unitCostIqd)}</bdi>
+                    </td>
+                    <td className={s.sapNum}>
+                      <bdi dir="ltr">{money(row.valueIqd)}</bdi>
+                    </td>
+                    <td>
+                      {/* Row drill-down: the item's ledger in this warehouse. */}
+                      <Link className={s.sapLink} href={`/inventory/stock-ledger?item=${encodeURIComponent(row.itemCode)}&warehouse=${encodeURIComponent(row.warehouseCode)}`}>
+                        {t('open_ledger')}
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>

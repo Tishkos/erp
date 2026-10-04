@@ -315,7 +315,7 @@ export interface AdjustmentInput {
  * first stock belongs on Opening Stock or a Purchase Invoice, which say what
  * it cost.
  */
-async function unitCostForFound(tx: Tx, itemCode: string, warehouseCode: string): Promise<bigint> {
+export async function unitCostForFound(tx: Tx, itemCode: string, warehouseCode: string): Promise<bigint> {
   const averageOf = async (where: ReturnType<typeof and>) => {
     const [row] = await tx
       .select({

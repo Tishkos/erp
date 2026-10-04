@@ -946,6 +946,17 @@ export async function discardDraft(
 // ---------------------------------------------------------------------------
 
 /**
+ * §14.3 — the date a reversal posts on: today (or the day asked), never before
+ * what it undoes. Exported so a document reversing its stock beside its journal
+ * dates both the same (IMPROVEMENT-002: the stock goes back on the day the
+ * journal does).
+ */
+export function reversalPostingDate(originalPostingDate: string, requested?: string | null): string {
+  const asked = requested?.trim() || businessToday();
+  return asked < originalPostingDate ? originalPostingDate : asked;
+}
+
+/**
  * Reverses a posted journal — Phase 1 requirement 3.
  *
  * "A posted entry cannot be edited or deleted. If a correction is required,
@@ -1001,9 +1012,7 @@ export async function reverse(
   // §14.3 — the reversal is never dated before what it undoes. Today, unless
   // the original posted later than today, in which case the original's own
   // date is the earliest honest answer.
-  const today = businessToday();
-  const requested = input.postingDate?.trim() || today;
-  const postingDate = requested < original.postingDate ? original.postingDate : requested;
+  const postingDate = reversalPostingDate(original.postingDate, input.postingDate);
 
   const period = await periodService.periodFor(tx, postingDate);
   // A reversal still has to land in a period that accepts postings; a closed

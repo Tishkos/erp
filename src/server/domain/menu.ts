@@ -220,24 +220,31 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ],
   },
   {
+    /*
+     * IMPROVEMENT-002 (sponsor, 2026-10-04) — the twelve inventory screens, in
+     * the order the work is done: what is where, what came in and went out,
+     * the counts and corrections, the checks and the valuations. Items, units
+     * and warehouses are master data and live there (one screen, one home).
+     * The unbuilt placeholders (quarantine, returns, damaged goods, serial /
+     * batch, reports, settings) are off the tree until a requirement names
+     * them: the quarantine, damaged and returns buckets are Availability's
+     * columns, and the reports are the three valuation screens.
+     */
     key: 'inventory',
     ordinal: 5,
     items: [
       page('availability', 'inventory_movement', '/inventory/availability'),
       page('opening_stock', 'opening_stock', '/inventory/opening-stock'),
+      page('stock_receipts', 'stock_movement', '/inventory/stock-receipts'),
+      page('stock_issues', 'stock_movement', '/inventory/stock-issues'),
+      page('transfer_requests', 'warehouse_transfer', '/inventory/transfers'),
       page('stock_movements', 'stock_movement', '/inventory/stock-movements'),
       page('stock_ledger', 'stock_movement', '/inventory/stock-ledger'),
-      page('transfer_requests', 'warehouse_transfer', '/inventory/transfers'),
-      page('quarantine', 'quarantine'),
-      page('inventory_returns', 'inventory_return'),
-      page('damaged_goods', 'damage_report'),
-      page('serial_batch_tracking', 'serial_batch'),
-      page('items', 'item', '/inventory/items'),
-      page('uom', 'uom', '/inventory/uom'),
+      page('stock_count', 'stock_count', '/inventory/stock-count'),
       page('stock_reconciliation', 'stock_reconciliation', '/inventory/stock-reconciliation'),
+      page('inventory_checks', 'inventory_movement', '/inventory/checks'),
+      page('inventory_valuation', 'inventory_movement', '/inventory/valuation'),
       page('fifo_valuation', 'fifo_valuation'),
-      page('inventory_reports', 'inventory_report'),
-      page('inventory_settings', 'inventory_settings'),
     ],
   },
   {
@@ -602,7 +609,12 @@ export const MENU: readonly MenuSection[] = Object.freeze([
   {
     key: 'master_inventory',
     ordinal: 28,
-    items: [page('warehouses', 'warehouse', '/master-data/warehouses')],
+    // Items and units keep the routes they were derived under (D-FX-1).
+    items: [
+      page('items', 'item', '/inventory/items'),
+      page('uom', 'uom', '/inventory/uom'),
+      page('warehouses', 'warehouse', '/master-data/warehouses'),
+    ],
   },
   {
     key: 'administration',

@@ -5,6 +5,9 @@ import * as customsDocuments from './customs-documents';
 import * as logisticsDocuments from './logistics-documents';
 import * as importDocuments from './import-documents';
 import * as purchaseDocuments from './purchase-documents';
+import * as landedCostDocuments from './landed-cost-documents';
+import * as inventoryDocuments from './inventory-documents';
+import * as inventoryReports from './inventory-reports';
 import type { BuildContext, Built } from './documents';
 import * as reports from './reports';
 import * as projectReports from './project-reports';
@@ -53,6 +56,7 @@ const BUILDERS = {
   opening_stock: byId(documents.openingStock),
   journal_entry: byId(documents.journalEntry),
   item_reconciliation: byId(documents.itemReconciliation),
+  stock_count: byId(inventoryDocuments.stockCount),
   bill_of_lading: byId(shipmentDocuments.billOfLading),
   asycuda_reading: byId(customsDocuments.asycudaReading),
   import_application: byId(importDocuments.importApplication),
@@ -75,11 +79,14 @@ const BUILDERS = {
   container_receipt: byId(logisticsDocuments.containerReceipt),
   customs_declaration: byId(logisticsDocuments.customsDeclaration),
   port: byId(logisticsDocuments.port),
+  landed_cost_final: byId(landedCostDocuments.finalCostOfImport),
   customer_statement: (ctx, input) => reports.partnerStatement(ctx, 'customer', input.query),
   supplier_statement: (ctx, input) => reports.partnerStatement(ctx, 'supplier', input.query),
   bank_statement: (ctx, input) => (input.id ? reports.bankStatement(ctx, input.id, input.query, 'bank') : Promise.resolve(null)),
   cash_statement: (ctx, input) => (input.id ? reports.bankStatement(ctx, input.id, input.query, 'cash') : Promise.resolve(null)),
   warehouses_report: (ctx, input) => reports.warehousesReport(ctx, input.query),
+  inventory_valuation: (ctx, input) => inventoryReports.inventoryValuation(ctx, input.query),
+  inventory_checks: (ctx, input) => inventoryReports.inventoryChecks(ctx, input.query),
   stock_movement: (ctx, input) => reports.stockMovement(ctx, input.query),
   stock_ledger: (ctx, input) => reports.stockLedger(ctx, input.query),
   treasury_reporting: (ctx, input) => reports.treasuryReporting(ctx, input.query),

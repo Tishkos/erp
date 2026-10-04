@@ -314,6 +314,8 @@ export async function resetTestData(): Promise<void> {
   await client.query('truncate project_milestone_history');
   await client.query('delete from project_activity_dependency');
   await client.query('delete from project_activity');
+  // IMPROVEMENT-002 (0286) — the supplements name the settlement, the issue line, the cost row and the departure.
+  await client.query('delete from project_settlement_supplement');
   // REQ-PM-001 PM-3 — the material issues name their movements and cost rows.
   await client.query('delete from project_material_issue_line');
   await client.query('delete from project_material_issue');
@@ -599,6 +601,9 @@ export async function resetTestData(): Promise<void> {
     await client.query(`update pay_component set expense_account_id = null, liability_account_id = null, active = true, taxable = code in ('BASE', 'HOUSING', 'TRANSPORT', 'OVERTIME'),
         default_value = case code when 'SS_EMPLOYEE' then 5 when 'SS_EMPLOYER' then 12 else 0 end`);
     // Stage 6 (0235) — what the loans funded, their schedules, the loans.
+    // 0275 and 0276 — repayments and revaluations name their loan.
+    await client.query('delete from bank_loan_repayment');
+    await client.query('delete from bank_loan_revaluation');
     await client.query('delete from bank_loan_allocation');
     await client.query('delete from bank_loan_instalment');
     await client.query('delete from bank_loan');
@@ -639,6 +644,7 @@ export async function resetTestData(): Promise<void> {
     await client.query('truncate recurring_contract_amendment');
     // Stage 7 (0236) — the locks and what they did to each layer (append-
     // only in production); the charges name their lock, so they go between.
+    await client.query('delete from landed_cost_departure');
     await client.query('delete from landed_cost_layer_adjustment');
     await client.query('delete from landed_cost_charge');
     await client.query('delete from landed_cost_lock');

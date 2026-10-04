@@ -23,6 +23,8 @@ export const EXPORT_ACCESS = {
   opening_stock: { kind: 'document', route: '/inventory/opening-stock', object: 'opening_stock' },
   journal_entry: { kind: 'document', route: '/finance/journals', object: 'journal_entry' },
   item_reconciliation: { kind: 'document', route: '/inventory/stock-reconciliation', object: 'stock_reconciliation' },
+  // IMPROVEMENT-002 — a stock count, printed from its own page.
+  stock_count: { kind: 'document', route: '/inventory/stock-count', object: 'stock_count' },
   // IMPROVEMENT-002 — the B/L, printed from its own page (its boxes, containers and what each carries).
   bill_of_lading: { kind: 'document', route: '/payables/shipments', object: 'bill_of_lading' },
   // IMPROVEMENT-002 — an ASYCUDA reading, printed from its own page (its lines as ASYCUDA gave them).
@@ -55,11 +57,17 @@ export const EXPORT_ACCESS = {
   container_receipt: { kind: 'document', route: '/payables/containers', object: 'shipment_container' },
   customs_declaration: { kind: 'document', route: '/logistics/customs-declarations', object: 'customs_declaration' },
   port: { kind: 'document', route: '/logistics/ports', object: 'port' },
+  // IMPROVEMENT-002 — the Final Cost of an import: purchase → each lock →
+  // final per layer, the locks' charges, and where the departed part went.
+  landed_cost_final: { kind: 'document', route: '/payables', object: 'payable' },
   customer_statement: { kind: 'report', route: '/sales/customer-statements', object: 'business_partner' },
   supplier_statement: { kind: 'report', route: '/payables/supplier-statements', object: 'business_partner' },
   bank_statement: { kind: 'report', route: '/master-data/bank-accounts', object: 'bank_account' },
   cash_statement: { kind: 'report', route: '/master-data/cash-accounts', object: 'bank_account' },
   warehouses_report: { kind: 'report', route: '/inventory/fifo-valuation', object: 'inventory_movement' },
+  // IMPROVEMENT-002 — the FIFO position at a date against the G/L, and the stock ledger's health checks.
+  inventory_valuation: { kind: 'report', route: '/inventory/valuation', object: 'inventory_movement' },
+  inventory_checks: { kind: 'report', route: '/inventory/checks', object: 'inventory_movement' },
   stock_movement: { kind: 'report', route: '/inventory/stock-movements', object: 'stock_movement' },
   stock_ledger: { kind: 'report', route: '/inventory/stock-ledger', object: 'stock_movement' },
   treasury_reporting: { kind: 'report', route: '/treasury/reporting', object: 'bank_account' },

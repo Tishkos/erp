@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ownerPool, rejection } from './setup';
 import { withScope } from '@/server/db/client';
+import { registerDepartureRuntime } from '@/server/departures-runtime';
 import * as ap from '@/server/services/ap-invoice';
 import * as applications from '@/server/services/payment-applications';
 import * as customs from '@/server/services/customs-pd';
@@ -40,7 +41,7 @@ const iqd = (value: string) => parseDecimal(value, 4n);
 const q = (value: string) => parseQuantity(value);
 
 /** A posted journal, as an accountant would post one: Dr `debit` Cr `credit`. */
-async function journal(debit: string, credit: string, amount: string, on = '2026-10-20') {
+async function journal(debit: string, credit: string, amount: string, on = '2026-08-20') {
   const client = await ownerPool.connect();
   try {
     await client.query('begin');
@@ -91,7 +92,7 @@ const charge = (type: string, amount: string, reason: string | null = null) =>
     ),
   );
 const lock = (input: Partial<landed.LockInput> = {}) =>
-  withScope(scope(world.manager), (tx) => landed.lock(tx, world.manager, { payableId, lockDate: '2026-10-30', ...input }));
+  withScope(scope(world.manager), (tx) => landed.lock(tx, world.manager, { payableId, lockDate: '2026-08-30', ...input }));
 const pdTo = (statusCode: string, on: string) =>
   withScope(scope(world.clerk), (tx) => customs.changeStatus(tx, world.clerk, pdId, { statusCode, effectiveDate: on }));
 const codes = async () =>
@@ -114,7 +115,7 @@ async function receiveAll() {
         documentId: randomUUID(),
         containerId: container.id,
         warehouseCode: WAREHOUSE,
-        receiptDate: '2026-10-10',
+        receiptDate: '2026-08-10',
         lines: lines.map((line) => ({ containerLineId: line.id, receivedQty: q(line.planned_qty), damagedQty: 0n, shortQty: 0n })),
         varianceReason: null,
       }),
@@ -135,6 +136,9 @@ async function receiptLayers() {
 }
 
 beforeEach(async () => {
+  // IMPROVEMENT-002 — the lock asks each module where its departed stock went
+  // (the lock action registers them through registerAllRecords).
+  registerDepartureRuntime();
   world = await buildTradingWorld();
   // C-20: the charges below are paid out of the bank, so it holds money first.
   await fundBank(world, '1000000.0000');
@@ -167,8 +171,8 @@ beforeEach(async () => {
       supplierId: world.supplierId,
       supplierInvoiceNo: 'CSA-COST-0001',
       branchCode: BAGHDAD,
-      invoiceDate: '2026-09-01',
-      dueDate: '2026-11-01',
+      invoiceDate: '2026-07-01',
+      dueDate: '2026-09-01',
       isImport: true,
       lines: [
         {
@@ -193,18 +197,18 @@ beforeEach(async () => {
     shipments.createBl(tx, world.clerk, {
       payableId,
       blNo: 'MEDUAP070001',
-      blDate: '2026-09-20',
-      eta: '2026-10-05',
+      blDate: '2026-07-20',
+      eta: '2026-08-05',
       containers: 'MSCU1234566\nTGHU7654320',
       spreadLines: true,
     }),
   );
   await receiveAll();
   const pd = await withScope(scope(world.clerk), (tx) =>
-    customs.register(tx, world.clerk, { payableId, pdNo: '6600', registrationDate: '2026-09-02', expiryDate: '2027-03-01' }),
+    customs.register(tx, world.clerk, { payableId, pdNo: '6600', registrationDate: '2026-07-02', expiryDate: '2027-01-01' }),
   );
   pdId = pd.id;
-  await pdTo('validated', '2026-09-05');
+  await pdTo('validated', '2026-07-05');
 });
 
 describe('A18 · the landed cost, locked', () => {
@@ -221,7 +225,7 @@ describe('A18 · the landed cost, locked', () => {
         warehouseCode: WAREHOUSE,
         branchCode: BAGHDAD,
         quantity: q('10'),
-        movementDate: '2026-10-15',
+        movementDate: '2026-08-15',
         kind: 'delivery',
         batchNumber: first!.batch_number,
         sourceDocumentType: 'test',
@@ -235,7 +239,7 @@ describe('A18 · the landed cost, locked', () => {
         toWarehouseCode: SECOND,
         branchCode: BAGHDAD,
         quantity: q('10'),
-        movementDate: '2026-10-16',
+        movementDate: '2026-08-16',
         layers: (await inventory.layersOf(tx, PANEL, WAREHOUSE)).filter((layer) => layer.id === second!.id),
         sourceDocumentType: 'stock_transfer',
         sourceDocumentId: 'TRF-AP07-1',
@@ -243,7 +247,7 @@ describe('A18 · the landed cost, locked', () => {
       }),
     );
 
-    await pdTo('totally_written_off', '2026-10-25');
+    await pdTo('totally_written_off', '2026-08-25');
     const done = await lock({ basisCode: 'by_value' });
     expect([done.sequence, done.totalIqd, done.inventoryIqd, done.cogsIqd]).toEqual([1, '150000.0000', '135000.0000', '15000.0000']);
 
@@ -260,10 +264,13 @@ describe('A18 · the landed cost, locked', () => {
          from journal_line l where l.journal_entry_id = $1 order by l.line_no`,
       [done.journalEntryId],
     );
+    // IMPROVEMENT-002: the stock lines per warehouse, then one line per
+    // destination of the departed stock — a bare delivery with no document of
+    // its own goes to the item's cost of sales by its branch and warehouse.
     expect(lines).toEqual([
       { line_role: 'inventory', warehouse_code: WAREHOUSE, debit: '120000.0000', credit: '0.0000' },
-      { line_role: 'cogs', warehouse_code: null, debit: '15000.0000', credit: '0.0000' },
       { line_role: 'inventory', warehouse_code: SECOND, debit: '15000.0000', credit: '0.0000' },
+      { line_role: 'cogs', warehouse_code: WAREHOUSE, debit: '15000.0000', credit: '0.0000' },
       { line_role: 'landed_cost_clearing', warehouse_code: null, debit: '0.0000', credit: '150000.0000' },
     ]);
     const { rows: charges } = await ownerPool.query(
@@ -278,7 +285,7 @@ describe('A18 · the landed cost, locked', () => {
     // A charge after the lock is a dated adjustment, by quantity this time.
     expect(await rejection(lock())).toMatch(/already in its landed cost/);
     await charge('port_forwarding', '20000');
-    const adjustment = await lock({ basisCode: 'by_quantity', lockDate: '2026-11-05' });
+    const adjustment = await lock({ basisCode: 'by_quantity', lockDate: '2026-09-05' });
     expect([adjustment.sequence, adjustment.totalIqd]).toEqual([2, '20000.0000']);
     const { rows: adjusted } = await ownerPool.query(
       `select count(*)::int as n from landed_cost_layer_adjustment where lock_id = $1`,
@@ -293,7 +300,7 @@ describe('A18 · the landed cost, locked', () => {
 
   it('allocates manually per model, and refuses amounts that do not add up', async () => {
     await charge('freight', '30000');
-    await pdTo('totally_written_off', '2026-10-25');
+    await pdTo('totally_written_off', '2026-08-25');
     expect(
       await rejection(lock({ basisCode: 'manual', manual: new Map([[PANEL, iqd('29000')]]) })),
     ).toMatch(/add up to 29,000\.00 IQD.*30,000\.00 IQD/);
@@ -329,7 +336,7 @@ describe('A19 · cleared by nobody, re-opened with a reason', () => {
        values ($1,'Bank of China','CN-1','BKCHCNBJ','IQD','approved',true) returning id`,
       [world.supplierId],
     );
-    await journal(world.accounts.bank!, world.accounts.grni!, '5000000', '2026-09-01');
+    await journal(world.accounts.bank!, world.accounts.grni!, '5000000', '2026-07-01');
     const app = await withScope(scope(world.clerk), (tx) =>
       applications.create(tx, world.clerk, {
         payableId,
@@ -337,21 +344,21 @@ describe('A19 · cleared by nobody, re-opened with a reason', () => {
         bankCashAccountId: world.bankAccountId,
         payeeBankAccountId: payee[0].id,
         amountTxn: iqd('1000000'),
-        onDate: '2026-10-01',
+        onDate: '2026-08-01',
       }),
     );
     await withScope(scope(world.manager), (tx) => applications.approve(tx, world.manager, app.id));
     await withScope(scope(world.clerk), (tx) =>
-      applications.send(tx, world.clerk, app.id, { applicationDate: '2026-10-01', bankReference: 'B-1', overrideReason: null }),
+      applications.send(tx, world.clerk, app.id, { applicationDate: '2026-08-01', bankReference: 'B-1', overrideReason: null }),
     );
     await withScope(scope(world.manager), (tx) =>
-      applications.confirm(tx, world.manager, app.id, { confirmedOn: '2026-10-03', reference: 'MT103-AP07' }),
+      applications.confirm(tx, world.manager, app.id, { confirmedOn: '2026-08-03', reference: 'MT103-AP07' }),
     );
     const before = await withScope(scope(world.manager), (tx) => payables.load(tx, payableId));
     expect(before.closedAt).toBeNull();
 
     // The PD written off is the last condition: cleared in its transaction.
-    await pdTo('totally_written_off', '2026-10-25');
+    await pdTo('totally_written_off', '2026-08-25');
     const after = await withScope(scope(world.manager), (tx) => payables.load(tx, payableId));
     expect(after.stageCode).toBe('cleared');
     expect(after.closedAt).not.toBeNull();
@@ -404,7 +411,7 @@ describe('A20 \u00b7 the cycle end to end, and the final item cost', () => {
        values ($1,'Bank of China','CN-A20','BKCHCNBJ','IQD','approved',true) returning id`,
       [world.supplierId],
     );
-    await journal(world.accounts.bank!, world.accounts.grni!, '5000000', '2026-09-01');
+    await journal(world.accounts.bank!, world.accounts.grni!, '5000000', '2026-07-01');
 
     const app = await withScope(scope(world.clerk), (tx) =>
       applications.create(tx, world.clerk, {
@@ -413,7 +420,7 @@ describe('A20 \u00b7 the cycle end to end, and the final item cost', () => {
         bankCashAccountId: world.bankAccountId,
         payeeBankAccountId: payee[0].id,
         amountTxn: iqd('1000000'),
-        onDate: '2026-10-01',
+        onDate: '2026-08-01',
       }),
     );
     // The clerk cannot approve their own application — §19's second pair of eyes.
@@ -422,14 +429,14 @@ describe('A20 \u00b7 the cycle end to end, and the final item cost', () => {
     );
     await withScope(scope(world.manager), (tx) => applications.approve(tx, world.manager, app.id));
     await withScope(scope(world.clerk), (tx) =>
-      applications.send(tx, world.clerk, app.id, { applicationDate: '2026-10-01', bankReference: 'B-A20', overrideReason: null }),
+      applications.send(tx, world.clerk, app.id, { applicationDate: '2026-08-01', bankReference: 'B-A20', overrideReason: null }),
     );
     await withScope(scope(world.manager), (tx) =>
-      applications.confirm(tx, world.manager, app.id, { confirmedOn: '2026-10-03', reference: 'MT103-A20' }),
+      applications.confirm(tx, world.manager, app.id, { confirmedOn: '2026-08-03', reference: 'MT103-A20' }),
     );
 
     // ── The declaration written off is the last condition: it clears ──────
-    await pdTo('totally_written_off', '2026-10-25');
+    await pdTo('totally_written_off', '2026-08-25');
     const cleared = await withScope(scope(world.manager), (tx) => payables.load(tx, payableId));
     expect(cleared.stageCode).toBe('cleared');
     expect(cleared.closedAt).not.toBeNull();

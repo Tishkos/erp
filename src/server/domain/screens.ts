@@ -130,22 +130,21 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   whatsapp: 'settings',
   project_settings: 'settings',
 
-  // 5 — Inventory
+  // 5 — Inventory (IMPROVEMENT-002: the twelve screens)
   availability: 'workspace',
   opening_stock: 'document',
+  stock_receipts: 'list',
+  stock_issues: 'list',
   stock_movements: 'document',
   stock_ledger: 'report',
   transfer_requests: 'document',
   in_transit: 'list',
-  quarantine: 'workspace',
-  inventory_returns: 'document',
-  damaged_goods: 'document',
-  serial_batch_tracking: 'workspace',
+  stock_count: 'document',
   uom: 'document',
   stock_reconciliation: 'workspace',
+  inventory_checks: 'workspace',
+  inventory_valuation: 'report',
   fifo_valuation: 'report',
-  inventory_reports: 'report',
-  inventory_settings: 'settings',
 
   // 6 — Projects
   project_master: 'document',
@@ -446,6 +445,12 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/master-data/exchange-rates',
   // The Warehouses Report and Warehouse Setup.
   '/inventory/fifo-valuation',
+  // IMPROVEMENT-002 — the inventory screens.
+  '/inventory/stock-receipts',
+  '/inventory/stock-issues',
+  '/inventory/stock-count',
+  '/inventory/checks',
+  '/inventory/valuation',
   '/master-data/warehouses',
   // Transfer, Opening Stock, Item Reconciliation, Stock Movement.
   '/inventory/transfers',

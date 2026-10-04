@@ -138,6 +138,8 @@ shipment_container_line
 shipment_container_status_history
 shipment_container
 bill_of_lading
+bank_loan_repayment
+bank_loan_revaluation
 bank_loan_allocation
 bank_loan_instalment
 bank_loan
@@ -152,6 +154,7 @@ legacy_document
 legacy_import_run
 payables_migration_run
 payable_exchange_difference
+landed_cost_departure
 landed_cost_layer_adjustment
 landed_cost_charge
 landed_cost_lock
@@ -223,6 +226,7 @@ project_recognition
 project_balance_movement
 project_certificate
 project_progress
+project_settlement_supplement
 project_material_issue_line
 project_material_issue
 project_timesheet

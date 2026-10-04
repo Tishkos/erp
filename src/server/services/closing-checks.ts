@@ -10,15 +10,16 @@
  * does not stop it, because a company that has never reconciled its bank is
  * still allowed to close its month — knowing it.
  *
- * Every figure is as at the period's last day, except the two that have no
- * history (the layers' value and what is on hand), which are as of now and
- * say so.
+ * Every figure is as at the period's last day, except what is on hand, which
+ * has no history, is as of now and says so (the layers' value at the date is
+ * `inventory-valuation.stockAgainstGl`).
  */
 import { sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import type { FiscalPeriod } from '../domain/periods';
 import { businessToday } from '../domain/business-date';
 import * as inventoryIntegrity from './inventory-integrity';
+import * as inventoryValuation from './inventory-valuation';
 import * as subledger from './subledger';
 
 export type CheckSeverity = 'blocking' | 'warning';
@@ -125,20 +126,22 @@ export async function report(tx: Tx, period: FiscalPeriod): Promise<CloseReport>
   ).rows as { documentNo: string; status: string }[];
   checks.push(outcome('stock_documents_waiting', 'blocking', waiting.length > 0, String(waiting.length), waiting.map((r) => `${r.documentNo} (${r.status})`), '/inventory/opening-stock'));
 
-  // 7. Inventory value: the layers (now) against the inventory accounts (now).
-  // The Warehouses Report's own arithmetic: remaining quantity at each
-  // layer's unit cost; beside it, the part whose movement carries no journal
-  // of its own (§22's "not yet posted"), for the reader's eye. One figure,
-  // `subledger.inventoryValue`, shared with the Account Reconciliation screen
-  // (REQ-ACC-001), and exact rather than through a double.
-  const inventory = await subledger.inventoryValue(tx);
+  // 7. Inventory value: the layers against the inventory accounts, both at
+  // the period's last day (IMPROVEMENT-002 — `inventory-valuation.stockAgainstGl`:
+  // each layer's quantity and unit cost as they stood at the date, the
+  // Warehouses Report's own arithmetic, compared exactly, never as a float);
+  // beside it, the part whose maker movement carries no journal of its own
+  // (§22's "not yet posted"), for the reader's eye.
+  // Accounting's Account Reconciliation screen reads `subledger.inventoryValue`
+  // (the layers now); this check is the period's, at its last day.
+  const stockValue = await inventoryValuation.stockAgainstGl(tx, asOf);
   checks.push(
     outcome(
       'inventory_value_equals_gl',
       'warning',
-      !isZero(inventory.differenceIqd),
-      inventory.differenceIqd,
-      [`layers ${inventory.layersIqd} · accounts ${inventory.accountsIqd} · not yet posted ${inventory.provisionalIqd} · as of ${businessToday()}`],
+      !isZero(stockValue.differenceIqd),
+      stockValue.differenceIqd,
+      [`layers ${stockValue.layersIqd} · accounts ${stockValue.glIqd} · not yet posted ${stockValue.provisionalIqd} · as of ${asOf}`],
       '/inventory/fifo-valuation',
     ),
   );

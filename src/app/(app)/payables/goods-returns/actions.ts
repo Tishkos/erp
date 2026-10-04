@@ -40,6 +40,8 @@ export async function createGoodsReturn(formData: FormData): Promise<void> {
       reason: text(formData, 'reason'),
       offsetKind,
       ...(offsetKind === 'bank' ? { offsetBankAccountId: bank } : {}),
+      // IMPROVEMENT-002 — Yes only when somebody chose it; anything else is No.
+      reimbursesLandedCost: text(formData, 'reimburses_landed_cost').trim() === 'yes',
       lines,
     });
   });
