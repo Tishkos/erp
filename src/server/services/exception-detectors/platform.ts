@@ -7,6 +7,7 @@
  * the integration tests run the other detectors.
  */
 import { EVIDENCE_ROW, type Finding, type Severity } from '../../domain/exceptions';
+import { recordLabelFor } from '../exception-text';
 import * as health from '../system-health';
 import type { DetectContext } from './shared';
 
@@ -26,7 +27,7 @@ export async function systemHealth(ctx: DetectContext): Promise<Finding[]> {
       severity,
       facts: { healthCheck: finding.code, job: job ?? null, message: finding.message.slice(0, 400) },
       evidence: [EVIDENCE_ROW({ ref: finding.code, href: HEALTH_ROUTE, note: { code: 'health_message', params: { message: finding.message.slice(0, 400) } } })],
-      record: { type: 'system', id: job ? `${finding.code}:${job}` : finding.code, label: finding.code, href: HEALTH_ROUTE },
+      record: { type: 'system', id: job ? `${finding.code}:${job}` : finding.code, label: recordLabelFor('system', { healthCheck: finding.code }, finding.code, 'en'), href: HEALTH_ROUTE },
       action: HEALTH_ROUTE,
       branchCode: null,
     };

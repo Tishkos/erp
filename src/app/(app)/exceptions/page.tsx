@@ -87,7 +87,13 @@ export default async function ExceptionsPage({ searchParams }: { searchParams: S
       title={x('title')}
       variant="sap"
     >
-      <Flash error={outcome.error} errorTitle={t('error_title')} saved={outcome.saved} savedLabel={t('saved')} />
+      {/* The only thing that comes back to this page with "saved" is "Refresh now", so the flash says what the check found. */}
+      <Flash
+        error={outcome.error}
+        errorTitle={t('error_title')}
+        saved={outcome.saved}
+        savedLabel={last ? x('refreshed', { found: last.found, created: last.created, reopened: last.reopened, resolved: last.resolved }) : t('saved')}
+      />
 
       {last && last.failed > 0 ? <p className={s.sapNote}>{x('last_check_failed', { failed: last.failed })}</p> : null}
 

@@ -16,6 +16,7 @@ import * as customerReconciliation from '../customer-reconciliation';
 import * as posting from '../posting';
 import * as subledger from '../subledger';
 import * as supplierBalances from '../supplier-balances';
+import { recordLabelFor } from '../exception-text';
 import { enc, isZero, rowsOf, userNames, type DetectContext } from './shared';
 
 // ---------------------------------------------------------------------------
@@ -202,7 +203,12 @@ export async function postingRoleUnmapped(ctx: DetectContext): Promise<Finding[]
         severity: line.always ? 'high' : 'medium',
         facts: { postingEvent: document.event, postingRole: line.role, reason: rule === null ? 'missing' : 'stale', account: rule?.accountCode ?? null },
         evidence: [],
-        record: { type: 'posting_rule', id: `${document.event}:${line.role}`, label: `${document.event} · ${line.role}`, href: '/finance/posting-mappings' },
+        record: {
+          type: 'posting_rule',
+          id: `${document.event}:${line.role}`,
+          label: recordLabelFor('posting_rule', { postingEvent: document.event, postingRole: line.role }, `${document.event} · ${line.role}`, 'en'),
+          href: '/finance/posting-mappings',
+        },
         action: '/finance/posting-mappings',
         branchCode: null,
       });

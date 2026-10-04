@@ -324,6 +324,8 @@ describe('EX1 · every detector finds its own real thing, once', () => {
     for (const row of rows) {
       expect(row.subject).toMatch(/^[a-z_]+\.[a-z_]+\|[a-z_]+$/);
       expect(row).toMatchObject({ record_type: 'posting_rule', href: '/finance/posting-mappings' });
+      // The record is called by the document it belongs to, in words — not by its event code.
+      expect(row.record_label, row.subject).not.toMatch(/[a-z]+_[a-z]+|[a-z]\.[a-z]/);
     }
     // The ones the fixture maps are not among them.
     expect(rows.map((r) => r.subject)).not.toContain('sales.ar_invoice|customer_receivable');

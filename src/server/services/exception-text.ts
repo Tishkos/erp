@@ -76,6 +76,19 @@ export function formatFacts(facts: ExceptionFacts, locale: Locale): Record<strin
   return out;
 }
 
+/**
+ * What the affected record is called, for a record that has no number of its own: a posting line is the document it belongs to,
+ * the host's health check and a detector are named by their labels. Every other record's label is its own number.
+ */
+export function recordLabelFor(type: string, facts: ExceptionFacts, stored: string, locale: Locale): string {
+  if (type !== 'posting_rule' && type !== 'system' && type !== 'detector') return stored;
+  const shown = formatFacts(facts, locale);
+  // The event is what the posting rule belongs to; the role it lacks is in the finding's title.
+  if (type === 'posting_rule') return shown.postingEvent ? String(shown.postingEvent) : stored;
+  if (type === 'system') return String(shown.healthCheck || stored);
+  return String(shown.sourceDetector || stored);
+}
+
 export interface ExceptionText {
   readonly title: string;
   readonly explanation: string;
