@@ -233,3 +233,32 @@ Every failure was a suite reading a behaviour one merged module changed on purpo
 | `containerReceipt` print model (noise, not red) | Its totals label asked for `column.total`, a key in neither locale. | `admin.reports.totals`, as every other print model. |
 
 The skipped test is `ap08-migration`'s legacy-sheet read, which skips when the sheet is not on the machine. `npm run typecheck` and the unit suite (115 files, 1,758 tests) are green at `2edc3e9`.
+
+---
+
+## The owner's merge — 4 October 2026, third run
+
+**Branch** `feat/erp-integration` at `1f13c73`: the six-module merge above plus the owner's `main` of the afternoon (`9fd09f2` — partner approval and migration 0302, ASYCUDA corrections by hand, the header, the Document Centre placeholder, the chart-of-accounts script).
+**Database** `erp_test_integration`, migrated from scratch to 0302, used by nothing else.
+**Scope** all 169 integration files, serially.
+
+| Run | Files | Tests | Log |
+|---|---|---|---|
+| 1 (`1f13c73`) | 169 passed | 2,615 passed, 1 skipped, 4 todo | `orchestration/integration-full-3.log` (32 min) |
+
+Nothing failed. The owner's report that "something is wrong with the ERP integration" was not in the suite; it was in the path a database built from nothing takes, which the suite does not walk. So that path was walked by hand on `erp_integration` (migrated to 0302, otherwise empty), in the order AGENTS.md › *Live server* names, and then the development seed over it.
+
+| Step | Result |
+|---|---|
+| `npm run db:migrate` | at head (220 recorded, last `…112`) |
+| `bash scripts/ops/new-company-setup.sh` | **could not be run against anything but the live box**: it read the owner's password from `.env` and then spoke to `127.0.0.1:5434/erp` regardless. It now reads host, port and database from the same `DATABASE_URL_OWNER` line (the live `.env` names that cluster, so nothing changes there). Then: Finance department, FY2026 with twelve open periods, USD 1320. |
+| `create-first-user.ts` | ok — HQ, WH-HQ, the user with super user + `system_administrator`, `accounting_manager`, `ceo` |
+| `ensure-chart-of-accounts.ts --branch HQ` | ok — 11 groups, 92 accounts, all 72 (event, role) pairs of `POSTING_MAP` mapped, none left over |
+| `ensure-stage-warehouses.ts --branch HQ` | ok — In Process / On Board / On Port |
+| `ensure-user-employees.ts --apply` | ok — one employee for the first user (department FIN assumed) |
+| `set-up-people.ts --apply` | **refused at the first role**: `no such menu section: payables_setup`, and once past that, `'ap_allocation' is not a system section`. The Payables finalisation (`de6fe70`) moved Payables Settings and the sheet migration to Administration and removed the never-built Allocations item; the script still named the section and the object, and `roles.setGrants` refuses an object the menu does not know. The two objects are now named in the supply chain officer's grant and the dead object is dropped; the grants are otherwise the same. Then: 8 roles, 10 people. This is the defect the live rebuild would have met. |
+| `ensure-user-employees.ts --apply` (again) | ok — the ten people and the seed's five |
+| `npm run db:seed` | **failed at commit**: `Journal OPEN-DEV-2026 has 1 line(s)`. The seed made `CASH-HQ` only when it was also making HQ; with HQ from `create-first-user.ts` the opening cash journal had its credit alone. The bank account is now made whenever it is missing. Checked both ways: over the setup above, and on a database migrated from nothing (`erp_integration_seedcheck`, dropped afterwards). |
+| `health-check.ts`, `statement-coverage.ts` | run as read-only checks of the result; both answer (the health findings are this machine's — no backups, little disk). |
+
+`npm run typecheck` and the unit suite (115 files, 1,759 tests) are green. The final full run is `orchestration/integration-full-3-final.log`.
