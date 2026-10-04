@@ -207,6 +207,25 @@ export function matchSeries(shape: NumberShape | null, catalog: readonly SeriesI
   return { exact, partial, any: false };
 }
 
+/**
+ * The numbers a bare `PREFIX-serial` could be written as in a series that is
+ * kept to neither branch nor year: SUP-1 is SUP-1, SUP-01 … SUP-000001 (and
+ * A1 is A000001). Tried as equalities on the number's own btree, so a code
+ * issued by hand, or by a padding the series has since changed, is still met
+ * by its serial. Series with a branch or a year in them go through
+ * `doc_number_allocation` instead.
+ */
+export function paddedNumbers(shape: NumberShape | null): string[] {
+  if (!shape || shape.prefix === '' || shape.branch !== null || shape.year !== null) return [];
+  const digits = shape.serial.toString();
+  const numbers: string[] = [];
+  for (let width = digits.length; width <= 9; width++) {
+    const padded = digits.padStart(width, '0');
+    numbers.push(`${shape.prefix}-${padded}`, `${shape.prefix}${padded}`);
+  }
+  return numbers;
+}
+
 export type QueryKind = 'empty' | 'short' | 'number' | 'text';
 
 export interface QueryPlan {
@@ -214,6 +233,8 @@ export interface QueryPlan {
   readonly kind: QueryKind;
   readonly shape: NumberShape | null;
   readonly series: SeriesMatch;
+  /** `paddedNumbers(shape)` — the serial as an unscoped series would have written it. */
+  readonly padded: readonly string[];
   /** Substring matches are allowed (the phrase is long enough for the trigram index). */
   readonly contains: boolean;
   /** Records are searched at all. */
@@ -229,7 +250,7 @@ export interface QueryPlan {
 export function planQuery(raw: string, catalog: readonly SeriesInfo[]): QueryPlan {
   const query = normaliseQuery(raw);
   if (query.display.length === 0) {
-    return { query, kind: 'empty', shape: null, series: NO_SERIES, contains: false, records: false };
+    return { query, kind: 'empty', shape: null, series: NO_SERIES, padded: [], contains: false, records: false };
   }
   const shape = parseNumberShape(query.upper);
   const series = matchSeries(shape, catalog);
@@ -239,6 +260,7 @@ export function planQuery(raw: string, catalog: readonly SeriesInfo[]): QueryPla
     kind: !records ? 'short' : shape ? 'number' : 'text',
     shape,
     series,
+    padded: paddedNumbers(shape),
     contains: query.display.length >= MIN_CONTAINS_QUERY,
     records,
   };

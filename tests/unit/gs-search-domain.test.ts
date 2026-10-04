@@ -15,6 +15,7 @@ import {
   matchScreens,
   matchSeries,
   normaliseQuery,
+  paddedNumbers,
   parseNumberShape,
   planQuery,
   screenTier,
@@ -186,6 +187,34 @@ describe('planQuery', () => {
 
   it('treats an Arabic name as text', () => {
     expect(planQuery('شركة النور', CATALOG)).toMatchObject({ kind: 'text', records: true });
+  });
+});
+
+describe('paddedNumbers — a serial as an unscoped series would have written it', () => {
+  it('pads with and without the dash, up to nine digits', () => {
+    const numbers = paddedNumbers(parseNumberShape('SUP-1'));
+    expect(numbers).toContain('SUP-1');
+    expect(numbers).toContain('SUP-00001');
+    expect(numbers).toContain('SUP-000001');
+    expect(numbers).toContain('SUP000001');
+    expect(numbers).toHaveLength(18);
+  });
+
+  it('takes the serial, not the zeros typed', () => {
+    expect(paddedNumbers(parseNumberShape('A-000012'))).toContain('A000012');
+    expect(paddedNumbers(parseNumberShape('A-000012'))).toContain('A-12');
+  });
+
+  it('is empty for a bare number, and where a branch or a year is named (those go through the allocations)', () => {
+    expect(paddedNumbers(parseNumberShape('1024'))).toEqual([]);
+    expect(paddedNumbers(parseNumberShape('API-HQ-2026-12'))).toEqual([]);
+    expect(paddedNumbers(parseNumberShape('JE-2026-12'))).toEqual([]);
+    expect(paddedNumbers(null)).toEqual([]);
+  });
+
+  it('is part of the plan', () => {
+    expect(planQuery('SUP-1', CATALOG).padded).toContain('SUP-000001');
+    expect(planQuery('al noor', CATALOG).padded).toEqual([]);
   });
 });
 

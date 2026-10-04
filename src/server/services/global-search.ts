@@ -93,6 +93,13 @@ export async function loadSeries(tx: Tx): Promise<SeriesInfo[]> {
   }));
 }
 
+/** The database's own message (drizzle wraps it as the `cause` of a "Failed query"). */
+function reasonOf(error: unknown): string {
+  const cause = error instanceof Error ? (error as { cause?: unknown }).cause : undefined;
+  if (cause instanceof Error) return cause.message;
+  return error instanceof Error ? error.message.split('\n')[0]! : String(error);
+}
+
 const clamp = (value: number | undefined, fallback: number, max: number): number => {
   if (value === undefined || !Number.isFinite(value)) return fallback;
   return Math.min(Math.max(Math.trunc(value), 0), max);
@@ -139,7 +146,7 @@ export async function search(tx: Tx, principal: Principal, input: SearchInput): 
       await tx.execute(sql`rollback to savepoint search_type`);
       failed.push(type.key);
       // The type and the failure — never the phrase.
-      console.error(`[global-search] ${type.key} failed:`, error instanceof Error ? error.message : error);
+      console.error(`[global-search] ${type.key} failed:`, reasonOf(error));
     }
   }
   groups.sort(compareGroups);

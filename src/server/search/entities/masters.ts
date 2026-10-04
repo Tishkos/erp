@@ -63,7 +63,8 @@ export const item: SearchTableType = {
   text: [sql`t.name`, sql`t.supplier_item_code`],
   title: sql`t.name`,
   status: sql`case when t.active then 'active' else 'inactive' end`,
-  amount: { value: sql`t.selling_price_iqd`, currency: sql`'IQD'` },
+  // A selling price is a price list's matter: shown to whoever may see price lists, not to everyone who may see the item.
+  amount: { value: sql`t.selling_price_iqd`, currency: sql`'IQD'`, grant: { object: 'price_list' } },
   href: (row) => profileHref('item', row.number),
 };
 

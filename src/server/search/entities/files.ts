@@ -20,6 +20,7 @@ import type { SearchCustomType, SearchRow, SearchTableType } from '../types';
 
 /** Candidates read before the parents are asked; a refusal drops one, so more are read than shown. */
 const CANDIDATES = 120;
+const CANDIDATES_MAX = 600;
 
 const lit = (n: number) => sql.raw(String(n));
 const ESCAPE = sql.raw(`escape '\\'`);
@@ -49,7 +50,7 @@ export const attachmentFiles: SearchCustomType = {
        where a.scan_status = 'clean' and a.superseded_by_id is null and a.disposed_at is null
          and (${contains})
        order by tier, a.created_at desc
-       limit ${CANDIDATES}`);
+       limit ${Math.min(CANDIDATES_MAX, Math.max(CANDIDATES, (request.offset + request.limit + 1) * 3))}`);
     const candidates = result.rows as unknown as {
       id: string;
       file_name: string;

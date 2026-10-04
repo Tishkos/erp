@@ -84,17 +84,17 @@ export function branchesOf(type: SearchTableType, request: TypeRequest): SQL[] {
   const branches: SQL[] = [];
   const number = type.number;
 
-  // The number or code: equal to the phrase as a number is written, or beginning with it.
+  // The number or code: equal to the phrase as a number is written, equal to its serial padded as an
+  // unscoped series would pad it (SUP-1 for SUP-00001), or beginning with the phrase.
   const candidates = inList(query.numberCandidates);
+  const padded = plan.padded.filter((value) => !query.numberCandidates.includes(value));
+  const equal = padded.length > 0 ? sql`${candidates}, ${inList(padded)}` : candidates;
   const begins = query.numberCandidates.map((candidate) => sql`${number} like ${`${likeEscape(candidate)}%`} ${ESCAPE}`);
-  branches.push(
-    branch(
-      type,
-      request,
-      sql`case when ${number} in (${candidates}) then ${lit(TIER.exact)} else ${lit(TIER.prefix)} end`,
-      sql`(${number} in (${candidates}) or ${sql.join(begins, sql` or `)})`,
-    ),
-  );
+  const tier =
+    padded.length > 0
+      ? sql`case when ${number} in (${candidates}) then ${lit(TIER.exact)} when ${number} in (${inList(padded)}) then ${lit(TIER.serial)} else ${lit(TIER.prefix)} end`
+      : sql`case when ${number} in (${candidates}) then ${lit(TIER.exact)} else ${lit(TIER.prefix)} end`;
+  branches.push(branch(type, request, tier, sql`(${number} in (${equal}) or ${sql.join(begins, sql` or `)})`));
 
   // "AP-12": serial 12 of the series this type owns whose prefix is, or begins with, AP.
   if (plan.shape && type.series && type.series.length > 0) {
@@ -155,7 +155,8 @@ export async function runTableType(tx: Tx, type: SearchTableType, request: TypeR
   const amount = type.amount && request.mayAmount
     ? sql`(${type.amount.value})::text as amount_value, (${type.amount.currency})::text as amount_currency`
     : sql`null::text as amount_value, null::text as amount_currency`;
-  const ordering = type.date ?? sql`null`;
+  // A type with no date has none to order by (`order by null` is refused).
+  const ordering = type.date ? sql`best.tier, ${type.date} desc nulls last, ${type.number}` : sql`best.tier, ${type.number}`;
   const result = await tx.execute(sql`
     with hits as (${sql.join(branches, sql` union all `)}),
          best as (select id, min(tier) as tier from hits group by id)
@@ -171,7 +172,7 @@ export async function runTableType(tx: Tx, type: SearchTableType, request: TypeR
       from best
       join ${sql.raw(type.table)} t on ${type.id} = best.id
       ${type.joins ?? sql``}
-     order by best.tier, ${ordering} desc nulls last, ${type.number}
+     order by ${ordering}
      limit ${request.limit + 1} offset ${request.offset}`);
   const raws = result.rows as unknown as Raw[];
   const rows: SearchRow[] = raws.slice(0, request.limit).map((raw) => {
