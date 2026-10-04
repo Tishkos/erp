@@ -5631,7 +5631,14 @@
       "allocation_note": "Allocation to invoices is recorded here, on the supplier payment. A payment application is the request to the bank; the allocation is never kept there.",
       "no_allocations": "Not put against any invoice yet.",
       "adjustments": "Credit and debit notes on this invoice",
-      "no_adjustments": "No credit or debit note adjusts this invoice."
+      "no_adjustments": "No credit or debit note adjusts this invoice.",
+      "position_title": "Payables position",
+      "position_owed": "Owed on open invoices",
+      "position_open_invoices": "Open invoices",
+      "position_held": "Held with the supplier (credits)",
+      "position_net": "Net position",
+      "position_notes": "Credit / debit notes",
+      "position_open_notes": "Open the register"
     },
     "record_notes": {
       "notes": "Notes",

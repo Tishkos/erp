@@ -167,10 +167,17 @@ test.describe('A22 · payables in a browser', () => {
     );
     const invoiceNo = decodeURIComponent(page.url().split('/payables/invoices/')[1]!.split('?')[0]!);
 
-    // A note, dated and signed, under the invoice.
-    await page.getByRole('textbox', { name: 'Add note' }).fill(`Landlord travelling ${RUN}`);
-    await page.getByRole('button', { name: 'Add note' }).click();
-    await expect(page.getByText(`Landlord travelling ${RUN}`).first()).toBeVisible({ timeout: 30_000 });
+    // A note, dated and signed — behind the Notes door in the title bar, the
+    // shared one every record wears from its draft (2026-10-04).
+    await page.getByRole('button', { name: 'Notes', exact: true }).click();
+    const notes = page.getByRole('dialog', { name: 'Notes' });
+    await notes.getByRole('textbox', { name: 'Add note' }).fill(`Landlord travelling ${RUN}`);
+    await notes.getByRole('button', { name: 'Add note' }).click();
+    await page.waitForURL(/saved=1/, { timeout: 60_000 });
+    await expect(page.getByRole('button', { name: 'Notes (1)' })).toBeVisible({ timeout: 30_000 });
+    await page.getByRole('button', { name: 'Notes (1)' }).click();
+    await expect(page.getByRole('dialog', { name: 'Notes' }).getByText(`Landlord travelling ${RUN}`).first()).toBeVisible({ timeout: 30_000 });
+    await page.keyboard.press('Escape');
 
     // The register: Expenses view, the row, its Payment state.
     await page.goto('/payables/invoices?view=expenses');
