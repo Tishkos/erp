@@ -129,8 +129,8 @@ export async function save(tx: Tx, ctx: ActorContext, input: SaveSettingsInput):
     action: 'cloud_setting.updated',
     objectType: PERMISSION_OBJECT,
     objectId: '1',
-    before: { enabled: before.enabled, baseUrl: before.baseUrl, rootPath: before.rootPath, recordRoot: before.recordRoot },
-    after: { enabled: input.enabled, baseUrl, rootPath, recordRoot },
+    before: { enabled: before.enabled, baseUrl: before.baseUrl, startFolder: before.rootPath, recordRoot: before.recordRoot },
+    after: { enabled: input.enabled, baseUrl, startFolder: rootPath, recordRoot },
   });
   return get(tx);
 }

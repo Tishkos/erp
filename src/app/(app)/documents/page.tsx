@@ -156,7 +156,10 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Se
               <>
                 <strong>{relink ? t('relink_title') : t('not_linked_title')}</strong>
                 <p>{relink ? t('relink_body') : t('not_linked_body')}</p>
-                <ActionButton action={startLinkAction} hidden={{ return_to: HOME }} label={relink ? t('relink_action') : t('not_linked_action')} small={false} tone="primary" />
+                <div className={s.submitRow}>
+                  <ActionButton action={startLinkAction} hidden={{ return_to: HOME }} label={relink ? t('relink_action') : t('not_linked_action')} small={false} tone="primary" />
+                  {relink ? <ActionButton action={unlinkAccountAction} hidden={{ return_to: HOME }} label={t('unlink_account')} small={false} /> : null}
+                </div>
                 <p className={s.sapNote}>{t('not_linked_note', { server: session.settings.baseUrl ?? '' })}</p>
               </>
             )}
@@ -256,9 +259,9 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Se
                 start: t('upload_start'),
                 retry: t('upload_retry'),
                 waiting: t('upload_waiting'),
-                sending: t('upload_sending'),
+                sending: t.raw('upload_sending') as string,
                 done: t('upload_done'),
-                failed: t('upload_failed'),
+                failed: t.raw('upload_failed') as string,
                 hint: t('upload_hint'),
                 network: t('upload_network'),
                 finished: t('upload_finished'),

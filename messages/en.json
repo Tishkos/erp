@@ -7219,7 +7219,7 @@
     "root_path": "Document Center starts in",
     "root_hint": "A folder of each person's own Cloud Files. / is the whole of it.",
     "record_root": "Record folders are made in",
-    "record_root_hint": "Inside the folder above. A record's folder is <this folder>/<kind>/<number>.",
+    "record_root_hint": "Inside the folder above. A record's folder is this folder / kind / number.",
     "test_connection": "Test the address",
     "test_ok": "Cloud Files answered (version {version}).",
     "test_failed_title": "Cloud Files did not answer as expected",

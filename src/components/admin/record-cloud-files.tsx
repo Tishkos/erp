@@ -141,7 +141,12 @@ export async function RecordCloudFiles({
                   <span>{row.state === 'unavailable' ? t('record_unavailable') : t('record_unverified')}</span>
                 )}
                 <span className={s.fileMeta}>
-                  {row.state === 'available' && row.entry ? `${readableSize(row.entry.size)} · ` : ''}
+                  {row.state === 'available' && row.entry ? (
+                    <>
+                      <bdi dir="ltr">{readableSize(row.entry.size)}</bdi>
+                      {' · '}
+                    </>
+                  ) : null}
                   {row.linkedByName ? `${t('record_linked_by', { name: row.linkedByName })} · ` : ''}
                   {formatTimestamp(row.linkedAt.toISOString(), locale as Locale)}
                   {row.openUrl ? (
@@ -179,9 +184,9 @@ export async function RecordCloudFiles({
             start: t('upload_start'),
             retry: t('upload_retry'),
             waiting: t('upload_waiting'),
-            sending: t('upload_sending'),
+            sending: t.raw('upload_sending') as string,
             done: t('upload_done'),
-            failed: t('upload_failed'),
+            failed: t.raw('upload_failed') as string,
             hint: t('record_upload_hint'),
             network: t('upload_network'),
             finished: t('upload_finished'),
