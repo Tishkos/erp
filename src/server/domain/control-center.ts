@@ -470,7 +470,6 @@ export const NON_MENU_OBJECTS: readonly string[] = Object.freeze([
   'client_import_payment',
   'client_kyc_record',
   'crm',
-  'data_scope',
   'dimension',
   'employee_asset',
   'employee_compensation',
@@ -496,9 +495,17 @@ export const NON_MENU_OBJECTS: readonly string[] = Object.freeze([
   'warranty_registration',
 ]);
 
-/** Granted objects that neither the menu nor `NON_MENU_OBJECTS` knows, sorted. */
+/**
+ * Objects a shipped migration grants for a screen that is not built yet — nothing reads them today, and they are
+ * the platform's own reservation, not a stray. `tests/unit/cc01-control-center.test.ts` fails when one is not
+ * granted by any migration (it would then be a name for nothing) or has become a menu object (it would then
+ * belong to the menu, not here).
+ */
+export const RESERVED_OBJECTS: readonly string[] = Object.freeze(['data_scope']);
+
+/** Granted objects that neither the menu, `NON_MENU_OBJECTS` nor `RESERVED_OBJECTS` knows, sorted. */
 export function unknownObjects(granted: readonly string[], menu: readonly string[]): string[] {
-  const known = new Set<string>([...menu, ...NON_MENU_OBJECTS]);
+  const known = new Set<string>([...menu, ...NON_MENU_OBJECTS, ...RESERVED_OBJECTS]);
   return [...new Set(granted)].filter((object) => !known.has(object)).sort();
 }
 
