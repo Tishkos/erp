@@ -47,10 +47,12 @@ CREATE TABLE "exception" (
 	"facts" jsonb NOT NULL DEFAULT '{}'::jsonb,
 	"evidence" jsonb NOT NULL DEFAULT '[]'::jsonb,
 	"content_hash" text NOT NULL,
-	-- The affected record and where to go to deal with it.
+	-- The affected record (its kind, the id its paperclip files under, what a person calls it,
+	-- where it opens) and — in `href` — the direct action: the screen where it is dealt with.
 	"record_type" text NOT NULL,
 	"record_id" text NOT NULL,
 	"record_label" text NOT NULL,
+	"record_href" text NOT NULL,
 	"href" text NOT NULL,
 	"party_code" text,
 	"owner_user_id" uuid REFERENCES "app_user"("id"),
@@ -72,7 +74,7 @@ CREATE TABLE "exception" (
 	CONSTRAINT "exception_detector_shape" CHECK ("detector" ~ '^[a-z]+\.[a-z0-9_]+$'),
 	CONSTRAINT "exception_text_present" CHECK (nullif(btrim("title"), '') IS NOT NULL AND nullif(btrim("explanation"), '') IS NOT NULL),
 	CONSTRAINT "exception_record_present" CHECK (nullif(btrim("record_type"), '') IS NOT NULL AND nullif(btrim("record_id"), '') IS NOT NULL AND nullif(btrim("record_label"), '') IS NOT NULL),
-	CONSTRAINT "exception_href_local" CHECK ("href" ~ '^/[^/\\]'),
+	CONSTRAINT "exception_href_local" CHECK ("href" ~ '^/[^/\\]' AND "record_href" ~ '^/[^/\\]'),
 	CONSTRAINT "exception_facts_object" CHECK (jsonb_typeof("facts") = 'object'),
 	CONSTRAINT "exception_evidence_array" CHECK (jsonb_typeof("evidence") = 'array' AND jsonb_array_length("evidence") <= 50),
 	CONSTRAINT "exception_seen_after_first" CHECK ("last_seen_at" >= "first_detected_at"),
