@@ -7201,26 +7201,27 @@
         "crontab": "the job schedule"
       },
       "object": {
-        "trial_balance": "the Trial Balance",
-        "bank_reconciliation": "Bank Reconciliation",
-        "bank_account": "Bank Accounts",
-        "posting_rule": "Posting Mappings",
-        "inventory_movement": "Inventory Checks",
-        "in_transit": "In-Transit Inventory",
-        "ar_invoice": "Sales Invoices",
         "ap_invoice": "Purchase Invoices",
-        "supplier_credit_memo": "Supplier Credits",
-        "landed_cost_register": "Landed Costs",
-        "customs_pd": "Customs PDs",
-        "shipment_container": "Containers",
-        "job": "Background Jobs",
-        "whatsapp": "WhatsApp",
-        "cloud_setting": "Cloud Files Settings",
-        "system_health": "Backup and Health",
         "app_user": "Users",
-        "role": "Roles",
+        "ar_invoice": "Sales Invoices",
+        "bank_account": "Bank Accounts",
+        "bank_reconciliation": "Bank Reconciliation",
+        "cloud_setting": "Cloud Files Settings",
+        "control_center": "the Control Center",
+        "customs_pd": "Customs PDs",
         "employee": "Employees",
-        "control_center": "the Control Center"
+        "in_transit": "In-Transit Inventory",
+        "inventory_movement": "Inventory Checks",
+        "job": "Background Jobs",
+        "landed_cost": "Landed Cost",
+        "landed_cost_register": "Landed Costs",
+        "posting_rule": "Posting Mappings",
+        "role": "Roles",
+        "shipment_container": "Containers",
+        "supplier_credit_memo": "Supplier Credits",
+        "system_health": "Backup and Health",
+        "trial_balance": "the Trial Balance",
+        "whatsapp": "WhatsApp"
       },
       "word": {
         "connected": "connected",
@@ -7248,8 +7249,7 @@
         "found": "Found",
         "stock_layers": "Stock at FIFO cost",
         "stock_accounts": "Inventory accounts in the ledger",
-        "stock_provisional": "Not yet posted",
-        "unexplained": "Unexplained difference",
+        "stock_provisional": "Of which without a journal of their own",
         "subledger": "Sub-ledger",
         "control_account": "Control account",
         "lines": "Inconsistent ledger lines",
@@ -7286,7 +7286,7 @@
       "item": {
         "trial_balance_difference": "Total debit {debitIqd} does not equal total credit {creditIqd}: a difference of {differenceIqd}.",
         "bank_account_unlinked": "Bank or cash account {account} points at a ledger account that no longer exists.",
-        "stock_gl_difference": "Stock at FIFO cost is {layersIqd} but the inventory accounts hold {glIqd}; after {provisionalIqd} not yet posted, {unexplainedIqd} is unexplained.",
+        "stock_gl_difference": "Stock at FIFO cost is {layersIqd} but the inventory accounts hold {glIqd}: a difference of {differenceIqd}.",
         "control_difference": "{account}: sub-ledger {subledgerIqd}, ledger {glIqd}, a difference of {differenceIqd}.",
         "statement_above_ageing": "{party}: the statement shows {ledgerIqd} owed but the open documents come to {documentsIqd}; {differenceIqd} has no document behind it.",
         "transit_shipped_over_ordered": "Import {importNo}, {item}: {shippedQty} is planned into containers but only {orderedQty} was bought.",
@@ -7347,7 +7347,7 @@
         },
         "inventory_stock_vs_gl": {
           "title": "Stock against the ledger",
-          "what": "Stock at FIFO cost equals the inventory accounts, less movements not yet posted."
+          "what": "The FIFO layers hold the same value as the inventory accounts in the ledger."
         },
         "inventory_negative_stock": {
           "title": "Negative stock",

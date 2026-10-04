@@ -116,7 +116,7 @@ export const CHECKS: readonly CheckDefinition[] = Object.freeze([
 
   // Logistics
   { code: 'logistics.transit_issues', domain: 'logistics', requires: [view('in_transit')], route: '/logistics/in-transit' },
-  { code: 'logistics.landed_costs', domain: 'logistics', requires: [view('landed_cost_register')], route: '/logistics/landed-costs' },
+  { code: 'logistics.landed_costs', domain: 'logistics', requires: [view('landed_cost_register'), view('landed_cost')], route: '/logistics/landed-costs' },
   { code: 'logistics.customs', domain: 'logistics', requires: [view('customs_pd')], route: '/payables/pd' },
   { code: 'logistics.shipment_delays', domain: 'logistics', requires: [view('shipment_container')], route: '/logistics/shipment-tracking' },
 

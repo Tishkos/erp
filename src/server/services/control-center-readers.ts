@@ -36,13 +36,15 @@ import {
   type Item,
   type Reading,
 } from '../domain/control-center';
-import { severityRank, type ExceptionFacts, type Finding } from '../domain/exceptions';
+import { detectorOf, severityRank, type ExceptionFacts, type Finding } from '../domain/exceptions';
 import { menuObjects } from '../domain/menu';
 import { MONEY_SCALE, parseDecimal, toDecimalString } from '../domain/money';
-import type { Principal } from '../domain/permissions';
+import { assertCan, type Principal } from '../domain/permissions';
 import { profileHref } from '../domain/profiles';
+import { registerAllRecords } from '../records';
 import { secretKeyProblem } from '../secret-box';
 import * as accountsCloud from './cloud-accounts';
+import * as attachments from './attachments';
 import * as cloudSettings from './cloud-settings';
 import * as customerReconciliation from './customer-reconciliation';
 import { RUNNERS } from './exception-detectors';
@@ -120,10 +122,35 @@ const detectContext = (context: CheckContext): DetectContext => ({
   truncated: new Map(),
 });
 
+/**
+ * What the viewer may be told of the findings a detector made. The detectors run as the viewer, so every table they
+ * read through is narrowed by row-level security — but a few read through views the database owner owns, and a
+ * finding names a record and its figures. So the Exception Center's own three rules are applied here to each
+ * finding: the viewer holds the grant of the object the detector is about, the finding's branch is one of theirs
+ * (a finding of no branch is the company's), and the record it names is one they may open
+ * (`attachments.mayAccessParent`, the rule Search and the paperclip ask).
+ */
 async function runDetector(context: CheckContext, code: string): Promise<Finding[]> {
   const runner = RUNNERS[code];
-  if (!runner) throw new Error(`no detector ${code}`);
-  return runner(detectContext(context));
+  const definition = detectorOf(code);
+  if (!runner || !definition) throw new Error(`no detector ${code}`);
+  const { principal, tx } = context;
+  assertCan(principal, 'view', definition.object);
+  registerAllRecords();
+  const found = await runner(detectContext(context));
+  const kept: Finding[] = [];
+  const memo = new Map<string, boolean>();
+  for (const finding of found) {
+    if (finding.branchCode !== null && !principal.isSuperUser && !principal.branchCodes.includes(finding.branchCode)) continue;
+    const key = `${finding.record.type}|${finding.record.id}`;
+    let open = memo.get(key);
+    if (open === undefined) {
+      open = (await attachments.mayAccessParent(tx, principal, finding.record.type, finding.record.id)) !== false;
+      memo.set(key, open);
+    }
+    if (open) kept.push(finding);
+  }
+  return kept;
 }
 
 /** The reading of a check whose whole question is "does this detector find anything?". */
@@ -155,7 +182,16 @@ const trialBalanceReader: Reader = async ({ tx }) => {
 };
 
 const journalIntegrityReader: Reader = async ({ tx }) => {
-  const issues = await trialBalance.integrityReport(tx);
+  const all = await trialBalance.integrityReport(tx);
+  // `gl_integrity_issue` is a view owned by the database owner, so it names every branch's journals; the viewer is
+  // told only of the ones row-level security lets them read.
+  const references = [...new Set(all.map((issue) => issue.reference))];
+  const readable = new Set<string>();
+  if (references.length > 0) {
+    const rows = (await tx.execute(sql`select entry_no as "entryNo" from journal_entry where entry_no in (${sql.join(references.map((r) => sql`${r}`), sql`, `)})`)).rows as { entryNo: string }[];
+    for (const row of rows) readable.add(row.entryNo);
+  }
+  const issues = all.filter((issue) => readable.has(issue.reference));
   return readingOf({
     figures: [count('issues', issues.length)],
     // Worded by the Exception Center's detector for the same view (`accounting.gl_integrity`).
@@ -208,22 +244,24 @@ const postingFailuresReader: Reader = (context) => readFindings(context, ['accou
 
 const stockVsGlReader: Reader = async ({ tx, today }) => {
   const figure = await valuation.stockAgainstGl(tx, today);
-  // Stock whose movement has no journal of its own yet sits in the layers and legitimately not in the books; only
-  // what remains after it is taken out is a difference (the Exception Center's rule, `inventory.gl_difference`).
-  const gross = compareAmounts(figure.layersIqd, figure.glIqd);
-  const unexplained = compareAmounts(gross.differenceIqd, figure.provisionalIqd);
-  const items = unexplained.equal
+  // The question the period close and Inventory Checks already ask: do the FIFO layers and the inventory accounts
+  // hold the same value, to the fils. `provisional` — layers whose making movement carries no journal of its own,
+  // such as the layers a container receipt makes out of goods the invoice already booked — is shown beside the
+  // figures and is not subtracted: the accounts already hold that value by the invoice's journal, so taking it
+  // out would invent a difference where there is none.
+  const comparison = compareAmounts(figure.layersIqd, figure.glIqd);
+  const items = comparison.equal
     ? []
     : [
         item(
           'stock_gl_difference',
-          { layersIqd: gross.leftIqd, glIqd: gross.rightIqd, provisionalIqd: figure.provisionalIqd, unexplainedIqd: unexplained.differenceIqd },
+          { layersIqd: comparison.leftIqd, glIqd: comparison.rightIqd, provisionalIqd: figure.provisionalIqd, differenceIqd: comparison.differenceIqd },
           null,
           '/inventory/fifo-valuation',
         ),
       ];
   return readingOf({
-    figures: [amount('stock_layers', gross.leftIqd), amount('stock_accounts', gross.rightIqd), amount('stock_provisional', figure.provisionalIqd), amount('unexplained', unexplained.differenceIqd)],
+    figures: [amount('stock_layers', comparison.leftIqd), amount('stock_accounts', comparison.rightIqd), amount('difference', comparison.differenceIqd), amount('stock_provisional', figure.provisionalIqd)],
     items,
     attention: items.length,
   });

@@ -7201,26 +7201,27 @@
         "crontab": "جدول المهام"
       },
       "object": {
-        "trial_balance": "ميزان المراجعة",
-        "bank_reconciliation": "التسوية البنكية",
-        "bank_account": "الحسابات البنكية",
-        "posting_rule": "ربط الترحيل",
-        "inventory_movement": "فحوص المخزون",
-        "in_transit": "المخزون في الطريق",
-        "ar_invoice": "فواتير المبيعات",
         "ap_invoice": "فواتير المشتريات",
-        "supplier_credit_memo": "أرصدة الموردين الدائنة",
-        "landed_cost_register": "التكاليف الواصلة",
-        "customs_pd": "بيانات الجمارك المسبقة",
-        "shipment_container": "الحاويات",
-        "job": "المهام الخلفية",
-        "whatsapp": "واتساب",
-        "cloud_setting": "إعدادات الملفات السحابية",
-        "system_health": "النسخ الاحتياطي وسلامة النظام",
         "app_user": "المستخدمون",
-        "role": "الأدوار",
+        "ar_invoice": "فواتير المبيعات",
+        "bank_account": "الحسابات البنكية",
+        "bank_reconciliation": "التسوية البنكية",
+        "cloud_setting": "إعدادات الملفات السحابية",
+        "control_center": "مركز التحكم",
+        "customs_pd": "بيانات الجمارك المسبقة",
         "employee": "الموظفون",
-        "control_center": "مركز التحكم"
+        "in_transit": "المخزون في الطريق",
+        "inventory_movement": "فحوص المخزون",
+        "job": "المهام الخلفية",
+        "landed_cost": "التكلفة الواصلة",
+        "landed_cost_register": "التكاليف الواصلة",
+        "posting_rule": "ربط الترحيل",
+        "role": "الأدوار",
+        "shipment_container": "الحاويات",
+        "supplier_credit_memo": "أرصدة الموردين الدائنة",
+        "system_health": "النسخ الاحتياطي وسلامة النظام",
+        "trial_balance": "ميزان المراجعة",
+        "whatsapp": "واتساب"
       },
       "word": {
         "connected": "متصل",
@@ -7248,8 +7249,7 @@
         "found": "المكتشف",
         "stock_layers": "المخزون بتكلفة الوارد أولًا",
         "stock_accounts": "حسابات المخزون في الدفتر",
-        "stock_provisional": "لم يُرحَّل بعد",
-        "unexplained": "فرق غير مفسَّر",
+        "stock_provisional": "منها ما ليس له قيد خاص",
         "subledger": "الدفتر الفرعي",
         "control_account": "الحساب الرقابي",
         "lines": "أسطر دفتر غير متسقة",
@@ -7286,7 +7286,7 @@
       "item": {
         "trial_balance_difference": "إجمالي المدين {debitIqd} لا يساوي إجمالي الدائن {creditIqd}: الفرق {differenceIqd}.",
         "bank_account_unlinked": "الحساب البنكي أو النقدي {account} يشير إلى حساب في الدفتر لم يعد موجودًا.",
-        "stock_gl_difference": "المخزون بتكلفة الوارد أولًا {layersIqd} بينما تحمل حسابات المخزون {glIqd}؛ وبعد استبعاد {provisionalIqd} لم يُرحَّل بعد يبقى {unexplainedIqd} غير مفسَّر.",
+        "stock_gl_difference": "المخزون بتكلفة الوارد أولًا {layersIqd} بينما تحمل حسابات المخزون {glIqd}؛ والفرق {differenceIqd}.",
         "control_difference": "{account}: الدفتر الفرعي {subledgerIqd}، الدفتر العام {glIqd}، والفرق {differenceIqd}.",
         "statement_above_ageing": "{party}: يُظهر الكشف مستحقًا {ledgerIqd} بينما مجموع المستندات المفتوحة {documentsIqd}؛ و{differenceIqd} بلا مستند خلفه.",
         "transit_shipped_over_ordered": "الاستيراد {importNo}، {item}: خُطّط {shippedQty} في الحاويات بينما المشترى {orderedQty} فقط.",
@@ -7347,7 +7347,7 @@
         },
         "inventory_stock_vs_gl": {
           "title": "المخزون مقابل الدفتر",
-          "what": "المخزون بتكلفة الوارد أولًا يساوي حسابات المخزون بعد استبعاد الحركات التي لم تُرحَّل بعد."
+          "what": "طبقات الوارد أولًا تحمل القيمة نفسها التي تحملها حسابات المخزون في دفتر الأستاذ."
         },
         "inventory_negative_stock": {
           "title": "المخزون السالب",

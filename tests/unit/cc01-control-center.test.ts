@@ -284,7 +284,8 @@ describe('the catalogue of checks', () => {
   });
 
   it('names permission objects someone can hold, and routes the application serves', () => {
-    const objects = new Set(menuObjects());
+    // The menu's own objects, and the few a migration grants and a service checks (the landed cost the detectors ask).
+    const objects = new Set([...menuObjects(), ...NON_MENU_OBJECTS]);
     const routes = screenRoutes();
     for (const check of CHECKS) {
       expect(check.requires.length, check.code).toBeGreaterThan(0);
