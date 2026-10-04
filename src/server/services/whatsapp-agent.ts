@@ -396,7 +396,7 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         const who = `${row?.display_name ?? meta?.userName ?? ctx.principal.userId}${row?.email ? ` <${row.email}>` : ''} · branch ${ctx.branchCode}`;
         const filed = systemGuide.reportIssue({
           who,
-          chat: meta?.chat ? `WhatsApp ${meta.chat.includes('@g.us') ? 'group' : 'chat'}` : 'WhatsApp',
+          chat: !meta?.chat ? 'WhatsApp' : meta.chat === 'terminal' ? 'terminal (ask-noah)' : `WhatsApp ${meta.chat.includes('@g.us') ? 'group' : 'chat'}`,
           issue: { summary, kind, severity, screen: text('screen'), doing: text('doing'), happened: text('happened'), message: text('message'), document: text('document'), note: text('note') },
         });
         return {
