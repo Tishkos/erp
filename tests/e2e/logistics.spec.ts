@@ -101,6 +101,7 @@ test.describe('REQ-LOG-001 · the Logistics module', () => {
     await dialog.getByRole('textbox', { name: 'B/L no.' }).fill(blNo);
     await dialog.getByLabel('B/L date').fill('2026-09-20');
     await dialog.getByLabel('ETA').fill('2026-10-20');
+    await dialog.locator('select[name="port_of_discharge"]').selectOption('PRT-0001');
     await dialog.getByLabel('Container no. 1').fill(first);
     await dialog.getByLabel('ITM-SEED 1').fill('300');
     await dialog.getByLabel('Container no. 2').fill(second);
