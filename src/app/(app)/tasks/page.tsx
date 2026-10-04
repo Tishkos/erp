@@ -53,12 +53,11 @@ export default async function TasksPage({ searchParams }: { searchParams: Search
   const found = await withCurrentUser(async (tx) => {
     const showTeam = await tasks.leadsAnyone(tx, reader);
     const view = tasks.isView(viewParam) && (viewParam !== 'team' || showTeam) ? viewParam : 'mine';
-    const [result, counts, workload, choices] = await Promise.all([
-      tasks.listForScreen(tx, reader, { view, bucket: bucketParam || null, search: outcome.q, page: outcome.page }),
-      tasks.countsFor(tx, reader, view),
-      view === 'team' ? tasks.teamWorkload(tx, reader) : Promise.resolve([]),
-      mayCreate ? tasks.assignmentChoices(tx, reader, context.scope.branchCode) : Promise.resolve([]),
-    ]);
+    // One after the other: the transaction is one connection and answers one question at a time.
+    const result = await tasks.listForScreen(tx, reader, { view, bucket: bucketParam || null, search: outcome.q, page: outcome.page });
+    const counts = await tasks.countsFor(tx, reader, view);
+    const workload = view === 'team' ? await tasks.teamWorkload(tx, reader) : [];
+    const choices = mayCreate ? await tasks.assignmentChoices(tx, reader, context.scope.branchCode) : [];
     return { showTeam, view, result, counts, workload, choices };
   });
   const { showTeam, view, result, counts, workload, choices } = found;

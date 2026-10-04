@@ -790,7 +790,9 @@ const toBrief = (r: Omit<TaskBrief, 'href'>): TaskBrief => ({ ...r, href: `/task
 export async function dashboardSummary(tx: Tx, ctx: Reader, today = businessToday()): Promise<TaskSummary> {
   if (!can(ctx.principal, 'view', PERMISSION_OBJECT)) return EMPTY_SUMMARY(today);
   const me = ctx.principal.userId;
-  const [mine, assigned] = await Promise.all([countsFor(tx, ctx, 'mine', today), countsFor(tx, ctx, 'assigned', today)]);
+  // One after the other: a transaction is one connection, and it answers one question at a time.
+  const mine = await countsFor(tx, ctx, 'mine', today);
+  const assigned = await countsFor(tx, ctx, 'assigned', today);
   const team = (await leadsAnyone(tx, ctx)) ? await countsFor(tx, ctx, 'team', today) : null;
   const waiting = await tx.execute(sql`select count(*)::int as n from task t where t.assigned_by = ${me}::uuid and t.status = 'submitted'`);
   const next = await tx.execute(sql`
