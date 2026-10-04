@@ -287,6 +287,8 @@ describe('every screen has one address', () => {
       '/payables/advances',
       '/payables/containers',
       '/payables/contracts',
+      // REQ-PAY-001 PAY8 — supplier credit and debit notes.
+      '/payables/credit-memos',
       '/payables/goods-receipts',
       // Operations build — block 4's Purchase Invoice.
       '/payables/goods-returns',
@@ -301,10 +303,14 @@ describe('every screen has one address', () => {
       '/payables/pd',
       '/payables/pd/asycuda',
       '/payables/purchase-orders',
+      // REQ-PAY-001 PAY11 — the supplier reconciliation.
+      '/payables/reconciliation',
       '/payables/service-receipts',
       // REQ-AP-001 Stage 5 — B/Ls.
       '/payables/shipments',
       // Block 6 — Payments and Receipts.
+      // REQ-PAY-001 PAY10 — the supplier's credits.
+      '/payables/supplier-credits',
       '/payables/supplier-payments',
       // Blocks 2 and 3 — the Account Statement, one screen on each side.
       '/payables/supplier-statements',

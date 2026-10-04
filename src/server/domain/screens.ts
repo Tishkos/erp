@@ -491,6 +491,11 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/treasury/loans',
   // REQ-AP-001 Stage 8 — the sheet import and its sign-off (§24.3).
   '/administration/payables-migration',
+  // REQ-PAY-001 PAY8 / PAY10 / PAY11 — supplier credit and debit notes, the
+  // supplier's credits, and the supplier reconciliation (2026-10-04).
+  '/payables/credit-memos',
+  '/payables/supplier-credits',
+  '/payables/reconciliation',
   // REQ-IMPROVE-001 Stage 1 — the two screens the menu promised (OP-4).
   '/administration/jobs',
   '/administration/backup-health',

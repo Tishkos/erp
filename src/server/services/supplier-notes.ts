@@ -42,6 +42,7 @@ import {
   businessPartner,
   chartOfAccount,
   goodsReturn,
+  journalEntry,
   supplierCreditApplication,
   supplierCreditMemo,
 } from '../db/schema';
@@ -704,6 +705,11 @@ export async function viewCreditByNo(tx: Tx, memoNo: string) {
     .innerJoin(apInvoice, eq(apInvoice.id, supplierCreditApplication.apInvoiceId))
     .where(eq(supplierCreditApplication.supplierCreditMemoId, memo.id))
     .orderBy(supplierCreditApplication.appliedAt);
+  const entryNoOf = async (id: string | null) => {
+    if (!id) return null;
+    const [entry] = await tx.select({ entryNo: journalEntry.entryNo }).from(journalEntry).where(eq(journalEntry.id, id)).limit(1);
+    return entry?.entryNo ?? null;
+  };
   return {
     memo,
     invoice: invoice ?? null,
@@ -712,6 +718,8 @@ export async function viewCreditByNo(tx: Tx, memoNo: string) {
     account: account ?? null,
     unappliedIqd: dec(memo.amountIqd) - dec(memo.allocatedAmountIqd),
     applications,
+    entryNo: await entryNoOf(memo.journalEntryId),
+    reversalEntryNo: await entryNoOf(memo.reversalJournalEntryId),
     raisedBy: names.get(memo.createdBy) ?? null,
     approvedBy: memo.approvedBy ? (names.get(memo.approvedBy) ?? null) : null,
     postedBy: memo.postedBy ? (names.get(memo.postedBy) ?? null) : null,
@@ -764,4 +772,42 @@ export async function debitNotesFor(tx: Tx, apInvoiceId: string) {
     .from(apInvoice)
     .where(eq(apInvoice.adjustsInvoiceId, apInvoiceId))
     .orderBy(apInvoice.invoiceDate);
+}
+
+/** One line of what adjusts an invoice: a credit note applied to it, or a debit note raised on it. */
+export interface AdjustmentRow {
+  readonly kind: NoteKind;
+  readonly number: string;
+  readonly noteDate: string;
+  readonly status: string;
+  /** Credit: what of it was put against this invoice. Debit: the note's total. */
+  readonly amountIqd: string;
+}
+
+/**
+ * What adjusts one invoice, for its own page (PAY8/PAY9): every credit note
+ * applied to it (the return's memo included), with the part applied here,
+ * and every debit note raised on it. Live applications only.
+ */
+export async function adjustmentsOf(tx: Tx, apInvoiceId: string): Promise<AdjustmentRow[]> {
+  const credits = await tx
+    .select({
+      number: supplierCreditMemo.memoNo,
+      noteDate: supplierCreditMemo.memoDate,
+      status: supplierCreditMemo.status,
+      amountIqd: supplierCreditApplication.amountIqd,
+    })
+    .from(supplierCreditApplication)
+    .innerJoin(supplierCreditMemo, eq(supplierCreditMemo.id, supplierCreditApplication.supplierCreditMemoId))
+    .where(and(eq(supplierCreditApplication.apInvoiceId, apInvoiceId), isNull(supplierCreditApplication.reversedAt)))
+    .orderBy(supplierCreditMemo.memoDate, supplierCreditMemo.memoNo);
+  const debits = await tx
+    .select({ number: apInvoice.invoiceNo, noteDate: apInvoice.invoiceDate, status: apInvoice.status, amountIqd: apInvoice.totalIqd })
+    .from(apInvoice)
+    .where(eq(apInvoice.adjustsInvoiceId, apInvoiceId))
+    .orderBy(apInvoice.invoiceDate, apInvoice.invoiceNo);
+  return [
+    ...credits.map((row) => ({ ...row, kind: 'credit' as const })),
+    ...debits.map((row) => ({ ...row, kind: 'debit' as const })),
+  ];
 }

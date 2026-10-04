@@ -875,11 +875,19 @@ export async function viewByNo(tx: Tx, receiptNo: string) {
         .from(purchaseOrderLine)
         .where(inArray(purchaseOrderLine.id, orderLineIds))
     : [];
+  const [supplier] = order?.supplierId
+    ? await tx
+        .select({ code: businessPartner.code, legalName: businessPartner.legalName })
+        .from(businessPartner)
+        .where(eq(businessPartner.id, order.supplierId))
+        .limit(1)
+    : [];
   return {
     receipt,
     lines,
     orderNo: order?.orderNo ?? null,
     supplierId: order?.supplierId ?? null,
+    supplier: supplier ?? null,
     orderLines: new Map(ordered.map((row) => [row.id, row])),
   };
 }

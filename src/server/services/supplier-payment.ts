@@ -1077,13 +1077,15 @@ export async function partiesOf(tx: Tx, supplierPaymentId: string) {
       supplierName: businessPartner.legalName,
       bankCode: bankCashAccount.code,
       bankName: bankCashAccount.name,
+      // PAY3 — which profile the account links to (bank or cash).
+      accountType: bankCashAccount.accountType,
     })
     .from(supplierPayment)
     .leftJoin(businessPartner, eq(businessPartner.id, supplierPayment.supplierId))
     .leftJoin(bankCashAccount, eq(bankCashAccount.id, supplierPayment.bankCashAccountId))
     .where(eq(supplierPayment.id, supplierPaymentId))
     .limit(1);
-  return row ?? { supplierCode: null, supplierName: null, bankCode: null, bankName: null };
+  return row ?? { supplierCode: null, supplierName: null, bankCode: null, bankName: null, accountType: null };
 }
 
 /** The invoices this payment settles, with what it put against each. Live allocations only. */

@@ -3105,6 +3105,7 @@
       "confirm_before_cut_over_note": "For an application migrated from the sheet whose money left before the cut-over: the SWIFT date and reference from the bank’s copy are recorded and nothing is posted — that payment is already in the books the ERP opened with. Money that left after the cut-over is confirmed with the button beside this one, which posts it.",
       "exchange_open": "Fully paid in its currency; in dinars its invoices still owe {owed} and its payments are {over} over them. That is the exchange difference: it is booked once the exchange gain and loss are mapped on Posting Mappings.",
       "exchange_settle": "Settle exchange difference",
+      "meaning": "A payment application is the request to the bank or cashier to pay. The allocation to invoices is kept on the supplier payment its confirmation creates.",
       "amount_part_hint": "Any part of it. {remaining} is still owed — pay 20% with the order and the rest against the bill of lading if that is the deal, and raise another application for each part. Leave it empty to ask for all of it."
     },
     "supplier_advances": {
@@ -5563,7 +5564,9 @@
       "nothing_owed": "This supplier owes nothing on an open invoice in this branch; the credit stays on the account.",
       "record_title": "Supplier credit note",
       "debit_opens_invoice": "A debit note is a purchase invoice; it opens there.",
-      "notes": "Notes"
+      "notes": "Notes",
+      "journal": "Journal entry",
+      "reversal_journal": "Reversal entry"
     },
     "supplier_credits": {
       "title": "Supplier Credits",
@@ -5618,11 +5621,17 @@
       "by_supplier_title": "By supplier",
       "open_documents": "Open invoices",
       "no_suppliers": "No supplier has a balance or an open invoice.",
-      "open_statement": "Statement"
+      "open_statement": "Statement",
+      "as_of": "As of",
+      "filter": "Show"
     },
     "payables_record": {
       "notes": "Notes",
-      "supplier_profile": "Supplier profile"
+      "supplier_profile": "Supplier profile",
+      "allocation_note": "Allocation to invoices is recorded here, on the supplier payment. A payment application is the request to the bank; the allocation is never kept there.",
+      "no_allocations": "Not put against any invoice yet.",
+      "adjustments": "Credit and debit notes on this invoice",
+      "no_adjustments": "No credit or debit note adjusts this invoice."
     },
     "record_notes": {
       "notes": "Notes",

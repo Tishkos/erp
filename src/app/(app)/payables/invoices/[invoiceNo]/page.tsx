@@ -4,14 +4,10 @@ import Link from 'next/link';
 import { AdminPage, Field, Flash, Form, Grid, Select, admin as s, Submit, SubmitRow } from '@/components/admin';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
-import { RecordHistory } from '@/components/admin/history';
 import { InvoiceSettlement } from '@/components/admin/invoice-settlement';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
-import { Attachments } from '@/components/admin/attachments';
-import * as attachmentsService from '@/server/services/attachments';
-import { AttachmentsButton, HistoryButton, NotesButton } from '@/components/admin/icon-dialog';
-import { ExportIcon } from '@/components/print/export-menu';
+import { ProfileLink } from '@/components/admin/profile-link';
 import { Denied } from '@/components/denied';
 import { ExportMenu } from '@/components/print/export-menu';
 import { PrintSheet } from '@/components/print/print-sheet';
@@ -28,7 +24,9 @@ import * as warehouses from '@/server/services/warehouses';
 import * as expenses from '@/server/services/expenses';
 import * as bankCash from '@/server/services/bank-cash-accounts';
 import * as payables from '@/server/services/payables';
-import { addInvoiceNoteAction, attachToInvoice, invoiceLineAvailability, markPaidAction, postApInvoice, removeApInvoiceLine, reverseApInvoice, saveApInvoiceAccounts, saveApInvoiceLine, setDueDateAction, submitApInvoice } from '../actions';
+import { invoiceLineAvailability, markPaidAction, postApInvoice, removeApInvoiceLine, reverseApInvoice, saveApInvoiceAccounts, saveApInvoiceLine, setDueDateAction, submitApInvoice } from '../actions';
+import * as supplierNotes from '@/server/services/supplier-notes';
+import { PurchaseDoors, readDoors } from '../../record-doors';
 import { businessToday } from '@/server/domain/business-date';
 import { MONEY_SCALE, parseDecimal, RATE_SCALE, toDecimalString, toIqd } from '@/server/domain/money';
 import { advanceOf } from '@/server/domain/payment-applications';
@@ -96,9 +94,13 @@ export default async function ApInvoicePage({
       document.invoice.status === 'draft' && document.invoice.purchaseOrderId === null;
     return {
       document,
-      // D12 / D13 — the notes, the accounts a payment may leave from, and
-      // the import application behind this invoice, if any.
-      notes: await expenses.notesOf(tx, document.invoice.id),
+      // The four doors' reads (notes from the trail, the files), and the
+      // credit and debit notes that adjust this invoice (PAY8/PAY9).
+      doors: await readDoors(tx, principal, { object: ap.PERMISSION_OBJECT, recordId: document.invoice.id }),
+      adjustments: await supplierNotes.adjustmentsOf(tx, document.invoice.id),
+      adjusts: document.invoice.adjustsInvoiceId ? await ap.view(tx, document.invoice.adjustsInvoiceId).then((seen) => seen.invoice.invoiceNo).catch(() => null) : null,
+      // D12 / D13 — the accounts a payment may leave from, and the import
+      // application behind this invoice, if any.
       categoryName: document.invoice.expenseCategoryCode
         ? ((await expenses.categories(tx)).find((c) => c.code === document.invoice.expenseCategoryCode)
             ?.name ?? document.invoice.expenseCategoryCode)
@@ -237,11 +239,7 @@ export default async function ApInvoicePage({
     can(principal, 'post', 'supplier_payment');
   const importApplication = found.importApplication;
 
-  // The paperwork: how many there are, and whether this person may add one.
-  const attached = await withCurrentUser((tx) =>
-    attachmentsService.currentFor(tx, ap.PERMISSION_OBJECT, invoice.id),
-  );
-  const mayAttach = can(context.principal, 'create', 'attachment');
+  const self = `/payables/invoices/${encodeURIComponent(invoice.invoiceNo)}`;
 
   /*
    * The advance, by `advanceOf` — the same arithmetic the posting uses to
@@ -286,8 +284,18 @@ export default async function ApInvoicePage({
         ]
       : []),
     { label: column('status'), value: status(invoice.status), status: invoice.status },
-    { label: column('supplier_code'), value: <bdi dir="ltr">{supplier?.code ?? '—'}</bdi> },
-    { label: column('supplier_name'), value: <bdi dir="auto">{supplier?.name ?? '—'}</bdi> },
+    // The supplier, as a link to its profile — "like bank loans" (2026-10-04).
+    { label: column('supplier_code'), value: <ProfileLink code={supplier?.code} kind="supplier">{supplier?.code ?? '—'}</ProfileLink> },
+    {
+      label: column('supplier_name'),
+      value: (
+        <ProfileLink code={supplier?.code} dir="auto" kind="supplier">
+          {supplier?.name ?? '—'}
+        </ProfileLink>
+      ),
+    },
+    // PAY9 — a debit note names the invoice it adjusts.
+    ...(found.adjusts ? [{ label: t('supplier_notes.invoice'), value: <ProfileLink code={found.adjusts} kind="purchase_invoice" /> }] : []),
     {
       label: column('posting_date'),
       value: <bdi dir="ltr">{formatBusinessDate(invoice.invoiceDate, locale as Locale)}</bdi>,
@@ -443,80 +451,15 @@ export default async function ApInvoicePage({
           </>
         }
         titleActions={
-          <>
-            {/* Printer, paperclip, notes, clock — the printer first, as asked
-                (2026-10-03). The document is what is left underneath. */}
-            <ExportIcon
-              exportKey="purchase_invoice"
-              id={invoice.invoiceNo}
-              title={`${page('ap_invoice')} ${invoice.invoiceNo}`}
-            />
-            <AttachmentsButton
-              closeLabel={t('close')}
-              count={attached.length}
-              label={t('attachments.title')}
-              title={t('attachments.title')}
-            >
-              <Attachments
-                action={attachToInvoice}
-                hidden={{ invoice_no: invoice.invoiceNo }}
-                mayAttach={mayAttach}
-                objectId={invoice.id}
-                objectType={ap.PERMISSION_OBJECT}
-              />
-            </AttachmentsButton>
-            <NotesButton
-              closeLabel={t('close')}
-              count={found.notes.length}
-              label={x('notes')}
-              title={x('notes')}
-            >
-              <div className={s.sapTableWrap}>
-                <table className={s.sapTable}>
-                  <thead>
-                    <tr>
-                      <th scope="col">{x('note_when')}</th>
-                      <th scope="col">{x('note_who')}</th>
-                      <th scope="col">{x('note')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {found.notes.length === 0 ? (
-                      <tr>
-                        <td className={s.sapEmptyRow} colSpan={3}>
-                          {x('no_notes')}
-                        </td>
-                      </tr>
-                    ) : null}
-                    {found.notes.map((note) => (
-                      <tr key={note.id}>
-                        <td>
-                          <bdi dir="ltr">{note.createdAt.slice(0, 16)}</bdi>
-                        </td>
-                        <td>
-                          <bdi dir="auto">{note.author ?? '—'}</bdi>
-                        </td>
-                        <td>
-                          <bdi dir="auto">{note.note}</bdi>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <Form action={addInvoiceNoteAction}>
-                <input name="id" type="hidden" value={invoice.id} />
-                <input name="invoice_no" type="hidden" value={invoice.invoiceNo} />
-                <Field hint={x('note_hint')} label={x('add_note')} name="note" required wide />
-                <SubmitRow>
-                  <Submit label={x('add_note')} small tone="secondary" />
-                </SubmitRow>
-              </Form>
-            </NotesButton>
-            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
-              <RecordHistory objectId={invoice.id} objectType={ap.PERMISSION_OBJECT} />
-            </HistoryButton>
-          </>
+          <PurchaseDoors
+            doors={found.doors}
+            exportId={invoice.invoiceNo}
+            exportKey="purchase_invoice"
+            object={ap.PERMISSION_OBJECT}
+            recordId={invoice.id}
+            returnTo={self}
+            title={`${page('ap_invoice')} ${invoice.invoiceNo}`}
+          />
         }
         documentType={page('ap_invoice')}
         fields={fields}
@@ -655,6 +598,60 @@ export default async function ApInvoicePage({
           service the Receivables and Payables reports use, so an invoice and
           the report listing it cannot disagree about its own due date. */}
       <InvoiceSettlement invoiceNo={invoice.invoiceNo} side="supplier" />
+
+      {/* PAY8/PAY9 — what adjusts this invoice: credit notes applied to it,
+          debit notes raised on it. Each is its own record; this is the index. */}
+      <section aria-labelledby="ap-invoice-adjustments-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="ap-invoice-adjustments-title">
+            <span>{t('payables_record.adjustments')}</span>
+            <span className={s.sapTitleMeta}>{t('payables_orders.rows', { count: found.adjustments.length })}</span>
+          </h2>
+          <div className={s.sapTableWrap}>
+            <table className={s.sapTable}>
+              <thead>
+                <tr>
+                  <th scope="col">{t('supplier_notes.col_kind')}</th>
+                  <th scope="col">{t('supplier_notes.col_no')}</th>
+                  <th scope="col">{column('date')}</th>
+                  <th scope="col">{column('status')}</th>
+                  <th className={s.sapNum} scope="col">
+                    {t('supplier_notes.amount')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {found.adjustments.length === 0 ? (
+                  <tr>
+                    <td className={s.sapEmptyRow} colSpan={5}>
+                      {t('payables_record.no_adjustments')}
+                    </td>
+                  </tr>
+                ) : null}
+                {found.adjustments.map((row) => (
+                  <tr key={`${row.kind}-${row.number}`}>
+                    <td>{t(`supplier_notes.kind_${row.kind}`)}</td>
+                    <td className={s.sapAccountCell}>
+                      <ProfileLink code={row.number} kind={row.kind === 'credit' ? 'supplier_credit_note' : 'purchase_invoice'} />
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{formatBusinessDate(row.noteDate, locale as Locale)}</bdi>
+                    </td>
+                    <td>
+                      <span className={`status status--${row.status}`} data-status={row.status}>
+                        {status(row.status)}
+                      </span>
+                    </td>
+                    <td className={s.sapNum}>
+                      <bdi dir="ltr">{money(row.amountIqd)}</bdi>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
 
       {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>

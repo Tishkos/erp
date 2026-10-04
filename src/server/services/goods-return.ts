@@ -1241,7 +1241,33 @@ export async function viewByNo(tx: Tx, returnNo: string) {
     .where(eq(goodsReturn.returnNo, returnNo))
     .limit(1);
   if (!row) return null;
-  return load(tx, row.id);
+  const found = await load(tx, row.id);
+  // REQ-PAY-001 PAY3 — the parties and documents the record links to: the
+  // supplier's profile, the invoice or receipt it was raised against, and
+  // the credit memo it produced.
+  const [supplier] = await tx
+    .select({ code: businessPartner.code, legalName: businessPartner.legalName })
+    .from(businessPartner)
+    .where(eq(businessPartner.id, found.document.supplierId))
+    .limit(1);
+  const [invoice] = found.document.apInvoiceId
+    ? await tx.select({ invoiceNo: apInvoice.invoiceNo }).from(apInvoice).where(eq(apInvoice.id, found.document.apInvoiceId)).limit(1)
+    : [];
+  const [receipt] = found.document.goodsReceiptId
+    ? await tx.select({ receiptNo: goodsReceipt.receiptNo }).from(goodsReceipt).where(eq(goodsReceipt.id, found.document.goodsReceiptId)).limit(1)
+    : [];
+  const [memo] = await tx
+    .select({ memoNo: supplierCreditMemo.memoNo, status: supplierCreditMemo.status })
+    .from(supplierCreditMemo)
+    .where(eq(supplierCreditMemo.goodsReturnId, found.document.id))
+    .limit(1);
+  return {
+    ...found,
+    supplier: supplier ?? null,
+    invoiceNo: invoice?.invoiceNo ?? null,
+    receiptNo: receipt?.receiptNo ?? null,
+    creditMemo: memo ?? null,
+  };
 }
 
 /**

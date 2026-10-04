@@ -254,7 +254,7 @@ describe('PAY4 · each purchase record prints, exports and reads back its own fi
     expect(out.pdf.text).toContain('10,000');
     const arabic = await take(world.manager, 'supplier_credit_note', 'pdf', doc.note!, 'ar');
     expect(arabic!.status).toBe(200);
-    expect(readPdf(arabic!.body).unmappedGlyphs).toBe(0);
+    expect(readPdf(arabic!.status === 200 ? arabic!.body : Buffer.alloc(0)).unmappedGlyphs).toBe(0);
   });
 });
 

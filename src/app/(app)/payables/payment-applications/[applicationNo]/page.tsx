@@ -15,8 +15,7 @@ import {
 } from '@/components/admin';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
-import { Attachments } from '@/components/admin/attachments';
-import { RecordHistory } from '@/components/admin/history';
+import { ProfileLink } from '@/components/admin/profile-link';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -28,7 +27,6 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as applications from '@/server/services/payment-applications';
 import {
   approveApplication,
-  attachToApplication,
   cancelApplication,
   confirmApplication,
   confirmBeforeCutOver,
@@ -40,6 +38,7 @@ import { STATUS_CHIP, statusKey } from '../status';
 import { windowTone } from '../../window-tone';
 import { businessToday } from '@/server/domain/business-date';
 import { isNotFoundError } from '@/server/not-found';
+import { PurchaseDoors, readDoors } from '../../record-doors';
 
 /**
  * One payment application — REQ-AP-001 §21.7.
@@ -87,7 +86,8 @@ export default async function PaymentApplicationPage({
 
   const found = await withCurrentUser(async (tx) => {
     try {
-      return await applications.view(tx, applicationNo);
+      const seen = await applications.view(tx, applicationNo);
+      return { ...seen, doors: await readDoors(tx, principal, { object: applications.PERMISSION_OBJECT, recordId: seen.application.id }) };
     } catch (error) {
       // E1 — a missing record is a 404; anything else reaches the error boundary.
       if (isNotFoundError(error)) return null;
@@ -96,7 +96,9 @@ export default async function PaymentApplicationPage({
   });
   if (!found) notFound();
 
-  const { application: row, method, account, accountBank, payee, instalment, people, checks } = found;
+  const { application: row, method, account, accountBank, payee, instalment, people, checks, doors } = found;
+  const self = `/payables/payment-applications/${encodeURIComponent(row.applicationNo)}`;
+  const accountKind = account.accountType === 'cash' ? 'cash_account' : 'bank_account';
   const kind = method.kind;
   const money = (amount: string, currency: string = row.currency) => formatMoney(amount, currency, locale as Locale);
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
@@ -154,16 +156,23 @@ export default async function PaymentApplicationPage({
     },
     {
       label: t('col_supplier'),
-      value: <bdi dir="auto">{found.supplier ? `${found.supplier.name} (${found.supplier.code})` : '—'}</bdi>,
+      value: <ProfileLink code={found.supplier?.code} dir="auto" kind="supplier" name={found.supplier?.name ?? null} />,
     },
     { label: t('col_method'), value: <bdi dir="auto">{method.name}</bdi> },
     {
       label: t('col_account'),
       value: (
-        <bdi dir="auto">
-          {account.code} · {account.name}
-          {accountBank ? ` · ${accountBank.name}` : ''}
-        </bdi>
+        <>
+          <ProfileLink code={account.code} dir="auto" kind={accountKind} name={account.name} />
+          {accountBank ? (
+            <>
+              {' · '}
+              <ProfileLink code={accountBank.code} dir="auto" kind="bank">
+                {accountBank.name}
+              </ProfileLink>
+            </>
+          ) : null}
+        </>
       ),
     },
     {
@@ -295,6 +304,21 @@ export default async function PaymentApplicationPage({
     >
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
 
+      {/* Owner's decision 4.6 (2026-10-04): a payment application is the request
+          to the bank; the allocation to invoices lives on the supplier payment
+          its confirmation creates. Said on the record, so nobody looks for it here. */}
+      <p className={s.sapNote}>
+        {t('meaning')}
+        {documentHref && found.documentNo ? (
+          <>
+            {' '}
+            <Link className={s.sapLink} href={documentHref}>
+              <bdi dir="ltr">{found.documentNo}</bdi>
+            </Link>
+          </>
+        ) : null}
+      </p>
+
       <DocumentWindow
         actions={
           <>
@@ -417,11 +441,20 @@ export default async function PaymentApplicationPage({
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={admin('history')}
         documentType={t('document_type')}
         fields={fields}
         id="payment-application-document"
+        titleActions={
+          <PurchaseDoors
+            doors={doors}
+            exportId={row.applicationNo}
+            exportKey="payment_application"
+            object={applications.PERMISSION_OBJECT}
+            recordId={row.id}
+            returnTo={self}
+            title={`${t('document_type')} ${row.applicationNo}`}
+          />
+        }
         linesCount={showChecks ? checks.length : path.length}
         linesTitle={showChecks ? t('checks_title') : t('path_title')}
         number={row.applicationNo}
@@ -491,19 +524,6 @@ export default async function PaymentApplicationPage({
         )}
       </DocumentWindow>
 
-      {/* ── The SWIFT copy, the voucher, the bank's letter ───────────── */}
-      <section aria-label={t('attachments')} className={s.sapDoc}>
-        <div className={s.sapWindow}>
-          <Attachments
-            action={attachToApplication}
-            hidden={{ application_no: row.applicationNo }}
-            mayAttach={can(principal, 'edit_draft', applications.PERMISSION_OBJECT)}
-            objectId={row.id}
-            objectType={applications.PERMISSION_OBJECT}
-          />
-        </div>
-      </section>
-      <RecordHistory objectId={row.id} objectType={applications.PERMISSION_OBJECT} />
     </AdminPage>
   );
 }
