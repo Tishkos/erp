@@ -59,6 +59,8 @@ async function main(): Promise<void> {
   console.log('');
   const tools = (reply.detail.tools as readonly string[] | undefined) ?? [];
   console.log(`— ${reply.locale}, ${Math.round((Date.now() - started) / 1000)}s, tools: ${tools.length > 0 ? tools.join(' → ') : 'none'}`);
+  const trace = (reply.detail.trace as ReadonlyArray<{ tool: string; args: string; ms: number; ok: boolean; said?: string }> | undefined) ?? [];
+  for (const step of trace) console.log(`   ${step.ok ? '✓' : '✗'} ${step.tool} ${step.args} · ${step.ms}ms${step.ok ? '' : ` · ${(step.said ?? '').replace(/\s+/g, ' ').slice(0, 200)}`}`);
 }
 
 main()

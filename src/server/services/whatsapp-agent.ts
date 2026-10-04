@@ -18,6 +18,7 @@ import * as ratesService from './exchange-rates';
 import * as itemsService from './items';
 import * as openingStockService from './opening-stock';
 import * as doService from './whatsapp-do';
+import * as insight from './whatsapp-insight';
 import * as sqlService from './whatsapp-sql';
 import * as systemGuide from './system-guide';
 import { runAgent, type AgentClient, type AgentResult, type PriorTurn, type ToolOutcome } from '../domain/whatsapp-agent';
@@ -382,6 +383,23 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
             .join(chr10()),
         };
       }
+      case 'document_story':
+        return { text: await insight.documentStory(ctx.tx, ctx.principal, String(args.no ?? ''), systemGuide.appUrl()) };
+      case 'activity_log':
+        return {
+          text: await insight.activityLog(ctx.tx, ctx.principal, {
+            ...(typeof args.user === 'string' ? { user: args.user } : {}),
+            ...(typeof args.document === 'string' ? { document: args.document } : {}),
+            ...(typeof args.action === 'string' ? { action: args.action } : {}),
+            ...(typeof args.object === 'string' ? { object: args.object } : {}),
+            ...(typeof args.outcome === 'string' ? { outcome: args.outcome } : {}),
+            ...(typeof args.from === 'string' ? { from: args.from } : {}),
+            ...(typeof args.to === 'string' ? { to: args.to } : {}),
+            ...(typeof args.limit === 'number' ? { limit: args.limit } : {}),
+          }),
+        };
+      case 'system_status':
+        return { text: await insight.systemStatus(ctx.tx, ctx.principal) };
       case 'accounts': {
         const no = lacks('chart_of_account');
         if (no) return no;
@@ -433,8 +451,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
       case 'document_status':
         return { text: await doService.describeDocument(ctx.tx, ctx.principal, String(args.no ?? ''), systemGuide.appUrl()) };
       case 'show_screen': {
-        const view = ['menu', 'screen', 'form', 'record', 'all'].includes(String(args.view)) ? (args.view as systemGuide.ShotView | 'all') : 'all';
-        const shown = systemGuide.screenPictures(ctx.principal, ctx.locale, String(args.screen ?? ''), view);
+        const view = ['menu', 'screen', 'form', 'record', 'dialog', 'all'].includes(String(args.view)) ? (args.view as systemGuide.ShotView | 'all') : 'all';
+        const shown = systemGuide.screenPictures(ctx.principal, ctx.locale, String(args.screen ?? ''), view, typeof args.dialog === 'string' ? args.dialog : null);
         return { text: shown.text, ...(shown.images.length > 0 ? { images: shown.images } : {}) };
       }
       case 'screens':

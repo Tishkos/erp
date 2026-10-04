@@ -58,8 +58,9 @@ export function screens(principal: Principal, search?: string | null): string {
 // The pictures
 // ---------------------------------------------------------------------------
 
-export type ShotView = 'menu' | 'screen' | 'form' | 'record';
-export const SHOT_VIEWS: readonly ShotView[] = ['menu', 'screen', 'form', 'record'];
+export type ShotView = 'menu' | 'screen' | 'form' | 'record' | 'dialog';
+/** One picture each per screen; a screen may have several `dialog` pictures beside them. */
+export const SHOT_VIEWS: readonly Exclude<ShotView, 'dialog'>[] = ['menu', 'screen', 'form', 'record'];
 
 /** One numbered pointer drawn on a picture, and what it points at. */
 interface Mark {
@@ -67,6 +68,10 @@ interface Mark {
   readonly label: string;
   readonly kind: string;
   readonly required?: boolean;
+  /** A dropdown's choices, as the screen lists them. */
+  readonly options?: readonly string[];
+  /** What the screen itself says under the field. */
+  readonly hint?: string;
 }
 
 interface Shot {
@@ -78,6 +83,10 @@ interface Shot {
   readonly ringed?: boolean;
   /** The red numbers on the picture, in order. */
   readonly marks?: readonly Mark[];
+  /** A dialog's picture: where it opens from, its name in this language, and a key that is the same in both. */
+  readonly on?: 'screen' | 'record';
+  readonly name?: string;
+  readonly key?: string;
 }
 
 /** Where `scripts/guide/make-screens.ts` put them (copied to the server's `var/`). */
@@ -105,6 +114,7 @@ const VIEW_WORDS: Readonly<Record<ShotView, { readonly en: string; readonly ar: 
   screen: { en: 'the screen as it opens', ar: 'الشاشة كما تظهر عند فتحها' },
   form: { en: 'the form that opens — the fields to fill', ar: 'النموذج الذي يُفتح — الحقول المطلوب تعبئتها' },
   record: { en: 'one record opened — its status, its buttons and its doors', ar: 'سجل مفتوح — حالته وأزراره وأبوابه' },
+  dialog: { en: 'the window that opens', ar: 'النافذة التي تُفتح' },
 };
 
 /** A screen whose "New …" button is ringed in its picture says so under it. */
@@ -161,7 +171,11 @@ const KIND_WORDS: Readonly<Record<string, string>> = {
 function marksLine(marks: readonly Mark[] | undefined): string {
   if (!marks || marks.length === 0) return '';
   return marks
-    .map((mark) => `${mark.n} = ${mark.label} (${KIND_WORDS[mark.kind] ?? mark.kind}${mark.required ? ', required' : ''})`)
+    .map((mark) => {
+      const choices = mark.options && mark.options.length > 0 ? `; its choices: ${mark.options.join(' / ')}` : '';
+      const hint = mark.hint ? `; the screen says: "${mark.hint}"` : '';
+      return `${mark.n} = ${mark.label} (${KIND_WORDS[mark.kind] ?? mark.kind}${mark.required ? ', required' : ''}${choices}${hint})`;
+    })
     .join(' · ');
 }
 
@@ -185,6 +199,7 @@ export function screenPictures(
   locale: 'en' | 'ar',
   asked: string,
   view: ShotView | 'all' = 'all',
+  dialog: string | null = null,
 ): { readonly text: string; readonly images: ReadonlyArray<{ readonly file: string; readonly caption: string }> } {
   const all = shots();
   if (all.length === 0) return { text: 'No pictures are installed on this server. Describe the path in words (the screens tool).', images: [] };
@@ -206,8 +221,40 @@ export function screenPictures(
   const names = entry ? (locale === 'ar' ? entry.ar : entry.en) : null;
   const heading = extra ? (locale === 'ar' ? extra.ar : extra.en) : `${names!.module} → ${names!.heading} → ${names!.screen}`;
 
+  // The windows that open from this screen and from its record, in this language.
+  const dialogs = all.filter((candidate) => candidate.route === route && candidate.locale === locale && candidate.view === 'dialog' && existsSync(join(shotsDir(), candidate.file)));
+  const dialogList = dialogs.map((one) => `"${one.key ?? one.name ?? ''}"${one.name && one.name.toLowerCase() !== (one.key ?? '').replace(/_/g, ' ') ? ` (${one.name})` : ''}${one.on === 'record' ? ' — on an opened record' : ''}`).join(', ');
+
+  if (view === 'dialog') {
+    if (dialogs.length === 0) return { text: `${title} (${route}) has no picture of a dialog. Describe it in words.`, images: [] };
+    const wantedDialog = (dialog ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+    const one =
+      dialogs.length === 1 && !wantedDialog
+        ? dialogs[0]
+        : dialogs.find((candidate) => (candidate.key ?? '').toLowerCase() === wantedDialog) ??
+          dialogs.find((candidate) => wantedDialog !== '' && ((candidate.key ?? '').toLowerCase().includes(wantedDialog) || (candidate.name ?? '').toLowerCase().replace(/[\s-]+/g, '_').includes(wantedDialog)));
+    if (!one) {
+      return {
+        text: `${title} (${route}) has these dialogs: ${dialogList}. Call show_screen again with view "dialog" and dialog set to the one you mean${wantedDialog ? ` — "${dialog}" is not one of them` : ''}.`,
+        images: [],
+      };
+    }
+    const file = join(shotsDir(), one.file);
+    const numbers = marksLine(one.marks);
+    const caption = `${heading}: ${one.name ?? one.key ?? ''} — ${VIEW_WORDS.dialog[locale]}${numbers ? ` — ${NUMBERED_WORDS[locale]}` : ''}`;
+    return {
+      text: [
+        `1 picture of ${title} (${route}) is attached to your answer: the "${one.name ?? one.key}" window, which opens from ${one.on === 'record' ? 'an opened record' : 'the screen'}. Place it at its step: write its tag on a line of its own, and what you write under it is sent as its caption.`,
+        `[picture: ${tagOf(file)}] — ${VIEW_WORDS.dialog.en}.${numbers ? ` The red numbers on it: ${numbers}.` : ' Nothing is numbered on this one.'}`,
+        'Say its number and its name for each thing the person has to use, what it is for, what to put there, and what happens when they press the button that saves.',
+        "It is a picture of a training copy with sample data: the layout is real, the names and figures in it are not the company's.",
+      ].join('\n'),
+      images: [{ file, caption }],
+    };
+  }
+
   // "all" is a how-to: where it is, the screen, the form. A record is asked for by name.
-  const views: ShotView[] = view === 'all' ? (extra ? [...SHOT_VIEWS] : ['menu', 'screen', 'form']) : [view];
+  const views: Exclude<ShotView, 'dialog'>[] = view === 'all' ? (extra ? [...SHOT_VIEWS] : ['menu', 'screen', 'form']) : [view];
   const found = views.flatMap((one) => {
     const shot = all.find((candidate) => candidate.route === route && candidate.locale === locale && candidate.view === one);
     if (!shot) return [];
@@ -236,6 +283,7 @@ export function screenPictures(
       }),
       'For every numbered thing the person has to use, say its number and its name as the picture shows it, then: what it is for, why the system needs it, what to put there (with an example), whether it may be left empty, and what it changes elsewhere — the guide tool has this for each screen. Skip a number that does not matter to what they asked.',
       also.length > 0 ? `This screen also has: ${also.map((one) => `"${one}"`).join(', ')} — ask for it by that view when the task goes there (a "record" is one saved document opened: its status, its action buttons, and the printer / paperclip / notes / history icons).` : '',
+      dialogs.length > 0 ? `It also has pictures of the windows that open from it (view "dialog", dialog = the name): ${dialogList}. Use one when the step is "attach the file", "add a note", "see its history", "print it" or an action that asks for something.` : '',
       "They are pictures of a training copy with sample data: the layout is real, the names and figures in them are not the company's.",
     ]
       .filter((line) => line !== '')

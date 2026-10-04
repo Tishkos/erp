@@ -157,9 +157,34 @@ the e-mail rows are marked `suppressed` and the log says so once per run.
   people in the application and by e-mail. A restart of the bridge is silent.
 * The model is the `agent_model` setting — `claude-opus-5-5`.
 
+## When Noah gets something wrong
+
+Every answer keeps what he did to reach it. On the server:
+
+```
+grep 'inbound from' /var/log/qs-erp/whatsapp-bridge.log | tail -40
+```
+
+shows, per answer, the look-ups in order with their time and what a refused
+one said (never the question or the answer). The same trace, with the
+arguments, is on the message itself — Settings → Administration → WhatsApp →
+the message log, or `whatsapp_message.detail -> 'trace'`.
+
+To ask him the same thing yourself, as that person, and see the trace:
+
+```
+cd /opt/qs-erp-next && npx tsx scripts/ops/ask-noah.ts <email> "<the question>"
+```
+
+What he can read to explain a problem: `document_story` (one document whole —
+lines, journal, stock, history, what it is waiting for), `activity_log` (who
+did what, what was refused and why), `system_status` (health, migrations,
+scheduled jobs, the application's error log). One failed look-up no longer
+ends the question: each runs in its own savepoint.
+
 ## The pictures Noah sends
 
-Noah explains a task as steps with pictures — up to six in one answer, each
+Noah explains a task as steps with pictures — up to eight in one answer, each
 sent with its own step as the caption — in the language of the person who
 asked. Every picture carries red numbers on the things that matter (each field
 of a form, the buttons, the tabs, the search and filters, the table, a record's
@@ -168,7 +193,9 @@ each number: what it is for, why it is needed, what to enter, what it changes.
 
 There are four pictures of a screen — `menu` (where it is, the entry ringed),
 `screen`, `form` (what its New button opens) and `record` (one saved document
-opened) — for **every built screen of the menu**, plus *sign in*, *the top
+opened) — and one of each window that opens from it (`dialog`: attachments,
+notes, history, print, an action that asks for a reason), for **every built
+screen of the menu**, plus *sign in*, *the top
 bar*, *the account menu* and *change password*.
 
 They are not taken when the question is asked: they are made ahead of time

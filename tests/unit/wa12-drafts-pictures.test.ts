@@ -38,13 +38,15 @@ describe('the tools he is offered', () => {
     const show = tool('show_screen');
     expect(show).toBeDefined();
     const schema = show!.input_schema as unknown as { properties: { screen: unknown; view: { enum: string[] } }; required?: string[] };
-    expect(schema.properties.view.enum).toEqual(['menu', 'screen', 'form', 'record', 'all']);
+    expect(schema.properties.view.enum).toEqual(['menu', 'screen', 'form', 'record', 'dialog', 'all']);
     expect(schema.required).toContain('screen');
     // The description is what makes him place a picture at its step.
     expect(show!.description).toMatch(/write the tag on a line of its own/);
     expect(show!.description).toMatch(/every field NUMBERED in red/);
     expect(show!.description).toMatch(/"sign in"/);
-    for (const name of ['document_status', 'accounts', 'exchange_rate']) expect(tool(name), name).toBeDefined();
+    for (const name of ['document_status', 'document_story', 'activity_log', 'system_status', 'accounts', 'exchange_rate']) expect(tool(name), name).toBeDefined();
+    // The one that reads a document whole is the first thing to reach for.
+    expect(tool('document_story')!.description).toMatch(/Use it FIRST whenever a question is about a particular document/);
   });
 
   it('offers a draft of exactly the kinds the service keys, through propose_action and nothing else', () => {
@@ -94,9 +96,9 @@ describe('what the instructions say about them', () => {
 describe('the pictures the loop collects', () => {
   const base = { model: 'fake', userName: 'Baban', locale: 'en' as const, branchCode: 'HQ', today: '2026-10-04' };
 
-  it('hands on each picture once, in order, and no more than six', async () => {
+  it('hands on each picture once, in order, and no more than eight', async () => {
     let round = 0;
-    const script = [{ screen: '/a' }, { screen: '/a' }, { screen: '/b' }, { screen: '/c' }];
+    const script = [{ screen: '/a' }, { screen: '/a' }, { screen: '/b' }, { screen: '/c' }, { screen: '/d' }];
     const client: AgentClient = {
       create: async () => {
         const step = script[round];
@@ -114,8 +116,11 @@ describe('the pictures the loop collects', () => {
         images: ['menu', 'screen', 'form'].map((view) => ({ file: `${String(args.screen)}-${view}.jpg`, caption: view })),
       }),
     });
-    expect(MAX_IMAGES).toBe(6);
-    expect(result.images?.map((image) => image.file)).toEqual(['/a-menu.jpg', '/a-screen.jpg', '/a-form.jpg', '/b-menu.jpg', '/b-screen.jpg', '/b-form.jpg']);
+    expect(MAX_IMAGES).toBe(8);
+    expect(result.images?.map((image) => image.file)).toEqual(['/a-menu.jpg', '/a-screen.jpg', '/a-form.jpg', '/b-menu.jpg', '/b-screen.jpg', '/b-form.jpg', '/c-menu.jpg', '/c-screen.jpg']);
+    // What he did is kept: each look-up, in order, with its time.
+    expect(result.trace?.map((step) => step.tool)).toEqual(['show_screen', 'show_screen', 'show_screen', 'show_screen', 'show_screen']);
+    expect(result.trace?.every((step) => step.ok && typeof step.ms === 'number')).toBe(true);
     expect(result.text).toBe('The ringed entry is the one to click.');
   });
 
@@ -162,7 +167,7 @@ describe('which pictures a person is shown', () => {
         view: 'form',
         file: `${locale}/payables_invoices-form.jpg`,
         marks: [
-          { n: 1, label: locale === 'en' ? 'Supplier' : 'المورد', kind: 'choice', required: true },
+          { n: 1, label: locale === 'en' ? 'Supplier' : 'المورد', kind: 'choice', required: true, options: ['SUP-00001 · Al-Rafidain', 'SUP-00002 · Basra Freight'], hint: locale === 'en' ? 'Who billed you.' : 'من أصدر الفاتورة.' },
           { n: 2, label: locale === 'en' ? 'Invoice date' : 'تاريخ الفاتورة', kind: 'date', required: true },
           { n: 3, label: locale === 'en' ? 'Note' : 'ملاحظة', kind: 'text' },
           { n: 4, label: locale === 'en' ? 'Create' : 'إنشاء', kind: 'button' },
@@ -181,6 +186,20 @@ describe('which pictures a person is shown', () => {
         ],
       });
       put({ route: 'top-bar', locale, view: 'screen', file: `${locale}/top_bar-screen.jpg`, marks: [{ n: 1, label: 'Modules', kind: 'tabs' }] });
+      put({
+        route: '/payables/invoices',
+        locale,
+        view: 'dialog',
+        on: 'record',
+        key: 'attachments',
+        name: locale === 'en' ? 'Attachments' : 'المرفقات',
+        file: `${locale}/payables_invoices-dialog-attachments.jpg`,
+        marks: [
+          { n: 1, label: locale === 'en' ? 'File' : 'الملف', kind: 'file', required: true },
+          { n: 2, label: locale === 'en' ? 'Attach' : 'إرفاق', kind: 'button' },
+        ],
+      });
+      put({ route: '/payables/invoices', locale, view: 'dialog', on: 'record', key: 'audit_log', name: locale === 'en' ? 'Audit log' : 'سجل التدقيق', file: `${locale}/payables_invoices-dialog-audit_log.jpg` });
     }
     // Listed, but the file never arrived: it is left out rather than promised.
     index.push({ route: '/payables/suppliers', locale: 'en', view: 'menu', file: 'en/missing.jpg' });
@@ -218,8 +237,9 @@ describe('which pictures a person is shown', () => {
 
   it('tells him which red number is which field, what kind it is, and whether it is required', () => {
     const shown = screenPictures(principal(), 'en', '/payables/invoices', 'form');
+    // With what the screen itself offers and says: a dropdown's choices, a field's hint.
     expect(shown.text).toContain(
-      'The red numbers on it: 1 = Supplier (a list to choose from, required) · 2 = Invoice date (a date, required) · 3 = Note (a box to type in) · 4 = Create (a button).',
+      'The red numbers on it: 1 = Supplier (a list to choose from, required; its choices: SUP-00001 · Al-Rafidain / SUP-00002 · Basra Freight; the screen says: "Who billed you.") · 2 = Invoice date (a date, required) · 3 = Note (a box to type in) · 4 = Create (a button).',
     );
     expect(shown.text).toMatch(/what it is for, why the system needs it, what to put there \(with an example\), whether it may be left empty, and what it changes elsewhere/);
     expect(shown.images[0]!.caption).toMatch(/the red numbers are explained in the message/);
@@ -233,7 +253,30 @@ describe('which pictures a person is shown', () => {
     expect(tail(shown.images[0]!.file)).toBe('ar/payables_invoices-form.jpg');
     expect(shown.images[0]!.caption).toMatch(/[؀-ۿ]/);
     expect(shown.images[0]!.caption).not.toMatch(/Purchase Invoices/);
-    expect(shown.text).toContain('1 = المورد (a list to choose from, required)');
+    expect(shown.text).toContain('1 = المورد (a list to choose from, required;');
+    expect(shown.text).toContain('the screen says: "من أصدر الفاتورة."');
+  });
+
+  it('has the windows that open from a screen and its record, by a name that is the same in both languages', () => {
+    // A how-to says they exist…
+    const howTo = screenPictures(principal(), 'en', '/payables/invoices');
+    expect(howTo.text).toMatch(/pictures of the windows that open from it \(view "dialog", dialog = the name\): "attachments" — on an opened record, "audit_log" — on an opened record/);
+    // …asked for without a name, he is told which there are…
+    const which = screenPictures(principal(), 'en', '/payables/invoices', 'dialog');
+    expect(which.images).toEqual([]);
+    expect(which.text).toMatch(/has these dialogs: "attachments" — on an opened record, "audit_log"/);
+    // …and by name, the one picture with its numbers, in the asker's language.
+    const en = screenPictures(principal(), 'en', '/payables/invoices', 'dialog', 'Attachments');
+    expect(en.images.map((image) => tail(image.file))).toEqual(['en/payables_invoices-dialog-attachments.jpg']);
+    expect(en.text).toContain('[picture: payables_invoices-dialog-attachments]');
+    expect(en.text).toContain('1 = File (a file to attach, required) · 2 = Attach (a button)');
+    const ar = screenPictures(principal(), 'ar', '/payables/invoices', 'dialog', 'audit log');
+    expect(ar.images.map((image) => tail(image.file))).toEqual(['ar/payables_invoices-dialog-audit_log.jpg']);
+    expect(ar.images[0]!.caption).toMatch(/سجل التدقيق/);
+    expect(screenPictures(principal(), 'en', '/payables/invoices', 'dialog', 'no such window').text).toMatch(/"no such window" is not one of them/);
+    // A screen with none says so; and nobody is shown one of a screen they cannot open.
+    expect(screenPictures(principal(), 'en', 'sign in', 'dialog').text).toMatch(/has no picture of a dialog/);
+    expect(screenPictures(principal({ isSuperUser: false }), 'en', '/payables/invoices', 'dialog', 'attachments').images).toEqual([]);
   });
 
   it('has the way in for everybody: signing in and the top bar, whatever their role', () => {

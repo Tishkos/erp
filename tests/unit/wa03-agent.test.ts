@@ -107,7 +107,7 @@ describe('WA-3 · the tool list', () => {
   it('names each tool once, and covers the books as well as the payables', () => {
     const names = AGENT_TOOLS.map((tool) => tool.name);
     expect(new Set(names).size).toBe(names.length);
-    for (const needed of ['trial_balance', 'open_items', 'stock_valuation', 'approvals_waiting', 'list_warehouses', 'screens', 'guide', 'report_issue', 'reported_issues', 'show_screen', 'document_status']) {
+    for (const needed of ['trial_balance', 'open_items', 'stock_valuation', 'approvals_waiting', 'list_warehouses', 'screens', 'guide', 'report_issue', 'reported_issues', 'show_screen', 'document_status', 'document_story', 'activity_log', 'system_status', 'accounts', 'exchange_rate']) {
       expect(names, needed).toContain(needed);
     }
   });
@@ -272,7 +272,8 @@ describe('WA-3 · the loop', () => {
     };
     const result = await runAgent({ ...base, client: forever, question: 'go on then', runTool: says('again') });
     // Twelve: a how-to reads the guide and the menu before it answers (2026-10-04).
-    expect(result.used.length).toBeLessThanOrEqual(12);
+    // Sixteen since 2026-10-04: reading a document whole and then its neighbours is a longer walk.
+    expect(result.used.length).toBeLessThanOrEqual(16);
     expect(result.text).toMatch(/narrow the question/i);
   });
 

@@ -12,7 +12,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { AI_SILENCERS, AI_TRIGGER, DEFAULT_SETTINGS, triggerOf } from '@domain/whatsapp';
-import { systemPrompt } from '@domain/whatsapp-agent';
+import { runAgent, systemPrompt } from '@domain/whatsapp-agent';
 import { CAPTION_MAX, layOutAnswer, pictureId } from '@domain/whatsapp-pictures';
 
 describe('the trigger', () => {
@@ -212,5 +212,51 @@ describe('an answer laid out in steps', () => {
 
   it('is the answer unchanged when there are no pictures', () => {
     expect(layOutAnswer('The balance is 1,250,000 IQD.', [])).toEqual({ text: 'The balance is 1,250,000 IQD.', parts: [{ text: 'The balance is 1,250,000 IQD.', picture: null }] });
+  });
+});
+
+describe('what he did is kept, so he can be improved', () => {
+  const base = { model: 'fake', userName: 'Baban', locale: 'en' as const, branchCode: 'HQ', today: '2026-10-04' };
+
+  it('records each look-up with its time, and what a refused or failed one said', async () => {
+    let round = 0;
+    const script = [
+      { tool: 'query', input: { sql: 'select bp.name from business_partner bp' } },
+      { tool: 'document_story', input: { no: 'INV-HQ-2026-000001' } },
+      { tool: 'trial_balance', input: {} },
+    ];
+    const result = await runAgent({
+      ...base,
+      client: {
+        create: async () => {
+          const step = script[round];
+          round += 1;
+          if (!step) return { content: [{ type: 'text', text: 'It is approved, not posted.' }] };
+          return { content: [{ type: 'tool_use', id: `t${round}`, name: step.tool, input: step.input }] };
+        },
+      },
+      question: 'why is the customer account empty?',
+      runTool: async (name) => {
+        if (name === 'query') return { text: 'PostgreSQL refused the query: column bp.name does not exist. Nothing else was affected.' };
+        if (name === 'trial_balance') throw new Error('Permission denied: view on journal_entry');
+        return { text: 'INV-HQ-2026-000001 · sales invoice · status: APPROVED' };
+      },
+    });
+    expect(result.trace).toHaveLength(3);
+    expect(result.trace![0]).toMatchObject({ tool: 'query', ok: false, said: expect.stringMatching(/column bp\.name does not exist/) });
+    expect(result.trace![0]!.args).toContain('select bp.name');
+    expect(result.trace![1]).toMatchObject({ tool: 'document_story', ok: true });
+    expect(result.trace![1]).not.toHaveProperty('said');
+    expect(result.trace![2]).toMatchObject({ tool: 'trial_balance', ok: false, said: 'Permission denied: view on journal_entry' });
+    expect(result.text).toBe('It is approved, not posted.');
+  });
+
+  it('is told to read the document before explaining, and never to call the database down over one query', () => {
+    const prompt = systemPrompt({ locale: 'en', userName: 'Baban', branchCode: 'HQ', today: '2026-10-04' });
+    expect(prompt).toMatch(/INVESTIGATE BEFORE YOU ANSWER/);
+    expect(prompt).toMatch(/read it whole with document_story/);
+    expect(prompt).toMatch(/saved or approved but never POSTED/);
+    expect(prompt).toMatch(/Never tell the group the database is down because one query failed/);
+    expect(prompt).toMatch(/activity_log \(outcome problems, their name\)/);
   });
 });

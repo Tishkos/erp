@@ -821,6 +821,15 @@ async function handleInbound(
     log(
       `inbound from ${e164}: ${reply.intent.kind} answered${reply.attachment ? ` + ${reply.attachment.fileName}` : ''}${reply.images.length > 0 ? ` + ${reply.images.length} picture(s)` : ''}${checked ? ' (said he was checking first)' : ''}`,
     );
+    // What he did to get there, for whoever reads this log to improve him: the
+    // look-ups in order with their time, and what a refused one said. Never
+    // the question or the answer — those are in the message log, under its
+    // own retention.
+    const trace = (reply.detail.trace as ReadonlyArray<{ tool: string; ms: number; ok: boolean; said?: string }> | undefined) ?? [];
+    if (trace.length > 0) {
+      log(`inbound from ${e164}: ${trace.map((step) => `${step.tool} ${step.ok ? '' : 'REFUSED '}${Math.round(step.ms)}ms`).join(' → ')}`);
+      for (const step of trace.filter((one) => !one.ok)) log(`inbound from ${e164}: ${step.tool} was refused — ${(step.said ?? '').replace(/\s+/g, ' ').slice(0, 300)}`);
+    }
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     await withScope(scope, async (tx) => {

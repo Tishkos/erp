@@ -232,7 +232,7 @@ export const AGENT_TOOLS = [
       'What the database holds. With no arguments: every table and how many columns it has. With a table: its columns, their types and whether they can be empty. Use it before writing a query rather than guessing a column name — and use it freely, it is cheap.',
     input_schema: {
       type: 'object',
-      properties: { table: { ...string, description: 'Optional: one table name, for its columns.' } },
+      properties: { table: { ...string, description: 'Optional: a table name for its columns and what it joins to — or several, separated by commas, when the query will join them.' } },
       additionalProperties: false,
     },
   },
@@ -332,16 +332,17 @@ export const AGENT_TOOLS = [
   {
     name: 'show_screen',
     description:
-      'Attach pictures of a screen to your answer, so the person sees where to click and what to type. view "menu": the module\'s dropdown open with the screen ringed in red — where to go. "screen": the screen itself with its New button ringed. "form": what opens when that button is pressed, every field NUMBERED in red — the result tells you which number is which field, so you can say "1 — Name: …". "all": the three of them, which is a whole how-to. Besides the menu\'s screens there are: "sign in" (the sign-in page, numbered), "top bar" (the bar at the top with its parts numbered: modules, branch, search, notifications, language, account), "account menu" (the menu under the person\'s initials) and "change password". The result gives each picture a tag: write the tag on a line of its own in your answer and what you write under it is sent as that picture\'s caption — step, picture, step, picture. Name the screen in English ("purchase invoices", "suppliers", "sign in") or by its address. The pictures are of a training copy with sample data: the layout is the real one; the names and figures in them are not the company\'s. At most six pictures go with one answer.',
+      'Attach pictures of a screen to your answer, so the person sees where to click and what to type. view "menu": the module\'s dropdown open with the screen ringed in red — where to go. "screen": the screen itself with its New button ringed. "form": what opens when that button is pressed, every field NUMBERED in red — the result tells you which number is which field, so you can say "1 — Name: …". "all": the three of them, which is a whole how-to. Besides the menu\'s screens there are: "sign in" (the sign-in page, numbered), "top bar" (the bar at the top with its parts numbered: modules, branch, search, notifications, language, account), "account menu" (the menu under the person\'s initials) and "change password". The result gives each picture a tag: write the tag on a line of its own in your answer and what you write under it is sent as that picture\'s caption — step, picture, step, picture. Name the screen in English ("purchase invoices", "suppliers", "sign in") or by its address. The pictures are of a training copy with sample data: the layout is the real one; the names and figures in them are not the company\'s. At most eight pictures go with one answer.',
     input_schema: {
       type: 'object',
       properties: {
         screen: { ...string, description: 'The screen: its English name, or its address (/payables/invoices).' },
+        dialog: { ...string, description: 'With view "dialog": which one, by the name the result of an earlier call listed (for example "attachments", "notes", "audit log", "reverse"). Leave it out to be told which dialogs the screen has.' },
         view: {
           ...string,
-          enum: ['menu', 'screen', 'form', 'record', 'all'],
+          enum: ['menu', 'screen', 'form', 'record', 'dialog', 'all'],
           description:
-            'Which picture. "all" for a how-to (menu, screen, form); "menu" when they only asked where it is; "record" for one saved document opened — its status, its action buttons, and the printer / paperclip / notes / history icons — when the question is about what to do with a record that already exists.',
+            'Which picture. "all" for a how-to (menu, screen, form); "menu" when they only asked where it is; "record" for one saved document opened — its status, its action buttons, and the printer / paperclip / notes / history icons — when the question is about what to do with a record that already exists; "dialog" for a window that opens from the screen or the record — attaching a file, adding a note, the history, print / export, an action that asks for a reason.',
         },
       },
       required: ['screen'],
@@ -399,6 +400,37 @@ export const AGENT_TOOLS = [
       properties: { name: { ...string, description: 'Optional: part of the file name, when more than one has been sent.' } },
       additionalProperties: false,
     },
+  },
+  {
+    name: 'document_story',
+    description:
+      'EVERYTHING about one document, by its number, in one reading: what it is and its status, the customer or supplier, its lines, the journal it wrote (every debit and credit), the stock it moved, what was paid or received against it, who raised / approved / posted it and when, its history from the audit trail, and what it is waiting for. Use it FIRST whenever a question is about a particular document or "why did nothing happen after I did X" — why a customer\'s account is empty, why stock did not move, why something is not on a report, who approved it, what to do next. Purchase invoice API-…, sales invoice INV-…, purchase order PO-…, goods receipt GRN-…, purchase return GRT-…, supplier payment PAY-…, customer receipt RCT-…, journal entry JE-…, internal transfer BTR-…, opening stock OPN-…. If they gave no number, find it first (invoice, open_items, a query on the table ordered by created_at desc).',
+    input_schema: { type: 'object', properties: { no: { ...string, description: 'The document number.' } }, required: ['no'], additionalProperties: false },
+  },
+  {
+    name: 'activity_log',
+    description:
+      'The audit trail, searched: who did what and when, and what the system REFUSED and why. Use it for "who changed / posted / deleted this", "what did <person> do today", "why was I refused", "what happened this morning", and to see whether an action somebody says they took really reached the system. Every filter is optional; with none it is the latest events. For administrators (the Audit Log screen\'s permission).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        user: { ...string, description: 'Part of a person\'s name or e-mail.' },
+        document: { ...string, description: 'A document number (INV-…, API-…, JE-…) or a record code.' },
+        action: { ...string, description: 'Part of an action name, such as "posted", "approved", "whatsapp", "login", "ar_invoice".' },
+        object: { ...string, description: 'Part of an object type, such as "ar_invoice", "business_partner", "app_user".' },
+        outcome: { ...string, enum: ['success', 'denied', 'failure', 'problems'], description: '"problems" for everything refused or failed.' },
+        from: { ...string, description: 'YYYY-MM-DD.' },
+        to: { ...string, description: 'YYYY-MM-DD.' },
+        limit: { type: 'integer', description: 'How many events (up to 80; 40 when left out).' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'system_status',
+    description:
+      'Whether the system itself is well: the database, whether every migration is applied, which version and build is running, the scheduled jobs and when each last ran, notifications stuck in the outbox, and the latest errors the application logged. Use it for "is the system ok", "is it down", "was the update / migration applied", "which version", "did the backup run", and when somebody reports an error page — the error log shows what failed behind it.',
+    input_schema: noArgs,
   },
   {
     name: 'accounts',
@@ -513,6 +545,9 @@ export function systemPrompt(input: { readonly locale: BotLocale; readonly userN
     '• If one of your own tools fails or returns nonsense, report that too (kind: bug), say so honestly, and take another road to the answer.',
     '',
     'HOW TO ANSWER:',
+    '• INVESTIGATE BEFORE YOU ANSWER. "Why is X empty / missing / wrong / not showing" is a question about a document\'s state: find the document and read it whole with document_story — its status, its journal, its stock movements and its history say why in one reading. Nine times in ten the answer is that the document was saved or approved but never POSTED, or that the stock it needs was never brought in. Say exactly which, with the document number and what you read, and then the one next step. Do not answer such a question from general knowledge when you can read the document.',
+    '• When somebody says "it gave me an error" or "it did not let me": activity_log (outcome problems, their name) shows what the system refused and its reason; system_status shows the errors the application logged. Read them before you explain, and report a real defect with report_issue.',
+    '• When a query is refused you are handed the real columns: write it again at once. Ask the schema tool for several tables in one call when you are going to join them. Never tell the group the database is down because one query failed — system_status says whether it is.',
     '• Be a colleague, not a form. Answer the question that was asked, in the language it was asked in (Arabic or English), briefly — this is WhatsApp, not a report.',
     '• Never greet the group with a menu, never list your own commands, never introduce yourself unless you were asked. You are a person in a chat who happens to know everything about this system.',
     '• When a question needed looking up, the group was already told you were checking. Do not open the answer with "let me check" or "I will look into it" — you have looked. Give what you found.',
@@ -550,20 +585,38 @@ export interface AgentResult {
   readonly images?: ReadonlyArray<{ readonly file: string; readonly caption: string }>;
   /** For the log: which tools it used, in order. */
   readonly used: readonly string[];
+  /**
+   * For the log, and for whoever improves him: each tool call with what it was
+   * asked, how long it took, and what it said when it failed.
+   */
+  readonly trace?: readonly ToolTrace[];
 }
+
+export interface ToolTrace {
+  readonly tool: string;
+  readonly args: string;
+  readonly ms: number;
+  readonly ok: boolean;
+  /** A refusal's own words, cut short. */
+  readonly said?: string;
+}
+
+/** What a tool says when the answer is "no": worth keeping in the trace. */
+const REFUSAL = /^(PostgreSQL refused|The system refused|This person's role|There is no |No built screen|Not written down|I cannot tell)/;
 
 /**
  * How many pictures one answer may carry: a walk through one task — the menu,
- * the screen, the form — and a second screen beside it when the task has two.
+ * the screen, the form, the saved record and a dialog on it — and a second
+ * screen beside it when the task has two.
  */
-export const MAX_IMAGES = 6;
+export const MAX_IMAGES = 8;
 
 /**
  * How many times round the loop before it must answer with what it has. A
  * how-to reads the guide and the menu and often looks up an example before it
  * answers, so there is room for that.
  */
-const MAX_ROUNDS = 12;
+const MAX_ROUNDS = 16;
 
 export async function runAgent(input: {
   readonly client: AgentClient;
@@ -592,6 +645,7 @@ export async function runAgent(input: {
   messages.push({ role: 'user', content: input.question });
 
   const used: string[] = [];
+  const trace: ToolTrace[] = [];
   let lastAttachment: ToolOutcome['attachment'] = null;
   // The pictures the tools attached, in order, each once, and no more than three.
   const images: { file: string; caption: string }[] = [];
@@ -622,6 +676,7 @@ export async function runAgent(input: {
         ...(lastAttachment?.exportKey ? { exportKey: lastAttachment.exportKey } : {}),
         ...(images.length > 0 ? { images } : {}),
         used,
+        trace,
       };
     }
 
@@ -631,8 +686,12 @@ export async function runAgent(input: {
       const name = call.name ?? '';
       const args = (call.input ?? {}) as Record<string, unknown>;
       used.push(name);
+      const started = Date.now();
+      const asked = JSON.stringify(args).slice(0, 300);
       try {
         const outcome = await input.runTool(name, args);
+        const refused = REFUSAL.test(outcome.text);
+        trace.push({ tool: name, args: asked, ms: Date.now() - started, ok: !refused, ...(refused ? { said: outcome.text.slice(0, 240) } : {}) });
         if (outcome.attachment?.model) lastAttachment = outcome.attachment;
         for (const image of outcome.images ?? []) {
           if (images.length < MAX_IMAGES && !images.some((one) => one.file === image.file)) images.push({ file: image.file, caption: image.caption });
@@ -641,6 +700,7 @@ export async function runAgent(input: {
       } catch (error) {
         // A tool that refuses is information, not a crash: the model is told
         // what the ERP said and can explain it or try another way.
+        trace.push({ tool: name, args: asked, ms: Date.now() - started, ok: false, said: (error instanceof Error ? error.message : String(error)).slice(0, 240) });
         results.push({
           type: 'tool_result',
           tool_use_id: call.id ?? '',
@@ -659,5 +719,6 @@ export async function runAgent(input: {
     model: lastAttachment?.model ?? null,
     ...(images.length > 0 ? { images } : {}),
     used,
+    trace,
   };
 }

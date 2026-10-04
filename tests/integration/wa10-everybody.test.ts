@@ -648,3 +648,160 @@ describe('one refused statement does not end the question', () => {
     expect(readFileSync(issuesFile, 'utf8')).toMatch(/A query named a column that is not there/);
   });
 });
+
+describe('he reads a thing whole before he explains it', () => {
+  // 2026-10-04: "make it drastically understand everything". The first real
+  // question was "I completed the sale and the customer account is empty".
+  it('document_story: what it is, its lines, that nothing has posted, who did what, and what comes next', async () => {
+    const invoice = await draftInvoice();
+    const draft = await tool(world.clerk, 'document_story', { no: invoice.invoiceNo.toLowerCase() });
+    expect(draft).toContain(`${invoice.invoiceNo} · purchase invoice · status: DRAFT · branch BGW`);
+    expect(draft).toMatch(/supplier: \S+ · Jinko Solar/);
+    expect(draft).toMatch(/dated 2026-09-01 · due 2026-11-01/);
+    expect(draft).toMatch(/LINES \(1\):\n1\. ITM-PANEL · Solar Panel 550W — 10 EA × 10,000 · warehouse WH-MAIN/);
+    expect(draft).toMatch(/JOURNAL: none — this document has written NOTHING to the ledger/);
+    expect(draft).toMatch(/STOCK MOVEMENTS: none — this document has moved no stock/);
+    expect(draft).toMatch(/PAYMENTS AGAINST IT: none/);
+    expect(draft).toMatch(/WHO: raised by /);
+    expect(draft).toMatch(/WHAT THIS MEANS: NOTHING HAS POSTED: no journal, no stock in, nothing owed\. Next: submit it/);
+    expect(draft).toContain(`/payables/invoices/${invoice.invoiceNo}`);
+
+    // After a step taken from chat, the history says who did it — and the meaning moves on.
+    const submit = await propose(world.clerk, 'document_step', { step: 'submit', document: invoice.invoiceNo });
+    if (!submit.ok) throw new Error(submit.reason);
+    expect(await confirm(world.clerk, submit.pending)).toMatchObject({ ok: true });
+    const submitted = await tool(world.manager, 'document_story', { no: invoice.invoiceNo });
+    expect(submitted).toContain('status: SUBMITTED');
+    expect(submitted).toMatch(/submitted by /);
+    expect(submitted).toMatch(/HISTORY \(\d+ event\(s\), oldest first\):[\s\S]*whatsapp\.action\.document_step/);
+    expect(submitted).toMatch(/Waiting to be posted by a second person/);
+
+    // As the asker: no grant, no story; no such document, said plainly.
+    expect(await tool(nobody, 'document_story', { no: invoice.invoiceNo })).toMatch(/role does not include "purchase invoice"/);
+    expect(await tool(world.clerk, 'document_story', { no: 'API-BGW-2026-999999' })).toMatch(/There is no purchase invoice API-BGW-2026-999999/);
+    expect(await tool(world.clerk, 'document_story', { no: 'XYZ-1' })).toMatch(/cannot tell what kind of document XYZ-1 is/);
+  });
+
+  it('document_story reads a journal draft with its lines, and a sales draft that has moved nothing', async () => {
+    const expense = (await ownerPool.query(`select code from chart_of_account where id = $1`, [world.accounts.expense])).rows[0].code as string;
+    const bank = (await ownerPool.query(`select code from chart_of_account where id = $1`, [world.accounts.bank])).rows[0].code as string;
+    const made = await propose(world.clerk, 'create_draft', { kind: 'journal_entry', date: '2026-09-15', description: 'Office rent', lines: [{ account: expense, debit: 250000 }, { account: bank, credit: 250000 }] });
+    if (!made.ok) throw new Error(made.reason);
+    const saved = await confirm(world.clerk, made.pending);
+    if (!saved.ok) throw new Error(saved.reason);
+    const no = /JE-\S+/.exec(saved.said)![0];
+    const journal = await tool(world.clerk, 'document_story', { no });
+    expect(journal).toContain(`${no} · journal entry · status: DRAFT`);
+    expect(journal).toMatch(new RegExp(`JOURNAL LINES:\\n1\\. Dr 250,000 — ${expense} · Service and Expense Cost\\n2\\. Cr 250,000 — ${bank} · Bank Current Account`));
+    expect(journal).toMatch(/A draft: nothing is in the ledger/);
+
+    const sale = await propose(world.clerk, 'create_draft', { kind: 'sales_invoice', party: 'al noor', lines: [{ item: PANEL, quantity: 2, unitPrice: 15000, warehouse: WAREHOUSE }] });
+    if (!sale.ok) throw new Error(sale.reason);
+    const sold = await confirm(world.clerk, sale.pending);
+    if (!sold.ok) throw new Error(sold.reason);
+    const inv = /INV-\S+/.exec(sold.said)![0];
+    const story = await tool(world.clerk, 'document_story', { no: inv });
+    expect(story).toMatch(/customer: \S+ · Al Noor Trading/);
+    expect(story).toMatch(/net 30,000 IQD · received against it 0 IQD/);
+    expect(story).toMatch(/JOURNAL: none/);
+    expect(story).toMatch(/RECEIPTS AGAINST IT: none/);
+    // The sentence that answers "why is the customer account empty".
+    expect(story).toMatch(/NOTHING HAS POSTED: no journal, no receivable on the customer, no stock out/);
+  });
+
+  it('activity_log is the audit trail, searched — for whoever holds the Audit Log screen', async () => {
+    expect(await tool(nobody, 'activity_log')).toMatch(/permission view on audit_event/);
+    const reader = [admin, world.manager, world.clerk].find((ctx) => ctx.principal.isSuperUser || ctx.principal.grants.some((grant) => grant.object === 'audit_event' && grant.verb === 'view'));
+    if (!reader) throw new Error('no fixture role reads the audit log');
+
+    const invoice = await draftInvoice();
+    const refused = await propose(world.manager, 'document_step', { step: 'post', document: invoice.invoiceNo });
+    if (!refused.ok) throw new Error(refused.reason);
+    expect((await confirm(world.manager, refused.pending)).ok).toBe(false);
+
+    const all = await tool(reader, 'activity_log', { document: invoice.invoiceNo });
+    expect(all).toMatch(/event\(s\) on \S+, newest first:/);
+    expect(all).toMatch(/whatsapp\.action\.document_step · DENIED/);
+    const problems = await tool(reader, 'activity_log', { outcome: 'problems', action: 'whatsapp', limit: 5 });
+    expect(problems).toMatch(/that were refused or failed/);
+    expect(problems).toMatch(/DENIED/);
+    expect(await tool(reader, 'activity_log', { user: 'nobody-by-this-name-anywhere' })).toMatch(/Nothing in the audit trail by "nobody-by-this-name-anywhere"/);
+    expect(await tool(reader, 'activity_log', { from: '2020-01-01', to: '2020-01-02' })).toMatch(/Nothing in the audit trail from 2020-01-01, to 2020-01-02/);
+  });
+
+  it('system_status says whether the system is well, and shows its keepers the jobs and the error log', async () => {
+    const jobs = join(dir, 'jobs');
+    mkdirSync(jobs, { recursive: true });
+    writeFileSync(join(jobs, 'backup.last'), '2026-10-04T02:00:07Z 0 41\n');
+    writeFileSync(join(jobs, 'closing-checks.last'), '2026-10-04T03:40:07Z 1 5\n');
+    const log = join(dir, 'error.log');
+    writeFileSync(
+      log,
+      [
+        '2026-10-04T19:48:26: Error: MISSING_MESSAGE: posting_map.role.inventory (ar)',
+        '2026-10-04T19:48:26:     at <unknown> (.next/server/chunks/ssr/_1.js:1:3114)',
+        '2026-10-04T19:48:27: Error: MISSING_MESSAGE: posting_map.role.inventory (ar)',
+        '2026-10-04T19:48:27: (node:1) MaxListenersExceededWarning: Possible EventEmitter memory leak detected.',
+        '2026-10-04T20:39:18: Error: The Server Reference ID did not match the expected format.',
+      ].join('\n'),
+    );
+    const before = { jobs: process.env.JOB_STATE_DIR, log: process.env.ERP_ERROR_LOG };
+    process.env.JOB_STATE_DIR = jobs;
+    process.env.ERP_ERROR_LOG = log;
+    try {
+      const brief = await tool(nobody, 'system_status');
+      expect(brief).toMatch(/The system is (HEALTHY|DEGRADED): the database answers; migrations \d+ applied of \d+/);
+      expect(brief).not.toMatch(/SCHEDULED JOBS|ERROR LOG/);
+
+      const full = await tool(admin, 'system_status');
+      expect(full).toMatch(/migrations \d+ applied of \d+ — at head, nothing waiting/);
+      expect(full).toMatch(/SCHEDULED JOBS \(2\): 1 FAILED on its last run\./);
+      expect(full).toMatch(/backup: ok · last run 04\/10\/2026 05:00 · 41s/);
+      expect(full).toMatch(/closing-checks: FAILED \(exit 1\)/);
+      // The same error twice is said once, with its count; a stack frame and a warning are not errors.
+      expect(full).toMatch(/2026-10-04T19:48 Error: MISSING_MESSAGE: posting_map\.role\.inventory \(ar\) \(×2\)/);
+      expect(full).toMatch(/The Server Reference ID did not match/);
+      expect(full).not.toMatch(/MaxListenersExceededWarning|chunks\/ssr/);
+    } finally {
+      if (before.jobs === undefined) delete process.env.JOB_STATE_DIR;
+      else process.env.JOB_STATE_DIR = before.jobs;
+      if (before.log === undefined) delete process.env.ERP_ERROR_LOG;
+      else process.env.ERP_ERROR_LOG = before.log;
+    }
+  });
+
+  it('a refused query comes back with the real columns, and several tables are described in one call', async () => {
+    const wrong = await tool(world.manager, 'query', { sql: 'select bp.code, bp.name from business_partner bp join ar_invoice i on i.customer_id = bp.id' });
+    expect(wrong).toMatch(/PostgreSQL refused the query: column bp\.name does not exist/);
+    expect(wrong).toMatch(/The real columns — write it again with these:/);
+    expect(wrong).toMatch(/business_partner: id, code, legal_name,/);
+    expect(wrong).toMatch(/ar_invoice: id, invoice_no, status,/);
+
+    const noTable = await tool(world.manager, 'query', { sql: 'select * from sales_invoice' });
+    expect(noTable).toMatch(/There is no table "sales_invoice"\. Tables with a name like it: .*ar_invoice/);
+
+    const both = await tool(world.manager, 'schema', { table: 'ar_invoice, ar_invoice_line' });
+    expect(both).toMatch(/ar_invoice:\n[\s\S]*invoice_no text not null[\s\S]*ar_invoice_line:\n[\s\S]*net_iqd/);
+    expect(both).toMatch(/joins: .*customer_id → business_partner\(id\)/);
+    expect(both).toMatch(/joins: .*ar_invoice_id → ar_invoice\(id\)/);
+  });
+
+  it('what he did to get an answer is kept with it', async () => {
+    const reply = await wa.answer({
+      userId: world.manager.principal.userId,
+      text: 'why is the customer account empty?',
+      agent: async () => ({
+        text: 'It is approved, not posted.',
+        model: null,
+        used: ['query', 'document_story'],
+        trace: [
+          { tool: 'query', args: '{"sql":"select bp.name from business_partner bp"}', ms: 12, ok: false, said: 'PostgreSQL refused the query: column bp.name does not exist.' },
+          { tool: 'document_story', args: '{"no":"INV-1"}', ms: 40, ok: true },
+        ],
+      }),
+    });
+    expect(reply.detail).toMatchObject({ tools: ['query', 'document_story'], failed: 1 });
+    expect((reply.detail.trace as unknown[]).length).toBe(2);
+    expect(typeof reply.detail.seconds).toBe('number');
+  });
+});

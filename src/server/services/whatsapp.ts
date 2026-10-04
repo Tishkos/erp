@@ -855,6 +855,8 @@ export interface AgentOutcome {
   /** Pictures a tool attached: files on this host, each with its caption. */
   readonly images?: ReadonlyArray<{ readonly file: string; readonly caption: string }>;
   readonly used: readonly string[];
+  /** Each tool call: what it was asked, how long it took, what it said when it failed. */
+  readonly trace?: ReadonlyArray<{ readonly tool: string; readonly args: string; readonly ms: number; readonly ok: boolean; readonly said?: string }>;
 }
 
 export interface ReadContext {
@@ -948,7 +950,13 @@ export async function answer(input: {
         ...(outcome.format ? { format: outcome.format } : {}),
         ...(outcome.exportObject ? { exportObject: outcome.exportObject } : {}),
         ...(outcome.exportKey ? { exportKey: outcome.exportKey } : {}),
-        detail: { tools: outcome.used },
+        detail: {
+          tools: outcome.used,
+          // What he did to get there, kept with the answer (and blanked with
+          // it by the retention sweep): how long each look-up took and what a
+          // refused one said — the record of where he struggles.
+          ...(outcome.trace && outcome.trace.length > 0 ? { trace: outcome.trace, seconds: Math.round((Date.now() - at.getTime()) / 100) / 10, failed: outcome.trace.filter((step) => !step.ok).length } : {}),
+        },
       };
     } else {
       drafted = await draft(ctx, intent);
