@@ -135,6 +135,8 @@ shipment_container_line
 shipment_container_status_history
 shipment_container
 bill_of_lading
+bank_loan_repayment
+bank_loan_revaluation
 bank_loan_allocation
 bank_loan_instalment
 bank_loan

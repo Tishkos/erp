@@ -590,6 +590,9 @@ export async function resetTestData(): Promise<void> {
     await client.query(`update pay_component set expense_account_id = null, liability_account_id = null, active = true, taxable = code in ('BASE', 'HOUSING', 'TRANSPORT', 'OVERTIME'),
         default_value = case code when 'SS_EMPLOYEE' then 5 when 'SS_EMPLOYER' then 12 else 0 end`);
     // Stage 6 (0235) — what the loans funded, their schedules, the loans.
+    // 0275 and 0276 — repayments and revaluations name their loan.
+    await client.query('delete from bank_loan_repayment');
+    await client.query('delete from bank_loan_revaluation');
     await client.query('delete from bank_loan_allocation');
     await client.query('delete from bank_loan_instalment');
     await client.query('delete from bank_loan');
