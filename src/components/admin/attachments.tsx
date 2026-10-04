@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { FileText, Paperclip, Upload } from 'lucide-react';
 import { inArray } from 'drizzle-orm';
@@ -42,6 +43,7 @@ export async function Attachments({
   mayAttach,
   hidden = {},
   preloaded,
+  formExtra,
 }: {
   readonly objectType: string;
   readonly objectId: string;
@@ -50,6 +52,8 @@ export async function Attachments({
   readonly hidden?: Readonly<Record<string, string>>;
   /** The files already read in the page's own transaction (`readAttachments`). */
   readonly preloaded?: AttachmentsRead;
+  /** Anything else the upload form carries — the shared door's way back (2026-10-04). */
+  readonly formExtra?: ReactNode;
 }) {
   const [t, locale] = await Promise.all([getTranslations('admin'), getLocale()]);
 
@@ -101,6 +105,7 @@ export async function Attachments({
           {Object.entries(hidden).map(([k, v]) => (
             <input key={k} name={k} type="hidden" value={v} />
           ))}
+          {formExtra}
           <label className={s.uploadPicker}>
             <Upload aria-hidden="true" />
             <span>{t('attachments.choose')}</span>

@@ -86,8 +86,8 @@ dont forget these this must be our standard". A record screen carries them in
   record's export key. A record with no print model does not get an empty door;
   it gets a print model (`src/server/print/`, `EXPORT_ACCESS`, `registry.ts`).
 * **Paperclip** — `AttachmentsButton` with the count and the `Attachments` form.
-* **Notes** — `NotesButton` with the record's own notes and the box to add one,
-  where the record has notes.
+* **Notes** — `RecordNotesDoor` (`NotesButton` with the record's own notes and
+  the box to add one); see "Shared doors and profiles" below.
 * **Clock** — `HistoryButton` with `RecordHistory`.
 
 The long blocks those replace — an attachments panel, a notes table, an audit
@@ -96,8 +96,64 @@ log under the lines — come off the page. The document is the document; what it
 history doors open `wide`, because a table in a narrow dialog is read sideways.
 
 Done so far: the purchase invoice, the import application, the B/L, the PD, the
-ASYCUDA reading, the loan (no printer — no print model yet). A new record screen
-starts with them.
+ASYCUDA reading, the loan (no printer — no print model yet); on
+`feat/shared-module` (2026-10-04) the Project System's certificate, budget
+document, change order and material issue, and HR's advance, leave request,
+document, request, review, vacancy, application and payroll run. A new record
+screen starts with them. `docs/notes/doors-coverage.md` is the table of where
+every record page stands.
+
+## Shared doors and profiles (feat/shared-module, 2026-10-04)
+
+**Notes door.** A note is an append-only audit event `<object>.note_added`, `after: { note }` — no notes table, ever. `services/record-notes.ts`: `addNote(tx, ctx, { object, recordId, body })` (trimmed, 1–2,000 characters, the record must be visible under the caller's scope, the grant is the record's own — `edit_draft`, or `create`/`configure` where no role edits drafts — in the record's branch, refusal audited) and `listNotes(tx, { object, recordId })` → `{ id, createdAt, author, body }[]`, newest first. `object`/`recordId` are exactly what the record's `RecordHistory` gets (its uuid, or its number where its history is kept by number). The PD (`last_note`, `PD_NOTE`) and the purchase invoice (`ap_invoice_note`, read by the Overdue list) keep their side effects. A record not in the service's `TARGETS` table is added with `registerNoteTarget(object, { permissionObject, verb, find })` — an additive edit to that table is fine too. Wiring, in `titleActions` between the paperclip and the clock:
+
+```tsx
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+// in the page's transaction: notes: await recordNotes.listNotes(tx, { object: ar.PERMISSION_OBJECT, recordId: invoice.id })
+<RecordNotesDoor notes={found.notes} object={ar.PERMISSION_OBJECT} recordId={invoice.id} />
+```
+
+The door is the purchase invoice's (`NotesButton`, the When/Who/Note table, the add form) and posts to the one shared action `addRecordNoteAction`, which returns to the page it was opened on (query included). The add box shows to whoever `mayAddNote` allows; pass `mayAdd` to override. Messages: `admin.record_notes`. Test: `tests/integration/shared-record-notes.test.ts`.
+
+**Paperclip door.** `RecordAttachmentsDoor` (`@/components/admin/record-attachments-door`) is the same thing for files: `AttachmentsButton` with the count, the `Attachments` list and picker behind it, posting to the one shared `attachToRecordAction` (`src/server/record-attach-action.ts`), which calls `attachments.upload` under the caller's context and returns to the page (`src/server/return-path.ts` is the way back both doors share). It needs the record's parent-access check in `attachments-runtime.ts` — a record without one is refused, by design. `recordId` is whatever the record's files are already kept under (its number for the Project System's documents, its uuid for HR's); `mayAttach` is the record's own rule (a draft, a live request), narrowed by the door to `create` on `attachment`. Reading the files in the page's transaction (`readAttachments`) and passing `files` saves a second session, as with notes:
+
+```tsx
+<RecordAttachmentsDoor files={found.files} mayAttach={doc.status === 'draft'} object={pb.BUDGET_DOCUMENT_TYPE} recordId={doc.documentNo} />
+```
+
+**Print models for the rest.** `print/project-documents.ts` (certificate, budget document, change order, material issue — object `project`) and `print/hr-documents.ts` (advance, leave request, employee document, review, vacancy, application, request — each under its own grant; a document, a review and a request are also the person's own to print, `selfService`, as the payslip is). Read through the same service readers the pages read, so a copy is the screen. A new key goes in `EXPORT_ACCESS`, `registry.ts`, `print.titles.<key>` in both locales, and — if the accounting officer or manager has no grant on its object — the gated lists in `ops14-print-export.test.ts`.
+
+**Profile links.** Every party or account a record shows links to its profile through `profileHref(kind, key, qualifier?)` (`src/server/domain/profiles.ts`, null where no page exists) — render it with `ProfileLink` (`@/components/admin/profile-link`), the bank loan's account link markup (`s.sapLink` + `<bdi dir="ltr">code · name</bdi>`), plain text where there is no page or the screen is not served:
+
+```tsx
+<ProfileLink code={supplier.code} kind="supplier" name={supplier.name} />
+<ProfileLink code={pd.pdNo} kind="pd" qualifier={{ year: pd.year }} />
+<ProfileLink code={supplier.code} dir="auto" kind="supplier">{supplier.name}</ProfileLink>
+```
+
+When a module builds a missing profile page, it fills in the route in `BASES` (and `tests/unit/profiles.test.ts` checks the page exists and is delivered).
+
+| Kind (`profileHref`) | Profile route | Owner |
+|---|---|---|
+| `customer` | `/sales/customers/<code>?role=customer` | receivables |
+| `supplier` | `/payables/suppliers/<code>?role=supplier` | payables |
+| `bank` | `/master-data/banks/<code>` | accounting |
+| `bank_account` / `cash_account` | `/master-data/bank-accounts/<code>` / `/master-data/cash-accounts/<code>` | accounting |
+| `gl_account` | `/master-data/chart-of-accounts/<code>` (its ledger is one click on) | accounting |
+| `journal` | `/finance/journals/<entryNo>` | accounting |
+| `item` / `warehouse` / `uom` | `/inventory/items/<code>` / `/master-data/warehouses/<code>` / `/inventory/uom/<code>` | inventory |
+| `import` | `/payables/<payableNo>` (the import application) | payables |
+| `bl` / `container` / `pd` / `asycuda_run` | `/payables/shipments/<blNo>` / `/payables/containers/<no>[?id=]` / `/payables/pd/<no>[?year=]` / `/payables/pd/asycuda/<runNo>` | logistics |
+| `port`, `carrier` | **missing — logistics builds it** | logistics |
+| `loan`, `deposit` | `/treasury/loans/<loanNo>`, `/treasury/deposits/<no>` | payables |
+| `employee`, `position`, `user` | `/hr/employees/<no>`, `/hr/positions/<code>`, `/administration/users/<id>` | shared |
+| HR records: `employee_advance`, `leave_request`, `employee_request`, `employee_document`, `performance_review`, `vacancy`, `payroll_run` | `/hr/advances/<no>`, `/hr/leave/<no>`, `/hr/requests/<no>`, `/hr/documents/<no>`, `/hr/performance/<no>`, `/hr/recruitment/<no>`, `/hr/payroll/<no>` | shared |
+| `project` and its documents | `/projects/<code>`, `/projects/billing/<no>`, `/projects/budgets/<no>`, `/projects/change-orders/<no>`, `/projects/material-issues/<no>` | shared |
+| `branch`, `department`, `cost_centre`, `payment_term`, `payment_method` | `/master-data/<…>/<code>` | shared |
+| every document kind (`purchase_invoice`, `sales_invoice`, `supplier_payment`, `customer_receipt`, returns, PO, GR, payment application, advance, contract, opening stock) | its record page | the document's module |
+| `currency`, `fixed_asset`, `investment` | **missing** — no record screens for these modules yet (not delivered) | shared |
+
+The coverage of the four doors and profile links per record page is `docs/notes/doors-coverage.md`.
 
 ## Screens copy existing models — the design must not change
 

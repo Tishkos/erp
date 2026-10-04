@@ -1,10 +1,15 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Field, Flash, Form, Grid, Hidden, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { readAttachments } from '@/components/admin/attachments';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { HistoryButton } from '@/components/admin/icon-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordAttachmentsDoor } from '@/components/admin/record-attachments-door';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+import { ExportIcon } from '@/components/print/export-menu';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -13,6 +18,7 @@ import { isNotFoundError } from '@/server/not-found';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as pb from '@/server/services/project-budget';
 import * as ps from '@/server/services/project-system';
+import * as recordNotes from '@/server/services/record-notes';
 import { approveBudgetDocument, rejectBudgetDocument, submitBudgetDocument, updateBudgetDocument } from '../actions';
 
 /**
@@ -20,7 +26,9 @@ import { approveBudgetDocument, rejectBudgetDocument, submitBudgetDocument, upda
  * the document window with its fields, the status chip, the transitions as
  * its actions and the lines; a draft's lines are typed in the grid as a
  * draft invoice's are; then the budget by element the approved documents
- * add up to, stacked underneath; then the history.
+ * add up to, stacked underneath. The four doors in its title bar from the
+ * draft on — printer, paperclip, notes, clock (shared, 2026-10-04) — and the
+ * project and the change order as links to their own pages.
  */
 export const dynamic = 'force-dynamic';
 
@@ -49,14 +57,15 @@ export default async function BudgetDocumentPage({ params, searchParams }: { par
     try {
       const view = await pb.budgetDocument(tx, actor, documentNo);
       const codes = (await ps.costCodes(tx)).filter((c) => c.active);
-      return { view, codes };
+      const ref = { object: pb.BUDGET_DOCUMENT_TYPE, recordId: view.document.documentNo };
+      return { view, codes, notes: await recordNotes.listNotes(tx, ref), files: await readAttachments(tx, ref.object, ref.recordId) };
     } catch (error) {
       if (isNotFoundError(error)) return null;
       throw error;
     }
   });
   if (!found) notFound();
-  const { view, codes } = found;
+  const { view, codes, notes, files } = found;
   const doc = view.document;
   const money = (value: string) => formatMoney(value, 'IQD', locale as Locale);
   const when = (value: Date | null) => (value ? formatTimestamp(value.toISOString(), locale as Locale) : '—');
@@ -73,14 +82,7 @@ export default async function BudgetDocumentPage({ params, searchParams }: { par
     { label: column('document_no'), value: <bdi dir="ltr">{doc.documentNo}</bdi> },
     { label: column('status'), value: status(doc.status), status: doc.status },
     { label: x('kind'), value: x(`kind_${doc.kind}`) },
-    {
-      label: x('project'),
-      value: (
-        <Link className={s.sapLink} href={`/projects/${encodeURIComponent(doc.projectCode)}`}>
-          <bdi dir="ltr">{doc.projectCode}</bdi>
-        </Link>
-      ),
-    },
+    { label: x('project'), value: <ProfileLink code={doc.projectCode} kind="project" /> },
     { label: column('name'), value: <bdi dir="auto">{view.project.name}</bdi> },
     { label: column('date'), value: <bdi dir="ltr">{formatBusinessDate(doc.raisedOn, locale as Locale)}</bdi> },
     { label: column('amount'), value: <bdi dir="ltr">{money(doc.totalIqd)}</bdi> },
@@ -88,18 +90,7 @@ export default async function BudgetDocumentPage({ params, searchParams }: { par
     ...(doc.submittedAt ? [{ label: x('submitted_by'), value: <bdi dir="auto">{`${view.people.submittedBy ?? '—'} · ${when(doc.submittedAt)}`}</bdi> }] : []),
     ...(doc.approvedAt ? [{ label: x('approved_by'), value: <bdi dir="auto">{`${view.people.approvedBy ?? '—'} · ${when(doc.approvedAt)}`}</bdi> }] : []),
     ...(doc.rejectedAt ? [{ label: x('rejected_by'), value: <bdi dir="auto">{`${view.people.rejectedBy ?? '—'} · ${when(doc.rejectedAt)} · ${doc.rejectedReason ?? ''}`}</bdi> }] : []),
-    ...(view.variationNo
-      ? [
-          {
-            label: x('change_order'),
-            value: (
-              <Link className={s.sapLink} href={`/projects/change-orders/${encodeURIComponent(view.variationNo)}`}>
-                <bdi dir="ltr">{view.variationNo}</bdi>
-              </Link>
-            ),
-          },
-        ]
-      : []),
+    ...(view.variationNo ? [{ label: x('change_order'), value: <ProfileLink code={view.variationNo} kind="project_variation" /> }] : []),
     { label: column('description'), value: <bdi dir="auto">{doc.description}</bdi> },
   ];
 
@@ -141,8 +132,17 @@ export default async function BudgetDocumentPage({ params, searchParams }: { par
             {doc.status === 'submitted' && isRaiser ? <p className={s.sapNote}>{x('four_eyes_note')}</p> : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Printer, paperclip, notes, clock — from the draft on (2026-10-04). */}
+            <ExportIcon exportKey="project_budget" id={doc.documentNo} title={`${x('budget_document')} ${doc.documentNo}`} />
+            <RecordAttachmentsDoor files={files} mayAttach={can(principal, 'edit_draft', pb.PERMISSION_OBJECT)} object={pb.BUDGET_DOCUMENT_TYPE} recordId={doc.documentNo} />
+            <RecordNotesDoor notes={notes} object={pb.BUDGET_DOCUMENT_TYPE} recordId={doc.documentNo} />
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={doc.documentNo} objectType={pb.BUDGET_DOCUMENT_TYPE} />
+            </HistoryButton>
+          </>
+        }
         documentType={x('budget_document')}
         fields={fields}
         id="budget-document"
@@ -293,8 +293,6 @@ export default async function BudgetDocumentPage({ params, searchParams }: { par
           </div>
         </div>
       </section>
-
-      <RecordHistory objectId={doc.documentNo} objectType={pb.BUDGET_DOCUMENT_TYPE} />
     </AdminPage>
   );
 }

@@ -5,7 +5,10 @@ import { AdminPage, Checkbox, Field, Flash, Form, Grid, Hidden, Pill, Select, Su
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { HistoryButton } from '@/components/admin/icon-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
 import { toDecimalString } from '@/server/domain/money';
@@ -14,8 +17,10 @@ import { visibleRoute } from '@/server/delivered';
 import { isNotFoundError } from '@/server/not-found';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as departments from '@/server/services/departments';
+import * as employees from '@/server/services/employees';
 import * as pb from '@/server/services/project-budget';
 import * as ps from '@/server/services/project-system';
+import * as recordNotes from '@/server/services/record-notes';
 import {
   addWbsElement,
   closeProject,
@@ -34,7 +39,9 @@ import { chipOf } from '../chip';
  * transitions as its actions, the WBS tree as its lines; then the registers
  * Phase 11 keeps — budget by cost code, commitments, costs, certificates,
  * variations, balances — stacked underneath in the supplier-statement
- * manner; then the history.
+ * manner. The notes and the clock are doors in its title bar, and the
+ * customer, the manager, the branch and the department are links to their
+ * own pages (shared, 2026-10-04).
  */
 export const dynamic = 'force-dynamic';
 
@@ -68,7 +75,10 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       const documents = (await pb.budgetDocuments(tx, { projectCode: code, pageSize: 20 })).rows;
       const changes = (await pb.changeOrders(tx, { projectCode: code, pageSize: 20 })).rows;
       const plan = await pb.planByElement(tx, code);
-      return { view, pickers, depts, elements, documents, changes, plan };
+      const notes = await recordNotes.listNotes(tx, { object: ps.PERMISSION_OBJECT, recordId: view.project.code });
+      // The manager's own profile, where the user is also an employee (FIX-5); plain text where not.
+      const manager = view.project.managerUserId ? await employees.ofUser(tx, view.project.managerUserId) : null;
+      return { view, pickers, depts, elements, documents, changes, plan, notes, manager };
     } catch (error) {
       // E1 — a missing record is a 404; anything else reaches the error boundary.
       if (isNotFoundError(error)) return null;
@@ -76,7 +86,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     }
   });
   if (!found) notFound();
-  const { view, pickers, depts, elements, documents, changes, plan } = found;
+  const { view, pickers, depts, elements, documents, changes, plan, notes, manager } = found;
   const row = view.project;
   const status = row.status;
   const kind = view.type?.kind ?? 'customer';
@@ -100,10 +110,17 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     { label: column('code'), value: <bdi dir="ltr">{row.code}</bdi> },
     { label: column('status'), value: x(`status_${status}`), status: chipOf(status) },
     { label: x('type'), value: <bdi dir="auto">{typeLabel}</bdi> },
-    { label: x('customer'), value: <bdi dir="auto">{view.customer ? `${view.customer.name} (${view.customer.code})` : '—'}</bdi> },
-    { label: x('manager'), value: <bdi dir="auto">{view.people.manager ?? '—'}</bdi> },
-    { label: column('branch'), value: <bdi dir="ltr">{row.branchCode ?? '—'}</bdi> },
-    { label: x('department'), value: <bdi dir="ltr">{row.departmentCode ?? '—'}</bdi> },
+    { label: x('customer'), value: <ProfileLink code={view.customer?.code ?? null} dir="auto" kind="customer" name={view.customer?.name ?? null} /> },
+    {
+      label: x('manager'),
+      value: (
+        <ProfileLink code={manager?.employeeNo} dir="auto" kind="employee">
+          {view.people.manager ?? '—'}
+        </ProfileLink>
+      ),
+    },
+    { label: column('branch'), value: <ProfileLink code={row.branchCode} kind="branch" /> },
+    { label: x('department'), value: <ProfileLink code={row.departmentCode} kind="department" /> },
     { label: x('baseline_starts_on'), value: <bdi dir="ltr">{day(row.baselineStartsOn)}</bdi> },
     { label: x('baseline_ends_on'), value: <bdi dir="ltr">{day(row.baselineEndsOn)}</bdi> },
     { label: x('forecast_ends_on'), value: <bdi dir="ltr">{day(row.forecastEndsOn)}</bdi> },
@@ -234,8 +251,15 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
             </Link>
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Notes and the clock — the profile's two doors (2026-10-04). */}
+            <RecordNotesDoor notes={notes} object={ps.PERMISSION_OBJECT} recordId={row.code} />
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={row.code} objectType={ps.PERMISSION_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         documentType={page('project_master')}
         fields={fields}
         id="project-document"
@@ -720,7 +744,6 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
         </section>
       ) : null}
 
-      <RecordHistory objectId={row.code} objectType={ps.PERMISSION_OBJECT} />
     </AdminPage>
   );
 }

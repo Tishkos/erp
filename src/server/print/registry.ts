@@ -7,6 +7,8 @@ import type { BuildContext, Built } from './documents';
 import * as reports from './reports';
 import * as projectReports from './project-reports';
 import * as hrReports from './hr-reports';
+import * as projectDocuments from './project-documents';
+import * as hrDocuments from './hr-documents';
 
 export type { ExportKey } from './access';
 
@@ -79,6 +81,17 @@ const BUILDERS = {
   hr_leave_balances: (ctx, input) => hrReports.leaveBalances(ctx, input.query),
   hr_payroll_register: (ctx, input) => hrReports.payrollRegister(ctx, input.query),
   hr_unsettled_advances: (ctx, input) => hrReports.unsettledAdvances(ctx, input.query),
+  project_certificate: byId(projectDocuments.projectCertificate),
+  project_budget: byId(projectDocuments.projectBudget),
+  project_change_order: byId(projectDocuments.changeOrder),
+  project_material_issue: byId(projectDocuments.materialIssue),
+  employee_advance: byId(hrDocuments.employeeAdvance),
+  leave_request: byId(hrDocuments.leaveRequest),
+  employee_document: byId(hrDocuments.employeeDocument),
+  performance_review: byId(hrDocuments.performanceReview),
+  vacancy: byId(hrDocuments.vacancy),
+  applicant: byId(hrDocuments.applicant),
+  employee_request: byId(hrDocuments.employeeRequest),
 } satisfies Record<ExportKey, Builder>;
 
 export function exportable(key: ExportKey): Exportable {

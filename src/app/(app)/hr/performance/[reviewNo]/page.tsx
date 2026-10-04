@@ -1,11 +1,16 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Field, Flash, Form, Grid, Hidden, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { readAttachments } from '@/components/admin/attachments';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { HistoryButton } from '@/components/admin/icon-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordAttachmentsDoor } from '@/components/admin/record-attachments-door';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+import { ExportIcon } from '@/components/print/export-menu';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -13,6 +18,7 @@ import { visibleRoute } from '@/server/delivered';
 import { MAX_GOALS, RATINGS } from '@/server/domain/talent';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as performance from '@/server/services/performance';
+import * as recordNotes from '@/server/services/record-notes';
 import { assignReviewer, cancelReview, commentOnReview, completeReview, reopenReview, saveGoals, signOffReview } from '../actions';
 
 /**
@@ -20,7 +26,9 @@ import { assignReviewer, cancelReview, commentOnReview, completeReview, reopenRe
  * Invoice page: the document window with its header fields and status chip,
  * its lines the goals — typed in their cells while it is a draft (titles,
  * targets and weights by HR or the reviewer, ratings by the reviewer only),
- * read-only after — the verbs at its foot; the audit log.
+ * read-only after — the verbs at its foot. The four doors in its title bar
+ * from the draft on — printer, paperclip, notes, clock (shared, 2026-10-04)
+ * — and the person as a link to their own page.
  */
 export const dynamic = 'force-dynamic';
 
@@ -48,13 +56,19 @@ export default async function ReviewPage({ params, searchParams }: { params: Pro
     const detail = await performance.byNo(tx, reviewNo);
     if (!detail) return null;
     const hrEdits = detail.row.status === 'draft' && can(principal, 'edit_draft', performance.PERMISSION_OBJECT);
-    return { detail, reviewers: hrEdits ? await performance.reviewers(tx) : [] };
+    // Notes by number, as its history is; files by its id, as HR's records file them.
+    return {
+      detail,
+      reviewers: hrEdits ? await performance.reviewers(tx) : [],
+      notes: await recordNotes.listNotes(tx, { object: performance.PERMISSION_OBJECT, recordId: detail.row.reviewNo }),
+      files: await readAttachments(tx, performance.PERMISSION_OBJECT, detail.row.id),
+    };
   });
   if (!found) {
     if (!can(principal, 'view', performance.PERMISSION_OBJECT)) return <Denied object={page('performance')} />;
     notFound();
   }
-  const { detail, reviewers } = found;
+  const { detail, reviewers, notes, files } = found;
   const { row, person, goals } = detail;
   const me = principal.userId;
   const reviewer = row.reviewerUserId === me;
@@ -82,13 +96,7 @@ export default async function ReviewPage({ params, searchParams }: { params: Pro
     { label: column('status'), value: statusLabel(row.status), status: tone },
     {
       label: x('employee'),
-      value: mayOpenPerson ? (
-        <Link className={s.sapLink} href={`/hr/employees/${encodeURIComponent(person.employeeNo)}`}>
-          <bdi dir="auto">{`${person.employeeNo} · ${name}`}</bdi>
-        </Link>
-      ) : (
-        <bdi dir="auto">{`${person.employeeNo} · ${name}`}</bdi>
-      ),
+      value: mayOpenPerson ? <ProfileLink code={person.employeeNo} dir="auto" kind="employee" name={name} /> : <bdi dir="auto">{`${person.employeeNo} · ${name}`}</bdi>,
     },
     { label: x('cycle'), value: <bdi dir="auto">{`${row.cycleCode} · ${cycleName}`}</bdi> },
     { label: x('period'), value: <bdi dir="ltr">{`${day(detail.periodFrom)} – ${day(detail.periodTo)}`}</bdi> },
@@ -201,8 +209,17 @@ export default async function ReviewPage({ params, searchParams }: { params: Pro
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Printer, paperclip, notes, clock — from the draft on (2026-10-04). */}
+            <ExportIcon exportKey="performance_review" id={row.reviewNo} title={`${x('document_type')} ${row.reviewNo}`} />
+            <RecordAttachmentsDoor files={files} mayAttach={(draft || rated) && (reviewer || can(principal, 'edit_draft', performance.PERMISSION_OBJECT))} object={performance.PERMISSION_OBJECT} recordId={row.id} />
+            <RecordNotesDoor notes={notes} object={performance.PERMISSION_OBJECT} recordId={row.reviewNo} />
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={row.reviewNo} objectType={performance.PERMISSION_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         documentType={x('document_type')}
         fields={fields}
         id="review-document"
@@ -325,8 +342,6 @@ export default async function ReviewPage({ params, searchParams }: { params: Pro
           </table>
         )}
       </DocumentWindow>
-
-      <RecordHistory objectId={row.reviewNo} objectType={performance.PERMISSION_OBJECT} />
     </AdminPage>
   );
 }
