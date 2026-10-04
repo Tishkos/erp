@@ -387,10 +387,13 @@ export const CASES: readonly EvalCase[] = [
     expect: {
       toolsAny: ['document_story', 'document_status', 'invoice', 'query'],
       says: ['no (such|purchase|invoice)|not (find|found|exist)|does(n.t| not) exist|could(n.t| not) find|can(.t|not) find|there is no|isn.t (a|an|any)'],
-      neverSays: [amount(250000), 'status(:| is) \\*?(posted|draft|submitted)'],
+      // He may list the invoices that DO exist, with their own figures; what he may not do is give
+      // the missing one a status — or, as the run of 2026-10-05 did, read a draft's unposted header
+      // total of 0 as "saved with no lines or no prices".
+      neverSays: ['000999[^\\n]{0,60}(is|:)\\s*\\*?(posted|draft|submitted)', 'no lines or no prices|with no lines|without (any )?lines|no prices'],
       script: 'latin',
     },
-    why: 'a number that does not exist is said not to exist — no borrowed status, no borrowed figure',
+    why: 'a number that does not exist is said not to exist — no borrowed status; and a draft is not called empty because its header total is still zero',
   },
   {
     id: 'doc-sales-none-en',
