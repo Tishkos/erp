@@ -26,6 +26,8 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as items from '@/server/services/items';
 import * as stock from '@/server/services/stock-operations';
 import * as warehouses from '@/server/services/warehouses';
+import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
+import { savedViewsFor } from '@/server/saved-views-gate';
 
 /**
  * The Stock Ledger — one item, warehouse by warehouse: what was there, every
@@ -58,6 +60,9 @@ export default async function StockLedgerPage({ searchParams }: { searchParams: 
     return <Denied object={page('stock_ledger')} />;
   }
 
+  // The person's saved views of this screen — and, on a bare arrival, their default one.
+  const saved = await savedViewsFor('inventory.stock_ledger', searchParams);
+
   const one = (key: string) => (typeof params[key] === 'string' ? (params[key] as string).trim() : '');
   const filter = {
     itemCode: one('item') || null,
@@ -89,7 +94,12 @@ export default async function StockLedgerPage({ searchParams }: { searchParams: 
 
   return (
     <AdminPage
-      actions={<ExportMenu exportKey="stock_ledger" query={params} />}
+      actions={
+        <>
+          <SavedViewsMenu state={saved} />
+          <ExportMenu exportKey="stock_ledger" query={params} />
+        </>
+      }
       back={{ href: '/', label: t('dashboard_label') }}
       subtitle={t('stock_ledger.subtitle')}
       tabs={<SectionTabs route="/inventory/stock-ledger" />}

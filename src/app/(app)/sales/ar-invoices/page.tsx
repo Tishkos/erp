@@ -11,6 +11,8 @@ import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as ar from '@/server/services/ar-invoice';
+import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
+import { savedViewsFor } from '@/server/saved-views-gate';
 
 /**
  * Sales Invoices — Operations build, block 5.
@@ -44,6 +46,8 @@ export default async function ArInvoicesPage({ searchParams }: { searchParams: S
   }
   const mayCreate = can(principal, 'create', ar.PERMISSION_OBJECT);
 
+  // The person's saved views of this screen — and, on a bare arrival, their default one.
+  const saved = await savedViewsFor('sales.invoices', searchParams);
   const rows = await withCurrentUser((tx) => ar.list(tx));
   const shown = rows.filter((row) => matches(row, outcome.q));
 
@@ -83,7 +87,9 @@ export default async function ArInvoicesPage({ searchParams }: { searchParams: S
             placeholder={t('search_placeholder')}
             q={outcome.q}
             searchLabel={t('search')}
-          />
+          >
+            <SavedViewsMenu state={saved} />
+          </ListToolbar>
 
           <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
             <table aria-labelledby="ar-list-title" className={`${s.sapTable} ${s.sapRegisterTable}`}>

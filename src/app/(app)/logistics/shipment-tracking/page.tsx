@@ -13,6 +13,8 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as views from '@/server/services/logistics-views';
 import { CONTAINER_OBJECT } from '@/server/services/shipments';
 import { containerChip } from '../../payables/containers/status';
+import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
+import { savedViewsFor } from '@/server/saved-views-gate';
 
 /**
  * Shipment Tracking — REQ-LOG-001 item 20. Read only: every container on
@@ -40,6 +42,8 @@ export default async function ShipmentTrackingPage({ searchParams }: { searchPar
   if (!can(principal, 'view', CONTAINER_OBJECT)) {
     return <Denied object={page('shipment_tracking')} />;
   }
+  // The person's saved views of this screen — and, on a bare arrival, their default one.
+  const saved = await savedViewsFor('logistics.shipment_tracking', searchParams);
   const params = await searchParams;
   const view = (VIEWS as readonly string[]).includes(String(params.view)) ? (params.view as (typeof VIEWS)[number]) : 'open';
 
@@ -61,7 +65,9 @@ export default async function ShipmentTrackingPage({ searchParams }: { searchPar
             <span>{page('shipment_tracking')}</span>
             <span className={s.sapTitleMeta}>{admin('rows_shown', { count: rows.length })}</span>
           </h2>
-          <ListToolbar clearHref="/logistics/shipment-tracking" clearLabel={admin('clear_search')} countLabel={admin('rows_shown', { count: rows.length })} placeholder={admin('search_placeholder')} q={outcome.q} searchLabel={admin('search')} />
+          <ListToolbar clearHref="/logistics/shipment-tracking" clearLabel={admin('clear_search')} countLabel={admin('rows_shown', { count: rows.length })} placeholder={admin('search_placeholder')} q={outcome.q} searchLabel={admin('search')}>
+            <SavedViewsMenu state={saved} />
+          </ListToolbar>
           <form className={s.filterBar} method="get">
             <FilterRow>
               <Select defaultValue={view} label={t('view')} name="view" options={VIEWS.map((key) => ({ value: key, label: viewLabel(key) }))} />

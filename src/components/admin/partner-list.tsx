@@ -4,6 +4,7 @@ import { Panel } from '@/components/ui';
 import {
   AdminPage,
   Field,
+  FilterRow,
   Flash,
   Form,
   Grid,
@@ -14,7 +15,7 @@ import {
   Select,
   Submit,
   SubmitRow,
-  matches,
+  admin as s,
 } from './index';
 import { SectionTabs } from './section-tabs';
 import { outcomeOf, type SearchParams } from './params';
@@ -23,6 +24,9 @@ import { can } from '@domain/permissions';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as partners from '@/server/services/partners';
 import * as terms from '@/server/services/payment-terms';
+import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
+import { savedViewsFor } from '@/server/saved-views-gate';
+import { partnerRegister } from '@/server/services/screen-registers';
 import { createPartnerInRole } from '@/app/(app)/master-data/business-partners/actions';
 
 /**
@@ -44,6 +48,9 @@ const ROUTES = {
 } as const;
 
 const PAGE_KEY = { customer: 'customers', supplier: 'suppliers' } as const;
+
+/** The lifecycle statuses a list can be narrowed to (`business_partner.status`). */
+const STATUSES = ['prospect', 'active', 'on_hold', 'blocked', 'inactive'] as const;
 
 export async function PartnerList({
   role,
@@ -68,11 +75,15 @@ export async function PartnerList({
   const mayCreate = can(principal, 'create', partners.PERMISSION_OBJECT);
   const route = ROUTES[key];
 
-  const { rows, paymentTerms } = await withCurrentUser(async (tx) => ({
-    rows: await partners.listByRole(tx, role),
+  // The person's saved views of this list — and, on a bare arrival, their default one.
+  const saved = await savedViewsFor(role === 'supplier' ? 'payables.suppliers' : 'sales.customers', searchParams);
+  const status = saved?.current.params['status'] ?? '';
+
+  const { shown, paymentTerms } = await withCurrentUser(async (tx) => ({
+    // The rows and filters are `partnerRegister` — the pinned count on Home asks the same function.
+    ...(await partnerRegister(tx, role, { q: outcome.q, status })),
     paymentTerms: mayCreate ? await terms.listActive(tx) : [],
   }));
-  const shown = rows.filter((row) => matches(row, outcome.q));
 
   return (
     <AdminPage
@@ -138,10 +149,27 @@ export async function PartnerList({
           clearHref={route}
           clearLabel={t('clear_search')}
           countLabel={t('rows_shown', { count: shown.length })}
+          hidden={status ? { status } : {}}
           placeholder={t('search_placeholder')}
           q={outcome.q}
           searchLabel={t('search')}
-        />
+        >
+          <SavedViewsMenu state={saved} />
+        </ListToolbar>
+        <form className={s.filterBar} method="get">
+          <FilterRow>
+            <Select
+              defaultValue={status}
+              emptyLabel={t('partners.status_all')}
+              label={column('status')}
+              name="status"
+              options={STATUSES.map((value) => ({ value, label: t(`partners.status_${value}`) }))}
+            />
+            <SubmitRow>
+              <Submit label={t('partners.filter')} />
+            </SubmitRow>
+          </FilterRow>
+        </form>
         <div className="table-wrap">
           <table className="list">
             <thead>

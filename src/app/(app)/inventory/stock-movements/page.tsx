@@ -25,6 +25,8 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import * as items from '@/server/services/items';
 import * as stock from '@/server/services/stock-operations';
 import * as warehouses from '@/server/services/warehouses';
+import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
+import { savedViewsFor } from '@/server/saved-views-gate';
 
 /**
  * Stock Movement — Operations build, block 7.
@@ -54,6 +56,9 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
   if (!can(context.principal, 'view', stock.MOVEMENT_OBJECT)) {
     return <Denied object={page('stock_movements')} />;
   }
+
+  // The person's saved views of this screen — and, on a bare arrival, their default one.
+  const saved = await savedViewsFor('inventory.stock_movements', searchParams);
 
   const one = (key: string) => (typeof params[key] === 'string' ? (params[key] as string) : '');
   const filter = {
@@ -105,7 +110,12 @@ export default async function StockMovementsPage({ searchParams }: { searchParam
 
   return (
     <AdminPage
-      actions={<ExportMenu exportKey="stock_movement" query={params} />}
+      actions={
+        <>
+          <SavedViewsMenu state={saved} />
+          <ExportMenu exportKey="stock_movement" query={params} />
+        </>
+      }
       back={{ href: '/', label: t('dashboard_label') }}
       tabs={<SectionTabs route="/inventory/stock-movements" />}
       subtitle={t('stock_movements.subtitle')}

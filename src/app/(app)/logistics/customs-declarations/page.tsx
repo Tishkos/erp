@@ -17,6 +17,8 @@ import * as declarations from '@/server/services/customs-declarations';
 import * as rates from '@/server/services/exchange-rates';
 import { businessToday } from '@/server/domain/business-date';
 import { createDeclaration } from './actions';
+import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
+import { savedViewsFor } from '@/server/saved-views-gate';
 
 /**
  * Customs Declarations — REQ-LOG-001 item 8. What the broker lodged for each
@@ -47,6 +49,8 @@ export default async function CustomsDeclarationsPage({ searchParams }: { search
   }
   const mayCreate = can(principal, 'create', declarations.PERMISSION_OBJECT);
 
+  // The person's saved views of this screen — and, on a bare arrival, their default one.
+  const saved = await savedViewsFor('logistics.customs_declarations', searchParams);
   const params = await searchParams;
   const view = (VIEWS as readonly string[]).includes(String(params.view)) ? (params.view as (typeof VIEWS)[number]) : 'open';
   const today = businessToday();
@@ -124,7 +128,9 @@ export default async function CustomsDeclarationsPage({ searchParams }: { search
             placeholder={admin('search_placeholder')}
             q={outcome.q}
             searchLabel={admin('search')}
-          />
+          >
+            <SavedViewsMenu state={saved} />
+          </ListToolbar>
           <form className={s.filterBar} method="get">
             <FilterRow>
               <Select defaultValue={view} label={t('view')} name="view" options={VIEWS.map((key) => ({ value: key, label: t(`view_${key}`) }))} />

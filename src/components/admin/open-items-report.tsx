@@ -13,6 +13,8 @@ import { pickOne, pickOutcome } from '@domain/pick';
 import * as openItems from '@/server/services/open-items';
 import * as partners from '@/server/services/partners';
 import { businessToday } from '@/server/domain/business-date';
+import { SavedViewsMenu } from '@/components/saved-views/saved-views-menu';
+import { savedViewsFor } from '@/server/saved-views-gate';
 
 /**
  * Receivables and Payables — §15 and §16, written once.
@@ -59,6 +61,10 @@ export async function OpenItemsReport({
   if (!can(context.principal, 'view', openItems.PERMISSION_OBJECT[side])) {
     return <Denied object={page(titleKey)} />;
   }
+
+  // The supplier ageing is the registered screen (Receivables Ageing has its own component and key).
+  // The person's saved views of it — and, on a bare arrival, their default one.
+  const saved = side === 'supplier' ? await savedViewsFor('payables.open_items', searchParams) : null;
 
   const one = (key: string) => (typeof params[key] === 'string' ? (params[key] as string).trim() : '');
   const asOf = one('as_at') || businessToday();
@@ -258,7 +264,12 @@ export async function OpenItemsReport({
 
   return (
     <AdminPage
-      actions={<ExportMenu exportKey={exportKey} query={params} />}
+      actions={
+        <>
+          <SavedViewsMenu state={saved} />
+          <ExportMenu exportKey={exportKey} query={params} />
+        </>
+      }
       back={{ href: '/', label: t('dashboard_label') }}
       subtitle={t(`open_items.subtitle_${side}`)}
       tabs={<SectionTabs route={route} />}
