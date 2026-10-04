@@ -1,10 +1,9 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Field, Flash, Form, Grid, Hidden, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
-import { RecordHistory } from '@/components/admin/history';
+import { ProfileLink } from '@/components/admin/profile-link';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -18,10 +17,13 @@ import * as bankCash from '@/server/services/bank-cash-accounts';
 import { approveAdvance, payAdvance } from '../actions';
 import { businessToday } from '@/server/domain/business-date';
 import { isNotFoundError } from '@/server/not-found';
+import { PurchaseDoors, readDoors } from '../../record-doors';
 
 /**
  * One supplier advance — §8.5. The Purchase Invoice's window: the header, the
  * settlements against invoices as its grid, and approve / pay at its foot.
+ * The four doors in its title bar from the draft on, and the supplier, the
+ * order and the import as links (REQ-PAY-001 PAY3, 2026-10-04).
  */
 export const dynamic = 'force-dynamic';
 
@@ -57,7 +59,7 @@ export default async function AdvancePage({
         ...(await bankCash.listOfKind(tx, 'bank')),
         ...(await bankCash.listOfKind(tx, 'cash')),
       ].filter((account) => account.active && account.currency === view.advance.currency);
-      return { ...view, payFrom };
+      return { ...view, payFrom, doors: await readDoors(tx, principal, { object: advances.PERMISSION_OBJECT, recordId: view.advance.id }) };
     } catch (error) {
       // E1 — a missing record is a 404; anything else reaches the error boundary.
       if (isNotFoundError(error)) return null;
@@ -65,7 +67,8 @@ export default async function AdvancePage({
     }
   });
   if (!found) notFound();
-  const { advance } = found;
+  const { advance, doors } = found;
+  const self = `/payables/advances/${encodeURIComponent(advance.advanceNo)}`;
   const money = (amount: string, currency = 'IQD') => formatMoney(amount, currency, locale as Locale);
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
   const today = businessToday();
@@ -79,20 +82,11 @@ export default async function AdvancePage({
   const fields: DocumentField[] = [
     { label: t('col_no'), value: <bdi dir="ltr">{advance.advanceNo}</bdi> },
     { label: t('col_status'), value: status(advance.status), status: advance.status },
-    { label: t('order'), value: <bdi dir="ltr">{found.orderNo ?? '—'}</bdi> },
-    {
-      label: t('import'),
-      value: found.payableNo ? (
-        <Link className={s.sapLink} href={`/payables/${encodeURIComponent(found.payableNo)}`}>
-          <bdi dir="ltr">{found.payableNo}</bdi>
-        </Link>
-      ) : (
-        '—'
-      ),
-    },
+    { label: t('order'), value: <ProfileLink code={found.orderNo} kind="purchase_order" /> },
+    { label: t('import'), value: <ProfileLink code={found.payableNo} kind="import" /> },
     {
       label: t('col_supplier'),
-      value: <bdi dir="auto">{found.supplier ? `${found.supplier.name} (${found.supplier.code})` : '—'}</bdi>,
+      value: <ProfileLink code={found.supplier?.code} dir="auto" kind="supplier" name={found.supplier?.name ?? null} />,
     },
     { label: t('request_date'), value: <bdi dir="ltr">{day(advance.requestDate)}</bdi> },
     { label: t('paid_date'), value: <bdi dir="ltr">{day(advance.paidDate)}</bdi> },
@@ -156,9 +150,18 @@ export default async function AdvancePage({
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={admin('history')}
         documentType={t('document_type')}
+        titleActions={
+          <PurchaseDoors
+            doors={doors}
+            exportId={advance.advanceNo}
+            exportKey="supplier_advance"
+            object={advances.PERMISSION_OBJECT}
+            recordId={advance.id}
+            returnTo={self}
+            title={`${t('document_type')} ${advance.advanceNo}`}
+          />
+        }
         fields={fields}
         id="supplier-advance-document"
         linesCount={found.settlements.length}
@@ -191,9 +194,7 @@ export default async function AdvancePage({
             {found.settlements.map((row, index) => (
               <tr key={`${row.invoiceNo}-${index}`}>
                 <td>
-                  <Link className={s.sapLink} href={`/payables/invoices/${encodeURIComponent(row.invoiceNo)}`}>
-                    <bdi dir="ltr">{row.invoiceNo}</bdi>
-                  </Link>
+                  <ProfileLink code={row.invoiceNo} kind="purchase_invoice" />
                 </td>
                 <td>
                   <bdi dir="ltr">{day(row.settlementDate)}</bdi>
@@ -214,7 +215,6 @@ export default async function AdvancePage({
           </tbody>
         </table>
       </DocumentWindow>
-      <RecordHistory objectId={advance.id} objectType={advances.PERMISSION_OBJECT} />
     </AdminPage>
   );
 }

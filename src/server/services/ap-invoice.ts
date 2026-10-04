@@ -270,6 +270,12 @@ export interface CreateApInvoiceInput {
   readonly recurringContractId?: string | null;
   readonly periodStart?: string | null;
   readonly periodEnd?: string | null;
+  /**
+   * REQ-PAY-001 PAY9 (D-PAY-2) — a supplier debit note: the posted invoice of
+   * the same supplier it adjusts. Its §15 evidence is that invoice and the
+   * justification; its second person is the one who posts it (0295).
+   */
+  readonly adjustsInvoiceId?: string | null;
   /** REQ-PM-001 §8 — the project, the element and the cost code; the three together, or none. Inherited from the order when it carries one. */
   readonly projectCode?: string | null;
   readonly wbsCode?: string | null;
@@ -480,7 +486,24 @@ export async function create(
     ? (input.nonPoJustification?.trim() || `Expense — ${category!.name}`)
     : null;
 
-  if (!input.purchaseOrderId && !receivesItsOwnStock && !isExpense) {
+  // PAY9 — a debit note's evidence is the posted invoice it adjusts.
+  let adjusts: typeof apInvoice.$inferSelect | undefined;
+  if (input.adjustsInvoiceId) {
+    [adjusts] = await tx.select().from(apInvoice).where(eq(apInvoice.id, input.adjustsInvoiceId)).limit(1);
+    if (!adjusts) throw new Error(`No purchase invoice with id '${input.adjustsInvoiceId}' to adjust.`);
+    if (adjusts.supplierId !== input.supplierId) {
+      throw new Error(`Invoice ${adjusts.invoiceNo} is another supplier's; a debit note adjusts its own supplier's invoice.`);
+    }
+    if (!['posted', 'partially_executed', 'settled'].includes(adjusts.status)) {
+      throw new Error(`Invoice ${adjusts.invoiceNo} is '${adjusts.status}'; a debit note adjusts a posted invoice.`);
+    }
+    if (!input.nonPoJustification?.trim()) {
+      throw new Error('A debit note says why the supplier is charging more. Give a reason.');
+    }
+  }
+  const isDebitNote = adjusts !== undefined;
+
+  if (!input.purchaseOrderId && !receivesItsOwnStock && !isExpense && !isDebitNote) {
     if (
       !input.nonPoJustification ||
       input.nonPoJustification.trim().length === 0 ||
@@ -649,6 +672,7 @@ export async function create(
       nonPoApprovedAt: input.nonPoApprovedBy ? new Date() : null,
       expenseCategoryCode: category?.code ?? null,
       recurringContractId: input.recurringContractId ?? null,
+      adjustsInvoiceId: adjusts?.id ?? null,
       periodStart: input.periodStart ?? null,
       periodEnd: input.periodEnd ?? null,
       projectCode: assignment?.projectCode ?? null,
@@ -790,6 +814,7 @@ export async function create(
       isImport: Boolean(input.isImport),
       importApplication: importPayableNo,
       expenseCategory: category?.code ?? null,
+      adjustsInvoiceNo: adjusts?.invoiceNo ?? null,
     },
     outcome: 'success',
   });
@@ -1958,7 +1983,13 @@ export async function reverse(
   const [credited] = await tx
     .select({ memoNo: supplierCreditMemo.memoNo })
     .from(supplierCreditMemo)
-    .where(eq(supplierCreditMemo.apInvoiceId, id))
+    .where(
+      and(
+        eq(supplierCreditMemo.apInvoiceId, id),
+        // REQ-PAY-001 PAY8 — a credit note reversed or a draft cancelled rests on nothing.
+        sql`${supplierCreditMemo.status} not in ('cancelled', 'reversed')`,
+      ),
+    )
     .limit(1);
   if (credited) {
     throw new ApInvoiceNotReversibleError(

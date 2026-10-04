@@ -62,6 +62,7 @@ export const PROFILE_KINDS = [
   'payment_application',
   'supplier_advance',
   'supplier_contract',
+  'supplier_credit_note',
   'opening_stock',
   'project_certificate',
   'project_budget',
@@ -140,6 +141,8 @@ const BASES: Readonly<Record<ProfileKind, string | null>> = {
   payment_application: '/payables/payment-applications',
   supplier_advance: '/payables/advances',
   supplier_contract: '/payables/contracts',
+  // REQ-PAY-001 PAY8 — the standalone supplier credit note (payables, 2026-10-04).
+  supplier_credit_note: '/payables/credit-memos',
   opening_stock: '/inventory/opening-stock',
   project_certificate: '/projects/billing',
   project_budget: '/projects/budgets',

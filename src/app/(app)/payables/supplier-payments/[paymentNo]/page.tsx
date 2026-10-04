@@ -1,22 +1,22 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
-import { RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { ProfileLink } from '@/components/admin/profile-link';
 import { Denied } from '@/components/denied';
-import { ExportMenu } from '@/components/print/export-menu';
 import { PrintSheet } from '@/components/print/print-sheet';
 import { printSheet } from '@/server/print/sheet';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { toDecimalString } from '@domain/money';
+import { businessDateOf } from '@/server/domain/business-date';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as payments from '@/server/services/supplier-payment';
 import * as paymentApplications from '@/server/services/payment-applications';
 import { allocateOldestFirstPayment, allocatePayment, postPayment } from '../actions';
+import { PurchaseDoors, readDoors } from '../../record-doors';
 
 /**
  * One Payment — Operations build, block 6.
@@ -31,6 +31,12 @@ import { allocateOldestFirstPayment, allocatePayment, postPayment } from '../act
  * amount box, pre-filled with whatever is outstanding but editable. Partial is
  * the ordinary case, and a form that assumed the whole balance would make the
  * ordinary case the awkward one.
+ *
+ * REQ-PAY-001 (2026-10-04): the four doors in the title bar from the draft
+ * on; the supplier and the account as links to their profiles; and, under
+ * the document, what this payment has been put against — the allocation
+ * lives here, on the payment, not on the payment application (which is the
+ * request to the bank; owner's decision 4.6).
  */
 export const dynamic = 'force-dynamic';
 
@@ -76,11 +82,16 @@ export default async function PaymentPage({
       // REQ-AP-001 §21.13 — a payment confirmed from a payment application
       // links back to it.
       application: await paymentApplications.forSupplierPayment(tx, seen.payment.id),
+      // What it has been put against, live allocations only.
+      allocations: await payments.allocationsOf(tx, seen.payment.id),
+      doors: await readDoors(tx, principal, { object: payments.PERMISSION_OBJECT, recordId: seen.payment.id }),
     };
   });
 
   if (!found) notFound();
-  const { payment, unallocated, open, plan, parties, application } = found;
+  const { payment, unallocated, open, plan, parties, application, allocations, doors } = found;
+  const self = `/payables/supplier-payments/${encodeURIComponent(payment.paymentNo)}`;
+  const accountKind = parties.accountType === 'cash' ? 'cash_account' : 'bank_account';
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
   const mayAllocate = unallocated > 0n && can(principal, 'post', payments.PERMISSION_OBJECT);
@@ -97,14 +108,28 @@ export default async function PaymentPage({
     // Who was paid and out of which account: the two things the form asked for
     // and the document did not say back. The printed copy has carried them all
     // along, so the screen was the odd one out.
-    { label: column('supplier_code'), value: <bdi dir="ltr">{parties.supplierCode ?? '—'}</bdi> },
-    { label: column('supplier_name'), value: <bdi dir="auto">{parties.supplierName ?? '—'}</bdi> },
+    { label: column('supplier_code'), value: <ProfileLink code={parties.supplierCode} kind="supplier">{parties.supplierCode ?? '—'}</ProfileLink> },
+    {
+      label: column('supplier_name'),
+      value: (
+        <ProfileLink code={parties.supplierCode} dir="auto" kind="supplier">
+          {parties.supplierName ?? '—'}
+        </ProfileLink>
+      ),
+    },
     {
       label: column('posting_date'),
       value: <bdi dir="ltr">{formatBusinessDate(payment.paymentDate, locale as Locale)}</bdi>,
     },
-    { label: column('bank_code'), value: <bdi dir="ltr">{parties.bankCode ?? '—'}</bdi> },
-    { label: column('bank_name'), value: <bdi dir="auto">{parties.bankName ?? '—'}</bdi> },
+    { label: column('bank_code'), value: <ProfileLink code={parties.bankCode} kind={accountKind}>{parties.bankCode ?? '—'}</ProfileLink> },
+    {
+      label: column('bank_name'),
+      value: (
+        <ProfileLink code={parties.bankCode} dir="auto" kind={accountKind}>
+          {parties.bankName ?? '—'}
+        </ProfileLink>
+      ),
+    },
     { label: column('branch_code'), value: <bdi dir="ltr">{payment.branchCode}</bdi> },
     {
       label: t('supplier_payments.amount'),
@@ -122,14 +147,7 @@ export default async function PaymentPage({
       ? [
           {
             label: t('payment_applications.document_type'),
-            value: (
-              <Link
-                className={s.sapLink}
-                href={`/payables/payment-applications/${encodeURIComponent(application.applicationNo)}`}
-              >
-                <bdi dir="ltr">{application.applicationNo}</bdi>
-              </Link>
-            ),
+            value: <ProfileLink code={application.applicationNo} kind="payment_application" />,
           },
         ]
       : []),
@@ -147,7 +165,6 @@ export default async function PaymentPage({
 
   return (
     <AdminPage
-      actions={<ExportMenu exportKey="supplier_payment" id={payment.paymentNo} />}
       back={{ href: '/payables/supplier-payments', label: t('back') }}
       title={payment.paymentNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -185,11 +202,20 @@ export default async function PaymentPage({
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
         documentType={page('supplier_payments')}
         fields={fields}
         id="payment-document"
+        titleActions={
+          <PurchaseDoors
+            doors={doors}
+            exportId={payment.paymentNo}
+            exportKey="supplier_payment"
+            object={payments.PERMISSION_OBJECT}
+            recordId={payment.id}
+            returnTo={self}
+            title={`${page('supplier_payments')} ${payment.paymentNo}`}
+          />
+        }
         linesCount={open.length}
         linesTitle={t('supplier_payments.invoice')}
         number={payment.paymentNo}
@@ -218,7 +244,7 @@ export default async function PaymentPage({
             {open.map((invoice) => (
               <tr key={invoice.id}>
                 <td className={s.sapAccountCell}>
-                  <bdi dir="ltr">{invoice.invoiceNo}</bdi>
+                  <ProfileLink code={invoice.invoiceNo} kind="purchase_invoice" />
                 </td>
                 <td>
                   <bdi dir="ltr">{formatBusinessDate(invoice.dueDate, locale as Locale)}</bdi>
@@ -259,7 +285,55 @@ export default async function PaymentPage({
         </table>
       </DocumentWindow>
 
-      <RecordHistory objectId={payment.id} objectType={payments.PERMISSION_OBJECT} />
+      {/* Where the money went — the allocation is the payment's own (4.6). */}
+      <section aria-labelledby="payment-allocations-title" className={s.sapDoc}>
+        <div className={s.sapWindow}>
+          <h2 className={s.sapTitle} id="payment-allocations-title">
+            <span>{t('supplier_payments.allocated')}</span>
+            <span className={s.sapTitleMeta}>{t('payables_orders.rows', { count: allocations.length })}</span>
+          </h2>
+          <p className={s.sapNote}>{t('payables_record.allocation_note')}</p>
+          <div className={s.sapTableWrap}>
+            <table className={s.sapTable}>
+              <thead>
+                <tr>
+                  <th scope="col">{column('invoice_no')}</th>
+                  <th scope="col">{column('due_date')}</th>
+                  <th scope="col">{column('date')}</th>
+                  <th className={s.sapNum} scope="col">
+                    {t('supplier_payments.allocated')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {allocations.length === 0 ? (
+                  <tr>
+                    <td className={s.sapEmptyRow} colSpan={4}>
+                      {t('payables_record.no_allocations')}
+                    </td>
+                  </tr>
+                ) : null}
+                {allocations.map((row) => (
+                  <tr key={`${row.invoiceNo}-${String(row.allocatedAt)}`}>
+                    <td className={s.sapAccountCell}>
+                      <ProfileLink code={row.invoiceNo} kind="purchase_invoice" />
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{formatBusinessDate(row.dueDate, locale as Locale)}</bdi>
+                    </td>
+                    <td>
+                      <bdi dir="ltr">{formatBusinessDate(businessDateOf(new Date(row.allocatedAt)), locale as Locale)}</bdi>
+                    </td>
+                    <td className={s.sapNum}>
+                      <bdi dir="ltr">{money(row.amountIqd)}</bdi>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
       {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>
   );

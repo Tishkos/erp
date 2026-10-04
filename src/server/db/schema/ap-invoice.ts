@@ -42,6 +42,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { appUser, branch } from './platform';
 import { businessPartner, costCentre, warehouse } from './organisation';
@@ -162,6 +163,12 @@ export const apInvoice = pgTable(
     recurringContractId: uuid('recurring_contract_id').references(() => recurringContract.id),
     periodStart: date('period_start'),
     periodEnd: date('period_end'),
+    /**
+     * REQ-PAY-001 PAY9 (D-PAY-2) — a supplier debit note is a purchase invoice
+     * that names the invoice it adjusts. Approved, posted, aged, stated and
+     * paid like any bill (0295).
+     */
+    adjustsInvoiceId: uuid('adjusts_invoice_id').references((): AnyPgColumn => apInvoice.id),
     /** REQ-PM-001 §8 — the project, the element and the cost code the purchase is assigned to; the three together, or none. */
     projectCode: text('project_code'),
     wbsCode: text('wbs_code'),
