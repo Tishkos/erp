@@ -51,7 +51,7 @@ export async function ViewSummary({
         {lines.length === 0 ? t('no_filters_set') : lines.map((line) => `${line.label}: ${line.value}`).join(' · ')}
       </span>
       {dropped.length > 0 ? (
-        <p className={s.sectionHint} role="note">
+        <p className={s.sapNote} role="note">
           {t('dropped_note', { names: dropped.join(', ') })}
         </p>
       ) : null}
@@ -66,14 +66,16 @@ export async function ViewRename({ view, returnTo }: { readonly view: RouteViewS
     <form action={renameView} className={s.inline}>
       <Hidden name="id" value={view.id} />
       <Hidden name="return_to" value={returnTo} />
-      <input
-        aria-label={`${t('rename')}: ${view.name}`}
-        className={s.sapCellField}
-        defaultValue={view.name}
-        maxLength={80}
-        name="name"
-        required
-      />
+      <div className={s.field}>
+        <input
+          aria-label={`${t('rename')}: ${view.name}`}
+          className={s.input}
+          defaultValue={view.name}
+          maxLength={80}
+          name="name"
+          required
+        />
+      </div>
       <Submit label={t('rename')} small tone="secondary" />
     </form>
   );

@@ -412,13 +412,14 @@ describe('a view is its owner’s alone', () => {
       );
       expect(seen.rows[0].n).toBe(0);
 
-      for (const act of [
-        (tx: Tx, ctx: ActorContext) => sv.renameRouteView(tx, ctx, ids.overdue!, 'Mine now'),
-        (tx: Tx, ctx: ActorContext) => sv.duplicateRouteView(tx, ctx, ids.overdue!),
-        (tx: Tx, ctx: ActorContext) => sv.deleteRouteView(tx, ctx, ids.overdue!),
-        (tx: Tx, ctx: ActorContext) => sv.setDefaultRouteView(tx, ctx, ids.overdue!, true),
-        (tx: Tx, ctx: ActorContext) => sv.pinRouteView(tx, ctx, ids.overdue!, true),
-      ]) {
+      const acts: ((tx: Tx, ctx: ActorContext) => Promise<unknown>)[] = [
+        (tx, ctx) => sv.renameRouteView(tx, ctx, ids.overdue!, 'Mine now'),
+        (tx, ctx) => sv.duplicateRouteView(tx, ctx, ids.overdue!),
+        (tx, ctx) => sv.deleteRouteView(tx, ctx, ids.overdue!),
+        (tx, ctx) => sv.setDefaultRouteView(tx, ctx, ids.overdue!, true),
+        (tx, ctx) => sv.pinRouteView(tx, ctx, ids.overdue!, true),
+      ];
+      for (const act of acts) {
         await expect(as(who, act)).rejects.toMatchObject({ code: 'not_found' });
       }
     }

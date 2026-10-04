@@ -48,7 +48,10 @@ export function ViewsDialog({
         aria-labelledby={headingId}
         className={`${styles.dialog} ${styles.dialogWide}`}
         onClick={(event) => {
-          if (event.target === ref.current) ref.current?.close();
+          // The backdrop closes it; so does following a link out of it — opening a view is a
+          // client-side navigation on the same page, which would otherwise leave the window up.
+          const target = event.target as HTMLElement;
+          if (target === ref.current || target.closest('a[href]')) ref.current?.close();
         }}
         ref={ref}
       >

@@ -35,7 +35,7 @@ export async function SavedViewsMenu({ state }: { readonly state: SavedViewsStat
 
   return (
     <ViewsDialog closeLabel={admin('close')} count={state.used} label={t('menu_label')} title={t('menu_title')}>
-      <h3 className={s.sectionHint}>{t('save_heading')}</h3>
+      <h3 className={s.label}>{t('save_heading')}</h3>
       {full ? (
         <p className={s.sapNote} role="status">
           {t('errors.limit_views', { views: MAX_ROUTE_VIEWS })}
@@ -44,7 +44,7 @@ export async function SavedViewsMenu({ state }: { readonly state: SavedViewsStat
         <Form action={saveView}>
           <Hidden name="route_key" value={state.routeKey} />
           <Hidden name="return_to" value={state.current.returnTo} />
-          <p className={s.sectionHint}>
+          <p className="muted">
             {here.length === 0
               ? t('saving_nothing')
               : t('saving', { filters: here.map((line) => `${line.label}: ${line.value}`).join(' · ') })}
@@ -72,43 +72,32 @@ export async function SavedViewsMenu({ state }: { readonly state: SavedViewsStat
               />
             ))}
           </Grid>
-          <p className={s.hint}>{t('save_hint')}</p>
+          {state.slots.length > 0 ? <p className={s.hint}>{t('save_hint')}</p> : null}
           <SubmitRow>
             <Submit label={t('save')} />
           </SubmitRow>
         </Form>
       )}
 
-      <h3 className={s.sectionHint}>{t('mine_heading')}</h3>
+      <h3 className={s.label}>{t('mine_heading')}</h3>
       {rows.length === 0 ? (
-        <p className={s.sectionHint}>{t('none_on_screen')}</p>
+        <p className="muted">{t('none_on_screen')}</p>
       ) : (
-        <div className={`${s.sapTableWrap} ${s.sapRegisterTableWrap}`}>
-          <table className={`${s.sapTable} ${s.sapRegisterTable}`}>
-            <thead>
-              <tr>
-                <th scope="col">{t('view')}</th>
-                <th scope="col">{t('filters')}</th>
-                <th scope="col">{admin('actions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ view, lines }) => (
-                <tr key={view.id}>
-                  <td>
-                    <ViewRename returnTo={state.current.returnTo} view={view} />
-                    <ViewBadges active={view.active} view={view} />
-                  </td>
-                  <td>
-                    <ViewSummary lines={lines} view={view} />
-                  </td>
-                  <td>
-                    <ViewActions returnTo={state.current.returnTo} view={view} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        // The approvals inbox's cards: the name and what it asks on one side, the buttons on the other,
+        // one column on a phone — a table here would scroll sideways with its buttons out of sight.
+        <div className={s.inboxList}>
+          {rows.map(({ view, lines }) => (
+            <article className={s.inboxItem} key={view.id}>
+              <div className={s.inboxDoc}>
+                <ViewRename returnTo={state.current.returnTo} view={view} />
+                <ViewBadges active={view.active} view={view} />
+                <ViewSummary lines={lines} view={view} />
+              </div>
+              <div className={s.inboxDecide}>
+                <ViewActions returnTo={state.current.returnTo} view={view} />
+              </div>
+            </article>
+          ))}
         </div>
       )}
 
