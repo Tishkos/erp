@@ -97,7 +97,12 @@ export default async function InTransitPage({ searchParams }: { searchParams: Se
     >
       <Flash error={outcome.error} errorTitle={admin('error_title')} saved={outcome.saved} savedLabel={admin('saved')} />
       <p className={s.sapNote}>
-        <strong>{t('legend_title')}</strong> {t('legend_in_transit')} {t('legend_received')} {t('legend_on_hand')} {t('legend_available')}
+        <strong>{t('legend_title')}</strong> {t('legend_in_transit')} {t('legend_received')} {t('legend_on_hand')} {t('legend_available')}{' '}
+        {visibleRoute('/inventory/availability') ? (
+          <Link className={s.sapLink} href="/inventory/availability">
+            {page('availability')}
+          </Link>
+        ) : null}
       </p>
 
       {/* ── By import and item — the ledger's layers (item 18) ─────────── */}
