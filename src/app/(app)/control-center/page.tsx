@@ -243,7 +243,7 @@ export default async function ControlCenterPage({ searchParams }: { searchParams
                               <span>
                                 {result.figures.map((figure, index) => (
                                   <span key={`${figure.key}-${index}`}>
-                                    {index > 0 ? ' · ' : ''}
+                                    {index > 0 ? <br /> : null}
                                     <bdi dir="auto">{figureLabel(figure)}</bdi>
                                     {': '}
                                     <bdi dir="ltr">{figureValue(figure)}</bdi>
@@ -263,9 +263,7 @@ export default async function ControlCenterPage({ searchParams }: { searchParams
                           const itemHref = served(item.href);
                           return (
                             <tr key={`${result.code}|${index}`}>
-                              <td />
-                              <td />
-                              <td>
+                              <td colSpan={3}>
                                 <bdi dir="auto">{itemText(item)}</bdi>
                                 {item.ref ? (
                                   <>
@@ -292,9 +290,7 @@ export default async function ControlCenterPage({ searchParams }: { searchParams
                         }),
                         result.hidden > 0 ? (
                           <tr key={`${result.code}|hidden`}>
-                            <td />
-                            <td />
-                            <td>
+                            <td colSpan={3}>
                               <span className="muted">
                                 {x('more_items', { count: number(result.hidden) })}{' '}
                                 {href ? (

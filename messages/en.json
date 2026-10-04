@@ -7193,7 +7193,7 @@
         "timeout": "Could not be checked: it did not answer within {seconds, plural, one {# second} other {# seconds}}.",
         "budget": "Could not be checked: the {seconds, plural, one {# second} other {# seconds}} allowed for the whole run ran out first.",
         "error": "Could not be checked: {message}",
-        "no_host_data": "Could not be checked: {what} is not available on this server.",
+        "no_host_data": "Could not be checked: {what} cannot be read on this server.",
         "not_configured": "Not set up here, so there is nothing to check."
       },
       "what": {
