@@ -127,6 +127,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   payables_migration: 'settings',
   legacy_import: 'settings',
   hr_settings: 'settings',
+  cloud_files_settings: 'settings',
   whatsapp: 'settings',
   project_settings: 'settings',
 
@@ -417,6 +418,7 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/administration/roles',
   '/administration/permissions',
   '/administration/numbering',
+  '/administration/cloud-files',
   '/administration/audit',
   '/master-data/branches',
   '/master-data/departments',

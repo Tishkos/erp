@@ -224,7 +224,7 @@ describe('linking an account (Login Flow v2) and unlinking it', () => {
     expect((await session(manager)).account.cloudUser).toBe('bob');
     // Row-level security: the officer's scope sees only the officer's row.
     const seen = await inTx(officer, (tx) => tx.execute(sql`select user_id from cloud_account`));
-    expect((seen as { rows: Array<{ user_id: string }> }).rows.map((r) => r.user_id)).toEqual([officer.principal.userId]);
+    expect((seen as unknown as { rows: Array<{ user_id: string }> }).rows.map((r) => r.user_id)).toEqual([officer.principal.userId]);
   });
 
   it('a sign-in that is never finished expires, and a stale poll token does nothing', async () => {
@@ -620,9 +620,9 @@ describe('links between cloud files and ERP records — both directions', () => 
     await linkAs(mosulOfficer, 'alice');
     await link('/Contracts/SUP-DOC-1 agreement.pdf', 'project', 'PRJ-MSL', mosulOfficer);
     const seen = await inTx(officer, (tx) => tx.execute(sql`select id from cloud_file_link`));
-    expect((seen as { rows: unknown[] }).rows).toEqual([]);
+    expect((seen as unknown as { rows: unknown[] }).rows).toEqual([]);
     const own = await inTx(mosulOfficer, (tx) => tx.execute(sql`select id from cloud_file_link`));
-    expect((own as { rows: unknown[] }).rows).toHaveLength(1);
+    expect((own as unknown as { rows: unknown[] }).rows).toHaveLength(1);
   });
 });
 

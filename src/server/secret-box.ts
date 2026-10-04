@@ -27,7 +27,7 @@ export const MIN_SECRET_KEY_LENGTH = 32;
 const SALT = Buffer.from('qimah-erp/secret-box/v1', 'utf8');
 
 /** What the key is read from: the process environment, or anything shaped like it (a test hands its own). */
-export type SecretEnv = { readonly ERP_SECRET_KEY?: string | undefined };
+export type SecretEnv = { readonly ERP_SECRET_KEY?: string | undefined; readonly [name: string]: string | undefined };
 
 /** Is the server able to seal a secret? (The settings screen says so plainly when it is not.) */
 export function secretKeyProblem(env: SecretEnv = process.env): string | null {

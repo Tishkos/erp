@@ -588,6 +588,31 @@ export async function sendToCloud(client: CloudClient, config: settings.CloudSet
   return { entry };
 }
 
+export interface UploadTarget {
+  /** The Document Center folder to put the file in; ignored when the file belongs to a record. */
+  readonly directory: string | null;
+  /** The record the file belongs to: it goes in the record's own folder and is linked to it. */
+  readonly record: { readonly type: string; readonly id: string } | null;
+}
+
+/**
+ * Where an upload goes, decided before any byte is sent: the permission to
+ * add files, the fence around the Document Center's folder, and — for a file
+ * that belongs to a record — the right to open that record and the record's
+ * own folder (made and shared if it is not yet there).
+ */
+export async function prepareUpload(tx: Tx, ctx: ActorContext, client: CloudClient, config: settings.CloudSettings, target: UploadTarget): Promise<{ directory: string; record: RecordRef | null }> {
+  await permit(ctx, 'create', FILES_OBJECT, target.record?.id ?? null);
+  if (!target.record) return { directory: assertWithin(config.rootPath, target.directory ?? config.rootPath), record: null };
+  const record = await openRecord(tx, ctx.principal, target.record.type, target.record.id);
+  if (!record) {
+    await refuse(ctx, 'cloud_file.upload_refused', target.record.type, target.record.id, 'the record cannot be opened by this person');
+    throw new CloudLinkError('You cannot add files to that record.');
+  }
+  const folder = await ensureRecordFolder(tx, ctx, client, config, record);
+  return { directory: folder.entry.path, record };
+}
+
 /** The audit row for a confirmed upload, and the link if it was made from a record. */
 export async function recordUpload(tx: Tx, ctx: ActorContext, client: CloudClient, uploaded: UploadedFile, link: RecordRef | null): Promise<LinkRow | null> {
   await audit.record(tx, {
@@ -608,10 +633,10 @@ export async function recordUpload(tx: Tx, ctx: ActorContext, client: CloudClien
 // Download and preview
 // ---------------------------------------------------------------------------
 
-export async function recordDownload(tx: Tx, ctx: ActorContext, entry: CloudEntry): Promise<void> {
+export async function recordDownload(tx: Tx, ctx: ActorContext, entry: CloudEntry, how: 'download' | 'preview' = 'download'): Promise<void> {
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,
-    action: 'cloud_file.downloaded',
+    action: how === 'preview' ? 'cloud_file.previewed' : 'cloud_file.downloaded',
     objectType: 'cloud_file',
     objectId: entry.fileId ?? entry.path,
     branchCode: ctx.branchCode,

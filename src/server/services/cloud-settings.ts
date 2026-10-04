@@ -50,6 +50,27 @@ export async function get(tx: Tx): Promise<CloudSettings> {
   };
 }
 
+let cached: { readonly at: number; readonly value: CloudSettings } | null = null;
+const CACHE_MS = 10_000;
+
+/**
+ * The same, remembered for ten seconds by the process. Every record's paperclip
+ * asks whether Cloud Files is on; when it is not (the state of every company
+ * until it is configured) that question should cost nothing. A change made
+ * here is seen at once by this process and within ten seconds by the others.
+ */
+export async function getCached(tx: Tx): Promise<CloudSettings> {
+  if (cached && Date.now() - cached.at < CACHE_MS) return cached.value;
+  const value = await get(tx);
+  cached = { at: Date.now(), value };
+  return value;
+}
+
+/** What this process last saw of the settings, if that was under ten seconds ago — no database. */
+export function peekCached(): CloudSettings | null {
+  return cached && Date.now() - cached.at < CACHE_MS ? cached.value : null;
+}
+
 /** The integration is on and has somewhere to go. */
 export const isConfigured = (settings: CloudSettings): boolean => settings.enabled && Boolean(settings.baseUrl);
 
@@ -101,6 +122,7 @@ export async function save(tx: Tx, ctx: ActorContext, input: SaveSettingsInput):
     .set({ enabled: input.enabled, baseUrl, rootPath, recordRoot, updatedBy: ctx.principal.userId, updatedAt: new Date() })
     .where(eq(cloudSetting.id, 1));
 
+  cached = null;
   await recordChange(tx, ctx, {
     action: 'cloud_setting.updated',
     objectType: PERMISSION_OBJECT,

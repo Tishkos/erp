@@ -537,7 +537,7 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'documents',
     ordinal: 16,
     items: [
-      page('document_centre', 'attachment', '/documents'),
+      page('document_centre', 'cloud_files', '/documents'),
       page('templates', 'document_template'),
       page('checklists', 'checklist'),
       page('expiring_documents', 'expiring_document'),
@@ -629,6 +629,8 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('roles', 'role', '/administration/roles'),
       page('permissions', 'permission', '/administration/permissions'),
       page('numbering', 'number_series', '/administration/numbering'),
+      // Platform phase, Agent 4 — QS Cloud Files: on/off, address, role -> group mapping.
+      page('cloud_files_settings', 'cloud_setting', '/administration/cloud-files'),
       page('audit_trail', 'audit_event', '/administration/audit'),
       page('system_parameters', 'system_parameter', '/administration/parameters'),
       page('background_jobs', 'job', '/administration/jobs'),

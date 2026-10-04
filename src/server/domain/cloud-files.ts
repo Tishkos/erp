@@ -440,6 +440,15 @@ export function sortEntries<T extends { isFolder: boolean; name: string; size: n
   });
 }
 
+/** Bytes as a person reads them; a dash for a size the cloud did not give. */
+export function readableSize(bytes: number | null): string {
+  if (bytes === null) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+}
+
 /**
  * Can the browser show the cloud's own preview of this entry? Only when the
  * cloud said it can (`nc:has-preview`) and the entry is a file — never guessed

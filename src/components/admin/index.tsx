@@ -608,6 +608,7 @@ export function ListToolbar({
   countLabel,
   clearLabel,
   clearHref,
+  hidden,
   children,
 }: {
   readonly q: string;
@@ -616,11 +617,16 @@ export function ListToolbar({
   readonly countLabel: string;
   readonly clearLabel: string;
   readonly clearHref: string;
+  /** Query values the search keeps — a folder, a filter — so that searching does not leave the place it was started in. */
+  readonly hidden?: Readonly<Record<string, string>>;
   readonly children?: ReactNode;
 }) {
   return (
     <div className={styles.toolbar}>
       <form className={styles.toolbarSearch} method="get" role="search">
+        {hidden
+          ? Object.entries(hidden).map(([name, value]) => <input key={name} name={name} type="hidden" value={value} />)
+          : null}
         <input aria-label={searchLabel} defaultValue={q} name="q" placeholder={placeholder} type="search" />
         <button aria-label={searchLabel} type="submit">
           <Search aria-hidden="true" />

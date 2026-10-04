@@ -29,7 +29,7 @@ import {
   type ConnectionState,
 } from '../domain/cloud-files';
 import { SecretKeyError, openSecret, sealSecret, secretKeyProblem } from '../secret-box';
-import { AdminValidationError, recordChange } from './administration';
+import { AdminValidationError, permit, recordChange } from './administration';
 import type { ActorContext } from './chart-of-accounts';
 import {
   CloudAuthError,
@@ -107,6 +107,28 @@ export async function connect(tx: Tx, userId: string): Promise<{ client: CloudCl
   return { client: new CloudClient({ baseUrl: account.serverUrl, user: account.cloudUser, password }), settings: current, account };
 }
 
+/** Where a screen stands with the cloud, without throwing — what a page needs to choose what to draw. */
+export type CloudSession =
+  | { readonly state: 'not_configured'; readonly settings: settings.CloudSettings }
+  | { readonly state: 'not_linked' | 'relink'; readonly settings: settings.CloudSettings; readonly account: AccountView | null; readonly pending: PendingLink | null }
+  | { readonly state: 'ready'; readonly settings: settings.CloudSettings; readonly account: AccountView; readonly client: CloudClient };
+
+export async function sessionFor(tx: Tx, userId: string): Promise<CloudSession> {
+  const { settings: current, account, state } = await stateFor(tx, userId);
+  if (state === 'not_configured') return { state, settings: current };
+  if (state === 'ready') {
+    try {
+      const { client } = await connect(tx, userId);
+      return { state, settings: current, account: account!, client };
+    } catch (error) {
+      // The server's key was changed: the sealed password can no longer be opened, so the person links again.
+      if (!(error instanceof SecretKeyError)) throw error;
+      return { state: 'relink', settings: current, account, pending: await pendingLink(tx, userId) };
+    }
+  }
+  return { state, settings: current, account, pending: await pendingLink(tx, userId) };
+}
+
 /**
  * Records what the cloud last said about this account, on its own connection:
  * a refusal rolls the caller's transaction back, and the fact that the cloud
@@ -158,6 +180,8 @@ export interface LinkStart {
 
 /** Starts a sign-in at the cloud. Replaces any earlier attempt of this person's. */
 export async function beginLink(tx: Tx, ctx: ActorContext): Promise<LinkStart> {
+  // Only those who may use the Document Center link an account to it.
+  await permit(ctx, 'view', settings.FILES_OBJECT, null);
   const { settings: current } = await stateFor(tx, ctx.principal.userId);
   if (!settings.isConfigured(current) || !current.baseUrl) throw new CloudStateError('not_configured', 'This integration is not configured.');
   const problem = secretKeyProblem();
