@@ -119,8 +119,15 @@ DECLARE
 	v_lock record;
 	v_departed numeric;
 	v_inventory numeric;
-	v_lock_id uuid := CASE WHEN TG_TABLE_NAME = 'landed_cost_lock' THEN NEW.id ELSE NEW.lock_id END;
+	v_lock_id uuid;
 BEGIN
+	-- Each branch reads only the field its table has: PL/pgSQL would plan a
+	-- CASE over both and refuse the one the row does not carry.
+	IF TG_TABLE_NAME = 'landed_cost_lock' THEN
+		v_lock_id := NEW.id;
+	ELSE
+		v_lock_id := NEW.lock_id;
+	END IF;
 	SELECT * INTO v_lock FROM landed_cost_lock WHERE id = v_lock_id;
 	IF v_lock IS NULL THEN
 		RETURN NULL;
