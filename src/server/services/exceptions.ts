@@ -547,7 +547,10 @@ async function detect(scope: RequestScope, input: SweepInput, now: Date, today: 
     await applyScope(tx, scope);
     // Whatever a detector does, it cannot write a business row: PostgreSQL refuses.
     await tx.execute(sql`set local transaction_read_only = on`);
-    const principal = await authz.loadPrincipal(tx, scope.userId);
+    // The system operator reads the whole company (its scope says so); the services' own checks must agree with the scope,
+    // whether the operator holds the super-user flag or only the system administrator's role.
+    const loaded = await authz.loadPrincipal(tx, scope.userId);
+    const principal = scope.isSuperUser ? { ...loaded, isSuperUser: true } : loaded;
     const truncated = new Map<string, { total: number; shown: number }>();
     const results: DetectorResult[] = [];
     const findings: Finding[] = [];
