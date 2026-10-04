@@ -5863,6 +5863,15 @@
       "raised_by": "Raised by",
       "raised_at": "Raised at",
       "no_runs": "Nothing raised yet."
+    },
+    "record_notes": {
+      "notes": "Notes",
+      "note_when": "When",
+      "note_who": "Who",
+      "note": "Note",
+      "no_notes": "No notes yet.",
+      "note_hint": "What is happening with this record — dated and signed, never edited.",
+      "add_note": "Add note"
     }
   },
   "profile": {
@@ -6236,7 +6245,8 @@
       "cash_forecast": "Cash Forecast",
       "account_reconciliation": "Account Reconciliation",
       "tax_code": "Tax Code",
-      "recurring_journal": "Recurring Journal"
+      "recurring_journal": "Recurring Journal",
+      "project_certificate": "Progress Certificate"
     }
   }
 }

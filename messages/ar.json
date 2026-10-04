@@ -5863,6 +5863,15 @@
       "raised_by": "أنشأه",
       "raised_at": "أُنشئ في",
       "no_runs": "لم يُنشأ شيء بعد."
+    },
+    "record_notes": {
+      "notes": "الملاحظات",
+      "note_when": "متى",
+      "note_who": "من",
+      "note": "ملاحظة",
+      "no_notes": "لا توجد ملاحظات بعد.",
+      "note_hint": "ما الذي يحدث مع هذا السجل — مؤرخة وموقعة، ولا تُعدَّل.",
+      "add_note": "إضافة ملاحظة"
     }
   },
   "profile": {
@@ -6236,7 +6245,8 @@
       "cash_forecast": "توقعات النقد",
       "account_reconciliation": "مطابقة الحسابات",
       "tax_code": "رمز ضريبي",
-      "recurring_journal": "قيد متكرر"
+      "recurring_journal": "قيد متكرر",
+      "project_certificate": "شهادة الإنجاز"
     }
   }
 }
