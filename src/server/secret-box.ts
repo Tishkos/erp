@@ -26,15 +26,18 @@ export class SecretKeyError extends Error {
 export const MIN_SECRET_KEY_LENGTH = 32;
 const SALT = Buffer.from('qimah-erp/secret-box/v1', 'utf8');
 
+/** What the key is read from: the process environment, or anything shaped like it (a test hands its own). */
+export type SecretEnv = { readonly ERP_SECRET_KEY?: string | undefined };
+
 /** Is the server able to seal a secret? (The settings screen says so plainly when it is not.) */
-export function secretKeyProblem(env: NodeJS.ProcessEnv = process.env): string | null {
+export function secretKeyProblem(env: SecretEnv = process.env): string | null {
   const key = env.ERP_SECRET_KEY;
   if (!key) return 'ERP_SECRET_KEY is not set on this server.';
   if (key.length < MIN_SECRET_KEY_LENGTH) return `ERP_SECRET_KEY must be at least ${MIN_SECRET_KEY_LENGTH} characters.`;
   return null;
 }
 
-function keyFor(env: NodeJS.ProcessEnv): Buffer {
+function keyFor(env: SecretEnv): Buffer {
   const problem = secretKeyProblem(env);
   if (problem) throw new SecretKeyError(problem);
   return Buffer.from(hkdfSync('sha256', Buffer.from(env.ERP_SECRET_KEY!, 'utf8'), SALT, Buffer.from('cloud-files', 'utf8'), 32));
@@ -43,7 +46,7 @@ function keyFor(env: NodeJS.ProcessEnv): Buffer {
 const b64 = (buffer: Buffer): string => buffer.toString('base64url');
 
 /** Seals `plain`, bound to `bind` (what it belongs to). */
-export function sealSecret(plain: string, bind: string, env: NodeJS.ProcessEnv = process.env): string {
+export function sealSecret(plain: string, bind: string, env: SecretEnv = process.env): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', keyFor(env), iv);
   cipher.setAAD(Buffer.from(bind, 'utf8'));
@@ -52,7 +55,7 @@ export function sealSecret(plain: string, bind: string, env: NodeJS.ProcessEnv =
 }
 
 /** Opens a sealed value, or throws — a wrong key, a wrong owner and a changed byte all fail the same way. */
-export function openSecret(sealed: string, bind: string, env: NodeJS.ProcessEnv = process.env): string {
+export function openSecret(sealed: string, bind: string, env: SecretEnv = process.env): string {
   const parts = sealed.split('.');
   if (parts.length !== 4 || parts[0] !== 'v1') throw new SecretKeyError('The stored secret is not in a known format.');
   try {

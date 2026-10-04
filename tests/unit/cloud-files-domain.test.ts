@@ -358,7 +358,7 @@ describe('the state a screen is in', () => {
 });
 
 describe('the app password is kept sealed', () => {
-  const env = { ERP_SECRET_KEY: 'k'.repeat(40) } as NodeJS.ProcessEnv;
+  const env = { ERP_SECRET_KEY: 'k'.repeat(40) };
 
   it('opens for its owner and for nobody else', () => {
     const sealed = sealSecret('abcde-fghij-klmno', 'cloud-files:user-1', env);
@@ -366,7 +366,7 @@ describe('the app password is kept sealed', () => {
     expect(sealed).not.toContain('abcde');
     expect(openSecret(sealed, 'cloud-files:user-1', env)).toBe('abcde-fghij-klmno');
     expect(() => openSecret(sealed, 'cloud-files:user-2', env)).toThrow(SecretKeyError);
-    expect(() => openSecret(sealed, 'cloud-files:user-1', { ERP_SECRET_KEY: 'z'.repeat(40) } as NodeJS.ProcessEnv)).toThrow(SecretKeyError);
+    expect(() => openSecret(sealed, 'cloud-files:user-1', { ERP_SECRET_KEY: 'z'.repeat(40) })).toThrow(SecretKeyError);
   });
 
   it('seals the same text differently each time and refuses a changed byte', () => {
@@ -381,10 +381,10 @@ describe('the app password is kept sealed', () => {
   });
 
   it('refuses to seal without a key of a proper length', () => {
-    expect(secretKeyProblem({} as NodeJS.ProcessEnv)).toMatch(/not set/);
-    expect(secretKeyProblem({ ERP_SECRET_KEY: 'short' } as NodeJS.ProcessEnv)).toMatch(/at least 32/);
+    expect(secretKeyProblem({})).toMatch(/not set/);
+    expect(secretKeyProblem({ ERP_SECRET_KEY: 'short' })).toMatch(/at least 32/);
     expect(secretKeyProblem(env)).toBeNull();
-    expect(() => sealSecret('x', 'y', {} as NodeJS.ProcessEnv)).toThrow(SecretKeyError);
-    expect(() => sealSecret('x', 'y', { ERP_SECRET_KEY: 'short' } as NodeJS.ProcessEnv)).toThrow(SecretKeyError);
+    expect(() => sealSecret('x', 'y', {})).toThrow(SecretKeyError);
+    expect(() => sealSecret('x', 'y', { ERP_SECRET_KEY: 'short' })).toThrow(SecretKeyError);
   });
 });
