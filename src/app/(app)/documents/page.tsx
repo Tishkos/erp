@@ -1,78 +1,50 @@
-import { getLocale, getTranslations } from 'next-intl/server';
-import { visibleRoute } from '@/server/delivered';
 import { notFound } from 'next/navigation';
-import { redirect } from 'next/navigation';
-import {
-  DocumentCentreWorkspace,
-  type DocumentCentreLabels,
-  type DocumentWorkspaceItem,
-} from './document-centre-workspace';
-import { optionalContext } from '@/server/session';
-import { visibleMenu } from '@domain/menu';
+import { getTranslations } from 'next-intl/server';
+import { AdminPage, admin as s } from '@/components/admin';
+import { Panel } from '@/components/ui';
+import { Denied } from '@/components/denied';
+import { SectionTabs } from '@/components/admin/section-tabs';
+import { can } from '@domain/permissions';
+import { visibleRoute } from '@/server/delivered';
+import { requireContext } from '@/server/session';
 
 /**
- * Document Centre — Appendix A menu 17.
+ * Document Centre — Appendix A menu 17, coming soon (by direction,
+ * 2026-10-04: "make document center coming soon, delete that weird design,
+ * mocked stuff").
  *
- * This route deliberately has no document query or mutation path yet. The
- * authenticated navigation tree is the only source for its workspace cards,
- * so it cannot advertise tools outside the caller's existing permissions.
+ * It used to draw a workspace of its own — cards, a search, a recent list —
+ * over nothing: no document was ever read. It is now the house's "coming
+ * soon" screen, the Monitoring screens' own, until the centre is built. A
+ * record's files stay behind its paperclip door.
  */
 export const dynamic = 'force-dynamic';
 
 export default async function DocumentsPage() {
   if (!visibleRoute('/documents')) notFound();
-  const context = await optionalContext();
-  if (!context) redirect('/sign-in');
 
-  const [locale, t, documents] = await Promise.all([
-    getLocale(),
-    getTranslations(),
-    getTranslations('documents'),
+  const [t, page, context] = await Promise.all([
+    getTranslations('admin'),
+    getTranslations('page'),
+    requireContext(),
   ]);
-  const documentSection = visibleMenu(context.principal).find(
-    (section) => section.key === 'documents',
-  );
 
-  const items: DocumentWorkspaceItem[] = (documentSection?.items ?? []).map((item) => ({
-    key: item.key,
-    label: t(`page.${item.key}`),
-    href: item.href,
-    pendingHint: t('screen.not_built'),
-  }));
-
-  const labels: DocumentCentreLabels = {
-    module: t('nav.documents'),
-    title: t('page.document_centre'),
-    subtitle: documents('subtitle'),
-    upload: documents('upload'),
-    newDocument: documents('new_document'),
-    previewBadge: documents('preview_badge'),
-    previewNotice: documents('preview_notice'),
-    workspaces: documents('workspaces'),
-    workspacesHint: documents('workspaces_hint'),
-    recent: documents('recent'),
-    recentEmpty: documents('recent_empty'),
-    recentEmptyHint: documents('recent_empty_hint'),
-    openWorkspace: documents('open_workspace'),
-    all: documents('all'),
-    available: documents('available'),
-    planned: documents('planned'),
-    search: t('list.search'),
-    searchPlaceholder: t('list.search_placeholder'),
-    filters: t('list.filters'),
-    clearSearch: t('list.clear_filters'),
-    noResults: t('list.no_rows'),
-    noResultsHint: t('list.no_rows_hint'),
-    pending: t('screen.not_built'),
-    pendingExplanation: t('screen.explanation'),
-    noAccessTitle: t('error.no_permission_title'),
-    noAccessDescription: t('error.no_permission'),
-    close: t('shell.close'),
-  };
+  if (!can(context.principal, 'view', 'attachment')) {
+    return <Denied object={page('document_centre')} />;
+  }
 
   return (
-    <>
-      <DocumentCentreWorkspace items={items} labels={labels} locale={locale} />
-    </>
+    <AdminPage
+      back={{ href: '/', label: t('dashboard_label') }}
+      tabs={<SectionTabs route="/documents" />}
+      title={page('document_centre')}
+      variant="sap"
+    >
+      <Panel>
+        <div className={s.emptyState}>
+          <strong>{t('monitoring.soon')}</strong>
+        </div>
+      </Panel>
+    </AdminPage>
   );
 }
