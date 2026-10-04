@@ -385,6 +385,8 @@ export interface ExceptionDetail extends ExceptionListRow {
   readonly subject: string;
   readonly recordType: string;
   readonly partyCode: string | null;
+  /** The party's name where the finding recorded it (the customer, the supplier). */
+  readonly partyName: string | null;
   readonly ownerUserId: string | null;
   readonly resolvedAt: string | null;
   readonly acknowledgedAt: string | null;
@@ -393,6 +395,20 @@ export interface ExceptionDetail extends ExceptionListRow {
   readonly evidence: readonly EvidenceView[];
   readonly history: readonly HistoryLine[];
   readonly mayAcknowledge: boolean;
+}
+
+/** The party's name from the facts the detector kept: `party` is the name alone, `supplier` is "CODE Name". */
+function partyNameOf(row: Row): string | null {
+  if (!row.partyCode) return null;
+  const facts = row.facts as Record<string, unknown>;
+  const direct = typeof facts.party === 'string' && facts.party !== row.partyCode ? facts.party : null;
+  if (direct) return direct;
+  const supplier = typeof facts.supplier === 'string' ? facts.supplier : null;
+  if (supplier) {
+    const name = supplier.startsWith(`${row.partyCode} `) ? supplier.slice(row.partyCode.length + 1) : supplier;
+    return name || null;
+  }
+  return null;
 }
 
 /** One exception by its number, for its page; null when it does not exist or the principal may not open it. */
@@ -427,6 +443,7 @@ export async function byNo(tx: Tx, principal: Principal, no: string, options: { 
     recordLabel: row.recordLabel,
     branchCode: row.branchCode,
     partyCode: row.partyCode,
+    partyName: partyNameOf(row),
     ownerUserId: row.ownerUserId,
     firstDetectedAt: iso(row.firstDetectedAt)!,
     lastSeenAt: iso(row.lastSeenAt)!,

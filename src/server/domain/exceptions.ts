@@ -37,6 +37,7 @@ export const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 export type Severity = (typeof SEVERITIES)[number];
 
 export const DOMAINS = ['accounting', 'receivables', 'payables', 'inventory', 'logistics', 'tasks', 'approvals', 'platform'] as const;
+
 export type ExceptionDomain = (typeof DOMAINS)[number];
 
 export const STATUSES = ['open', 'acknowledged', 'resolved'] as const;
@@ -44,6 +45,14 @@ export type ExceptionStatus = (typeof STATUSES)[number];
 
 export const HISTORY_EVENTS = ['detected', 'acknowledged', 'resolved', 'reopened', 'escalated', 'severity_raised', 'severity_lowered'] as const;
 export type HistoryEvent = (typeof HISTORY_EVENTS)[number];
+
+/**
+ * The status chip each severity and each status wears: the tones the application already has (`status--<tone>`),
+ * so an exception looks like every other record on the register — red for critical, amber for high,
+ * blue for medium, grey for low; open needs a person, acknowledged has one, resolved went by itself.
+ */
+export const SEVERITY_TONE: Readonly<Record<Severity, string>> = Object.freeze({ critical: 'rejected', high: 'submitted', medium: 'approved', low: 'draft' });
+export const STATUS_TONE: Readonly<Record<ExceptionStatus, string>> = Object.freeze({ open: 'submitted', acknowledged: 'approved', resolved: 'settled' });
 
 export const isSeverity = (value: unknown): value is Severity => typeof value === 'string' && (SEVERITIES as readonly string[]).includes(value);
 export const isDomain = (value: unknown): value is ExceptionDomain => typeof value === 'string' && (DOMAINS as readonly string[]).includes(value);
