@@ -18,21 +18,19 @@
  *        is unchanged by every run of every person, and the transaction itself is held read-only
  *   CC6  faults that stay (a late container, a bank statement nobody matched) — last, because they cannot be undone
  */
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { PoolClient } from 'pg';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ownerPool, rejection } from './setup';
 import { BAGHDAD, PANEL, SECOND, blWith, importOf, iqd, journal } from './logistics-fixture';
-import { ERBIL, as, buildChainWorld, person, type ChainWorld, type Person } from './cc01-world';
+import { ERBIL, as, buildChainWorld, expectOpenable, maintenance, person, type ChainWorld, type Person, type Undo } from './cc01-world';
 import { containerNo } from '../support/container-number';
 import { CHECKS, checkOf, missingRequirement, type CheckResult, type CheckDefinition } from '@/server/domain/control-center';
 import { MONEY_SCALE, parseDecimal } from '@/server/domain/money';
 import { PermissionDeniedError, can } from '@/server/domain/permissions';
 import { POSTING_MAP } from '@/server/domain/posting-map';
-import { screenRoutes } from '@/server/domain/screens';
 import * as authz from '@/server/services/authorization';
 import * as banks from '@/server/services/bank-cash-accounts';
 import * as rec from '@/server/services/bank-reconciliation';
@@ -135,23 +133,6 @@ function expectHealthy(definition: CheckDefinition, result: CheckResult) {
 // ---------------------------------------------------------------------------
 
 /**
- * The damage a maintenance script can do with the triggers off — the only way a fault the application's own doors
- * refuse can get into the books. Session-level so the rows go in whole; always reset.
- */
-async function maintenance<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
-  const client = await ownerPool.connect();
-  try {
-    await client.query('set session_replication_role = replica');
-    return await fn(client);
-  } finally {
-    await client.query('reset session_replication_role');
-    client.release();
-  }
-}
-
-type Undo = () => Promise<void>;
-
-/**
  * Reports before, during and after a fault; the fault comes out whatever the assertions say. `observers` are
  * other people whose report is also taken while the fault is in.
  */
@@ -168,47 +149,6 @@ async function withFault(p: ActorContext, fault: () => Promise<Undo>, observers:
   }
   const after = await report(p);
   return { base, during, after, observed };
-}
-
-/** Does `href` name a page of the application? Route groups are transparent; `[x]` matches any one segment. */
-function pageExists(href: string): boolean {
-  const path = href.split(/[?#]/)[0]!.replace(/^\/+|\/+$/g, '');
-  const segments = path === '' ? [] : path.split('/');
-  const walk = (dir: string, rest: readonly string[]): boolean => {
-    const dirs = readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory());
-    if (rest.length === 0) {
-      return existsSync(join(dir, 'page.tsx')) || dirs.filter((e) => /^\(.+\)$/.test(e.name)).some((e) => walk(join(dir, e.name), rest));
-    }
-    const [head, ...tail] = rest as [string, ...string[]];
-    return dirs.some((e) => {
-      if (/^\(.+\)$/.test(e.name)) return walk(join(dir, e.name), rest);
-      if (e.name === head) return walk(join(dir, e.name), tail);
-      return /^\[[^.\]]+\]$/.test(e.name) && walk(join(dir, e.name), tail);
-    });
-  };
-  return walk(join(process.cwd(), 'src', 'app'), segments);
-}
-
-/** The permission object of the screen a path belongs to: the path itself, else the list it hangs from. */
-function objectOfHref(href: string): string | undefined {
-  const routes = screenRoutes();
-  let path = href.split(/[?#]/)[0]!.replace(/\/+$/, '');
-  while (path.length > 0) {
-    const found = routes.get(path);
-    if (found) return found.item.object;
-    path = path.replace(/\/[^/]*$/, '');
-  }
-  return undefined;
-}
-
-/** An item's path must open a page that exists and that the viewer may enter. */
-function expectOpenable(p: ActorContext, href: string | null) {
-  expect(href, 'an item without a path').toBeTruthy();
-  expect(href!.startsWith('/')).toBe(true);
-  expect(pageExists(href!), `${href} is a page of the application`).toBe(true);
-  const object = objectOfHref(href!);
-  expect(object, `${href} belongs to a screen of the menu`).toBeDefined();
-  expect(can(p.principal, 'view', object!), `the viewer may open ${href} (${object})`).toBe(true);
 }
 
 /**
@@ -707,7 +647,7 @@ describe('CC2 · one fault at a time', () => {
 describe('CC3 · who may open it, and what each check shows them', () => {
   it('opens for the CEO, the accounting manager, the system administrator — and nobody else', async () => {
     for (const p of [ceo, acct, admin, world.manager]) {
-      expect(can(p.principal, 'view', control.PERMISSION_OBJECT), p.name).toBe(true);
+      expect(can(p.principal, 'view', control.PERMISSION_OBJECT), p.principal.userId).toBe(true);
       const run = await report(p);
       expect(run.results).toHaveLength(CHECKS.length);
     }

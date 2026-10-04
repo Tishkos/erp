@@ -14,6 +14,10 @@
  * something honest to say "ok" about.
  */
 import { randomUUID } from 'node:crypto';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import type { PoolClient } from 'pg';
+import { expect } from 'vitest';
 import { ownerPool, seedBranch } from './setup';
 import {
   BAGHDAD,
@@ -35,7 +39,9 @@ import {
 import { containerNo } from '../support/container-number';
 import { withScope } from '@/server/db/client';
 import { registerAttachmentRuntime } from '@/server/attachments-runtime';
+import { can } from '@/server/domain/permissions';
 import { POSTING_MAP, mappingAccountEligible, requiredControlAccount } from '@/server/domain/posting-map';
+import { screenRoutes } from '@/server/domain/screens';
 import { registerAllRecords } from '@/server/records';
 import * as ar from '@/server/services/ar-invoice';
 import * as authz from '@/server/services/authorization';
@@ -234,6 +240,10 @@ export async function buildChainWorld(): Promise<ChainWorld> {
   );
   await withScope(scope(world.manager), (tx) => receipts.approve(tx, world.manager, received.id));
   await withScope(scope(world.manager), (tx) => receipts.post(tx, world.manager, received.id));
+  // Applied to the invoice it paid part of (the receipt's money and the invoice's balance move together).
+  await withScope(scope(world.manager), (tx) =>
+    receipts.allocate(tx, world.manager, received.id, [{ arInvoiceId: sold.id, amountIqd: iqd('500000') }]),
+  );
 
   const back = await withScope(scope(world.clerk), (tx) =>
     sr.request(tx, world.clerk, {
@@ -317,4 +327,77 @@ export async function buildChainWorld(): Promise<ChainWorld> {
     goodsReceiptNo: await scalar(`select receipt_no as v from goods_receipt where id = $1`, [goods.id]),
     paymentNo: await scalar(`select payment_no as v from supplier_payment where id = $1`, [payment.id]),
   };
+}
+
+/**
+ * The damage a maintenance script can do with the triggers off — the only way a fault the application's own doors
+ * refuse can get into the books. Session-level so the rows go in whole; always reset.
+ */
+export async function maintenance<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await ownerPool.connect();
+  try {
+    await client.query('set session_replication_role = replica');
+    return await fn(client);
+  } finally {
+    await client.query('reset session_replication_role');
+    client.release();
+  }
+}
+
+export type Undo = () => Promise<void>;
+
+/** The `beforeFiles` rewrites of `next.config.ts` (a route that lives under another folder): `/inventory/items/:code` is a page of `master-data/items`. */
+function rewritten(path: string): string {
+  const config = readFileSync(join(process.cwd(), 'next.config.ts'), 'utf8');
+  const block = config.slice(config.indexOf('async rewrites()'));
+  for (const match of block.matchAll(/source:\s*'([^']+)',\s*destination:\s*'([^']+)'/g)) {
+    const [, source, destination] = match as unknown as [string, string, string];
+    const names = [...source.matchAll(/:(\w+)/g)].map((m) => m[1]!);
+    const pattern = new RegExp('^' + source.replace(/:(\w+)/g, '([^/]+)') + '$');
+    const hit = pattern.exec(path);
+    if (!hit) continue;
+    return names.reduce((to, name, i) => to.replace(':' + name, hit[i + 1]!), destination);
+  }
+  return path;
+}
+
+/** Does `href` name a page of the application? Route groups are transparent; `[x]` matches any one segment. */
+export function pageExists(href: string): boolean {
+  const path = rewritten(href.split(/[?#]/)[0]!).replace(/^\/+|\/+$/g, '');
+  const segments = path === '' ? [] : path.split('/');
+  const walk = (dir: string, rest: readonly string[]): boolean => {
+    const dirs = readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory());
+    if (rest.length === 0) {
+      return existsSync(join(dir, 'page.tsx')) || dirs.filter((e) => /^\(.+\)$/.test(e.name)).some((e) => walk(join(dir, e.name), rest));
+    }
+    const [head, ...tail] = rest as [string, ...string[]];
+    return dirs.some((e) => {
+      if (/^\(.+\)$/.test(e.name)) return walk(join(dir, e.name), rest);
+      if (e.name === head) return walk(join(dir, e.name), tail);
+      return /^\[[^.\]]+\]$/.test(e.name) && walk(join(dir, e.name), tail);
+    });
+  };
+  return walk(join(process.cwd(), 'src', 'app'), segments);
+}
+
+/** The permission object of the screen a path belongs to: the path itself, else the list it hangs from. */
+export function objectOfHref(href: string): string | undefined {
+  const routes = screenRoutes();
+  let path = href.split(/[?#]/)[0]!.replace(/\/+$/, '');
+  while (path.length > 0) {
+    const found = routes.get(path);
+    if (found) return found.item.object;
+    path = path.replace(/\/[^/]*$/, '');
+  }
+  return undefined;
+}
+
+/** An item's path must open a page that exists and that the viewer may enter. */
+export function expectOpenable(p: ActorContext, href: string | null) {
+  expect(href, 'an item without a path').toBeTruthy();
+  expect(href!.startsWith('/')).toBe(true);
+  expect(pageExists(href!), `${href} is a page of the application`).toBe(true);
+  const object = objectOfHref(href!);
+  expect(object, `${href} belongs to a screen of the menu`).toBeDefined();
+  expect(can(p.principal, 'view', object!), `the viewer may open ${href} (${object})`).toBe(true);
 }

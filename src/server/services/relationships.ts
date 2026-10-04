@@ -73,6 +73,11 @@ interface Root extends RelRoot {
 /** A record found, with the id its module's access rule is asked about. */
 interface Candidate extends RelNode {
   readonly check?: { readonly type: string; readonly id: string } | undefined;
+  /**
+   * `from` names records (one, or several joined by ", "). They are named only when the same graph shows them:
+   * a number the viewer may not open is not spelled out beside a record they may.
+   */
+  readonly fromRecord?: boolean | undefined;
 }
 
 interface Read {
@@ -254,6 +259,7 @@ const importContainers: Reader = async (tx, context) => {
         label: line.containerNo,
         href: profileHref('container', line.containerNo, { id: line.id }),
         from: line.blNo,
+        fromRecord: true,
         date: line.receivedOn ?? line.customsClearedOn ?? line.arrivedPortOn ?? line.eta,
         statusName: line.statusName,
         check: { type: 'shipment_container', id: line.id! },
@@ -301,6 +307,7 @@ const importDeclarations: Reader = async (tx, context) => {
         label: declaration.declarationNo,
         href: `/logistics/customs-declarations/${encodeURIComponent(declaration.declarationNo)}`,
         from: declaration.pdNo ?? context.root.label,
+        fromRecord: true,
         date: declaration.statusDate,
         status: declaration.status,
         note: declaration.customsRef ? note('declaration', { reference: declaration.customsRef }) : null,
@@ -347,6 +354,7 @@ const importReceipts: Reader = async (tx, { root, principal }) => {
         label: row.receiptNo,
         href: link(principal, 'shipment_container', profileHref('container', row.containerNo, { id: row.containerId })),
         from: row.containerNo,
+        fromRecord: true,
         date: row.date,
         note: note('receipt', { warehouse: row.warehouseCode }),
         check: { type: 'shipment_container', id: row.containerId },
@@ -410,6 +418,7 @@ const importLayers: Reader = async (tx, { root, principal }) => {
         key: row.id,
         href: ledger ? `/inventory/stock-ledger?item=${encodeURIComponent(row.itemCode)}&warehouse=${encodeURIComponent(row.warehouseCode)}` : null,
         from: row.receiptNo,
+        fromRecord: true,
         date: row.layerDate,
         figure: quantity(row.remaining),
         note: note('layer_item', { item: row.itemCode, warehouse: row.warehouseCode, originalQty: row.original, unitCostIqd: row.unitCost }),
@@ -459,6 +468,7 @@ const supplierReceipts: Reader = async (tx, { root, principal }) => {
         label: row.receiptNo,
         href: link(principal, 'goods_receipt', profileHref('goods_receipt', row.receiptNo)),
         from: row.orderNo,
+        fromRecord: true,
         date: row.date,
         status: row.status,
         check: { type: 'goods_receipt', id: row.id },
@@ -484,6 +494,7 @@ const supplierInvoices: Reader = async (tx, { root, principal }) => {
         label: row.invoiceNo,
         href: link(principal, 'ap_invoice', documentHref('ap_invoice', row.invoiceNo)),
         from: row.orderNo ?? root.label,
+        fromRecord: true,
         date: row.date,
         status: row.status,
         figure: money(row.total),
@@ -511,6 +522,7 @@ const supplierPayments: Reader = async (tx, { root, principal }) => {
         label: row.paymentNo,
         href: link(principal, 'supplier_payment', profileHref('supplier_payment', row.paymentNo)),
         from: row.invoices ?? root.label,
+        fromRecord: true,
         date: row.date,
         status: row.status,
         figure: money(row.amount),
@@ -564,6 +576,7 @@ const customerReceipts: Reader = async (tx, { root, principal }) => {
         label: row.receiptNo,
         href: link(principal, 'customer_receipt', profileHref('customer_receipt', row.receiptNo)),
         from: row.invoices ?? root.label,
+        fromRecord: true,
         date: row.date,
         status: row.status,
         figure: money(row.amount),
@@ -592,6 +605,7 @@ const customerCredits: Reader = async (tx, { root, principal }) => {
         label: row.memoNo,
         href: link(principal, 'customer_credit_memo', `/sales/credit-notes/${encodeURIComponent(row.memoNo)}`),
         from: row.source ?? root.label,
+        fromRecord: true,
         date: row.date,
         status: row.status,
         figure: money(row.amount),
@@ -617,6 +631,7 @@ const customerReturns: Reader = async (tx, { root, principal }) => {
         label: row.returnNo,
         href: link(principal, 'sales_return', profileHref('sales_return', row.returnNo)),
         from: row.invoiceNo ?? root.label,
+        fromRecord: true,
         date: row.date,
         status: row.status,
         check: { type: 'sales_return', id: row.id },
@@ -826,9 +841,17 @@ export const READER_CODES: readonly string[] = Object.keys(READERS);
 // The graph
 // ---------------------------------------------------------------------------
 
+/** A node that passed its module's access rule; the reference flag stays until the whole graph is known. */
+type Admitted = RelNode & { readonly fromRecord?: boolean | undefined };
+
+interface Found {
+  allowed: Admitted[];
+  readonly truncated: boolean;
+}
+
 /** Keeps the candidates whose module lets this person open them; strips the access handle. */
-async function admit(tx: Tx, principal: Principal, rows: readonly Candidate[]): Promise<RelNode[]> {
-  const allowed: RelNode[] = [];
+async function admit(tx: Tx, principal: Principal, rows: readonly Candidate[]): Promise<Admitted[]> {
+  const allowed: Admitted[] = [];
   for (const row of rows) {
     const { check, ...shown } = row;
     if (check && UUID.test(check.id)) {
@@ -839,6 +862,27 @@ async function admit(tx: Tx, principal: Principal, rows: readonly Candidate[]): 
     allowed.push(shown);
   }
   return allowed;
+}
+
+/**
+ * A node says where it came from (`from`). When that is a record's number, it is kept only if the graph being
+ * drawn shows that record — or it is the root — so a restricted record is never spelled out beside an allowed one.
+ * Several numbers joined by ", " are cut to the ones shown; none shown, no `from`.
+ */
+function settleReferences(
+  found: Map<string, Found>,
+  rootLabel: string,
+): void {
+  const shown = new Set<string>([rootLabel]);
+  for (const one of found.values()) for (const row of one.allowed) if (row.label) shown.add(row.label);
+  for (const one of found.values()) {
+    one.allowed = one.allowed.map((row) => {
+      const { fromRecord, ...rest } = row;
+      if (!fromRecord || rest.from === null) return rest;
+      const kept = rest.from.split(', ').filter((reference) => shown.has(reference));
+      return { ...rest, from: kept.length > 0 ? kept.join(', ') : null };
+    });
+  }
 }
 
 /**
@@ -870,7 +914,7 @@ export async function graphFor(tx: Tx, context: RelationshipContext, kind: RootK
   };
 
   const definitions: readonly StepDefinition[] = visibleSteps(kind, context.principal);
-  const found = new Map<string, { readonly allowed: readonly RelNode[]; readonly truncated: boolean }>();
+  const found = new Map<string, Found>();
   const failed = new Set<string>();
   // One after the other: a transaction is one connection and answers one question at a time.
   for (const definition of definitions) {
@@ -887,6 +931,7 @@ export async function graphFor(tx: Tx, context: RelationshipContext, kind: RootK
     else failed.add(definition.code);
   }
 
+  settleReferences(found, root.label);
   const counts = countsOf(new Map([...found].map(([code, one]) => [code, one.allowed.length])));
   const steps: RelStep[] = [];
   for (const definition of definitions) {
