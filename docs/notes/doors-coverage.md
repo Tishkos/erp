@@ -1,0 +1,133 @@
+# Four doors and profile links — coverage (2026-10-04)
+
+The owner's rule: *"Every invoice — notes, attachments, audit, print — after the
+draft is created. Like Bank Loans: we can click the bank or the customer; the
+parts have profiles."* AGENTS.md › *Every record wears the same four doors* and
+› *Shared doors and profiles* say how. This page is the one truth table of
+where every record page stands. The rows marked **owner module** were surveyed
+on `main` 81a5ede and are each module agent's to finish on its own branch; the
+orchestrator re-checks them at merge. Every other row is `feat/shared-module`'s
+and reads as it is on that branch.
+
+Columns: **P** printer (`ExportIcon` in the title bar), **A** paperclip
+(`AttachmentsButton` / `RecordAttachmentsDoor`), **N** notes (`RecordNotesDoor`),
+**H** clock (`HistoryButton`). ✅ in the title bar · ◐ present on the page but
+not as a door (an `ExportMenu` in the header, a `RecordHistory` or attachments
+panel under the document) · ❌ missing · — not applicable. **Print model**: the
+export key, or none. **Parties → profile**: what the record names and whether
+each is a `ProfileLink` (or an existing `sapLink`). **Status**: `done` (four
+doors from draft, print model, every party linked), `owner module` (that
+module's agent wires it; the merge check reads this row against the branch),
+`profile` (a master record: notes and clock, no printer or paperclip by the
+rule), `view` (a read-only rendering of another record's data: printer only).
+
+## Invoice-like and money documents
+
+| Record page | P | A | N | H | Print model | Parties → profile | Owner | Status |
+|---|---|---|---|---|---|---|---|---|
+| `payables/invoices/[invoiceNo]` — purchase invoice (the model) | ✅ | ✅ | ✅ | ✅ | `purchase_invoice` | supplier: text ❌; import: link ✅ | payables | owner module |
+| `sales/ar-invoices/[invoiceNo]` — sales invoice | ◐ | ❌ | ❌ | ◐ | `sales_invoice` | customer: text ❌; journal, G/L accounts: links ✅ | receivables | owner module |
+| `sales/customer-receipts/[receiptNo]` | ◐ | ❌ | ❌ | ◐ | `customer_receipt` | customer, bank/cash account: text ❌ | receivables | owner module |
+| `sales/sales-returns/[returnNo]` | ◐ | ❌ | ❌ | ◐ | `sales_return` | customer, invoice: text ❌ | receivables | owner module |
+| `payables/supplier-payments/[paymentNo]` | ◐ | ❌ | ❌ | ◐ | `supplier_payment` | supplier, bank/cash account: text ❌; application: link ✅ | payables | owner module |
+| `payables/goods-returns/[returnNo]` — purchase return | ◐ | ❌ | ❌ | ◐ | `purchase_return` | supplier, invoice: text ❌ | payables | owner module |
+| `payables/advances/[advanceNo]` — supplier advance | ❌ | ❌ | ❌ | ◐ | none | import, invoice: links ✅; supplier: text ❌ | payables | owner module |
+| `payables/payment-applications/[applicationNo]` | ❌ | ◐ | ❌ | ◐ | none | import, PD, loan: links ✅; supplier, bank account: text ❌ | payables | owner module |
+| `payables/purchase-orders/[orderNo]` | ❌ | ❌ | ❌ | ❌ | none | supplier: text ❌; import: link ✅ | payables | owner module |
+| `payables/goods-receipts/[receiptNo]` | ❌ | ❌ | ❌ | ❌ | none | order: link ✅; supplier, warehouse: text ❌ | payables | owner module |
+| `payables/contracts/[contractNo]` — recurring contract | ❌ | ❌ | ❌ | ❌ | none | supplier, department: text ❌ | payables | owner module |
+| `payables/[payableNo]` — import application | ✅ | ✅ | ✅ | ✅ | `import_application` | supplier: text ❌; B/L, container, PD, invoice, loan: links ✅ | payables | owner module |
+| `treasury/loans/[loanNo]` — bank loan (the party-link model) | ❌ | ✅ | ❌ | ✅ | **none** | bank account: link ✅; bank: text ❌ | payables | owner module |
+| `treasury/deposits/[depositNo]` | ❌ | ✅ | ❌ | ✅ | none | journal: link ✅; bank/cash account: text ❌ | payables | owner module |
+| `finance/journals/[entryNo]` | ◐ | ✅ | ❌ | ◐ (own audit page) | `journal_entry` | G/L accounts: text ❌ | accounting | owner module |
+| `inventory/opening-stock/[documentNo]` (record framework) | ◐ | ❌ | ❌ | ◐ | `opening_stock` | warehouse, items: text ❌ | inventory | owner module |
+
+## Logistics documents
+
+| Record page | P | A | N | H | Print model | Parties → profile | Owner | Status |
+|---|---|---|---|---|---|---|---|---|
+| `payables/shipments/[blNo]` — B/L | ✅ | ✅ | ❌ | ✅ | `bill_of_lading` | import, containers: links ✅; supplier, port: text ❌ | logistics | owner module |
+| `payables/containers/[containerNo]` | ❌ | ✅ | ❌ | ✅ | none | import, B/L: links ✅; supplier, warehouse: text ❌ | logistics | owner module |
+| `payables/pd/[pdNo]` — PD | ❌ | ✅ | ◐ (box + `last_note`) | ✅ | none | import, applications: links ✅; supplier, bank: text ❌ | logistics | owner module |
+| `payables/pd/asycuda/[runNo]` — ASYCUDA reading | ✅ | ✅ | ❌ | ✅ | `asycuda_reading` | PDs: links ✅ | logistics | owner module |
+
+The B/L, the PD, the container and the ASYCUDA reading draw the clock before
+the printer on `main`; the rule's order is printer, paperclip, notes, clock.
+
+## Project System (shared, Phase 2 — done on `feat/shared-module`)
+
+| Record page | P | A | N | H | Print model | Parties → profile | Owner | Status |
+|---|---|---|---|---|---|---|---|---|
+| `projects/billing/[no]` — progress certificate (client invoice) | ✅ | ✅ | ✅ | ✅ | `project_certificate` | project, customer, journal ✅ | shared | done |
+| `projects/budgets/[no]` — budget document | ✅ | ✅ | ✅ | ✅ | `project_budget` | project, change order ✅ | shared | done |
+| `projects/change-orders/[no]` — change order | ✅ | ✅ | ✅ | ✅ | `project_change_order` | project, budget document, earlier versions ✅ | shared | done |
+| `projects/material-issues/[no]` — material issue / return | ✅ | ✅ | ✅ | ✅ | `project_material_issue` | project, warehouse, items ✅ | shared | done |
+| `projects/[code]` — project (profile) | — | — | ✅ | ✅ | — | customer, manager (employee), branch, department ✅; budget documents, change orders: links ✅ | shared | profile |
+
+Attachments on the three documents hang by number, as the certificate's do
+(`project_budget`, `project_variation`, `project_material_issue` in
+`attachments-runtime.ts`); notes by number through `record-notes` `TARGETS`.
+
+## HR (shared, Phase 2 — done on `feat/shared-module`)
+
+| Record page | P | A | N | H | Print model | Parties → profile | Owner | Status |
+|---|---|---|---|---|---|---|---|---|
+| `hr/advances/[advanceNo]` — advance or loan | ✅ | ✅ | ✅ | ✅ | `employee_advance` | employee, paying account (bank/cash), journals ✅ | shared | done |
+| `hr/leave/[requestNo]` — leave request | ✅ | ✅ | ✅ | ✅ | `leave_request` | employee ✅; manager: text (no employee no. on the row) | shared | done |
+| `hr/documents/[documentNo]` — employee document | ✅ | ✅ | ✅ | ✅ | `employee_document` (self-service) | employee, the papers it renews / is renewed by ✅ | shared | done |
+| `hr/requests/[requestNo]` — claim, trip, letter, other | ✅ | ✅ | ✅ | ✅ | `employee_request` (self-service; an issued letter prints as the letter, `hr_letter`) | employee, trip, advance, paying account, journal ✅ | shared | done |
+| `hr/performance/[reviewNo]` — performance review | ✅ | ✅ | ✅ | ✅ | `performance_review` (self-service) | employee ✅; reviewer: text (a user) | shared | done |
+| `hr/recruitment/[vacancyNo]` — vacancy | ✅ | ✅ | ✅ | ✅ | `vacancy` | branch, position, department, people hired ✅; applicants: links ✅ | shared | done |
+| `hr/recruitment/applicants/[applicantNo]` — application | ✅ | ✅ | ✅ | ✅ | `applicant` | vacancy, position, employee hired ✅ | shared | done |
+| `hr/payroll/[runNo]` — payroll run | ✅ | ✅ | ✅ | ✅ | `payroll_run` | branch, people, departments, paying accounts, journals ✅; payslips: links ✅ | shared | done |
+| `hr/payroll/payslips/[payslipNo]` — payslip | ✅ | — | — | — | `payslip` (self-service) | employee, department, run ✅ | shared | view (a line of its run; papers, notes and history are the run's) |
+| `hr/employees/[employeeNo]` — employee (profile) | — | — | ✅ | ✅ | — | branch, department, position, manager, user account ✅; hired from: link ✅ | shared | profile |
+
+HR attachments hang by the row's uuid, as the HR pages always filed them
+(`leave_request` in `services/leave.ts`; `employee_request`,
+`employee_document`, `applicant`, `employee_advance`, `performance_review`,
+`vacancy`, `payroll_run` in `attachments-runtime.ts`); notes by number.
+The employee link on an HR record is shown only to readers who hold `view` on
+`employee` — the person reading their own record has no page to land on.
+
+## Platform and master records (profiles)
+
+| Profile page | Kind (`profileHref`) | Notes | History | Owner | Status |
+|---|---|---|---|---|---|
+| `master-data/business-partners/[code]` (`/sales/customers/…`, `/payables/suppliers/…`) | `customer`, `supplier` | ❌ | ◐ | receivables / payables | owner module |
+| `master-data/banks/[code]` | `bank` | ❌ | ◐ | accounting | owner module |
+| `master-data/bank-accounts/[code]`, `master-data/cash-accounts/[code]` | `bank_account`, `cash_account` | ❌ | ◐ | accounting | owner module |
+| `master-data/chart-of-accounts/[code]` | `gl_account` | ❌ | ◐ (record framework) | accounting | owner module |
+| `master-data/items/[code]` (`/inventory/items/…`) | `item` | ❌ | ◐ | inventory | owner module |
+| `master-data/warehouses/[code]` | `warehouse` | ❌ | ◐ | inventory | owner module |
+| `hr/employees/[employeeNo]` | `employee` | ✅ | ✅ | shared | profile |
+| `projects/[code]` | `project` | ✅ | ✅ | shared | profile |
+| `master-data/branches/[code]`, `master-data/departments/[code]`, `master-data/cost-centres/[code]` | `branch`, `department`, `cost_centre` | ❌ | ◐ (`AuditLogButton` + `RecordHistory`) | shared | profile (history only — no record links to a note on them yet) |
+| `master-data/payment-terms/[code]`, `master-data/payment-methods/[code]` | `payment_term`, `payment_method` | ❌ | ◐ | shared | profile |
+| `hr/positions/[code]`, `hr/departments/[code]` | `position` (`department` resolves to master-data) | ❌ | ◐ | shared | profile |
+| `administration/users/[id]`, `administration/roles/[code]` | `user` | ❌ | ◐ | shared | profile (platform settings, not records) |
+| — | `port`, `carrier` | | missing — **logistics builds it** | logistics | owner module |
+| — | `currency`, `fixed_asset`, `investment` | | missing — those modules have no delivered screens; nothing to link from yet | shared | not delivered |
+
+## Export keys added on `feat/shared-module`
+
+`project_certificate`, `project_budget`, `project_change_order`,
+`project_material_issue` (object `project`); `employee_advance`,
+`leave_request`, `employee_document`*, `performance_review`*, `vacancy`,
+`applicant`, `employee_request`* (each under its own grant; * self-service, as
+`payslip` and `hr_letter` are — the row policy returns the person their own
+row and nobody else's). `tests/integration/ops14-print-export.test.ts` lists
+`employee_advance` among the keys the accounting officer has no copy of and
+`leave_request`, `vacancy`, `applicant` among those the accounting manager has
+none of (HR's own).
+
+## What a module agent checks against this table at merge
+
+* Every row of its own in the first two tables reads ✅ ✅ ✅ ✅ with a print
+  model and every party a `ProfileLink` — or says why not.
+* Its profile pages (customer/supplier, bank, accounts, G/L account, item,
+  warehouse) exist at the route `profileHref` answers; a notes door on a
+  profile is welcome (`record-notes` already lists `business_partner`, `item`,
+  `warehouse`, `bank`, `bank_account`, `chart_of_account`) but not required.
+* Logistics fills `port` and `carrier` in `domain/profiles.ts` › `BASES` when
+  their pages exist; `tests/unit/profiles.test.ts` then checks the page.

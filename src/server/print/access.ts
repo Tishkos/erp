@@ -66,6 +66,25 @@ export const EXPORT_ACCESS = {
   hr_leave_balances: { kind: 'report', route: '/hr/reports', object: 'hr_report' },
   hr_payroll_register: { kind: 'report', route: '/hr/reports', object: 'payroll_run' },
   hr_unsettled_advances: { kind: 'report', route: '/hr/reports', object: 'employee_advance' },
+  // REQ-PM-001 PM-5 — the progress certificate, the client's invoice for work done (shared, 2026-10-04).
+  project_certificate: { kind: 'document', route: '/projects/billing', object: 'project' },
+  // The Project System's other documents, printed from their own pages (shared, 2026-10-04).
+  project_budget: { kind: 'document', route: '/projects/budgets', object: 'project' },
+  project_change_order: { kind: 'document', route: '/projects/change-orders', object: 'project' },
+  project_material_issue: { kind: 'document', route: '/projects/material-issues', object: 'project' },
+  // HR's records, printed from their own pages (shared, 2026-10-04), each
+  // under its own grant. A person's paper and their review are also theirs to
+  // print (R5): their row policies return their own rows and nobody else's.
+  // An advance and a leave request are read branch-wide at the database, so
+  // they are not self-service — the grant decides.
+  employee_advance: { kind: 'document', route: '/hr/advances', object: 'employee_advance' },
+  leave_request: { kind: 'document', route: '/hr/leave', object: 'leave_request' },
+  employee_document: { kind: 'document', route: '/hr/documents', object: 'employee_document', selfService: true },
+  performance_review: { kind: 'document', route: '/hr/performance', object: 'performance_review', selfService: true },
+  vacancy: { kind: 'document', route: '/hr/recruitment', object: 'recruitment' },
+  applicant: { kind: 'document', route: '/hr/recruitment', object: 'recruitment' },
+  // A person's request of any kind, at any stage (an issued letter prints as the letter): theirs to print, as the letter is.
+  employee_request: { kind: 'document', route: '/hr/requests', object: 'employee_request', selfService: true },
 } as const satisfies Record<
   string,
   { readonly kind: 'document' | 'report'; readonly route: string; readonly object: string; readonly selfService?: boolean }

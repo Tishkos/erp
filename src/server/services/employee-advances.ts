@@ -700,6 +700,8 @@ export async function byNo(tx: Tx, advanceNo: string) {
       cancelledByName: userName('cancelled_by'),
       entryNo: sql<string | null>`(select j.entry_no from journal_entry j where j.id = "employee_advance"."journal_entry_id")`,
       accountCode: sql<string | null>`(select b.code from bank_cash_account b where b.id = "employee_advance"."bank_cash_account_id")`,
+      // Bank or cash: which profile the account's code opens (shared, 2026-10-04).
+      accountType: sql<'bank' | 'cash' | null>`(select b.account_type::text from bank_cash_account b where b.id = "employee_advance"."bank_cash_account_id")`,
     })
     .from(employeeAdvance)
     .where(eq(employeeAdvance.advanceNo, advanceNo))

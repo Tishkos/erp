@@ -5,7 +5,10 @@ import { AdminPage, Checkbox, Field, FilterRow, Flash, Form, Grid, Select, Submi
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { HistoryButton } from '@/components/admin/icon-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -26,6 +29,7 @@ import * as performance from '@/server/services/performance';
 import * as recruitment from '@/server/services/recruitment';
 import * as employeeRequests from '@/server/services/employee-requests';
 import * as employeeDocuments from '@/server/services/employee-documents';
+import * as recordNotes from '@/server/services/record-notes';
 import { showDays, daysFrom, weekdayOf } from '@/server/domain/hr-time';
 import {
   adjustLeaveBalance,
@@ -128,6 +132,8 @@ export default async function EmployeePage({ params, searchParams }: { params: P
       // HR-6 — what the person asked for, and their papers with their expiry.
       hrRequests: maySeeRequests ? await employeeRequests.ofEmployee(tx, row.id) : [],
       papers: maySeeDocuments ? await employeeDocuments.ofEmployee(tx, row.id) : [],
+      // The profile's notes, kept by number as its history is (shared, 2026-10-04).
+      notes: await recordNotes.listNotes(tx, { object: employees.PERMISSION_OBJECT, recordId: row.employeeNo }),
     };
   });
   if (!found) notFound();
@@ -154,10 +160,10 @@ export default async function EmployeePage({ params, searchParams }: { params: P
     { label: x('national_id'), value: <bdi dir="ltr">{row.nationalId ?? '—'}</bdi> },
     { label: x('date_of_birth'), value: <bdi dir="ltr">{day(row.dateOfBirth)}</bdi> },
     { label: x('phone'), value: <bdi dir="ltr">{row.phone ?? '—'}</bdi> },
-    { label: column('branch'), value: <bdi dir="auto">{row.branchName}</bdi> },
-    { label: x('department'), value: <bdi dir="auto">{row.departmentName}</bdi> },
-    { label: x('position'), value: <bdi dir="auto">{row.positionTitle ?? '—'}</bdi> },
-    { label: x('manager'), value: <bdi dir="auto">{row.managerName ? `${row.managerNo} · ${row.managerName}` : '—'}</bdi> },
+    { label: column('branch'), value: <ProfileLink code={row.branchCode} dir="auto" kind="branch">{row.branchName}</ProfileLink> },
+    { label: x('department'), value: <ProfileLink code={row.departmentCode} dir="auto" kind="department">{row.departmentName}</ProfileLink> },
+    { label: x('position'), value: <ProfileLink code={row.positionCode} dir="auto" kind="position">{row.positionTitle ?? '—'}</ProfileLink> },
+    { label: x('manager'), value: <ProfileLink code={row.managerName ? row.managerNo : null} dir="auto" kind="employee" name={row.managerName} /> },
     { label: x('hire_date'), value: <bdi dir="ltr">{day(row.hireDate)}</bdi> },
     ...(found.hiredFrom
       ? [
@@ -179,7 +185,7 @@ export default async function EmployeePage({ params, searchParams }: { params: P
           { label: x('end_reason'), value: <bdi dir="auto">{row.endReason ?? '—'}</bdi>, wide: true },
         ]
       : []),
-    { label: x('user_account'), value: <bdi dir="ltr">{row.userEmail ?? x('no_user')}</bdi> },
+    { label: x('user_account'), value: <ProfileLink code={row.appUserId} kind="user">{row.userEmail ?? x('no_user')}</ProfileLink> },
     { label: x('address'), value: <bdi dir="auto">{row.address ?? '—'}</bdi>, wide: true },
     { label: x('emergency_contact'), value: <bdi dir="auto">{row.emergencyContact ?? '—'}</bdi>, wide: true },
   ];
@@ -325,8 +331,15 @@ export default async function EmployeePage({ params, searchParams }: { params: P
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Notes and the clock — the profile's two doors (2026-10-04). */}
+            <RecordNotesDoor notes={found.notes} object={employees.PERMISSION_OBJECT} recordId={row.employeeNo} />
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={row.employeeNo} objectType={employees.PERMISSION_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         documentType={page('employees')}
         fields={fields}
         id="employee-document"
@@ -1196,8 +1209,6 @@ export default async function EmployeePage({ params, searchParams }: { params: P
           </div>
         </section>
       ) : null}
-
-      <RecordHistory objectId={row.employeeNo} objectType={employees.PERMISSION_OBJECT} />
     </AdminPage>
   );
 }

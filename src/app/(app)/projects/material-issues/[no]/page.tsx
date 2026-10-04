@@ -1,10 +1,15 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, Hidden, Submit, admin as s } from '@/components/admin';
+import { readAttachments } from '@/components/admin/attachments';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { HistoryButton } from '@/components/admin/icon-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordAttachmentsDoor } from '@/components/admin/record-attachments-door';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+import { ExportIcon } from '@/components/print/export-menu';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, formatQuantity as formatLocaleQuantity, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -12,12 +17,16 @@ import { visibleRoute } from '@/server/delivered';
 import { isNotFoundError } from '@/server/not-found';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as pe from '@/server/services/project-execution';
+import * as recordNotes from '@/server/services/record-notes';
 import { cancelMaterialIssue, postMaterialIssue } from '../actions';
 
 /**
  * One material issue — REQ-PM-001 §9. Copies the Purchase Invoice page: the
  * document window with its fields, the status chip, Post and Cancel as its
- * actions, the lines with the cost each one became; then the history.
+ * actions, the lines with the cost each one became. The four doors in its
+ * title bar from the draft on — printer, paperclip, notes, clock (shared,
+ * 2026-10-04) — and the project, the warehouse and the items as links to
+ * their own pages.
  */
 export const dynamic = 'force-dynamic';
 
@@ -43,7 +52,9 @@ export default async function MaterialIssuePage({ params, searchParams }: { para
   const actor = { principal, branchCode: context.scope.branchCode };
   const view = await withCurrentUser(async (tx) => {
     try {
-      return await pe.issue(tx, actor, documentNo);
+      const found = await pe.issue(tx, actor, documentNo);
+      const ref = { object: pe.ISSUE_DOCUMENT_TYPE, recordId: found.document.documentNo };
+      return { ...found, notes: await recordNotes.listNotes(tx, ref), files: await readAttachments(tx, ref.object, ref.recordId) };
     } catch (error) {
       if (isNotFoundError(error)) return null;
       throw error;
@@ -60,18 +71,11 @@ export default async function MaterialIssuePage({ params, searchParams }: { para
     { label: column('document_no'), value: <bdi dir="ltr">{doc.documentNo}</bdi> },
     { label: column('status'), value: status(doc.status), status: doc.status },
     { label: x('kind'), value: doc.kind === 'issue' ? x('kind_issue') : x('kind_return_stock') },
-    {
-      label: x('project'),
-      value: (
-        <Link className={s.sapLink} href={`/projects/${encodeURIComponent(doc.projectCode)}`}>
-          <bdi dir="ltr">{doc.projectCode}</bdi>
-        </Link>
-      ),
-    },
+    { label: x('project'), value: <ProfileLink code={doc.projectCode} kind="project" /> },
     { label: column('name'), value: <bdi dir="auto">{view.project.name}</bdi> },
     { label: x('element'), value: <bdi dir="auto">{`${doc.wbsCode}${view.elementName ? ` · ${view.elementName}` : ''}`}</bdi> },
     { label: x('cost_code'), value: <bdi dir="ltr">{doc.costCode}</bdi> },
-    { label: column('warehouse'), value: <bdi dir="ltr">{doc.warehouseCode}</bdi> },
+    { label: column('warehouse'), value: <ProfileLink code={doc.warehouseCode} kind="warehouse" /> },
     { label: column('date'), value: <bdi dir="ltr">{formatBusinessDate(doc.movementDate, locale as Locale)}</bdi> },
     { label: x('cost'), value: <bdi dir="ltr">{money(doc.totalCostIqd)}</bdi> },
     { label: x('raised_by'), value: <bdi dir="auto">{view.people.createdBy ?? '—'}</bdi> },
@@ -102,8 +106,17 @@ export default async function MaterialIssuePage({ params, searchParams }: { para
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Printer, paperclip, notes, clock — from the draft on (2026-10-04). */}
+            <ExportIcon exportKey="project_material_issue" id={doc.documentNo} title={`${x('material_issue')} ${doc.documentNo}`} />
+            <RecordAttachmentsDoor files={view.files} mayAttach={can(principal, 'edit_draft', pe.PERMISSION_OBJECT)} object={pe.ISSUE_DOCUMENT_TYPE} recordId={doc.documentNo} />
+            <RecordNotesDoor notes={view.notes} object={pe.ISSUE_DOCUMENT_TYPE} recordId={doc.documentNo} />
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={doc.documentNo} objectType={pe.ISSUE_DOCUMENT_TYPE} />
+            </HistoryButton>
+          </>
+        }
         documentType={x('material_issue')}
         fields={fields}
         id="material-issue"
@@ -136,7 +149,7 @@ export default async function MaterialIssuePage({ params, searchParams }: { para
               <tr key={line.id}>
                 <td>{line.lineNo}</td>
                 <td>
-                  <bdi dir="ltr">{line.itemCode}</bdi>
+                  <ProfileLink code={line.itemCode} kind="item" />
                 </td>
                 <td>
                   <bdi dir="auto">{line.itemName ?? '—'}</bdi>
@@ -161,8 +174,6 @@ export default async function MaterialIssuePage({ params, searchParams }: { para
           </tbody>
         </table>
       </DocumentWindow>
-
-      <RecordHistory objectId={doc.documentNo} objectType={pe.ISSUE_DOCUMENT_TYPE} />
     </AdminPage>
   );
 }

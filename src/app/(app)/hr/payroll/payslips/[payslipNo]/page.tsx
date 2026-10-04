@@ -1,11 +1,11 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Flash, admin as s } from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { ProfileLink } from '@/components/admin/profile-link';
 import { Denied } from '@/components/denied';
-import { ExportMenu } from '@/components/print/export-menu';
+import { ExportIcon } from '@/components/print/export-menu';
 import { PrintSheet } from '@/components/print/print-sheet';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -20,7 +20,9 @@ import * as payroll from '@/server/services/payroll';
  * page: the document window, its header the person and the month as the day
  * sheet read it, its lines the components, its totals gross, deductions and
  * net. Read by the payroll's readers, and by the person it pays — row security
- * decides, and of the run the person sees only what the payslip prints.
+ * decides, and of the run the person sees only what the payslip prints. It is
+ * a line of its run, not a record of its own: the printer is in its title bar
+ * (shared, 2026-10-04); its papers, notes and history are the run's.
  */
 export const dynamic = 'force-dynamic';
 
@@ -61,27 +63,12 @@ export default async function PayslipPage({ params, searchParams }: { params: Pr
     { label: column('status'), value: x(`payslip_status_${status}`), status: tone },
     {
       label: x('employee'),
-      value: mayOpenPerson ? (
-        <Link className={s.sapLink} href={`/hr/employees/${encodeURIComponent(line.employeeNo)}`}>
-          <bdi dir="auto">{`${line.employeeNo} · ${name}`}</bdi>
-        </Link>
-      ) : (
-        <bdi dir="auto">{`${line.employeeNo} · ${name}`}</bdi>
-      ),
+      value: mayOpenPerson ? <ProfileLink code={line.employeeNo} dir="auto" kind="employee" name={name} /> : <bdi dir="auto">{`${line.employeeNo} · ${name}`}</bdi>,
     },
-    { label: x('department'), value: <bdi dir="ltr">{line.departmentCode}</bdi> },
+    { label: x('department'), value: mayOpenPerson ? <ProfileLink code={line.departmentCode} kind="department" /> : <bdi dir="ltr">{line.departmentCode}</bdi> },
     { label: x('position'), value: <bdi dir="auto">{line.positionTitle ?? '—'}</bdi> },
     { label: x('month'), value: <bdi dir="ltr">{month}</bdi> },
-    {
-      label: x('run'),
-      value: mayOpenRun ? (
-        <Link className={s.sapLink} href={`/hr/payroll/${encodeURIComponent(run.runNo)}`}>
-          <bdi dir="ltr">{run.runNo}</bdi>
-        </Link>
-      ) : (
-        <bdi dir="ltr">{run.runNo}</bdi>
-      ),
-    },
+    { label: x('run'), value: mayOpenRun ? <ProfileLink code={run.runNo} kind="payroll_run" /> : <bdi dir="ltr">{run.runNo}</bdi> },
     { label: x('pay_date'), value: <bdi dir="ltr">{day(run.payDate)}</bdi> },
     { label: x('paid_on'), value: <bdi dir="ltr">{run.paidOn ? `${day(run.paidOn)}${run.paymentReference ? ` · ${run.paymentReference}` : ''}` : '—'}</bdi> },
     { label: x('pay_method'), value: x(`method_${line.payMethod}`) },
@@ -98,7 +85,6 @@ export default async function PayslipPage({ params, searchParams }: { params: Pr
 
   return (
     <AdminPage
-      actions={<ExportMenu exportKey="payslip" id={payslipNo} />}
       back={{ href: mayOpenRun ? `/hr/payroll/${encodeURIComponent(run.runNo)}` : '/', label: t('back') }}
       title={`${payslipNo} · ${name}`}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -108,6 +94,7 @@ export default async function PayslipPage({ params, searchParams }: { params: Pr
       {run.status === 'reversed' ? <p className={s.sapNote}>{x('payslip_reversed', { run: run.runNo })}</p> : null}
 
       <DocumentWindow
+        titleActions={<ExportIcon exportKey="payslip" id={payslipNo} title={`${x('payslip')} ${payslipNo}`} />}
         documentType={x('payslip')}
         fields={fields}
         id="payslip-document"

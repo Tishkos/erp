@@ -5535,6 +5535,15 @@
     },
     "monitoring": {
       "soon": "قريباً"
+    },
+    "record_notes": {
+      "notes": "الملاحظات",
+      "note_when": "متى",
+      "note_who": "من",
+      "note": "ملاحظة",
+      "no_notes": "لا توجد ملاحظات بعد.",
+      "note_hint": "ما الذي يحدث مع هذا السجل — مؤرخة وموقعة، ولا تُعدَّل.",
+      "add_note": "إضافة ملاحظة"
     }
   },
   "profile": {
@@ -5902,7 +5911,18 @@
       "bill_of_lading": "بوليصة الشحن",
       "asycuda_reading": "قراءة أسيكودا",
       "import_application": "طلب استيراد",
-      "landed_cost_final": "التكلفة النهائية"
+      "landed_cost_final": "التكلفة النهائية",
+      "project_certificate": "شهادة الإنجاز",
+      "project_budget": "مستند الموازنة",
+      "project_change_order": "أمر التغيير",
+      "project_material_issue": "صرف مواد",
+      "employee_advance": "سلفة موظف",
+      "leave_request": "طلب إجازة",
+      "employee_document": "وثيقة موظف",
+      "performance_review": "تقييم أداء",
+      "vacancy": "شاغر وظيفي",
+      "applicant": "طلب توظيف",
+      "employee_request": "طلب موظف"
     }
   }
 }

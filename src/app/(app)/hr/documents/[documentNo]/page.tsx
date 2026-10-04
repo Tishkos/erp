@@ -1,25 +1,32 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Field, Flash, Form, Grid, Submit, SubmitRow, admin as s } from '@/components/admin';
-import { Attachments } from '@/components/admin/attachments';
+import { readAttachments } from '@/components/admin/attachments';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { HistoryButton } from '@/components/admin/icon-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordAttachmentsDoor } from '@/components/admin/record-attachments-door';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+import { ExportIcon } from '@/components/print/export-menu';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as documents from '@/server/services/employee-documents';
-import { attachToDocument, renewDocument, updateDocument, withdrawDocument } from '../actions';
+import * as recordNotes from '@/server/services/record-notes';
+import { renewDocument, updateDocument, withdrawDocument } from '../actions';
 
 /**
  * One employee document — REQ-HR-001 Stage HR-6. Copies the Purchase Invoice
  * page: the document window with its header fields and its expiry as the
  * status chip, its lines the person's papers of the same type (each renewal
- * in turn), the verbs at its foot; the scan filed under it; the audit log.
+ * in turn), the verbs at its foot. The four doors in its title bar — printer,
+ * paperclip (the scan), notes, clock (shared, 2026-10-04) — and the person
+ * and the papers it renews or is renewed by as links to their own pages.
  */
 export const dynamic = 'force-dynamic';
 
@@ -41,11 +48,21 @@ export default async function DocumentPage({ params, searchParams }: { params: P
   const documentNo = decodeURIComponent(rawNo);
   const { principal } = context;
   // Row security decides who sees it: HR by grant and branch, and the person.
-  const detail = await withCurrentUser((tx) => documents.byNo(tx, documentNo));
-  if (!detail) {
+  const found = await withCurrentUser(async (tx) => {
+    const detail = await documents.byNo(tx, documentNo);
+    if (!detail) return null;
+    // Notes by number, as its history is; the scan by its id, as HR's records file them.
+    return {
+      detail,
+      notes: await recordNotes.listNotes(tx, { object: documents.PERMISSION_OBJECT, recordId: detail.row.documentNo }),
+      files: await readAttachments(tx, documents.PERMISSION_OBJECT, detail.row.id),
+    };
+  });
+  if (!found) {
     if (!can(principal, 'view', documents.PERMISSION_OBJECT)) return <Denied object={page('hr_documents')} />;
     notFound();
   }
+  const { detail, notes, files } = found;
   const { row, person } = detail;
   const valid = row.status === 'valid';
   const mayEdit = valid && can(principal, 'edit_draft', documents.PERMISSION_OBJECT);
@@ -55,24 +72,14 @@ export default async function DocumentPage({ params, searchParams }: { params: P
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
   const when = (name: string | null, value: Date | string | null) => (value ? `${name ?? '—'} · ${formatTimestamp(new Date(value).toISOString(), locale as Locale)}` : '—');
   const name = locale === 'ar' && person.fullNameAr ? person.fullNameAr : person.fullNameEn;
-  const link = (no: string) => (
-    <Link className={s.sapLink} href={`/hr/documents/${encodeURIComponent(no)}`}>
-      <bdi dir="ltr">{no}</bdi>
-    </Link>
-  );
+  const link = (no: string) => <ProfileLink code={no} kind="employee_document" />;
 
   const fields: DocumentField[] = [
     { label: column('reference'), value: <bdi dir="ltr">{row.documentNo}</bdi> },
     { label: column('status'), value: statusText, status: tone },
     {
       label: x('employee'),
-      value: can(principal, 'view', 'employee') ? (
-        <Link className={s.sapLink} href={`/hr/employees/${encodeURIComponent(person.employeeNo)}`}>
-          <bdi dir="auto">{`${person.employeeNo} · ${name}`}</bdi>
-        </Link>
-      ) : (
-        <bdi dir="auto">{`${person.employeeNo} · ${name}`}</bdi>
-      ),
+      value: can(principal, 'view', 'employee') ? <ProfileLink code={person.employeeNo} dir="auto" kind="employee" name={name} /> : <bdi dir="auto">{`${person.employeeNo} · ${name}`}</bdi>,
     },
     { label: x('doc_type'), value: x(`type_${row.docType}`) },
     { label: x('doc_title'), value: <bdi dir="auto">{row.title}</bdi> },
@@ -146,8 +153,17 @@ export default async function DocumentPage({ params, searchParams }: { params: P
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Printer, paperclip, notes, clock (2026-10-04). */}
+            <ExportIcon exportKey="employee_document" id={row.documentNo} title={`${x('document_type')} ${row.documentNo}`} />
+            <RecordAttachmentsDoor files={files} mayAttach={valid && can(principal, 'create', documents.PERMISSION_OBJECT)} object={documents.PERMISSION_OBJECT} recordId={row.id} />
+            <RecordNotesDoor notes={notes} object={documents.PERMISSION_OBJECT} recordId={row.documentNo} />
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={row.documentNo} objectType={documents.PERMISSION_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         documentType={x('document_type')}
         fields={fields}
         id="employee-document"
@@ -191,20 +207,6 @@ export default async function DocumentPage({ params, searchParams }: { params: P
           </tbody>
         </table>
       </DocumentWindow>
-
-      <section aria-label={x('attachments')} className={s.sapDoc}>
-        <div className={s.sapWindow}>
-          <Attachments
-            action={attachToDocument}
-            hidden={{ id: row.id, document_no: row.documentNo }}
-            mayAttach={valid && can(principal, 'create', 'attachment') && can(principal, 'create', documents.PERMISSION_OBJECT)}
-            objectId={row.id}
-            objectType={documents.PERMISSION_OBJECT}
-          />
-        </div>
-      </section>
-
-      <RecordHistory objectId={row.documentNo} objectType={documents.PERMISSION_OBJECT} />
     </AdminPage>
   );
 }

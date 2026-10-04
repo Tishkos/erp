@@ -1,12 +1,16 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Checkbox, Field, Flash, Form, Grid, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
-import { Attachments } from '@/components/admin/attachments';
+import { readAttachments } from '@/components/admin/attachments';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { HistoryButton } from '@/components/admin/icon-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordAttachmentsDoor } from '@/components/admin/record-attachments-door';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+import { ExportIcon } from '@/components/print/export-menu';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -14,13 +18,16 @@ import { visibleRoute } from '@/server/delivered';
 import { daysFrom, showDays, weekdayOf } from '@/server/domain/hr-time';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as leave from '@/server/services/leave';
-import { approveLeave, attachToLeave, cancelLeave, refuseLeave, submitLeave, updateLeaveDraft } from '../actions';
+import * as recordNotes from '@/server/services/record-notes';
+import { approveLeave, cancelLeave, refuseLeave, submitLeave, updateLeaveDraft } from '../actions';
 
 /**
  * One leave request — REQ-HR-001 Stage HR-2 (§8). Copies the Purchase
  * Invoice page: the document window with its header fields and status chip,
  * its lines the days the span covers (each counted, a rest day or a
- * holiday), the verbs at its foot; the paper filed with it; the audit log.
+ * holiday), the verbs at its foot. The four doors in its title bar from the
+ * draft on — printer, paperclip (the sick note), notes, clock (shared,
+ * 2026-10-04) — and the person as a link to their own page.
  */
 export const dynamic = 'force-dynamic';
 
@@ -46,7 +53,13 @@ export default async function LeaveRequestPage({ params, searchParams }: { param
   const found = await withCurrentUser(async (tx) => {
     const detail = await leave.byNo(tx, requestNo);
     if (!detail) return null;
-    return { detail, types: await leave.activeTypes(tx) };
+    // Notes by number, as its history is; files by its id, as HR's records file them.
+    return {
+      detail,
+      types: await leave.activeTypes(tx),
+      notes: await recordNotes.listNotes(tx, { object: leave.PERMISSION_OBJECT, recordId: detail.row.requestNo }),
+      files: await readAttachments(tx, leave.PERMISSION_OBJECT, detail.row.id),
+    };
   });
   if (!found) {
     if (!can(principal, 'view', leave.PERMISSION_OBJECT)) return <Denied object={page('leave')} />;
@@ -69,14 +82,7 @@ export default async function LeaveRequestPage({ params, searchParams }: { param
   const fields: DocumentField[] = [
     { label: column('reference'), value: <bdi dir="ltr">{row.requestNo}</bdi> },
     { label: column('status'), value: x(`status_${row.status}`), status: tone },
-    {
-      label: x('employee'),
-      value: (
-        <Link className={s.sapLink} href={`/hr/employees/${encodeURIComponent(person.employeeNo)}`}>
-          <bdi dir="auto">{`${person.employeeNo} · ${person.fullNameEn}`}</bdi>
-        </Link>
-      ),
-    },
+    { label: x('employee'), value: <ProfileLink code={person.employeeNo} dir="auto" kind="employee" name={person.fullNameEn} /> },
     { label: x('manager'), value: <bdi dir="auto">{person.managerName ?? '—'}</bdi> },
     { label: x('leave_type'), value: <bdi dir="auto">{typeLabel}</bdi> },
     { label: x('from_date'), value: <bdi dir="ltr">{`${day(row.fromDate)}${row.halfDayStart ? ` · ${x('half')}` : ''}`}</bdi> },
@@ -172,8 +178,17 @@ export default async function LeaveRequestPage({ params, searchParams }: { param
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Printer, paperclip, notes, clock — from the draft on (2026-10-04). */}
+            <ExportIcon exportKey="leave_request" id={row.requestNo} title={`${x('document_type')} ${row.requestNo}`} />
+            <RecordAttachmentsDoor files={found.files} mayAttach={row.status !== 'cancelled' && row.status !== 'refused'} object={leave.PERMISSION_OBJECT} recordId={row.id} />
+            <RecordNotesDoor notes={found.notes} object={leave.PERMISSION_OBJECT} recordId={row.requestNo} />
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={row.requestNo} objectType={leave.PERMISSION_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         documentType={x('document_type')}
         fields={fields}
         id="leave-document"
@@ -209,20 +224,6 @@ export default async function LeaveRequestPage({ params, searchParams }: { param
           </tbody>
         </table>
       </DocumentWindow>
-
-      <section aria-label={x('attachments')} className={s.sapDoc}>
-        <div className={s.sapWindow}>
-          <Attachments
-            action={attachToLeave}
-            hidden={{ id: row.id, request_no: row.requestNo }}
-            mayAttach={row.status !== 'cancelled' && row.status !== 'refused' && can(principal, 'create', 'attachment')}
-            objectId={row.id}
-            objectType={leave.PERMISSION_OBJECT}
-          />
-        </div>
-      </section>
-
-      <RecordHistory objectId={row.requestNo} objectType={leave.PERMISSION_OBJECT} />
     </AdminPage>
   );
 }

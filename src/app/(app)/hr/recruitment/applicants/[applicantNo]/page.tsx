@@ -1,12 +1,16 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Field, Flash, Form, Grid, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
-import { Attachments } from '@/components/admin/attachments';
+import { readAttachments } from '@/components/admin/attachments';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { HistoryButton } from '@/components/admin/icon-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordAttachmentsDoor } from '@/components/admin/record-attachments-door';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+import { ExportIcon } from '@/components/print/export-menu';
 import { Denied } from '@/components/denied';
 import { formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -15,8 +19,9 @@ import { businessToday } from '@/server/domain/business-date';
 import { EMPLOYMENT_KINDS } from '@/server/domain/hr';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as employees from '@/server/services/employees';
+import * as recordNotes from '@/server/services/record-notes';
 import * as recruitment from '@/server/services/recruitment';
-import { attachToApplicant, hireApplicant, moveApplicant, updateApplicant } from '../../actions';
+import { hireApplicant, moveApplicant, updateApplicant } from '../../actions';
 
 /**
  * One applicant — REQ-HR-001 Stage HR-5. Copies the Purchase Invoice page:
@@ -56,10 +61,16 @@ export default async function ApplicantPage({ params, searchParams }: { params: 
   const found = await withCurrentUser(async (tx) => {
     const detail = await recruitment.applicantByNo(tx, applicantNo);
     if (!detail) return null;
-    return { detail, managers: detail.row.stage === 'offer' && mayHire ? await employees.managersAvailable(tx) : [] };
+    // Notes by number, as its history is; the CV and letters by its id, as HR's records file them.
+    return {
+      detail,
+      managers: detail.row.stage === 'offer' && mayHire ? await employees.managersAvailable(tx) : [],
+      notes: await recordNotes.listNotes(tx, { object: recruitment.APPLICANT_OBJECT, recordId: detail.row.applicantNo }),
+      files: await readAttachments(tx, recruitment.APPLICANT_OBJECT, detail.row.id),
+    };
   });
   if (!found) notFound();
-  const { detail, managers } = found;
+  const { detail, managers, notes, files } = found;
   const { row } = detail;
   const tone = STAGE_TONE[row.stage] ?? 'draft';
   const when = (name: string | null, value: Date | string | null) => (value ? `${name ?? '—'} · ${formatTimestamp(new Date(value).toISOString(), locale as Locale)}` : '—');
@@ -71,15 +82,8 @@ export default async function ApplicantPage({ params, searchParams }: { params: 
   const fields: DocumentField[] = [
     { label: column('reference'), value: <bdi dir="ltr">{row.applicantNo}</bdi> },
     { label: x('stage'), value: x(`stage_${row.stage}`), status: tone },
-    {
-      label: x('vacancy'),
-      value: (
-        <Link className={s.sapLink} href={`/hr/recruitment/${encodeURIComponent(detail.vacancyNo)}`}>
-          <bdi dir="ltr">{detail.vacancyNo}</bdi>
-        </Link>
-      ),
-    },
-    { label: x('position'), value: <bdi dir="auto">{`${detail.positionCode} · ${title}`}</bdi> },
+    { label: x('vacancy'), value: <ProfileLink code={detail.vacancyNo} kind="vacancy" /> },
+    { label: x('position'), value: <ProfileLink code={detail.positionCode} dir="auto" kind="position" name={title} /> },
     { label: x('full_name_en'), value: <bdi dir="auto">{row.fullNameEn}</bdi> },
     { label: x('full_name_ar'), value: <bdi dir="auto">{row.fullNameAr ?? '—'}</bdi> },
     { label: x('phone'), value: <bdi dir="ltr">{row.phone ?? '—'}</bdi> },
@@ -88,16 +92,7 @@ export default async function ApplicantPage({ params, searchParams }: { params: 
     { label: x('created_by'), value: <bdi dir="auto">{when(detail.createdByName, row.createdAt)}</bdi> },
     ...(detail.employeeNo
       ? [
-          {
-            label: x('employee'),
-            value: mayOpenPerson ? (
-              <Link className={s.sapLink} href={`/hr/employees/${encodeURIComponent(detail.employeeNo)}`}>
-                <bdi dir="ltr">{detail.employeeNo}</bdi>
-              </Link>
-            ) : (
-              <bdi dir="ltr">{detail.employeeNo}</bdi>
-            ),
-          },
+          { label: x('employee'), value: mayOpenPerson ? <ProfileLink code={detail.employeeNo} kind="employee" /> : <bdi dir="ltr">{detail.employeeNo}</bdi> },
         ]
       : []),
     ...(row.note ? [{ label: x('note'), value: <bdi dir="auto">{row.note}</bdi>, wide: true }] : []),
@@ -176,8 +171,17 @@ export default async function ApplicantPage({ params, searchParams }: { params: 
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Printer, paperclip, notes, clock (2026-10-04). */}
+            <ExportIcon exportKey="applicant" id={row.applicantNo} title={`${x('applicant_document_type')} ${row.applicantNo}`} />
+            <RecordAttachmentsDoor files={files} mayAttach={can(principal, 'create', recruitment.PERMISSION_OBJECT)} object={recruitment.APPLICANT_OBJECT} recordId={row.id} />
+            <RecordNotesDoor notes={notes} object={recruitment.APPLICANT_OBJECT} recordId={row.applicantNo} />
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={row.applicantNo} objectType={recruitment.APPLICANT_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         documentType={x('applicant_document_type')}
         fields={fields}
         id="applicant-document"
@@ -218,20 +222,6 @@ export default async function ApplicantPage({ params, searchParams }: { params: 
           </tbody>
         </table>
       </DocumentWindow>
-
-      <section aria-label={x('attachments')} className={s.sapDoc}>
-        <div className={s.sapWindow}>
-          <Attachments
-            action={attachToApplicant}
-            hidden={{ id: row.id, applicant_no: row.applicantNo }}
-            mayAttach={can(principal, 'create', 'attachment') && can(principal, 'create', recruitment.PERMISSION_OBJECT)}
-            objectId={row.id}
-            objectType={recruitment.APPLICANT_OBJECT}
-          />
-        </div>
-      </section>
-
-      <RecordHistory objectId={row.applicantNo} objectType={recruitment.APPLICANT_OBJECT} />
     </AdminPage>
   );
 }

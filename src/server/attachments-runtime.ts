@@ -11,7 +11,30 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
-import { applicant, asycudaRun, bankLoan, bankTransfer, billOfLading, customsPd, employeeDocument, employeeRequest, journalEntry, otherReceipt, payable, paymentApplication, shipmentContainer } from './db/schema';
+import {
+  applicant,
+  asycudaRun,
+  bankLoan,
+  bankTransfer,
+  billOfLading,
+  customsPd,
+  employeeAdvance,
+  employeeDocument,
+  employeeRequest,
+  journalEntry,
+  otherReceipt,
+  payable,
+  paymentApplication,
+  payrollRun,
+  performanceReview,
+  project,
+  projectBudgetDocument,
+  projectCertificate,
+  projectMaterialIssue,
+  projectVariation,
+  shipmentContainer,
+  vacancy,
+} from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -205,6 +228,93 @@ const otherReceiptParentAccess = async (tx: Tx, principal: Principal, objectId: 
   return Boolean(row);
 };
 
+/**
+ * REQ-PM-001 PM-5 — a progress certificate's papers (the signed measurement,
+ * the client's acceptance): whoever reads the project, and row security
+ * answers the branch. Kept by number, as the certificate's history is.
+ */
+const projectCertificateParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'project')) return false;
+  const [row] = await tx
+    .select({ id: projectCertificate.id })
+    .from(projectCertificate)
+    .where(eq(projectCertificate.certificateNo, objectId))
+    .limit(1);
+  return Boolean(row);
+};
+
+/**
+ * The Project System's other documents (shared, 2026-10-04): the budget
+ * document, the change order and the material issue, each kept by its number
+ * as its history is, each read by whoever reads the project (row security
+ * answers the branch); and the project itself, by its code.
+ */
+const projectParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'project')) return false;
+  const [row] = await tx.select({ code: project.code }).from(project).where(eq(project.code, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const projectBudgetParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'project')) return false;
+  const [row] = await tx
+    .select({ id: projectBudgetDocument.id })
+    .from(projectBudgetDocument)
+    .where(eq(projectBudgetDocument.documentNo, objectId))
+    .limit(1);
+  return Boolean(row);
+};
+
+const projectVariationParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'project')) return false;
+  const [row] = await tx.select({ id: projectVariation.id }).from(projectVariation).where(eq(projectVariation.variationNo, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const projectMaterialIssueParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'project')) return false;
+  const [row] = await tx
+    .select({ id: projectMaterialIssue.id })
+    .from(projectMaterialIssue)
+    .where(eq(projectMaterialIssue.documentNo, objectId))
+    .limit(1);
+  return Boolean(row);
+};
+
+/**
+ * HR's remaining records (shared, 2026-10-04), each kept by its uuid as the
+ * HR pages already file against. An advance's papers (the signed agreement,
+ * the receipt): HR and Finance by the grant, or the person and their manager
+ * through the link, as the advance itself is read. A review's: whoever the
+ * review's own row policy lets read it, with the grant or as its person or
+ * reviewer. A vacancy's (the approved requisition): recruitment's grant. A
+ * payroll run's (the signed sheet): the run's grant.
+ */
+const employeeAdvanceParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  const [row] = await tx.select({ employeeId: employeeAdvance.employeeId }).from(employeeAdvance).where(eq(employeeAdvance.id, objectId)).limit(1);
+  if (!row) return false;
+  if (can(principal, 'view', 'employee_advance')) return true;
+  const reach = await tx.execute(sql`select app_employee_reach(${row.employeeId}) as ok`);
+  return Boolean((reach.rows[0] as { ok: boolean } | undefined)?.ok);
+};
+
+const performanceReviewParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  const [row] = await tx.select({ id: performanceReview.id }).from(performanceReview).where(eq(performanceReview.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const vacancyParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'recruitment')) return false;
+  const [row] = await tx.select({ id: vacancy.id }).from(vacancy).where(eq(vacancy.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const payrollRunParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'payroll_run')) return false;
+  const [row] = await tx.select({ id: payrollRun.id }).from(payrollRun).where(eq(payrollRun.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -226,6 +336,15 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('applicant', applicantParentAccess);
   attachments.registerParentAccessCheck('employee_request', employeeRequestParentAccess);
   attachments.registerParentAccessCheck('employee_document', employeeDocumentParentAccess);
+  attachments.registerParentAccessCheck('project_certificate', projectCertificateParentAccess);
+  attachments.registerParentAccessCheck('project', projectParentAccess);
+  attachments.registerParentAccessCheck('project_budget', projectBudgetParentAccess);
+  attachments.registerParentAccessCheck('project_variation', projectVariationParentAccess);
+  attachments.registerParentAccessCheck('project_material_issue', projectMaterialIssueParentAccess);
+  attachments.registerParentAccessCheck('employee_advance', employeeAdvanceParentAccess);
+  attachments.registerParentAccessCheck('performance_review', performanceReviewParentAccess);
+  attachments.registerParentAccessCheck('vacancy', vacancyParentAccess);
+  attachments.registerParentAccessCheck('payroll_run', payrollRunParentAccess);
 }
 
 /** Streams a stored file, for a route handler that has already checked access. */
