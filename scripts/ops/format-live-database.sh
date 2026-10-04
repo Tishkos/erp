@@ -114,6 +114,8 @@ warranty_registration
 promise_to_pay
 collection_activity
 ar_write_off
+customer_credit_application
+customer_note
 customer_credit_memo_line
 customer_credit_memo
 customer_receipt_allocation
@@ -419,6 +421,7 @@ select rpad(t.table_name, 28) || lpad(t.n::text, 8)
     union all select 'goods_return', count(*) from goods_return
     union all select 'sales_return', count(*) from sales_return
     union all select 'customer_credit_memo', count(*) from customer_credit_memo
+    union all select 'customer_note', count(*) from customer_note
     union all select 'supplier_credit_memo', count(*) from supplier_credit_memo
     union all select 'inventory_movement', count(*) from inventory_movement
     union all select 'cost_layer', count(*) from cost_layer

@@ -41,6 +41,7 @@ const BUILDERS = {
   sales_invoice: byId(documents.salesInvoice),
   supplier_payment: byId(documents.supplierPayment),
   customer_receipt: byId(documents.customerReceipt),
+  customer_note: byId(documents.customerNote),
   sales_return: byId(documents.salesReturn),
   purchase_return: byId(documents.purchaseReturn),
   transfer: byId(documents.transfer),

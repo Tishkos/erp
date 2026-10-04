@@ -314,8 +314,14 @@ describe('every screen has one address', () => {
       '/projects/wbs',
       // Block 5 — the Sales Invoice.
       '/sales/ar-invoices',
+      // Receivables (2026-10-04) — credit and debit notes.
+      '/sales/credit-notes',
+      // Receivables (2026-10-04) — the customer's credits and advances.
+      '/sales/customer-credits',
       // Block 6 — Receipts.
       '/sales/customer-receipts',
+      // Receivables (2026-10-04) — the subledger against the control account.
+      '/sales/customer-reconciliation',
       '/sales/customer-statements',
       '/sales/customers',
       // §16 — what is owed to us, invoice by invoice.

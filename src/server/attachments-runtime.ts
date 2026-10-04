@@ -12,6 +12,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
 import { applicant, asycudaRun, bankLoan, bankTransfer, billOfLading, customsPd, employeeDocument, employeeRequest, journalEntry, otherReceipt, payable, paymentApplication, shipmentContainer } from './db/schema';
+// Receivables (2026-10-04) — on its own line, to keep the list above merge-friendly.
+import { arInvoice, customerCreditMemo, customerNote, customerReceipt } from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -205,6 +207,44 @@ const otherReceiptParentAccess = async (tx: Tx, principal: Principal, objectId: 
   return Boolean(row);
 };
 
+/*
+ * Receivables (2026-10-04) — the sales invoice, the receipt and the credit or
+ * debit note carry their files behind the paperclip, like every record. The
+ * invoice and the receipt are read under their own objects; a note under the
+ * credit memo's, which governs it. Row security decides the branch.
+ */
+const arInvoiceParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'ar_invoice')) return false;
+  const [row] = await tx.select({ id: arInvoice.id }).from(arInvoice).where(eq(arInvoice.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const customerReceiptParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'customer_receipt')) return false;
+  const [row] = await tx
+    .select({ id: customerReceipt.id })
+    .from(customerReceipt)
+    .where(eq(customerReceipt.id, objectId))
+    .limit(1);
+  return Boolean(row);
+};
+
+const customerNoteParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'customer_credit_memo')) return false;
+  const [row] = await tx.select({ id: customerNote.id }).from(customerNote).where(eq(customerNote.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
+const customerCreditMemoParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'customer_credit_memo')) return false;
+  const [row] = await tx
+    .select({ id: customerCreditMemo.id })
+    .from(customerCreditMemo)
+    .where(eq(customerCreditMemo.id, objectId))
+    .limit(1);
+  return Boolean(row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -223,6 +263,10 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('bank_loan', loanParentAccess);
   attachments.registerParentAccessCheck('bank_transfer', bankTransferParentAccess);
   attachments.registerParentAccessCheck('other_receipt', otherReceiptParentAccess);
+  attachments.registerParentAccessCheck('ar_invoice', arInvoiceParentAccess);
+  attachments.registerParentAccessCheck('customer_receipt', customerReceiptParentAccess);
+  attachments.registerParentAccessCheck('customer_note', customerNoteParentAccess);
+  attachments.registerParentAccessCheck('customer_credit_memo', customerCreditMemoParentAccess);
   attachments.registerParentAccessCheck('applicant', applicantParentAccess);
   attachments.registerParentAccessCheck('employee_request', employeeRequestParentAccess);
   attachments.registerParentAccessCheck('employee_document', employeeDocumentParentAccess);

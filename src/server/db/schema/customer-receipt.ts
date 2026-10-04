@@ -36,6 +36,7 @@ import {
 import { appUser, branch } from './platform';
 import { businessPartner } from './organisation';
 import { bankCashAccount } from './item';
+import { paymentMethod } from './pricing';
 import { journalEntry } from './journal';
 import { arInvoice } from './ar-invoice';
 import { documentStatus } from './workflow';
@@ -67,6 +68,11 @@ export const customerReceipt = pgTable(
     currency: text('currency').notNull().default('IQD'),
     /** The transfer reference, cheque number or slip the bank shows. */
     bankReference: text('bank_reference'),
+    /**
+     * How the money came — the payment method master (migration 0280).
+     * Optional: receipts recorded before the column existed name none.
+     */
+    paymentMethodCode: text('payment_method_code').references(() => paymentMethod.code),
 
     amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
     allocatedIqd: numeric('allocated_iqd', { precision: 19, scale: 4 })

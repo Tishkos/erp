@@ -5,10 +5,14 @@ import { AdminPage, Flash, admin as s, Submit} from '@/components/admin';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
 import { InvoiceSettlement } from '@/components/admin/invoice-settlement';
+import { ReceivableInvoiceActivity } from '@/components/admin/receivable-invoice-activity';
+import { Attachments } from '@/components/admin/attachments';
+import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { ExportIcon } from '@/components/print/export-menu';
+import * as attachmentsService from '@/server/services/attachments';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { ExportMenu } from '@/components/print/export-menu';
 import { PrintSheet } from '@/components/print/print-sheet';
 import { printSheet } from '@/server/print/sheet';
 import { Panel } from '@/components/ui';
@@ -23,6 +27,7 @@ import * as partners from '@/server/services/partners';
 import * as warehouses from '@/server/services/warehouses';
 import {
   approveArInvoice,
+  attachToArInvoice,
   saveArInvoiceAccounts,
   invoiceLineAvailability,
   postArInvoice,
@@ -265,9 +270,14 @@ export default async function ArInvoicePage({
 
   const sheet = await printSheet('sales_invoice', invoice.invoiceNo);
 
+  // The paperwork: how many there are, and whether this person may add one.
+  const attached = await withCurrentUser((tx) =>
+    attachmentsService.currentFor(tx, ar.PERMISSION_OBJECT, invoice.id),
+  );
+  const mayAttach = can(principal, 'create', 'attachment');
+
   return (
     <AdminPage
-      actions={<ExportMenu exportKey="sales_invoice" id={invoice.invoiceNo} />}
       back={{ href: '/sales/ar-invoices', label: t('back') }}
       title={invoice.invoiceNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -323,8 +333,34 @@ export default async function ArInvoicePage({
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Printer, paperclip, clock — the standing order (2026-10-03).
+                The invoice keeps no notes log, so it has no notes door. */}
+            <ExportIcon
+              exportKey="sales_invoice"
+              id={invoice.invoiceNo}
+              title={`${page('ar_invoice')} ${invoice.invoiceNo}`}
+            />
+            <AttachmentsButton
+              closeLabel={t('close')}
+              count={attached.length}
+              label={t('attachments.title')}
+              title={t('attachments.title')}
+            >
+              <Attachments
+                action={attachToArInvoice}
+                hidden={{ invoice_no: invoice.invoiceNo }}
+                mayAttach={mayAttach}
+                objectId={invoice.id}
+                objectType={ar.PERMISSION_OBJECT}
+              />
+            </AttachmentsButton>
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={invoice.id} objectType={ar.PERMISSION_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         documentType={page('ar_invoice')}
         fields={fields}
         id="ar-invoice-document"
@@ -520,7 +556,13 @@ export default async function ArInvoicePage({
           the report listing it cannot disagree about its own due date. */}
       <InvoiceSettlement invoiceNo={invoice.invoiceNo} side="customer" />
 
-      <RecordHistory objectId={invoice.id} objectType={ar.PERMISSION_OBJECT} />
+      {/* Receivables (2026-10-04) — the receipts and credits applied, the
+          notes and returns raised against it, and what is left. */}
+      <ReceivableInvoiceActivity
+        customerCode={customer?.code ?? null}
+        invoiceId={invoice.id}
+        invoiceNo={invoice.invoiceNo}
+      />
       {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>
   );

@@ -821,18 +821,30 @@ export async function openItems(
   // a copy of everybody's ageing under one customer's name is worse than a
   // blank page, because somebody would act on it.
   const narrow = {
-    branchCode: ctx.branchCode,
+    // Receivables (2026-10-04) — the branch the screen was set to; the
+    // Payables screen sends none, and reads the working branch as before.
+    branchCode:
+      side === 'customer'
+        ? openItemsService.branchFrom(query.get('branch'), ctx.principal.branchCodes, ctx.branchCode)
+        : ctx.branchCode,
     ...(chosen ? { partyCode: chosen.code } : {}),
   };
 
   const items =
     asked && !chosen
       ? []
-      : await openItemsService.openItems(ctx.tx, ctx.principal, side, asOf, {
-          ...narrow,
-          outstandingOnly: show !== 'all',
-          overdueOnly: show === 'overdue',
-        });
+      : side === 'customer'
+        ? // The Receivables screen's own filter — state and currency — so the
+          // copy lists what the screen listed.
+          openItemsService.narrowList(
+            await openItemsService.openItems(ctx.tx, ctx.principal, side, asOf, narrow),
+            { show: openItemsService.showFrom(show), currency: query.get('currency') || null },
+          )
+        : await openItemsService.openItems(ctx.tx, ctx.principal, side, asOf, {
+            ...narrow,
+            outstandingOnly: show !== 'all',
+            overdueOnly: show === 'overdue',
+          });
 
   /*
    * The same reconciliation the screen performs.

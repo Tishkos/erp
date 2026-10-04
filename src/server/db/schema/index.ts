@@ -57,6 +57,7 @@ export * from './warranty';
 export * from './customer-receipt';
 export * from './sales-return';
 export * from './ar-collections';
+export * from './customer-note';
 export * from './treasury';
 export * from './payment-run';
 export * from './bank-statement';

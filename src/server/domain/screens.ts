@@ -209,7 +209,7 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   credit_limits: 'document',
   collections: 'workspace',
   ar_ageing: 'report',
-  ar_reconciliation: 'workspace',
+  ar_reconciliation: 'report',
 
   // 12 — Finance · Payables
   supplier_ledger: 'report',
@@ -461,6 +461,11 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/payables/pd/asycuda',
   // §15 and §16 — open items and ageing, one screen on each side.
   '/sales/receivables',
+  // Receivables (2026-10-04) — the customer's credits, the credit and debit
+  // notes, and the subledger against the control account.
+  '/sales/customer-credits',
+  '/sales/credit-notes',
+  '/sales/customer-reconciliation',
   // REQ-AP-001 Stage 1 — the payables workbench, the payable page's list
   // route, and the module's settings.
   '/payables',

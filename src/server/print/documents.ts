@@ -1,7 +1,7 @@
 import { eq, inArray } from 'drizzle-orm';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import type { Principal } from '@domain/permissions';
-import { toDecimalString } from '@domain/money';
+import { parseDecimal, toDecimalString } from '@domain/money';
 import type { Tx } from '../db/client';
 import { businessPartner, chartOfAccount } from '../db/schema';
 import * as ap from '../services/ap-invoice';
@@ -9,6 +9,7 @@ import * as ar from '../services/ar-invoice';
 import * as goodsReturns from '../services/goods-return';
 import * as opening from '../services/opening-stock';
 import * as receipts from '../services/customer-receipt';
+import * as customerNotes from '../services/customer-notes';
 import * as salesReturns from '../services/sales-return';
 import * as stock from '../services/stock-operations';
 import * as payments from '../services/supplier-payment';
@@ -422,6 +423,8 @@ export async function customerReceipt(ctx: BuildContext, receiptNo: string): Pro
     { label: m.admin('customer_receipts.amount'), value: money(receipt.amountIqd, locale), ltr: true },
     { label: m.admin('customer_receipts.unallocated'), value: money(receipt.unappliedIqd, locale), ltr: true },
     { label: m.admin('customer_receipts.reference'), value: receipt.bankReference ?? '—' },
+    { label: m.admin('customer_receipts.currency'), value: receipt.currency, ltr: true },
+    { label: m.admin('customer_receipts.payment_method'), value: receipt.paymentMethodCode ?? '—', ltr: true },
   ];
   return {
     model: base({
@@ -440,6 +443,106 @@ export async function customerReceipt(ctx: BuildContext, receiptNo: string): Pro
     }),
     branchCode: receipt.branchCode,
     objectId: receipt.id,
+  };
+}
+
+/**
+ * Customer Credit / Debit Note — Receivables, 2026-10-04. The record screen's
+ * fields, and what the note has been applied to (a credit) or settled by (a
+ * debit), in the order it happened.
+ */
+export async function customerNote(ctx: BuildContext, noteNo: string): Promise<Built | null> {
+  const { tx, m, locale } = ctx;
+  const note = await customerNotes.viewByNo(tx, noteNo);
+  if (!note) return customerCreditMemo(ctx, noteNo);
+  const credit = note.kind === 'credit';
+  const fields: Fact[] = [
+    { label: m.column('document_no'), value: note.noteNo, ltr: true },
+    { label: m.admin('customer_notes.kind'), value: m.admin(`customer_notes.kind_${note.kind}`) },
+    { label: m.column('status'), value: m.status(note.status) },
+    { label: m.column('customer_code'), value: note.customerCode, ltr: true },
+    { label: m.column('customer_name'), value: note.customerName },
+    { label: m.column('posting_date'), value: date(note.noteDate, locale), ltr: true },
+    { label: m.column('due_date'), value: date(note.dueDate, locale), ltr: true },
+    { label: m.column('invoice_no'), value: note.invoiceNo ?? '—', ltr: true },
+    { label: m.column('branch_code'), value: note.branchCode, ltr: true },
+    { label: m.admin('customer_notes.reason'), value: note.reason },
+    { label: m.admin('customer_notes.description'), value: note.description ?? '—' },
+  ];
+  return {
+    model: base({
+      title: m.print(credit ? 'titles.customer_credit_note' : 'titles.customer_debit_note'),
+      number: note.noteNo,
+      status: m.status(note.status),
+      posted: note.journalEntryId !== null,
+      fields,
+      tables: [
+        {
+          title: m.admin(credit ? 'customer_notes.applied_to' : 'customer_notes.settled_by'),
+          columns: [
+            { key: 'date', label: m.column('date'), kind: 'date' as const },
+            { key: 'document', label: m.column('reference'), kind: 'code' as const },
+            { key: 'amount', label: m.column('amount'), kind: 'money' as const },
+          ],
+          rows: note.applications.map((row) => ({
+            cells: { date: row.appliedOn, document: credit ? row.targetNo : row.sourceNo, amount: row.amountIqd },
+          })),
+          empty: m.admin('customer_notes.no_applications'),
+          totals: { label: m.admin('reports.totals'), cells: { amount: note.allocatedIqd } },
+        },
+      ],
+      summary: [
+        { label: m.column('amount'), value: money(note.amountIqd, locale), ltr: true },
+        {
+          label: m.admin(credit ? 'customer_notes.applied' : 'customer_notes.received'),
+          value: money(note.allocatedIqd, locale),
+          ltr: true,
+        },
+        { label: m.admin('customer_notes.remaining'), value: money(note.outstandingIqd, locale), ltr: true },
+      ],
+      signatures: true,
+      fileName: note.noteNo,
+    }),
+    branchCode: note.branchCode,
+    objectId: note.id,
+  };
+}
+
+/** A credit memo — the money half of a sales return — printed from the same page. */
+async function customerCreditMemo(ctx: BuildContext, memoNo: string): Promise<Built | null> {
+  const { tx, m, locale } = ctx;
+  const memo = await customerNotes.memoByNo(tx, memoNo);
+  if (!memo) return null;
+  const remaining = toDecimalString(parseDecimal(memo.amountIqd, 4n) - parseDecimal(memo.allocatedIqd, 4n), 4n);
+  const fields: Fact[] = [
+    { label: m.column('document_no'), value: memo.memoNo, ltr: true },
+    { label: m.admin('customer_notes.kind'), value: m.admin('customer_notes.register_credit_memo') },
+    { label: m.column('status'), value: m.status(memo.status) },
+    { label: m.column('customer_code'), value: memo.customerCode, ltr: true },
+    { label: m.column('customer_name'), value: memo.customerName },
+    { label: m.column('posting_date'), value: date(memo.memoDate, locale), ltr: true },
+    { label: m.column('invoice_no'), value: memo.invoiceNo ?? '—', ltr: true },
+    { label: m.admin('customer_notes.sales_return'), value: memo.returnNo, ltr: true },
+    { label: m.column('branch_code'), value: memo.branchCode, ltr: true },
+  ];
+  return {
+    model: base({
+      title: m.print('titles.customer_credit_memo'),
+      number: memo.memoNo,
+      status: m.status(memo.status),
+      posted: memo.journalEntryNo !== null,
+      fields,
+      tables: [],
+      summary: [
+        { label: m.column('amount'), value: money(memo.amountIqd, locale), ltr: true },
+        { label: m.admin('customer_notes.applied'), value: money(memo.allocatedIqd, locale), ltr: true },
+        { label: m.admin('customer_notes.remaining'), value: money(remaining, locale), ltr: true },
+      ],
+      signatures: true,
+      fileName: memo.memoNo,
+    }),
+    branchCode: memo.branchCode,
+    objectId: memo.id,
   };
 }
 

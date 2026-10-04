@@ -71,7 +71,10 @@ const BUCKET_KEY: Record<string, string> = {
 const DOCUMENT_ROUTE: Readonly<Record<statement.DocumentKind, string | null>> = {
   ar_invoice: '/sales/ar-invoices',
   customer_receipt: '/sales/customer-receipts',
-  customer_credit_memo: null,
+  // Receivables (2026-10-04) — a memo and a note open on the Credit / Debit
+  // Notes screen, which reads both.
+  customer_credit_memo: '/sales/credit-notes',
+  customer_note: '/sales/credit-notes',
   ap_invoice: '/payables/invoices',
   supplier_payment: '/payables/supplier-payments',
   goods_return: '/payables/goods-returns',

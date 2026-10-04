@@ -48,8 +48,26 @@ export interface Payment {
   readonly documentNo: string | null;
 }
 
+/**
+ * A credit put against an item — a credit memo or a credit note; receipts are
+ * payments, not credits. Customer side only (Receivables, 2026-10-04).
+ */
+export interface CreditApplied {
+  readonly appliedOn: string;
+  readonly amountIqd: string;
+  readonly documentNo: string;
+  readonly kind: 'credit_memo' | 'credit_note';
+}
+
+/** What an open item is. A supplier's are always invoices. */
+export type OpenItemKind = 'invoice' | 'debit_note';
+
 export interface OpenItem {
   readonly side: Side;
+  /** An invoice, or — on the customer side — a debit note, which is owed and ages the same way. */
+  readonly documentKind: OpenItemKind;
+  readonly currency: string;
+  readonly branchCode: string;
   readonly partyCode: string;
   readonly partyName: string;
   readonly invoiceId: string;
@@ -77,6 +95,8 @@ export interface OpenItem {
   readonly lastPaymentDate: string | null;
   readonly daysLateAtLastPayment: number | null;
   readonly payments: readonly Payment[];
+  /** Credits applied to it, oldest first. Empty on the supplier side. */
+  readonly credits: readonly CreditApplied[];
 }
 
 const SIDES = {
@@ -239,8 +259,14 @@ export async function openItems(
       ? sql`i.${s.paid} - (${allocatedPayments}) - (${creditsApplied})`
       : sql`0::numeric`;
 
-  const result = await tx.execute(sql`
-    select p.code                                    as "partyCode",
+  // Receivables (2026-10-04) — the customer side reads invoices and debit
+  // notes together (`customerQuery`); the supplier side is the query below.
+  const result = side === 'customer' ? await customerQuery(tx, asOf, branch, party) : await tx.execute(sql`
+    select 'invoice'::text                           as "documentKind",
+           i.currency                                as "currency",
+           i.branch_code                             as "branchCode",
+           '[]'::json                                as "credits",
+           p.code                                    as "partyCode",
            p.legal_name                              as "partyName",
            i.id::text                                as "invoiceId",
            i.${s.number}                             as "invoiceNo",
@@ -277,7 +303,7 @@ export async function openItems(
   const rows = result.rows as unknown as (Omit<
     OpenItem,
     'side' | 'daysUntilDue' | 'daysOverdue' | 'bucket' | 'lastPaymentDate' | 'daysLateAtLastPayment'
-  > & { payments: Payment[] })[];
+  > & { payments: Payment[]; credits: CreditApplied[] })[];
 
   return rows
     .map((row): OpenItem => {
@@ -288,6 +314,7 @@ export async function openItems(
         ...row,
         side,
         payments,
+        credits: row.credits ?? [],
         daysUntilDue: untilDue,
         // Zero, not a negative number, while it is still in time: "overdue by
         // -6 days" is not a sentence anybody reads correctly.
@@ -313,6 +340,196 @@ export async function openItems(
       if (filter.statuses && !filter.statuses.includes(item.status)) return false;
       return true;
     });
+}
+
+/**
+ * The customer's open items: invoices and debit notes (Receivables,
+ * 2026-10-04). Both are owed from a due date and age the same way; a debit
+ * note is the one debt that is not an invoice, and leaving it out would make
+ * the ageing disagree with the statement by exactly the notes.
+ *
+ * What settled each, kept apart as the report shows it:
+ *
+ *   paid      receipts — the receipt's own allocation for an invoice, a
+ *             receipt application for a debit note — dated the day the money
+ *             arrived (the receipt date), so "paid 3 days late" counts from
+ *             the money, not from the day a clerk matched it;
+ *   credits   credit memos and credit notes, through the memo's own
+ *             application to the invoice it was raised for and through
+ *             `customer_credit_application` for every other pairing;
+ *   other     whatever else the invoice's running total holds (a write-off).
+ */
+async function customerQuery(tx: Tx, asOf: string, branch: string | null, party: string | null) {
+  return tx.execute(sql`
+    with items as (
+      select 'invoice'::text                                  as kind,
+             i.id, i.invoice_no as no, i.invoice_date as doc_date, i.due_date,
+             coalesce(i.payment_terms_code, p.payment_terms_code) as terms_code,
+             i.status::text as status, i.net_iqd as total, i.allocated_iqd as allocated,
+             i.customer_id, i.branch_code, i.currency
+        from ar_invoice i
+        join business_partner p on p.id = i.customer_id
+       where i.status::text in ${OPEN_STATUSES}
+      union all
+      select 'debit_note', n.id, n.note_no, n.note_date, n.due_date,
+             coalesce(n.payment_terms_code, p.payment_terms_code),
+             n.status::text, n.amount_iqd, n.allocated_iqd,
+             n.customer_id, n.branch_code, n.currency
+        from customer_note n
+        join business_partner p on p.id = n.customer_id
+       where n.kind = 'debit'
+         and n.status::text in ${OPEN_STATUSES}
+    ),
+    figures as (
+      select x.*,
+             case when x.kind = 'invoice' then coalesce((
+                    select sum(a.amount_iqd)
+                      from customer_receipt_allocation a
+                      join customer_receipt r on r.id = a.customer_receipt_id
+                     where a.ar_invoice_id = x.id and r.reversed_at is null), 0)
+                  else coalesce((
+                    select sum(ca.amount_iqd)
+                      from customer_credit_application ca
+                     where ca.debit_note_id = x.id and ca.customer_receipt_id is not null), 0)
+             end as paid,
+             case when x.kind = 'invoice' then coalesce((
+                    select sum(m.allocated_iqd - coalesce((
+                             select sum(ma.amount_iqd) from customer_credit_application ma
+                              where ma.customer_credit_memo_id = m.id), 0))
+                      from customer_credit_memo m
+                     where m.ar_invoice_id = x.id and m.reversed_at is null), 0)
+                  + coalesce((
+                    select sum(ca.amount_iqd) from customer_credit_application ca
+                     where ca.ar_invoice_id = x.id), 0)
+                  else coalesce((
+                    select sum(ca.amount_iqd) from customer_credit_application ca
+                     where ca.debit_note_id = x.id and ca.customer_receipt_id is null), 0)
+             end as credited
+        from items x
+    )
+    select x.kind                                     as "documentKind",
+           x.currency                                 as "currency",
+           x.branch_code                              as "branchCode",
+           p.code                                     as "partyCode",
+           p.legal_name                               as "partyName",
+           x.id::text                                 as "invoiceId",
+           x.no                                       as "invoiceNo",
+           x.doc_date::text                           as "invoiceDate",
+           x.due_date::text                           as "dueDate",
+           x.terms_code                               as "paymentTermsCode",
+           t.name                                     as "paymentTermsName",
+           x.status                                   as "status",
+           x.total::text                              as "totalIqd",
+           x.paid::text                               as "paidIqd",
+           x.credited::text                           as "creditsAppliedIqd",
+           (x.allocated - x.paid - x.credited)::text  as "otherAppliedIqd",
+           (x.total - x.allocated)::text              as "outstandingIqd",
+           case when x.kind = 'invoice' then coalesce((
+                  select json_agg(json_build_object(
+                           'paidOn',     r.receipt_date::text,
+                           'amountIqd',  a.amount_iqd::text,
+                           'documentNo', r.receipt_no
+                         ) order by r.receipt_date, a.allocated_at)
+                    from customer_receipt_allocation a
+                    join customer_receipt r on r.id = a.customer_receipt_id
+                   where a.ar_invoice_id = x.id and r.reversed_at is null), '[]'::json)
+                else coalesce((
+                  select json_agg(json_build_object(
+                           'paidOn',     r.receipt_date::text,
+                           'amountIqd',  ca.amount_iqd::text,
+                           'documentNo', r.receipt_no
+                         ) order by r.receipt_date, ca.applied_at)
+                    from customer_credit_application ca
+                    join customer_receipt r on r.id = ca.customer_receipt_id
+                   where ca.debit_note_id = x.id), '[]'::json)
+           end                                        as "payments",
+           coalesce((
+             select json_agg(c order by c."appliedOn", c."documentNo")
+               from (
+                 select m.memo_date::text as "appliedOn",
+                        (m.allocated_iqd - coalesce((
+                           select sum(ma.amount_iqd) from customer_credit_application ma
+                            where ma.customer_credit_memo_id = m.id), 0))::text as "amountIqd",
+                        m.memo_no as "documentNo",
+                        'credit_memo' as "kind"
+                   from customer_credit_memo m
+                  where x.kind = 'invoice' and m.ar_invoice_id = x.id and m.reversed_at is null
+                    and m.allocated_iqd > coalesce((
+                           select sum(ma.amount_iqd) from customer_credit_application ma
+                            where ma.customer_credit_memo_id = m.id), 0)
+                 union all
+                 select ca.applied_on::text,
+                        ca.amount_iqd::text,
+                        coalesce(m.memo_no, n.note_no),
+                        case when ca.customer_credit_memo_id is not null then 'credit_memo' else 'credit_note' end
+                   from customer_credit_application ca
+                   left join customer_credit_memo m on m.id = ca.customer_credit_memo_id
+                   left join customer_note n on n.id = ca.credit_note_id
+                  where ca.customer_receipt_id is null
+                    and ((x.kind = 'invoice' and ca.ar_invoice_id = x.id)
+                      or (x.kind = 'debit_note' and ca.debit_note_id = x.id))
+               ) c
+           ), '[]'::json)                             as "credits"
+      from figures x
+      join business_partner p on p.id = x.customer_id
+      left join payment_terms t on t.code = x.terms_code
+     where x.doc_date <= ${asOf}::date
+       and (${branch}::text is null or x.branch_code = ${branch})
+       and (${party}::text is null or p.code = ${party})
+     order by x.due_date, x.no
+  `);
+}
+
+/**
+ * What the Receivables and Payables screens list, and their printed copies
+ * (2026-10-04): every document, or only what is still owed, part paid, fully
+ * paid, or late — and, where a currency is chosen, only documents raised in
+ * it. One function for the screen and the copy, so the copy is the copy of
+ * what was on screen. It narrows what is listed; the tie is always computed
+ * over every item, never over this list.
+ */
+export const SHOW_VALUES = ['all', 'open', 'part_paid', 'paid', 'overdue'] as const;
+export type Show = (typeof SHOW_VALUES)[number];
+
+export function showFrom(value: unknown): Show {
+  return (SHOW_VALUES as readonly unknown[]).includes(value) ? (value as Show) : 'all';
+}
+
+export function narrowList(
+  items: readonly OpenItem[],
+  filter: { readonly show: Show; readonly currency?: string | null },
+): OpenItem[] {
+  return items.filter((item) => {
+    if (filter.currency && item.currency !== filter.currency) return false;
+    const owed = parseDecimal(item.outstandingIqd, MONEY_SCALE) > 0n;
+    switch (filter.show) {
+      case 'open':
+        return owed;
+      case 'part_paid':
+        return owed && parseDecimal(item.outstandingIqd, MONEY_SCALE) < parseDecimal(item.totalIqd, MONEY_SCALE);
+      case 'paid':
+        return !owed;
+      case 'overdue':
+        return owed && item.daysOverdue > 0;
+      default:
+        return true;
+    }
+  });
+}
+
+/**
+ * The branch a report reads: one the reader holds, every branch they hold
+ * ('*' — row security still decides what that is), or, when nothing usable
+ * was asked, the branch they are working in.
+ */
+export function branchFrom(
+  asked: unknown,
+  held: readonly string[],
+  working: string | null,
+): string | null {
+  if (asked === '*') return null;
+  if (typeof asked === 'string' && held.includes(asked)) return asked;
+  return working || null;
 }
 
 export interface BucketTotal {
