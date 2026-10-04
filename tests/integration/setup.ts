@@ -520,6 +520,8 @@ export async function resetTestData(): Promise<void> {
     // Internal chat (platform phase): a conversation, its messages and receipts are never deleted by
     // the application (triggers), so a reset truncates them together; presence is a heartbeat.
     await client.query('truncate chat_reaction, chat_receipt, chat_message, chat_participant, chat_conversation, chat_presence');
+    // The Task Center (platform phase, Agent 3): a task is never deleted by the application (trigger), so a reset truncates.
+    await client.query('truncate task');
     await client.query(`delete from whatsapp_setting where key like 'bridge_%'`);
     /*
      * Every seeded key, not some of them.
@@ -968,6 +970,8 @@ export async function resetTestData(): Promise<void> {
                          'LOAN',
                          -- REQ-HR-001 Stage HR-1, migration 0241.
                          'EMPLOYEE', 'POSITION_CODE', 'LEAVE_REQUEST', 'PAYROLL_RUN', 'PAYSLIP', 'EMPLOYEE_ADVANCE', 'VACANCY', 'APPLICANT', 'PERFORMANCE_REVIEW', 'EXPENSE_CLAIM', 'TRAVEL_REQUEST', 'HR_LETTER', 'EMPLOYEE_REQUEST', 'EMPLOYEE_DOCUMENT', 'PROJECT', 'PROJECT_BUDGET', 'PROJECT_VARIATION', 'PROJECT_ISSUE', 'PROJECT_SETTLEMENT',
+                         -- Platform phase, Agent 3 — the Task Center, migration 0340.
+                         'TASK',
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',
