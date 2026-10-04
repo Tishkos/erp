@@ -2,6 +2,7 @@
  * Global search (platform phase, Agent 5) — what a typed phrase means and which
  * match comes first. Pure: the database half is tests/integration/gs-global-search.test.ts.
  */
+import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   MAX_QUERY_LENGTH,
@@ -19,6 +20,7 @@ import {
   parseNumberShape,
   planQuery,
   screenTier,
+  STATUS_CODES,
   tierBucket,
   type SeriesInfo,
 } from '@/server/domain/search';
@@ -322,5 +324,48 @@ describe('screens — "go to Customer Receipts"', () => {
 
   it('answers nothing for an empty phrase', () => {
     expect(matchScreens(screens, normaliseQuery('   '), 5)).toEqual([]);
+  });
+});
+
+describe('messages — everything the search shows reads in both languages', () => {
+  const en = JSON.parse(readFileSync('messages/en.json', 'utf8')) as { search: Record<string, Record<string, string> | string> };
+  const ar = JSON.parse(readFileSync('messages/ar.json', 'utf8')) as { search: Record<string, Record<string, string> | string> };
+
+  /** Every `key: '…'` the entity declarations register (the files are the source of truth, read as text so this stays database-free). */
+  const typeKeys = ['customer', 'supplier'] // masters.ts makes these two from one function (`key: role`)
+    .concat(readdirSync('src/server/search/entities')
+    .filter((file) => file.endsWith('.ts') && file !== 'index.ts')
+    .flatMap((file) => [...readFileSync(`src/server/search/entities/${file}`, 'utf8').matchAll(/^\s+key: '([a-z_]+)',/gm)].map((m) => m[1]!)));
+
+  it('finds the declared types', () => {
+    expect(typeKeys.length).toBeGreaterThanOrEqual(20);
+    expect(typeKeys).toContain('employee');
+    expect(typeKeys).toContain('attachment');
+    expect(new Set(typeKeys).size).toBe(typeKeys.length);
+  });
+
+  it('has a heading for every type (and for the screens), in English and Arabic', () => {
+    for (const key of [...typeKeys, 'screen']) {
+      expect((en.search.types as Record<string, string>)[key], `en ${key}`).toBeTruthy();
+      expect((ar.search.types as Record<string, string>)[key], `ar ${key}`).toBeTruthy();
+    }
+  });
+
+  it('has a label for every status code, in English and Arabic — a status is never shown as its code', () => {
+    for (const code of STATUS_CODES) {
+      const english = (en.search.status as Record<string, string>)[code];
+      const arabic = (ar.search.status as Record<string, string>)[code];
+      expect(english, `en ${code}`).toBeTruthy();
+      expect(arabic, `ar ${code}`).toBeTruthy();
+      expect(english).not.toBe(code);
+    }
+    // …and nothing is translated that no code can carry.
+    expect(Object.keys(en.search.status as object).sort()).toEqual([...STATUS_CODES].sort());
+    expect(Object.keys(ar.search.status as object).sort()).toEqual([...STATUS_CODES].sort());
+  });
+
+  it('keeps the two catalogues the same shape', () => {
+    expect(Object.keys(ar.search).sort()).toEqual(Object.keys(en.search).sort());
+    expect(Object.keys(ar.search.types as object).sort()).toEqual(Object.keys(en.search.types as object).sort());
   });
 });

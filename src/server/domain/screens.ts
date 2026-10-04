@@ -421,6 +421,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/master-data/branches',
   '/master-data/departments',
   '/approvals',
+  // Global Search (platform phase): the results page behind the palette's "see all".
+  '/search',
   // The accounting core.
   '/finance/journals',
   '/finance/reversals',

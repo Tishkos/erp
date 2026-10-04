@@ -7081,10 +7081,8 @@
     }
   },
   "search": {
-    "title": "Search",
     "subtitle": "Find a record, a number, a file or a screen. You see only what you are allowed to open.",
     "placeholder": "Search numbers, names, files and screens…",
-    "dialog_label": "Search",
     "searching": "Searching…",
     "empty": "Nothing found for “{query}”.",
     "too_short": "Type at least two characters to search records.",
@@ -7107,7 +7105,6 @@
     "none": "Nothing matches “{query}”.",
     "prompt": "Type a number, a name, a file name or a screen to search.",
     "shown": "{count, plural, =0 {No results} one {# result} other {# results}}",
-    "on_record": "on {record}",
     "types": {
       "customer": "Customers",
       "supplier": "Suppliers",
