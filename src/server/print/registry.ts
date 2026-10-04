@@ -5,6 +5,7 @@ import * as customsDocuments from './customs-documents';
 import * as importDocuments from './import-documents';
 import * as landedCostDocuments from './landed-cost-documents';
 import * as inventoryDocuments from './inventory-documents';
+import * as inventoryReports from './inventory-reports';
 import type { BuildContext, Built } from './documents';
 import * as reports from './reports';
 import * as projectReports from './project-reports';
@@ -61,6 +62,8 @@ const BUILDERS = {
   bank_statement: (ctx, input) => (input.id ? reports.bankStatement(ctx, input.id, input.query, 'bank') : Promise.resolve(null)),
   cash_statement: (ctx, input) => (input.id ? reports.bankStatement(ctx, input.id, input.query, 'cash') : Promise.resolve(null)),
   warehouses_report: (ctx, input) => reports.warehousesReport(ctx, input.query),
+  inventory_valuation: (ctx, input) => inventoryReports.inventoryValuation(ctx, input.query),
+  inventory_checks: (ctx, input) => inventoryReports.inventoryChecks(ctx, input.query),
   stock_movement: (ctx, input) => reports.stockMovement(ctx, input.query),
   stock_ledger: (ctx, input) => reports.stockLedger(ctx, input.query),
   treasury_reporting: (ctx, input) => reports.treasuryReporting(ctx, input.query),

@@ -38,6 +38,9 @@ export const EXPORT_ACCESS = {
   bank_statement: { kind: 'report', route: '/master-data/bank-accounts', object: 'bank_account' },
   cash_statement: { kind: 'report', route: '/master-data/cash-accounts', object: 'bank_account' },
   warehouses_report: { kind: 'report', route: '/inventory/fifo-valuation', object: 'inventory_movement' },
+  // IMPROVEMENT-002 — the FIFO position at a date against the G/L, and the stock ledger's health checks.
+  inventory_valuation: { kind: 'report', route: '/inventory/valuation', object: 'inventory_movement' },
+  inventory_checks: { kind: 'report', route: '/inventory/checks', object: 'inventory_movement' },
   stock_movement: { kind: 'report', route: '/inventory/stock-movements', object: 'stock_movement' },
   stock_ledger: { kind: 'report', route: '/inventory/stock-ledger', object: 'stock_movement' },
   treasury_reporting: { kind: 'report', route: '/treasury/reporting', object: 'bank_account' },

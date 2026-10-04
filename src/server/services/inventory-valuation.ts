@@ -117,6 +117,8 @@ export interface HistoricalValuation {
   readonly totalIqd: string;
   readonly flags: ValuationFlag[];
   readonly accounts: ValuationAccount[];
+  /** Σ the layers' value on the accounts above (lines whose item names an inventory account). */
+  readonly layersOnAccountsIqd: string;
   readonly glTotalIqd: string;
   readonly differenceIqd: string;
 }
@@ -352,6 +354,7 @@ export async function valuationAt(tx: Tx, principal: Principal, filter: Valuatio
     totalIqd: money(totalIqd),
     flags,
     accounts,
+    layersOnAccountsIqd: money(layersOnAccounts),
     glTotalIqd: money(glTotal),
     differenceIqd: money(layersOnAccounts - glTotal),
   };
