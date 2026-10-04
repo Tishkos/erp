@@ -91,6 +91,7 @@ const BUILDERS = {
   performance_review: byId(hrDocuments.performanceReview),
   vacancy: byId(hrDocuments.vacancy),
   applicant: byId(hrDocuments.applicant),
+  employee_request: byId(hrDocuments.employeeRequest),
 } satisfies Record<ExportKey, Builder>;
 
 export function exportable(key: ExportKey): Exportable {

@@ -632,6 +632,8 @@ export async function byNo(tx: Tx, requestNo: string) {
       cancelledByName: userName('cancelled_by'),
       entryNo: sql<string | null>`(select j.entry_no from journal_entry j where j.id = "employee_request"."journal_entry_id")`,
       accountCode: sql<string | null>`(select b.code from bank_cash_account b where b.id = "employee_request"."bank_cash_account_id")`,
+      // Bank or cash: which profile the account's code opens (shared, 2026-10-04).
+      accountType: sql<'bank' | 'cash' | null>`(select b.account_type::text from bank_cash_account b where b.id = "employee_request"."bank_cash_account_id")`,
       tripNo: sql<string | null>`(select t.request_no from employee_request t where t.id = "employee_request"."travel_request_id")`,
       advanceNo: sql<string | null>`(select a.advance_no from employee_advance a where a.id = "employee_request"."advance_id")`,
       advanceStatus: sql<string | null>`(select a.status from employee_advance a where a.id = "employee_request"."advance_id")`,

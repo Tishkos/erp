@@ -5878,7 +5878,8 @@
       "employee_document": "وثيقة موظف",
       "performance_review": "تقييم أداء",
       "vacancy": "شاغر وظيفي",
-      "applicant": "طلب توظيف"
+      "applicant": "طلب توظيف",
+      "employee_request": "طلب موظف"
     }
   }
 }

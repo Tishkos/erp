@@ -80,6 +80,8 @@ export const EXPORT_ACCESS = {
   performance_review: { kind: 'document', route: '/hr/performance', object: 'performance_review', selfService: true },
   vacancy: { kind: 'document', route: '/hr/recruitment', object: 'recruitment' },
   applicant: { kind: 'document', route: '/hr/recruitment', object: 'recruitment' },
+  // A person's request of any kind, at any stage (an issued letter prints as the letter): theirs to print, as the letter is.
+  employee_request: { kind: 'document', route: '/hr/requests', object: 'employee_request', selfService: true },
 } as const satisfies Record<
   string,
   { readonly kind: 'document' | 'report'; readonly route: string; readonly object: string; readonly selfService?: boolean }

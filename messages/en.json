@@ -5878,7 +5878,8 @@
       "employee_document": "Employee Document",
       "performance_review": "Performance Review",
       "vacancy": "Vacancy",
-      "applicant": "Application"
+      "applicant": "Application",
+      "employee_request": "Employee Request"
     }
   }
 }

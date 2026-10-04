@@ -14,6 +14,9 @@
  *   `performanceReview` — a review (§12): its goals, weights and ratings.
  *   `vacancy` — a vacancy (§11): its pipeline.
  *   `applicant` — an application (§11): the moves it made.
+ *   `employeeRequest` — a claim, a trip, a letter or another request (§14):
+ *   the expenses, the claims settling the trip, or the text; an issued
+ *   letter prints as the letter itself (`hr-reports.letter`).
  *
  * "Posted" for the watermark means what each record's page means by final:
  * an advance paid out or settled, a leave approved, a document valid, a
@@ -25,11 +28,13 @@ import { businessDateOf } from '../domain/business-date';
 import { showDays, weekdayOf } from '../domain/hr-time';
 import * as advances from '../services/employee-advances';
 import * as documents from '../services/employee-documents';
+import * as requests from '../services/employee-requests';
 import * as leave from '../services/leave';
 import * as performance from '../services/performance';
 import * as recruitment from '../services/recruitment';
 import type { BuildContext, Built } from './documents';
-import type { Fact, Row } from './model';
+import { letter } from './hr-reports';
+import type { Column, Fact, Row } from './model';
 
 type Locale = BuildContext['locale'];
 
@@ -525,5 +530,116 @@ export async function applicant(ctx: BuildContext, applicantNo: string): Promise
     },
     branchCode: row.branchCode,
     objectId: row.applicantNo,
+  };
+}
+
+/** A claim, a trip, a letter or another request — REQ-HR-001 §14. An issued letter is the letter. */
+export async function employeeRequest(ctx: BuildContext, requestNo: string): Promise<Built | null> {
+  const { tx, m, locale } = ctx;
+  const detail = await requests.byNo(tx, requestNo);
+  if (!detail) return null;
+  const { row, person } = detail;
+  if (row.kind === 'letter' && row.status === 'issued' && row.issuedText) return letter(ctx, requestNo);
+  const kind = row.kind;
+  const x = (key: string) => m.admin(`requests.${key}`);
+  const money = (value: string | null) => (value === null ? '—' : formatMoney(value, 'IQD', locale));
+  const day = (value: string | null) => (value ? formatBusinessDate(value, locale) : '—');
+  const statusLabel = (value: string) => (value === 'paid' || value === 'issued' ? x(`status_${value}`) : m.status(value === 'refused' ? 'rejected' : value));
+  const fields: Fact[] = [
+    { label: m.column('reference'), value: row.requestNo, ltr: true },
+    { label: m.column('status'), value: statusLabel(row.status) },
+    { label: x('kind'), value: x(`kind_${kind}`) },
+    { label: x('employee'), value: `${person.employeeNo} · ${personName(person, locale)}` },
+    { label: x('subject'), value: row.subject },
+  ];
+  if (kind === 'expense_claim') {
+    fields.push({ label: x('total'), value: money(row.amountIqd), ltr: true });
+    fields.push({ label: x('trip'), value: detail.tripNo ?? '—', ltr: true });
+  }
+  if (kind === 'travel') {
+    fields.push({ label: x('destination'), value: row.destination ?? '—' });
+    fields.push({ label: x('travel_dates'), value: `${day(row.travelFrom)} – ${day(row.travelTo)}`, ltr: true });
+    fields.push({ label: x('estimated'), value: money(row.estimatedIqd), ltr: true });
+    fields.push({ label: x('advance'), value: detail.advanceNo ?? '—', ltr: true });
+  }
+  if (kind === 'letter') {
+    fields.push({ label: x('letter_type'), value: row.letterType ? x(`letter_type_${row.letterType}`) : '—' });
+    fields.push({ label: x('addressed_to'), value: row.addressedTo ?? '—' });
+  }
+  fields.push({ label: x('requested_by'), value: signed(detail.requestedByName, row.createdAt, locale) ?? '—' });
+  const decided = signed(detail.decidedByName, row.decidedAt, locale);
+  const paid = signed(detail.paidByName, row.paidAt, locale);
+  const issued = signed(detail.issuedByName, row.issuedAt, locale);
+  const cancelled = signed(detail.cancelledByName, row.cancelledAt, locale);
+  if (decided) fields.push({ label: row.status === 'refused' ? x('refused_by') : x('approved_by'), value: decided });
+  if (paid) {
+    fields.push({ label: x('paid_by'), value: paid });
+    fields.push({ label: x('paid_on'), value: `${day(row.paidOn)} · ${detail.accountCode ?? '—'}${row.paymentReference ? ` · ${row.paymentReference}` : ''}`, ltr: true });
+    fields.push({ label: x('advance_offset'), value: money(row.advanceOffsetIqd), ltr: true });
+    fields.push({ label: x('journal'), value: detail.entryNo ?? '—', ltr: true });
+  }
+  if (issued) fields.push({ label: x('issued_by'), value: issued });
+  if (cancelled) {
+    fields.push({ label: x('cancelled_by'), value: cancelled });
+    fields.push({ label: x('cancel_reason'), value: row.cancelReason ?? '—' });
+  }
+  if (row.decisionNote) fields.push({ label: x('decision_note'), value: row.decisionNote });
+  if (row.details) fields.push({ label: x('details'), value: row.details });
+
+  let columns: Column[];
+  let rows: Row[];
+  let title: string;
+  let empty: string;
+  if (kind === 'expense_claim') {
+    title = x('lines_title');
+    empty = x('lines_none');
+    columns = [
+      { key: 'line', label: '#', kind: 'code', weight: 0.4 },
+      { key: 'spent_on', label: x('spent_on'), kind: 'date' },
+      { key: 'category', label: x('category'), kind: 'text' },
+      { key: 'description', label: x('line_description'), kind: 'text', weight: 2 },
+      { key: 'amount', label: m.column('amount'), kind: 'money' },
+    ];
+    rows = detail.lines.map((l) => ({ cells: { line: String(l.lineNo), spent_on: l.spentOn, category: l.categoryName, description: l.description, amount: l.amountIqd } }));
+  } else if (kind === 'travel') {
+    title = x('claims_title');
+    empty = x('claims_none');
+    columns = [
+      { key: 'reference', label: m.column('reference'), kind: 'code' },
+      { key: 'amount', label: m.column('amount'), kind: 'money' },
+      { key: 'status', label: m.column('status'), kind: 'text' },
+    ];
+    rows = detail.claims.map((c) => ({ cells: { reference: c.requestNo, amount: c.amountIqd, status: statusLabel(c.status) } }));
+  } else {
+    title = kind === 'letter' ? x('letter_title') : x('details');
+    empty = '—';
+    columns = [{ key: 'text', label: title, kind: 'text' }];
+    const text = kind === 'letter' ? (row.issuedText ?? x('letter_not_issued')) : (row.details ?? '—');
+    rows = text
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map((p) => ({ cells: { text: p } }));
+  }
+  const total = kind === 'expense_claim' && row.amountIqd ? { label: x('total'), cells: { amount: row.amountIqd }, sum: ['amount'] } : undefined;
+  return {
+    model: {
+      kind: 'document',
+      title: m.print('titles.employee_request'),
+      number: row.requestNo,
+      status: statusLabel(row.status),
+      posted: row.status === 'approved' || row.status === 'paid' || row.status === 'issued',
+      orientation: 'portrait',
+      fields,
+      filters: [],
+      tables: [total ? { title, columns, rows, empty, totals: total } : { title, columns, rows, empty }],
+      summary: kind === 'expense_claim' ? [{ label: x('total'), value: money(row.amountIqd), ltr: true }] : [],
+      signatures: true,
+      currency: 'IQD',
+      fileName: row.requestNo,
+      sheetName: row.requestNo,
+    },
+    branchCode: row.branchCode,
+    objectId: row.requestNo,
   };
 }
