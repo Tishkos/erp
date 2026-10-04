@@ -6,6 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   MAX_QUERY_LENGTH,
+  MAX_RAW_VARIANTS,
   TIER,
   allocationFilters,
   chipOf,
@@ -19,6 +20,8 @@ import {
   paddedNumbers,
   parseNumberShape,
   planQuery,
+  prefixUpperBound,
+  rawVariants,
   screenTier,
   STATUS_CODES,
   tierBucket,
@@ -289,6 +292,52 @@ describe('chipOf — a code wears one of the eleven chips, never itself', () => 
 describe('likeEscape', () => {
   it('takes %, _ and \\ literally', () => {
     expect(likeEscape('100%_a\\b')).toBe('100\\%\\_a\\\\b');
+  });
+});
+
+describe('prefixUpperBound — "begins with" as two comparisons a row policy lets through', () => {
+  it('is the prefix with its last code point stepped up', () => {
+    expect(prefixUpperBound('API')).toBe('APJ');
+    expect(prefixUpperBound('API-BGW-2026-1234')).toBe('API-BGW-2026-1235');
+    expect(prefixUpperBound('si-4242')).toBe('si-4243');
+    expect(prefixUpperBound('9')).toBe(':');
+  });
+
+  it('bounds exactly the strings that begin with the prefix (C collation: code point order)', () => {
+    const prefix = 'API-12';
+    const upper = prefixUpperBound(prefix)!;
+    const inRange = (value: string) => value >= prefix && value < upper;
+    for (const begins of ['API-12', 'API-120', 'API-12-X', 'API-12\uffff']) expect(inRange(begins)).toBe(true);
+    for (const other of ['API-11', 'API-13', 'API-1', 'AP', 'APJ', 'api-12']) expect(inRange(other)).toBe(false);
+  });
+
+  it('steps over a whole Arabic letter, and over a code point outside the BMP', () => {
+    expect(prefixUpperBound('شركة')).toBe('شركت');
+    expect(prefixUpperBound('a\u{1F600}')).toBe('a\u{1F601}');
+  });
+
+  it('carries past the last code point, and is null when nothing can follow', () => {
+    expect(prefixUpperBound('a\u{10FFFF}')).toBe('b');
+    expect(prefixUpperBound('\u{10FFFF}')).toBeNull();
+    expect(prefixUpperBound('')).toBeNull();
+  });
+});
+
+describe('rawVariants — the spellings a reference may be stored in', () => {
+  it('tries what was typed, upper and lower case, with and without spaces', () => {
+    const variants = rawVariants(normaliseQuery('Si 4242'));
+    expect(variants).toEqual(expect.arrayContaining(['Si 4242', 'SI 4242', 'si 4242', 'Si4242', 'SI4242', 'si4242', 'SI-4242', 'si-4242']));
+    expect(new Set(variants).size).toBe(variants.length);
+  });
+
+  it('reads Arabic-Indic digits as the digits they are, and leaves Arabic letters as they are', () => {
+    expect(rawVariants(normaliseQuery('INV-١٢٣'))).toEqual(expect.arrayContaining(['INV-123', 'inv-123']));
+    expect(rawVariants(normaliseQuery('شركة'))).toEqual(['شركة']);
+  });
+
+  it('is bounded', () => {
+    expect(rawVariants(normaliseQuery('a b c d')).length).toBeLessThanOrEqual(MAX_RAW_VARIANTS);
+    expect(rawVariants(normaliseQuery(''))).toEqual([]);
   });
 });
 

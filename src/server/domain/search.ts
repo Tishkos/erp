@@ -128,6 +128,50 @@ export function normaliseQuery(raw: string): NormalisedQuery {
   return { raw, display, text, tokens, upper, numberCandidates };
 }
 
+/**
+ * The most variants of a phrase tried against a raw column: as typed, with its
+ * spaces dropped, as a number is written — each as typed, upper and lower case.
+ */
+export const MAX_RAW_VARIANTS = 12;
+
+/**
+ * The spellings a reference may have been stored in, tried **as stored** (no
+ * folding) against a btree: references (a supplier's invoice number, a bank's
+ * reference, a container) are typed in whatever case they were given.
+ */
+export function rawVariants(query: NormalisedQuery): string[] {
+  const out = new Set<string>();
+  for (const base of [query.display, query.display.replace(/\s+/g, ''), ...query.numberCandidates]) {
+    if (!base) continue;
+    out.add(base);
+    out.add(base.toUpperCase());
+    out.add(base.toLowerCase());
+  }
+  return [...out].slice(0, MAX_RAW_VARIANTS);
+}
+
+/**
+ * The smallest string greater than every string that begins with `prefix`, in
+ * code point order — which is byte order in UTF-8 and so the order of a database
+ * collated C. `column >= prefix and column < prefixUpperBound(prefix)` is
+ * "begins with", written with the two comparisons a btree answers **and** the
+ * two a row policy lets through ahead of its own filter (LIKE is not leakproof;
+ * `>=` and `<` are). Null when nothing can follow the prefix (every code point
+ * is the last one) — then `>= prefix` alone is the range.
+ */
+export function prefixUpperBound(prefix: string): string | null {
+  const points = [...prefix];
+  while (points.length > 0) {
+    const last = points.pop()!.codePointAt(0)!;
+    if (last < 0x10ffff) {
+      // Surrogates are not scalar values: step over the gap.
+      const next = last === 0xd7ff ? 0xe000 : last + 1;
+      return points.join('') + String.fromCodePoint(next);
+    }
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Numbers
 // ---------------------------------------------------------------------------

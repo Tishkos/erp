@@ -585,3 +585,65 @@ describe('statuses are never shown as codes', () => {
     for (const code of STATUS_CODES) expect(chipOf(code)).toMatch(/^[a-z_]+$/);
   });
 });
+
+describe('tables under a row policy: references by comparison, names inside the newest rows', () => {
+  it('knows which tables have a row policy (the masters have none, the documents all do)', async () => {
+    const { rowSecurityTables, forgetRowSecurityTables } = await import('@/server/search/table-query');
+    forgetRowSecurityTables();
+    const policed = await globalSearch.searchAs(officer.scope, officer.principal, { query: 'zz' }).then(async () =>
+      withScope(officer.scope, (tx) => rowSecurityTables(tx)),
+    );
+    for (const table of ['ap_invoice', 'journal_entry', 'payable', 'bill_of_lading', 'shipment_container', 'customs_pd', 'attachment', 'employee']) {
+      expect(policed.has(table), table).toBe(true);
+    }
+    for (const table of ['business_partner', 'item', 'warehouse', 'chart_of_account', 'bank_cash_account']) {
+      expect(policed.has(table), table).toBe(false);
+    }
+  });
+
+  it('finds a reference stored in capitals however it is typed: whole, by its beginning, by its middle', async () => {
+    expect(numbersOf(await run(officer, 'qz-inv-77'), 'ap_invoice')).toEqual(['API-BGW-2026-910001']);
+    expect(numbersOf(await run(officer, 'Qz-Inv'), 'ap_invoice')).toEqual(['API-BGW-2026-910001']);
+    expect(numbersOf(await run(officer, 'inv-77'), 'ap_invoice')).toEqual(['API-BGW-2026-910001']);
+    expect(numbersOf(await run(officer, 'QZ INV 77'), 'ap_invoice')).toEqual(['API-BGW-2026-910001']);
+  });
+
+  it('applies the branch rule inside the window as it does everywhere else', async () => {
+    expect(numbersOf(await run(officer, 'inv-88'), 'ap_invoice')).toEqual([]);
+    expect(numbersOf(await run(erbil, 'inv-88'), 'ap_invoice')).toEqual(['API-EBL-2026-910002']);
+    expect(numbersOf(await run(erbil, 'inv-77'), 'ap_invoice')).toEqual([]);
+    expect(keys(await run(outsider, 'inv-77'))).toEqual([]);
+  });
+
+  it('finds a file by its name as stored, in either case, and by a part of it', async () => {
+    expect(numbersOf(await run(officer, 'ZANZIBAR-CONTRACT.PDF'), 'attachment')).toEqual(['zanzibar-contract.pdf']);
+    expect(numbersOf(await run(officer, 'zanzibar-con'), 'attachment')).toEqual(['zanzibar-contract.pdf']);
+    expect(numbersOf(await run(officer, 'contract.pdf'), 'attachment')).toEqual(['zanzibar-contract.pdf']);
+  });
+
+  it('reads a reference across the whole table, and a name only inside the newest rows', async () => {
+    const { CONTAINS_WINDOW } = await import('@/server/search/table-query');
+    // One old invoice, then more newer ones than the window holds.
+    const old = await one(
+      `insert into ap_invoice (invoice_no, supplier_invoice_no, supplier_id, branch_code, invoice_date, due_date, total_iqd, created_by, receives_own_stock)
+       values ('API-BGW-2026-910003','OLDREF-NEEDLE-1',$1,$2,'2020-01-01','2020-02-01', 1, $3, true) returning id`,
+      [ids.quartz, BGW, admin.principal.userId],
+    );
+    expect(old).toBeTruthy();
+    await ownerPool.query(
+      `insert into ap_invoice (invoice_no, supplier_invoice_no, supplier_id, branch_code, invoice_date, due_date, total_iqd, created_by, receives_own_stock)
+       select 'API-BGW-2027-' || lpad(g::text, 6, '0'), 'GSFILL-' || g, $1, $2, date '2027-01-01' + (g % 300), date '2028-01-01', 1, $3, true
+         from generate_series(1, $4::int) g`,
+      [ids.quartz, BGW, admin.principal.userId, CONTAINS_WINDOW + 10],
+    );
+    await ownerPool.query('analyze ap_invoice');
+
+    // Whole, or by its beginning: found, however old.
+    expect(numbersOf(await run(officer, 'OLDREF-NEEDLE-1'), 'ap_invoice')).toEqual(['API-BGW-2026-910003']);
+    expect(numbersOf(await run(officer, 'oldref-needle'), 'ap_invoice')).toEqual(['API-BGW-2026-910003']);
+    // By its middle: only while it is among the newest rows. (The documented limit of a name search on a large table.)
+    expect(numbersOf(await run(officer, 'needle-1'), 'ap_invoice')).toEqual([]);
+    // …and the newest rows are still matched by their middle.
+    expect(numbersOf(await run(officer, 'gsfill-10'), 'ap_invoice').length).toBeGreaterThan(0);
+  });
+});

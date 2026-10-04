@@ -46,6 +46,7 @@ export const employee: SearchTableType = {
   titleAlt: sql`coalesce(nullif(t.full_name_ar, ''), t.full_name_en)`,
   status: sql`t.status`,
   date: sql`t.hire_date`,
+  recent: sql`t.hire_date`,
   // No `amount`, ever: what a person is paid is `employee_compensation`'s, behind its own grant.
   href: (row) => profileHref('employee', row.number),
 };
@@ -78,6 +79,7 @@ export const warehouse: SearchTableType = {
   // The table has no row policy; a warehouse belongs to one branch, and a branch the asker is not in is not theirs to find.
   where: sql`app_branch_allowed(t.branch_code)`,
   id: sql`t.code`,
+  textId: true,
   series: ['WAREHOUSE_CODE'],
   number: sql`t.code`,
   text: [sql`t.name`],
@@ -137,6 +139,7 @@ export const project: SearchTableType = {
   route: '/projects',
   table: 'project',
   id: sql`t.code`,
+  textId: true,
   attachmentType: 'project',
   series: ['PROJECT'],
   number: sql`t.code`,

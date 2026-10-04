@@ -94,6 +94,8 @@ export interface SearchTableType extends SearchTypeBase {
   readonly where?: SQL;
   /** The column the table is keyed on, as the attachment table names it: `t.id` (uuid) or `t.code`. */
   readonly id: SQL;
+  /** `id` is a text code (a project's, a warehouse's), not a uuid — a file's parent is then looked up by the text itself. */
+  readonly textId?: boolean;
   /** Where a file named `object_type = <this>` hangs: the key it carries. */
   readonly attachmentType?: string;
   /** `doc_sequence` keys of the series whose numbers `number` holds ("AP-12" finds serial 12 of these). */
@@ -102,6 +104,16 @@ export interface SearchTableType extends SearchTypeBase {
   readonly number: SQL;
   /** Text columns matched folded — equal, beginning with, containing the phrase. */
   readonly text?: readonly SQL[];
+  /**
+   * References people are handed with the paper (a supplier's invoice number, a
+   * bank's reference) that have a **plain btree index on the column itself**.
+   * On a table under row-level security the trigram index cannot be used (the
+   * policy runs first and LIKE may not go ahead of it), so these are looked up
+   * as stored — as typed, upper and lower case, equal or beginning with — across
+   * the whole table; `text` is then matched inside the newest rows only. A
+   * table with no row policy ignores this: its trigram index answers everything.
+   */
+  readonly refs?: readonly SQL[];
   /** The foreign key to `business_partner` whose name is also matched (documents of "Al Noor"), as `t.supplier_id`. */
   readonly partyKey?: SQL;
   /** Joins for the display columns only (they never take part in matching). */
