@@ -255,9 +255,14 @@ async function paymentApplications(tx: Tx, principal: Principal): Promise<Approv
 async function purchaseInvoices(tx: Tx, principal: Principal): Promise<ApprovalItem[]> {
   // Posting a purchase invoice is its approval: both grants, as `ap-invoice.post` asks.
   if (!can(principal, 'approve', 'ap_invoice') || !can(principal, 'post', 'ap_invoice')) return [];
+  // total_iqd is written at posting, so on a submitted invoice it is zero: until then the figure is summed from the
+  // lines, exactly as ap-invoice.list does for the register (the amount here must be the register's).
   const rows = (
     await tx.execute(sql`
-      select i.id, i.invoice_no as "no", i.total_iqd::text as "amount", i.updated_at as "since", u.display_name as "requester"
+      select i.id, i.invoice_no as "no", i.updated_at as "since", u.display_name as "requester",
+             case when i.total_iqd <> 0 then i.total_iqd::text
+                  else coalesce((select sum(l.quantity * l.unit_price - l.discount_iqd) from ap_invoice_line l where l.ap_invoice_id = i.id), 0)::text
+             end as "amount"
         from ap_invoice i
         left join app_user u on u.id = coalesce(i.submitted_by, i.created_by)
        where i.status = 'submitted' and i.reversed_at is null

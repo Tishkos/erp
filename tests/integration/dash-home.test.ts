@@ -546,6 +546,9 @@ describe('4 · My Approvals lists only what the viewer can act on', () => {
     expect(byNo.get(made.invoiceNo)).toMatchObject({ documentType: 'ap_invoice', action: 'post', href: `/payables/invoices/${made.invoiceNo}` });
     // The order's amount is its lines' total, in its own currency.
     expect(byNo.get(made.orderNo)!.amount).toEqual({ value: '200000.0000', currency: 'IQD' });
+    // A submitted invoice has not been posted, so its own total is still zero: the amount is summed from its lines
+    // (5 panels at 10,000), as the Purchase Invoices register does — never "0 IQD" for a real invoice.
+    expect(byNo.get(made.invoiceNo)!.amount).toEqual({ value: expect.stringMatching(/^50000(\.0+)?$/), currency: 'IQD' });
     expect(page.failed).toEqual([]);
 
     // The accounting manager decides journals and orders, and has no say on posting a purchase invoice (the CEO's).

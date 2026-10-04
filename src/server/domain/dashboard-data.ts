@@ -29,10 +29,10 @@ export type Cell =
   | { readonly t: 'date'; readonly v: string }
   /** An ISO instant. */
   | { readonly t: 'instant'; readonly v: string }
-  /** A status code, drawn as the shared status chip with `status.<code>` as its words. */
-  | { readonly t: 'status'; readonly v: string }
   /** A code with words in the catalogue: `home.value.<v>`, or `<ns>.<v>` when another screen's words are reused. */
   | { readonly t: 'word'; readonly v: string; readonly ns?: string }
+  /** The shared status chip wearing another screen's words: `<ns>.<v>` for the words, `tone` a document-status colour. */
+  | { readonly t: 'chip'; readonly v: string; readonly ns: string; readonly tone: string }
   /** A short sentence from the catalogue (`home.say.<v>`) with its numbers. */
   | { readonly t: 'say'; readonly v: string; readonly values?: Readonly<Record<string, string | number>> }
   | { readonly t: 'none' };
@@ -44,9 +44,9 @@ export const qty = (v: string | null | undefined): Cell => (v === null || v === 
 export const count = (v: number): Cell => ({ t: 'count', v });
 export const day = (v: string | null | undefined): Cell => (v ? { t: 'date', v } : { t: 'none' });
 export const instant = (v: string | null | undefined): Cell => (v ? { t: 'instant', v } : { t: 'none' });
-export const status = (v: string | null | undefined): Cell => (v ? { t: 'status', v } : { t: 'none' });
 export const say = (v: string, values?: Readonly<Record<string, string | number>>): Cell => (values ? { t: 'say', v, values } : { t: 'say', v });
 export const word = (v: string | null | undefined, ns?: string): Cell => (v ? (ns ? { t: 'word', v, ns } : { t: 'word', v }) : { t: 'none' });
+export const chip = (v: string | null | undefined, ns: string, tone: string): Cell => (v ? { t: 'chip', v, ns, tone } : { t: 'none' });
 
 /** A sentence from the catalogue (`home.note.<key>`) with its numbers. */
 export interface Note {

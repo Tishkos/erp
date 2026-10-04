@@ -39,6 +39,7 @@ import {
   EMPTY,
   READY,
   UNWIRED,
+  chip,
   code,
   count,
   day,
@@ -46,7 +47,6 @@ import {
   money,
   qty,
   say,
-  status,
   text,
   word,
   type Cell,
@@ -56,6 +56,7 @@ import {
   type WidgetOutcome,
 } from '../domain/dashboard-data';
 import type { WidgetKey } from '../domain/dashboard-widgets';
+import { TASK_STATUS_TONE } from '../domain/tasks';
 import { can, type Principal } from '../domain/permissions';
 import { furthest, stagesFor, countByStage, type ImportFacts, type JourneyStage } from '../domain/import-journey';
 import * as approvalCenter from './approval-center';
@@ -109,6 +110,10 @@ const table = (
   href: string | null,
   note: { key: string; values?: Record<string, string | number> } | null = null,
 ): WidgetOutcome => (rows.length === 0 ? EMPTY : READY({ kind: 'table', columns, rows, total, href, note }));
+
+/** An item as people say it: its code and its name, or the code alone when it has no name. */
+const itemCell = (itemCode: string, itemName: string | null | undefined): Cell =>
+  itemName ? say('item_line', { code: itemCode, name: itemName }) : code(itemCode);
 
 const col = (key: string, numeric = false): Column => (numeric ? { key, numeric: true } : { key });
 const link = (path: string, no: string) => `${path}/${encodeURIComponent(no)}`;
@@ -529,16 +534,17 @@ const LOADERS_BY_KEY: Record<WidgetKey, Loader> = {
   async list_approvals(ctx) {
     const found = await approvalsOf(ctx);
     return table(
-      [col('document'), col('requested_by'), col('since'), col('amount', true), col('action')],
+      [col('document'), col('type'), col('requested_by'), col('since'), col('amount', true), col('action')],
       found.items.slice(0, ROWS).map((item) => ({
         key: item.id,
         href: item.href,
         cells: [
-          { t: 'say', v: 'document', values: { type: item.documentType, no: item.documentNo } } as Cell,
+          code(item.documentNo),
+          word(`type_${item.documentType}`, 'admin.approvals'),
           text(item.requester),
           instant(item.since),
           item.amount ? money(item.amount.value, item.amount.currency) : ({ t: 'none' } as Cell),
-          word(item.action, 'admin.approvals.action'),
+          word(`action_${item.action}`, 'admin.approvals'),
         ],
       })),
       found.items.length,
@@ -553,7 +559,12 @@ const LOADERS_BY_KEY: Record<WidgetKey, Loader> = {
       summary.next.map((task) => ({
         key: task.taskNo,
         href: task.href,
-        cells: [{ t: 'say', v: 'task_line', values: { no: task.taskNo, title: task.title } } as Cell, day(task.dueDate), word(task.priority, 'home.priority'), status(task.status)],
+        cells: [
+          say('task_line', { no: task.taskNo, title: task.title }),
+          day(task.dueDate),
+          word(`priority_${task.priority}`, 'admin.tasks'),
+          chip(`status_${task.status}`, 'admin.tasks', TASK_STATUS_TONE[task.status] ?? 'draft'),
+        ],
       })),
       summary.mine.open,
       '/tasks',
@@ -666,7 +677,7 @@ const LOADERS_BY_KEY: Record<WidgetKey, Loader> = {
       rows.slice(0, ROWS).map((row) => ({
         key: `${row.payableId}:${row.itemCode}`,
         href: link('/payables', row.payableNo),
-        cells: [code(row.payableNo), { t: 'say', v: 'item_line', values: { code: row.itemCode, name: row.itemName ?? '' } } as Cell, qty(row.inTransit), say('containers_of', { received: row.containers - row.containersOpen, total: row.containers })],
+        cells: [code(row.payableNo), itemCell(row.itemCode, row.itemName), qty(row.inTransit), say('containers_of', { received: row.containers - row.containersOpen, total: row.containers })],
       })),
       rows.length,
       '/logistics/in-transit',
@@ -707,7 +718,7 @@ const LOADERS_BY_KEY: Record<WidgetKey, Loader> = {
       rows.map((r) => ({
         key: `${r.itemCode}:${r.warehouseCode}`,
         href: `/inventory/availability?q=${encodeURIComponent(r.itemCode)}`,
-        cells: [{ t: 'say', v: 'item_line', values: { code: r.itemCode, name: r.itemName } } as Cell, code(r.warehouseCode), qty(r.onHand), qty(r.minimum)],
+        cells: [itemCell(r.itemCode, r.itemName), code(r.warehouseCode), qty(r.onHand), qty(r.minimum)],
       })),
       rows[0]?.total ?? 0,
       '/inventory/availability',
@@ -724,7 +735,7 @@ const LOADERS_BY_KEY: Record<WidgetKey, Loader> = {
         key: row.id,
         href: documentHref(row.documentType, row.documentNo),
         cells: [
-          { t: 'say', v: 'item_line', values: { code: row.itemCode, name: row.itemName } } as Cell,
+          itemCell(row.itemCode, row.itemName),
           code(row.warehouseCode),
           word(row.type, 'admin.stock_movements.type'),
           qty(row.signedQuantity),
@@ -776,7 +787,7 @@ const LOADERS_BY_KEY: Record<WidgetKey, Loader> = {
       result.rows.map((r) => ({
         key: r.code,
         href: link('/projects', r.code),
-        cells: [{ t: 'say', v: 'item_line', values: { code: r.code, name: r.name } } as Cell, text(r.managerName), day(r.baselineEndsOn), money(r.availableIqd)],
+        cells: [itemCell(r.code, r.name), text(r.managerName), day(r.baselineEndsOn), money(r.availableIqd)],
       })),
       result.total,
       '/projects',
@@ -808,11 +819,12 @@ const LOADERS_BY_KEY: Record<WidgetKey, Loader> = {
   async list_activity(ctx) {
     const page = await listRows(ctx.tx, ctx.principal, 'audit_event', { page: 1, pageSize: ROWS }, { withTotal: false });
     return table(
-      [col('when'), col('event'), col('actor'), col('outcome')],
+      [col('when'), col('type'), col('event'), col('actor'), col('outcome')],
       page.rows.map((row, index) => ({
         key: `${String(row.occurred_at ?? '')}-${index}`,
         href: null,
-        cells: [instant(String(row.occurred_at ?? '')), text(String(row.action ?? '').replace(/[._]/g, ' ')), text(String(row.actor ?? '—')), word(String(row.outcome ?? ''), 'admin.audit.outcome')],
+        // "Approved" alone does not say what was approved: the record's kind (the audit screen's own words) comes first.
+        cells: [instant(String(row.occurred_at ?? '')), word(String(row.action ?? '').split('.')[0], 'admin.audit.kinds'), word(String(row.action ?? ''), 'audit_action'), text(String(row.actor ?? '—')), word(String(row.outcome ?? ''), 'admin.audit.outcome')],
       })),
       page.rows.length,
       '/administration/audit',
