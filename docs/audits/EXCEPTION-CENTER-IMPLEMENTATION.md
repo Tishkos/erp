@@ -2,7 +2,7 @@
 
 Platform phase, Wave 3, Builder Agent 7. Branch `platform/exception-center`,
 base `3403b6da`. Migrations `0380_exception_core`, `0381_exception_grants`
-(journal idx 233 and 234). Controls C-82 to C-85.
+(journal idx 233 and 234). Controls C-78 to C-81.
 
 The Exception Center is the one place that says what in the books and the work
 needs a person, found by the system, kept until its cause is gone, and cleared
@@ -218,7 +218,7 @@ Server actions: `refreshExceptions`, `acknowledgeException`
 objects: the test opens every registered saved-view route) ·
 `tests/unit/{im04-live-guard,im05-jobs-locked,screen-catalogue}.test.ts`
 (counts: 250 → 251 screens, 365 → 367 in total; job list + `exception-sweep`) ·
-`docs/CONTROLS.md` (C-82..C-85) · `docs/notes/doors-coverage.md` · `AGENTS.md`.
+`docs/CONTROLS.md` (C-78..C-81) · `docs/notes/doors-coverage.md` · `AGENTS.md`.
 
 New files: schema `exceptions.ts`, `domain/exceptions.ts`,
 `services/{exceptions,exception-text}.ts`, `services/exception-detectors/*`,
@@ -247,7 +247,7 @@ Own databases only (`erp_exceptions`, `erp_test_exceptions`), every run through
   hd18/hd19, im04/im05, notification-center, screen-catalogue, sv01): 273 pass;
   the one failure is `im15-controls-register` › "numbered without gaps" —
   C-78..C-81 belong to the Dashboard agent and are absent on this branch (the
-  rows C-82..C-85 are themselves valid: each names a real test file and a
+  rows C-78..C-81 are themselves valid: each names a real test file and a
   migration).
 * Integration `tests/integration/ex01-exceptions.test.ts` — 48 passing on a real
   world: every detector with a real scenario and one finding per scenario;
