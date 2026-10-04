@@ -33,6 +33,8 @@ import { BAGHDAD, PANEL, WAREHOUSE, buildTradingWorld, scope, type TradingWorld 
 import { fundBank } from './hr-funds';
 import * as rates from '@/server/services/exchange-rates';
 import * as cash from '@/server/services/cash-forecast';
+import { mayExport } from '@/server/print/access';
+import { runExport } from '@/server/print/export';
 
 let world: TradingWorld;
 let payableId: string;
@@ -410,6 +412,30 @@ describe('§15.6 · repayment', () => {
     );
     expect(ledger[0].owed).toBe('0.0000');
     expect(await rejection(pay(3, '2026-12-21'))).toMatch(/fully repaid|was paid/);
+
+    // The printer door (2026-10-04): the copy is the record page — its boxes,
+    // its schedule with how each instalment stands, the foot's figures.
+    expect(mayExport(world.manager.principal, 'bank_loan', 'pdf')).toBe(true);
+    const copy = await withScope(scope(world.manager), (tx) =>
+      runExport(tx, world.manager, { key: 'bank_loan', format: 'xlsx', locale: 'en', at: '2026-12-21T09:00:00.000Z', input: { id: made.loanNo, query: new URLSearchParams() } }),
+    );
+    expect(copy.status).toBe(200);
+    if (copy.status !== 200) return;
+    expect(copy.fileName).toBe(`${made.loanNo}.xlsx`);
+    const facts = new Map(copy.model.fields.map((fact) => [fact.label, fact.value]));
+    expect(facts.get('Loan no.')).toBe(made.loanNo);
+    expect(facts.get('Status')).toBe('Fully repaid');
+    expect(copy.model.tables[0]!.rows.map((row) => [row.cells.seq, row.cells.principal, row.cells.paid])).toEqual([
+      ['1', '250000.0000', 'Oct 15, 2026 · RAF-DR-1'],
+      ['2', '250000.0000', 'Nov 15, 2026 · RAF-DR-2'],
+      ['3', '250000.0000', 'Dec 15, 2026 · RAF-DR-3'],
+      ['4', '250000.0000', 'Dec 20, 2026 · RAF-DR-4'],
+    ]);
+    expect(copy.model.summary.map((fact) => fact.label)).toEqual(['Outstanding', 'Repaid', 'Left to fund']);
+    const missing = await withScope(scope(world.manager), (tx) =>
+      runExport(tx, world.manager, { key: 'bank_loan', format: 'pdf', locale: 'ar', at: '2026-12-21T09:00:00.000Z', input: { id: 'LOAN-NOWHERE', query: new URLSearchParams() } }),
+    );
+    expect(missing.status).toBe(404);
   });
 
   it('a spread commission and interest ride on each instalment', async () => {

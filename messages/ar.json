@@ -7069,6 +7069,8 @@
       "inventory_valuation": "تقييم المخزون",
       "inventory_checks": "فحوصات المخزون",
       "internal_transfer": "تحويل داخلي",
+      "bank_deposit": "إيداع يدوي",
+      "bank_loan": "قرض مصرفي",
       "bank_reconciliation": "مطابقة مصرفية",
       "payments_receipts": "المدفوعات والمقبوضات",
       "cash_forecast": "توقعات النقد",

@@ -7069,6 +7069,8 @@
       "inventory_valuation": "Inventory Valuation",
       "inventory_checks": "Inventory Checks",
       "internal_transfer": "Internal Transfer",
+      "bank_deposit": "Manual Deposit",
+      "bank_loan": "Bank Loan",
       "bank_reconciliation": "Bank Reconciliation",
       "payments_receipts": "Payments & Receipts",
       "cash_forecast": "Cash Forecast",
