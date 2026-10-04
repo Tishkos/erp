@@ -17,6 +17,7 @@ import { businessToday } from '@/server/domain/business-date';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as counts from '@/server/services/stock-count';
+import * as departments from '@/server/services/departments';
 import * as recordNotes from '@/server/services/record-notes';
 import { adjustCount, approveVariance, cancelCount, recordCount, requestRecount } from '../actions';
 
@@ -55,12 +56,18 @@ export default async function StockCountRecordPage({ params, searchParams }: { p
     const found = await counts.viewByNo(tx, countNo);
     if (!found) return null;
     const ref = { object: counts.PERMISSION_OBJECT, recordId: found.count.id };
-    return { ...found, notes: await recordNotes.listNotes(tx, ref), files: await readAttachments(tx, ref.object, ref.recordId) };
+    return {
+      ...found,
+      notes: await recordNotes.listNotes(tx, ref),
+      files: await readAttachments(tx, ref.object, ref.recordId),
+      // The adjustment posts to the inventory adjustment account, which may ask for a department (§4.2).
+      departments: found.count.status === 'pending_approval' ? (await departments.listAll(tx)).filter((d) => d.active) : [],
+    };
   });
   if (!view) notFound();
   const { count, lines } = view;
   const day = (value: string | null) => (value ? formatBusinessDate(value, locale as Locale) : '—');
-  const when = (value: Date | null) => (value ? formatTimestamp(value.toISOString(), locale as Locale) : '—');
+  const when = (value: string | null) => (value ? formatTimestamp(new Date(value).toISOString(), locale as Locale) : '—');
   const qty = (value: string | null) => (value === null ? '—' : formatLocaleQuantity(value, locale as Locale));
   const today = businessToday();
 
@@ -184,6 +191,12 @@ export default async function StockCountRecordPage({ params, searchParams }: { p
                 <Hidden name="id" value={count.id} />
                 <Hidden name="count_no" value={count.countNo} />
                 <input aria-label={t('adjusted_on')} defaultValue={today} name="adjusted_on" required type="date" />
+                <select aria-label={t('department')} name="department_code">
+                  <option value="">{t('department')}</option>
+                  {view.departments.map((d) => (
+                    <option key={d.code} value={d.code}>{`${d.code} · ${d.name}`}</option>
+                  ))}
+                </select>
                 <Submit label={t('adjust')} variant="document" />
               </form>
             ) : null}

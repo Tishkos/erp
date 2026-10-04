@@ -3620,6 +3620,7 @@
       "paid_from": "Paid from"
     },
     "stock_count": {
+      "department": "Department",
       "subtitle": "Plan a count of a warehouse, record what was found, approve the variance, adjust the books. The book quantity is frozen when the count is planned; a variance is the difference against it.",
       "new": "Plan a count",
       "new_note": "The items in scope and their book quantities are fixed now; what the counters find is recorded on the count's own page.",

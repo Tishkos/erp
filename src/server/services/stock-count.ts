@@ -652,7 +652,7 @@ export async function viewByNo(tx: Tx, countNo: string) {
       select c.id, c.count_no as "countNo", c.status::text as status, c.branch_code as "branchCode",
              c.warehouse_code as "warehouseCode", w.name as "warehouseName", c.scope::text as scope, c.scope_filter as "scopeFilter",
              c.planned_on::text as "plannedOn", c.counted_on::text as "countedOn", c.adjusted_on::text as "adjustedOn",
-             c.approval_reason as "approvalReason", c.approved_at as "approvedAt", c.created_at as "createdAt",
+             c.approval_reason as "approvalReason", c.approved_at::text as "approvedAt", c.created_at::text as "createdAt",
              c.planned_by as "plannedBy", pb.display_name as "plannedByName", cb.display_name as "countedByName", ab.display_name as "approvedByName"
         from stock_count c
         join warehouse w on w.code = c.warehouse_code
@@ -664,7 +664,7 @@ export async function viewByNo(tx: Tx, countNo: string) {
     | {
         id: string; countNo: string; status: string; branchCode: string; warehouseCode: string; warehouseName: string;
         scope: string; scopeFilter: string | null; plannedOn: string; countedOn: string | null; adjustedOn: string | null;
-        approvalReason: string | null; approvedAt: Date | null; createdAt: Date; plannedBy: string;
+        approvalReason: string | null; approvedAt: string | null; createdAt: string; plannedBy: string;
         plannedByName: string | null; countedByName: string | null; approvedByName: string | null;
       }
     | undefined;

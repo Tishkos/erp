@@ -73,7 +73,14 @@ export async function approveVariance(formData: FormData): Promise<void> {
 export async function adjustCount(formData: FormData): Promise<void> {
   const countNo = text(formData, 'count_no');
   await runAdminAndReturn(
-    (tx, ctx) => counts.adjust(tx, ctx, text(formData, 'id'), { adjustedOn: text(formData, 'adjusted_on').trim(), post: true }),
+    (tx, ctx) => {
+      const department = text(formData, 'department_code').trim();
+      return counts.adjust(tx, ctx, text(formData, 'id'), {
+        adjustedOn: text(formData, 'adjusted_on').trim(),
+        post: true,
+        ...(department ? { dimensions: { department } } : {}),
+      });
+    },
     record(countNo),
   );
 }
