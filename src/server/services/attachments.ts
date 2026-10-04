@@ -126,6 +126,27 @@ export function clearParentAccessChecks(): void {
   parentAccessChecks.clear();
 }
 
+/**
+ * Whether the person may open the record a file hangs on — `assertParentAccess`
+ * as a question rather than a refusal, for a listing that shows a file only to
+ * somebody who could download it (the global search). A parent type with no
+ * registered check is no.
+ */
+export async function mayAccessParent(
+  tx: Tx,
+  principal: Principal,
+  objectType: string,
+  objectId: string,
+): Promise<boolean> {
+  const check = parentAccessChecks.get(objectType);
+  if (!check) return false;
+  try {
+    return Boolean(await check(tx, principal, objectId));
+  } catch {
+    return false;
+  }
+}
+
 async function assertParentAccess(
   tx: Tx,
   principal: Principal,
