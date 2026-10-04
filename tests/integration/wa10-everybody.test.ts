@@ -619,3 +619,32 @@ describe('the look-ups a draft needs', () => {
     expect(await tool(nobody, 'exchange_rate')).toMatch(/permission view on exchange_rate/);
   });
 });
+
+describe('one refused statement does not end the question', () => {
+  // 2026-10-04, the first real question in the group: a query named a column
+  // that does not exist, PostgreSQL aborted the question's transaction, and
+  // every tool after it — the schema look-up, a second query, even writing the
+  // problem down — was refused. He told the group his database was down.
+  it('a wrong column is said, and the schema, the next query and the issues list all still work', async () => {
+    await asking(world.manager, async (read) => {
+      const run = toolRunnerFor(read, [], undefined, { userName: 'Tester', chat: CHAT });
+
+      const wrong = await run('query', { sql: 'select bp.code, bp.name from business_partner bp' });
+      expect(wrong.text).toMatch(/PostgreSQL refused the query: .*column bp\.name does not exist/);
+      expect(wrong.text).toMatch(/Nothing else was affected/);
+
+      // The look-up that corrects the query, in the same question.
+      const columns = await run('schema', { table: 'business_partner' });
+      expect(columns.text).toMatch(/legal_name text not null/);
+      const right = await run('query', { sql: 'select bp.code, bp.legal_name from business_partner bp order by bp.code' });
+      expect(right.text).toMatch(/Jinko Solar/);
+
+      // A named tool, and the issues list, after a second failure.
+      expect((await run('query', { sql: 'select * from no_such_table' })).text).toMatch(/PostgreSQL refused the query: .*no_such_table/);
+      expect((await run('list_partners', { side: 'supplier' })).text).toMatch(/supplier\(s\):/);
+      const filed = await run('report_issue', { summary: 'A query named a column that is not there', kind: 'bug', severity: 'minor' });
+      expect(filed.text).toMatch(/Written down as ISS-\d{8}-\d{3}/);
+    });
+    expect(readFileSync(issuesFile, 'utf8')).toMatch(/A query named a column that is not there/);
+  });
+});

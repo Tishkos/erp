@@ -26,28 +26,74 @@ export type QueryResult =
  * says, because the next query is right. Throwing it would turn a
  * conversation into an apology.
  */
+/**
+ * Runs `fn` so that a statement PostgreSQL refuses does not end the question.
+ *
+ * A question is one read-only transaction, and PostgreSQL aborts a whole
+ * transaction on the first error in it: after "column bp.name does not exist"
+ * every later statement — the schema look-up that would have corrected the
+ * query, any other tool, even the name read before an issue is written down —
+ * is refused with "current transaction is aborted". That is how one wrong
+ * column name became "I couldn't read the books… my database connection is
+ * down" in the group (2026-10-04, the first real question).
+ *
+ * A savepoint is the boundary: the failure is rolled back to it and the
+ * transaction carries on. Allowed in a read-only transaction — it writes
+ * nothing.
+ */
+export async function inSavepoint<T>(tx: Tx, fn: () => Promise<T>): Promise<T> {
+  await tx.execute(sql`savepoint noah_tool`);
+  let out: T;
+  try {
+    out = await fn();
+  } catch (error) {
+    await tx.execute(sql`rollback to savepoint noah_tool`).catch(() => {});
+    await tx.execute(sql`release savepoint noah_tool`).catch(() => {});
+    throw error;
+  }
+  try {
+    await tx.execute(sql`release savepoint noah_tool`);
+  } catch {
+    // `fn` answered, but a statement inside it had failed and been swallowed:
+    // the transaction is put back all the same, and the answer stands.
+    await tx.execute(sql`rollback to savepoint noah_tool`).catch(() => {});
+    await tx.execute(sql`release savepoint noah_tool`).catch(() => {});
+  }
+  return out;
+}
+
+/** What PostgreSQL itself said, when the driver wrapped it in "Failed query: …". */
+function databaseSaid(error: unknown): string {
+  const cause = (error as { cause?: unknown } | null)?.cause;
+  const inner = cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : '';
+  const outer = error instanceof Error ? error.message : String(error);
+  return inner ? inner : outer;
+}
+
 export async function runQuery(tx: Tx, raw: string, limit?: number): Promise<QueryResult> {
   const checked = checkQuery(raw);
   if (!checked.ok) return { ok: false, reason: checked.reason };
 
   const rowCap = Math.min(Math.max(1, Number(limit) || ROW_CAP), ROW_CAP);
   try {
-    // Local to this transaction, which is this one question: the next query
-    // sets it again. Through `set_config`, not `SET LOCAL … = $1`: SET takes no
-    // bound parameter, so the statement was refused and every query with it —
-    // "Failed query: set local statement_timeout = $1" (found 2026-10-04 by
-    // the first test that ran this against a database).
-    await tx.execute(sql`select set_config('statement_timeout', ${String(TIMEOUT_MS)}, true)`);
-    const result = (await tx.execute(sql.raw(checked.sql))) as unknown as { rows?: Record<string, unknown>[] } | Record<string, unknown>[];
-    const rows = Array.isArray(result) ? result : (result.rows ?? []);
-    return { ok: true, text: rowsToText(rows, { rowCap }), rows: rows.length, sql: checked.sql };
+    return await inSavepoint(tx, async () => {
+      // Local to this transaction, which is this one question: the next query
+      // sets it again. Through `set_config`, not `SET LOCAL … = $1`: SET takes no
+      // bound parameter, so the statement was refused and every query with it —
+      // "Failed query: set local statement_timeout = $1" (found 2026-10-04 by
+      // the first test that ran this against a database).
+      await tx.execute(sql`select set_config('statement_timeout', ${String(TIMEOUT_MS)}, true)`);
+      const result = (await tx.execute(sql.raw(checked.sql))) as unknown as { rows?: Record<string, unknown>[] } | Record<string, unknown>[];
+      const rows = Array.isArray(result) ? result : (result.rows ?? []);
+      return { ok: true as const, text: rowsToText(rows, { rowCap }), rows: rows.length, sql: checked.sql };
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = databaseSaid(error);
     return {
       ok: false,
       reason: /statement timeout/i.test(message)
         ? `The query ran for more than ${TIMEOUT_MS / 1000} seconds and was stopped. Narrow it — a date range, a party, a limit.`
-        : message,
+        : `PostgreSQL refused the query: ${message}. Nothing else was affected — look the table up with the schema tool and write it again.`,
     };
   }
 }

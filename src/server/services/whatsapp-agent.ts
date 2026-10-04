@@ -99,7 +99,7 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
   /** The free query reads any table: it is for the roles that read everything. */
   const readsEverything = ctx.principal.isSuperUser || ctx.principal.roleCodes.includes(QUERY_ROLE);
 
-  return async function runTool(name: string, args: Record<string, unknown>): Promise<ToolOutcome> {
+  const run = async (name: string, args: Record<string, unknown>): Promise<ToolOutcome> => {
     switch (name) {
       case 'company_summary':
         return fromDrafted(await draft(ctx, { kind: 'summary' }));
@@ -448,8 +448,14 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         const severity = (ISSUE_SEVERITIES as readonly string[]).includes(String(args.severity)) ? (args.severity as IssueSeverity) : 'slows_work';
         const text = (key: string) => (typeof args[key] === 'string' ? (args[key] as string) : null);
         // Who they are, read as them: the list is read by people, and "who" should be a name they know.
-        const me = await ctx.tx.execute(sql`select display_name, email from app_user where id = ${ctx.principal.userId}`);
-        const row = me.rows[0] as { display_name?: string; email?: string } | undefined;
+        // Read in a savepoint of its own, and optional: a problem is written
+        // down even when the database is the problem.
+        const row = await sqlService
+          .inSavepoint(ctx.tx, async () => {
+            const me = await ctx.tx.execute(sql`select display_name, email from app_user where id = ${ctx.principal.userId}`);
+            return me.rows[0] as { display_name?: string; email?: string } | undefined;
+          })
+          .catch(() => undefined);
         const who = `${row?.display_name ?? meta?.userName ?? ctx.principal.userId}${row?.email ? ` <${row.email}>` : ''} · branch ${ctx.branchCode}`;
         const filed = systemGuide.reportIssue({
           who,
@@ -471,8 +477,16 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
       default:
         return { text: `There is no tool called ${String(name)}.` };
     }
-    };
-  }
+  };
+
+  /*
+   * Each tool in its own savepoint: a statement PostgreSQL refuses inside one
+   * tool must not take the rest of the question with it (see `inSavepoint`).
+   */
+  return function runTool(name: string, args: Record<string, unknown>): Promise<ToolOutcome> {
+    return sqlService.inSavepoint(ctx.tx, () => run(name, args));
+  };
+}
   
   
 /** The agent, for one asker: the loop with this context's tools bound in. */
