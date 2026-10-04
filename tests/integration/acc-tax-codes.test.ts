@@ -16,6 +16,7 @@ import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
 import * as taxCodes from '@/server/services/tax-codes';
 import * as attachments from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
 import { registerAttachmentRuntime } from '@/server/attachments-runtime';
 import { runExport } from '@/server/print/export';
 import { mayExport } from '@/server/print/access';
@@ -140,5 +141,12 @@ describe('Tax Codes', () => {
       attachments.upload(tx, officer, { objectType: 'tax_code', objectId: vat.code, fileName: 'notice.pdf', content: Buffer.from('%PDF-1.4\n%%EOF\n') }),
     );
     expect(filed.quarantined).toBe(false);
+
+    // The shared Notes door: a note by whoever configures tax codes, read by
+    // whoever reads them, kept under the code its history is kept under.
+    await withScope(scope(manager), (tx) => recordNotes.addNote(tx, manager, { object: 'tax_code', recordId: vat.code, body: 'Rate notice filed 2026-03' }));
+    expect(recordNotes.mayAddNote(officer.principal, 'tax_code')).toBe(false);
+    const read = await withScope(scope(officer), (tx) => recordNotes.listNotes(tx, { object: 'tax_code', recordId: vat.code }));
+    expect(read.map((n) => n.body)).toEqual(['Rate notice filed 2026-03']);
   });
 });

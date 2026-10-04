@@ -324,6 +324,7 @@ async function february() {
 import { runExport } from '@/server/print/export';
 import { registerAttachmentRuntime } from '@/server/attachments-runtime';
 import * as attachments from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
 
 describe('Bank Reconciliation · the statement entered on its record', () => {
   it('takes typed and pasted lines through the one path, keeps what it cannot read, and closes only when it adds up', async () => {
@@ -447,5 +448,13 @@ describe('Bank Reconciliation · the register and the record', () => {
       }),
     );
     expect(uploaded.quarantined).toBe(false);
+
+    // The shared Notes door is the statement's — the record from its draft —
+    // by whoever enters statements, in the statement's branch.
+    await withScope(scope(officer), (tx) =>
+      recordNotes.addNote(tx, officer, { object: statements.DOCUMENT_TYPE, recordId: feb.statementId, body: 'Bank fee of 3,000 queried with the branch' }),
+    );
+    const read = await withScope(scope(officer), (tx) => recordNotes.listNotes(tx, { object: statements.DOCUMENT_TYPE, recordId: feb.statementId }));
+    expect(read.map((n) => n.body)).toEqual(['Bank fee of 3,000 queried with the branch']);
   });
 });

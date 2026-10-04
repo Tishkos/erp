@@ -13,6 +13,11 @@ import { ownerPool, rejection, resetTestData, seedBranch } from './setup';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
 import * as periods from '@/server/services/periods';
+import * as attachments from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
+import { registerAttachmentRuntime } from '@/server/attachments-runtime';
+import { runExport } from '@/server/print/export';
+import { mayExport } from '@/server/print/access';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
 
 const BAGHDAD = 'BGW';
@@ -71,5 +76,39 @@ describe('Period / Year-End Closing', () => {
     );
     const { rows } = await ownerPool.query(`select count(*)::int as n from journal_entry`);
     expect(rows[0].n).toBe(0);
+  });
+
+  it('the period is a record: its checklist prints, its papers and notes are filed on it, its history is the trail’s', async () => {
+    registerAttachmentRuntime();
+    const january = await periodNamed('January 2026');
+    await withScope(scope(manager), (tx) => periods.setPeriodStatus(tx, manager, january, 'closed', 'January agreed'));
+
+    // Printer — the checklist and this period's closes, for whoever reads the trial balance.
+    expect(mayExport(officer.principal, 'period_close', 'pdf')).toBe(true);
+    const copy = await withScope(scope(officer), (tx) =>
+      runExport(tx, officer, { key: 'period_close', format: 'pdf', locale: 'en', at: '2026-02-01T09:00:00.000Z', input: { id: january, query: new URLSearchParams() } }),
+    );
+    expect(copy.status).toBe(200);
+    if (copy.status === 200) {
+      expect(copy.model.number).toBe('January 2026 · FY2026');
+      expect(copy.model.tables[0]!.rows.length).toBeGreaterThan(5);
+      expect(copy.model.tables[1]!.rows.map((row) => row.cells.change)).toEqual(['Open → Closed']);
+    }
+    const missing = await withScope(scope(officer), (tx) =>
+      runExport(tx, officer, { key: 'period_close', format: 'pdf', locale: 'en', at: '2026-02-01T09:00:00.000Z', input: { id: randomUUID(), query: new URLSearchParams() } }),
+    );
+    expect(missing.status).toBe(404);
+
+    // Paperclip — the sign-off, on the period itself, for whoever reads periods.
+    const filed = await withScope(scope(officer), (tx) =>
+      attachments.upload(tx, officer, { objectType: 'fiscal_period', objectId: january, fileName: 'signoff.pdf', content: Buffer.from('%PDF-1.4\n%%EOF\n') }),
+    );
+    expect(filed.quarantined).toBe(false);
+
+    // Notes — by whoever may close periods; read by whoever may see them.
+    await withScope(scope(manager), (tx) => recordNotes.addNote(tx, manager, { object: 'fiscal_period', recordId: january, body: 'Closed over the bank warning; statement due Monday' }));
+    expect(recordNotes.mayAddNote(officer.principal, 'fiscal_period')).toBe(false);
+    const read = await withScope(scope(officer), (tx) => recordNotes.listNotes(tx, { object: 'fiscal_period', recordId: january }));
+    expect(read.map((n) => n.body)).toEqual(['Closed over the bank warning; statement due Monday']);
   });
 });

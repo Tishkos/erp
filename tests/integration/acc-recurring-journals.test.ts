@@ -20,6 +20,7 @@ import * as periods from '@/server/services/periods';
 import * as recurring from '@/server/services/recurring-journals';
 import * as rates from '@/server/services/exchange-rates';
 import * as attachments from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
 import { registerAttachmentRuntime } from '@/server/attachments-runtime';
 import { runExport } from '@/server/print/export';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
@@ -198,5 +199,10 @@ describe('Recurring Journals', () => {
       attachments.upload(tx, officer, { objectType: recurring.DOCUMENT_TYPE, objectId: rent.id, fileName: 'lease.pdf', content: Buffer.from('%PDF-1.4\n%%EOF\n') }),
     );
     expect(filed.quarantined).toBe(false);
+
+    // The shared Notes door, under the template's own id, by whoever edits journals.
+    await withScope(scope(officer), (tx) => recordNotes.addNote(tx, officer, { object: recurring.DOCUMENT_TYPE, recordId: rent.id, body: 'Rent rises in July' }));
+    const read = await withScope(scope(manager), (tx) => recordNotes.listNotes(tx, { object: recurring.DOCUMENT_TYPE, recordId: rent.id }));
+    expect(read.map((n) => n.body)).toEqual(['Rent rises in July']);
   });
 });
