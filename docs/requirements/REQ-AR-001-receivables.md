@@ -13,6 +13,7 @@ truth throughout:
 | **Agent** | `receivables` — one of several module agents run in parallel, each on `feat/{module}-module` |
 | **Branch** | `feat/receivables-module` (off `main` at `1e2ffd1`) — never `main` directly |
 | **Source** | The sponsor's instruction of 2026-10-04, verbatim in Appendix A |
+| **Approved by** | *The sponsor's instruction of 2026-10-04 (Appendix A); the defaults in §2 marked "owner to confirm" are not yet confirmed.* |
 | **Test case(s)** | `tests/integration/rcv01-receivables.test.ts` (every §14 scenario), `tests/unit/fx1-menu.test.ts`, `tests/unit/screen-catalogue.test.ts` |
 | **Status** | **Work in progress** — services, migration, screens and tests built; visual verification, full suite run and PR outstanding (§5) |
 
