@@ -151,16 +151,15 @@ export async function submitOrFinalise(
     ctx.principal.userId,
   );
 
+  // The department and the manager go in with the submission, so the manager
+  // is told (`approval.required`) in the same act that asks them.
   const { instanceId } = await workflow.submit(tx, ctx, {
     documentTypeCode: input.documentTypeCode,
     documentId: input.documentId,
     branchCode: ctx.branchCode,
+    departmentCode: input.departmentCode,
+    assignedToUserId,
   });
-
-  await tx
-    .update(workflowInstance)
-    .set({ departmentCode: input.departmentCode, assignedToUserId })
-    .where(eq(workflowInstance.id, instanceId));
 
   await audit.record(tx, {
     actorUserId: ctx.principal.userId,

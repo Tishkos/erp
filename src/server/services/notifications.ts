@@ -17,7 +17,19 @@
  * at-least-once, which is why `raise` is idempotent on the dedupe key rather
  * than merely careful.
  */
-import { and, asc, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lte, sql, type SQL } from 'drizzle-orm';
+import {
+  NOTIFICATION_CATEGORIES,
+  categoryOf,
+  claimedByOthers,
+  dedupeKeyOf,
+  kindDef,
+  matchOf,
+  needsOccurrence,
+  windowToken,
+  type NotificationCategory,
+} from '../domain/notification-center';
+import { businessToday } from '../domain/business-date';
 import {
   assertRule,
   dedupeKeyFor,
@@ -41,6 +53,7 @@ import {
 import { markSystemSweep, type Tx } from '../db/client';
 import type { ActorContext } from './chart-of-accounts';
 import * as jobs from './jobs';
+import { countOf, registerPage, whereOf, type RegisterPage } from './register-page';
 
 export const PERMISSION_OBJECT = 'notification';
 export const DELIVERY_QUEUE = 'notification.deliver';
@@ -115,28 +128,86 @@ export interface RaiseResult {
  * module has just raised for them from the RETURNING clause; the definer
  * function `app_notify` inserts and returns the id without widening the
  * policy. Null when the dedupe key already exists.
+ *
+ * Platform phase (Agent 6, C-72): a kind the registry gives a permission
+ * object (`domain/notification-center.KINDS`) is told only to a person who is
+ * active, holds that grant and — when the notification names a branch — has
+ * that branch in scope. Anyone else is skipped (null, nothing written). A kind
+ * with no object, or one the registry does not know, is written as before: its
+ * emitter chose its people by its own rule.
  */
-export async function insertNotification(
+export type InsertOutcome =
+  | { readonly status: 'created'; readonly id: bigint }
+  | { readonly status: 'duplicate' }
+  | { readonly status: 'not_permitted'; readonly reason: 'inactive' | 'no_grant' | 'no_branch' };
+
+export interface NotificationRowInput {
+  ruleCode: string | null;
+  eventType: string;
+  objectType: string;
+  objectId: string;
+  recipientUserId: string;
+  subject: string;
+  body: string;
+  context: Record<string, unknown> | null;
+  dedupeKey: string;
+  branchCode: string | null;
+}
+
+const refusals = new WeakMap<object, Map<string, 'inactive' | 'no_grant' | 'no_branch' | null>>();
+
+/** Why a person may not be told this kind (null: they may). Asked once per person, grant and branch in a transaction. */
+export async function refusalFor(
   tx: Tx,
-  row: {
-    ruleCode: string | null;
-    eventType: string;
-    objectType: string;
-    objectId: string;
-    recipientUserId: string;
-    subject: string;
-    body: string;
-    context: Record<string, unknown> | null;
-    dedupeKey: string;
-    branchCode: string | null;
-  },
-): Promise<bigint | null> {
+  recipientUserId: string,
+  kind: string,
+  branchCode: string | null,
+): Promise<'inactive' | 'no_grant' | 'no_branch' | null> {
+  const def = kindDef(kind);
+  if (!def.object) return null;
+  const verb = def.verb ?? 'view';
+  const key = `${recipientUserId}|${def.object}|${verb}|${branchCode ?? ''}`;
+  let cache = refusals.get(tx);
+  if (!cache) {
+    cache = new Map();
+    refusals.set(tx, cache);
+  }
+  if (cache.has(key)) return cache.get(key) ?? null;
+
+  const result = await tx.execute(sql`
+    select u.is_active as active, u.is_super_user as super,
+           exists (select 1 from user_role ur join role_grant g on g.role_code = ur.role_code
+                    where ur.user_id = u.id and g.object = ${def.object} and g.verb = ${verb}::permission_verb) as granted,
+           exists (select 1 from user_branch_scope b where b.user_id = u.id and b.branch_code = ${branchCode ?? ''}) as in_branch
+      from app_user u
+     where u.id = ${recipientUserId}::uuid`);
+  const row = result.rows[0] as { active: boolean; super: boolean; granted: boolean; in_branch: boolean } | undefined;
+  const refused =
+    !row || !row.active
+      ? 'inactive'
+      : !row.super && !row.granted
+        ? 'no_grant'
+        : branchCode && !row.super && !row.in_branch
+          ? 'no_branch'
+          : null;
+  cache.set(key, refused);
+  return refused;
+}
+
+export async function tryInsertNotification(tx: Tx, row: NotificationRowInput): Promise<InsertOutcome> {
+  const refused = await refusalFor(tx, row.recipientUserId, row.eventType, row.branchCode);
+  if (refused) return { status: 'not_permitted', reason: refused };
   const result = await tx.execute(sql`
     select app_notify(${row.ruleCode}, ${row.eventType}, ${row.objectType}, ${row.objectId}, ${row.recipientUserId}::uuid,
                       ${row.subject}, ${row.body}, ${row.context === null ? null : JSON.stringify(row.context)}::jsonb,
                       ${row.dedupeKey}, ${row.branchCode}) as id`);
   const id = (result.rows[0] as { id: string | null } | undefined)?.id ?? null;
-  return id === null ? null : BigInt(id);
+  return id === null ? { status: 'duplicate' } : { status: 'created', id: BigInt(id) };
+}
+
+export async function insertNotification(tx: Tx, row: NotificationRowInput): Promise<bigint | null> {
+  const outcome = await tryInsertNotification(tx, row);
+  return outcome.status === 'created' ? outcome.id : null;
 }
 
 export async function raise(
@@ -178,7 +249,7 @@ export async function raise(
   for (const [recipientUserId, { rules: reaching, channels }] of reached) {
     const dedupeKey = dedupeKeyFor(event, recipientUserId);
 
-    const notificationId = await insertNotification(tx, {
+    const outcome = await tryInsertNotification(tx, {
       // A notification carries one rule, which escalation reads for its
       // window. Of the rules that reached this person the strictest is
       // recorded — the one that escalates soonest — because a merged
@@ -196,10 +267,13 @@ export async function raise(
       branchCode: options.branchCode ?? null,
     });
 
-    if (notificationId === null) {
+    // Not the recipient's to be told (C-72): neither created nor a repeat.
+    if (outcome.status === 'not_permitted') continue;
+    if (outcome.status === 'duplicate') {
       suppressed += 1;
       continue;
     }
+    const notificationId = outcome.id;
 
     created += 1;
 
@@ -353,6 +427,8 @@ export interface DeliverResult {
  * 1 / 10 / 60 minutes apart; after that the failure stays and is visible).
  */
 export async function deliver(tx: Tx, notificationId: bigint, now = new Date()): Promise<DeliverResult> {
+  // A delivery reads somebody else's notification (C-70): the job that runs it is the system sweep.
+  await markSystemSweep(tx);
   const [row] = await tx.select().from(notification).where(eq(notification.id, notificationId)).limit(1);
   const result = { sent: 0, failed: 0, suppressed: 0, skipped: 0 };
   if (!row) return result;
@@ -601,6 +677,387 @@ export function registerDeliveryHandler(runWithTx: (fn: (tx: Tx) => Promise<void
       await deliver(tx, notificationId);
     });
   });
+}
+
+// ===========================================================================
+// The notification centre — platform phase, Agent 6
+// ===========================================================================
+//
+// One table, one runner, one bell. What follows is the part the bell, the
+// /notifications screen, the Dashboard and the modules that raise things ask
+// of this service:
+//
+//   emit(…)            the contract for a module that has something to say to
+//                      named people — Exceptions, Automation, the Task Center
+//   unreadCountFor,    what the bell and the Dashboard draw
+//   countsFor,
+//   listFor
+//   markRead,          read state: stored per recipient, idempotent, and
+//   markUnread,        never an audit row per click (see notification-center.ts
+//   markAllRead        for the one bulk act that is audited)
+//
+// Where a notification leads is not decided here — `notification-center.ts`
+// resolves it in the reader's own scope, when it is shown and when it is
+// clicked.
+
+export class NotificationError extends Error {
+  readonly code = 'NOTIFICATION_INVALID';
+  constructor(detail: string) {
+    super(detail);
+    this.name = 'NotificationError';
+  }
+}
+
+/**
+ * Runs a notification step so that its failure never reaches the business act
+ * that caused it (§21: a notification can never change what the document is).
+ * The step runs in a savepoint: whatever it wrote is undone with it, the
+ * error is logged, and the caller carries on.
+ */
+export async function safely<T>(tx: Tx, step: (sp: Tx) => Promise<T>): Promise<T | null> {
+  try {
+    return await tx.transaction((savepoint) => step(savepoint as unknown as Tx));
+  } catch (error) {
+    console.error('[notifications] a notification step failed and was left out:', error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+export interface EmitInput {
+  /** The kind (`event_type`): an entry of `domain/notification-center.KINDS`, or a new one. */
+  readonly kind: string;
+  /** What it is about: the record's type and the id it is addressed by. */
+  readonly objectType: string;
+  readonly objectId: string;
+  /** Who is told. Null and duplicates are dropped, `except` is removed. */
+  readonly recipients: readonly (string | null | undefined)[];
+  readonly except?: readonly (string | null | undefined)[] | undefined;
+  /** One plain line and the detail, stored as written: the fallback text when a kind has no label of its own. */
+  readonly subject: string;
+  readonly body?: string | undefined;
+  /** Facts the label uses (`reference`, `party`, `days_overdue`, …) and, optionally, a local `href`. */
+  readonly context?: Readonly<Record<string, unknown>> | undefined;
+  /**
+   * Which occurrence this is. Required for a kind whose window is
+   * `occurrence` (a revision, a status entered, a sequence number); a `day`
+   * kind uses the business day and a `once` kind none, unless named.
+   */
+  readonly occurrence?: string | null | undefined;
+  readonly branchCode?: string | null | undefined;
+  /** Also require that the recipient can open the record now (asked as them, in this transaction). */
+  readonly recordAccess?: boolean | undefined;
+  readonly actorUserId?: string | null | undefined;
+}
+
+export interface EmitResult {
+  /** Rows written. */
+  readonly created: number;
+  /** Already told for this window: nothing written. */
+  readonly suppressed: number;
+  /** Not theirs to be told (no grant, no branch, inactive, cannot open the record). */
+  readonly skipped: number;
+  readonly ids: readonly bigint[];
+}
+
+/**
+ * Tells named people, once per (recipient, kind, subject, window).
+ *
+ * The same key the rule path uses (`dedupeKeyOf`), the same unique index and
+ * `ON CONFLICT DO NOTHING` inside `app_notify`: two calls — a refresh, a retry,
+ * two requests at the same instant — write one row. The delivery channels of
+ * any active rule for the kind reach the recipients holding the rule's role
+ * through the same runner (`notification.deliver`); with no rule the
+ * notification is the in-app row alone.
+ */
+export async function emit(tx: Tx, input: EmitInput): Promise<EmitResult> {
+  if (!input.kind.trim()) throw new NotificationError('A notification names its kind.');
+  if (!input.objectType.trim() || !input.objectId.trim()) throw new NotificationError(`${input.kind} names no subject (objectType, objectId).`);
+  if (needsOccurrence(input.kind, input.occurrence)) {
+    throw new NotificationError(
+      `${input.kind} is told once per occurrence: name the occurrence (a revision, a status, a sequence number), or the second event on this subject would be dropped as a repeat.`,
+    );
+  }
+  const window = windowToken(input.kind, { occurrence: input.occurrence ?? null, today: businessToday() });
+  const skip = new Set((input.except ?? []).filter((id): id is string => Boolean(id)));
+  const people = [...new Set(input.recipients.filter((id): id is string => Boolean(id) && !skip.has(id as string)))];
+
+  const rules = people.length > 0 ? await rulesFor(tx, input.kind) : [];
+  const channelsOf = new Map<string, NotificationChannel[]>();
+  for (const rule of rules) {
+    assertRule(rule);
+    for (const userId of await recipientsOf(tx, rule.recipientRole)) {
+      const list = channelsOf.get(userId) ?? [];
+      for (const channel of rule.channels) if (!list.includes(channel)) list.push(channel);
+      channelsOf.set(userId, list);
+    }
+  }
+
+  let created = 0;
+  let suppressed = 0;
+  let skipped = 0;
+  const ids: bigint[] = [];
+  for (const recipientUserId of people) {
+    if (input.recordAccess) {
+      const { mayOpenAs } = await import('./notification-center');
+      if (!(await mayOpenAs(tx, recipientUserId, input.objectType, input.objectId))) {
+        skipped += 1;
+        continue;
+      }
+    }
+    const dedupeKey = dedupeKeyOf({ kind: input.kind, objectType: input.objectType, objectId: input.objectId, window, recipientUserId });
+    const outcome = await tryInsertNotification(tx, {
+      ruleCode: null,
+      eventType: input.kind,
+      objectType: input.objectType,
+      objectId: input.objectId,
+      recipientUserId,
+      subject: input.subject,
+      body: input.body ?? '',
+      context: (input.context ?? null) as Record<string, unknown> | null,
+      dedupeKey,
+      branchCode: input.branchCode ?? null,
+    });
+    if (outcome.status === 'not_permitted') {
+      skipped += 1;
+      continue;
+    }
+    if (outcome.status === 'duplicate') {
+      suppressed += 1;
+      continue;
+    }
+    created += 1;
+    ids.push(outcome.id);
+
+    const channels = channelsOf.get(recipientUserId) ?? [];
+    if (channels.length > 0) {
+      for (const channel of channels) {
+        await tx.insert(notificationDelivery).values({ notificationId: outcome.id, channel });
+      }
+      await jobs.enqueue(tx, input.actorUserId ?? null, {
+        queueName: DELIVERY_QUEUE,
+        payload: { notificationId: outcome.id.toString() },
+        idempotencyKey: dedupeKey,
+        branchCode: input.branchCode ?? null,
+      });
+    }
+  }
+  return { created, suppressed, skipped, ids };
+}
+
+// ---------------------------------------------------------------------------
+// Reading: the bell and the screen
+// ---------------------------------------------------------------------------
+
+export interface NotificationItem {
+  readonly id: string;
+  readonly kind: string;
+  readonly category: NotificationCategory;
+  readonly objectType: string;
+  readonly objectId: string;
+  readonly subject: string;
+  readonly body: string;
+  readonly context: Record<string, unknown> | null;
+  readonly createdAt: Date;
+  readonly readAt: Date | null;
+  readonly actedAt: Date | null;
+  readonly branchCode: string | null;
+}
+
+export type ReadState = 'unread' | 'all';
+
+export interface ListOptions {
+  readonly state?: ReadState | null;
+  readonly category?: NotificationCategory | null;
+  readonly q?: string | null;
+  readonly page?: number | null;
+  readonly pageSize?: number | null;
+}
+
+export interface CategoryCount {
+  readonly category: NotificationCategory;
+  readonly unread: number;
+  readonly total: number;
+}
+
+export interface NotificationCounts {
+  readonly unread: number;
+  readonly total: number;
+  /** Every category, in the registry's order, with the ones that hold nothing at zero. */
+  readonly categories: readonly CategoryCount[];
+}
+
+/** The categories a notification can belong to, in the order the bell and the screen list them. */
+export function categories(): readonly NotificationCategory[] {
+  return NOTIFICATION_CATEGORIES;
+}
+
+function kindsPredicate(match: { readonly exact: readonly string[]; readonly prefixes: readonly string[] }): SQL | null {
+  const parts: SQL[] = [];
+  if (match.exact.length > 0) parts.push(sql`n.event_type in (${sql.join(match.exact.map((kind) => sql`${kind}`), sql`, `)})`);
+  for (const prefix of match.prefixes) parts.push(sql`starts_with(n.event_type, ${prefix})`);
+  return parts.length === 0 ? null : sql`(${sql.join(parts, sql` or `)})`;
+}
+
+/** The SQL for "this notification is in that category", built from the registry. */
+function categoryPredicate(category: NotificationCategory): SQL | null {
+  if (category === 'system') {
+    const others = kindsPredicate(claimedByOthers());
+    return others === null ? null : sql`not ${others}`;
+  }
+  return kindsPredicate(matchOf(category)) ?? sql`false`;
+}
+
+/** How many are waiting for this person. One indexed count: the bell asks it on every poll. */
+export async function unreadCountFor(tx: Tx, userId: string): Promise<number> {
+  const result = await tx.execute(
+    sql`select count(*)::int as n from notification where recipient_user_id = ${userId}::uuid and read_at is null`,
+  );
+  return Number((result.rows[0] as { n: number } | undefined)?.n ?? 0);
+}
+
+/** Unread and total, overall and per category — the tabs of the bell and the screen's filter. */
+export async function countsFor(tx: Tx, userId: string): Promise<NotificationCounts> {
+  const result = await tx.execute(sql`
+    select event_type, count(*)::int as total, (count(*) filter (where read_at is null))::int as unread
+      from notification
+     where recipient_user_id = ${userId}::uuid
+     group by event_type`);
+  const by = new Map<NotificationCategory, { unread: number; total: number }>(
+    NOTIFICATION_CATEGORIES.map((category) => [category, { unread: 0, total: 0 }]),
+  );
+  let unread = 0;
+  let total = 0;
+  for (const row of result.rows as { event_type: string; total: number; unread: number }[]) {
+    const entry = by.get(categoryOf(row.event_type))!;
+    entry.total += Number(row.total);
+    entry.unread += Number(row.unread);
+    total += Number(row.total);
+    unread += Number(row.unread);
+  }
+  return { unread, total, categories: NOTIFICATION_CATEGORIES.map((category) => ({ category, ...by.get(category)! })) };
+}
+
+interface ListRow {
+  id: string;
+  event_type: string;
+  object_type: string;
+  object_id: string;
+  subject: string;
+  body: string;
+  context: Record<string, unknown> | null;
+  created_at: Date;
+  read_at: Date | null;
+  acted_at: Date | null;
+  branch_code: string | null;
+}
+
+function itemOf(row: ListRow): NotificationItem {
+  return {
+    id: String(row.id),
+    kind: row.event_type,
+    category: categoryOf(row.event_type),
+    objectType: row.object_type,
+    objectId: row.object_id,
+    subject: row.subject,
+    body: row.body,
+    context: row.context,
+    createdAt: new Date(row.created_at),
+    readAt: row.read_at ? new Date(row.read_at) : null,
+    actedAt: row.acted_at ? new Date(row.acted_at) : null,
+    branchCode: row.branch_code,
+  };
+}
+
+/**
+ * This person's notifications, newest first, paged at fifty with a true count
+ * (`register-page`). Always `recipient_user_id = userId` — the policy says the
+ * same (C-70); asking for it in the query as well means a caller in a sweep's
+ * transaction still gets only the one person's.
+ */
+export async function listFor(tx: Tx, userId: string, options: ListOptions = {}): Promise<RegisterPage<NotificationItem>> {
+  const parts: (SQL | null)[] = [sql`n.recipient_user_id = ${userId}::uuid`];
+  if (options.state === 'unread') parts.push(sql`n.read_at is null`);
+  if (options.category) parts.push(categoryPredicate(options.category));
+  const needle = (options.q ?? '').trim();
+  if (needle) {
+    const pattern = `%${needle.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')}%`;
+    parts.push(sql`(n.subject ilike ${pattern} escape '\\' or n.body ilike ${pattern} escape '\\' or n.object_id ilike ${pattern} escape '\\')`);
+  }
+  const where = whereOf(parts);
+  return registerPage<NotificationItem>({
+    paging: { page: options.page ?? 1, pageSize: options.pageSize ?? null },
+    count: () => countOf(tx, sql`from notification n ${where}`),
+    rows: async ({ limit, offset }) => {
+      const result = await tx.execute(sql`
+        select n.id::text as id, n.event_type, n.object_type, n.object_id, n.subject, n.body, n.context,
+               n.created_at, n.read_at, n.acted_at, n.branch_code
+          from notification n
+          ${where}
+         order by n.created_at desc, n.id desc
+         limit ${limit} offset ${offset}`);
+      return (result.rows as unknown as ListRow[]).map(itemOf);
+    },
+  });
+}
+
+/** One notification of this person's, by id; null when it is not theirs or does not exist. */
+export async function findFor(tx: Tx, userId: string, id: bigint): Promise<NotificationItem | null> {
+  const result = await tx.execute(sql`
+    select n.id::text as id, n.event_type, n.object_type, n.object_id, n.subject, n.body, n.context,
+           n.created_at, n.read_at, n.acted_at, n.branch_code
+      from notification n
+     where n.id = ${id.toString()}::bigint and n.recipient_user_id = ${userId}::uuid`);
+  const row = result.rows[0] as unknown as ListRow | undefined;
+  return row ? itemOf(row) : null;
+}
+
+// ---------------------------------------------------------------------------
+// Read state — stored per recipient, idempotent
+// ---------------------------------------------------------------------------
+
+/** Mark as unread again. A no-op (0) when it is not theirs or is unread already. */
+export async function markUnread(tx: Tx, notificationId: bigint, recipientUserId: string): Promise<number> {
+  const updated = await tx
+    .update(notification)
+    .set({ readAt: null })
+    .where(
+      and(
+        eq(notification.id, notificationId),
+        eq(notification.recipientUserId, recipientUserId),
+        sql`${notification.readAt} is not null`,
+      ),
+    )
+    .returning({ id: notification.id });
+  return updated.length;
+}
+
+/** Several at once (the screen's selection); the count is those that changed. */
+export async function markManyRead(tx: Tx, notificationIds: readonly bigint[], recipientUserId: string): Promise<number> {
+  if (notificationIds.length === 0) return 0;
+  const updated = await tx
+    .update(notification)
+    .set({ readAt: new Date() })
+    .where(
+      and(
+        inArray(notification.id, [...notificationIds]),
+        eq(notification.recipientUserId, recipientUserId),
+        isNull(notification.readAt),
+      ),
+    )
+    .returning({ id: notification.id });
+  return updated.length;
+}
+
+/** Everything unread of theirs — or of one category — marked read; the count is how many changed. */
+export async function markAllRead(
+  tx: Tx,
+  recipientUserId: string,
+  options: { readonly category?: NotificationCategory | null } = {},
+): Promise<number> {
+  const parts: (SQL | null)[] = [sql`n.recipient_user_id = ${recipientUserId}::uuid`, sql`n.read_at is null`];
+  if (options.category) parts.push(categoryPredicate(options.category));
+  const result = await tx.execute(sql`update notification n set read_at = now() ${whereOf(parts)} returning n.id`);
+  return result.rows.length;
 }
 
 export { lte, role };

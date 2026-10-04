@@ -7034,6 +7034,9 @@
       "unlinked": "إلغاء ربط حساب Cloud Files",
       "revoked_on_deactivation": "إلغاء كلمة مرور تطبيق Cloud Files عند تعطيل الحساب"
     },
+    "notification": {
+      "marked_all_read": "تحديد الإشعارات كمقروءة"
+    },
     "cloud_file": {
       "uploaded": "رفع ملف إلى Cloud Files",
       "downloaded": "تنزيل ملف من Cloud Files",
@@ -7405,6 +7408,199 @@
     "record_start_denied_title": "مناقشة سجلّ",
     "record_start_denied": "لا يمكنك فتح هذا السجل، لذلك لا يمكنك بدء محادثة عنه.",
     "record_existing": "محادثة قائمة حول هذا السجل"
+  },
+  "notifications": {
+    "title": "الإشعارات",
+    "subtitle": "ما أبلغك به النظام، الأحدث أولاً. تُعرض إشعاراتك أنت فقط.",
+    "bell_label": "الإشعارات",
+    "bell_label_count": "الإشعارات: {count} غير مقروءة",
+    "unread_count": "{count} غير مقروءة",
+    "tab_unread": "غير المقروءة",
+    "tab_all": "الكل",
+    "list_label": "قائمة الإشعارات",
+    "category_filter": "الفئة",
+    "category_all": "كل الفئات",
+    "state_filter": "عرض",
+    "state_unread": "غير المقروءة",
+    "state_all": "الكل",
+    "filter": "تصفية",
+    "see_all": "عرض كل الإشعارات",
+    "mark_read": "تحديد كمقروء",
+    "mark_unread": "تحديد كغير مقروء",
+    "mark_all_read": "تحديد الكل كمقروء",
+    "empty_unread": "لا شيء جديد لديك. لا توجد إشعارات غير مقروءة.",
+    "empty_all": "لم يُرسل إليك أي إشعار بعد.",
+    "loading": "جارٍ تحميل الإشعارات...",
+    "load_failed": "تعذّر تحميل الإشعارات. ستُعاد المحاولة بعد قليل.",
+    "gone": "لم يعد متاحاً",
+    "gone_hint": "لم يعد بإمكانك فتح ما يخصه هذا الإشعار.",
+    "gone_flash": "هذا الإشعار يقود إلى شيء لم يعد بإمكانك فتحه.",
+    "col_when": "الوقت",
+    "col_category": "الفئة",
+    "col_message": "الإشعار",
+    "col_status": "الحالة",
+    "col_actions": "الإجراءات",
+    "status_unread": "غير مقروء",
+    "status_read": "مقروء",
+    "acted": "تم الإجراء",
+    "category": {
+      "approvals": "الموافقات",
+      "tasks": "المهام",
+      "chat": "المحادثات",
+      "documents": "المستندات",
+      "payments": "المدفوعات",
+      "invoices": "الفواتير",
+      "logistics": "الشحن والخدمات اللوجستية",
+      "accounting": "المحاسبة",
+      "hr": "الموارد البشرية",
+      "system": "النظام"
+    },
+    "kind": {
+      "approval_required": {
+        "title": "مطلوب اعتماد: {ref}",
+        "detail": "بانتظار قرارك."
+      },
+      "approval_completed": {
+        "title": "تم الاعتماد: {ref}",
+        "detail": "تم اعتماد ما قدّمته."
+      },
+      "approval_rejected": {
+        "title": "تم الرفض: {ref}",
+        "detail": "تم رفض ما قدّمته. افتحه لمعرفة السبب."
+      },
+      "journal_entry_submitted": {
+        "title": "قيد اليومية {ref} بانتظار الاعتماد"
+      },
+      "journal_entry_rejected": {
+        "title": "تم رفض قيد اليومية {ref}"
+      },
+      "chart_of_account_submitted": {
+        "title": "الحساب {ref} بانتظار الاعتماد"
+      },
+      "partner_bank_account_submitted": {
+        "title": "بيانات بنكية بانتظار التحقق: {ref}",
+        "detail": "{party}"
+      },
+      "task_assigned": {
+        "title": "أُسندت إليك المهمة {ref}",
+        "detail": "{name}"
+      },
+      "task_accepted": {
+        "title": "تم قبول المهمة {ref}",
+        "detail": "{name}"
+      },
+      "task_started": {
+        "title": "بدأ العمل على المهمة {ref}",
+        "detail": "{name}"
+      },
+      "task_blocked": {
+        "title": "المهمة {ref} متوقفة",
+        "detail": "{name}"
+      },
+      "task_submitted": {
+        "title": "قُدّمت المهمة {ref} للمراجعة",
+        "detail": "{name}"
+      },
+      "task_completed": {
+        "title": "اكتملت المهمة {ref}",
+        "detail": "{name}"
+      },
+      "task_reassigned": {
+        "title": "أُعيد إسناد المهمة {ref}",
+        "detail": "{name}"
+      },
+      "task_due_soon": {
+        "title": "موعد المهمة {ref} قريب",
+        "detail": "{name}"
+      },
+      "task_overdue": {
+        "title": "تأخرت المهمة {ref}",
+        "detail": "{name}"
+      },
+      "document_linked": {
+        "title": "تم ربط ملف بـ {ref}",
+        "detail": "{name}"
+      },
+      "customer_receipt_received": {
+        "title": "تم استلام السند {ref}",
+        "detail": "{party} · {amount} د.ع"
+      },
+      "supplier_payment_made": {
+        "title": "تم دفع الدفعة {ref}",
+        "detail": "{party} · {amount} د.ع"
+      },
+      "ar_invoice_due_soon": {
+        "title": "{days, plural, one {فاتورة المبيعات {ref} تستحق خلال يوم واحد} two {فاتورة المبيعات {ref} تستحق خلال يومين} few {فاتورة المبيعات {ref} تستحق خلال # أيام} many {فاتورة المبيعات {ref} تستحق خلال # يومًا} other {فاتورة المبيعات {ref} تستحق خلال # يوم}}",
+        "detail": "{party} · المتبقي {amount} د.ع"
+      },
+      "ar_invoice_due_today": {
+        "title": "فاتورة المبيعات {ref} تستحق اليوم",
+        "detail": "{party} · المتبقي {amount} د.ع"
+      },
+      "ar_invoice_overdue": {
+        "title": "{days, plural, one {فاتورة المبيعات {ref} متأخرة منذ يوم واحد} two {فاتورة المبيعات {ref} متأخرة منذ يومين} few {فاتورة المبيعات {ref} متأخرة منذ # أيام} many {فاتورة المبيعات {ref} متأخرة منذ # يومًا} other {فاتورة المبيعات {ref} متأخرة منذ # يوم}}",
+        "detail": "{party} · المتبقي {amount} د.ع"
+      },
+      "ar_invoice_paid_late": {
+        "title": "فاتورة المبيعات {ref} سُدّدت متأخرة",
+        "detail": "{party}"
+      },
+      "ap_invoice_due_soon": {
+        "title": "{days, plural, one {فاتورة المورد {ref} تستحق خلال يوم واحد} two {فاتورة المورد {ref} تستحق خلال يومين} few {فاتورة المورد {ref} تستحق خلال # أيام} many {فاتورة المورد {ref} تستحق خلال # يومًا} other {فاتورة المورد {ref} تستحق خلال # يوم}}",
+        "detail": "{party} · المتبقي {amount} د.ع"
+      },
+      "ap_invoice_due_today": {
+        "title": "فاتورة المورد {ref} تستحق اليوم",
+        "detail": "{party} · المتبقي {amount} د.ع"
+      },
+      "ap_invoice_overdue": {
+        "title": "{days, plural, one {فاتورة المورد {ref} متأخرة منذ يوم واحد} two {فاتورة المورد {ref} متأخرة منذ يومين} few {فاتورة المورد {ref} متأخرة منذ # أيام} many {فاتورة المورد {ref} متأخرة منذ # يومًا} other {فاتورة المورد {ref} متأخرة منذ # يوم}}",
+        "detail": "{party} · المتبقي {amount} د.ع"
+      },
+      "ap_invoice_paid_late": {
+        "title": "فاتورة المورد {ref} سُدّدت متأخرة",
+        "detail": "{party}"
+      },
+      "container_late": {
+        "title": "الحاوية {ref} متأخرة",
+        "detail": "مر موعد وصولها المتوقع {date} ولم تصل."
+      },
+      "shipment_status_changed": {
+        "title": "تغيّرت حالة الشحنة: {ref}",
+        "detail": "{extra}"
+      },
+      "payable_stage_changed": {
+        "title": "انتقل الاستيراد {ref} إلى {extra}"
+      },
+      "payable_hold_opened": {
+        "title": "تم تعليق الاستيراد {ref}",
+        "detail": "{extra}"
+      },
+      "payable_hold_escalated": {
+        "title": "تعليق على الاستيراد {ref} طال انتظاره",
+        "detail": "{days, plural, one {بانتظار يوم واحد.} two {بانتظار يومين.} few {بانتظار # أيام.} many {بانتظار # يومًا.} other {بانتظار # يوم.}}"
+      },
+      "fiscal_period_close_blocked": {
+        "title": "لا يمكن إقفال الفترة {name} بعد",
+        "detail": "افتح شاشة الفترات لمعرفة الفحوص التي لم تنجح."
+      },
+      "inventory_integrity_failed": {
+        "title": "{count, plural, one {فحص سجل المخزون وجد أمراً واحداً للمراجعة} two {فحص سجل المخزون وجد أمرين للمراجعة} few {فحص سجل المخزون وجد # أمور للمراجعة} many {فحص سجل المخزون وجد # أمراً للمراجعة} other {فحص سجل المخزون وجد # أمر للمراجعة}}",
+        "detail": "افتح شاشة فحوص المخزون لمشاهدتها."
+      },
+      "project_availability_warning": {
+        "title": "المشروع {ref}: تم بلوغ حد التحذير في الميزانية",
+        "detail": "العنصر {extra}"
+      },
+      "reconciliation_issue": {
+        "title": "فرق في المطابقة: {ref}",
+        "detail": "{name}"
+      },
+      "system_health": {
+        "title": "سلامة النظام تحتاج إلى انتباه",
+        "detail": "{extra}"
+      }
+    }
   },
   "cloudFiles": {
     "subtitle": "ملفاتك في QS Cloud Files، مرتبطة بالسجلات التي تخصها.",

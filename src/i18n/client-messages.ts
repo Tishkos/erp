@@ -10,7 +10,7 @@
  * `useTranslations` in `src` to this list, so a client component that needs
  * another namespace fails the build instead of a page.
  */
-export const CLIENT_NAMESPACES = ['chart', 'chat', 'column', 'error', 'list', 'nav', 'page', 'screen', 'search', 'shell', 'status'] as const;
+export const CLIENT_NAMESPACES = ['chart', 'chat', 'column', 'error', 'list', 'nav', 'notifications', 'page', 'screen', 'search', 'shell', 'status'] as const;
 
 export function clientMessages<T extends Record<string, unknown>>(messages: T): Partial<T> {
   const picked: Record<string, unknown> = {};

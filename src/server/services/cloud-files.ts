@@ -20,7 +20,7 @@
  * time. "Uploaded" is said only when the cloud has answered 201/204 AND a
  * listing of the new file shows the size that was sent.
  */
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import { cloudFileLink, roleGrant, appUser } from '../db/schema';
 import {
@@ -49,6 +49,7 @@ import {
 } from './cloud-client';
 import { openRecord, targetOf, type RecordRef } from './cloud-link-targets';
 import * as settings from './cloud-settings';
+import * as notifications from './notifications';
 
 export const FILES_OBJECT = settings.FILES_OBJECT;
 
@@ -306,7 +307,37 @@ export async function linkEntry(tx: Tx, ctx: ActorContext, serverUrl: string, en
     clientIp: ctx.clientIp ?? null,
     relatedObjectId: row!.id,
   });
+  await notifications.safely(tx, (sp) => tellLinked(sp, ctx, record, entry.name, row!.id));
   return { ...row!, linkedByName: null };
+}
+
+/**
+ * `document.linked` — a file was linked to a record. Told: the other people
+ * who have acted on that record (its audit trail), each only if they can open
+ * it themselves. The one who linked it is not told; a second link is a new event.
+ */
+async function tellLinked(tx: Tx, ctx: ActorContext, record: RecordRef, fileName: string, linkId: string): Promise<void> {
+  const involved = await tx.execute(sql`
+    select distinct actor_user_id::text as id
+      from audit_event
+     where object_type = ${record.auditObject} and object_id = ${record.id}
+       and actor_user_id is not null and actor_user_id <> ${ctx.principal.userId}::uuid`);
+  if (involved.rows.length === 0) return;
+  const [who] = await tx.select({ name: appUser.displayName }).from(appUser).where(eq(appUser.id, ctx.principal.userId)).limit(1);
+  await notifications.emit(tx, {
+    kind: 'document.linked',
+    objectType: record.type,
+    objectId: record.id,
+    recipients: involved.rows.map((r) => (r as { id: string }).id),
+    except: [ctx.principal.userId],
+    subject: `A file was linked to ${record.label}`,
+    body: fileName,
+    context: { reference: record.label, name: fileName, actor: who?.name ?? '' },
+    occurrence: linkId,
+    branchCode: record.branchCode ?? null,
+    recordAccess: true,
+    actorUserId: ctx.principal.userId,
+  });
 }
 
 /** Ends a link. The row stays, with who ended it and why; the file in the cloud is untouched. */

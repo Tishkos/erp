@@ -321,6 +321,7 @@ describe('every screen has one address', () => {
       '/monitoring/customer-list',
       '/monitoring/history',
       '/monitoring/reports',
+      '/notifications',
       // REQ-AP-001 Stage 1 — the Payables workbench.
       '/payables',
       // REQ-AP-001 Stage 3 — the advances' register.

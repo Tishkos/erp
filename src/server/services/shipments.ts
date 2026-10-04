@@ -71,6 +71,7 @@ import { allocateDocumentNumber } from './numbering';
 import { registerPage, searchOf, type RegisterPaging } from './register-page';
 import { businessToday } from '../domain/business-date';
 import { can } from '../domain/permissions';
+import * as notifications from './notifications';
 
 export const BL_OBJECT = 'bill_of_lading';
 export const CONTAINER_OBJECT = 'shipment_container';
@@ -1500,8 +1501,45 @@ export async function lateSweep(tx: Tx, asOf: string): Promise<number> {
       sourceNo: container.containerNo,
       actorUserId: null,
     });
+    await notifications.safely(tx, (sp) => tellContainerLate(sp, container, asOf));
   }
   return late.length;
+}
+
+/**
+ * `container.late` — to the shipment desk of the container's branch (whoever
+ * may change a container's status) and to the person who raised the import.
+ * Told once per ETA: the same container going late again on a new ETA is a new
+ * event; a repeated sweep over the same ETA writes nothing.
+ */
+async function tellContainerLate(tx: Tx, container: typeof shipmentContainer.$inferSelect, asOf: string): Promise<void> {
+  const desk = await tx.execute(sql`
+    select distinct ur.user_id::text as user_id
+      from user_role ur
+      join role_grant g on g.role_code = ur.role_code
+     where g.object = ${CONTAINER_OBJECT} and g.verb = 'edit_draft'`);
+  const [owner] = await tx
+    .select({ createdBy: payable.createdBy, payableNo: payable.payableNo })
+    .from(payable)
+    .where(eq(payable.id, container.payableId))
+    .limit(1);
+  await notifications.emit(tx, {
+    kind: 'container.late',
+    objectType: CONTAINER_OBJECT,
+    objectId: container.id,
+    recipients: [...desk.rows.map((r) => (r as { user_id: string }).user_id), owner?.createdBy],
+    subject: `Container ${container.containerNo} is late`,
+    body: `ETA ${container.eta} has passed and it has not arrived.`,
+    context: {
+      reference: container.containerNo,
+      containerNo: container.containerNo,
+      eta: container.eta,
+      payableNo: owner?.payableNo ?? '',
+      days_late: Math.max(0, Math.round((Date.parse(asOf) - Date.parse(String(container.eta))) / 86_400_000)),
+    },
+    occurrence: String(container.eta),
+    branchCode: container.branchCode,
+  });
 }
 
 // ---------------------------------------------------------------------------
