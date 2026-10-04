@@ -172,14 +172,20 @@ export default async function ArInvoicePage({
    * one, and it used to be shown for every posted invoice, because the list
    * it searched is only populated while the invoice is editable.
    */
+  // The account named opens its own profile (the shared `ProfileLink`, 2026-10-04);
+  // the default and a broken link are said in words.
   const accountLabel = (id: string | null) => {
-    if (!id) return t('invoices.account_default');
+    if (!id) return <bdi dir="auto">{t('invoices.account_default')}</bdi>;
     const account =
       found.accounts.find((row) => row.id === id) ??
       found.chosenAccounts.find((row) => row?.id === id);
     // An id that names nothing at all is a broken link, not a default. Said
     // plainly, because it is the screen the link is repaired from.
-    return account ? `${account.code} · ${account.name}` : t('invoices.account_missing');
+    return account ? (
+      <ProfileLink code={account.code} dir="auto" kind="gl_account" name={account.name} />
+    ) : (
+      <bdi dir="auto">{t('invoices.account_missing')}</bdi>
+    );
   };
   const mayReturnToDraft =
     invoice.status === 'approved' &&
@@ -245,7 +251,7 @@ export default async function ArInvoicePage({
             ))}
         </select>
       ) : (
-        <bdi dir="auto">{accountLabel(invoice.receivableAccountId)}</bdi>
+        accountLabel(invoice.receivableAccountId)
       ),
     },
     {
@@ -270,7 +276,7 @@ export default async function ArInvoicePage({
             ))}
         </select>
       ) : (
-        <bdi dir="auto">{accountLabel(invoice.revenueAccountId)}</bdi>
+        accountLabel(invoice.revenueAccountId)
       ),
     },
     // Who the document passed through. An empty box is an answer too: it says

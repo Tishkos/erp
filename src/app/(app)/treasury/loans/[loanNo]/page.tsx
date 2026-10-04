@@ -197,7 +197,13 @@ export default async function LoanPage({
     },
     {
       label: t('account'),
-      value: <ProfileLink code={found.account.code} kind="bank_account" name={found.account.name} />,
+      value: (
+        <ProfileLink
+          code={found.account.code}
+          kind={found.account.accountType === 'cash' ? 'cash_account' : 'bank_account'}
+          name={found.account.name}
+        />
+      ),
     },
     { label: t('principal'), value: <bdi dir="ltr">{money(loan.principalTxn)}</bdi> },
     {

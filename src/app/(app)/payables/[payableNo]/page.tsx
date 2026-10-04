@@ -502,8 +502,9 @@ export default async function PayablePage({
             {lines.map((line) => (
               <tr key={line.id}>
                 <td>{line.lineNo}</td>
+                {/* The item opens its own profile (the shared `ProfileLink`, 2026-10-04). */}
                 <td>
-                  <bdi dir="ltr">{line.itemCode ?? '—'}</bdi>
+                  <ProfileLink code={line.itemCode} kind="item" />
                 </td>
                 <td>{line.description}</td>
                 <td className={s.sapNum}>
@@ -1671,7 +1672,7 @@ export default async function PayablePage({
                     {shipment.quantities.map((line) => (
                       <tr key={line.itemCode}>
                         <td>
-                          <bdi dir="ltr">{line.itemCode}</bdi> {line.itemName ?? ''}
+                          <ProfileLink code={line.itemCode} kind="item" /> {line.itemName ?? ''}
                         </td>
                         {[line.ordered, line.planned, line.received, line.damaged, line.short, line.claimed, line.inTransit, line.notYetShipped].map((value, index) => (
                           <td className={s.sapNum} key={index}>
