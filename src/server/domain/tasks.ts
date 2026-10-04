@@ -511,7 +511,7 @@ export function noticeText(kind: TaskNotificationKind, facts: NoticeFacts): { su
  *   self          oneself
  *   report        somebody who reports to the assigner, directly or through others
  *                 (the employee record's manager link)
- *   department    a member of a section the assigner manages (or a section under it)
+ *   department    a member of a section the assigner manages (the section itself; sub-sections are not followed)
  *   organisation  anyone in the section, for a holder of `administer` on tasks
  */
 export const SCOPE_VIAS = ['self', 'report', 'department', 'organisation'] as const;
