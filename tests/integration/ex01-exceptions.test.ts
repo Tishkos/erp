@@ -30,6 +30,7 @@ import { containerNo } from '../support/container-number';
 import { withScope } from '@/server/db/client';
 import { registerAttachmentRuntime } from '@/server/attachments-runtime';
 import { DETECTORS } from '@/server/domain/exceptions';
+import { businessToday } from '@/server/domain/business-date';
 import { parseDecimal } from '@/server/domain/money';
 import { registerAllRecords } from '@/server/records';
 import * as ap from '@/server/services/ap-invoice';
@@ -65,6 +66,8 @@ const as = <T>(p: ActorContext, fn: (tx: Parameters<Parameters<typeof withScope>
 
 /** Every detector but the one that looks at the machine the test happens to run on. */
 const ALL = DETECTORS.map((d) => d.code).filter((code) => code !== 'platform.system_health');
+/** Whole days from a fixture's date to the business day the sweep runs on — the findings count from the real today. */
+const daysSince = (date: string) => Math.round((Date.parse(businessToday()) - Date.parse(date)) / 86_400_000);
 const sweep = (only: readonly string[] = ALL) => exceptions.sweep({ trigger: 'schedule', only });
 
 interface Stored {
@@ -334,14 +337,14 @@ describe('EX1 · every detector finds its own real thing, once', () => {
   it('a customer who has not paid: one finding for the account, with the invoice as its evidence', async () => {
     const row = await one('receivables.overdue_exposure');
     expect(row).toMatchObject({ severity: 'low', subject: 'CUST-ALNOOR|BGW', record_type: 'business_partner', branch_code: BAGHDAD });
-    expect(row.facts).toMatchObject({ partyCode: 'CUST-ALNOOR', invoices: 1, days: 35 });
+    expect(row.facts).toMatchObject({ partyCode: 'CUST-ALNOOR', invoices: 1, days: daysSince('2026-08-30') });
     expect(row.evidence).toHaveLength(1);
   });
 
   it('a supplier left unpaid: the one import that is overdue, not the ones that are not', async () => {
     const row = await one('payables.overdue_exposure');
     expect(row).toMatchObject({ severity: 'medium', subject: 'SUP-JINKO|BGW', record_type: 'business_partner' });
-    expect(row.facts).toMatchObject({ invoices: 1, days: 33 });
+    expect(row.facts).toMatchObject({ invoices: 1, days: daysSince('2026-09-01') });
     expect(row.evidence.map((e) => e.ref)).toEqual([importA.invoiceNo]);
   });
 
@@ -355,7 +358,7 @@ describe('EX1 · every detector finds its own real thing, once', () => {
   it('a container past its ETA and not received', async () => {
     const row = await one('logistics.container_delayed');
     expect(row).toMatchObject({ severity: 'critical', subject: delayedContainerId, record_type: 'shipment_container', record_id: delayedContainerId, branch_code: BAGHDAD });
-    expect(row.facts).toMatchObject({ days: 40, etaDate: '2026-08-25' });
+    expect(row.facts).toMatchObject({ days: daysSince('2026-08-25'), etaDate: '2026-08-25' });
     expect(row.explanation).toContain('40');
   });
 
@@ -368,7 +371,7 @@ describe('EX1 · every detector finds its own real thing, once', () => {
   it('a task past its date: the assignee owns it, and it is the task’s own record', async () => {
     const row = await one('tasks.overdue');
     expect(row).toMatchObject({ severity: 'high', subject: taskId, record_type: 'task', record_id: taskId, record_label: taskNo, owner_user_id: world.clerk.principal.userId });
-    expect(row.facts).toMatchObject({ days: 14, task: taskNo });
+    expect(row.facts).toMatchObject({ days: daysSince('2026-09-20'), task: taskNo });
   });
 
   it('an approval that has waited a fortnight', async () => {
@@ -639,7 +642,7 @@ describe('EX5 · the reads other screens use', () => {
     const detail = await as(world.manager, (tx) => exceptions.byNo(tx, world.manager.principal, overdue.no, { locale: 'en' }));
     expect(detail).toMatchObject({ no: overdue.no, status: 'open', partyCode: 'SUP-JINKO', partyName: 'Jinko Solar', branchCode: BAGHDAD });
     expect(detail!.evidence.map((e) => e.ref)).toEqual([importA.invoiceNo]);
-    expect(detail!.evidence[0]).toMatchObject({ amount: '100000.0000', noteText: expect.stringContaining('33') });
+    expect(detail!.evidence[0]).toMatchObject({ amount: '100000.0000', noteText: expect.stringContaining(String(daysSince('2026-09-01'))) });
     expect(detail!.actionHref).toMatch(/^\/payables\/open-items/);
     expect(detail!.history.map((h) => h.event)).toEqual(['detected']);
     const arabic = await as(world.manager, (tx) => exceptions.byNo(tx, world.manager.principal, overdue.no, { locale: 'ar' }));
