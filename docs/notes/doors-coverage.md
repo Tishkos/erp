@@ -120,6 +120,18 @@ The employee link on an HR record is shown only to readers who hold `view` on
 | — | `carrier` | | missing — no carrier record exists (a B/L's shipping line is text) | logistics | not delivered |
 | — | `currency`, `fixed_asset`, `investment` | | missing — those modules have no delivered screens; nothing to link from yet | shared | not delivered |
 
+## Chat (platform phase, Agent 1)
+
+`/chat` is a workspace, not a record page: it has no four doors. The doors a
+record page wears are untouched; what chat adds to a record is a seam,
+`services/chat.openRecordConversation(tx, ctx, { recordType, recordId, label,
+href })` — a conversation about that record, offered only to people who could
+open it (`attachments.mayAccessParent`). A record page that wants a "discuss"
+door calls it from an action and sends the person to `/chat?c=<id>`; none does
+yet. A file sent in a conversation is an attachment of object type
+`chat_message` (member-only), so it appears in no record's attachments door.
+`docs/audits/CHAT-IMPLEMENTATION.md` has the rest.
+
 ## Export keys added on `feat/shared-module`
 
 `project_certificate`, `project_budget`, `project_change_order`,
