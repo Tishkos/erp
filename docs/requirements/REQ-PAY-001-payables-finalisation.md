@@ -6,6 +6,7 @@
 | **Branch** | `feat/payables-module` — one of the parallel module branches (`feat/{module}-module`); see §6 before merging. |
 | **Source** | The owner's specification of 2026-10-04 01:59 (Europe/Budapest), reproduced in full in Appendix A, and his addition in the same message: *"also add icon for notes in invoices also supplier clickable like we can from invoices we can goto their profile please like bank loans is very nice features print attachments audit notes icon for any invoice please starting from after draft created"*. Then, 02:04: other agents work on Receivables, Inventory and Accounting at the same time and he merges everything himself — stay inside Payables. |
 | **Test case(s)** | PAY1–PAY14 in §3, from the specification's §26. |
+| **Approved by** | The owner, 2026-10-04 — the specification itself (Appendix A) and the post-completion notes §4 (D-PAY-1…6 and the five menu removals approved; Suppliers under Master Data; Payment Application = the request to the bank). |
 | **Status** | **BUILT on this branch** (2026-10-04): PAY1–PAY6, PAY8–PAY12, PAY14. **PAY7** is built on `feat/inventory-module` (fdee68c, with the landed-cost engine it belongs to) and **PAY13** is verified there after that branch merges — neither is duplicated here. The owner's post-completion decisions (4.1–4.7) are all APPROVED and applied; see §5. |
 
 **How to read this document.** §1 is what was asked, in short. §2 is what was
