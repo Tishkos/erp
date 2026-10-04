@@ -4,6 +4,7 @@
  *
  *   npx tsx scripts/ops/set-up-people.ts            # say what it would do
  *   npx tsx scripts/ops/set-up-people.ts --apply    # do it, and print passwords
+ *   ... --new-only                                  # add the missing people; leave the rest alone
  *
  * The owner set the shape: Baban holds everything and approves everything;
  * everybody else works within a section and brings the things that commit the
@@ -54,6 +55,12 @@ import * as users from '../../src/server/services/users';
 import type { PermissionVerb } from '../../src/server/domain/permissions';
 
 const apply = process.argv.includes('--apply');
+/**
+ * Only the people not on the system yet (by direction, 2026-10-04: "if the user
+ * exists already don't add, if it doesn't exist add it"). Whoever is already
+ * there keeps exactly the roles and the super-user flag they have.
+ */
+const newOnly = process.argv.includes('--new-only');
 
 /**
  * Everything a person may do with the things in their section — except approve.
@@ -126,12 +133,27 @@ const BUYING = ['payables'];
  * grants back, 2026-10-03). Named here so no section grant can include them by
  * accident again.
  */
+/**
+ * Items and units of measure were the Inventory section's on 2026-10-03, when
+ * these roles were set, and have since moved to Master Data (with Warehouses,
+ * which none of these roles held). Named, so the roles keep what they had.
+ */
+const STOCK_MASTER = ['item', 'uom'];
+
 const PAYING = ['payment_application', 'supplier_payment', 'supplier_advance', 'ap_allocation'];
 
 type Grant = { readonly object: string; readonly verb: PermissionVerb };
 
+/**
+ * Only objects the system grants on. A name that is not one — `ap_allocation`
+ * in PAYING, a menu entry whose screen has no permission object yet — would
+ * make `setGrants` refuse the whole role ("not a system section"); it is
+ * passed over instead, so the role holds every object that does exist.
+ */
+const GRANTABLE = new Set(roles.grantableObjects());
+
 function grants(objects: readonly string[], verbs: readonly PermissionVerb[]): Grant[] {
-  return objects.flatMap((object) => verbs.map((verb) => ({ object, verb })));
+  return objects.filter((object) => GRANTABLE.has(object)).flatMap((object) => verbs.map((verb) => ({ object, verb })));
 }
 
 /**
@@ -172,17 +194,26 @@ const NEW_ROLES = [
       'Supply chain, ASYCUDA, shipping and inventory, with no approvals. A purchase invoice is raised for the CEO. Nothing else. Shene and Diana.',
     grants: restrict(
       grants(
-        objectsOf(
-          'payables',
-          'payables_suppliers',
-          'payables_setup',
-          'logistics_customs',
-          'logistics_shipping',
-          'logistics_in_transit',
-          'logistics_landed_costs',
-          'logistics',
-          'inventory',
-        ),
+        [
+          ...objectsOf(
+            'payables',
+            'payables_suppliers',
+            'logistics_customs',
+            'logistics_shipping',
+            'logistics_in_transit',
+            'logistics_landed_costs',
+            'logistics',
+            'inventory',
+            // The payments moved to a heading of their own after 2026-10-03;
+            // still raise-only below, so the CEO approves them.
+            'payables_payments',
+          ),
+          ...STOCK_MASTER,
+          // Payables Settings and the sheet migration: the menu's payables_setup
+          // until both moved to Administration (2026-10-04), named by object now.
+          'payables_settings',
+          'payables_migration',
+        ],
         FULL,
       ),
       // The purchase invoice commits the company to pay; the payment objects
@@ -194,14 +225,14 @@ const NEW_ROLES = [
     code: 'inventory_clerk',
     name: 'Inventory clerk',
     description: 'Inventory, with no approvals. Nothing else. Lara.',
-    grants: grants(objectsOf('inventory'), FULL),
+    grants: grants([...objectsOf('inventory'), ...STOCK_MASTER], FULL),
   },
   {
     code: 'sales_inventory_clerk',
     name: 'Sales and inventory clerk',
     description: 'Inventory, with no approvals. A sales invoice is raised for the CEO. Zhyar and Rawezh.',
     grants: restrict(
-      grants(objectsOf('inventory'), FULL),
+      grants([...objectsOf('inventory'), ...STOCK_MASTER], FULL),
       grants(objectsOf(...SALES), RAISE_ONLY),
     ),
   },
@@ -271,7 +302,7 @@ const NEW_ROLES = [
       'The import application and its papers, in full; inventory to look at. Nothing else. For Maki, when their address is known.',
     grants: restrict(
       grants(objectsOf('payables', 'logistics_customs', 'logistics_shipping', 'logistics_in_transit', 'logistics_landed_costs'), FULL),
-      grants([...objectsOf('inventory'), ...PAYING], READ),
+      grants([...objectsOf('inventory'), ...STOCK_MASTER, ...PAYING], READ),
     ),
   },
 ] as const;
@@ -372,6 +403,10 @@ async function main(): Promise<void> {
         continue;
       }
 
+      if (newOnly) {
+        console.log(`user ${person.email.padEnd(26)} exists — left as it is`);
+        continue;
+      }
       console.log(
         `user ${person.email.padEnd(26)} exists — roles set to ${person.roles.join('+')}` +
           (person.superUser ? ', super user' : ''),
