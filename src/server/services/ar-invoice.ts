@@ -1517,11 +1517,20 @@ export async function reverse(
     )
     .orderBy(asc(inventoryMovement.createdAt));
 
+  // IMPROVEMENT-002 — the stock goes back on the day the journal reversal
+  // posts, one date for both; the original movements keep theirs, so a past
+  // position stays what it was and a month already closed is not touched.
+  const [postedJournal] = await tx
+    .select({ postingDate: journalEntry.postingDate })
+    .from(journalEntry)
+    .where(eq(journalEntry.id, invoice.journalEntryId))
+    .limit(1);
+  const reversalDate = journal.reversalPostingDate(postedJournal!.postingDate);
   for (const movement of deliveries) {
-    await inventory.reverseMovement(tx, ctx, movement.id, reason);
+    await inventory.reverseMovement(tx, ctx, movement.id, reason, { reversalDate });
   }
 
-  const reversal = await journal.reverse(tx, ctx, invoice.journalEntryId, { reason });
+  const reversal = await journal.reverse(tx, ctx, invoice.journalEntryId, { reason, postingDate: reversalDate });
 
   // What the delivery and the order were credited with when this posted.
   const lines = await tx

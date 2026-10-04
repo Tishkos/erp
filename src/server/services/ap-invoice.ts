@@ -1999,11 +1999,20 @@ export async function reverse(
     )
     .orderBy(inventoryMovement.createdAt);
 
+  // IMPROVEMENT-002 — the stock goes back on the day the journal reversal
+  // posts, one date for both; the original movements keep theirs, so a past
+  // position stays what it was and a month already closed is not touched.
+  const [postedJournal] = await tx
+    .select({ postingDate: journalEntry.postingDate })
+    .from(journalEntry)
+    .where(eq(journalEntry.id, invoice.journalEntryId))
+    .limit(1);
+  const reversalDate = journal.reversalPostingDate(postedJournal!.postingDate);
   for (const movement of receipts) {
-    await inventory.reverseMovement(tx, ctx, movement.id, reason);
+    await inventory.reverseMovement(tx, ctx, movement.id, reason, { reversalDate });
   }
 
-  const reversal = await journal.reverse(tx, ctx, invoice.journalEntryId, { reason });
+  const reversal = await journal.reverse(tx, ctx, invoice.journalEntryId, { reason, postingDate: reversalDate });
 
   // The ordered lines were credited with this invoice's quantity when it
   // posted; they give it back, so a later invoice can bill the order again.
