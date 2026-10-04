@@ -133,9 +133,25 @@ async function balancesQuery(
                 and e.status in ('posted', 'reversed')
                 and (${filter.branchCode ?? null}::text is null or e.branch_code = ${filter.branchCode ?? null})
            ), 0::numeric(19,4))::text              as "balanceIqd",
+           -- An approved transfer holds what will leave, in dinars: a dollar
+           -- account's transfer is its dollars at the ledger rate of the
+           -- transfer date (Currencies & Rates, as valueTransfer posts it),
+           -- not its dollar figure read as dinars (REQ-ACC-001 E-4).
            (coalesce((
-             select sum(t.amount)
+             select sum(case when t.from_currency = 'IQD' then t.amount
+                             else round(t.amount * coalesce(r.iqd_per_unit, 1), 4) end)
                from bank_transfer t
+               left join lateral (
+                 select x.iqd_per_unit
+                   from exchange_rate x
+                  where x.currency_code = t.from_currency
+                    and x.rate_type = 'accounting'
+                    and x.superseded_at is null
+                  order by (x.effective_from <= t.transfer_date) desc,
+                           case when x.effective_from <= t.transfer_date then x.effective_from end desc nulls last,
+                           x.effective_from asc
+                  limit 1
+               ) r on t.from_currency <> 'IQD'
               where t.from_account_id = b.id
                 and t.status = 'approved'
                 and (${filter.branchCode ?? null}::text is null or t.branch_code = ${filter.branchCode ?? null})

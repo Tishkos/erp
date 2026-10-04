@@ -459,6 +459,43 @@ describe('Internal Transfers · across currencies, through Currencies & Rates', 
     expect(await rejection(out('2000'))).toMatch(/BANK-USD/);
   });
 
+  it('holds an approved dollar transfer in dinars at the ledger rate, not as its dollar figure', async () => {
+    // 1,000 dollars in the account (1,000,000 dinars at 1,000).
+    await fund('A9BNKUSD', '1000000');
+    const made = await withScope(scope(manager), (tx) =>
+      treasury.createTransfer(tx, manager, {
+        fromAccountId: bankUsd,
+        toAccountId: bankIqd,
+        transferDate: '2026-02-10',
+        amountIqd: price('300'),
+        fxRate: '1000',
+      }),
+    );
+    await withScope(scope(checker), (tx) => treasury.approveTransferAsChecker(tx, checker, made.id));
+
+    const usd = (await withScope(scope(manager), (tx) => treasury.balances(tx, manager, '2026-12-31'))).find(
+      (r) => r.accountCode === 'BANK-USD',
+    )!;
+    // 300 dollars waiting to leave are 300,000 dinars, not 300.
+    expect(usd.committedIqd).toBe('300000.0000');
+    expect(usd.availableIqd).toBe('700000.0000');
+
+    // So a second transfer of 800 dollars no longer fits beside it.
+    expect(
+      await rejection(
+        withScope(scope(manager), (tx) =>
+          treasury.createTransfer(tx, manager, {
+            fromAccountId: bankUsd,
+            toAccountId: bankIqd,
+            transferDate: '2026-02-10',
+            amountIqd: price('800'),
+            fxRate: '1000',
+          }),
+        ),
+      ),
+    ).toMatch(/BANK-USD/);
+  });
+
   it('names the role Finance has still to map, rather than posting a difference somewhere', async () => {
     await fund('A9BNKUSD', '1000000');
     const made = await withScope(scope(manager), (tx) =>
@@ -476,11 +513,10 @@ describe('Internal Transfers · across currencies, through Currencies & Rates', 
 });
 
 describe('Internal Transfers · correction by reversal', () => {
-  // Skipped until C-20 is corrected (REQ-ACC-001 §D, defect D-ACC-3): the
-  // `assert_bank_not_negative` guard sums only `posted` journals, and a
-  // reversed original turns `reversed`, so the guard sees the reversal alone
-  // and refuses it. The reversal itself is right; the guard is not.
-  it.skip('mirrors the journal, keeps the original and refuses a second reversal', async () => {
+  // C-20's guard (0290, REQ-ACC-001 E-3) counts the reversed original beside
+  // its mirror, as the ledger does; before, it saw the mirror alone and
+  // refused a reversal that emptied the account the transfer had filled.
+  it('mirrors the journal, keeps the original and refuses a second reversal', async () => {
     await fund('A9BNKIQD', '10000');
     const transfer = await postedTransfer({
       fromAccountId: bankIqd,
