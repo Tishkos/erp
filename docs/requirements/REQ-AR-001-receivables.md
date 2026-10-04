@@ -15,7 +15,7 @@ truth throughout:
 | **Source** | The sponsor's instruction of 2026-10-04, verbatim in Appendix A |
 | **Approved by** | *The sponsor's instruction of 2026-10-04 (Appendix A); the defaults in §2 marked "owner to confirm" are not yet confirmed.* |
 | **Test case(s)** | `tests/integration/rcv01-receivables.test.ts` (every §14 scenario), `tests/unit/fx1-menu.test.ts`, `tests/unit/screen-catalogue.test.ts` |
-| **Status** | **Work in progress** — services, migration, screens and tests built; visual verification, full suite run and PR outstanding (§5) |
+| **Status** | **Built, awaiting the owner** — services, migration, screens, doors, controls and tests built; owner to confirm the defaults in §2 |
 
 ---
 
@@ -126,6 +126,27 @@ the posting engine and the exchange-rate service.
 | D-AR-14 | **Customer Reconciliation is read-only**; it uses `subledger.reconciliation` (the closing check's query) and lists the exact lines behind any difference (no subledger entry, amount differs, other control account, unposted journal), each opening its journal. | "Do not automatically repair." |
 | D-AR-15 | The invoice's status flow is the existing one: draft → approved → posted → partially_executed (Partially Paid) → settled (Paid); reversal only while nothing rests on it. | Existing architecture. |
 
+**Decided by default, owner to confirm** (orchestrator, 2026-10-04 — taken as
+recommended so the work does not block; each is reversible):
+
+* Decided by default, owner to confirm: advances and unapplied receipts stay a
+  credit on Customer A/R, shown apart in the ageing and on Credits & Advances —
+  no reclassification to a separate customer-advances liability (D-AR-4).
+* Decided by default, owner to confirm: credit and debit notes reuse the
+  `customer_credit_memo` permission object; no separate `customer_note` grant
+  (D-AR-9).
+* Decided by default, owner to confirm: "days late" on the customer side counts
+  from the receipt date, not the allocation timestamp (D-AR-10). Payables is
+  unchanged.
+* Decided by default, owner to confirm: a receipt into a bank or cash account of
+  another currency is refused at entry rather than at posting (D-AR-11).
+* Decided by default, owner to confirm: Customers sit under Master Data's first
+  heading (`master_data`, beside the financial master records), not under
+  Banking, Organization or Inventory Reference (PR #43's split).
+
+**Out of scope** (reported, not built): multi-currency receipts — the posting
+engine carries one currency per journal; sales tax — no tax engine.
+
 ---
 
 ## 3. Status by requirement
@@ -144,7 +165,10 @@ the posting engine and the exchange-rate service.
 | 9 | Customer Reconciliation with investigation path | **Done** | `customer-reconciliation/page.tsx`, `services/customer-reconciliation.ts` |
 | 13 | Drill-down ageing → customer/statement/credits; statement → source; invoice → everything | **Done** | as above |
 | 14 | Validation scenarios | **Done — 20/20 passing** | `tests/integration/rcv01-receivables.test.ts` |
-| 12 | UI unchanged; screenshots beside the models; theme readability | **Not yet verified** | §5 |
+| 12 | UI unchanged; screenshots beside the models; theme readability | **Verified 2026-10-04** | `tests/e2e/receivables.spec.ts`, `theme-readability.spec.ts`, screenshots |
+| R1 | Four doors from the draft on invoice, receipt, return, credit/debit note, credit memo | **Done** | record pages; `attachments-runtime.ts`; rcv01 › *the four doors* |
+| R2 | Customer name links to the customer's profile on every receivables record and register | **Done** | shared `ProfileLink`; `/sales/customers/<code>?role=customer` |
+| C | Controls register rows for 0280 | **Done** — C-41 to C-45 | `docs/CONTROLS.md`, rcv01 › *0280* |
 
 ---
 
@@ -183,18 +207,19 @@ filters), attachments runtime (parent checks for `ar_invoice`,
 
 ## 5. Left to do (next run of this agent)
 
-- [ ] Run the app against an isolated database, open every new and changed
+(2026-10-04, second run: the items below were taken up; see §3.)
+
+- [x] Run the app against an isolated database, open every new and changed
       screen (desktop EN, mobile AR) and compare side by side with its model
       (Purchase Invoices list, Purchase Invoice record, Sales Return new page,
       the ageing). Fix anything a reviewer could tell apart.
-- [ ] `npx playwright test tests/e2e/theme-readability.spec.ts --workers=1`.
-- [ ] Add an e2e spec for the new screens (`tests/e2e/receivables.spec.ts`).
-- [ ] Run the **full** integration suite on an isolated database
-      (`DATABASE_URL_TEST` pointed at its own database).
-- [ ] Rows for the new triggers/constraints in `docs/CONTROLS.md`
-      (held by `im15-controls-register.test.ts`).
-- [ ] A `CLAUDE.md` section for Receivables (as the other stages have).
-- [ ] Open the PR into `main`, listing every shared file touched (§6).
+- [x] `npx playwright test tests/e2e/theme-readability.spec.ts --workers=1`.
+- [x] Add an e2e spec for the new screens (`tests/e2e/receivables.spec.ts`).
+- [ ] Run the **full** integration suite on an isolated database — the
+      orchestrator runs it at merge; the focused AR files run here.
+- [x] Rows for the new triggers/constraints in `docs/CONTROLS.md` (C-41–C-45).
+- [x] A Receivables section in `AGENTS.md` (CLAUDE.md only includes it).
+- [ ] The PR into `main` — the orchestrator's.
 
 Known, **not from this branch**: `ops16-document-table-lists` fails on `main`
 — `bank_loan_repayment` and `bank_loan_revaluation` are missing from the reset
