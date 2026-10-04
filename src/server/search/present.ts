@@ -31,6 +31,9 @@ export interface PresentedHit {
 export interface PresentedGroup {
   readonly key: string;
   readonly label: string;
+  /** Where the group sits among equals, and the best tier it holds — for merging it with the screens (`compareGroups`). */
+  readonly priority: number;
+  readonly best: number;
   readonly rows: readonly PresentedHit[];
   readonly more: boolean;
 }
@@ -77,7 +80,7 @@ function presentGroup(group: SearchGroup, deps: PresentDeps): PresentedGroup {
       exact: row.tier <= 1,
     });
   }
-  return { key: group.key, label: deps.typeLabel(group.key), rows, more: group.more };
+  return { key: group.key, label: deps.typeLabel(group.key), priority: group.priority, best: group.best, rows, more: group.more };
 }
 
 export function present(outcome: SearchOutcome, deps: PresentDeps): PresentedOutcome {
