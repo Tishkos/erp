@@ -76,6 +76,12 @@ export interface RecordIntent {
 const TYPING_IDLE_MS = 4_000;
 const NEAR_BOTTOM_PX = 96;
 
+/** A line kept to what the narrow list can hold; the whole text stays in the title. */
+function clip(text: string, max: number): string {
+  const chars = Array.from(text);
+  return chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : text;
+}
+
 function useMedia(query: string): boolean {
   return useSyncExternalStore(
     (notify) => {
@@ -201,10 +207,21 @@ export function ChatWorkspace({
     setAtBottom(true);
   }, []);
 
-  const jump = useCallback((messageId: string) => {
-    const el = document.getElementById(`m-${messageId}`);
-    if (el) el.scrollIntoView({ block: 'center' });
+  // Scrolls the thread's own box, never the page behind it.
+  const scrollToEl = useCallback((el: HTMLElement, align: 'start' | 'center') => {
+    const box = scroller.current;
+    if (!box) return;
+    const delta = el.getBoundingClientRect().top - box.getBoundingClientRect().top;
+    box.scrollTop += align === 'center' ? delta - box.clientHeight / 2 + el.clientHeight / 2 : delta;
   }, []);
+
+  const jump = useCallback(
+    (messageId: string) => {
+      const el = document.getElementById(`m-${messageId}`);
+      if (el) scrollToEl(el, 'center');
+    },
+    [scrollToEl],
+  );
 
   // A conversation opened: the first unread message, else the end.
   useEffect(() => {
@@ -225,7 +242,7 @@ export function ChatWorkspace({
       lastSeqSeen.current = thread.lastSeq;
       const firstUnseen = snap.firstUnseen[openId];
       const divider = firstUnseen ? document.getElementById('chat-unread-divider') : null;
-      if (divider) divider.scrollIntoView({ block: 'start' });
+      if (divider) scrollToEl(divider, 'start');
       else scrollToEnd();
       onScroll();
       return;
@@ -235,7 +252,7 @@ export function ChatWorkspace({
       lastSeqSeen.current = thread.lastSeq;
       if (atBottomRef.current || mineLast) scrollToEnd();
     }
-  }, [thread, openId, messageCount, pendingHere.length, snap.firstUnseen, scrollToEnd, onScroll]);
+  }, [thread, openId, messageCount, pendingHere.length, snap.firstUnseen, scrollToEnd, scrollToEl, onScroll]);
 
   // Jumping to a message found by search or named in a quote.
   useEffect(() => {
@@ -397,7 +414,6 @@ export function ChatWorkspace({
                         <span>{snap.me.busy ? t('busy_off') : t('busy_on')}</span>
                       </button>
                     ) : null}
-                    <span className={s.sapTitleMeta}>{t('rows', { count: rows.length })}</span>
                   </span>
                 </div>
 
@@ -432,7 +448,6 @@ export function ChatWorkspace({
                       <thead>
                         <tr>
                           <th scope="col">{t('col_conversation')}</th>
-                          <th scope="col">{t('col_when')}</th>
                           <th className={s.sapNum} scope="col">
                             {t('col_unread')}
                           </th>
@@ -481,7 +496,7 @@ export function ChatWorkspace({
                               </a>
                               <span className={s.sapNote}>
                                 <bdi dir="auto">
-                                  {hit.mine ? t('you') : hit.senderName}: {hit.snippet}
+                                  {clip(`${hit.mine ? t('you') : hit.senderName}: ${hit.snippet}`, 30)}
                                 </bdi>
                               </span>
                             </td>
@@ -502,6 +517,7 @@ export function ChatWorkspace({
           </aside>
         ) : null}
 
+        {narrow && !openId ? null : (
         <div className={s.sapSplitMain}>
           {openId && thread ? (
             <section aria-label={thread.name} className={s.sapDoc}>
@@ -601,7 +617,7 @@ export function ChatWorkspace({
                         <strong>{t('say_hello')}</strong>
                       </div>
                     ) : (
-                      <ol aria-label={t('messages')} aria-live="polite" className={s.timeline}>
+                      <ul aria-label={t('messages')} aria-live="polite" className={s.fileList}>
                         {thread.messages.map((message) => (
                           <MessageItem
                             dividerAt={hasUnreadDivider ?? null}
@@ -613,7 +629,7 @@ export function ChatWorkspace({
                         {pendingHere.map((pending) => (
                           <PendingRow env={env} key={pending.clientId} onDiscard={discard} onRetry={retry} pending={pending} />
                         ))}
-                      </ol>
+                      </ul>
                     )}
                   </div>
                 </div>
@@ -716,6 +732,7 @@ export function ChatWorkspace({
             </section>
           )}
         </div>
+        )}
       </div>
 
       <ChatDialog closeLabel={t('close')} onClose={() => setWithdrawing(null)} open={withdrawing !== null} title={t('withdraw_title')}>
@@ -764,8 +781,9 @@ function MessageItem({ message, env, dividerAt }: { readonly message: MessageVie
     <>
       {dividerAt !== null && message.seq === dividerAt ? (
         <li id="chat-unread-divider">
-          <span className={s.timelineWhen} />
-          <span className={s.sapNote}>{t('unread_from_here')}</span>
+          <div className={s.sapNote}>
+            <strong>{t('unread_from_here')}</strong>
+          </div>
         </li>
       ) : null}
       {message.kind === 'system' ? <SystemRow env={env} message={message} /> : <MessageRow env={env} message={message} quoteOf={quote} />}
@@ -812,8 +830,8 @@ function ConversationItem({
         >
           <span className={s.personCell}>
             <span className={s.avatarSmall}>{c.kind === 'group' ? <Users aria-hidden="true" size={14} /> : initials(c.name)}</span>
-            <strong>
-              <bdi dir="auto">{c.name}</bdi>
+            <strong title={c.name}>
+              <bdi dir="auto">{clip(c.name, 18)}</bdi>
             </strong>
           </span>
         </a>{' '}
@@ -822,14 +840,15 @@ function ConversationItem({
         ) : null}
         {c.muted ? <BellOff aria-label={t('muted')} size={12} /> : null}
         {c.aboutRecord ? <Link2 aria-label={t('about_record')} size={12} /> : null}
-        {line ? (
-          <span className={s.sapNote}>
+        {line || c.lastMessageAt ? (
+          <span className={s.sapNote} title={line}>
             <br />
-            <bdi dir="auto">{line}</bdi>
+            {line ? <bdi dir="auto">{clip(line, 22)}</bdi> : null}
+            {line && c.lastMessageAt ? ' · ' : ''}
+            {c.lastMessageAt ? listStamp(c.lastMessageAt, now, locale, timeZone) : ''}
           </span>
         ) : null}
       </td>
-      <td>{c.lastMessageAt ? listStamp(c.lastMessageAt, now, locale, timeZone) : ''}</td>
       <td className={s.sapNum}>
         {c.unread > 0 ? (
           <span aria-label={t('unread_count', { count: c.unread })} className={s.sapIconCount}>

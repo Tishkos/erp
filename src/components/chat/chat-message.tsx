@@ -67,8 +67,8 @@ export function SystemRow({ message, env }: { readonly message: MessageView; rea
   const known = ['created', 'added', 'removed', 'left', 'renamed'].includes(message.body);
   return (
     <li id={`m-${message.id}`}>
-      <span className={s.timelineWhen}>{stamp(message.createdAt, env)}</span>
       <div className={s.sapNote}>
+        <span className={s.timelineWhen}>{stamp(message.createdAt, env)}</span>{' '}
         {known ? t(`system.${message.body}`, { actor: message.senderName, names, title: meta.title ?? '' }) : ''}
       </div>
     </li>
@@ -132,14 +132,14 @@ export function MessageRow({ message, env, quoteOf }: { readonly message: Messag
 
   return (
     <li id={`m-${message.id}`} data-mine={message.mine ? 'true' : undefined}>
-      <span className={s.timelineWhen} title={dateTimeOf(message.createdAt, env.locale, env.timeZone)}>
-        {stamp(message.createdAt, env)}
-      </span>
       <div>
         <div className={s.sapTitleActions}>
           <strong className={s.timelineAction}>
             <bdi dir="auto">{message.mine ? ownName : message.senderName}</bdi>
           </strong>
+          <span className={s.timelineWhen} title={dateTimeOf(message.createdAt, env.locale, env.timeZone)}>
+            {stamp(message.createdAt, env)}
+          </span>
           {message.mentionsMe && !message.mine ? <span className={s.sapIconCount}>@</span> : null}
           {message.mine ? <StatusMark message={message} /> : null}
           {message.retracted || !env.mayWrite ? null : (
@@ -286,10 +286,10 @@ export function PendingRow({
   const Icon = failed ? TriangleAlert : pending.state === 'sent' ? Check : Clock;
   return (
     <li data-pending={pending.state}>
-      <span className={s.timelineWhen}>{timeOf(pending.createdAt, env.locale, env.timeZone)}</span>
       <div>
         <div className={s.sapTitleActions}>
           <strong className={s.timelineAction}>{t('you')}</strong>
+          <span className={s.timelineWhen}>{timeOf(pending.createdAt, env.locale, env.timeZone)}</span>
           <span className={s.sapNote} data-status={pending.state}>
             <Icon aria-hidden="true" size={13} /> {t(`status.${pending.state === 'failed' ? 'failed' : pending.state}`)}
           </span>
