@@ -158,6 +158,33 @@ export async function applyAsycudaRun(formData: FormData): Promise<void> {
   );
 }
 
+/** A reading's lines corrected by hand before it is applied: each line's cells, and one new line at the foot. */
+export async function editAsycudaLines(formData: FormData): Promise<void> {
+  const id = text(formData, 'run');
+  const runNo = text(formData, 'run_no');
+  const edits: asycuda.LineEdit[] = [];
+  for (const [name] of formData.entries()) {
+    const match = /^pd_(\d+)$/.exec(name);
+    if (!match) continue;
+    const line = match[1]!;
+    edits.push({
+      line: Number(line),
+      pdNo: text(formData, `pd_${line}`),
+      statusCode: text(formData, `status_${line}`),
+      effectiveDate: text(formData, `date_${line}`) || null,
+    });
+  }
+  await runAdminAndReturn(
+    async (tx, ctx) =>
+      asycuda.editLines(tx, ctx, id, {
+        expectedSha: text(formData, 'sha'),
+        edits,
+        added: { pdNo: text(formData, 'pd_new'), statusCode: text(formData, 'status_new'), effectiveDate: text(formData, 'date_new') || null },
+      }),
+    runNo ? asycudaRecord(runNo) : ASYCUDA,
+  );
+}
+
 /** IMPROVEMENT-002 — more paperwork filed on an ASYCUDA reading (the screenshot, the officer's note). */
 export async function attachToAsycudaRun(formData: FormData): Promise<void> {
   const runNo = text(formData, 'run_no');

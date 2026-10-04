@@ -49,6 +49,7 @@ import * as authz from '../../src/server/services/authorization';
 import * as coa from '../../src/server/services/chart-of-accounts';
 import * as posting from '../../src/server/services/posting';
 import type { ActorContext } from '../../src/server/services/chart-of-accounts';
+import type { AccountMappingInput } from '../../src/server/domain/financial-statements';
 
 type Kind = 'customer' | 'supplier' | 'inventory' | 'loan';
 
@@ -58,6 +59,8 @@ interface Leaf {
   readonly roles?: readonly string[];
   readonly control?: Kind;
   readonly currency?: string;
+  /** Where it prints on each statement (Phase 1 §5) — the seeded line codes. */
+  readonly lines?: AccountMappingInput;
 }
 
 interface Group {
@@ -68,27 +71,62 @@ interface Group {
 }
 
 /*
+ * Where each kind of account prints. The Balance Sheet would fall back on the
+ * account type without these, but the Cash Flow deliberately does not — an
+ * account it has not been told about lands in "Not yet classified" — so every
+ * account is filed on both faces from the day it is opened.
+ */
+const CASH: AccountMappingInput = { balance_sheet: 'cash_and_equivalents', cash_flow: 'cash_flow_cash' };
+const RECEIVABLE: AccountMappingInput = { balance_sheet: 'current_assets', cash_flow: 'cf_receivables' };
+const STOCK: AccountMappingInput = { balance_sheet: 'current_assets', cash_flow: 'cf_inventory' };
+const FIXED: AccountMappingInput = { balance_sheet: 'non_current_assets', cash_flow: 'cf_equipment' };
+const DEPRECIATED: AccountMappingInput = { balance_sheet: 'non_current_assets', cash_flow: 'cf_depreciation' };
+const PAYABLE: AccountMappingInput = { balance_sheet: 'current_liabilities', cash_flow: 'cf_payables' };
+const LONG_TERM: AccountMappingInput = { balance_sheet: 'non_current_liabilities', cash_flow: 'cf_payables' };
+const LOAN: AccountMappingInput = { balance_sheet: 'non_current_liabilities', cash_flow: 'cf_loan' };
+const CAPITAL: AccountMappingInput = { balance_sheet: 'equity', cash_flow: 'cf_capital', changes_in_equity: 'equity_paid_in' };
+const EQUITY: AccountMappingInput = { balance_sheet: 'equity' };
+const REVENUE: AccountMappingInput = { income_statement: 'revenue' };
+const OTHER_INCOME: AccountMappingInput = { income_statement: 'other_income' };
+const COST: AccountMappingInput = { income_statement: 'cost_of_sales' };
+const OPEX: AccountMappingInput = { income_statement: 'operating_expenses' };
+const FINANCE: AccountMappingInput = { income_statement: 'finance_costs' };
+const TAX: AccountMappingInput = { income_statement: 'tax_expense' };
+
+/*
  * Every role in `domain/posting-map.ts` appears exactly once below, against
  * the account that should carry it. `bank` is deliberately absent: the bank
  * side of a payment is the account the money actually left, which is a
  * property of the payment and not a mapping.
+ *
+ * The company (2026-10-04, by direction — "the chart of accounts, fully,
+ * related to our work"): Qimah Al-Safinah imports and sells solar equipment,
+ * motorcycles and their spare parts, installs solar projects, borrows from
+ * banks against its imports, and pays a staff through payroll. The payroll
+ * roles HR-3/HR-4/HR-6 added (salary, employer cost, withholding, net pay,
+ * employee advances, expense claims) are carried here too.
  */
 const CHART: readonly Group[] = [
   {
     name: 'Current assets',
     root: 'A000001',
     children: [
-      { name: 'Cash on hand' },
-      { name: 'Cash on hand (USD)', currency: 'USD' },
-      { name: 'Bank current account' },
-      { name: 'Bank current account (USD)', currency: 'USD' },
+      { name: 'Cash on hand', lines: CASH },
+      { name: 'Cash on hand (USD)', currency: 'USD', lines: CASH },
+      { name: 'Petty cash', lines: CASH },
+      { name: 'Bank current account', lines: CASH },
+      { name: 'Bank current account (USD)', currency: 'USD', lines: CASH },
       // Trade Receivables is already in the books and already mapped; it is
       // named here so a fresh database gets it too.
-      { name: 'Trade Receivables', roles: ['customer_receivable'], control: 'customer' },
-      { name: 'Other receivables' },
-      { name: 'Advances to suppliers', roles: ['supplier_advance'] },
-      { name: 'Prepaid expenses' },
-      { name: 'Customs duty and deposits recoverable' },
+      { name: 'Trade Receivables', roles: ['customer_receivable'], control: 'customer', lines: RECEIVABLE },
+      { name: 'Other receivables', lines: RECEIVABLE },
+      // HR-4: an advance or loan to a member of staff, recovered through payroll.
+      { name: 'Employee advances and loans', roles: ['employee_advance'], lines: RECEIVABLE },
+      { name: 'Advances to suppliers', roles: ['supplier_advance'], lines: RECEIVABLE },
+      // The bank holds a margin against every letter of credit an import is paid by.
+      { name: 'Letters of credit and bank margin deposits', lines: RECEIVABLE },
+      { name: 'Prepaid expenses', lines: RECEIVABLE },
+      { name: 'Customs duty and deposits recoverable', lines: RECEIVABLE },
     ],
   },
   {
@@ -97,89 +135,121 @@ const CHART: readonly Group[] = [
     children: [
       // The account every item holds its stock in, and the one a project's
       // material issue takes it out of.
-      { name: 'Inventory — goods for resale', roles: ['inventory'], control: 'inventory' },
+      { name: 'Inventory — goods for resale', roles: ['inventory'], control: 'inventory', lines: STOCK },
       // Goods owned and at sea. The stock itself sits in the In Process
       // warehouse; this is where its value sits until the file is closed.
-      { name: 'Goods in transit' },
+      { name: 'Goods in transit', lines: STOCK },
       // §9.2 — freight, duty and the rest, parked until the landed cost is
       // locked and spread over the goods.
-      { name: 'Landed cost clearing', roles: ['landed_cost_clearing'] },
+      { name: 'Landed cost clearing', roles: ['landed_cost_clearing'], lines: STOCK },
+      // Work done on a project and not yet billed is an asset until it is.
+      { name: 'Project work in progress', roles: ['project_wip'], lines: STOCK },
     ],
   },
   {
     name: 'Non-current assets',
     root: 'A000001',
     children: [
-      { name: 'Property, plant and equipment' },
-      { name: 'Vehicles' },
-      { name: 'Furniture and office equipment' },
-      { name: 'Accumulated depreciation' },
+      { name: 'Property, plant and equipment', lines: FIXED },
+      { name: 'Land and buildings', lines: FIXED },
+      { name: 'Installation tools and equipment', lines: FIXED },
+      { name: 'Vehicles', lines: FIXED },
+      { name: 'Furniture and office equipment', lines: FIXED },
+      { name: 'Computers and IT equipment', lines: FIXED },
+      { name: 'Software and other intangible assets', lines: FIXED },
+      { name: 'Accumulated depreciation', lines: DEPRECIATED },
       // Where a project's cost settles when it builds something.
-      { name: 'Assets under construction', roles: ['project_auc'] },
+      { name: 'Assets under construction', roles: ['project_auc'], lines: FIXED },
     ],
   },
   {
     name: 'Current liabilities',
     root: 'L000001',
     children: [
-      { name: 'Trade Payables', roles: ['supplier_payable'], control: 'supplier' },
+      { name: 'Trade Payables', roles: ['supplier_payable'], control: 'supplier', lines: PAYABLE },
       // The receipt debited it; the invoice clears it.
-      { name: 'Goods received not invoiced', roles: ['grni'] },
-      { name: 'Customer advances and deposits' },
+      { name: 'Goods received not invoiced', roles: ['grni'], lines: PAYABLE },
+      { name: 'Customer advances and deposits', lines: PAYABLE },
       // Money in that no customer has been put to yet. It waits here rather
       // than being guessed at.
-      { name: 'Unidentified receipts', roles: ['customer_clearing'] },
-      { name: 'Goods returned to suppliers — clearing', roles: ['return_clearing'] },
-      { name: 'Accrued expenses' },
-      { name: 'Salaries and wages payable' },
-      { name: 'Taxes payable' },
-      { name: 'Project deferred revenue', roles: ['project_deferred_revenue'] },
+      { name: 'Unidentified receipts', roles: ['customer_clearing'], lines: PAYABLE },
+      { name: 'Goods returned to suppliers — clearing', roles: ['return_clearing'], lines: PAYABLE },
+      { name: 'Accrued expenses', lines: PAYABLE },
+      // HR-3 — what a payroll run owes its people once everything is deducted
+      // (a role named "payable" must be a supplier control account, hence net_pay).
+      { name: 'Salaries and wages payable', roles: ['net_pay'], lines: PAYABLE },
+      // HR-3 — income tax and social security held back from pay, owed to the state.
+      { name: 'Payroll deductions payable — tax and social security', roles: ['payroll_withholding'], lines: PAYABLE },
+      { name: 'Taxes payable', lines: PAYABLE },
+      { name: 'Project deferred revenue', roles: ['project_deferred_revenue'], lines: PAYABLE },
+      // What the solar warranties may yet cost.
+      { name: 'Warranty provision', lines: PAYABLE },
     ],
   },
   {
     name: 'Non-current liabilities',
     root: 'L000001',
-    children: [{ name: 'Bank loans', roles: ['loan_liability'], control: 'loan' }],
+    children: [
+      { name: 'Bank loans', roles: ['loan_liability'], control: 'loan', lines: LOAN },
+      { name: 'Provision for end-of-service benefits', lines: LONG_TERM },
+    ],
   },
   {
     name: 'Capital and reserves',
     root: 'E000001',
     children: [
-      { name: 'Share capital' },
-      { name: 'Opening Balance Equity', roles: ['opening_balance'] },
-      { name: 'Retained earnings' },
+      { name: 'Share capital', lines: CAPITAL },
+      { name: "Partners' current accounts", lines: { balance_sheet: 'equity', cash_flow: 'cf_capital' } },
+      // The Companies Law sets a share of each year's profit aside.
+      { name: 'Statutory reserve', lines: EQUITY },
+      { name: 'Opening Balance Equity', roles: ['opening_balance'], lines: EQUITY },
+      { name: 'Retained earnings', lines: { balance_sheet: 'equity', changes_in_equity: 'equity_retained' } },
     ],
   },
   {
     name: 'Trading revenue',
     root: 'R000001',
     children: [
-      { name: 'Sales — solar equipment', roles: ['sales_revenue'] },
-      { name: 'Sales — motorcycles' },
-      { name: 'Sales — spare parts and accessories' },
-      { name: 'Project revenue', roles: ['project_revenue'] },
-      { name: 'Other income' },
-      { name: 'Foreign exchange gain', roles: ['exchange_gain'] },
+      // Each product line's sales are the item's own sales account; a sale of
+      // an item that names none lands in "other goods", where it is seen,
+      // rather than in one of the lines, where it would be believed.
+      { name: 'Sales — solar equipment', lines: REVENUE },
+      { name: 'Sales — motorcycles', lines: REVENUE },
+      { name: 'Sales — spare parts and accessories', lines: REVENUE },
+      { name: 'Sales — other goods', roles: ['sales_revenue'], lines: REVENUE },
+      { name: 'Installation and service revenue', lines: REVENUE },
+      { name: 'Project revenue', roles: ['project_revenue'], lines: REVENUE },
+      { name: 'Other income', lines: OTHER_INCOME },
+      { name: 'Foreign exchange gain', roles: ['exchange_gain'], lines: OTHER_INCOME },
+      // A loan's revaluation moves no money; its gain is kept apart from a realised one.
+      { name: 'Unrealised foreign exchange gain', lines: OTHER_INCOME },
     ],
   },
   {
     name: 'Cost of sales',
     root: 'X000001',
     children: [
-      { name: 'Cost of goods sold' },
-      { name: 'Sales returns', roles: ['sales_returns'] },
-      { name: 'Freight and shipping' },
-      { name: 'Customs duty and clearance' },
+      { name: 'Cost of goods sold', lines: COST },
+      // Each item names its own cost account (ar-invoice › stockAccountsFor);
+      // these give each product line its own gross margin.
+      { name: 'Cost of goods sold — solar equipment', lines: COST },
+      { name: 'Cost of goods sold — motorcycles', lines: COST },
+      { name: 'Cost of goods sold — spare parts and accessories', lines: COST },
+      { name: 'Sales returns', roles: ['sales_returns'], lines: COST },
+      // A credit note gives money back without goods coming back.
+      { name: 'Sales discounts and allowances', lines: COST },
+      { name: 'Freight and shipping', lines: COST },
+      { name: 'Customs duty and clearance', lines: COST },
       // §8.4 — ordered against billed. It never enters the value of stock.
-      { name: 'Purchase price variance', roles: ['purchase_variance'] },
-      { name: 'Inventory adjustments and write-offs', roles: ['inventory_adjustment'] },
-      { name: 'Project material cost', roles: ['project_material_cost'] },
-      { name: 'Project labour cost', roles: ['project_labour'] },
+      { name: 'Purchase price variance', roles: ['purchase_variance'], lines: COST },
+      { name: 'Inventory adjustments and write-offs', roles: ['inventory_adjustment'], lines: COST },
+      { name: 'Project material cost', roles: ['project_material_cost'], lines: COST },
+      { name: 'Project labour cost', roles: ['project_labour'], lines: COST },
       // The credit side of a timesheet: labour charged to a project leaves
       // the expense it was paid from.
-      { name: 'Labour absorption', roles: ['labour_absorption'] },
-      { name: 'Project work in progress', roles: ['project_wip'] },
-      { name: 'Project cost settlement', roles: ['project_cost'] },
+      { name: 'Labour absorption', roles: ['labour_absorption'], lines: COST },
+      { name: 'Project cost settlement', roles: ['project_cost'], lines: COST },
+      { name: 'Warranty and after-sales cost', lines: COST },
     ],
   },
   {
@@ -187,25 +257,42 @@ const CHART: readonly Group[] = [
     root: 'X000001',
     children: [
       // Where a service line goes when nothing was received into a warehouse.
-      { name: 'General and administrative expenses', roles: ['expense'] },
-      { name: 'Salaries and wages' },
-      { name: 'Rent' },
-      { name: 'Utilities' },
-      { name: 'Travel and transport' },
-      { name: 'Marketing and advertising' },
-      { name: 'Professional and legal fees' },
-      { name: 'Repairs and maintenance' },
-      { name: 'Depreciation' },
+      { name: 'General and administrative expenses', roles: ['expense'], lines: OPEX },
+      { name: 'Salaries and wages', roles: ['salary_expense'], lines: OPEX },
+      { name: 'Employer social security contributions', roles: ['payroll_employer_cost'], lines: OPEX },
+      // HR-6 — what staff spent on the company's behalf and claimed back.
+      { name: 'Employee expense claims', roles: ['employee_expense'], lines: OPEX },
+      { name: 'Rent', lines: OPEX },
+      { name: 'Utilities', lines: OPEX },
+      { name: 'Communications and internet', lines: OPEX },
+      { name: 'Travel and transport', lines: OPEX },
+      { name: 'Vehicle fuel and maintenance', lines: OPEX },
+      { name: 'Marketing and advertising', lines: OPEX },
+      { name: 'Professional and legal fees', lines: OPEX },
+      { name: 'Government fees and licences', lines: OPEX },
+      { name: 'Insurance', lines: OPEX },
+      { name: 'Repairs and maintenance', lines: OPEX },
+      { name: 'Office supplies and printing', lines: OPEX },
+      { name: 'Depreciation', lines: OPEX },
+      { name: 'Bad and doubtful debts', lines: OPEX },
     ],
   },
   {
     name: 'Financial expenses',
     root: 'X000001',
     children: [
-      { name: 'Bank charges and commission', roles: ['bank_commission'] },
-      { name: 'Interest on loans', roles: ['loan_interest'] },
-      { name: 'Foreign exchange loss', roles: ['exchange_loss'] },
+      { name: 'Bank charges and commission', roles: ['bank_commission'], lines: FINANCE },
+      { name: 'Letter of credit charges', lines: FINANCE },
+      { name: 'Loan fees and commission', lines: FINANCE },
+      { name: 'Interest on loans', roles: ['loan_interest'], lines: FINANCE },
+      { name: 'Foreign exchange loss', roles: ['exchange_loss'], lines: FINANCE },
+      { name: 'Unrealised foreign exchange loss', lines: FINANCE },
     ],
+  },
+  {
+    name: 'Income tax',
+    root: 'X000001',
+    children: [{ name: 'Income tax expense', lines: TAX }],
   },
 ];
 
@@ -214,7 +301,34 @@ const RETENTION: Leaf = {
   name: 'Project retention receivable',
   roles: ['project_retention_receivable'],
   control: 'customer',
+  lines: RECEIVABLE,
 };
+
+/*
+ * Where one role means two things. A rule is per event and role, so the same
+ * role can post to a different account in a different document — which is
+ * the only narrowing worth having here. (Rules narrowed by warehouse were
+ * considered and left out: goods valued into "Goods in transit" by the
+ * warehouse they arrive in would never be moved out of it, because no
+ * document posts the transfer from the transit warehouse to the store.)
+ */
+const EVENT_ACCOUNTS: readonly { readonly event: string; readonly role: string; readonly account: string }[] = [
+  // A credit note is a price allowance; a credit memo is goods coming back.
+  { event: 'sales.customer_credit_note', role: 'sales_returns', account: 'Sales discounts and allowances' },
+  // Revaluing a loan moves no money: unrealised, apart from the realised kind.
+  { event: 'treasury.loan_revaluation', role: 'exchange_gain', account: 'Unrealised foreign exchange gain' },
+  { event: 'treasury.loan_revaluation', role: 'exchange_loss', account: 'Unrealised foreign exchange loss' },
+  // What borrowing costs, apart from what banking costs day to day.
+  { event: 'treasury.loan_disbursement', role: 'bank_commission', account: 'Loan fees and commission' },
+  { event: 'treasury.loan_repayment', role: 'bank_commission', account: 'Loan fees and commission' },
+  { event: 'treasury.loan_commission', role: 'bank_commission', account: 'Loan fees and commission' },
+];
+
+/**
+ * Defaults this file once gave a role and has since moved. A rule still naming
+ * the old account was set by this file, not decided by anybody, so it follows.
+ */
+const MOVED: Readonly<Record<string, string>> = { sales_revenue: 'Sales — solar equipment' };
 
 function argument(name: string): string | null {
   const index = process.argv.indexOf(`--${name}`);
@@ -260,6 +374,21 @@ async function accountByNameInType(tx: Tx, name: string, accountType: AccountTyp
     )
     .limit(1);
   return row ?? null;
+}
+
+/** True when no statement has been told where this account prints. */
+async function printsNowhere(tx: Tx, id: string): Promise<boolean> {
+  const [row] = await tx
+    .select({
+      income: chartOfAccount.incomeStatementLine,
+      balance: chartOfAccount.balanceSheetLine,
+      cash: chartOfAccount.cashFlowLine,
+      equity: chartOfAccount.changesInEquityLine,
+    })
+    .from(chartOfAccount)
+    .where(eq(chartOfAccount.id, id))
+    .limit(1);
+  return Boolean(row && !row.income && !row.balance && !row.cash && !row.equity);
 }
 
 async function rootByCode(tx: Tx, code: string) {
@@ -319,6 +448,7 @@ async function main(): Promise<void> {
     const ctx: ActorContext = { principal, branchCode };
 
     const roleAccount = new Map<string, { id: string; code: string }>();
+    const byName = new Map<string, { id: string; code: string }>();
     let madeGroups = 0;
     let madeLeaves = 0;
 
@@ -357,13 +487,20 @@ async function main(): Promise<void> {
             isGroup: false,
             currencyRestriction: leaf.currency ?? 'IQD',
             ...(leaf.control ? { controlAccount: leaf.control } : {}),
+            ...(leaf.lines ? { mapping: leaf.lines } : {}),
           });
           account = { id: made.id, code: made.code, name: made.name };
           madeLeaves += 1;
           console.log(`  created       ${made.code}  ${made.name}`);
+        } else if (leaf.lines && !dryRun && (await printsNowhere(tx, account.id))) {
+          // An account already in the books that no statement was told about:
+          // filed where this chart files it. One somebody has filed is left alone.
+          await coa.setStatementLines(tx, ctx, account.id, leaf.lines);
+          console.log(`  filed         ${account.code}  ${account.name}`);
         }
 
         for (const role of leaf.roles ?? []) roleAccount.set(role, { id: account.id, code: account.code });
+        byName.set(leaf.name, { id: account.id, code: account.code });
       }
     }
 
@@ -384,10 +521,18 @@ async function main(): Promise<void> {
     }
 
     let mapped = 0;
+    let repointed = 0;
     const unmapped: string[] = [];
     for (const { event, role } of wanted) {
+      const special = EVENT_ACCOUNTS.find((entry) => entry.event === event && entry.role === role);
+      const account = special ? byName.get(special.account) : roleAccount.get(role);
+      if (!account) {
+        unmapped.push(`${event} / ${role}`);
+        continue;
+      }
+
       const [existing] = await tx
-        .select({ id: postingRule.id })
+        .select({ id: postingRule.id, accountId: postingRule.accountId })
         .from(postingRule)
         .where(
           and(
@@ -401,13 +546,24 @@ async function main(): Promise<void> {
           ),
         )
         .limit(1);
-      if (existing) continue;
 
-      const account = roleAccount.get(role);
-      if (!account) {
-        unmapped.push(`${event} / ${role}`);
+      if (existing) {
+        if (existing.accountId === account.id) continue;
+        // A rule pointing where this file put it is this file's, and follows
+        // it; one pointing anywhere else is somebody's decision and stands.
+        const moved = MOVED[role];
+        const ours = [roleAccount.get(role)?.id, moved ? byName.get(moved)?.id : undefined];
+        if (!ours.includes(existing.accountId)) continue;
+        if (dryRun) {
+          console.log(`would re-point  ${event} / ${role}  ->  ${account.code}`);
+          continue;
+        }
+        await posting.setMapping(tx, ctx, { eventType: event, lineRole: role, accountId: account.id });
+        repointed += 1;
+        console.log(`re-pointed  ${event.padEnd(34)} ${role.padEnd(28)} -> ${account.code}`);
         continue;
       }
+
       if (dryRun) {
         console.log(`would map  ${event} / ${role}  ->  ${account.code}`);
         continue;
@@ -416,14 +572,14 @@ async function main(): Promise<void> {
         eventType: event,
         lineRole: role,
         accountId: account.id,
-        description: 'Set up with the chart of accounts.',
+        description: special ? 'Set up with the chart of accounts — this document only.' : 'Set up with the chart of accounts.',
       });
       mapped += 1;
       console.log(`mapped  ${event.padEnd(38)} ${role.padEnd(28)} -> ${account.code}`);
     }
 
     console.log('');
-    console.log(`mappings: ${mapped} added`);
+    console.log(`mappings: ${mapped} added, ${repointed} re-pointed`);
     if (unmapped.length > 0) {
       console.log('');
       console.log('no account for these roles — they need a decision:');

@@ -127,6 +127,8 @@ describe('words · the declared figures are the record once it leaves draft', ()
     expect(edited).toEqual({ duty: '260000.0000', hs_code: '8541.43', customs_ref: 'BG-9', pd_id: null });
     expect(await rejection(withScope(scope(world.clerk), (tx) => declarations.update(tx, world.clerk, made.id, { declaredDuty: -1n })))).toMatch(/cannot be negative/);
     expect(await rejection(withScope(scope(world.clerk), (tx) => declarations.update(tx, world.clerk, made.id, { currency: 'dinar' })))).toMatch(/not a currency code/);
+    // Three letters are not enough: the currency is one of Currencies and Rates'.
+    expect(await rejection(withScope(scope(world.clerk), (tx) => declarations.update(tx, world.clerk, made.id, { currency: 'XYZ' })))).toMatch(/not an active currency/);
 
     await move(made.id, 'submitted');
     expect(await rejection(withScope(scope(world.clerk), (tx) => declarations.update(tx, world.clerk, made.id, { declaredDuty: iqd('1') })))).toMatch(/what it declared is the record/);

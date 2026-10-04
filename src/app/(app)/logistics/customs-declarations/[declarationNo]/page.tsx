@@ -20,6 +20,7 @@ import { MONEY_SCALE, parseDecimal, toDecimalString } from '@domain/money';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as declarations from '@/server/services/customs-declarations';
+import * as rates from '@/server/services/exchange-rates';
 import * as recordNotes from '@/server/services/record-notes';
 import { businessDateOf, businessToday } from '@/server/domain/business-date';
 import { isNotFoundError } from '@/server/not-found';
@@ -69,6 +70,10 @@ export default async function CustomsDeclarationPage({
         ...view,
         files: await readAttachments(tx, declarations.PERMISSION_OBJECT, view.declaration.id),
         notes: await recordNotes.listNotes(tx, { object: declarations.PERMISSION_OBJECT, recordId: view.declaration.id }),
+        // Currencies and Rates' own list; a currency retired since the draft was written stays on offer for it.
+        currencies: mayEdit
+          ? (await rates.currencies(tx)).filter((row) => row.isActive || row.code === view.declaration.currency)
+          : [],
       };
     } catch (error) {
       // E1 — a missing record is a 404; anything else reaches the error boundary.
@@ -206,7 +211,13 @@ export default async function CustomsDeclarationPage({
                     <Field defaultValue={declaration.declarationDate} id="edit-date" label={t('declaration_date')} name="declaration_date" required type="date" />
                     <Field defaultValue={declaration.customsRef ?? ''} id="edit-ref" label={t('customs_ref')} name="customs_ref" />
                     <Field defaultValue={declaration.hsCode ?? ''} id="edit-hs" label={t('hs_code')} name="hs_code" />
-                    <Field defaultValue={declaration.currency} id="edit-currency" label={t('currency')} maxLength={3} name="currency" />
+                    <Select
+                      defaultValue={declaration.currency}
+                      label={t('currency')}
+                      name="currency"
+                      options={found.currencies.map((row) => ({ value: row.code, label: `${row.code} · ${row.name}` }))}
+                      required
+                    />
                     <Field defaultValue={plain(declaration.declaredValue)} id="edit-value" label={t('declared_value')} name="declared_value" />
                     <Field defaultValue={plain(declaration.declaredDuty)} id="edit-duty" label={t('declared_duty')} name="declared_duty" />
                     <Field defaultValue={plain(declaration.declaredTaxes)} id="edit-taxes" label={t('declared_taxes')} name="declared_taxes" />

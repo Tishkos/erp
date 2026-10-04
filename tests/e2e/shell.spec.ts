@@ -134,10 +134,12 @@ test.describe('Appendix A · the shell', () => {
     await expect(html).toHaveAttribute('dir', /^(ltr|rtl)$/);
   });
 
-  test('opens the appearance drawer from the navbar', async ({ page }) => {
+  test('opens the appearance drawer from the user menu', async ({ page }) => {
     // The light/dark toggle became the Appearance drawer (palettes and
-    // accents); every palette is exercised by theme-readability.spec.ts.
-    await page.getByRole('button', { name: 'Appearance' }).click();
+    // accents); every palette is exercised by theme-readability.spec.ts. It
+    // is opened from the user menu since it left the header (2026-10-04).
+    await page.getByRole('button', { name: 'Open user menu' }).click();
+    await page.getByRole('button', { name: 'Appearance', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Appearance' })).toBeVisible();
   });
 

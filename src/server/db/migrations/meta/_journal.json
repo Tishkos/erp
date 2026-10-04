@@ -1534,6 +1534,13 @@
       "when": 1795900000111,
       "tag": "0301_customs_declaration",
       "breakpoints": true
+    },
+    {
+      "idx": 219,
+      "version": "7",
+      "when": 1795900000112,
+      "tag": "0302_partner_prospects_approved",
+      "breakpoints": true
     }
   ]
 }

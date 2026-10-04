@@ -55,7 +55,8 @@ export class SupplierNotUsableError extends Error {
     // §25 — the field, the reason, the corrective action.
     super(
       `${supplierCode} ${reason}, so a purchase order cannot be raised against them (§6). ` +
-        'Choose an active supplier, or ask master data to correct the partner record.',
+        'Choose an active supplier, or ask master data to correct the partner record — ' +
+        'a prospect is approved on its record under Payables › Suppliers.',
     );
     this.name = 'SupplierNotUsableError';
   }

@@ -13,7 +13,7 @@ import { expect, test, type Page } from '@playwright/test';
  *                      credit note takes 10 % off, a debit note adds a charge,
  *                      a return is raised against it.
  *   Profiles           the customer's name on every record and register
- *                      opens the customer's profile (Master Data › Customers);
+ *                      opens the customer's profile (Receivables › Customers);
  *                      the receipt's bank/cash account opens its own.
  *   Drill-down         ageing → customer → invoice → receipt → credits →
  *                      statement; statement row → source document; invoice →

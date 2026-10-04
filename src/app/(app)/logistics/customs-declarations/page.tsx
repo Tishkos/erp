@@ -14,6 +14,7 @@ import { declarationChip } from '@domain/import-logistics';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as declarations from '@/server/services/customs-declarations';
+import * as rates from '@/server/services/exchange-rates';
 import { businessToday } from '@/server/domain/business-date';
 import { createDeclaration } from './actions';
 
@@ -50,9 +51,11 @@ export default async function CustomsDeclarationsPage({ searchParams }: { search
   const view = (VIEWS as readonly string[]).includes(String(params.view)) ? (params.view as (typeof VIEWS)[number]) : 'open';
   const today = businessToday();
 
-  const { result, imports } = await withCurrentUser(async (tx) => ({
+  const { result, imports, currencies } = await withCurrentUser(async (tx) => ({
     result: await declarations.listForScreen(tx, { view, search: outcome.q, page: outcome.page }),
     imports: mayCreate ? await declarations.importChoices(tx) : [],
+    // Currencies and Rates' own list, as every other document offers it.
+    currencies: mayCreate ? (await rates.currencies(tx)).filter((row) => row.isActive) : [],
   }));
   const shown = result.rows;
   const query = (p: number) => [outcome.q ? `q=${encodeURIComponent(outcome.q)}` : '', `view=${view}`, `page=${p}`].filter(Boolean).join('&');
@@ -77,7 +80,13 @@ export default async function CustomsDeclarationsPage({ searchParams }: { search
                 <Field defaultValue={today} label={t('declaration_date')} name="declaration_date" required type="date" />
                 <Field hint={t('customs_ref_hint')} label={t('customs_ref')} name="customs_ref" />
                 <Field label={t('hs_code')} name="hs_code" />
-                <Field defaultValue="IQD" label={t('currency')} maxLength={3} name="currency" />
+                <Select
+                  defaultValue={currencies[0]?.code}
+                  label={t('currency')}
+                  name="currency"
+                  options={currencies.map((row) => ({ value: row.code, label: `${row.code} · ${row.name}` }))}
+                  required
+                />
                 <Field label={t('declared_value')} name="declared_value" />
                 <Field label={t('declared_duty')} name="declared_duty" />
                 <Field label={t('declared_taxes')} name="declared_taxes" />

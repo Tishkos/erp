@@ -205,7 +205,7 @@ export default async function ArInvoicePage({
   const fields: DocumentField[] = [
     { label: column('invoice_no'), value: <bdi dir="ltr">{invoice.invoiceNo}</bdi> },
     { label: column('status'), value: status(invoice.status), status: invoice.status },
-    // The customer is a link to their profile (Master Data › Customers) — "like
+    // The customer is a link to their profile (Receivables › Customers) — "like
     // Bank Loans: we can click the bank or the customer" (2026-10-04).
     {
       label: column('customer_code'),

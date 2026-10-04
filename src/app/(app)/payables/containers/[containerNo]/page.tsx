@@ -14,7 +14,7 @@ import { SectionTabs } from '@/components/admin/section-tabs';
 import { ExportIcon } from '@/components/print/export-menu';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { formatBusinessDate, formatQuantity, type Locale } from '@/i18n/config';
+import { formatBusinessDate, formatMoney, formatQuantity, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { CONTAINER_PATH, SIZE_TYPES } from '@domain/shipments';
 import { visibleRoute } from '@/server/delivered';
@@ -616,9 +616,7 @@ export default async function ContainerPage({
                       <bdi dir="ltr">{row.pdNo ?? '—'}</bdi>
                     </td>
                     <td>
-                      <bdi dir="ltr">
-                        {row.currency} {row.declaredValue}
-                      </bdi>
+                      <bdi dir="ltr">{formatMoney(row.declaredValue, row.currency, locale as Locale)}</bdi>
                     </td>
                     <td>
                       <span className={`status status--${declarationChip(row.status)}`} data-status={declarationChip(row.status)}>

@@ -16,6 +16,7 @@ import { ownerPool, rejection, resetTestData, seedBranch } from './setup';
 import { withScope } from '@/server/db/client';
 import * as authz from '@/server/services/authorization';
 import * as po from '@/server/services/purchase-order';
+import * as partners from '@/server/services/partners';
 import type { ActorContext } from '@/server/services/chart-of-accounts';
 import { formatQuantity, parseQuantity } from '@domain/uom';
 import { parseDecimal } from '@domain/money';
@@ -243,6 +244,82 @@ describe('05.1 gate · the supplier must be usable', () => {
     expect(
       await rejection(withScope(scope(manager), (tx) => po.approve(tx, manager, id))),
     ).toMatch(/is blocked/);
+  });
+});
+
+/*
+ * §6 — a supplier entered on the Suppliers screen can be ordered from once it
+ * is approved, and the screens can approve it (2026-10-04). Before, every
+ * partner the screens made was a prospect nothing could approve: "SUP-000001
+ * is prospect, so a purchase order cannot be raised against them", while the
+ * screen showed it Active and the invoice's picker offered it.
+ */
+describe('§6 · a supplier entered on the Suppliers screen', () => {
+  const orderFrom = (ctx: ActorContext, id: string) =>
+    withScope(scope(ctx), (tx) =>
+      po.create(tx, ctx, { supplierId: id, branchCode: BAGHDAD, orderDate: '2026-02-01', lines: [line()] }),
+    );
+  const offered = async (code: string) =>
+    (await withScope(scope(officer), (tx) => partners.listActiveInRole(tx, 'supplier'))).some(
+      (row) => row.code === code,
+    );
+  const statusOf = async (code: string) =>
+    (await ownerPool.query(`select status::text as status from business_partner where code = $1`, [code])).rows[0]
+      .status as string;
+
+  it('is entered approved by somebody who may approve partner records, and ordered from at once', async () => {
+    const made = await withScope(scope(manager), (tx) =>
+      partners.createInRole(tx, manager, 'supplier', { legalName: 'Approver Entered Trading' }),
+    );
+    expect(await statusOf(made.code)).toBe('active');
+    expect(await offered(made.code)).toBe(true);
+    await expect(orderFrom(officer, made.id)).resolves.toMatchObject({ orderNo: expect.any(String) });
+  });
+
+  it('waits as a prospect when the officer enters it — not offered, not orderable — until a manager approves it', async () => {
+    const made = await withScope(scope(officer), (tx) =>
+      partners.createInRole(tx, officer, 'supplier', { legalName: 'Officer Entered Trading' }),
+    );
+    expect(await statusOf(made.code)).toBe('prospect');
+    expect(await offered(made.code)).toBe(false);
+    expect(await rejection(orderFrom(officer, made.id))).toMatch(/is prospect, so a purchase order cannot be raised/);
+
+    // The officer holds no `approve` on the record; the manager does.
+    expect(await rejection(withScope(scope(officer), (tx) => partners.approve(tx, officer, made.code)))).toMatch(
+      /approve/,
+    );
+    await withScope(scope(manager), (tx) => partners.approve(tx, manager, made.code));
+    expect(await statusOf(made.code)).toBe('active');
+
+    const { rows } = await ownerPool.query(
+      `select actor_user_id, before_value, after_value, reason from audit_event
+        where action = 'business_partner.updated' and object_id = $1 order by id desc limit 1`,
+      [made.id],
+    );
+    expect(rows[0]).toMatchObject({
+      actor_user_id: manager.principal.userId,
+      before_value: { status: 'prospect' },
+      after_value: { status: 'active' },
+      reason: 'approved',
+    });
+
+    expect(await offered(made.code)).toBe(true);
+    await expect(orderFrom(officer, made.id)).resolves.toMatchObject({ orderNo: expect.any(String) });
+  });
+
+  it('approves a prospect only, and never a deactivated one', async () => {
+    const made = await withScope(scope(manager), (tx) =>
+      partners.createInRole(tx, manager, 'supplier', { legalName: 'Already Approved Trading' }),
+    );
+    expect(await rejection(withScope(scope(manager), (tx) => partners.approve(tx, manager, made.code)))).toMatch(
+      /only a prospect is approved/,
+    );
+
+    await createPartner('SUP-RETIRED', { status: 'prospect', active: false });
+    expect(await rejection(withScope(scope(manager), (tx) => partners.approve(tx, manager, 'SUP-RETIRED')))).toMatch(
+      /reactivate it before approving/,
+    );
+    expect(await offered('SUP-RETIRED')).toBe(false);
   });
 });
 

@@ -87,14 +87,13 @@ export function GlobalSearch({ sections }: { readonly sections: readonly MenuSec
     <>
       <button
         aria-keyshortcuts="Control+K Meta+K"
+        aria-label={shell('search')}
         className="erp-search-trigger"
         onClick={() => setOpen(true)}
         title={`${shell('search')} (${shell('search_shortcut')})`}
         type="button"
       >
         <Search aria-hidden="true" />
-        <span className="erp-search-trigger__label">{shell('search')}</span>
-        <kbd aria-hidden="true">{shell('search_shortcut')}</kbd>
       </button>
 
       {open ? (

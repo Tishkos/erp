@@ -110,7 +110,7 @@ the posting engine and the exchange-rate service.
 
 | # | Decision | Why |
 |---|---|---|
-| D-AR-1 | **Customers** move to the Master Data heading; the route stays `/sales/customers` (D-FX-1). | "Customers belong only in Master Data"; every existing link keeps working. |
+| D-AR-1 | **Customers** move to the Master Data heading; the route stays `/sales/customers` (D-FX-1). **Superseded 2026-10-04, by direction** ("customer [to] receivable"): Customers is the first item of Sales & Receivables, still one home, same route. | "Customers belong only in Master Data"; every existing link keeps working. |
 | D-AR-2 | The eight items reuse Appendix A keys: `ar_allocations` → Credits & Advances (`/sales/customer-credits`), `customer_credit_memos` → Credit / Debit Notes (`/sales/credit-notes`), `ar_reconciliation` → Customer Reconciliation (`/sales/customer-reconciliation`). Unbuilt sales items stay in the tree, hidden. | The catalogue's 242 items / 357 screens stay intact; no Appendix A function dropped. |
 | D-AR-3 | **A customer's credit is derived, never stored**: a posted receipt's unapplied remainder (advance if nothing applied, overpayment otherwise), a credit memo's remainder, a credit note's remainder. | §11 one source of truth. Receipts already post Dr Bank / Cr Customer A/R, so the subledger already holds the credit. |
 | D-AR-4 | Receipts keep posting **Cr Customer A/R**; there is **no reclassification to a separate "customer advances" liability account**. | The existing architecture; the ageing shows the credit apart (gross vs unapplied vs net). A reclass to a liability account is a possible later stage, owner's call. |
