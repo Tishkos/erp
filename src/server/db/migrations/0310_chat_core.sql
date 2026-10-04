@@ -500,9 +500,14 @@ LANGUAGE plpgsql AS $$
 BEGIN
 	IF NEW.conversation_id IS DISTINCT FROM OLD.conversation_id
 	OR NEW.user_id IS DISTINCT FROM OLD.user_id
-	OR NEW.role IS DISTINCT FROM OLD.role
 	OR NEW.joined_at IS DISTINCT FROM OLD.joined_at THEN
 		RAISE EXCEPTION 'A participant keeps the place they were given.' USING ERRCODE = 'restrict_violation';
+	END IF;
+	-- The one change of role there is: an owner makes a member an owner, so a
+	-- group is never left without one when its last owner leaves.
+	IF NEW.role IS DISTINCT FROM OLD.role
+	AND NOT (OLD.role = 'member' AND NEW.role = 'owner' AND app_chat_is_owner(OLD.conversation_id)) THEN
+		RAISE EXCEPTION 'Only an owner makes a member an owner; an owner stays one.' USING ERRCODE = 'restrict_violation';
 	END IF;
 	IF OLD.left_at IS NULL AND NEW.left_at IS NOT NULL THEN
 		-- Leaving is one''s own; sending someone away is an owner''s.
@@ -611,7 +616,7 @@ BEGIN
 	GRANT SELECT, INSERT ON chat_conversation TO erp_app;
 	GRANT UPDATE (title) ON chat_conversation TO erp_app;
 	GRANT SELECT, INSERT ON chat_participant TO erp_app;
-	GRANT UPDATE (muted, typing_until, left_at, first_seq) ON chat_participant TO erp_app;
+	GRANT UPDATE (role, muted, typing_until, left_at, first_seq) ON chat_participant TO erp_app;
 	GRANT SELECT, INSERT ON chat_message TO erp_app;
 	GRANT UPDATE (retracted_at, retracted_by, retract_reason) ON chat_message TO erp_app;
 	GRANT SELECT ON chat_receipt TO erp_app;
