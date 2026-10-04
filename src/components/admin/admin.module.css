@@ -5569,9 +5569,12 @@
 
 .mapStack > section {
   margin-block-end: 0;
-  /* A grid item is as wide as its content unless told otherwise: the table's
-     46rem minimum reached through the panel and widened the page on a phone
-     instead of scrolling inside the table's own frame. */
+}
+
+/* A grid item (each document's form) is as wide as its content unless told
+   otherwise: the table's 46rem minimum reached through the panel and widened
+   the page on a phone instead of scrolling inside the table's own frame. */
+.mapStack > * {
   min-inline-size: 0;
 }
 

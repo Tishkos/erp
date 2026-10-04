@@ -195,7 +195,7 @@ test.describe('Review · four doors from the draft and profile links, one record
     await photograph(page, record, 'stock-count', 4);
   });
 
-  test('the reference · a bank loan: paperclip, notes, clock; the bank and the account are links', async ({ page }) => {
+  test('the reference · a bank loan: printer, paperclip, notes, clock; the bank and the account are links', async ({ page }) => {
     test.setTimeout(240_000);
     await signIn(page);
     // The offer is typed on the new-loan page: the bank, the account, the
@@ -210,8 +210,8 @@ test.describe('Review · four doors from the draft and profile links, one record
     await page.waitForURL(/\/treasury\/loans\/LOAN-/, { timeout: 60_000 });
     const record = page.url().replace(/^https?:\/\/[^/]+/, '').split('?')[0]!;
 
-    // No print model yet (reported), so three doors: paperclip, notes, clock.
-    await expectDoors(page, ['Contract, schedule, bank letters', LABELS.notes, LABELS.history]);
+    // The four doors from the draft (the print model arrived 2026-10-04).
+    await expectDoors(page, [LABELS.print, 'Contract, schedule, bank letters', LABELS.notes, LABELS.history]);
     // "We can directly click the bank": the bank and the account open their profiles.
     const doc = page.locator('#loan-document');
     await expect(doc.locator('a[href^="/master-data/banks/"]').first()).toBeVisible();
@@ -227,7 +227,7 @@ test.describe('Review · four doors from the draft and profile links, one record
     await page.getByRole('button', { name: 'Audit log' }).click();
     await expect(page.getByRole('dialog', { name: 'Audit log' }).getByText(/note added/i).first()).toBeVisible();
     await page.keyboard.press('Escape');
-    await photograph(page, record, 'bank-loan', 3);
+    await photograph(page, record, 'bank-loan', 4);
 
     // The bank's profile is where the link lands.
     await doc.locator('a[href^="/master-data/banks/"]').first().click();
@@ -235,7 +235,7 @@ test.describe('Review · four doors from the draft and profile links, one record
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });
 
-  test('payables · a bank deposit: paperclip, notes, clock; the account it lands in and the account it credits are links', async ({ page }) => {
+  test('payables · a bank deposit: printer, paperclip, notes, clock; the account it lands in and the account it credits are links', async ({ page }) => {
     test.setTimeout(240_000);
     await signIn(page);
     await page.goto('/treasury/deposits');
@@ -251,11 +251,11 @@ test.describe('Review · four doors from the draft and profile links, one record
     await page.waitForURL(/\/treasury\/deposits\/ORC-/, { timeout: 60_000 });
     const record = page.url().replace(/^https?:\/\/[^/]+/, '').split('?')[0]!;
 
-    // No print model yet (reported), so three doors from the draft.
-    await expectDoors(page, [LABELS.attachments, LABELS.notes, LABELS.history]);
+    // The four doors from the draft (the print model arrived 2026-10-04).
+    await expectDoors(page, FOUR);
     const doc = page.locator('#bank-deposit-document');
     await expect(doc.locator('a[href^="/master-data/bank-accounts/"]').first()).toBeVisible();
     await expect(doc.locator('a[href^="/master-data/chart-of-accounts/"]').first()).toBeVisible();
-    await photograph(page, record, 'bank-deposit', 3);
+    await photograph(page, record, 'bank-deposit', 4);
   });
 });
