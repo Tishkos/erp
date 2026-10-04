@@ -260,21 +260,59 @@ export const MENU: readonly MenuSection[] = Object.freeze([
      */
     key: 'logistics_customs',
     ordinal: 23,
+    /*
+     * REQ-LOG-001 — the owner's four Logistics headings (2026-10-04), fifteen
+     * items in his order. Logistics owns nothing financial: the registers of
+     * duties, freight and landed cost read the import's charges and locks and
+     * link to the import; their menu objects (`customs_duty`, `freight_cost`,
+     * `landed_cost_register`, `cost_allocation`) are read-only, so a role
+     * given a Logistics heading gains no power over the money (0300). New
+     * screens live under /logistics/…; the old ones keep their routes (D-FX-1).
+     */
     items: [
       page('pds', 'customs_pd', '/payables/pd'),
+      page('customs_declarations', 'customs_declaration', '/logistics/customs-declarations'),
       { key: 'asycuda_update', object: 'customs_pd', verb: 'import', href: '/payables/pd/asycuda' },
+      page('customs_duties', 'customs_duty', '/logistics/customs-duties'),
+      page('customs_documents', 'customs_pd', '/logistics/customs-documents'),
     ],
   },
   {
     key: 'logistics_shipping',
     ordinal: 24,
     items: [
+      page('import_shipments', 'bill_of_lading', '/logistics/shipments'),
       page('shipments', 'bill_of_lading', '/payables/shipments'),
       page('containers', 'shipment_container', '/payables/containers'),
-      page('in_transit', 'in_transit', '/inventory/in-transit'),
+      page('ports_routes', 'port', '/logistics/ports'),
+      page('freight_costs', 'freight_cost', '/logistics/freight-costs'),
+      page('shipment_documents', 'bill_of_lading', '/logistics/shipment-documents'),
     ],
   },
   {
+    // REQ-LOG-001 — what is owned and not yet on hand. In-Transit Inventory
+    // absorbed Invoice Status Tracking; /inventory/in-transit redirects here.
+    key: 'logistics_in_transit',
+    ordinal: 29,
+    items: [
+      page('in_transit', 'in_transit', '/logistics/in-transit'),
+      page('shipment_tracking', 'shipment_container', '/logistics/shipment-tracking'),
+    ],
+  },
+  {
+    // REQ-LOG-001 — the landed cost, read: the engine and its actions stay on
+    // the import page (`/payables/[payableNo]#landed-cost`).
+    key: 'logistics_landed_costs',
+    ordinal: 30,
+    items: [
+      page('landed_costs', 'landed_cost_register', '/logistics/landed-costs'),
+      page('cost_allocation', 'cost_allocation', '/logistics/cost-allocation'),
+    ],
+  },
+  {
+    // The client logistics jobs (Phase 10, Appendix A menu 7). No screen yet;
+    // REQ-LOG-001 Q3 took them out of the Logistics dropdown (`erp-shell.tsx`)
+    // and kept them here, so their routes and objects stay reserved.
     key: 'logistics',
     ordinal: 7,
     items: [

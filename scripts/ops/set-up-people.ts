@@ -178,6 +178,8 @@ const NEW_ROLES = [
           'payables_setup',
           'logistics_customs',
           'logistics_shipping',
+          'logistics_in_transit',
+          'logistics_landed_costs',
           'logistics',
           'inventory',
         ),
@@ -220,7 +222,16 @@ const NEW_ROLES = [
       'Sales, the import application and logistics — and nothing else. A sale and a purchase invoice are raised for the CEO. Manar.',
     grants: restrict(
       grants(
-        objectsOf('sales', 'payables', 'payables_suppliers', 'logistics', 'logistics_customs', 'logistics_shipping'),
+        objectsOf(
+          'sales',
+          'payables',
+          'payables_suppliers',
+          'logistics',
+          'logistics_customs',
+          'logistics_shipping',
+          'logistics_in_transit',
+          'logistics_landed_costs',
+        ),
         FULL,
       ),
       /*
@@ -259,7 +270,7 @@ const NEW_ROLES = [
     description:
       'The import application and its papers, in full; inventory to look at. Nothing else. For Maki, when their address is known.',
     grants: restrict(
-      grants(objectsOf('payables', 'logistics_customs', 'logistics_shipping'), FULL),
+      grants(objectsOf('payables', 'logistics_customs', 'logistics_shipping', 'logistics_in_transit', 'logistics_landed_costs'), FULL),
       grants([...objectsOf('inventory'), ...PAYING], READ),
     ),
   },

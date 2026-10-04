@@ -108,6 +108,19 @@ export const SCREENS: Readonly<Record<string, ScreenArchetype>> = {
   asycuda_update: 'workspace',
   shipments: 'document',
   containers: 'list',
+  // REQ-LOG-001 — the four Logistics headings' new screens. The declaration
+  // and the port are records (a list and the record behind it); the rest are
+  // registers over records other modules own, read-only.
+  customs_declarations: 'document',
+  customs_duties: 'list',
+  customs_documents: 'list',
+  import_shipments: 'list',
+  ports_routes: 'document',
+  freight_costs: 'list',
+  shipment_documents: 'list',
+  shipment_tracking: 'list',
+  landed_costs: 'list',
+  cost_allocation: 'report',
   loans: 'document',
   purchasing_reports: 'report',
   payables_settings: 'settings',
@@ -454,8 +467,9 @@ const DELIVERED: ReadonlySet<string> = new Set([
   // Payments and Receipts.
   '/payables/supplier-payments',
   '/sales/customer-receipts',
-  // Invoice Status Tracking.
-  '/inventory/in-transit',
+  // Invoice Status Tracking — absorbed by In-Transit Inventory (REQ-LOG-001);
+  // /inventory/in-transit redirects there (next.config.ts).
+  '/logistics/in-transit',
   // The Account Statement, one screen on each side.
   '/sales/customer-statements',
   '/payables/supplier-statements',
@@ -486,6 +500,17 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/master-data/banks',
   // REQ-AP-001 Stage 4 — PD / ASYCUDA (§16, §21.8).
   '/payables/pd',
+  // REQ-LOG-001 — the Logistics module's own screens.
+  '/logistics/customs-declarations',
+  '/logistics/customs-duties',
+  '/logistics/customs-documents',
+  '/logistics/shipments',
+  '/logistics/ports',
+  '/logistics/freight-costs',
+  '/logistics/shipment-documents',
+  '/logistics/shipment-tracking',
+  '/logistics/landed-costs',
+  '/logistics/cost-allocation',
   // REQ-AP-001 Stage 5 — B/Ls and containers (§17, §18, §21.9).
   '/payables/shipments',
   '/payables/containers',

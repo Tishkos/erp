@@ -47,9 +47,25 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     }
   });
 
-  it('Logistics holds the customs declarations, the ASYCUDA list, the shipping and the jobs', () => {
-    expect(keysOf('logistics_customs')).toEqual(['pds', 'asycuda_update']);
-    expect(keysOf('logistics_shipping')).toEqual(['shipments', 'containers', 'in_transit']);
+  it('Logistics is the owner’s four headings, fifteen items in his order (REQ-LOG-001)', () => {
+    expect(keysOf('logistics_customs')).toEqual([
+      'pds',
+      'customs_declarations',
+      'asycuda_update',
+      'customs_duties',
+      'customs_documents',
+    ]);
+    expect(keysOf('logistics_shipping')).toEqual([
+      'import_shipments',
+      'shipments',
+      'containers',
+      'ports_routes',
+      'freight_costs',
+      'shipment_documents',
+    ]);
+    expect(keysOf('logistics_in_transit')).toEqual(['in_transit', 'shipment_tracking']);
+    expect(keysOf('logistics_landed_costs')).toEqual(['landed_costs', 'cost_allocation']);
+    // The client jobs stay in the tree (Appendix A) but leave the dropdown (Q3).
     expect(keysOf('logistics')).toContain('logistics_jobs');
   });
 
@@ -77,7 +93,11 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(route('logistics_customs', 'pds')).toBe('/payables/pd');
     expect(route('logistics_shipping', 'shipments')).toBe('/payables/shipments');
     expect(route('logistics_shipping', 'containers')).toBe('/payables/containers');
-    expect(route('logistics_shipping', 'in_transit')).toBe('/inventory/in-transit');
+    // REQ-LOG-001 Q4 — the one route that moved: In-Transit Inventory absorbed
+    // Invoice Status Tracking, and the old address redirects to it.
+    expect(route('logistics_in_transit', 'in_transit')).toBe('/logistics/in-transit');
+    expect(route('logistics_customs', 'customs_declarations')).toBe('/logistics/customs-declarations');
+    expect(route('logistics_shipping', 'ports_routes')).toBe('/logistics/ports');
     expect(route('treasury', 'loans')).toBe('/treasury/loans');
     expect(route('master_banking', 'bank_cash_accounts')).toBe('/master-data/bank-accounts');
     expect(route('master_banking', 'cash_accounts')).toBe('/master-data/cash-accounts');

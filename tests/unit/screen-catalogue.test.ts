@@ -106,8 +106,12 @@ describe('the screen catalogue covers the approved tree', () => {
     // plus the Accounting navbar (2026-10-04): Account Reconciliation, Tax
     // Codes and Payments & Receipts in, Treasury's separate Receipts and
     // Payments out (one register of the money that moved replaces both).
-    expect(allMenuItems()).toHaveLength(243);
-    expect(Object.keys(SCREENS)).toHaveLength(243);
+    // Plus REQ-LOG-001's ten (2026-10-04): Customs Declarations, Customs
+    // Duties & Taxes, Customs Documents, Shipments, Ports & Routes, Freight &
+    // Shipping Costs, Shipment Documents, Shipment Tracking, Landed Costs and
+    // Cost Allocation.
+    expect(allMenuItems()).toHaveLength(253);
+    expect(Object.keys(SCREENS)).toHaveLength(253);
   });
 
   it('uses only declared archetypes', () => {
@@ -129,7 +133,8 @@ describe('the screen catalogue covers the approved tree', () => {
     // Accounting navbar: + 1 (account reconciliation) + 1 (payments &
     // receipts) + 2 (tax codes) + 1 (bank reconciliation is a record now),
     // − 2 − 2 (receipts, payments).
-    expect(total).toBe(358);
+    // REQ-LOG-001: + 2 + 2 (declarations, ports) + 8 (the registers).
+    expect(total).toBe(370);
   });
 });
 
@@ -182,7 +187,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(243);
+    expect(screenRoutes().size).toBe(253);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -238,8 +243,6 @@ describe('every screen has one address', () => {
       '/inventory/availability',
       // Operations build — block 7's Warehouses Report.
       '/inventory/fifo-valuation',
-      // Block 8 — Invoice Status Tracking.
-      '/inventory/in-transit',
       '/inventory/items',
       // Block 7 — Opening Stock, Item Reconciliation, Stock Movement, Transfer.
       '/inventory/opening-stock',
@@ -249,6 +252,19 @@ describe('every screen has one address', () => {
       '/inventory/stock-reconciliation',
       '/inventory/transfers',
       '/inventory/uom',
+      // REQ-LOG-001 — the Logistics module's own screens; In-Transit
+      // Inventory absorbed Block 8's Invoice Status Tracking.
+      '/logistics/cost-allocation',
+      '/logistics/customs-declarations',
+      '/logistics/customs-documents',
+      '/logistics/customs-duties',
+      '/logistics/freight-costs',
+      '/logistics/in-transit',
+      '/logistics/landed-costs',
+      '/logistics/ports',
+      '/logistics/shipment-documents',
+      '/logistics/shipment-tracking',
+      '/logistics/shipments',
       '/master-data/bank-accounts',
       // REQ-AP-001 Stage 3 — the bank master.
       '/master-data/banks',

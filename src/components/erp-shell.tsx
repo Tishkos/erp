@@ -176,8 +176,14 @@ const MODULE_DEFINITIONS: readonly ModuleDefinition[] = [
   // Purchasing became Payables — one module for everything owed (REQ-AP-001 D7).
   // REQ-FIX-001 FIX-1 — four headings, like Accounting's.
   { key: 'payables', icon: ShoppingBag, sectionKeys: ['payables', 'payables_suppliers', 'payables_setup'] },
-  // Everything logistics in the system (by direction, 2026-10-02).
-  { key: 'logistics', icon: Truck, sectionKeys: ['logistics_customs', 'logistics_shipping', 'logistics'] },
+  // Everything logistics in the system (by direction, 2026-10-02) — the
+  // owner's four headings (REQ-LOG-001). The client jobs (`logistics`) are
+  // out of the dropdown until they have a screen (Q3).
+  {
+    key: 'logistics',
+    icon: Truck,
+    sectionKeys: ['logistics_customs', 'logistics_shipping', 'logistics_in_transit', 'logistics_landed_costs'],
+  },
   { key: 'money_transfer', icon: ArrowLeftRight, sectionKeys: ['money_transfer'] },
   { key: 'crm', icon: Handshake, sectionKeys: ['crm'] },
   { key: 'projects', icon: FolderKanban, sectionKeys: ['projects'] },
