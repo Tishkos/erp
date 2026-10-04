@@ -375,7 +375,7 @@ const SAMPLE: Readonly<Record<string, Record<string, string | number | null>>> =
   'inventory.negative_stock': { item: 'ITM-1 Pipe', warehouse: 'WH1 Main', quantityQty: '-3' },
   'inventory.layer_mismatch': { item: 'ITM-1 Pipe', warehouse: 'WH1 Main', quantityQty: '2' },
   'inventory.document_ledger_mismatch': { kind: 'unbalanced', documentType: 'stock_transfer', document: 'TRF-1', items: 2, movements: 3 },
-  'inventory.gl_difference': { layersIqd: '100', glIqd: '80', provisionalIqd: '5', unexplainedIqd: '15' },
+  'inventory.gl_difference': { layersIqd: '100', glIqd: '80', provisionalIqd: '5', unexplainedIqd: '20' },
   'inventory.transit_mismatch': { item: 'ITM-1', ledgerQty: '10', importsQty: '8', differenceQty: '2' },
   'logistics.container_delayed': { container: 'MSCU1234567', bl: 'BL-1', supplier: 'Sup', importNo: 'IMP-1', etaDate: '2026-09-20', days: 14 },
   'logistics.shipment_update_stale': { container: 'MSCU1234567', bl: 'BL-1', supplier: 'Sup', lastDate: '2026-09-01', days: 33 },

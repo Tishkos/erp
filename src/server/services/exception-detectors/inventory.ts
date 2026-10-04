@@ -157,16 +157,18 @@ export async function documentLedgerMismatch(ctx: DetectContext): Promise<Findin
 // ---------------------------------------------------------------------------
 
 /**
- * The layers' value against the inventory accounts, today. Stock whose
- * movement has no journal of its own yet (`provisional`) legitimately sits in
- * the layers and not in the books; only a difference that remains after it is
- * taken out is a finding.
+ * The layers' value against the inventory accounts, today — compared exactly,
+ * the question the period close and Inventory Checks ask
+ * (`inventory-valuation.stockAgainstGl`: `differenceIqd` is zero or it is not).
+ * `provisional` (layers whose maker movement carries no journal of its own, such
+ * as a container receipt's layers out of goods the invoice already booked) is
+ * shown beside the figures as evidence and is NOT taken out of the difference:
+ * the accounts already hold that value through the invoice's journal, so
+ * subtracting it would invent a difference on a clean import.
  */
 export async function glDifference(ctx: DetectContext): Promise<Finding[]> {
   const figure = await valuation.stockAgainstGl(ctx.tx, ctx.today);
-  const difference = parseDecimal(figure.differenceIqd, 4n);
-  const provisional = parseDecimal(figure.provisionalIqd, 4n);
-  const unexplained = difference - provisional;
+  const unexplained = parseDecimal(figure.differenceIqd, 4n);
   if (unexplained === 0n) return [];
   return [
     {
