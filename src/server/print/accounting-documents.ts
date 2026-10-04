@@ -11,8 +11,12 @@ import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { parseDecimal, toDecimalString } from '../domain/money';
 import * as treasury from '../services/treasury';
 import * as rec from '../services/bank-reconciliation';
+import * as treasuryReports from '../services/treasury-reports';
+import * as forecasts from '../services/cash-forecast';
+import * as subledger from '../services/subledger';
+import { businessToday } from '../domain/business-date';
 import type { BuildContext, Built } from './documents';
-import type { Fact, PrintModel } from './model';
+import { EXPORT_ROW_CAP, type Fact, type PrintModel } from './model';
 
 const day = (value: string | null | undefined, locale: Locale) => (value ? formatBusinessDate(value, locale) : '—');
 
@@ -256,5 +260,218 @@ export async function bankReconciliation(ctx: BuildContext, statementNo: string)
     }),
     branchCode: statement.branchCode,
     objectId: statement.statementId,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Accounting's reports — each the screen's own read, transcribed
+// ---------------------------------------------------------------------------
+
+const report = (
+  input: Pick<PrintModel, 'title' | 'filters' | 'tables'> &
+    Partial<Pick<PrintModel, 'summary' | 'orientation'>> & { readonly fileName: string },
+): PrintModel => ({
+  kind: 'report',
+  fields: [],
+  summary: input.summary ?? [],
+  signatures: false,
+  orientation: input.orientation ?? 'portrait',
+  currency: 'IQD',
+  sheetName: input.title,
+  ...input,
+});
+
+const queryValue = (query: URLSearchParams, name: string) => (query.get(name) ?? '').trim();
+
+/** Payments & Receipts — every row the filters choose, up to the export cap. */
+export async function paymentsReceipts(ctx: BuildContext, query: URLSearchParams): Promise<Built | null> {
+  const { tx, m, locale, principal, branchCode } = ctx;
+  const t = (key: string) => m.admin(`payments_receipts.${key}`);
+  const from = queryValue(query, 'from') || `${businessToday().slice(0, 4)}-01-01`;
+  const to = queryValue(query, 'to') || businessToday();
+  const view = (treasuryReports.MONEY_VIEWS as readonly string[]).includes(queryValue(query, 'view'))
+    ? (queryValue(query, 'view') as treasuryReports.MoneyView)
+    : null;
+  const accountCode = queryValue(query, 'account') || null;
+  const search = queryValue(query, 'q') || null;
+  const result = await treasuryReports.moneyRegister(tx, { principal, branchCode }, {
+    from,
+    to,
+    view,
+    accountCode,
+    search,
+    page: 1,
+    pageSize: EXPORT_ROW_CAP + 1,
+  });
+  const title = m.print('titles.payments_receipts');
+  return {
+    model: report({
+      title,
+      orientation: 'landscape',
+      filters: [
+        { label: t('from'), value: day(from, locale), ltr: true },
+        { label: t('to'), value: day(to, locale), ltr: true },
+        ...(view ? [{ label: t('view'), value: t(`view_${view}`) }] : []),
+        ...(accountCode ? [{ label: t('account'), value: accountCode, ltr: true }] : []),
+        ...(search ? [{ label: m.print('search'), value: search }] : []),
+      ],
+      tables: [
+        {
+          columns: [
+            { key: 'date', label: t('date'), kind: 'date' },
+            { key: 'document', label: t('document'), kind: 'code' },
+            { key: 'journal', label: m.admin('journals.entry_no'), kind: 'code' },
+            { key: 'account', label: t('account'), kind: 'text', weight: 1.5 },
+            { key: 'party', label: t('party'), kind: 'text', weight: 1.5 },
+            { key: 'movement', label: t('movement'), kind: 'text' },
+            { key: 'in', label: t('money_in'), kind: 'money' },
+            { key: 'out', label: t('money_out'), kind: 'money' },
+          ],
+          rows: result.rows.map((row) => ({
+            cells: {
+              date: row.postingDate,
+              document: row.documentNo ?? '—',
+              journal: row.entryNo,
+              account: `${row.accountName} (${row.accountCode})`,
+              party: row.partyName ?? row.partyCode ?? row.description ?? '—',
+              movement: t(`kind_${row.kind}`),
+              in: row.direction === 'in' ? row.amountIqd : null,
+              out: row.direction === 'out' ? row.amountIqd : null,
+            },
+          })),
+          empty: t('none'),
+          totals: { label: t('totals'), cells: { in: result.totalInIqd, out: result.totalOutIqd } },
+        },
+      ],
+      fileName: `payments-receipts-${from}-${to}`,
+    }),
+    branchCode,
+    objectId: 'payments_receipts',
+  };
+}
+
+/** Cash Forecast — the periods, the position by currency, the lines by source. */
+export async function cashForecast(ctx: BuildContext, query: URLSearchParams): Promise<Built | null> {
+  const { tx, m, locale, principal, branchCode } = ctx;
+  const t = (key: string) => m.admin(`cash_forecast.${key}`);
+  const today = businessToday();
+  const from = queryValue(query, 'from') || today;
+  const to = queryValue(query, 'to') || new Date(Date.parse(`${from}T00:00:00Z`) + 90 * 86_400_000).toISOString().slice(0, 10);
+  const bucket = (forecasts.FORECAST_BUCKETS as readonly string[]).includes(queryValue(query, 'bucket'))
+    ? (queryValue(query, 'bucket') as forecasts.ForecastBucket)
+    : 'week';
+  const actor = { principal, branchCode };
+  const forecast = await forecasts.forecast(tx, actor, { from, to, bucket });
+  const title = m.print('titles.cash_forecast');
+  return {
+    model: report({
+      title,
+      filters: [
+        { label: m.admin('reports.from'), value: day(from, locale), ltr: true },
+        { label: m.admin('reports.to'), value: day(to, locale), ltr: true },
+        { label: t('bucket'), value: t(`bucket_${bucket}`) },
+      ],
+      tables: [
+        {
+          title: t('by_period'),
+          columns: [
+            { key: 'period', label: t('period'), kind: 'date' },
+            { key: 'opening', label: t('opening'), kind: 'money' },
+            { key: 'in', label: t('inflow'), kind: 'money' },
+            { key: 'out', label: t('outflow'), kind: 'money' },
+            { key: 'closing', label: t('closing'), kind: 'money' },
+          ],
+          rows: forecast.periods.map((period) => ({
+            cells: { period: period.periodStart, opening: period.openingIqd, in: period.inflowIqd, out: period.outflowIqd, closing: period.closingIqd },
+          })),
+          empty: t('nothing_expected'),
+        },
+        {
+          title: t('by_source'),
+          columns: [
+            { key: 'period', label: t('period'), kind: 'date' },
+            { key: 'source', label: t('source'), kind: 'text', weight: 1.5 },
+            { key: 'in', label: t('inflow'), kind: 'money' },
+            { key: 'out', label: t('outflow'), kind: 'money' },
+            { key: 'net', label: t('net'), kind: 'money' },
+          ],
+          rows: forecast.lines.map((line) => ({
+            cells: { period: line.periodStart, source: t(`source_${line.source}`), in: line.inflowIqd, out: line.outflowIqd, net: line.netIqd },
+          })),
+          empty: t('nothing_expected'),
+        },
+      ],
+      summary: [
+        { label: t('opening'), value: formatMoney(forecast.openingIqd, 'IQD', locale), ltr: true },
+        { label: t('closing'), value: formatMoney(forecast.closingIqd, 'IQD', locale), ltr: true },
+      ],
+      fileName: `cash-forecast-${from}-${to}`,
+    }),
+    branchCode,
+    objectId: 'cash_forecast',
+  };
+}
+
+/** Account Reconciliation — the control accounts and the inventory figure, as at a date. */
+export async function accountReconciliation(ctx: BuildContext, query: URLSearchParams): Promise<Built | null> {
+  const { tx, m, locale, principal, branchCode } = ctx;
+  const t = (key: string) => m.admin(`account_reconciliation.${key}`);
+  const asOf = queryValue(query, 'to') || businessToday();
+  const result = await subledger.accountReconciliation(tx, { principal, branchCode }, asOf);
+  const kind = (code: string) => t(`kind_${code}`);
+  const title = m.print('titles.account_reconciliation');
+  return {
+    model: report({
+      title,
+      orientation: 'landscape',
+      filters: [{ label: m.admin('reports.as_at_label'), value: day(asOf, locale), ltr: true }],
+      tables: [
+        {
+          title: t('control_accounts'),
+          columns: [
+            { key: 'account', label: t('account'), kind: 'text', weight: 2 },
+            { key: 'kind', label: t('subledger'), kind: 'text' },
+            { key: 'sub', label: t('subledger_balance'), kind: 'money' },
+            { key: 'gl', label: t('gl_balance'), kind: 'money' },
+            { key: 'difference', label: t('difference'), kind: 'money' },
+          ],
+          rows: result.rows.map((row) => ({
+            cells: {
+              account: `${row.accountCode} · ${row.accountName}`,
+              kind: kind(row.subledgerType),
+              sub: row.subledgerBalance,
+              gl: row.generalLedgerBalance,
+              difference: row.difference,
+            },
+          })),
+          empty: t('no_control_accounts'),
+        },
+        {
+          title: t('inventory_title'),
+          columns: [
+            { key: 'kind', label: t('subledger'), kind: 'text' },
+            { key: 'layers', label: t('layers'), kind: 'money' },
+            { key: 'provisional', label: t('not_yet_posted'), kind: 'money' },
+            { key: 'gl', label: t('gl_balance'), kind: 'money' },
+            { key: 'difference', label: t('difference'), kind: 'money' },
+          ],
+          rows: [
+            {
+              cells: {
+                kind: t('kind_inventory'),
+                layers: result.inventory.layersIqd,
+                provisional: result.inventory.provisionalIqd,
+                gl: result.inventory.accountsIqd,
+                difference: result.inventory.differenceIqd,
+              },
+            },
+          ],
+          empty: '—',
+        },
+      ],
+      fileName: `account-reconciliation-${asOf}`,
+    }),
+    branchCode,
+    objectId: 'account_reconciliation',
   };
 }

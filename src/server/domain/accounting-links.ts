@@ -28,3 +28,41 @@ export function glAccountHref(code: string): string {
 export function journalHref(entryNo: string): string {
   return `/finance/journals/${enc(entryNo)}`;
 }
+
+/**
+ * The record page of a document that moved money — Payments & Receipts'
+ * source column. Null for a document with no page of its own; the row then
+ * says what it was and opens its journal.
+ */
+export function moneyDocumentHref(type: string | null, no: string | null): string | null {
+  if (!type || !no) return null;
+  switch (type) {
+    case 'customer_receipt':
+      return `/sales/customer-receipts/${enc(no)}`;
+    case 'supplier_payment':
+      return `/payables/supplier-payments/${enc(no)}`;
+    case 'supplier_advance':
+      return `/payables/advances/${enc(no)}`;
+    case 'bank_transfer':
+      return `/treasury/transfers/${enc(no)}`;
+    case 'other_receipt':
+      return `/treasury/deposits/${enc(no)}`;
+    case 'bank_loan':
+      return `/treasury/loans/${enc(no)}`;
+    case 'payroll_run':
+      return `/hr/payroll/${enc(no)}`;
+    case 'employee_request':
+      return `/hr/requests/${enc(no)}`;
+    case 'employee_advance':
+      return `/hr/advances/${enc(no)}`;
+    case 'bank_reconciliation':
+      return `/treasury/bank-reconciliation/${enc(no)}`;
+    default:
+      return null;
+  }
+}
+
+/** A business partner's profile — the customer's, or the supplier's when it is only that. */
+export function partnerHref(code: string, roles: { readonly isCustomer: boolean; readonly isSupplier: boolean }): string {
+  return roles.isSupplier && !roles.isCustomer ? `/payables/suppliers/${enc(code)}?role=supplier` : `/sales/customers/${enc(code)}?role=customer`;
+}

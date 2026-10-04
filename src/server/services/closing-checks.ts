@@ -128,31 +128,17 @@ export async function report(tx: Tx, period: FiscalPeriod): Promise<CloseReport>
   // 7. Inventory value: the layers (now) against the inventory accounts (now).
   // The Warehouses Report's own arithmetic: remaining quantity at each
   // layer's unit cost; beside it, the part whose movement carries no journal
-  // of its own (§22's "not yet posted"), for the reader's eye.
-  const [layers] = (
-    await tx.execute(sql`
-      select coalesce(sum(l.remaining_quantity * l.unit_cost_iqd), 0)::text as value,
-             coalesce(sum(l.remaining_quantity * l.unit_cost_iqd) filter (where m.journal_entry_id is null), 0)::text as provisional
-        from cost_layer l
-        join inventory_movement m on m.id = l.created_by_movement_id
-       where l.remaining_quantity > 0`)
-  ).rows as { value: string; provisional: string }[];
-  const [glInventory] = (
-    await tx.execute(sql`
-      select coalesce(sum(l.debit_iqd - l.credit_iqd), 0)::text as value
-        from journal_line l
-        join journal_entry e on e.id = l.journal_entry_id
-       where e.status in ('posted', 'reversed')
-         and l.account_id in (select distinct inventory_account_id from item where inventory_account_id is not null)`)
-  ).rows as { value: string }[];
-  const inventoryDifference = (Number(layers?.value ?? 0) - Number(glInventory?.value ?? 0)).toFixed(4);
+  // of its own (§22's "not yet posted"), for the reader's eye. One figure,
+  // `subledger.inventoryValue`, shared with the Account Reconciliation screen
+  // (REQ-ACC-001), and exact rather than through a double.
+  const inventory = await subledger.inventoryValue(tx);
   checks.push(
     outcome(
       'inventory_value_equals_gl',
       'warning',
-      !isZero(inventoryDifference),
-      inventoryDifference,
-      [`layers ${layers?.value ?? '0'} · accounts ${glInventory?.value ?? '0'} · not yet posted ${layers?.provisional ?? '0'} · as of ${businessToday()}`],
+      !isZero(inventory.differenceIqd),
+      inventory.differenceIqd,
+      [`layers ${inventory.layersIqd} · accounts ${inventory.accountsIqd} · not yet posted ${inventory.provisionalIqd} · as of ${businessToday()}`],
       '/inventory/fifo-valuation',
     ),
   );

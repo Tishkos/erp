@@ -209,6 +209,8 @@ describe('every screen has one address', () => {
       '/administration/whatsapp',
       '/approvals',
       '/documents',
+      // REQ-ACC-001 Part D — Account Reconciliation.
+      '/finance/account-reconciliation',
       // The accounting core.
       '/finance/balance-sheet',
       '/finance/cash-flow',
@@ -328,11 +330,14 @@ describe('every screen has one address', () => {
       '/sales/receivables',
       // Block 9 — Sales Returns.
       '/sales/sales-returns',
-      // REQ-ACC-001 Part D — Bank Reconciliation.
+      // REQ-ACC-001 Part D — Bank Reconciliation, the Cash Forecast.
       '/treasury/bank-reconciliation',
+      '/treasury/cash-forecast',
       // §17 — Bank and Cash Reporting, beside the accounts it reports on.
       '/treasury/deposits',
       '/treasury/loans',
+      // REQ-ACC-001 Part D — Payments & Receipts.
+      '/treasury/payments-receipts',
       '/treasury/reporting',
       // REQ-ACC-001 Part D — Internal Transfers.
       '/treasury/transfers',

@@ -15,6 +15,9 @@ import type { ControlAccountKind } from '../domain/chart-of-accounts';
 import type { DimensionType } from '../domain/dimensions';
 import { chartOfAccount, journalEntry, journalLine, subledgerEntry } from '../db/schema';
 import type { Tx } from '../db/client';
+import { toDecimalString } from '../domain/money';
+import * as authz from './authorization';
+import type { ActorContext } from './chart-of-accounts';
 
 /**
  * Where the party code comes from, per subledger.
@@ -249,3 +252,89 @@ export async function statementFor(
     )
     .orderBy(subledgerEntry.postingDate, subledgerEntry.id);
 }
+
+// ---------------------------------------------------------------------------
+// Inventory value against the inventory accounts — REQ-ACC-001 Part D-4
+// ---------------------------------------------------------------------------
+
+export interface InventoryValueFigure {
+  /** What the cost layers hold now: remaining quantity at each layer's unit cost. */
+  readonly layersIqd: string;
+  /** Of that, the part whose movement carries no journal of its own (§22's "not yet posted"). */
+  readonly provisionalIqd: string;
+  /** What the items' inventory accounts hold now. */
+  readonly accountsIqd: string;
+  /** Layers less accounts — expected to be nothing. */
+  readonly differenceIqd: string;
+}
+
+/**
+ * The inventory layers against the inventory accounts, now — the one figure
+ * the close checklist (check 7, `inventory_value_equals_gl`) and the Account
+ * Reconciliation screen both show, so they cannot disagree. As of now because
+ * the layers have no history: a layer's remaining quantity is today's.
+ */
+export async function inventoryValue(tx: Tx): Promise<InventoryValueFigure> {
+  const [layers] = (
+    await tx.execute(sql`
+      select coalesce(sum(l.remaining_quantity * l.unit_cost_iqd), 0)::text as value,
+             coalesce(sum(l.remaining_quantity * l.unit_cost_iqd) filter (where m.journal_entry_id is null), 0)::text as provisional
+        from cost_layer l
+        join inventory_movement m on m.id = l.created_by_movement_id
+       where l.remaining_quantity > 0`)
+  ).rows as { value: string; provisional: string }[];
+  const [accounts] = (
+    await tx.execute(sql`
+      select coalesce(sum(l.debit_iqd - l.credit_iqd), 0)::text as value
+        from journal_line l
+        join journal_entry e on e.id = l.journal_entry_id
+       where e.status in ('posted', 'reversed')
+         and l.account_id in (select distinct inventory_account_id from item where inventory_account_id is not null)`)
+  ).rows as { value: string }[];
+  // Exact: a layer's value carries more places than money (quantity × cost),
+  // so each figure is read at eight places, the difference taken there, and
+  // every figure rounded half up to money's four only when it is reported.
+  const exact = (value: string) => {
+    const negative = value.startsWith('-');
+    const [whole, fraction = ''] = value.replace('-', '').split('.');
+    const scaled = BigInt(`${whole}${fraction.padEnd(8, '0').slice(0, 8)}`);
+    return negative ? -scaled : scaled;
+  };
+  const money = (scaled: bigint) => {
+    const sign = scaled < 0n ? -1n : 1n;
+    return toDecimalString((((scaled * sign) + 5000n) / 10000n) * sign, 4n);
+  };
+  const layersExact = exact(layers?.value ?? '0');
+  const accountsExact = exact(accounts?.value ?? '0');
+  const layersIqd = money(layersExact);
+  const accountsIqd = money(accountsExact);
+  const rounded = money(layersExact - accountsExact);
+  return {
+    layersIqd,
+    provisionalIqd: money(exact(layers?.provisional ?? '0')),
+    accountsIqd,
+    differenceIqd: rounded,
+  };
+}
+
+/** Where each sub-ledger is investigated, party by party. */
+export const SUBLEDGER_SCREEN: Readonly<Partial<Record<ControlAccountKind, string>>> = {
+  customer: '/sales/customer-statements',
+  supplier: '/payables/supplier-statements',
+  loan: '/treasury/loans',
+  inventory: '/inventory/fifo-valuation',
+};
+
+/**
+ * The Account Reconciliation screen's one read (REQ-ACC-001 Part D-4): every
+ * control account's sub-ledger beside its G/L balance as at a date — the same
+ * rows the close checklist's `subledger_equals_gl` reads — and the inventory
+ * layers beside the inventory accounts (`inventoryValue`, check 7's figure).
+ * It reports; it never posts a correction. Read under the Trial Balance's
+ * grant, as the menu says.
+ */
+export async function accountReconciliation(tx: Tx, ctx: ActorContext, asOf: string) {
+  await authz.authorize(ctx.principal, 'view', 'trial_balance', { branchCode: ctx.branchCode });
+  return { asOf, rows: await reconciliation(tx, asOf), inventory: await inventoryValue(tx) };
+}
+
