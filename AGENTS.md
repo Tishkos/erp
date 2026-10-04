@@ -130,7 +130,7 @@ When a module builds a missing profile page, it fills in the route in `BASES` (a
 | `gl_account` | `/master-data/chart-of-accounts/<code>` (its ledger is one click on) | accounting |
 | `journal` | `/finance/journals/<entryNo>` | accounting |
 | `item` / `warehouse` / `uom` | `/inventory/items/<code>` / `/master-data/warehouses/<code>` / `/inventory/uom/<code>` | inventory |
-| `import` | `/payables/<payableNo>` | logistics |
+| `import` | `/payables/<payableNo>` (the import application) | payables |
 | `bl` / `container` / `pd` / `asycuda_run` | `/payables/shipments/<blNo>` / `/payables/containers/<no>[?id=]` / `/payables/pd/<no>[?year=]` / `/payables/pd/asycuda/<runNo>` | logistics |
 | `port`, `carrier` | **missing — logistics builds it** | logistics |
 | `loan`, `deposit` | `/treasury/loans/<loanNo>`, `/treasury/deposits/<no>` | payables |
