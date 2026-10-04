@@ -258,7 +258,8 @@ test.describe('REQ-ACC-001 · the Accounting screens', () => {
     await page.goto('/finance/journals/OPEN-DEV-2026');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 60_000 });
     await expectDoors(page);
-    await expect(page.getByRole('link', { name: /^[ALXRE]\d+ · / }).first()).toHaveAttribute('href', /\/master-data\/chart-of-accounts\//);
+    // The account cell's arrow is part of the accessible name ("➜ A100001 · …").
+    await expect(page.getByRole('link', { name: /[ALXRE]\d+ · / }).first()).toHaveAttribute('href', /\/master-data\/chart-of-accounts\//);
   });
 
   test('9 · every new screen reads right to left at a phone’s width with no sideways scroll', async ({ page, context }) => {
