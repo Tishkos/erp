@@ -69,6 +69,17 @@ export const EXPORT_ACCESS = {
   project_budget: { kind: 'document', route: '/projects/budgets', object: 'project' },
   project_change_order: { kind: 'document', route: '/projects/change-orders', object: 'project' },
   project_material_issue: { kind: 'document', route: '/projects/material-issues', object: 'project' },
+  // HR's records, printed from their own pages (shared, 2026-10-04), each
+  // under its own grant. A person's paper and their review are also theirs to
+  // print (R5): their row policies return their own rows and nobody else's.
+  // An advance and a leave request are read branch-wide at the database, so
+  // they are not self-service — the grant decides.
+  employee_advance: { kind: 'document', route: '/hr/advances', object: 'employee_advance' },
+  leave_request: { kind: 'document', route: '/hr/leave', object: 'leave_request' },
+  employee_document: { kind: 'document', route: '/hr/documents', object: 'employee_document', selfService: true },
+  performance_review: { kind: 'document', route: '/hr/performance', object: 'performance_review', selfService: true },
+  vacancy: { kind: 'document', route: '/hr/recruitment', object: 'recruitment' },
+  applicant: { kind: 'document', route: '/hr/recruitment', object: 'recruitment' },
 } as const satisfies Record<
   string,
   { readonly kind: 'document' | 'report'; readonly route: string; readonly object: string; readonly selfService?: boolean }

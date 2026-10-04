@@ -8,6 +8,7 @@ import * as reports from './reports';
 import * as projectReports from './project-reports';
 import * as hrReports from './hr-reports';
 import * as projectDocuments from './project-documents';
+import * as hrDocuments from './hr-documents';
 
 export type { ExportKey } from './access';
 
@@ -84,6 +85,12 @@ const BUILDERS = {
   project_budget: byId(projectDocuments.projectBudget),
   project_change_order: byId(projectDocuments.changeOrder),
   project_material_issue: byId(projectDocuments.materialIssue),
+  employee_advance: byId(hrDocuments.employeeAdvance),
+  leave_request: byId(hrDocuments.leaveRequest),
+  employee_document: byId(hrDocuments.employeeDocument),
+  performance_review: byId(hrDocuments.performanceReview),
+  vacancy: byId(hrDocuments.vacancy),
+  applicant: byId(hrDocuments.applicant),
 } satisfies Record<ExportKey, Builder>;
 
 export function exportable(key: ExportKey): Exportable {

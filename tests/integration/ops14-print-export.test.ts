@@ -845,11 +845,15 @@ describe('who may take a copy', () => {
     // whoever row security lets read it.
     // REQ-HR-001 HR-6 — the HR reports are HR's, Finance's and the CEO's: the
     // clerk reads none of them (an issued letter goes to whom it is about).
-    const COMPENSATION_GATED: readonly ExportKey[] = ['payroll_run', 'hr_headcount', 'hr_leave_balances', 'hr_payroll_register', 'hr_unsettled_advances'];
+    const COMPENSATION_GATED: readonly ExportKey[] = ['payroll_run', 'hr_headcount', 'hr_leave_balances', 'hr_payroll_register', 'hr_unsettled_advances', 'employee_advance'];
+    // Shared doors (2026-10-04) — HR's own papers: a leave request, a vacancy
+    // and an application are HR's to print, not Finance's (the accounting
+    // manager reads leave, and reads no recruitment at all).
+    const HR_ONLY: readonly ExportKey[] = ['leave_request', 'vacancy', 'applicant'];
     for (const key of EXPORT_KEYS) {
-      expect(mayExport(manager.principal, key, 'pdf')).toBe(true);
-      expect(mayExport(manager.principal, key, 'xlsx')).toBe(true);
-      expect(mayExport(clerk.principal, key, 'pdf')).toBe(!COMPENSATION_GATED.includes(key));
+      expect(mayExport(manager.principal, key, 'pdf'), key).toBe(!HR_ONLY.includes(key));
+      expect(mayExport(manager.principal, key, 'xlsx'), key).toBe(!HR_ONLY.includes(key));
+      expect(mayExport(clerk.principal, key, 'pdf'), key).toBe(!COMPENSATION_GATED.includes(key) && !HR_ONLY.includes(key));
     }
   });
 });

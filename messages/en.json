@@ -5872,7 +5872,13 @@
       "project_certificate": "Progress Certificate",
       "project_budget": "Budget Document",
       "project_change_order": "Change Order",
-      "project_material_issue": "Material Issue"
+      "project_material_issue": "Material Issue",
+      "employee_advance": "Employee Advance",
+      "leave_request": "Leave Request",
+      "employee_document": "Employee Document",
+      "performance_review": "Performance Review",
+      "vacancy": "Vacancy",
+      "applicant": "Application"
     }
   }
 }

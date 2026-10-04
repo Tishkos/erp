@@ -67,6 +67,14 @@ export const PROFILE_KINDS = [
   'project_budget',
   'project_variation',
   'project_material_issue',
+  // HR's records (shared, 2026-10-04): a paper renews a paper, a claim settles a trip's advance.
+  'employee_advance',
+  'leave_request',
+  'employee_request',
+  'employee_document',
+  'performance_review',
+  'vacancy',
+  'payroll_run',
   // Kinds with no page yet.
   'currency',
   'fixed_asset',
@@ -137,6 +145,13 @@ const BASES: Readonly<Record<ProfileKind, string | null>> = {
   project_budget: '/projects/budgets',
   project_variation: '/projects/change-orders',
   project_material_issue: '/projects/material-issues',
+  employee_advance: '/hr/advances',
+  leave_request: '/hr/leave',
+  employee_request: '/hr/requests',
+  employee_document: '/hr/documents',
+  performance_review: '/hr/performance',
+  vacancy: '/hr/recruitment',
+  payroll_run: '/hr/payroll',
   currency: null, // missing — shared (exchange rates are a settings screen, no record page)
   fixed_asset: null, // missing — shared (no module owns it yet)
   investment: null, // missing — shared (no module owns it yet)

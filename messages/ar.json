@@ -5872,7 +5872,13 @@
       "project_certificate": "شهادة الإنجاز",
       "project_budget": "مستند الموازنة",
       "project_change_order": "أمر التغيير",
-      "project_material_issue": "صرف مواد"
+      "project_material_issue": "صرف مواد",
+      "employee_advance": "سلفة موظف",
+      "leave_request": "طلب إجازة",
+      "employee_document": "وثيقة موظف",
+      "performance_review": "تقييم أداء",
+      "vacancy": "شاغر وظيفي",
+      "applicant": "طلب توظيف"
     }
   }
 }

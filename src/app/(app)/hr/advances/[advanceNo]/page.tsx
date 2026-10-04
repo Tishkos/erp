@@ -1,11 +1,16 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, Field, Flash, Form, Grid, Select, Submit, SubmitRow, admin as s } from '@/components/admin';
+import { readAttachments } from '@/components/admin/attachments';
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { DocumentWindow, type DocumentField } from '@/components/admin/document-window';
 import { RecordHistory } from '@/components/admin/history';
+import { HistoryButton } from '@/components/admin/icon-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordAttachmentsDoor } from '@/components/admin/record-attachments-door';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+import { ExportIcon } from '@/components/print/export-menu';
 import { Denied } from '@/components/denied';
 import { formatBusinessDate, formatMoney, formatTimestamp, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -14,6 +19,7 @@ import { businessToday } from '@/server/domain/business-date';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as advances from '@/server/services/employee-advances';
 import * as payroll from '@/server/services/payroll';
+import * as recordNotes from '@/server/services/record-notes';
 import { approveAdvance, cancelAdvance, endorseAdvance, payAdvance, refuseAdvance, repayAdvance, submitAdvance } from '../actions';
 
 /**
@@ -21,7 +27,9 @@ import { approveAdvance, cancelAdvance, endorseAdvance, payAdvance, refuseAdvanc
  * Invoice page: the document window with its header fields and status chip,
  * its lines the schedule month by month (the instalment, what was due by
  * then, what came back), the verbs at its foot; what came back stacked under
- * it; the audit log.
+ * it. The four doors in its title bar from the draft on — printer,
+ * paperclip, notes, clock (shared, 2026-10-04) — and the person, the account
+ * it was paid from and its journals as links to their own pages.
  */
 export const dynamic = 'force-dynamic';
 
@@ -55,13 +63,19 @@ export default async function AdvancePage({ params, searchParams }: { params: Pr
   const found = await withCurrentUser(async (tx) => {
     const detail = await advances.byNo(tx, advanceNo);
     if (!detail) return null;
-    return { detail, accounts: can(principal, 'execute', advances.PERMISSION_OBJECT) ? await payroll.payingAccounts(tx) : [] };
+    // Notes by number, as its history is; files by its id, as HR's records file them.
+    return {
+      detail,
+      accounts: can(principal, 'execute', advances.PERMISSION_OBJECT) ? await payroll.payingAccounts(tx) : [],
+      notes: await recordNotes.listNotes(tx, { object: advances.PERMISSION_OBJECT, recordId: detail.row.advanceNo }),
+      files: await readAttachments(tx, advances.PERMISSION_OBJECT, detail.row.id),
+    };
   });
   if (!found) {
     if (!can(principal, 'view', advances.PERMISSION_OBJECT)) return <Denied object={page('employee_advances')} />;
     notFound();
   }
-  const { detail, accounts } = found;
+  const { detail, accounts, notes, files } = found;
   const { row, person } = detail;
   const self = person.appUserId === principal.userId;
   const step = advances.stepRefusal({ principal }, person, row);
@@ -84,13 +98,7 @@ export default async function AdvancePage({ params, searchParams }: { params: Pr
     { label: column('status'), value: statusLabel(row.status), status: tone },
     {
       label: x('employee'),
-      value: mayOpenPerson ? (
-        <Link className={s.sapLink} href={`/hr/employees/${encodeURIComponent(person.employeeNo)}`}>
-          <bdi dir="auto">{`${person.employeeNo} · ${name}`}</bdi>
-        </Link>
-      ) : (
-        <bdi dir="auto">{`${person.employeeNo} · ${name}`}</bdi>
-      ),
+      value: mayOpenPerson ? <ProfileLink code={person.employeeNo} dir="auto" kind="employee" name={name} /> : <bdi dir="auto">{`${person.employeeNo} · ${name}`}</bdi>,
     },
     { label: x('kind'), value: x(`kind_${row.kind}`) },
     { label: x('amount'), value: <bdi dir="ltr">{iqd(row.amountIqd)}</bdi> },
@@ -105,17 +113,9 @@ export default async function AdvancePage({ params, searchParams }: { params: Pr
     ...(row.paidAt
       ? [
           { label: x('paid_by'), value: <bdi dir="auto">{when(detail.paidByName, row.paidAt)}</bdi> },
-          { label: x('paid_on'), value: <bdi dir="ltr">{`${day(row.paidOn)} · ${detail.accountCode ?? '—'}${row.paymentReference ? ` · ${row.paymentReference}` : ''}`}</bdi> },
-          {
-            label: x('journal'),
-            value: detail.entryNo ? (
-              <Link className={s.sapLink} href={`/finance/journals/${encodeURIComponent(detail.entryNo)}`}>
-                <bdi dir="ltr">{detail.entryNo}</bdi>
-              </Link>
-            ) : (
-              '—'
-            ),
-          },
+          { label: x('paid_on'), value: <bdi dir="ltr">{`${day(row.paidOn)}${row.paymentReference ? ` · ${row.paymentReference}` : ''}`}</bdi> },
+          { label: x('account'), value: <ProfileLink code={detail.accountCode} kind={detail.accountType === 'cash' ? 'cash_account' : 'bank_account'} /> },
+          { label: x('journal'), value: <ProfileLink code={detail.entryNo} kind="journal" /> },
         ]
       : []),
     ...(row.cancelledAt
@@ -212,8 +212,17 @@ export default async function AdvancePage({ params, searchParams }: { params: Pr
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Printer, paperclip, notes, clock — from the draft on (2026-10-04). */}
+            <ExportIcon exportKey="employee_advance" id={row.advanceNo} title={`${x('document_type')} ${row.advanceNo}`} />
+            <RecordAttachmentsDoor files={files} mayAttach={row.status !== 'cancelled' && row.status !== 'refused'} object={advances.PERMISSION_OBJECT} recordId={row.id} />
+            <RecordNotesDoor notes={notes} object={advances.PERMISSION_OBJECT} recordId={row.advanceNo} />
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={row.advanceNo} objectType={advances.PERMISSION_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         documentType={x('document_type')}
         fields={fields}
         id="advance-document"
@@ -303,13 +312,7 @@ export default async function AdvancePage({ params, searchParams }: { params: Pr
                       <bdi dir="ltr">{iqd(r.amountIqd)}</bdi>
                     </td>
                     <td>
-                      {r.entryNo ? (
-                        <Link className={s.sapLink} href={`/finance/journals/${encodeURIComponent(r.entryNo)}`}>
-                          <bdi dir="ltr">{r.entryNo}</bdi>
-                        </Link>
-                      ) : (
-                        '—'
-                      )}
+                      <ProfileLink code={r.entryNo} kind="journal" />
                     </td>
                     <td>
                       <bdi dir="ltr">{formatTimestamp(new Date(r.recordedAt).toISOString(), locale as Locale)}</bdi>
@@ -321,8 +324,6 @@ export default async function AdvancePage({ params, searchParams }: { params: Pr
           </div>
         </div>
       </section>
-
-      <RecordHistory objectId={row.advanceNo} objectType={advances.PERMISSION_OBJECT} />
     </AdminPage>
   );
 }
