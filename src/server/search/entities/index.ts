@@ -33,6 +33,7 @@ import {
   supplier,
   warehouse,
 } from './masters';
+import { exceptionType } from './exceptions';
 import { task } from './tasks';
 
 export const BUILT_IN: readonly SearchType[] = [
@@ -58,6 +59,7 @@ export const BUILT_IN: readonly SearchType[] = [
   bankLoan,
   // Work
   task,
+  exceptionType,
   // Imports and shipping
   payable,
   billOfLading,

@@ -430,6 +430,10 @@ const CHIP: Readonly<Record<string, string>> = {
   assigned: 'submitted',
   in_progress: 'executed',
   completed: 'posted',
+  // An exception on its road (the Exception Center): open needs a person, acknowledged has one, resolved cleared by itself.
+  open: 'submitted',
+  acknowledged: 'approved',
+  resolved: 'settled',
 };
 
 /** Every status code the search can show; each has a `search.status.<code>` translation in both locales. */

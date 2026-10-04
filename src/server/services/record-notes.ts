@@ -215,6 +215,9 @@ const TARGETS = new Map<string, NoteTarget>([
   // The Task Center (platform phase) — kept by number, as its history is. Whoever can open the task (its row
   // policy decides which exist for the reader) may add a note; a note is dated, signed and never edited.
   ['task', target('task', 'view', inTable('task', 'task_no', 'branch_code'))],
+  // The Exception Center (platform phase) — kept by number, as its history is. Whoever can open the exception may leave
+  // a dated, signed note on it (the row policy decides which exist for the reader); a note is never edited.
+  ['exception', target('exception', 'view', inTable('exception', 'exception_no', 'branch_code'))],
 ]);
 
 /** A module's own record joins the door. Additive: an existing object is never replaced. */

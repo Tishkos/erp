@@ -107,6 +107,18 @@ export const KINDS: Readonly<Record<string, KindDef>> = Object.freeze({
   'task.due_soon': { category: 'tasks', object: 'task', window: 'day' },
   'task.overdue': { category: 'tasks', object: 'task', window: 'day' },
 
+  // Exceptions — the Exception Center raises one kind per domain, so each reads as what it is about. They all sit in the
+  // Accounting category: the registry already reserves the `exception.` prefix for it, and a kind may not be claimed by two
+  // categories. A new critical or high finding is told once per occurrence and severity; `reason` carries the severity.
+  'exception.accounting': { category: 'accounting', object: 'exception', window: 'occurrence' },
+  'exception.receivables': { category: 'accounting', object: 'exception', window: 'occurrence' },
+  'exception.payables': { category: 'accounting', object: 'exception', window: 'occurrence' },
+  'exception.inventory': { category: 'accounting', object: 'exception', window: 'occurrence' },
+  'exception.logistics': { category: 'accounting', object: 'exception', window: 'occurrence' },
+  'exception.tasks': { category: 'accounting', object: 'exception', window: 'occurrence' },
+  'exception.approvals': { category: 'accounting', object: 'exception', window: 'occurrence' },
+  'exception.platform': { category: 'accounting', object: 'exception', window: 'occurrence' },
+
   // Chat — emitted by services/chat.ts.
   'chat.message': { category: 'chat', object: 'chat', window: 'occurrence', userText: true },
   'chat.mention': { category: 'chat', object: 'chat', window: 'occurrence', userText: true },

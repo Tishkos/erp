@@ -146,6 +146,20 @@ notes are `task.note_added` events under its number (as its history is); the
 kind `task` is registered for QS Cloud Files links and for Reply in Chat
 (`chat.openRecordConversation`, the same transaction).
 
+## Exception Center (platform phase, Agent 7)
+
+| Record page | P | A | N | H | Print model | Parties → profile | Owner | Status |
+|---|---|---|---|---|---|---|---|---|
+| `exceptions/[exceptionNo]` — exception | ✅ | ✅ | ✅ | ✅ | `exception` (the finding, its evidence and its road) | the affected record, the evidence rows: links, only to what the reader may open; the customer or supplier: `ProfileLink` | exceptions | done |
+
+`/exceptions` is a list screen and has no doors. An exception's files are
+attachments of object `exception` filed under its id (opened by the same rule as
+the finding itself, `exceptionParentAccess`); its notes are
+`record_note` events under its number; the kind `exception` is registered for QS
+Cloud Files links (`records/exceptions.ts`), is the target a notification
+opens, and is a record in Global Search. The record is never edited: the one
+verb on it is the acknowledgement (a note is required), and it clears by itself.
+
 ## Export keys added on `feat/shared-module`
 
 `project_certificate`, `project_budget`, `project_change_order`,

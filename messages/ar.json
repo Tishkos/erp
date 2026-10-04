@@ -314,7 +314,8 @@
     "account_reconciliation": "مطابقة الحسابات",
     "payments_receipts": "المدفوعات والمقبوضات",
     "tax_codes": "رموز الضرائب",
-    "cloud_files_settings": "إعدادات Cloud Files"
+    "cloud_files_settings": "إعدادات Cloud Files",
+    "exceptions": "الاستثناءات"
   },
   "auth": {
     "email": "البريد الإلكتروني",
@@ -6855,6 +6856,302 @@
       "watcher_remove": "إزالة",
       "watcher_add": "إضافة متابع",
       "watcher_add_submit": "إضافة"
+    },
+    "exceptions": {
+      "title": "الاستثناءات",
+      "subtitle": "ما يحتاج إلى شخص في الدفاتر والعمل: يكتشفه النظام ويبقى مدرجًا حتى يزول سببه.",
+      "document_type": "استثناء",
+      "filter": "عرض",
+      "domain": "المجال",
+      "all_domains": "كل المجالات",
+      "severity": "الخطورة",
+      "all_severities": "كل درجات الخطورة",
+      "status": "الحالة",
+      "status_live": "المفتوحة وقيد المتابعة",
+      "status_open": "مفتوح",
+      "status_acknowledged": "قيد المتابعة",
+      "status_resolved": "تمت معالجته",
+      "status_all": "الكل",
+      "owner": "المسؤول",
+      "owner_any": "أي شخص",
+      "owner_me": "خاصتي",
+      "owner_none": "بلا مسؤول",
+      "col_exception": "الاستثناء",
+      "col_record": "السجل المعني",
+      "col_first": "أول اكتشاف",
+      "col_last": "آخر رصد",
+      "severity_critical": "حرج",
+      "severity_high": "عالٍ",
+      "severity_medium": "متوسط",
+      "severity_low": "منخفض",
+      "domain_accounting": "المحاسبة",
+      "domain_receivables": "الذمم المدينة",
+      "domain_payables": "الذمم الدائنة",
+      "domain_inventory": "المخزون",
+      "domain_logistics": "الخدمات اللوجستية",
+      "domain_tasks": "المهام",
+      "domain_approvals": "الموافقات",
+      "domain_platform": "النظام",
+      "none": "لا شيء يحتاج إلى انتباه. فحص النظام ولم يجد شيئًا فيما يحق لك الاطلاع عليه.",
+      "none_filtered": "لا استثناء يطابق هذه المرشحات.",
+      "last_check": "آخر فحص {when}: وُجد {found}، جديد {created}، أُعيد فتحه {reopened}، زال سببه {resolved}.",
+      "last_check_none": "لم يجرِ النظام أي فحص بعد.",
+      "last_check_failed": "تعذّر تشغيل {failed, plural, one {فحص واحد} two {فحصين} few {# فحوص} many {# فحصًا} other {# فحص}} في المرة الأخيرة؛ وتُرك ما يغطيه كما هو تمامًا.",
+      "refresh": "حدّث الآن",
+      "refreshed": "جرى الفحص للتو: وُجد {found}، جديد {created}، أُعيد فتحه {reopened}، زال سببه {resolved}.",
+      "refreshed_recent": "جرى فحص قبل لحظات وهذه نتيجته: وُجد {found}، جديد {created}، أُعيد فتحه {reopened}، زال سببه {resolved}.",
+      "party": "الطرف",
+      "branch": "الفرع",
+      "occurrence": "مرات الظهور",
+      "resolved_on": "تاريخ المعالجة",
+      "acknowledged_by": "أقرّ به",
+      "acknowledged_on": "تاريخ الإقرار",
+      "acknowledgement_note": "الملاحظة",
+      "what_is_wrong": "ما المشكلة",
+      "what_to_do": "ما العمل",
+      "action_link": "اذهب إلى مكان المعالجة",
+      "affected_record": "السجل المعني",
+      "evidence_title": "الأدلة",
+      "evidence_none": "لم يحتفظ الفحص بأسطر مفردة لهذا الاستثناء.",
+      "ev_ref": "السجل",
+      "ev_date": "التاريخ",
+      "ev_amount": "المبلغ",
+      "ev_quantity": "الكمية",
+      "ev_note": "ما المشكلة فيه",
+      "history_title": "المسار",
+      "history_none": "لا مسار بعد.",
+      "hist_event": "الحدث",
+      "hist_when": "متى",
+      "hist_who": "بواسطة",
+      "hist_note": "ملاحظة",
+      "hist_system": "النظام",
+      "event_detected": "اكتُشف",
+      "event_acknowledged": "أُقرّ به",
+      "event_resolved": "زال سببه فعولج",
+      "event_reopened": "وُجد من جديد",
+      "event_escalated": "رُفع إلى مستوى أعلى",
+      "event_severity_raised": "ارتفعت الخطورة",
+      "event_severity_lowered": "انخفضت الخطورة",
+      "acknowledge": "إقرار",
+      "acknowledge_title": "إقرار {no}",
+      "ack_note": "ما تعرفه وما سيُفعل",
+      "ack_hint": "مطلوبة، وتُؤرَّخ وتُوقَّع. يبقى الاستثناء مدرجًا حتى يزول سببه.",
+      "acknowledged_note": "تم الإقرار: هناك من يتابعه. ويُعالَج من تلقاء نفسه عند زوال السبب.",
+      "resolved_note": "زال السبب؛ وعالج النظام هذا الاستثناء من تلقاء نفسه.",
+      "doc_kind": {
+        "chart_of_account": "حساب",
+        "department_request": "طلب قسم",
+        "invoice": "فاتورة",
+        "journal_entry": "قيد يومية",
+        "partner_bank_account": "حساب بنكي لمورد"
+      },
+      "health_check": {
+        "backup_missing": "لا توجد نسخة احتياطية",
+        "backup_stale": "النسخة الاحتياطية قديمة",
+        "backup_incomplete": "نسخة احتياطية غير مكتملة",
+        "backup_unencrypted": "نسخة احتياطية غير مشفّرة",
+        "partition_horizon": "سجل الذمم الدائنة على وشك النفاد",
+        "period_missing": "لا فترة مالية مفتوحة",
+        "period_closed": "الفترة الحالية مقفلة",
+        "next_year_missing": "السنة المالية القادمة غير مفتوحة",
+        "job_failed": "فشلت مهمة مجدولة",
+        "disk_low": "مساحة القرص منخفضة",
+        "deliveries_stuck": "إشعارات لم تُسلَّم",
+        "bank_account_unlinked": "حساب بنكي بلا حساب في الأستاذ"
+      },
+      "detector": {
+        "accounting_bank_reconciliation_difference": {
+          "name": "مطابقة بنكية فيها فرق",
+          "title": "{account}: المطابقة {reconciliation} لا توافق كشف البنك",
+          "explanation": "ما زالت المطابقة {reconciliation} للحساب {account} بتاريخ {asOfDate} تُظهر فرقًا مقداره {differenceIqd} بين كشف البنك والدفتر، بعد {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}} من تاريخ الكشف. {unmatchedStatementLines, plural, =0 {لا يوجد سطر غير مطابق في الكشف} one {يوجد سطر واحد غير مطابق في الكشف} two {يوجد سطران غير مطابقين في الكشف} few {توجد # أسطر غير مطابقة في الكشف} many {توجد # سطرًا غير مطابق في الكشف} other {توجد # سطر غير مطابق في الكشف}} و{unmatchedLedgerItems, plural, =0 {لا توجد بنود غير مطابقة في الدفتر} one {يوجد بند واحد غير مطابق في الدفتر} two {يوجد بندان غير مطابقين في الدفتر} few {توجد # بنود غير مطابقة في الدفتر} many {توجد # بندًا غير مطابق في الدفتر} other {توجد # بند غير مطابق في الدفتر}}.",
+          "action": "افتح المطابقة البنكية"
+        },
+        "accounting_control_account_difference": {
+          "name": "حساب رقابة يختلف عن دفتره الفرعي",
+          "title": "{account}: الأستاذ العام يختلف عن حسابات {side, select, customer {العملاء} other {الموردين}}",
+          "explanation": "يحمل الأستاذ العام {glIqd} على الحساب {account} بينما تبلغ أرصدة {side, select, customer {العملاء} other {الموردين}} {subledgerIqd}: فرق مقداره {differenceIqd}. {lines, plural, =0 {لم يُحدَّد بعد سطر قيد بعينه سببًا للفرق.} one {يقع سطر قيد واحد خارج الدفتر الفرعي، وهو مدرج أدناه.} two {يقع سطرا قيد خارج الدفتر الفرعي، وهما مدرجان أدناه.} few {تقع # أسطر قيد خارج الدفتر الفرعي، وهي مدرجة أدناه.} many {يقع # سطر قيد خارج الدفتر الفرعي، وهي مدرجة أدناه.} other {يقع # سطر قيد خارج الدفتر الفرعي، وهي مدرجة أدناه.}}",
+          "action": "افتح مطابقة الحسابات"
+        },
+        "accounting_gl_integrity": {
+          "name": "قيد يخالف قواعد الدفاتر",
+          "title": "القيد {entry} {issue, select, unbalanced_journal {غير متوازن} single_sided_journal {له طرف واحد فقط} orphan_subledger_entry {له قيد في الدفتر الفرعي وهو غير مرحَّل} posted_to_group_account {مرحَّل إلى حساب تجميعي} other {يخفق في فحص السلامة}}",
+          "explanation": "وجد فحص سلامة الدفاتر أن القيد {entry} {issue, select, unbalanced_journal {غير متوازن: مجموع المدين لا يساوي مجموع الدائن} single_sided_journal {أقل من سطرين} orphan_subledger_entry {له قيد عميل أو مورد في الدفتر الفرعي مع أنه غير مرحَّل} posted_to_group_account {فيه سطر على حساب أصبح تجميعيًا} other {يخفق في فحص السلامة}}. التفصيل: {detail}.",
+          "action": "افتح ميزان المراجعة"
+        },
+        "accounting_posting_role_unmapped": {
+          "name": "دور ترحيل بلا حساب",
+          "title": "{postingEvent}: لا حساب صالحًا للدور {postingRole}",
+          "explanation": "{reason, select, missing {لا تحتوي قاعدة الترحيل الخاصة بـ {postingEvent} على حساب للدور {postingRole}، لذا سيرفض النظام ترحيل أي مستند من هذا النوع.} stale {الحساب المرتبط بالدور {postingRole} في {postingEvent} ({account}) لم يعد صالحًا للاستخدام، لذا سيرفض النظام ترحيل أي مستند من هذا النوع.} other {لا يمكن استخدام قاعدة الترحيل الخاصة بـ {postingEvent} للدور {postingRole}.}}",
+          "action": "افتح ربط الترحيل"
+        },
+        "accounting_posting_failed": {
+          "name": "ترحيل فشل",
+          "title": "تعذّر ترحيل {document}",
+          "explanation": "فشل ترحيل {postingEvent} للمستند {document} {attempts, plural, one {مرة واحدة} two {مرتين} few {# مرات} many {# مرة} other {# مرة}} منذ {sinceDate} (قبل {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}) ولم تُعَد المحاولة. ما قاله النظام: {errorMessage}",
+          "action": "افتح ربط الترحيل"
+        },
+        "accounting_period_close_blocked": {
+          "name": "فترة لا يمكن إقفالها",
+          "title": "لا يمكن إقفال {period}: {periodCheck}",
+          "explanation": "انتهت {period} في {endDate}، قبل {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}، وما زالت مفتوحة لأن فحص الإقفال {periodCheck} لا يجتاز ({figure}). يبقى الإقفال ممنوعًا حتى يجتاز الفحص.",
+          "action": "افتح الفحص"
+        },
+        "receivables_overdue_exposure": {
+          "name": "عميل لديه فواتير متأخرة",
+          "title": "لدى {party} فواتير متأخرة بمبلغ {overdueIqd}",
+          "explanation": "{invoices, plural, one {فاتورة واحدة} two {فاتورتان} few {# فواتير} many {# فاتورة} other {# فاتورة}} للعميل {party} ({partyCode}) في الفرع {branch} تجاوزت موعد استحقاقها، بمجموع {overdueIqd}. أقدمها {oldestInvoice} استحقت في {oldestDueDate} وتأخرت {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}.",
+          "action": "افتح الذمم المدينة"
+        },
+        "receivables_ledger_inconsistency": {
+          "name": "دفتر العملاء لا يوافق الدفاتر",
+          "title": "القيد {entry} ودفتر العملاء غير متفقين",
+          "explanation": "{reason, select, no_subledger {يرحّل القيد {entry} إلى حساب الرقابة {account} ولا يوجد قيد في دفتر العملاء يقابله.} account {قيد دفتر العملاء الخاص بالقيد {entry} على حساب رقابة غير الذي في سطر القيد ({account}).} amount {مبلغ قيد دفتر العملاء للقيد {entry} يختلف عن سطره على حساب الرقابة {account}.} other {القيد {entry} على حساب الرقابة {account} لا يوافق دفتر العملاء.}} {lines, plural, one {سطر واحد متأثر.} two {سطران متأثران.} few {# أسطر متأثرة.} many {# سطرًا متأثرًا.} other {# سطر متأثر.}}",
+          "action": "افتح مطابقة العملاء"
+        },
+        "payables_overdue_exposure": {
+          "name": "فواتير موردين متأخرة",
+          "title": "ندين لـ {party} بمبلغ {overdueIqd} بعد موعد الاستحقاق",
+          "explanation": "{invoices, plural, one {فاتورة واحدة} two {فاتورتان} few {# فواتير} many {# فاتورة} other {# فاتورة}} للمورد {party} ({partyCode}) في الفرع {branch} تجاوزت موعد استحقاقها، بمجموع {overdueIqd}. أقدمها {oldestInvoice} استحقت في {oldestDueDate} قبل {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}.",
+          "action": "افتح بنود الموردين المفتوحة"
+        },
+        "payables_ledger_inconsistency": {
+          "name": "دفتر الموردين لا يوافق الدفاتر",
+          "title": "القيد {entry} ودفتر الموردين غير متفقين",
+          "explanation": "{reason, select, no_subledger {يرحّل القيد {entry} إلى حساب الرقابة {account} ولا يوجد قيد في دفتر الموردين يقابله.} account {قيد دفتر الموردين الخاص بالقيد {entry} على حساب رقابة غير الذي في سطر القيد ({account}).} amount {مبلغ قيد دفتر الموردين للقيد {entry} يختلف عن سطره على حساب الرقابة {account}.} other {القيد {entry} على حساب الرقابة {account} لا يوافق دفتر الموردين.}} {lines, plural, one {سطر واحد متأثر.} two {سطران متأثران.} few {# أسطر متأثرة.} many {# سطرًا متأثرًا.} other {# سطر متأثر.}}",
+          "action": "افتح مطابقة الموردين"
+        },
+        "payables_supplier_credit_inconsistency": {
+          "name": "إشعار دائن مورد لا تتطابق أرقامه",
+          "title": "مذكرة الدائن {memo} لا تتطابق أرقامها",
+          "explanation": "مذكرة الدائن {memo} من {supplier} بمبلغ {creditIqd} ومسجّلة على أنها طُبّقت بمبلغ {allocatedIqd}، لكن تطبيقاتها السارية تبلغ {appliedIqd}: فرق مقداره {differenceIqd}.",
+          "action": "افتح مذكرة الدائن"
+        },
+        "inventory_negative_stock": {
+          "name": "مخزون بالسالب",
+          "title": "{item} أقل من الصفر في {warehouse}",
+          "explanation": "يُظهر سجل المخزون {quantityQty} من {item} في {warehouse}. لا يمكن لمستودع أن يحمل أقل من لا شيء: سُجّل صرف دون الاستلام الذي كان يجب أن يسبقه، أو رُحّل مستند في المستودع الخطأ.",
+          "action": "افتح سجل المخزون"
+        },
+        "inventory_layer_mismatch": {
+          "name": "طبقات المخزون لا توافق السجل",
+          "title": "{item} في {warehouse}: طبقات التكلفة لا توافق المخزون",
+          "explanation": "في {warehouse} يختلف سجل المخزون عن طبقات التكلفة (الوارد أولاً صادر أولاً) للصنف {item} بمقدار {quantityQty}. قيمة هذا الصنف غير موثوقة حتى يُفسَّر الفرق.",
+          "action": "افتح سجل المخزون"
+        },
+        "inventory_document_ledger_mismatch": {
+          "name": "مستند مخزني وسجل المخزون غير متفقين",
+          "title": "{kind, select, no_ledger {المستند {document} لم يحرّك أي مخزون} no_document {حركات مخزون تشير إلى مستند غير موجود} unbalanced {التحويل {document} أنشأ مخزونًا أو أضاعه} other {مستند مخزني لا يوافق السجل}}",
+          "explanation": "{kind, select, no_ledger {المستند {document} مرحَّل لكنه لم يكتب أي سطر في سجل المخزون، فالمخزون الذي كان عليه تحريكه غير منعكس في أي مكان.} no_document {{movements, plural, one {حركة مخزون واحدة تشير} two {حركتا مخزون تشيران} few {# حركات مخزون تشير} many {# حركة مخزون تشير} other {# حركة مخزون تشير}} إلى مستند غير موجود ({document}). المخزون محسوب لكن لا شيء يفسّره.} unbalanced {التحويل {document} لم يصرف ويستلم الكمية نفسها في {items, plural, one {صنف واحد} two {صنفين} few {# أصناف} many {# صنفًا} other {# صنف}}، فنشأ مخزون أو ضاع أثناء التحويل.} other {المستند {document} لا يوافق سجل المخزون.}}",
+          "action": "افتح فحوص المخزون"
+        },
+        "inventory_gl_difference": {
+          "name": "قيمة المخزون تختلف عن حسابات المخزون",
+          "title": "قيمة المخزون وحسابات المخزون تختلفان بمقدار {unexplainedIqd}",
+          "explanation": "تقيّم طبقات التكلفة المخزون بمبلغ {layersIqd} بينما تحمل حسابات المخزون {glIqd}. وبعد استبعاد {provisionalIqd} من مخزون وارد دون قيد بعد، يبقى {unexplainedIqd} بلا تفسير.",
+          "action": "افتح مطابقة الحسابات"
+        },
+        "inventory_transit_mismatch": {
+          "name": "مخزون في الطريق لا تفسّره الاستيرادات",
+          "title": "{item}: المخزون في الطريق لا يوافق الاستيرادات",
+          "explanation": "يحمل سجل المخزون {ledgerQty} من {item} في الطريق، بينما تفسّر الاستيرادات المفتوحة {importsQty}: فرق مقداره {differenceQty}.",
+          "action": "افتح البضاعة في الطريق"
+        },
+        "logistics_container_delayed": {
+          "name": "حاوية تجاوزت موعد وصولها",
+          "title": "الحاوية {container} تجاوزت موعد وصولها المتوقع بـ {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}",
+          "explanation": "كان من المتوقع أن تصل الحاوية {container} على بوليصة الشحن {bl} من {supplier} (الاستيراد {importNo}) في {etaDate} ولم تُستلم.",
+          "action": "افتح تتبع الشحنات"
+        },
+        "logistics_shipment_update_stale": {
+          "name": "شحنة بلا تحديث حديث للحالة",
+          "title": "لا تحديث لحالة الحاوية {container} منذ {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}",
+          "explanation": "لم يكتب أحد حالة للحاوية {container} (بوليصة الشحن {bl}، المورد {supplier}) منذ {lastDate} ولم تُستلم بعد.",
+          "action": "افتح تتبع الشحنات"
+        },
+        "logistics_customs_issue": {
+          "name": "مستند جمركي في مشكلة",
+          "title": "{issue, select, rejected {رُفض الإقرار المبدئي {pd}} expired {انتهى الإقرار المبدئي {pd}} past_expiry {الإقرار المبدئي {pd} تجاوز تاريخ انتهائه} expiring {الإقرار المبدئي {pd} على وشك الانتهاء} other {الإقرار المبدئي {pd} يحتاج إلى متابعة}}",
+          "explanation": "{issue, select, rejected {رفضت الجمارك الإقرار المبدئي {pd}. يجب تصحيحه أو استبداله قبل التمكن من تخليص البضاعة.} expired {انتهى الإقرار المبدئي {pd} في {expiryDate} دون شطب قيمته بالكامل.} past_expiry {انتهى الإقرار المبدئي {pd} في {expiryDate}، قبل {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}، وما زال مفتوحًا.} expiring {ينتهي الإقرار المبدئي {pd} في {expiryDate}، بعد {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}.} other {الإقرار المبدئي {pd} يحتاج إلى متابعة.}}",
+          "action": "افتح الإقرار المبدئي"
+        },
+        "logistics_landed_cost_blocked": {
+          "name": "تكلفة واصلة تنتظر التوزيع",
+          "title": "الاستيراد {importNo}: لم تُوزَّع التكلفة الواصلة",
+          "explanation": "{state, select, waiting_pds {للاستيراد {importNo} من {supplier} {charges, plural, one {مصروف واحد} two {مصروفان} few {# مصروفات} many {# مصروفًا} other {# مصروف}} بقيمة {unlockedIqd} لا يمكن توزيعها بعد: إقراراته المبدئية الجمركية لم تُشطب كلها.} waiting_containers {للاستيراد {importNo} من {supplier} {charges, plural, one {مصروف واحد} two {مصروفان} few {# مصروفات} many {# مصروفًا} other {# مصروف}} بقيمة {unlockedIqd} لا يمكن توزيعها بعد: استُلمت {containersIn} من {containers} حاوية.} ready {للاستيراد {importNo} من {supplier} {charges, plural, one {مصروف واحد} two {مصروفان} few {# مصروفات} many {# مصروفًا} other {# مصروف}} بقيمة {unlockedIqd} يمكن توزيعها الآن لكن لم يفعل أحد ذلك.} late_charges {للاستيراد {importNo} من {supplier} {charges, plural, one {مصروف واحد} two {مصروفان} few {# مصروفات} many {# مصروفًا} other {# مصروف}} بقيمة {unlockedIqd} أُضيفت بعد قفل تكلفته الواصلة وهي بانتظار قرار.} other {للاستيراد {importNo} من {supplier} مصروفات بقيمة {unlockedIqd} لم تُوزَّع.}} أقدمها ينتظر منذ {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}.",
+          "action": "افتح التكلفة الواصلة"
+        },
+        "tasks_overdue": {
+          "name": "مهمة متأخرة",
+          "title": "المهمة {task} متأخرة: {taskTitle}",
+          "explanation": "كان موعد {task}، {taskTitle}، في {dueDate} وقد تأخرت {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}. الأولوية: {priority}. المكلَّف: {assignee}.",
+          "action": "افتح المهمة"
+        },
+        "tasks_blocked": {
+          "name": "مهمة معطّلة",
+          "title": "المهمة {task} معطّلة منذ {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}",
+          "explanation": "{task}، {taskTitle}، معطّلة منذ {sinceDate}. الأولوية: {priority}. السبب المذكور: {reason}.",
+          "action": "افتح المهمة"
+        },
+        "approvals_waiting_too_long": {
+          "name": "مستند ينتظر الموافقة",
+          "title": "{document} ينتظر قرارًا منذ {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}",
+          "explanation": "{docKind} {document}، قدّمه {submitter} في {sinceDate}، ما زال ينتظر قرارًا من {approver}.",
+          "action": "افتح الموافقات"
+        },
+        "platform_system_health": {
+          "name": "سلامة النظام",
+          "title": "فحص النظام: {healthCheck}",
+          "explanation": "يفيد فحص النظام بما يلي: {message}",
+          "action": "افتح النسخ الاحتياطي والسلامة"
+        },
+        "platform_sweep_truncated": {
+          "name": "الفحص أظهر جزءًا مما وجده",
+          "title": "فحص {sourceDetector} يعرض {shown} فقط من {total} نتيجة",
+          "explanation": "لتبقى القائمة صالحة للاستخدام، يعرض فحص {sourceDetector} الأشد خطورة وعددها {shown} من {total} نتيجة. عالج الأشد خطورة أولاً؛ وتظهر البقية عند زوال هذه.",
+          "action": "افتح الاستثناءات"
+        }
+      },
+      "evidence_note": {
+        "bank_statement_closing": "الرصيد الختامي في كشف البنك",
+        "bank_ledger_balance": "رصيد الحساب في الدفتر",
+        "bank_difference": "الفرق الذي ما زال يحتاج إلى تفسير",
+        "bank_unmatched": "{statement, plural, one {سطر واحد} two {سطران} few {# أسطر} many {# سطرًا} other {# سطر}} في الكشف و{ledger, plural, one {بند واحد} two {بندان} few {# بنود} many {# بندًا} other {# بند}} في الدفتر لم تُطابَق بعد",
+        "ledger_no_subledger": "مرحَّل إلى حساب الرقابة بلا قيد في الدفتر الفرعي يقابله",
+        "ledger_amount": "مبلغ الدفتر الفرعي يختلف عن سطر القيد هذا",
+        "ledger_account": "قيد الدفتر الفرعي على حساب رقابة آخر",
+        "ledger_not_posted": "القيد غير مرحَّل",
+        "gl_unbalanced_journal": "المدين والدائن مختلفان ({detail})",
+        "gl_single_sided_journal": "أقل من سطرين ({detail})",
+        "gl_orphan_subledger_entry": "قيد في الدفتر الفرعي على قيد غير مرحَّل ({detail})",
+        "gl_posted_to_group_account": "مرحَّل إلى الحساب {detail} وقد أصبح حسابًا تجميعيًا",
+        "posting_error": "توقف الترحيل بالرسالة: {message}",
+        "overdue_days": "متأخر {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}",
+        "credit_amount": "مبلغ المذكرة",
+        "credit_allocated": "المسجَّل على أنه مطبَّق",
+        "credit_applications": "مجموع تطبيقاتها السارية",
+        "stock_on_hand": "الكمية المتوفرة",
+        "stock_ledger_less_layers": "كمية السجل ناقص كمية الطبقات",
+        "stock_no_ledger_rows": "لا حركات مخزون للمستند",
+        "stock_orphan_movement": "حركة في المستودع {warehouse} بلا مستند",
+        "stock_unbalanced_transfer": "صُرف من هنا؛ المستلم {receivedQty}",
+        "value_layers": "قيمة طبقات التكلفة",
+        "value_accounts": "رصيد حسابات المخزون",
+        "value_provisional": "مخزون وارد دون قيد بعد",
+        "transit_ledger": "في الطريق بحسب سجل المخزون",
+        "transit_imports": "في الطريق بحسب الاستيرادات",
+        "container_eta_passed": "مضى على الموعد المتوقع {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}",
+        "container_last_update": "آخر حالة كُتبت قبل {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}",
+        "pd_rejected": "رفضته الجمارك",
+        "pd_expired": "منتهٍ",
+        "pd_past_expiry": "انتهى قبل {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}} وما زال مفتوحًا",
+        "pd_expiring": "ينتهي بعد {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}",
+        "landed_unlocked": "{charges, plural, one {مصروف واحد} two {مصروفان} few {# مصروفات} many {# مصروفًا} other {# مصروف}} لم يُوزَّع بعد، وأقدمها ينتظر منذ {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}",
+        "landed_containers": "استُلمت {received} من {total} حاوية",
+        "task_overdue": "تأخرت {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}} عن موعدها",
+        "task_blocked": "معطّلة منذ {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}: {reason}",
+        "approval_waiting": "تنتظر قرارًا منذ {days, plural, zero {# يوم} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}",
+        "health_message": "{message}"
+      }
     }
   },
   "profile": {
@@ -7123,6 +7420,12 @@
       "default_cleared": "أُلغي العرض الافتراضي",
       "pinned": "ثُبّت العرض في الرئيسية",
       "unpinned": "أُلغي تثبيت العرض من الرئيسية"
+    },
+    "exception": {
+      "acknowledged": "أُقرّ باستثناء",
+      "swept": "فحص الاستثناءات",
+      "refreshed": "تحديث الاستثناءات عند الطلب",
+      "note_added": "أُضيفت ملاحظة"
     }
   },
   "statement_line": {
@@ -7328,7 +7631,8 @@
       "tax_code": "رمز ضريبي",
       "recurring_journal": "قيد متكرر",
       "period_close": "إقفال الفترة",
-      "task": "مهمة"
+      "task": "مهمة",
+      "exception": "استثناء"
     }
   },
   "chat": {
@@ -7656,6 +7960,38 @@
       "system_health": {
         "title": "سلامة النظام تحتاج إلى انتباه",
         "detail": "{extra}"
+      },
+      "exception_accounting": {
+        "title": "استثناء محاسبي {ref}",
+        "detail": "{extra, select, critical {حرج} other {عالي الخطورة}}: افتح الاستثناء لقراءة التفاصيل وما يجب فعله."
+      },
+      "exception_receivables": {
+        "title": "استثناء في الذمم المدينة {ref}",
+        "detail": "{extra, select, critical {حرج} other {عالي الخطورة}}: افتح الاستثناء لقراءة التفاصيل وما يجب فعله."
+      },
+      "exception_payables": {
+        "title": "استثناء في الذمم الدائنة {ref}",
+        "detail": "{extra, select, critical {حرج} other {عالي الخطورة}}: افتح الاستثناء لقراءة التفاصيل وما يجب فعله."
+      },
+      "exception_inventory": {
+        "title": "استثناء في المخزون {ref}",
+        "detail": "{extra, select, critical {حرج} other {عالي الخطورة}}: افتح الاستثناء لقراءة التفاصيل وما يجب فعله."
+      },
+      "exception_logistics": {
+        "title": "استثناء لوجستي {ref}",
+        "detail": "{extra, select, critical {حرج} other {عالي الخطورة}}: افتح الاستثناء لقراءة التفاصيل وما يجب فعله."
+      },
+      "exception_tasks": {
+        "title": "استثناء في المهام {ref}",
+        "detail": "{extra, select, critical {حرج} other {عالي الخطورة}}: افتح الاستثناء لقراءة التفاصيل وما يجب فعله."
+      },
+      "exception_approvals": {
+        "title": "استثناء في الموافقات {ref}",
+        "detail": "{extra, select, critical {حرج} other {عالي الخطورة}}: افتح الاستثناء لقراءة التفاصيل وما يجب فعله."
+      },
+      "exception_platform": {
+        "title": "استثناء في النظام {ref}",
+        "detail": "{extra, select, critical {حرج} other {عالي الخطورة}}: افتح الاستثناء لقراءة التفاصيل وما يجب فعله."
       }
     }
   },
@@ -7870,7 +8206,8 @@
       "customs_declaration": "البيانات الجمركية",
       "attachment": "الملفات",
       "screen": "الشاشات",
-      "task": "مهمة"
+      "task": "مهمة",
+      "exception": "الاستثناءات"
     },
     "status": {
       "draft": "مسودة",
@@ -7926,7 +8263,10 @@
       "expired_part_written_off": "منتهي الصلاحية (مشطوب جزئيًا)",
       "assigned": "مُسندة",
       "in_progress": "قيد التنفيذ",
-      "completed": "مكتملة"
+      "completed": "مكتملة",
+      "open": "مفتوح",
+      "acknowledged": "قيد المتابعة",
+      "resolved": "تمت معالجته"
     }
   },
   "savedViews": {
@@ -7994,6 +8334,9 @@
       "too_many_params": "يحتوي هذا العرض على مرشّحات أكثر من اللازم."
     },
     "params": {
+      "domain": "المجال",
+      "severity": "الخطورة",
+      "owner": "المسؤول",
       "q": "بحث",
       "view": "العرض",
       "min_amount": "الحد الأدنى للمبلغ (د.ع)",

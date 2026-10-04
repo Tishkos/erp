@@ -29,6 +29,7 @@ import {
   employeeAdvance,
   employeeDocument,
   employeeRequest,
+  exception,
   fiscalPeriod,
   goodsReceipt,
   goodsReturn,
@@ -509,6 +510,23 @@ const taskParentAccess = async (tx: Tx, principal: Principal, objectId: string) 
   return Boolean(row);
 };
 
+/**
+ * The Exception Center (platform phase, Agent 7) — an exception's files and notes
+ * are for whoever may open it: the grant to view exceptions, the row policy
+ * (the grant on the object it is about, and the branch), and the one question
+ * SQL cannot answer, whether this person may open the affected record itself
+ * (a task is its parties' alone). The service is loaded when asked: it
+ * imports the record registry, which imports this file.
+ */
+const exceptionParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'exception')) return false;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectId)) return false;
+  const [row] = await tx.select().from(exception).where(eq(exception.id, objectId)).limit(1);
+  if (!row) return false;
+  const { recordVisible } = await import('./services/exceptions');
+  return recordVisible(tx, principal, row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -552,6 +570,7 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('payroll_run', payrollRunParentAccess);
   attachments.registerParentAccessCheck('chat_message', chatMessageParentAccess);
   attachments.registerParentAccessCheck('task', taskParentAccess);
+  attachments.registerParentAccessCheck('exception', exceptionParentAccess);
   for (const [object, table] of PURCHASE_PARENTS) {
     attachments.registerParentAccessCheck(object, purchaseParentAccess(object, table));
   }

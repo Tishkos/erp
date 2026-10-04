@@ -82,6 +82,9 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       page('my_tasks', 'task', '/tasks'),
       page('my_approvals', 'workflow_instance', '/approvals'),
       page('notifications', 'notification', '/notifications'),
+      // The Exception Center (platform phase, Agent 7): what in the books and the work needs a person,
+      // found by the system and kept until its cause is gone. One object `exception`, every role may view.
+      page('exceptions', 'exception', '/exceptions'),
       // Internal chat (platform phase, Agent 1): conversations between people
       // inside the ERP, one object `chat` every role may view.
       page('chat', 'chat', '/chat'),
