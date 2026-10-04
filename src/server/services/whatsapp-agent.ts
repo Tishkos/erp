@@ -19,6 +19,7 @@ import * as itemsService from './items';
 import * as openingStockService from './opening-stock';
 import * as doService from './whatsapp-do';
 import * as insight from './whatsapp-insight';
+import * as liveShots from './live-screenshot';
 import * as review from './whatsapp-review';
 import * as sqlService from './whatsapp-sql';
 import * as systemGuide from './system-guide';
@@ -470,6 +471,36 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         const view = ['menu', 'screen', 'form', 'record', 'dialog', 'all'].includes(String(args.view)) ? (args.view as systemGuide.ShotView | 'all') : 'all';
         const shown = systemGuide.screenPictures(ctx.principal, ctx.locale, String(args.screen ?? ''), view, typeof args.dialog === 'string' ? args.dialog : null);
         return { text: shown.text, ...(shown.images.length > 0 ? { images: shown.images } : {}) };
+      }
+      case 'screenshot': {
+        const ready = liveShots.liveShotsReady();
+        if (!ready.ok) return { text: `No live picture: ${ready.reason ?? 'it is not available here.'} The training pictures (show_screen) still work.` };
+        // The address as a tool gave it, or as a path: only the path is used.
+        const base = systemGuide.appUrl();
+        const given = String(args.address ?? '').trim();
+        const path = given.toLowerCase().startsWith(base.toLowerCase()) ? given.slice(base.length) || '/' : given;
+        const pointAt = Array.isArray(args.pointAt) ? args.pointAt.filter((one): one is string => typeof one === 'string' && one.trim() !== '').slice(0, 4) : [];
+        const taken = await liveShots.liveScreenshot({ userId: ctx.principal.userId, path, locale: ctx.locale, ...(pointAt.length > 0 ? { pointAt } : {}) });
+        if (!taken.ok) return { text: `No live picture: ${taken.reason} Say in words what you would have pointed at.` };
+        const { shot } = taken;
+        const numbers = systemGuide.marksLine(shot.marks);
+        const tag = shot.file.replace(/^.*[\\/]/, '').replace(/\.[a-z0-9]+$/i, '').toLowerCase();
+        const caption =
+          ctx.locale === 'ar' ? `${shot.title || shot.path} — الشاشة كما هي الآن${numbers ? '، والأرقام الحمراء مشروحة في الرسالة' : ''}` : `${shot.title || shot.path} — the screen as it is now${numbers ? '; the red numbers are explained in the message' : ''}`;
+        return {
+          text: [
+            `1 LIVE picture of ${shot.title || shot.path} (${shot.path}) is attached to your answer — the real screen as this person sees it now. Place it at its step: write its tag on a line of its own, and what you write under it is sent as its caption.`,
+            `[picture: ${tag}] — the live screen.${numbers ? ` The red numbers on it: ${numbers}.` : ' Nothing is numbered on this one.'}`,
+            shot.notFound.length > 0
+              ? `Not in the picture, so no arrow was drawn for: ${shot.notFound.join(', ')}. Do not say an arrow points at them. If the thing you meant is among the numbers above under another name, take the picture once more with pointAt set to that exact name — the new picture replaces this one.`
+              : '',
+            'Say where the arrow is and what to do there; refer to anything else by its number and its name. The figures in this picture are real.',
+          ]
+            .filter((line) => line !== '')
+            .join(chr10()),
+          // One live picture per page: a retake replaces the first.
+          images: [{ file: shot.file, caption, group: `live:${shot.path}` }],
+        };
       }
       case 'screens':
         return { text: systemGuide.screens(ctx.principal, typeof args.search === 'string' ? args.search : null) };

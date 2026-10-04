@@ -822,6 +822,35 @@ export const CASES: readonly EvalCase[] = [
     },
     why: 'a number that is not there is said to be not there; nothing is proposed for it',
   },
+
+  // ── the live picture (2026-10-05) — needs NOAH_APP_URL at the running application ──
+  {
+    id: 'live-show-document-en',
+    area: 'document',
+    ask: 'show me API-HQ-2026-000001 as it is now',
+    expect: {
+      tools: ['screenshot'],
+      says: ['posted'],
+      pictures: 1,
+      script: 'latin',
+      maxSeconds: 180,
+    },
+    why: 'their own document, pictured live: one picture, and what it says about its status',
+  },
+  {
+    id: 'live-point-at-button-en',
+    area: 'document',
+    ask: 'show me on the screen where I press to send API-HQ-2026-000005 for approval',
+    expect: {
+      tools: ['screenshot'],
+      says: ['Send for approval', 'arrow'],
+      pictures: 1,
+      noProposal: true,
+      script: 'latin',
+      maxSeconds: 180,
+    },
+    why: 'the arrow is at the button the screen really has, named as the screen names it — and showing is not doing',
+  },
 ];
 
 // ---------------------------------------------------------------------------

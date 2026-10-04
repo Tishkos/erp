@@ -66,8 +66,13 @@ export interface AgentClient {
  */
 export interface ToolOutcome {
   readonly text: string;
-  /** Pictures to send after the answer — a screen, its menu path, its form. */
-  readonly images?: ReadonlyArray<{ readonly file: string; readonly caption: string }>;
+  /**
+   * Pictures to send with the answer — a screen, its menu path, its form. A
+   * picture with a `group` takes the place of an earlier one of the same
+   * group: a live picture taken again (the arrow was at the wrong thing the
+   * first time) is one picture, not two.
+   */
+  readonly images?: ReadonlyArray<{ readonly file: string; readonly caption: string; readonly group?: string }>;
   readonly attachment?: {
     readonly model: unknown;
     readonly format?: 'pdf' | 'xlsx';
@@ -373,6 +378,24 @@ export const AGENT_TOOLS = [
     },
   },
   {
+    name: 'screenshot',
+    description:
+      'A picture of the LIVE system taken right now, as the person asking sees it — their actual document, list or form with its real figures — with a red box and a number on each part and an ARROW at the parts you name in pointAt. Use it when the answer is about THEIR record or THEIR screen: "show me my invoice", "where do I press on this one", "what is wrong with this document", "show me what is waiting", or to point at the exact button after you have read the document (document_story, review_document give you its address). The result tells you what every number is and what each field holds now. Give the address of a page inside the ERP (the path, such as /sales/ar-invoices/INV-HQ-2026-000001, or the full address a tool gave you). It takes about ten seconds, so take one or two, not five. It shows real company data in the group, exactly as that person may see it on their own screen: do not take one of something they did not ask about. For a general "how do I…", the training pictures (show_screen) are quicker and show no real data; use both when a how-to ends at their own document.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        address: { ...string, description: 'The page: a path inside the ERP (/payables/invoices/API-HQ-2026-000005) or its full address.' },
+        pointAt: {
+          type: 'array',
+          items: string,
+          description: 'What to draw an arrow at: the names of buttons or fields as the screen shows them ("Post", "Status", "Due date"), at most four. Leave out to only number the parts.',
+        },
+      },
+      required: ['address'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'screens',
     description:
       'Where a screen is in the top bar — Module → Heading → Screen — in English and in Arabic, with its address, whether it is built yet, and whether this person\'s role can open it. Call it for every "where is…", "how do I get to…", "وين القه", and before you give steps, so the path you give is the one on their screen. Search with a word or two — best in English ("purchase invoice", "trial balance"), because an Arabic singular will not match the plural the menu uses. With no search it gives the whole menu: every module, heading and built screen, in both languages — short enough to read whole, and the answer to "what is in the system".',
@@ -586,6 +609,7 @@ export function systemPrompt(input: {
     '• A screen that is not built yet shows "Coming soon": say so plainly, and what they can use instead. A screen their role cannot open: say which permission it needs and that an administrator gives it on Settings → Administration → Users / Roles.',
     '• When explaining a field or a whole form, go through every field in the order the form shows them. Nobody should have to ask twice.',
     '• Send the pictures — a how-to without them is half an answer: call show_screen for the screen you are explaining ("all" for a how-to, "menu" when they only asked where it is; "sign in", "top bar", "account menu" and "change password" have pictures too). It hands you a tag for each picture. Write your answer as STEPS, and put each picture at its step: the tag alone on a line, and under it that step\'s words — "*Step 2* — in this picture the button ringed in red is *New supplier*: press it." What you write under a tag is sent as the caption of that picture, so keep each step short (a few lines) and complete in itself. Start to finish: where to go, what to press, what to type in which field, what happens when they save.',
+    '• TWO KINDS OF PICTURE. show_screen is the training copy: every screen, its form, a record and its windows, with sample data — for "how do I…" and "where is…". screenshot is the LIVE system as this person sees it now, taken in about ten seconds, with an arrow at what you name — for THEIR document: after you have read it (document_story, review_document), take one picture of its page with pointAt set to the button to press or the field that is wrong, and say "in the picture the arrow is at *Post*". A picture has a box and a number on each part; refer to a part by its number and its name. If screenshot says it cannot take one, say what you would have pointed at in words — never promise a picture you were not given.',
     '• The pictures carry red numbers on what matters — every field of a form, the buttons, the tabs, the search and filters, the table, a record\'s status and its printer / paperclip / notes / history icons — and the tool tells you which number is which. Use them: "Look at *1* — *Customer name*: …". For every numbered thing the person has to use, in order: what it is for; why the system needs it; what to put there, with an example from this company where you can look one up; whether it may be left empty; and what it changes elsewhere (the due date, the ageing, the stock, the journal). Explain a term the first time it appears, right beside its step. Never invent a number or a field the tool did not list; if a picture has no numbers, describe the control by its label.',
     '• A task that crosses several screens is several pictures in order — *Step 1* where to go (the menu picture), *Step 2* what to press (the screen picture), *Step 3* what to fill in (the form picture), *Step 4* what to do with the saved record (the record picture) — each step under its own picture, and nothing described that the picture at that step does not show.',
     '• They are pictures of a training copy with sample data, so the layout is exact and the names and figures in them are not theirs; say so if they ask about a figure in a picture. If the tool says there is no picture, explain in words — never promise a picture you were not given.',
@@ -722,7 +746,7 @@ export async function runAgent(input: {
   const trace: ToolTrace[] = [];
   let lastAttachment: ToolOutcome['attachment'] = null;
   // The pictures the tools attached, in order, each once, and no more than three.
-  const images: { file: string; caption: string }[] = [];
+  const images: { file: string; caption: string; group?: string }[] = [];
 
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
     const reply = await input.client.create({
@@ -768,7 +792,10 @@ export async function runAgent(input: {
         trace.push({ tool: name, args: asked, ms: Date.now() - started, ok: !refused, ...(refused ? { said: outcome.text.slice(0, 240) } : {}) });
         if (outcome.attachment?.model) lastAttachment = outcome.attachment;
         for (const image of outcome.images ?? []) {
-          if (images.length < MAX_IMAGES && !images.some((one) => one.file === image.file)) images.push({ file: image.file, caption: image.caption });
+          const kept = { file: image.file, caption: image.caption, ...(image.group ? { group: image.group } : {}) };
+          const earlier = image.group ? images.findIndex((one) => one.group === image.group) : -1;
+          if (earlier >= 0) images[earlier] = kept;
+          else if (images.length < MAX_IMAGES && !images.some((one) => one.file === image.file)) images.push(kept);
         }
         results.push({ type: 'tool_result', tool_use_id: call.id ?? '', content: outcome.text.slice(0, 12_000) });
       } catch (error) {

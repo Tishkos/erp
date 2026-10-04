@@ -174,6 +174,30 @@ Everything starts with `!ai` at the beginning of the message.
 * **Have him do a step** — `!ai post INV-…`: he shows what it will do and waits
   for `!ai yes`.
 
+## Live pictures
+
+`!ai show me INV-HQ-2026-000001 and where I press to post it` — Noah takes a
+picture of the real page as that person sees it, with a box and a number on
+each part and an arrow at the button, and explains it. About ten seconds.
+
+* It is taken **as the person who asked**, through a session that lives three
+  minutes and is revoked as soon as the picture is taken; it appears, revoked,
+  on that user's sessions list, and every picture is in the audit trail
+  (`whatsapp.screenshot`).
+* It **cannot change anything**: the browser it uses is refused every request
+  that is not a plain page read.
+* It shows **real figures in the group**. If that is ever not wanted, set
+  `NOAH_LIVE_SHOTS=off` in the bridge's environment and restart it; the
+  training pictures keep working.
+* The server needs a browser, once:
+  ```
+  cd /opt/qs-erp-next && npx playwright install chromium && npx playwright install-deps chromium
+  ```
+* Try one by hand: `npx tsx scripts/ops/live-shot.ts <email> /payables/invoices --point "New invoice"`.
+* A person with a temporary password, or a super user who has not set up the
+  authenticator yet, gets no picture — the application sends them to that
+  screen first, and Noah says so.
+
 ## Noah's test set
 
 `tests/noah/questions.ts` holds some fifty real questions, each with what a
@@ -183,7 +207,7 @@ proposal made and not run. Run them against the real model after any change to
 his instructions, his tools, the guide or the pictures:
 
 ```
-npx tsx scripts/ops/noah-eval.ts                     # all of them, about half an hour
+NOAH_APP_URL=http://localhost:3000 npx tsx scripts/ops/noah-eval.ts   # all of them, about half an hour (the URL is for the live-picture cases)
 npx tsx scripts/ops/noah-eval.ts --only howto --only action
 npx tsx scripts/ops/noah-eval.ts --only doc-why-draft-en
 npx tsx scripts/ops/noah-eval.ts --list

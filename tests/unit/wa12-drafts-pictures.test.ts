@@ -124,6 +124,29 @@ describe('the pictures the loop collects', () => {
     expect(result.text).toBe('The ringed entry is the one to click.');
   });
 
+  it('a live picture taken again is one picture: the retake takes the place of the first', async () => {
+    let round = 0;
+    const script = ['wrong', 'training', 'right'];
+    const result = await runAgent({
+      ...base,
+      client: {
+        create: async () => {
+          const step = script[round];
+          round += 1;
+          if (!step) return { content: [{ type: 'text', text: 'The arrow is at Send for approval.' }] };
+          return { content: [{ type: 'tool_use', id: `t${round}`, name: step === 'training' ? 'show_screen' : 'screenshot', input: {} }] };
+        },
+      },
+      question: 'show me my invoice',
+      runTool: async (name) =>
+        name === 'screenshot'
+          ? { text: 'a live picture', images: [{ file: `/shots/${round}.jpg`, caption: 'live', group: 'live:/payables/invoices/API-1' }] }
+          : { text: 'a training picture', images: [{ file: '/guide/form.jpg', caption: 'form' }] },
+    });
+    // The first live picture (the arrow at nothing) is gone; the order is kept.
+    expect(result.images?.map((image) => image.file)).toEqual(['/shots/3.jpg', '/guide/form.jpg']);
+  });
+
   it('says nothing of pictures when no tool attached one', async () => {
     const result = await runAgent({
       ...base,

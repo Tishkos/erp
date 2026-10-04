@@ -72,6 +72,10 @@ interface Mark {
   readonly options?: readonly string[];
   /** What the screen itself says under the field. */
   readonly hint?: string;
+  /** On a live picture: what the field holds now. */
+  readonly value?: string;
+  /** Pointed at: a thick box and an arrow. */
+  readonly pointed?: boolean;
 }
 
 interface Shot {
@@ -168,13 +172,15 @@ const KIND_WORDS: Readonly<Record<string, string>> = {
 };
 
 /** The numbers on one picture, written out for the model: which is which. */
-function marksLine(marks: readonly Mark[] | undefined): string {
+export function marksLine(marks: readonly Mark[] | undefined): string {
   if (!marks || marks.length === 0) return '';
   return marks
     .map((mark) => {
       const choices = mark.options && mark.options.length > 0 ? `; its choices: ${mark.options.join(' / ')}` : '';
       const hint = mark.hint ? `; the screen says: "${mark.hint}"` : '';
-      return `${mark.n} = ${mark.label} (${KIND_WORDS[mark.kind] ?? mark.kind}${mark.required ? ', required' : ''}${choices}${hint})`;
+      const value = mark.value ? `; it holds now: ${mark.value}` : '';
+      const pointed = mark.pointed ? '; THE ARROW POINTS HERE' : '';
+      return `${mark.n} = ${mark.label} (${KIND_WORDS[mark.kind] ?? mark.kind}${mark.required ? ', required' : ''}${choices}${hint}${value}${pointed})`;
     })
     .join(' · ');
 }
