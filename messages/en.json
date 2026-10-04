@@ -4939,6 +4939,14 @@
       "reference_cash": "Reference"
     },
     "availability": {
+      "all_categories": "All categories",
+      "category": "Category",
+      "all_branches": "All branches",
+      "on_order": "On order",
+      "unit_cost": "Unit cost (IQD)",
+      "value": "Value (IQD)",
+      "ledger": "Ledger",
+      "open_ledger": "Movements",
       "subtitle": "What each warehouse holds, item by item: on hand, available to issue, and what is reserved, in transit, in quarantine, damaged or returned — every figure summed from the stock ledger.",
       "issue_stock": "Issue stock",
       "issue": "Issue",
