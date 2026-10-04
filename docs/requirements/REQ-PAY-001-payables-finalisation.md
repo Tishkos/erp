@@ -6,7 +6,7 @@
 | **Branch** | `feat/payables-module` — one of the parallel module branches (`feat/{module}-module`); see §6 before merging. |
 | **Source** | The owner's specification of 2026-10-04 01:59 (Europe/Budapest), reproduced in full in Appendix A, and his addition in the same message: *"also add icon for notes in invoices also supplier clickable like we can from invoices we can goto their profile please like bank loans is very nice features print attachments audit notes icon for any invoice please starting from after draft created"*. Then, 02:04: other agents work on Receivables, Inventory and Accounting at the same time and he merges everything himself — stay inside Payables. |
 | **Test case(s)** | PAY1–PAY14 in §3, from the specification's §26. |
-| **Status** | **Work in progress.** PAY1 (navigation) BUILT on this branch. Inspection complete (§2). PAY2–PAY14 not started. |
+| **Status** | **BUILT on this branch** (2026-10-04): PAY1–PAY6, PAY8–PAY12, PAY14. **PAY7** is built on `feat/inventory-module` (fdee68c, with the landed-cost engine it belongs to) and **PAY13** is verified there after that branch merges — neither is duplicated here. The owner's post-completion decisions (4.1–4.7) are all APPROVED and applied; see §5. |
 
 **How to read this document.** §1 is what was asked, in short. §2 is what was
 found when each item was inspected, classified KEEP / IMPROVE / ADD /
@@ -103,19 +103,19 @@ Each stage lands with its test. The criteria are the specification's §26.
 | Stage | What | Criteria | State |
 |---|---|---|---|
 | PAY1 | Navigation (§21–23) | `fx1-menu`, `ap01-menu-redirects`, `screen-catalogue`, `i18n-catalogue`; e2e `fx1-navigation`, `tabs-navigate` updated. | **BUILT** |
-| PAY2 | Record notes for every purchase document | A note is dated, signed, never edited, read back on the record; whoever may view the record may add one. | not started |
-| PAY3 | Four doors + supplier link on every purchase record (invoice, PO, GR, return, payment, payment application, advance, contract, credit/debit note) | Printer, paperclip, notes, clock in `DocumentWindow.titleActions`, in that order, from draft; supplier → `/payables/suppliers/<code>?role=supplier`. | not started |
-| PAY4 | Print models: PO, GR, payment application, advance, contract, credit/debit note | `ops14-print-export` style: each builds under the reader's row security. | not started |
-| PAY5 | PO record | PO 500 → approved → receipt 300 → Received 300 / Remaining 200 → receipt 200 → Received 500 / Remaining 0, status executed. | not started |
-| PAY6 | GR record | 300 received → inventory +300 (movement ledger) → second 200 → 500; ordered / received / remaining per line. | not started |
-| PAY7 | Return landed-cost reimbursement | Flag default No; frozen once posted (trigger); landed part → `purchase_variance` (No) / `return_clearing` (Yes) in the return's journal and in a later lock; inventory and supplier balance stay consistent. | not started |
-| PAY8 | Credit note | Invoice 100,000 → credit 10,000 → outstanding 90,000; on the statement and in the ageing; excess becomes an unapplied supplier credit. | not started |
-| PAY9 | Debit note | An AP invoice linked to the invoice it adjusts; ages, states and pays like a bill. | not started |
-| PAY10 | Supplier Credits screen | Overpayment 120,000 on 100,000 → invoice 0, supplier credit 20,000; advance 5,000,000 with no invoice → 5,000,000. | not started |
-| PAY11 | Supplier Reconciliation screen | Subledger = AP control; a difference shows its source lines, nothing repaired. | not started |
-| PAY12 | Payments chain | Invoice 100,000 → pay 40,000 → AP 60,000 → pay 60,000 → AP 0, Paid; ageing buckets and partial balances. | engines exist; test to write |
-| PAY13 | Import chain | Import → B/L/container → PD → landed cost → receipt → inventory → AP; final cost equals the FIFO layers. | engines exist (`im2-01`, `ap07`); test to extend |
-| PAY14 | Visual check | `theme-readability.spec.ts`; side-by-side screenshots against the model screens (AGENTS.md). | not started |
+| PAY2 | Record notes for every purchase document | A note is dated, signed, never edited, read back on the record; whoever may view the record may add one. | **BUILT** — the shared `record-notes` door (D-PAY-1, owner 4.1) |
+| PAY3 | Four doors + supplier link on every purchase record (invoice, PO, GR, return, payment, payment application, advance, contract, credit/debit note) | Printer, paperclip, notes, clock in `DocumentWindow.titleActions`, in that order, from draft; supplier → `/payables/suppliers/<code>?role=supplier`. | **BUILT** — `payables/record-doors.tsx`, `attach-action.ts`, `ProfileLink`; e2e `pay-doors.spec.ts` |
+| PAY4 | Print models: PO, GR, payment application, advance, contract, credit/debit note | `ops14-print-export` style: each builds under the reader's row security. | **BUILT** — `print/purchase-documents.ts`; `pay04-purchase-print` |
+| PAY5 | PO record | PO 500 → approved → receipt 300 → Received 300 / Remaining 200 → receipt 200 → Received 500 / Remaining 0, status executed. | **BUILT** — `purchase-orders/[orderNo]` on `DocumentWindow`; the arithmetic held by `purchasing-goods-receipt`, `purchasing-order-cancellation` |
+| PAY6 | GR record | 300 received → inventory +300 (movement ledger) → second 200 → 500; ordered / received / remaining per line. | **BUILT** — `goods-receipts/[receiptNo]` on `DocumentWindow` |
+| PAY7 | Return landed-cost reimbursement | Flag default No; frozen once posted (trigger); landed part → `purchase_variance` (No) / `return_clearing` (Yes) in the return's journal and in a later lock; inventory and supplier balance stay consistent. | **BUILT on `feat/inventory-module`** (fdee68c) — verified after that branch merges; not duplicated here |
+| PAY8 | Credit note | Invoice 100,000 → credit 10,000 → outstanding 90,000; on the statement and in the ageing; excess becomes an unapplied supplier credit. | **BUILT** — `services/supplier-notes.ts`, `/payables/credit-memos`, 0295; `pay08-supplier-credits` |
+| PAY9 | Debit note | An AP invoice linked to the invoice it adjusts; ages, states and pays like a bill. | **BUILT** — `ap_invoice.adjusts_invoice_id`; `pay08-supplier-credits` |
+| PAY10 | Supplier Credits screen | Overpayment 120,000 on 100,000 → invoice 0, supplier credit 20,000; advance 5,000,000 with no invoice → 5,000,000. | **BUILT** — `/payables/supplier-credits`; `pay08-supplier-credits` |
+| PAY11 | Supplier Reconciliation screen | Subledger = AP control; a difference shows its source lines, nothing repaired. | **BUILT** — `/payables/reconciliation`; `pay08-supplier-credits` |
+| PAY12 | Payments chain | Invoice 100,000 → pay 40,000 → AP 60,000 → pay 60,000 → AP 0, Paid; ageing buckets and partial balances. | **BUILT** — `pay08-supplier-credits` › PAY12 |
+| PAY13 | Import chain | Import → B/L/container → PD → landed cost → receipt → inventory → AP; final cost equals the FIFO layers. | engines exist (`im2-01`, `ap07`); the end-to-end proof is Inventory's (final cost + FIFO) — verified after `feat/inventory-module` merges |
+| PAY14 | Visual check | `theme-readability.spec.ts`; side-by-side screenshots against the model screens (AGENTS.md). | **DONE** — `/home/claude/shots/payables/` (desktop EN, phone AR, beside the register / record they copy) |
 
 ---
 
@@ -141,6 +141,19 @@ Each stage lands with its test. The criteria are the specification's §26.
   `ap_reconciliation` object nobody holds.
 * **D-PAY-6 — Supplier Credits authorises on `supplier_payment`.**
 
+**Owner's decisions (2026-10-04, post-completion notes §4), all applied:**
+4.1 D-PAY-1 approved (notes from the audit trail; no table). 4.2 D-PAY-2
+approved (debit note = AP invoice). 4.3 a standalone credit note goes
+Draft → Approve → Post; nothing posts on creation. 4.4 the five duplicate menu
+items are removed, not hidden. 4.5 Suppliers stays under Master Data. 4.6
+Payment Application = the request to the bank; allocation lives on the
+supplier payment — said on the application's record and register. 4.7 four
+doors and the supplier link on every purchase-side record from draft to
+posted. 4.8 the memo double-count is fixed with a data correction (0295);
+PAY7 is Inventory's branch. 4.9 the notes, credits and reconciliation read the
+existing AP / open-item / subledger engines; the reconciliation never repairs.
+4.10 `open-items.ts` is read, not edited.
+
 ---
 
 # §5 — Done so far
@@ -156,9 +169,16 @@ Each stage lands with its test. The criteria are the specification's §26.
   `tests/integration/ap01-menu-redirects.test.ts`,
   `tests/e2e/fx1-navigation.spec.ts`, `tests/e2e/tabs-navigate.spec.ts`. Unit
   suite green (112 files, 1,731 tests); `ap01-menu-redirects` green.
-* The new routes (`/payables/supplier-credits`, `/payables/credit-memos`,
-  `/payables/reconciliation`) are in the tree but **not** in `DELIVERED`, so
-  they stay hidden until their screens land (PAY8, PAY10, PAY11).
+* **PAY2–PAY6, PAY8–PAY12, PAY14** — see AGENTS.md › "Payables (REQ-PAY-001)"
+  for where each lives. Commits on this branch: `0d8cdda` (attachment parent
+  checks), `bb0592f` (credit/debit notes, the memo fix, 0295, PAY8–PAY12
+  tests), `6699f6f` (the six print models, PAY4), the `feat/shared-module`
+  merge (SHARED-READY), and the doors/links/screens commit that delivered
+  `/payables/credit-memos`, `/payables/supplier-credits` and
+  `/payables/reconciliation` (now in `DELIVERED`).
+* **Not done here, by design:** PAY7 (on `feat/inventory-module`, fdee68c) and
+  the PAY13 end-to-end final-cost proof (Inventory's engine) — both to be
+  verified after that branch merges.
 
 ---
 

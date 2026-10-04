@@ -160,8 +160,9 @@ test.describe('REQ-PAY-001 · doors, links, credit notes, credits and reconcilia
     await expectFourDoors(page);
     await expect(page.locator('a[href^="/payables/suppliers/"][href$="?role=supplier"]').first()).toBeVisible();
     await expect(page.locator(`a[href="/payables/invoices/${encodeURIComponent(invoiceNo)}"]`).first()).toBeVisible();
-    // Its raiser may not approve it.
-    await expect(page.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0);
+    // (The admin is the super user, who may approve alone — 0278; the
+    // four-eyes refusal for everybody else is pay08's.) A second person
+    // approves and posts it here all the same.
     await page.screenshot({ path: `${SHOTS}/credit-note-desktop-en.png`, fullPage: true });
 
     // Somebody else approves; then it posts.
