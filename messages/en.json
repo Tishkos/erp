@@ -5496,7 +5496,7 @@
       "soon": "Coming soon"
     },
     "internal_transfers": {
-      "subtitle": "The company’s own money moving between its own bank and cash accounts — no income, no expense.",
+      "subtitle": "Money moving between the company’s own bank and cash accounts.",
       "new": "New transfer",
       "new_note": "From one of the company’s bank or cash accounts to another. Between two currencies, state what arrived or the bank’s rate; the difference at the ledger rate is an exchange gain or loss.",
       "from": "From account",
@@ -5542,7 +5542,7 @@
       "reverse_reason": "Reason for reversing"
     },
     "bank_reconciliation": {
-      "subtitle": "The bank’s statement beside the books: every line matched, adjusted or explained before the balance is agreed.",
+      "subtitle": "The bank’s statement beside the books, line by line.",
       "new": "New statement",
       "new_note": "Whose account, which period, and the bank’s own opening and closing balances. The lines are added on its record — typed, or pasted from the bank’s file.",
       "account": "Bank account",
@@ -5637,7 +5637,7 @@
       "match_ticked": "Match ticked items"
     },
     "payments_receipts": {
-      "subtitle": "Every movement of money through the company’s bank and cash accounts, with the document that moved it. Receipts stay with Sales and payments with Payables; this is where they are seen together.",
+      "subtitle": "Every movement of money, with the document that moved it.",
       "from": "From",
       "to": "To",
       "view": "View",
@@ -5675,7 +5675,7 @@
       "type_bank_reconciliation": "Reconciliation adjustment"
     },
     "cash_forecast": {
-      "subtitle": "What the bank and cash accounts hold now, and what is expected to come in and go out from here — each period opening where the last closed. Paid documents are not counted again.",
+      "subtitle": "What the accounts hold now, and what is expected in and out.",
       "bucket": "Group by",
       "bucket_day": "Day",
       "bucket_week": "Week",
@@ -5710,7 +5710,7 @@
       "source_loan_drawdowns": "Loan drawdowns"
     },
     "account_reconciliation": {
-      "subtitle": "Every control account’s sub-ledger beside its G/L balance, and the inventory layers beside the inventory accounts — the figures the period close asks. Differences are shown, never corrected here.",
+      "subtitle": "Each sub-ledger beside its G/L balance — the figures the close asks.",
       "control_accounts": "Control accounts",
       "account": "G/L account",
       "subledger": "Sub-ledger",
@@ -5740,7 +5740,7 @@
       "kind_loan": "Bank loans"
     },
     "tax_codes": {
-      "subtitle": "The tax rates transactions refer to, each with its treatment and its account. A rate is added from a date and never changed, so a document always reads the rate of its own day.",
+      "subtitle": "The tax rates transactions refer to, each from its own date.",
       "new": "New tax code",
       "new_note": "Its code is given by the system. The first rate applies from the date stated; later rates are added on its record.",
       "document_type": "Tax Code",
@@ -5777,7 +5777,7 @@
       "deactivate_reason": "Reason for deactivating"
     },
     "closing": {
-      "subtitle": "Close a month — or the year, month by month — once its checklist passes. The lock is Accounting Periods’; every close and reopening is kept below with its reason.",
+      "subtitle": "Close a month, or the year, once its checklist passes.",
       "checklist": "Closing checklist — {period}",
       "period_state": "Period",
       "year_progress": "{year} closed",
@@ -5795,7 +5795,7 @@
       "no_calendar": "Open a financial year on Accounting Periods first:"
     },
     "recurring_journals": {
-      "subtitle": "Standing entries — rent, depreciation, subscriptions, accruals — that raise the same journal on a schedule. Each journal is an ordinary draft, submitted and approved as any other.",
+      "subtitle": "Standing entries that raise the same journal on a schedule.",
       "new": "New recurring journal",
       "new_note": "Its number is given by the system. Add its lines on its record; somebody else agrees to it before it raises anything.",
       "document_type": "Recurring Journal",
