@@ -593,6 +593,9 @@ const LOCK_NAME = 'exception_sweep';
 
 /** Runs the detectors and brings the stored findings in line. Safe to run twice, and from two places at once. */
 export async function sweep(input: SweepInput): Promise<SweepResult> {
+  // A notification asks, as each recipient, whether they can open the exception: that goes through the record registry,
+  // which a script (the schedule) has not loaded.
+  registerAllRecords();
   const scope = input.scope ?? (await systemScope());
   const now = input.now ?? new Date();
   const today = businessToday(now);
