@@ -5,6 +5,7 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { RecordHistory } from '@/components/admin/history';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
 import { Attachments } from '@/components/admin/attachments';
+import { ExportIcon } from '@/components/print/export-menu';
 import { ProfileLink } from '@/components/admin/profile-link';
 import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import * as attachmentsService from '@/server/services/attachments';
@@ -133,8 +134,10 @@ export default async function DepositPage({ params, searchParams }: { params: Pr
         }
         titleActions={
           <>
-            {/* The slip the bank gave, and what happened to the deposit —
-                behind the doors every record wears (2026-10-04). */}
+            {/* The copy, the slip the bank gave, the notes and what happened
+                to the deposit — behind the four doors every record wears
+                (2026-10-04). */}
+            <ExportIcon exportKey="bank_deposit" id={deposit.no} title={`${t(`document_type_${deposit.source}`)} ${deposit.no}`} />
             <AttachmentsButton
               closeLabel={admin('close')}
               count={attached.length}

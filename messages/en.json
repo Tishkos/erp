@@ -4913,6 +4913,7 @@
       "setting_group_queries": "Answer questions in the group (on / off)",
       "setting_group_notifications": "Post notifications to the group (on / off)",
       "setting_group_digest": "Post the morning digest to the group (on / off)",
+      "setting_group_only": "Answer questions in the group only — a private message is read, logged and left unanswered (on / off)",
       "group_hint": "One group, by its id. Add the bot to the group, run \"npm run whatsapp-bridge -- --list-groups\", and paste the id here. Any other group is ignored."
     },
     "projects": {
@@ -5467,13 +5468,9 @@
       "document_type_cash": "Cash deposit",
       "document_type_other": "Bank deposit — other source",
       "document_type_bank": "Bank deposit — other source",
-      "document_type_transfer": "Bank deposit — cash",
+      "document_type_transfer": "Bank deposit — cash to bank",
       "into_cash": "Into cash account",
-      "reference_cash": "Reference",
-      "source_bank": "Bank",
-      "source_transfer": "Cash to bank",
-      "document_type_bank": "Bank deposit",
-      "document_type_transfer": "Bank deposit — cash to bank"
+      "reference_cash": "Reference"
     },
     "availability": {
       "subtitle": "What each warehouse holds, item by item: on hand, available to issue, and what is reserved, in transit, in quarantine, damaged or returned — every figure summed from the stock ledger.",
@@ -7072,6 +7069,8 @@
       "inventory_valuation": "Inventory Valuation",
       "inventory_checks": "Inventory Checks",
       "internal_transfer": "Internal Transfer",
+      "bank_deposit": "Manual Deposit",
+      "bank_loan": "Bank Loan",
       "bank_reconciliation": "Bank Reconciliation",
       "payments_receipts": "Payments & Receipts",
       "cash_forecast": "Cash Forecast",

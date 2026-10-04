@@ -40,8 +40,8 @@ rule), `view` (a read-only rendering of another record's data: printer only).
 | `payables/goods-receipts/[receiptNo]` | ❌ | ❌ | ❌ | ❌ | none | order: link ✅; supplier, warehouse: text ❌ | payables | owner module |
 | `payables/contracts/[contractNo]` — recurring contract | ❌ | ❌ | ❌ | ❌ | none | supplier, department: text ❌ | payables | owner module |
 | `payables/[payableNo]` — import application | ✅ | ✅ | ✅ | ✅ | `import_application` | supplier: text ❌; B/L, container, PD, invoice, loan: links ✅ | payables | owner module |
-| `treasury/loans/[loanNo]` — bank loan (the party-link model) | ❌ | ✅ | ✅ | ✅ | **none** | bank account: link ✅; bank: text ❌ | payables | owner module (notes door 2026-10-04, e2e verification) |
-| `treasury/deposits/[depositNo]` | ❌ | ✅ | ✅ | ✅ | none | journal: link ✅; bank/cash account: text ❌ | payables | owner module (notes door 2026-10-04, e2e verification) |
+| `treasury/loans/[loanNo]` — bank loan (the party-link model) | ✅ | ✅ | ✅ | ✅ | `bank_loan` | bank, bank account: links ✅ | payables | done (notes door and print model 2026-10-04, e2e verification) |
+| `treasury/deposits/[depositNo]` | ✅ | ✅ | ✅ | ✅ | `bank_deposit` | journal, bank/cash account, credit account: links ✅ | payables | done (notes door and print model 2026-10-04, e2e verification) |
 | `finance/journals/[entryNo]` | ✅ | ✅ | ✅ | ✅ | `journal_entry` | G/L accounts, reversal journal: `ProfileLink` ✅; recurring template: link ✅ | accounting | done |
 | `treasury/transfers/[transferNo]` — internal transfer | ✅ | ✅ | ✅ | ✅ | `internal_transfer` | bank/cash accounts, G/L accounts, journals: `ProfileLink` ✅ | accounting | done |
 | `treasury/bank-reconciliation/[statementNo]` — statement + reconciliation | ✅ | ✅ | ✅ | ✅ | `bank_reconciliation` | account, G/L account, every journal: `ProfileLink` ✅ | accounting | done |

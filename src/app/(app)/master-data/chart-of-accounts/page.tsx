@@ -74,7 +74,7 @@ export default async function ChartOfAccountsPage({ searchParams }: { searchPara
     <AdminPage
       actions={
         <>
-          <LinkButton href={exportHref} label={list('export')} />
+          <LinkButton download href={exportHref} label={list('export')} />
           {accounts.length > 0 ? <NewAccountButton accounts={accounts} mapping={mapping} /> : null}
         </>
       }

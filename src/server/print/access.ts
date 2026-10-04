@@ -35,6 +35,10 @@ export const EXPORT_ACCESS = {
   // REQ-ACC-001 — Accounting's records, each printed from its own page.
   internal_transfer: { kind: 'document', route: '/treasury/transfers', object: 'bank_cash_account' },
   bank_reconciliation: { kind: 'document', route: '/treasury/bank-reconciliation', object: 'bank_reconciliation' },
+  // The two Treasury records that had no copy (2026-10-04): a manual deposit
+  // under the register's own object, a bank loan under its own.
+  bank_deposit: { kind: 'document', route: '/treasury/deposits', object: 'bank_cash_account' },
+  bank_loan: { kind: 'document', route: '/treasury/loans', object: 'bank_loan' },
   payments_receipts: { kind: 'report', route: '/treasury/payments-receipts', object: 'bank_account' },
   cash_forecast: { kind: 'report', route: '/treasury/cash-forecast', object: 'bank_cash_account' },
   account_reconciliation: { kind: 'report', route: '/finance/account-reconciliation', object: 'trial_balance' },

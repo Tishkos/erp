@@ -462,8 +462,11 @@ export function ErpShell({
   );
 
   const shortUserId = userId.slice(0, 8);
+  // On whitespace: `/s+/` split the name on its letter s, so "System
+  // Administrator" wore "ST" and nobody with an s in their name their own
+  // initials.
   const initials = displayName
-    .split(/s+/)
+    .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0]!)
@@ -980,7 +983,7 @@ export function ErpShell({
             <div className="erp-mobile-drawer__context">
               {branchControl}
               <div className="erp-mobile-user">
-                <strong>{shortUserId}</strong>
+                <strong>{displayName}</strong>
                 <span title={roleLabel}>{roleLabel}</span>
               </div>
             </div>

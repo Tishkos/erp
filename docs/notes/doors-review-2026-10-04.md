@@ -38,8 +38,8 @@ record: notes and clock), `view` (a rendering of another record: printer only).
 | `payables/goods-receipts/[receiptNo]` | ✓ | ✓ | ✓ | ✓ | ✓ | order, supplier, item, warehouse ✓ | ✓ | payables | compliant |
 | `payables/contracts/[contractNo]` — recurring contract | ✓ | ✓ | ✓ | ✓ | ✓ | supplier, department, invoices ✓ | ✓ | payables | compliant |
 | `payables/credit-memos/[memoNo]` — supplier credit / debit note (new, not in the coverage table) | ✓ | ✓ | ✓ | ✓ | ✓ | supplier, invoice, return, G/L account, journals ✓ | ✓ | payables | compliant |
-| `treasury/loans/[loanNo]` — bank loan (the owner's reference) | **✗** | ✓ | ✓ | ✓ | ✓ | **bank was text → `ProfileLink` (fixed)**; account ✓ (kind now follows the account's type); applications, imports ✓ | ✓ (`setManualShares` wrote no loan event → `bank_loan.shares_set` added) | payables | **failing — no print model** (notes door and bank link fixed here) |
-| `treasury/deposits/[depositNo]` — manual deposit | **✗** | ✓ | ✓ | ✓ | ✓ | **account it lands in, cash account / G/L account it came from, journal were text → fixed** | ✓ (through `treasury` / `other-receipt`) | payables | **failing — no print model** (notes door and links fixed here; see also the defects below) |
+| `treasury/loans/[loanNo]` — bank loan (the owner's reference) | ✓ | ✓ | ✓ | ✓ | ✓ | **bank was text → `ProfileLink` (fixed)**; account ✓ (kind now follows the account's type); applications, imports ✓ | ✓ (`setManualShares` wrote no loan event → `bank_loan.shares_set` added) | payables | **compliant** — notes door and bank link fixed here; print model `bank_loan` added on `verify/e2e` (2026-10-04, later the same day) |
+| `treasury/deposits/[depositNo]` — manual deposit | ✓ | ✓ | ✓ | ✓ | ✓ | **account it lands in, cash account / G/L account it came from, journal were text → fixed** | ✓ (through `treasury` / `other-receipt`) | payables | **compliant** — notes door and links fixed here; print model `bank_deposit` added on `verify/e2e` (2026-10-04, later the same day; see also the defects below) |
 | `finance/journals/[entryNo]` | ✓ | ✓ | ✓ | ✓ | ✓ | G/L accounts, reversal, template ✓; **department (lines) text → fixed** | ✓ | accounting | fixed |
 | `treasury/transfers/[transferNo]` — internal transfer | ✓ | ✓ | ✓ | ✓ | ✓ | bank/cash accounts, G/L accounts, journals ✓ | ✓ | accounting | compliant |
 | `treasury/bank-reconciliation/[statementNo]` | ✓ | ✓ | ✓ | ✓ | ✓ | account, G/L account, journals ✓ | ✓ | accounting | compliant |
@@ -100,8 +100,9 @@ delivered page; it passes on this branch.
   have no page at all.
 * Fully compliant before this review: 33. Brought to compliance here: 7
   (purchase invoice, import application, sales invoice, sales return, journal,
-  recurring journal, container). Improved here but still failing: 2 (the loan
-  and the deposit — notes door and links added, no print model). Failing with
+  recurring journal, container). Improved here, and brought to compliance later
+  the same day on `verify/e2e`: 2 (the loan and the deposit — notes door and
+  links added here, print models `bank_loan` / `bank_deposit` there). Failing with
   nothing to fix in place: 2 (the transfer and the reconciliation, no record
   page). Still failing in all: 4.
 

@@ -62,6 +62,8 @@ const BUILDERS = {
   import_application: byId(importDocuments.importApplication),
   internal_transfer: byId(accountingDocuments.internalTransfer),
   bank_reconciliation: byId(accountingDocuments.bankReconciliation),
+  bank_deposit: byId(accountingDocuments.bankDeposit),
+  bank_loan: byId(accountingDocuments.bankLoan),
   payments_receipts: (ctx, input) => accountingDocuments.paymentsReceipts(ctx, input.query),
   cash_forecast: (ctx, input) => accountingDocuments.cashForecast(ctx, input.query),
   account_reconciliation: (ctx, input) => accountingDocuments.accountReconciliation(ctx, input.query),

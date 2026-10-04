@@ -22,6 +22,7 @@ import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog
 import { LoanSettlementTotal } from '@/components/admin/loan-settlement-total';
 import { ProfileLink } from '@/components/admin/profile-link';
 import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+import { ExportIcon } from '@/components/print/export-menu';
 import * as attachmentsService from '@/server/services/attachments';
 import * as recordNotes from '@/server/services/record-notes';
 import { SectionTabs } from '@/components/admin/section-tabs';
@@ -540,10 +541,10 @@ export default async function LoanPage({
         }
         titleActions={
           <>
-            {/* The paperclip, the notes and the clock, as every record wears
-                them (2026-10-03; notes 2026-10-04). The loan has no print
-                model yet, so it has no printer: a door onto nothing is worse
-                than no door. */}
+            {/* The printer, the paperclip, the notes and the clock, as every
+                record wears them (2026-10-03; notes and the print model
+                2026-10-04). */}
+            <ExportIcon exportKey="bank_loan" id={loan.loanNo} title={`${t('record')} ${loan.loanNo}`} />
             <AttachmentsButton
               closeLabel={admin('close')}
               count={attachedCount}

@@ -128,7 +128,8 @@ test('FX3 · a deposit from another source is raised on the Manual Deposits scre
   await dialog.getByRole('button', { name: 'Create deposit' }).click();
 
   // The record: the document type, the status chip, and the register lists it.
-  await expect(page.getByText('Bank deposit — other source')).toBeVisible({ timeout: 30_000 });
+  // (First: the printer door's window is headed the same way, 2026-10-04.)
+  await expect(page.getByText('Bank deposit — other source').first()).toBeVisible({ timeout: 30_000 });
   const number = (await page.getByRole('heading', { level: 1 }).textContent())!.trim();
   expect(number).toMatch(/^ORC-/);
   await page.goto(`/treasury/deposits?q=${encodeURIComponent(number)}`);
