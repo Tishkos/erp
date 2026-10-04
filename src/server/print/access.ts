@@ -30,6 +30,7 @@ export const EXPORT_ACCESS = {
   import_application: { kind: 'document', route: '/payables', object: 'payable' },
   // REQ-ACC-001 — Accounting's records, each printed from its own page.
   internal_transfer: { kind: 'document', route: '/treasury/transfers', object: 'bank_cash_account' },
+  bank_reconciliation: { kind: 'document', route: '/treasury/bank-reconciliation', object: 'bank_reconciliation' },
   customer_statement: { kind: 'report', route: '/sales/customer-statements', object: 'business_partner' },
   supplier_statement: { kind: 'report', route: '/payables/supplier-statements', object: 'business_partner' },
   bank_statement: { kind: 'report', route: '/master-data/bank-accounts', object: 'bank_account' },

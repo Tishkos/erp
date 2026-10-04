@@ -8,8 +8,9 @@
  * security: another branch's record is not found rather than refused.
  */
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
-import { toDecimalString } from '../domain/money';
+import { parseDecimal, toDecimalString } from '../domain/money';
 import * as treasury from '../services/treasury';
+import * as rec from '../services/bank-reconciliation';
 import type { BuildContext, Built } from './documents';
 import type { Fact, PrintModel } from './model';
 
@@ -141,5 +142,119 @@ export async function internalTransfer(ctx: BuildContext, transferNo: string): P
     }),
     branchCode: transfer.branchCode,
     objectId: transfer.id,
+  };
+}
+
+/**
+ * A bank statement and its reconciliation: the statement's boxes and the
+ * reconciliation's arithmetic, the bank's lines with how each stands, and
+ * the matches agreed.
+ */
+export async function bankReconciliation(ctx: BuildContext, statementNo: string): Promise<Built | null> {
+  const { tx, m, locale, principal, branchCode } = ctx;
+  let view: Awaited<ReturnType<typeof rec.workspace>>;
+  try {
+    view = await rec.workspace(tx, { principal, branchCode }, statementNo);
+  } catch {
+    return null;
+  }
+  const { statement, lines, reconciliation } = view;
+  const t = (key: string, values?: Record<string, string | number>) => m.admin(`bank_reconciliation.${key}`, values);
+  const money = (amount: string | bigint) =>
+    formatMoney(typeof amount === 'bigint' ? toDecimalString(amount, 4n) : amount, statement.currency, locale);
+
+  const fields: Fact[] = [
+    { label: t('col_statement'), value: statement.statementNo, ltr: true },
+    { label: t('col_status'), value: t(`stage_${statement.stage}`) },
+    { label: t('account'), value: `${statement.accountName} (${statement.accountCode})` },
+    { label: t('gl_account'), value: view.glCode ? `${view.glCode} · ${view.glName ?? ''}` : '—' },
+    { label: t('col_period'), value: `${day(statement.periodFrom, locale)} – ${day(statement.periodTo, locale)}`, ltr: true },
+    { label: t('bank_reference'), value: statement.bankReference ?? '—' },
+    { label: t('opening'), value: money(statement.openingIqd), ltr: true },
+    { label: t('closing'), value: money(statement.closingIqd), ltr: true },
+    ...(statement.reconciliationNo ? [{ label: t('reconciliation_no'), value: statement.reconciliationNo, ltr: true }] : []),
+    ...(reconciliation
+      ? [
+          { label: t('ledger_balance'), value: money(reconciliation.position.ledgerBalanceIqd), ltr: true },
+          { label: t('in_transit'), value: money(reconciliation.position.depositsInTransitIqd), ltr: true },
+          { label: t('unpresented'), value: money(reconciliation.position.unpresentedPaymentsIqd), ltr: true },
+          { label: t('difference'), value: money(reconciliation.position.differenceIqd), ltr: true },
+        ]
+      : []),
+    { label: t('entered_by'), value: view.createdBy ?? '—' },
+    ...(statement.reconciliationNo ? [{ label: t('prepared_by'), value: view.preparedBy ?? '—' }] : []),
+    ...(statement.reconciliationNo ? [{ label: t('approved_by'), value: view.approvedBy ?? '—' }] : []),
+  ];
+
+  const title = m.print('titles.bank_reconciliation');
+  return {
+    model: base({
+      title,
+      number: statement.statementNo,
+      status: t(`stage_${statement.stage}`),
+      posted: statement.stage === 'reconciled',
+      orientation: 'landscape',
+      fields,
+      tables: [
+        {
+          title: t('lines'),
+          columns: [
+            { key: 'line', label: '#', kind: 'code', weight: 0.45 },
+            { key: 'booking', label: t('booking_date'), kind: 'text' },
+            { key: 'value', label: t('value_date'), kind: 'text' },
+            { key: 'reference', label: t('reference'), kind: 'text', weight: 1.5 },
+            { key: 'counterparty', label: t('counterparty'), kind: 'text' },
+            { key: 'amount', label: t('amount'), kind: 'money' },
+            { key: 'match', label: t('col_match'), kind: 'text' },
+          ],
+          rows: lines.map((line) => ({
+            cells: {
+              line: String(line.lineNo),
+              booking: day(line.bookingDate, locale),
+              value: day(line.valueDate, locale),
+              reference: line.reference ?? '—',
+              counterparty: line.counterparty ?? '—',
+              amount: line.amountIqd,
+              match: `${t(`match_${line.matchStatus}`)}${line.matchNo ? ` · ${line.matchNo}` : ''}`,
+            },
+          })),
+          empty: t('no_lines'),
+          totals: {
+            label: m.print('totals'),
+            // The statement's movement: the lines summed, exactly.
+            cells: { amount: toDecimalString(lines.reduce((sum, line) => sum + parseDecimal(line.amountIqd, 4n), 0n), 4n) },
+            sum: ['amount'],
+          },
+        },
+        ...(reconciliation
+          ? [
+              {
+                title: t('matches_title'),
+                columns: [
+                  { key: 'match', label: '#', kind: 'code' as const, weight: 0.45 },
+                  { key: 'lines', label: t('col_statement_lines'), kind: 'text' as const, weight: 1.5 },
+                  { key: 'journals', label: t('col_journals'), kind: 'text' as const, weight: 1.5 },
+                  { key: 'why', label: t('col_why'), kind: 'text' as const, weight: 2 },
+                  { key: 'state', label: t('col_state'), kind: 'text' as const },
+                ],
+                rows: reconciliation.matches.map((match) => ({
+                  cells: {
+                    match: String(match.matchNo),
+                    lines: match.statementLines.map((line) => String(line.lineNo)).join(', '),
+                    journals: match.journalLines.map((line) => line.entryNo).join(', '),
+                    why: match.why ?? '—',
+                    state: t(`state_${match.state}`),
+                  },
+                })),
+                empty: t('no_matches'),
+              },
+            ]
+          : []),
+      ],
+      signatures: true,
+      fileName: statement.statementNo,
+    }),
+    branchCode: statement.branchCode,
+    objectId: statement.statementId,
   };
 }

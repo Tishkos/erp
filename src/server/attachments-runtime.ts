@@ -11,7 +11,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
-import { applicant, asycudaRun, bankLoan, bankTransfer, billOfLading, customsPd, employeeDocument, employeeRequest, journalEntry, otherReceipt, payable, paymentApplication, shipmentContainer } from './db/schema';
+import { applicant, asycudaRun, bankLoan, bankStatement, bankTransfer, billOfLading, customsPd, employeeDocument, employeeRequest, journalEntry, otherReceipt, payable, paymentApplication, shipmentContainer } from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -208,6 +208,17 @@ const otherReceiptParentAccess = async (tx: Tx, principal: Principal, objectId: 
   return Boolean(row);
 };
 
+/**
+ * REQ-ACC-001 — the bank's statement file and the reconciliation's working
+ * papers, on the statement: whoever may read reconciliations, and row
+ * security answers the branch.
+ */
+const bankStatementParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'bank_reconciliation') && !can(principal, 'view', 'bank_statement')) return false;
+  const [row] = await tx.select({ id: bankStatement.id }).from(bankStatement).where(eq(bankStatement.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -226,6 +237,7 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('bank_loan', loanParentAccess);
   attachments.registerParentAccessCheck('bank_transfer', bankTransferParentAccess);
   attachments.registerParentAccessCheck('other_receipt', otherReceiptParentAccess);
+  attachments.registerParentAccessCheck('bank_statement', bankStatementParentAccess);
   attachments.registerParentAccessCheck('applicant', applicantParentAccess);
   attachments.registerParentAccessCheck('employee_request', employeeRequestParentAccess);
   attachments.registerParentAccessCheck('employee_document', employeeDocumentParentAccess);

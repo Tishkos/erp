@@ -52,6 +52,7 @@ const BUILDERS = {
   asycuda_reading: byId(customsDocuments.asycudaReading),
   import_application: byId(importDocuments.importApplication),
   internal_transfer: byId(treasuryDocuments.internalTransfer),
+  bank_reconciliation: byId(treasuryDocuments.bankReconciliation),
   customer_statement: (ctx, input) => reports.partnerStatement(ctx, 'customer', input.query),
   supplier_statement: (ctx, input) => reports.partnerStatement(ctx, 'supplier', input.query),
   bank_statement: (ctx, input) => (input.id ? reports.bankStatement(ctx, input.id, input.query, 'bank') : Promise.resolve(null)),

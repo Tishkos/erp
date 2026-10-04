@@ -328,6 +328,8 @@ describe('every screen has one address', () => {
       '/sales/receivables',
       // Block 9 — Sales Returns.
       '/sales/sales-returns',
+      // REQ-ACC-001 Part D — Bank Reconciliation.
+      '/treasury/bank-reconciliation',
       // §17 — Bank and Cash Reporting, beside the accounts it reports on.
       '/treasury/deposits',
       '/treasury/loans',

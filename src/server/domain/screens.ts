@@ -535,6 +535,7 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/administration/project-settings',
   // REQ-ACC-001 Part D — the Accounting screens over the existing engines.
   '/treasury/transfers',
+  '/treasury/bank-reconciliation',
 ]);
 
 export function isDelivered(route: string): boolean {
