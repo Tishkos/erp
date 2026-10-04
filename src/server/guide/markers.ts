@@ -2,19 +2,20 @@
  * The pointing — what is drawn on a picture of a screen so that a step can say
  * "look at 3" and be right.
  *
- * By direction (2026-10-05): "provide points with square, arrows — much better
- * visualisation; steps; helps explanation". The numbered dots of the day
- * before told a person which thing was meant only once they had found the
- * dot. So:
+ * By direction (2026-10-05): first "provide points with square, arrows — much
+ * better visualisation", and then, having seen both: "I also liked the dots …
+ * keep the dots too … use arrow when necessary, dots when necessary". So:
  *
- *   a BOX       a thin red rectangle round each numbered control itself — the
+ *   a DOT       a round red numbered dot on each thing a person can use — the
  *               input, the dropdown, the button, the row of tabs, a table's
- *               heading, a status — with its number in a small square tag on
- *               the box's top-start corner;
- *   an ARROW    for the things the answer is about (`pointAt`, or whatever the
- *               caller tagged `data-guide-point`): a thick box, and a filled
- *               arrow from outside pointing at it, its number in a larger tag
- *               at the arrow's tail.
+ *               heading, a status — on its top-start corner, clear of its words;
+ *   an ARROW    only for what the answer is about (`pointAt`, or whatever the
+ *               caller tagged `data-guide-point`): a thick box round it, and a
+ *               filled arrow from outside pointing at it, its number in a
+ *               larger tag at the arrow's tail.
+ *
+ * (`style: 'boxes'` also draws a thin box round every numbered control; it
+ * made a busy screen busier and is not the default.)
  *
  * One piece of code draws both kinds of picture — the ones made ahead of time
  * from the training copy (`scripts/guide/make-screens.ts`) and the ones taken
@@ -76,6 +77,14 @@ export interface MarkOptions {
   readonly gridAsOne?: boolean;
   /** A picture of the whole page: what is below the first screenful is numbered too. */
   readonly fullPage?: boolean;
+  /**
+   * How an ordinary number is drawn. `dots` (the default, by the owner's
+   * direction: "I also liked the dots … use arrow when necessary, dots when
+   * necessary"): a round numbered dot on the control and nothing round it.
+   * `boxes`: a thin box round every control as well. What is POINTED AT gets
+   * its thick box and its arrow either way.
+   */
+  readonly style?: 'dots' | 'boxes';
 }
 
 export interface MarkResult {
@@ -95,6 +104,8 @@ export const MARKERS_JS = String.raw`(function () {
   var ATTR = 'data-guide-mark';
   var RED = '#e11d48';
   var NS = 'http://www.w3.org/2000/svg';
+  /* A thin box round every numbered control as well as its number: off unless asked for (options.style === 'boxes'). */
+  var BOXES = false;
   /* What is never read out of a field: by its type, its name, or what it is called. */
   var SECRET = /pass|secret|token|otp|code|رمز|كلمة المرور|سري/i;
 
@@ -740,13 +751,18 @@ export const MARKERS_JS = String.raw`(function () {
   function tagWidth(n, large) {
     return (large ? 22 : 16) + (n > 9 ? (large ? 8 : 6) : 0);
   }
+  /*
+   * An ordinary number, as a dot: where its control's top-start corner is, half on and half off it, the way the
+   * first pictures drew it. A box round every control made a busy screen busier; the box is kept for what is
+   * pointed at, where it says "this one".
+   */
   function tag(n, large, host, left, top) {
     var el = document.createElement('span');
     var size = large ? 22 : 16;
     el.setAttribute(
       'style',
       'display:flex;align-items:center;justify-content:center;box-sizing:border-box;pointer-events:none;margin:0;padding:0;' +
-        'width:' + tagWidth(n, large) + 'px;height:' + size + 'px;border-radius:' + (large ? 6 : 4) + 'px;background:' + RED + ';color:#fff;' +
+        'width:' + tagWidth(n, large) + 'px;height:' + size + 'px;border-radius:' + (BOXES ? (large ? 6 : 4) : 999) + 'px;background:' + RED + ';color:#fff;' +
         'font:700 ' + (large ? 13 : 11) + 'px/1 Arial,Helvetica,sans-serif;letter-spacing:0;text-transform:none;text-decoration:none;direction:ltr;' +
         'box-shadow:0 0 0 ' + (large ? 2 : 1.5) + 'px rgba(255,255,255,.95);z-index:' + (host === document.body ? '2147483002' : '7') + ';'
     );
@@ -984,7 +1000,7 @@ export const MARKERS_JS = String.raw`(function () {
           }
         } else {
           var thin = 3;
-          frame(rect, thin, false, host);
+          if (BOXES) frame(rect, thin, false, host);
           if (item.place === 'above') {
             left = rect.left + rect.width / 2 - small / 2;
             top = rect.top - thin - 15;
@@ -1039,6 +1055,7 @@ export const MARKERS_JS = String.raw`(function () {
 
   window.__erpMark = function (options) {
     var opts = options || {};
+    BOXES = opts.style === 'boxes';
     window.__erpUnmark();
     var scope = opts.scope || 'screen';
     var items;
