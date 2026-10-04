@@ -28,6 +28,13 @@ export const EXPORT_ACCESS = {
   // The import application itself — the record that ties the invoice, the
   // goods, the declaration and the shipment together (2026-10-03).
   import_application: { kind: 'document', route: '/payables', object: 'payable' },
+  // REQ-LOG-001 item 23 — the four Logistics records that had no print model
+  // (the PD, the container, its receipt, the customs declaration), each
+  // under the object its screen authorises `view` on.
+  customs_pd: { kind: 'document', route: '/payables/pd', object: 'customs_pd' },
+  shipment_container: { kind: 'document', route: '/payables/containers', object: 'shipment_container' },
+  container_receipt: { kind: 'document', route: '/payables/containers', object: 'shipment_container' },
+  customs_declaration: { kind: 'document', route: '/logistics/customs-declarations', object: 'customs_declaration' },
   customer_statement: { kind: 'report', route: '/sales/customer-statements', object: 'business_partner' },
   supplier_statement: { kind: 'report', route: '/payables/supplier-statements', object: 'business_partner' },
   bank_statement: { kind: 'report', route: '/master-data/bank-accounts', object: 'bank_account' },
