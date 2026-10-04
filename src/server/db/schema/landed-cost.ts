@@ -111,7 +111,7 @@ export const landedCostLayerAdjustment = pgTable(
 );
 
 /**
- * IMPROVEMENT-002 (0280) — where every dinar of a lock went that did not stay
+ * IMPROVEMENT-002 (0285) — where every dinar of a lock went that did not stay
  * in stock: one row per lock × layer × departed movement, posted to the
  * destination of the business event that took the units (a sale's cost of
  * sales, a project issue's project cost, a write-off's loss …). A unit that

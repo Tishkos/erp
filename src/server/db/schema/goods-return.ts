@@ -105,7 +105,7 @@ export const goodsReturn = pgTable(
     /** Set when — and only when — `offsetKind` is 'bank'. */
     offsetBankAccountId: uuid('offset_bank_account_id').references(() => bankCashAccount.id),
     /**
-     * IMPROVEMENT-002 (0280) — whether the supplier also pays back the landed
+     * IMPROVEMENT-002 (0285) — whether the supplier also pays back the landed
      * cost (freight, duty) of what is returned. No by default — recoverability
      * is never assumed: No sends that part to purchase variance, Yes to return
      * clearing. Frozen once the return is posted.
