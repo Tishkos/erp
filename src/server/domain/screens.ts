@@ -428,6 +428,8 @@ const DELIVERED: ReadonlySet<string> = new Set([
   '/approvals',
   // Global Search (platform phase): the results page behind the palette's "see all".
   '/search',
+  // Notification Center (platform phase): the bell's "see all", every notification of mine.
+  '/notifications',
   // The accounting core.
   '/finance/journals',
   '/finance/reversals',

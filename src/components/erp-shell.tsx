@@ -63,6 +63,7 @@ import { Button, Panel } from '@/components/ui';
 import mainLogo from '../../mainLogoMark.png';
 import { GlobalSearch } from './global-search';
 import { ChatCount, ChatGlyph, ChatPopover, useChatLabel } from './chat/chat-header';
+import { BellCount, BellGlyph, BellPopover, useBellLabel } from './notifications/notification-bell';
 import { switchBranch } from '@/app/(app)/actions';
 
 type ModuleKey =
@@ -101,14 +102,6 @@ interface ModuleGroup extends ModuleDefinition {
   readonly sections: readonly MenuSection[];
 }
 
-export interface ShellNotification {
-  readonly id: string;
-  readonly subject: string;
-  readonly body: string;
-  readonly createdAt: string;
-  readonly read: boolean;
-}
-
 interface ErpShellProps {
   readonly brand: string;
   readonly branchCode: string;
@@ -123,11 +116,13 @@ interface ErpShellProps {
   readonly initialAppearanceSettings: UserAppearanceSettings;
   readonly appearanceSettingsSaved: boolean;
   /**
-   * The signed-in person's latest notifications, newest first — what the bell
-   * shows. Block 8's status changes land here for the users selected to be
-   * told.
+   * How many notifications the signed-in person has not read — what the bell
+   * shows first. The list itself is fetched when the popover opens
+   * (`components/notifications`), so a page render costs one count.
    */
-  readonly notifications?: readonly ShellNotification[];
+  readonly unreadNotifications?: number;
+  /** The books' time zone, for the hover time of a notification. */
+  readonly notificationZone?: string;
   /** Rendered after the main region, so it always ends the page. */
   readonly footer?: ReactNode;
   readonly children: ReactNode;
@@ -437,7 +432,8 @@ export function ErpShell({
   sections,
   initialAppearanceSettings,
   appearanceSettingsSaved,
-  notifications = [],
+  unreadNotifications = 0,
+  notificationZone = 'Asia/Baghdad',
   footer,
   children,
 }: ErpShellProps) {
@@ -478,9 +474,8 @@ export function ErpShell({
     : roleCodes.length > 0
       ? roleCodes.join(' · ')
       : shell('no_role');
-  const notificationItem = sections
-    .flatMap((section) => section.items)
-    .find((item) => item.key === 'notifications');
+  const bellSeed = { unread: unreadNotifications, zone: notificationZone };
+  const bellLabel = useBellLabel(bellSeed, shell('notifications'));
   // Internal chat: the messages button carries the unread count for a person who holds chat.
   const chatEnabled = sections.some((section) => section.items.some((item) => item.key === 'chat'));
   const messagesLabel = useChatLabel(chatEnabled, shell('messages'));
@@ -795,12 +790,12 @@ export function ErpShell({
             <button
               className="erp-icon-button"
               type="button"
-              aria-label={shell('notifications')}
+              aria-label={bellLabel}
               aria-expanded={openPopover === 'notifications'}
               aria-controls="erp-notifications-panel"
               onClick={() => togglePopover('notifications')}
             >
-              <Bell aria-hidden="true" />
+              <BellGlyph seed={bellSeed} />
             </button>
 
             <button
@@ -865,34 +860,7 @@ export function ErpShell({
               <Bell aria-hidden="true" />
               <h2>{shell('notifications')}</h2>
             </div>
-            {notifications.length > 0 ? (
-              <ul className="erp-notifications__list">
-                {notifications.map((note) => (
-                  <li key={note.id} className={note.read ? undefined : 'erp-notifications__unread'}>
-                    <strong>
-                      <bdi dir="auto">{note.subject}</bdi>
-                    </strong>
-                    <p>
-                      <bdi dir="auto">{note.body}</bdi>
-                    </p>
-                    <time dateTime={note.createdAt}>{note.createdAt.slice(0, 16).replace('T', ' ')}</time>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {notifications.length > 0 ? null : notificationItem?.href ? (
-              <Link
-                className="erp-utility-popover__link"
-                href={notificationItem.href}
-                onClick={closeNavigation}
-              >
-                {page(notificationItem.key)}
-              </Link>
-            ) : notificationItem ? (
-              <PendingItem item={notificationItem} />
-            ) : (
-              <p className="erp-utility-popover__empty">{shell('notifications_empty')}</p>
-            )}
+            <BellPopover onNavigate={closeNavigation} seed={bellSeed} />
           </section>
         ) : null}
 
@@ -1042,6 +1010,7 @@ export function ErpShell({
               >
                 <Bell aria-hidden="true" />
                 <span>{shell('notifications')}</span>
+                <BellCount seed={bellSeed} />
               </button>
               <button
                 className="erp-mobile-action"

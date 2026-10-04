@@ -73,6 +73,12 @@ export interface KindDef {
   readonly window?: NotificationWindow;
   /** The stored body is somebody's own words (a chat message): shown as it was written. */
   readonly userText?: boolean;
+  /**
+   * Where a notification of this kind leads when its subject has no record
+   * page of its own and the emitter named none (the approvals inbox for a
+   * document type that has no screen yet).
+   */
+  readonly fallback?: string;
 }
 
 /**
@@ -82,9 +88,9 @@ export interface KindDef {
  */
 export const KINDS: Readonly<Record<string, KindDef>> = Object.freeze({
   // Approvals — the workflow engine's submit / decide (services/workflow.ts).
-  'approval.required': { category: 'approvals', window: 'occurrence' },
-  'approval.completed': { category: 'approvals', window: 'occurrence' },
-  'approval.rejected': { category: 'approvals', window: 'occurrence' },
+  'approval.required': { category: 'approvals', window: 'occurrence', fallback: '/approvals' },
+  'approval.completed': { category: 'approvals', window: 'occurrence', fallback: '/approvals' },
+  'approval.rejected': { category: 'approvals', window: 'occurrence', fallback: '/approvals' },
   'journal_entry.submitted': { category: 'approvals', object: 'journal_entry', window: 'occurrence' },
   'journal_entry.rejected': { category: 'approvals', object: 'journal_entry', window: 'occurrence' },
   'chart_of_account.submitted': { category: 'approvals', object: 'chart_of_account', window: 'occurrence' },
@@ -123,7 +129,7 @@ export const KINDS: Readonly<Record<string, KindDef>> = Object.freeze({
   'ap_invoice.paid_late': { category: 'invoices', object: 'ap_invoice', window: 'once' },
 
   // Imports and logistics.
-  'container.late': { category: 'logistics', object: 'shipment_container', window: 'once' },
+  'container.late': { category: 'logistics', object: 'shipment_container', window: 'occurrence' },
   'shipment.status_changed': { category: 'logistics', window: 'occurrence' },
   'payable.stage.changed': { category: 'logistics', object: 'payable', window: 'occurrence' },
   'payable.hold.opened': { category: 'logistics', object: 'payable', window: 'day' },
@@ -133,6 +139,10 @@ export const KINDS: Readonly<Record<string, KindDef>> = Object.freeze({
   'fiscal_period.close_blocked': { category: 'accounting', window: 'day' },
   'inventory.integrity_failed': { category: 'accounting', window: 'day' },
   'project.availability_warning': { category: 'accounting', window: 'day' },
+
+  // Slots: no module raises these yet (Bank Reconciliation's unmatched lines, the health probe).
+  // The label and the category are ready; the module that owns the event calls emit() with the kind.
+  'reconciliation.issue': { category: 'accounting', window: 'day' },
 
   // The system itself.
   'system.health': { category: 'system', window: 'day' },
@@ -349,30 +359,40 @@ export function relativeParts(then: Date, now: Date): { readonly value: number; 
 export interface LabelParams {
   readonly ref: string;
   readonly party: string;
-  readonly days: string;
+  /** A number, so a message can pluralise on it (0 when the row names none). */
+  readonly days: number;
   readonly actor: string;
   readonly amount: string;
   readonly date: string;
   readonly name: string;
-  readonly count: string;
+  readonly count: number;
+  /** A second fact a label may show: the stage reached, the reason, the budget element. */
+  readonly extra: string;
 }
 
 const text = (value: unknown): string =>
   typeof value === 'string' ? value : typeof value === 'number' || typeof value === 'bigint' ? String(value) : '';
+
+const whole = (value: unknown): number => {
+  const n = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : Number.NaN;
+  return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+};
 
 export function labelParams(row: {
   readonly objectId: string;
   readonly context: Readonly<Record<string, unknown>> | null;
 }): LabelParams {
   const c = row.context ?? {};
+  const first = (...values: unknown[]): unknown => values.find((v) => text(v) !== '');
   return {
-    ref: text(c.reference) || text(c.documentNo) || text(c.requestNo) || text(c.runNo) || text(c.payableNo) || text(c.invoiceNo) || text(c.containerNo) || text(c.entryNo) || text(c.taskNo) || row.objectId,
+    ref: text(first(c.reference, c.documentNo, c.requestNo, c.runNo, c.payableNo, c.invoiceNo, c.containerNo, c.entryNo, c.taskNo, c.projectCode)) || row.objectId,
     party: text(c.party) || text(c.supplier) || text(c.customer),
-    days: text(c.days_overdue) || text(c.days_until_due) || text(c.days_late) || text(c.days),
+    days: whole(first(c.days_overdue, c.days_until_due, c.days_late, c.days)),
     actor: text(c.actor) || text(c.actorName) || text(c.senderName),
     amount: text(c.amount) || text(c.outstanding),
     date: text(c.due_date) || text(c.eta) || text(c.date),
-    name: text(c.name) || text(c.title),
-    count: text(c.count),
+    name: text(c.name) || text(c.title) || text(c.period),
+    count: whole(c.count),
+    extra: text(c.stage) || text(c.reason) || text(c.wbsCode),
   };
 }

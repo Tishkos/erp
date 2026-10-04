@@ -200,9 +200,9 @@ export async function resolveTarget(tx: Tx, principal: Principal, subject: Subje
       return served(principal, href);
     }
 
-    const hint = hintOf(subject);
-    if (!hint) return no('no_target');
     const def = kindDef(subject.kind);
+    const hint = hintOf(subject) ?? def.fallback ?? null;
+    if (!hint) return no('no_target');
     if (def.object && !can(principal, def.verb ?? 'view', def.object)) return no('no_access');
     return served(principal, hint);
   } catch {

@@ -6916,6 +6916,9 @@
       "unlinked": "Cloud Files account unlinked",
       "revoked_on_deactivation": "Cloud Files app password revoked on deactivation"
     },
+    "notification": {
+      "marked_all_read": "Notifications marked as read"
+    },
     "cloud_file": {
       "uploaded": "File uploaded to Cloud Files",
       "downloaded": "File downloaded from Cloud Files",
@@ -7269,6 +7272,199 @@
     "record_start_denied_title": "Discuss a record",
     "record_start_denied": "You cannot open that record, so you cannot start a conversation about it.",
     "record_existing": "Existing conversation about this record"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "subtitle": "What the system has told you, newest first. Only your own are listed.",
+    "bell_label": "Notifications",
+    "bell_label_count": "Notifications: {count, plural, one {# unread} other {# unread}}",
+    "unread_count": "{count, plural, one {# unread} other {# unread}}",
+    "tab_unread": "Unread",
+    "tab_all": "All",
+    "list_label": "Notification list",
+    "category_filter": "Category",
+    "category_all": "All categories",
+    "state_filter": "Show",
+    "state_unread": "Unread",
+    "state_all": "All",
+    "filter": "Filter",
+    "see_all": "See all notifications",
+    "mark_read": "Mark as read",
+    "mark_unread": "Mark as unread",
+    "mark_all_read": "Mark all as read",
+    "empty_unread": "You are all caught up. No unread notifications.",
+    "empty_all": "Nothing has been sent to you yet.",
+    "loading": "Loading notifications...",
+    "load_failed": "The notifications could not be loaded. Trying again shortly.",
+    "gone": "No longer available",
+    "gone_hint": "You can no longer open what this was about.",
+    "gone_flash": "That notification leads to something you can no longer open.",
+    "col_when": "When",
+    "col_category": "Category",
+    "col_message": "Notification",
+    "col_status": "Status",
+    "col_actions": "Actions",
+    "status_unread": "Unread",
+    "status_read": "Read",
+    "acted": "Done",
+    "category": {
+      "approvals": "Approvals",
+      "tasks": "Tasks",
+      "chat": "Chat",
+      "documents": "Documents",
+      "payments": "Payments",
+      "invoices": "Invoices",
+      "logistics": "Logistics",
+      "accounting": "Accounting",
+      "hr": "Human resources",
+      "system": "System"
+    },
+    "kind": {
+      "approval_required": {
+        "title": "Approval needed: {ref}",
+        "detail": "It is waiting for your decision."
+      },
+      "approval_completed": {
+        "title": "Approved: {ref}",
+        "detail": "What you submitted was approved."
+      },
+      "approval_rejected": {
+        "title": "Rejected: {ref}",
+        "detail": "What you submitted was rejected. Open it to see the reason."
+      },
+      "journal_entry_submitted": {
+        "title": "Journal entry {ref} is waiting for approval"
+      },
+      "journal_entry_rejected": {
+        "title": "Journal entry {ref} was rejected"
+      },
+      "chart_of_account_submitted": {
+        "title": "Account {ref} is waiting for approval"
+      },
+      "partner_bank_account_submitted": {
+        "title": "Bank details are waiting for verification: {ref}",
+        "detail": "{party}"
+      },
+      "task_assigned": {
+        "title": "Task {ref} was assigned to you",
+        "detail": "{name}"
+      },
+      "task_accepted": {
+        "title": "Task {ref} was accepted",
+        "detail": "{name}"
+      },
+      "task_started": {
+        "title": "Task {ref} was started",
+        "detail": "{name}"
+      },
+      "task_blocked": {
+        "title": "Task {ref} is blocked",
+        "detail": "{name}"
+      },
+      "task_submitted": {
+        "title": "Task {ref} was submitted for review",
+        "detail": "{name}"
+      },
+      "task_completed": {
+        "title": "Task {ref} was completed",
+        "detail": "{name}"
+      },
+      "task_reassigned": {
+        "title": "Task {ref} was reassigned",
+        "detail": "{name}"
+      },
+      "task_due_soon": {
+        "title": "Task {ref} is due soon",
+        "detail": "{name}"
+      },
+      "task_overdue": {
+        "title": "Task {ref} is overdue",
+        "detail": "{name}"
+      },
+      "document_linked": {
+        "title": "A file was linked to {ref}",
+        "detail": "{name}"
+      },
+      "customer_receipt_received": {
+        "title": "Receipt {ref} was received",
+        "detail": "{party} · {amount} IQD"
+      },
+      "supplier_payment_made": {
+        "title": "Payment {ref} was made",
+        "detail": "{party} · {amount} IQD"
+      },
+      "ar_invoice_due_soon": {
+        "title": "{days, plural, one {Sales invoice {ref} falls due in # day} other {Sales invoice {ref} falls due in # days}}",
+        "detail": "{party} · outstanding {amount} IQD"
+      },
+      "ar_invoice_due_today": {
+        "title": "Sales invoice {ref} is due today",
+        "detail": "{party} · outstanding {amount} IQD"
+      },
+      "ar_invoice_overdue": {
+        "title": "{days, plural, one {Sales invoice {ref} is # day overdue} other {Sales invoice {ref} is # days overdue}}",
+        "detail": "{party} · outstanding {amount} IQD"
+      },
+      "ar_invoice_paid_late": {
+        "title": "Sales invoice {ref} was paid late",
+        "detail": "{party}"
+      },
+      "ap_invoice_due_soon": {
+        "title": "{days, plural, one {Supplier invoice {ref} falls due in # day} other {Supplier invoice {ref} falls due in # days}}",
+        "detail": "{party} · outstanding {amount} IQD"
+      },
+      "ap_invoice_due_today": {
+        "title": "Supplier invoice {ref} is due today",
+        "detail": "{party} · outstanding {amount} IQD"
+      },
+      "ap_invoice_overdue": {
+        "title": "{days, plural, one {Supplier invoice {ref} is # day overdue} other {Supplier invoice {ref} is # days overdue}}",
+        "detail": "{party} · outstanding {amount} IQD"
+      },
+      "ap_invoice_paid_late": {
+        "title": "Supplier invoice {ref} was paid late",
+        "detail": "{party}"
+      },
+      "container_late": {
+        "title": "Container {ref} is late",
+        "detail": "Its ETA of {date} has passed and it has not arrived."
+      },
+      "shipment_status_changed": {
+        "title": "Shipment status changed: {ref}",
+        "detail": "{extra}"
+      },
+      "payable_stage_changed": {
+        "title": "Import {ref} moved to {extra}"
+      },
+      "payable_hold_opened": {
+        "title": "Import {ref} was put on hold",
+        "detail": "{extra}"
+      },
+      "payable_hold_escalated": {
+        "title": "A hold on import {ref} has waited too long",
+        "detail": "{days, plural, one {Waiting for # day.} other {Waiting for # days.}}"
+      },
+      "fiscal_period_close_blocked": {
+        "title": "Period {name} cannot close yet",
+        "detail": "Open the periods screen to see the checks that fail."
+      },
+      "inventory_integrity_failed": {
+        "title": "{count, plural, one {The stock ledger check found # thing to look at} other {The stock ledger check found # things to look at}}",
+        "detail": "Open the stock checks screen to see them."
+      },
+      "project_availability_warning": {
+        "title": "Project {ref}: the budget warning line was reached",
+        "detail": "Element {extra}"
+      },
+      "reconciliation_issue": {
+        "title": "Reconciliation difference: {ref}",
+        "detail": "{name}"
+      },
+      "system_health": {
+        "title": "System health needs attention",
+        "detail": "{extra}"
+      }
+    }
   },
   "cloudFiles": {
     "subtitle": "Your files in QS Cloud Files, linked to the records they belong to.",

@@ -731,6 +731,8 @@ export async function submit(
     documentTypeCode: DOCUMENT_TYPE,
     documentId: journalEntryId,
     branchCode: entry.branchCode,
+    // Whoever may post approves it in this very act: nobody is left waiting.
+    announce: !canPost(ctx),
   });
 
   await tx

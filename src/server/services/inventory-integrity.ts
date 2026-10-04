@@ -31,6 +31,7 @@
  */
 import { sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
+import * as notifications from './notifications';
 
 /** A stock document that should have written movements and has none. */
 export interface OrphanDocument {
@@ -356,22 +357,19 @@ export async function notifyFindings(
 
   let notified = 0;
   for (const { user_id } of recipients) {
-    const inserted = rowsOf<{ id: string }>(
-      await tx.execute(sql`
-        insert into notification
-          (rule_code, event_type, object_type, object_id, recipient_user_id, subject, body,
-           context, dedupe_key, branch_code)
-        values
-          (null, 'inventory.integrity_failed', 'inventory_movement', ${today}, ${user_id},
-           ${`Stock ledger check: ${count} thing(s) to look at`},
-           ${lines.slice(0, 20).join('\n') + (lines.length > 20 ? `\n… and ${lines.length - 20} more.` : '')},
-           ${JSON.stringify({ day: today, count })}::jsonb,
-           ${`inventory-integrity:${today}:${count}:${user_id}`}, null)
-        on conflict (dedupe_key) do nothing
-        returning id
-      `),
-    );
-    notified += inserted.length;
+    const id = await notifications.insertNotification(tx, {
+      ruleCode: null,
+      eventType: 'inventory.integrity_failed',
+      objectType: 'inventory_movement',
+      objectId: today,
+      recipientUserId: user_id,
+      subject: `Stock ledger check: ${count} thing(s) to look at`,
+      body: lines.slice(0, 20).join('\n') + (lines.length > 20 ? `\n… and ${lines.length - 20} more.` : ''),
+      context: { day: today, count },
+      dedupeKey: `inventory-integrity:${today}:${count}:${user_id}`,
+      branchCode: null,
+    });
+    if (id !== null) notified += 1;
   }
   return { notified };
 }

@@ -8,7 +8,7 @@
  * The instance pins the definition version it started under, so changing the
  * route later cannot rewrite what happened under the old one (01.7 gate).
  */
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
   advance,
   assertCanApprove,
@@ -20,12 +20,15 @@ import {
   type WorkflowDecision,
   type WorkflowDefinition,
   type WorkflowInstance,
+  type WorkflowStep,
 } from "../domain/workflow";
 import {
+  appUser,
   documentTypeControlledField,
   workflowDecisionLog,
   workflowDefinition,
   workflowInstance,
+  userRole,
   workflowStep,
 } from "../db/schema";
 import {
@@ -35,6 +38,7 @@ import {
 import type { DocumentStatus } from "../domain/statuses";
 import type { Tx } from "../db/client";
 import type { ActorContext } from "./chart-of-accounts";
+import * as notifications from "./notifications";
 
 export class NoWorkflowDefinedError extends Error {
   readonly code = "NO_WORKFLOW_DEFINED";
@@ -149,6 +153,15 @@ export interface SubmitInput {
   readonly documentTypeCode: string;
   readonly documentId: string;
   readonly branchCode?: string | null;
+  /** §5.2 — the department the document belongs to, and the manager it went to (department routing). */
+  readonly departmentCode?: string | null;
+  readonly assignedToUserId?: string | null;
+  /**
+   * False when nobody is left waiting — the submitter is about to approve it
+   * themselves in the same act (a journal submitted by someone who may post).
+   * Default true: the approvers of step 1 are told (`approval.required`).
+   */
+  readonly announce?: boolean;
 }
 
 /**
@@ -167,7 +180,7 @@ export async function submit(
   ctx: ActorContext,
   input: SubmitInput,
 ): Promise<{ instanceId: string; revision: number }> {
-  const { id: definitionId } = await activeDefinitionFor(
+  const { id: definitionId, definition } = await activeDefinitionFor(
     tx,
     input.documentTypeCode,
   );
@@ -197,8 +210,24 @@ export async function submit(
       isComplete: false,
       submittedBy: ctx.principal.userId,
       branchCode: input.branchCode ?? null,
+      departmentCode: input.departmentCode ?? null,
+      assignedToUserId: input.assignedToUserId ?? null,
     })
     .returning({ id: workflowInstance.id });
+
+  if (input.announce !== false) {
+    await notifications.safely(tx, (sp) =>
+      announceRequired(sp, ctx.principal.userId, {
+        documentTypeCode: input.documentTypeCode,
+        documentId: input.documentId,
+        branchCode: input.branchCode ?? null,
+        revision,
+        step: stepAt(definition, 1),
+        assignedToUserId: input.assignedToUserId ?? null,
+        submittedBy: ctx.principal.userId,
+      }),
+    );
+  }
 
   return { instanceId: created!.id, revision };
 }
@@ -293,6 +322,10 @@ export async function decide(
       .set({ currentStep: null, isComplete: true, completedAt: new Date() })
       .where(eq(workflowInstance.id, row.id));
 
+    await notifications.safely(tx, (sp) =>
+      announceDecision(sp, row, input.actor.userId, "approval.rejected", input.reason ?? null),
+    );
+
     return {
       instanceId: row.id,
       isComplete: true,
@@ -311,6 +344,24 @@ export async function decide(
       completedAt: outcome.isComplete ? new Date() : null,
     })
     .where(eq(workflowInstance.id, row.id));
+
+  await notifications.safely(tx, async (sp) => {
+    if (outcome.isComplete || outcome.nextStep === null) {
+      await announceDecision(sp, row, input.actor.userId, "approval.completed", input.reason ?? null);
+      return;
+    }
+    // The route goes on: the first step is done, the next one's approvers are asked.
+    await settleAsks(sp, row);
+    await announceRequired(sp, input.actor.userId, {
+      documentTypeCode: row.documentTypeCode,
+      documentId: row.documentId,
+      branchCode: row.branchCode,
+      revision: row.revision,
+      step: stepAt(definition, outcome.nextStep),
+      assignedToUserId: row.assignedToUserId,
+      submittedBy: row.submittedBy,
+    });
+  });
 
   return {
     instanceId: row.id,
@@ -349,6 +400,9 @@ export async function recall(
     .update(workflowInstance)
     .set({ currentStep: null, isComplete: true, completedAt: new Date() })
     .where(eq(workflowInstance.id, row.id));
+
+  // Nobody is asked any more: the approvers' copies are done, not outstanding.
+  await notifications.safely(tx, (sp) => settleAsks(sp, row));
 }
 
 /**
@@ -468,4 +522,129 @@ export async function assertControlledFieldsEditable(
 ): Promise<void> {
   const controlled = await controlledFieldsFor(tx, documentTypeCode);
   assertControlledFieldsUnchanged(documentTypeCode, status, controlled, before, after);
+}
+
+// ---------------------------------------------------------------------------
+// Notification centre — who is told when a route starts, moves on and ends.
+// A notification can never change what the document is (§21): every call is
+// made through `notifications.safely`, a savepoint that is undone on failure.
+// ---------------------------------------------------------------------------
+
+/**
+ * A bank account's submission is announced by its own audit event
+ * (`partner_bank_account.submitted`, a rule the accounting managers hold), so
+ * the engine does not tell the same people twice.
+ */
+const ANNOUNCED_ELSEWHERE: ReadonlySet<string> = new Set(["partner_bank_account"]);
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** What a person calls the document: the journal's number, the account's code, else the id as given. */
+async function referenceOf(tx: Tx, documentTypeCode: string, documentId: string): Promise<string> {
+  if (!UUID.test(documentId)) return documentId;
+  const found =
+    documentTypeCode === "journal_entry"
+      ? await tx.execute(sql`select entry_no as ref from journal_entry where id = ${documentId}::uuid limit 1`)
+      : documentTypeCode === "chart_of_account"
+        ? await tx.execute(sql`select code as ref from chart_of_account where id = ${documentId}::uuid limit 1`)
+        : null;
+  return (found?.rows[0] as { ref: string } | undefined)?.ref ?? documentId;
+}
+
+async function nameOf(tx: Tx, userId: string): Promise<string> {
+  const [row] = await tx.select({ name: appUser.displayName }).from(appUser).where(eq(appUser.id, userId)).limit(1);
+  return row?.name ?? "";
+}
+
+/** Who a step waits for: the manager it was sent to, else whoever holds the step's role — never the submitter unless the step allows it. */
+async function approversOf(
+  tx: Tx,
+  step: WorkflowStep,
+  assignedToUserId: string | null,
+  submittedBy: string,
+): Promise<string[]> {
+  const people = assignedToUserId
+    ? [assignedToUserId]
+    : step.approverKind === "role"
+      ? (await tx.select({ userId: userRole.userId }).from(userRole).where(eq(userRole.roleCode, step.approverRole))).map((r) => r.userId)
+      : [];
+  return step.allowSelfApproval ? people : people.filter((id) => id !== submittedBy);
+}
+
+/** `approval.required` — told once per (revision, step): a refresh or a retry writes nothing more. */
+async function announceRequired(
+  tx: Tx,
+  actorUserId: string,
+  at: {
+    readonly documentTypeCode: string;
+    readonly documentId: string;
+    readonly branchCode: string | null;
+    readonly revision: number;
+    readonly step: WorkflowStep;
+    readonly assignedToUserId: string | null;
+    readonly submittedBy: string;
+  },
+): Promise<void> {
+  if (ANNOUNCED_ELSEWHERE.has(at.documentTypeCode)) return;
+  const recipients = await approversOf(tx, at.step, at.assignedToUserId, at.submittedBy);
+  if (recipients.length === 0) return;
+  const reference = await referenceOf(tx, at.documentTypeCode, at.documentId);
+  const submitter = await nameOf(tx, at.submittedBy);
+  await notifications.emit(tx, {
+    kind: "approval.required",
+    objectType: at.documentTypeCode,
+    objectId: at.documentId,
+    recipients,
+    except: [at.step.allowSelfApproval ? null : at.submittedBy],
+    subject: `Approval required: ${reference}`,
+    body: submitter ? `Submitted by ${submitter}.` : "",
+    context: {
+      reference,
+      actor: submitter,
+      documentType: at.documentTypeCode,
+      step: at.step.sequence,
+      revision: at.revision,
+    },
+    occurrence: `${at.revision}:${at.step.sequence}`,
+    branchCode: at.branchCode,
+    actorUserId,
+  });
+}
+
+/** The people who were asked have nothing left to do: their copies are marked acted. */
+async function settleAsks(tx: Tx, row: typeof workflowInstance.$inferSelect): Promise<void> {
+  await notifications.markActed(tx, row.documentTypeCode, row.documentId);
+}
+
+/** `approval.completed` / `approval.rejected` — to the submitter, unless they are the one who decided. */
+async function announceDecision(
+  tx: Tx,
+  row: typeof workflowInstance.$inferSelect,
+  actorUserId: string,
+  kind: "approval.completed" | "approval.rejected",
+  reason: string | null,
+): Promise<void> {
+  await settleAsks(tx, row);
+  if (ANNOUNCED_ELSEWHERE.has(row.documentTypeCode)) return;
+  const reference = await referenceOf(tx, row.documentTypeCode, row.documentId);
+  const decider = await nameOf(tx, actorUserId);
+  await notifications.emit(tx, {
+    kind,
+    objectType: row.documentTypeCode,
+    objectId: row.documentId,
+    recipients: [row.submittedBy],
+    except: [actorUserId],
+    subject: kind === "approval.completed" ? `Approved: ${reference}` : `Rejected: ${reference}`,
+    body: reason ?? "",
+    context: {
+      reference,
+      actor: decider,
+      documentType: row.documentTypeCode,
+      revision: row.revision,
+      reason: reason ?? "",
+    },
+    occurrence: String(row.revision),
+    branchCode: row.branchCode,
+    actorUserId,
+  });
 }

@@ -234,10 +234,8 @@ export async function check(tx: Tx, options: CheckOptions = {}): Promise<HealthR
 
   // 6. The delivery outbox: pending rows older than a day mean no runner.
   checked.push('deliveries');
-  const stuck = (await tx.execute(sql`
-    select count(*)::int as n from notification_delivery
-     where status = 'pending' and last_attempt_at is null
-       and exists (select 1 from notification n where n.id = notification_id and n.created_at < now() - interval '1 day')`)).rows as { n: number }[];
+  // Across everybody's notifications, so through the definer function (0350): a notification is its recipient's alone.
+  const stuck = (await tx.execute(sql`select app_deliveries_stuck() as n`)).rows as { n: number }[];
   if ((stuck[0]?.n ?? 0) > 0) {
     findings.push({ code: 'deliveries_stuck', severity: 'warn', message: `${stuck[0]!.n} notification deliveries have waited more than a day: the delivery job is not running (REQ-HARDEN-001 F2).` });
   }

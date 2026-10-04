@@ -3,8 +3,10 @@ import { getTranslations } from 'next-intl/server';
 import { visibleMenu } from '@domain/menu';
 import { routeFor } from '@domain/screens';
 import { visibleRoute } from '@/server/delivered';
-import { desc, eq } from 'drizzle-orm';
-import { appUser, notification } from '@/server/db/schema';
+import { eq } from 'drizzle-orm';
+import { appUser } from '@/server/db/schema';
+import { BUSINESS_TIME_ZONE } from '@/server/domain/business-date';
+import * as notifications from '@/server/services/notifications';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { AppFooter } from './app-footer';
 import { ErpShell } from './erp-shell';
@@ -42,7 +44,7 @@ export async function AppShell({
       ),
     }))
     .filter((section) => section.items.length > 0);
-  const { me, notifications } = await withCurrentUser(async (tx) => ({
+  const { me, unread } = await withCurrentUser(async (tx) => ({
     me: (
       await tx
         .select({ displayName: appUser.displayName, email: appUser.email, image: appUser.image })
@@ -50,19 +52,8 @@ export async function AppShell({
         .where(eq(appUser.id, principal.userId))
         .limit(1)
     )[0],
-    // What the bell shows: this person's ten latest, newest first.
-    notifications: await tx
-      .select({
-        id: notification.id,
-        subject: notification.subject,
-        body: notification.body,
-        createdAt: notification.createdAt,
-        readAt: notification.readAt,
-      })
-      .from(notification)
-      .where(eq(notification.recipientUserId, principal.userId))
-      .orderBy(desc(notification.createdAt))
-      .limit(10),
+    // What the bell shows first: how many are unread. The list is fetched when the popover opens.
+    unread: await notifications.unreadCountFor(tx, principal.userId),
   }), { allowRestricted: true });
 
   return (
@@ -79,13 +70,8 @@ export async function AppShell({
       sections={sections}
       initialAppearanceSettings={initialAppearanceSettings}
       appearanceSettingsSaved={appearanceSettingsSaved}
-      notifications={notifications.map((note) => ({
-        id: String(note.id),
-        subject: note.subject ?? '',
-        body: note.body ?? '',
-        createdAt: new Date(note.createdAt).toISOString(),
-        read: note.readAt !== null,
-      }))}
+      unreadNotifications={unread}
+      notificationZone={BUSINESS_TIME_ZONE}
       footer={<AppFooter />}
     >
       <PermissionsWatch version={permissionsVersion} />
