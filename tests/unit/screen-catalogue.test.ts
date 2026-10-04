@@ -118,9 +118,9 @@ describe('the screen catalogue covers the approved tree', () => {
     // Stock Issues, Stock Count, Inventory Checks and Inventory Valuation in,
     // the unbuilt Quarantine, Returns, Damaged Goods, Serial / Batch,
     // Reports and Settings placeholders out.
-    // Plus Chat (platform phase, Agent 1): one workspace screen.
-    expect(allMenuItems()).toHaveLength(249);
-    expect(Object.keys(SCREENS)).toHaveLength(249);
+    // Plus Chat (platform phase, Agent 1): one workspace screen; Cloud Files Settings (Agent 4): one.
+    expect(allMenuItems()).toHaveLength(250);
+    expect(Object.keys(SCREENS)).toHaveLength(250);
   });
 
   it('uses only declared archetypes', () => {
@@ -146,8 +146,8 @@ describe('the screen catalogue covers the approved tree', () => {
     // Ledger, Advances, Payments, Allocations, Ageing), + 1 in (Supplier Credits).
     // REQ-LOG-001: + 2 + 2 (declarations, ports) + 8 (the registers).
     // IMPROVEMENT-002 inventory: + 1 + 1 + 2 + 1 + 1 in, − 1 − 2 − 2 − 1 − 1 − 1 out.
-    // Platform phase: + 1 (Chat, a workspace).
-    expect(total).toBe(363);
+    // Platform phase: + 1 (Chat, a workspace) + 1 (Cloud Files Settings).
+    expect(total).toBe(364);
   });
 });
 
@@ -209,6 +209,7 @@ describe('every screen has one address', () => {
       '/',
       '/administration/audit',
       '/administration/backup-health',
+      '/administration/cloud-files',
       '/administration/company',
       '/administration/hr-settings',
       '/administration/jobs',

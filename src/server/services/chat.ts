@@ -181,13 +181,14 @@ export async function mayOpenRecordAs(userId: string, recordType: string, record
     const principal = await loadPrincipal(tx, userId);
     if (!principal.isActive) return false;
     await applyScope(tx, { userId, branchCode: principal.defaultBranchCode ?? '', isSuperUser: user.isSuperUser });
-    return attachments.mayAccessParent(tx, principal, recordType, recordId);
+    return (await attachments.mayAccessParent(tx, principal, recordType, recordId)) === true;
   });
 }
 
 /** The viewer's own answer, in the transaction they are already in. */
-export function mayOpenRecord(tx: Tx, ctx: ActorContext, recordType: string, recordId: string): Promise<boolean> {
-  return attachments.mayAccessParent(tx, ctx.principal, recordType, recordId);
+export async function mayOpenRecord(tx: Tx, ctx: ActorContext, recordType: string, recordId: string): Promise<boolean> {
+  // A record kind nobody registered answers null: chat treats that as no.
+  return (await attachments.mayAccessParent(tx, ctx.principal, recordType, recordId)) === true;
 }
 
 // ---------------------------------------------------------------------------

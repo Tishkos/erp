@@ -86,3 +86,4 @@ export * from './hr';
 export * from './whatsapp';
 export * from './recurring-journals';
 export * from './chat';
+export * from './cloud-files';

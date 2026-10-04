@@ -4,6 +4,7 @@ import { attachToRecordAction } from '@/server/record-attach-action';
 import { requireContext, withCurrentUser } from '@/server/session';
 import { can } from '@domain/permissions';
 import { Attachments, readAttachments, type AttachmentsRead } from './attachments';
+import { loadCloudSection } from './record-cloud-files';
 import { AttachmentsButton } from './icon-dialog';
 import { ReturnToField } from './return-to-field';
 
@@ -43,9 +44,12 @@ export async function RecordAttachmentsDoor({
 }) {
   const [t, context] = await Promise.all([getTranslations('admin'), requireContext()]);
   const read = files ?? (await withCurrentUser((tx) => readAttachments(tx, object, recordId)));
+  // QS Cloud Files linked to the record count on the same paperclip (nothing, while the integration is off).
+  const cloud = await loadCloudSection(context, object, recordId);
   return (
-    <AttachmentsButton closeLabel={t('close')} count={read.rows.length} label={t('attachments.title')} title={t('attachments.title')}>
+    <AttachmentsButton closeLabel={t('close')} count={read.rows.length + (cloud?.links.length ?? 0)} label={t('attachments.title')} title={t('attachments.title')}>
       <Attachments
+        cloud={cloud}
         action={attachToRecordAction}
         formExtra={
           <Suspense fallback={null}>

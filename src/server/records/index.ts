@@ -17,6 +17,7 @@ import { registerRecord } from '../services/record';
 import { registerActionEffect } from '../services/document-actions';
 import { registerAttachmentRuntime } from '../attachments-runtime';
 import { registerDepartureRuntime } from '../departures-runtime';
+import { registerCloudLinkTargets } from './cloud-links';
 import * as accounts from '../services/chart-of-accounts';
 
 /**
@@ -109,6 +110,9 @@ export function registerAllRecords(): void {
 
   // §21 — where files go, what scans them, and who may read them back.
   registerAttachmentRuntime();
+
+  // Document Center — which records a cloud file can be linked to.
+  registerCloudLinkTargets();
 
   // IMPROVEMENT-002 — where stock that left a layer went, by the module that
   // took it; a landed-cost lock in a cold process would otherwise refuse
