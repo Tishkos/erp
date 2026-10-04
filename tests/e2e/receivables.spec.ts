@@ -121,6 +121,7 @@ let receiptNo = '';
 let creditNo = '';
 let debitNo = '';
 let returnNo = '';
+let memoNo = '';
 
 test.describe('REQ-AR-001 · receivables in a browser', () => {
   test('a draft sales invoice wears its doors and takes a file; posted, it owes', async ({ page }) => {
@@ -295,6 +296,36 @@ test.describe('REQ-AR-001 · receivables in a browser', () => {
     await shoot(page, 'customer-reconciliation-desktop-en');
   });
 
+  test('an accepted return settles into a credit memo that wears the doors and names its customer', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`/sales/sales-returns/${encodeURIComponent(returnNo)}`);
+    // One press: received, inspected as saleable, accepted, the memo raised,
+    // posted and applied to the invoice (block 9's journal is one act).
+    await press(page, 'Accept', 'approved');
+
+    // The register lists the memo beside the notes, against its invoice.
+    await page.goto('/sales/credit-notes');
+    const row = page.locator('tr', { hasText: 'Credit memo (sales return)' }).filter({ hasText: invoiceNo }).first();
+    await expect(row).toBeVisible({ timeout: 60_000 });
+    memoNo = (await row.locator('a[href^="/sales/credit-notes/CCM-"]').first().textContent())!.trim();
+    await row.locator('a[href^="/sales/credit-notes/CCM-"]').first().click();
+    await page.waitForURL(new RegExp(`/sales/credit-notes/${memoNo}`));
+
+    // Read-only, but with the four doors, a note, and its parties linked.
+    await doors(page, 'memo-document');
+    await note(page, `Memo checked against the return ${RUN}`);
+    const memo = page.locator('#memo-document');
+    await expect(memo.locator(`a[href="/sales/customers/${CUSTOMER}?role=customer"]`).first()).toBeVisible();
+    // The invoice twice: as the header's field and as the line the memo was applied to.
+    await expect(memo.getByRole('link', { name: invoiceNo })).toHaveCount(2);
+    await expect(memo.getByRole('link', { name: returnNo })).toBeVisible();
+    await shoot(page, 'credit-memo-desktop-en');
+
+    // And the invoice lists the memo among what was credited against it.
+    await page.goto(`/sales/ar-invoices/${encodeURIComponent(invoiceNo)}`);
+    await expect(page.locator('section[aria-labelledby="invoice-activity-title"]').getByRole('link', { name: memoNo })).toBeVisible();
+  });
+
   test('status chips on the receivables screens follow the palette into the dark', async ({ page }) => {
     await signIn(page);
     for (const route of [
@@ -366,6 +397,7 @@ test.describe('REQ-AR-001 · receivables in a browser', () => {
       [`/sales/customer-receipts/${encodeURIComponent(receiptNo)}`, 'customer-receipt'],
       [`/sales/credit-notes/${encodeURIComponent(creditNo)}`, 'credit-note'],
       [`/sales/sales-returns/${encodeURIComponent(returnNo)}`, 'sales-return'],
+      [`/sales/credit-notes/${encodeURIComponent(memoNo)}`, 'credit-memo'],
     ] as const) {
       await page.goto(route);
       await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
