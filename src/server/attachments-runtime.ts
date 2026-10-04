@@ -11,7 +11,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
-import { applicant, asycudaRun, bankLoan, bankTransfer, billOfLading, customsPd, employeeDocument, employeeRequest, journalEntry, otherReceipt, payable, paymentApplication, shipmentContainer } from './db/schema';
+import { applicant, asycudaRun, bankLoan, bankTransfer, billOfLading, customsPd, employeeDocument, employeeRequest, journalEntry, otherReceipt, payable, paymentApplication, projectCertificate, shipmentContainer } from './db/schema';
 import type { Tx } from './db/client';
 import type { Principal } from './domain/permissions';
 import { can } from './domain/permissions';
@@ -205,6 +205,21 @@ const otherReceiptParentAccess = async (tx: Tx, principal: Principal, objectId: 
   return Boolean(row);
 };
 
+/**
+ * REQ-PM-001 PM-5 — a progress certificate's papers (the signed measurement,
+ * the client's acceptance): whoever reads the project, and row security
+ * answers the branch. Kept by number, as the certificate's history is.
+ */
+const projectCertificateParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'project')) return false;
+  const [row] = await tx
+    .select({ id: projectCertificate.id })
+    .from(projectCertificate)
+    .where(eq(projectCertificate.certificateNo, objectId))
+    .limit(1);
+  return Boolean(row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -226,6 +241,7 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('applicant', applicantParentAccess);
   attachments.registerParentAccessCheck('employee_request', employeeRequestParentAccess);
   attachments.registerParentAccessCheck('employee_document', employeeDocumentParentAccess);
+  attachments.registerParentAccessCheck('project_certificate', projectCertificateParentAccess);
 }
 
 /** Streams a stored file, for a route handler that has already checked access. */

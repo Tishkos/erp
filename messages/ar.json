@@ -5868,7 +5868,8 @@
       "hr_unsettled_advances": "السلف غير المسوّاة",
       "bill_of_lading": "بوليصة الشحن",
       "asycuda_reading": "قراءة أسيكودا",
-      "import_application": "طلب استيراد"
+      "import_application": "طلب استيراد",
+      "project_certificate": "شهادة الإنجاز"
     }
   }
 }

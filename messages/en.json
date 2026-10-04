@@ -5868,7 +5868,8 @@
       "hr_unsettled_advances": "Unsettled Advances",
       "bill_of_lading": "Bill of Lading",
       "asycuda_reading": "ASYCUDA Reading",
-      "import_application": "Import Application"
+      "import_application": "Import Application",
+      "project_certificate": "Progress Certificate"
     }
   }
 }
