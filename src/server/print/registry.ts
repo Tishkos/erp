@@ -4,6 +4,7 @@ import * as shipmentDocuments from './shipment-documents';
 import * as customsDocuments from './customs-documents';
 import * as importDocuments from './import-documents';
 import * as landedCostDocuments from './landed-cost-documents';
+import * as inventoryDocuments from './inventory-documents';
 import type { BuildContext, Built } from './documents';
 import * as reports from './reports';
 import * as projectReports from './project-reports';
@@ -50,6 +51,7 @@ const BUILDERS = {
   opening_stock: byId(documents.openingStock),
   journal_entry: byId(documents.journalEntry),
   item_reconciliation: byId(documents.itemReconciliation),
+  stock_count: byId(inventoryDocuments.stockCount),
   bill_of_lading: byId(shipmentDocuments.billOfLading),
   asycuda_reading: byId(customsDocuments.asycudaReading),
   import_application: byId(importDocuments.importApplication),

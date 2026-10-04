@@ -315,6 +315,23 @@ const payrollRunParentAccess = async (tx: Tx, principal: Principal, objectId: st
   return Boolean(row);
 };
 
+/**
+ * Inventory's records (IMPROVEMENT-002), each kept by its uuid: a count, an
+ * opening stock document, a transfer (either table), an item reconciliation.
+ * Whoever reads the record under its own grant and row security reads its
+ * papers — the count sheet, the signed transfer note.
+ */
+const inventoryRecordParentAccess =
+  (object: string, tables: readonly string[]) => async (tx: Tx, principal: Principal, objectId: string) => {
+    if (!can(principal, 'view', object)) return false;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectId)) return false;
+    for (const table of tables) {
+      const result = await tx.execute(sql`select 1 from ${sql.identifier(table)} where id = ${objectId}::uuid limit 1`);
+      if (result.rows.length > 0) return true;
+    }
+    return false;
+  };
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -345,6 +362,10 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('performance_review', performanceReviewParentAccess);
   attachments.registerParentAccessCheck('vacancy', vacancyParentAccess);
   attachments.registerParentAccessCheck('payroll_run', payrollRunParentAccess);
+  attachments.registerParentAccessCheck('stock_count', inventoryRecordParentAccess('stock_count', ['stock_count']));
+  attachments.registerParentAccessCheck('opening_stock', inventoryRecordParentAccess('opening_stock', ['opening_stock']));
+  attachments.registerParentAccessCheck('warehouse_transfer', inventoryRecordParentAccess('warehouse_transfer', ['stock_transfer', 'warehouse_transfer']));
+  attachments.registerParentAccessCheck('stock_reconciliation', inventoryRecordParentAccess('stock_reconciliation', ['stock_adjustment']));
 }
 
 /** Streams a stored file, for a route handler that has already checked access. */
