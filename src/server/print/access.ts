@@ -38,6 +38,13 @@ export const EXPORT_ACCESS = {
   recurring_journal: { kind: 'document', route: '/finance/recurring-journals', object: 'journal_entry' },
   // The period's close checklist and history, read under the trial balance's grant (a reading of the ledger).
   period_close: { kind: 'document', route: '/finance/closing', object: 'trial_balance' },
+  // REQ-PAY-001 PAY4 — the purchase records that had no copy (2026-10-04).
+  purchase_order: { kind: 'document', route: '/payables/purchase-orders', object: 'purchase_order' },
+  goods_receipt: { kind: 'document', route: '/payables/goods-receipts', object: 'goods_receipt' },
+  payment_application: { kind: 'document', route: '/payables/payment-applications', object: 'payment_application' },
+  supplier_advance: { kind: 'document', route: '/payables/advances', object: 'supplier_advance' },
+  recurring_contract: { kind: 'document', route: '/payables/contracts', object: 'recurring_contract' },
+  supplier_credit_note: { kind: 'document', route: '/payables/credit-memos', object: 'supplier_credit_memo' },
   customer_statement: { kind: 'report', route: '/sales/customer-statements', object: 'business_partner' },
   supplier_statement: { kind: 'report', route: '/payables/supplier-statements', object: 'business_partner' },
   bank_statement: { kind: 'report', route: '/master-data/bank-accounts', object: 'bank_account' },

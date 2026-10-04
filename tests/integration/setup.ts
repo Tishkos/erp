@@ -477,6 +477,9 @@ export async function resetTestData(): Promise<void> {
   await client.query('delete from supplier_payment_allocation');
   await client.query('delete from supplier_payment');
 
+  // REQ-PAY-001 PAY8 — a credit's applications are frozen by trigger (0295);
+  // TRUNCATE does not fire row triggers.
+  await client.query('truncate supplier_credit_application');
   await client.query('delete from supplier_credit_memo');
     await client.query(`
       delete from goods_return_line;
@@ -799,7 +802,10 @@ export async function resetTestData(): Promise<void> {
              ('ar_invoice', 'business_line', 'optional'),
              ('ar_invoice', 'department',    'optional'),
              ('ap_invoice', 'business_line', 'optional'),
-             ('ap_invoice', 'department',    'optional')
+             ('ap_invoice', 'department',    'optional'),
+             -- REQ-PAY-001 PAY8, migration 0295: a supplier's credit note.
+             ('supplier_credit_memo', 'business_line', 'optional'),
+             ('supplier_credit_memo', 'department',    'optional')
       on conflict do nothing
     `);
 

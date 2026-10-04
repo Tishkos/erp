@@ -45,6 +45,7 @@ import { appUser, branch } from './platform';
 import { businessPartner } from './organisation';
 import { warehouse } from './organisation';
 import { bankCashAccount, item, unitOfMeasure } from './item';
+import { chartOfAccount } from './accounting';
 import { documentStatus } from './workflow';
 import { journalEntry } from './journal';
 import { costLayer, inventoryMovement } from './inventory';
@@ -235,10 +236,13 @@ export const supplierCreditMemo = pgTable(
     /** Appendix B: Draft, Approved, Posted, Allocated, Reversed. */
     status: documentStatus('status').notNull().default('draft'),
 
-    /** §8.2 and the 05.7 gate — both links, both required. */
-    goodsReturnId: uuid('goods_return_id')
-      .notNull()
-      .references(() => goodsReturn.id),
+    /**
+     * §8.2 and the 05.7 gate — the return the memo credits. Null for a
+     * standalone credit note (REQ-PAY-001 PAY8, 0295): a price, a rebate, a
+     * damaged delivery the supplier does not want back. The invoice link
+     * below stays required either way.
+     */
+    goodsReturnId: uuid('goods_return_id').references(() => goodsReturn.id),
     apInvoiceId: uuid('ap_invoice_id')
       .notNull()
       .references(() => apInvoice.id),
@@ -259,13 +263,27 @@ export const supplierCreditMemo = pgTable(
 
     note: text('note'),
 
+    /**
+     * PAY8 — the account a standalone credit note credits; null is the
+     * purchase variance mapping (D-PAY-3). A return's memo credits Return
+     * Clearing and names nothing here.
+     */
+    creditAccountId: uuid('credit_account_id').references(() => chartOfAccount.id),
+
     journalEntryId: uuid('journal_entry_id').references(() => journalEntry.id),
 
     createdBy: uuid('created_by')
       .notNull()
       .references(() => appUser.id),
+    /** PAY8 — draft → approved (not by its raiser, 0295) → posted. */
+    approvedBy: uuid('approved_by').references(() => appUser.id),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
     postedBy: uuid('posted_by').references(() => appUser.id),
     postedAt: timestamp('posted_at', { withTimezone: true }),
+    reversedBy: uuid('reversed_by').references(() => appUser.id),
+    reversedAt: timestamp('reversed_at', { withTimezone: true }),
+    reversalReason: text('reversal_reason'),
+    reversalJournalEntryId: uuid('reversal_journal_entry_id').references(() => journalEntry.id),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -282,5 +300,49 @@ export const supplierCreditMemo = pgTable(
       'supplier_credit_memo_not_over_allocated',
       sql`${t.allocatedAmountIqd} >= 0 and ${t.allocatedAmountIqd} <= ${t.amountIqd}`,
     ),
+    check(
+      'supplier_credit_memo_four_eyes',
+      sql`${t.approvedBy} is null or ${t.approvedBy} <> ${t.createdBy} or app_user_is_super(${t.approvedBy})`,
+    ),
+    check(
+      'supplier_credit_memo_standalone_has_reason',
+      sql`${t.goodsReturnId} is not null or coalesce(btrim(${t.note}), '') <> ''`,
+    ),
+  ],
+);
+
+/**
+ * REQ-PAY-001 PAY8 — a piece of a supplier credit put against an invoice.
+ *
+ * The memo's `allocated_amount_iqd` is the sum of its live applications, and
+ * the invoice's `settled_amount_iqd` carries each. Never deleted; undone once,
+ * with who, when and why (0295 `supplier_credit_application_frozen`).
+ */
+export const supplierCreditApplication = pgTable(
+  'supplier_credit_application',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    supplierCreditMemoId: uuid('supplier_credit_memo_id')
+      .notNull()
+      .references(() => supplierCreditMemo.id),
+    apInvoiceId: uuid('ap_invoice_id')
+      .notNull()
+      .references(() => apInvoice.id),
+    branchCode: text('branch_code')
+      .notNull()
+      .references(() => branch.code),
+    amountIqd: numeric('amount_iqd', { precision: 19, scale: 4 }).notNull(),
+    appliedBy: uuid('applied_by')
+      .notNull()
+      .references(() => appUser.id),
+    appliedAt: timestamp('applied_at', { withTimezone: true }).notNull().defaultNow(),
+    reversedBy: uuid('reversed_by').references(() => appUser.id),
+    reversedAt: timestamp('reversed_at', { withTimezone: true }),
+    reversalReason: text('reversal_reason'),
+  },
+  (t) => [
+    index('supplier_credit_application_memo_idx').on(t.supplierCreditMemoId),
+    index('supplier_credit_application_invoice_idx').on(t.apInvoiceId),
+    check('supplier_credit_application_amount_positive', sql`${t.amountIqd} > 0`),
   ],
 );

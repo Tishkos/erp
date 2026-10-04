@@ -97,7 +97,8 @@ test.describe('A22 · payables in a browser', () => {
     await page.getByLabel('Unit Price').first().fill('1000');
     await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
     await page.locator('input[name="is_import"]').check();
-    await page.locator('input[name="payment_terms_text"]').fill(`30% deposit, 70% against B/L ${RUN}`);
+    // The terms are the advance's percentage (2026-10-03): 30% in front.
+    await page.locator('input[name="advance_percent"]').fill('30');
     await page.getByRole('button', { name: 'Create' }).click();
 
     await page.waitForURL(
@@ -113,8 +114,8 @@ test.describe('A22 · payables in a browser', () => {
     await page.waitForURL(/\/payables\/IMP-/);
     const payableNo = decodeURIComponent(page.url().split('/payables/')[1]!.split('?')[0]!);
     await expect(page.getByRole('heading', { level: 1, name: payableNo })).toBeVisible();
-    // The story began with the invoice.
-    await expect(page.getByText(`30% deposit, 70% against B/L ${RUN}`).first()).toBeVisible();
+    // The story began with the invoice: the import names its supplier.
+    await expect(page.locator('a[href^="/payables/suppliers/"][href$="?role=supplier"]').first()).toBeVisible();
 
     // ── The stop/follow-up dialog (§21.12) — imports only ────────────────
     await page.getByRole('button', { name: 'Stop / follow-up' }).click();
@@ -167,10 +168,17 @@ test.describe('A22 · payables in a browser', () => {
     );
     const invoiceNo = decodeURIComponent(page.url().split('/payables/invoices/')[1]!.split('?')[0]!);
 
-    // A note, dated and signed, under the invoice.
-    await page.getByRole('textbox', { name: 'Add note' }).fill(`Landlord travelling ${RUN}`);
-    await page.getByRole('button', { name: 'Add note' }).click();
-    await expect(page.getByText(`Landlord travelling ${RUN}`).first()).toBeVisible({ timeout: 30_000 });
+    // A note, dated and signed — behind the Notes door in the title bar, the
+    // shared one every record wears from its draft (2026-10-04).
+    await page.getByRole('button', { name: 'Notes', exact: true }).click();
+    const notes = page.getByRole('dialog', { name: 'Notes' });
+    await notes.getByRole('textbox', { name: 'Add note' }).fill(`Landlord travelling ${RUN}`);
+    await notes.getByRole('button', { name: 'Add note' }).click();
+    await page.waitForURL(/saved=1/, { timeout: 60_000 });
+    await expect(page.getByRole('button', { name: 'Notes (1)' })).toBeVisible({ timeout: 30_000 });
+    await page.getByRole('button', { name: 'Notes (1)' }).click();
+    await expect(page.getByRole('dialog', { name: 'Notes' }).getByText(`Landlord travelling ${RUN}`).first()).toBeVisible({ timeout: 30_000 });
+    await page.keyboard.press('Escape');
 
     // The register: Expenses view, the row, its Payment state.
     await page.goto('/payables/invoices?view=expenses');
@@ -196,7 +204,7 @@ test.describe('A22 · payables in a browser', () => {
     await page.getByLabel('Unit Price').first().fill('5000');
     await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
     await page.locator('input[name="is_import"]').check();
-    await page.locator('input[name="payment_terms_text"]').fill(`30% deposit, 70% against B/L ${RUN}-P`);
+    await page.locator('input[name="advance_percent"]').fill('30');
     await page.getByRole('button', { name: 'Create' }).click();
     await page.waitForURL(
       (url) => url.pathname.startsWith('/payables/invoices/') && !url.pathname.endsWith('/new'),
@@ -649,7 +657,7 @@ test.describe('A22 · payables in a browser', () => {
     await noSidewaysScroll(page);
     // …and Stage 8's.
     await page.goto('/administration/payables-migration');
-    await expect(page.getByRole('heading', { level: 1, name: 'ترحيل الجدول' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'ترحيل جدول الذمم الدائنة (استيراد بيانات)' })).toBeVisible();
     await noSidewaysScroll(page);
     await page.goto('/payables/pd?view=holding');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();

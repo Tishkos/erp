@@ -126,6 +126,7 @@ sales_order_line
 sales_order
 other_receipt
 ap_match_exception
+supplier_credit_application
 supplier_credit_memo
 goods_return_line
 goods_return

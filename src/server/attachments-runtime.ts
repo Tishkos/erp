@@ -12,6 +12,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
 import {
+  apInvoice,
   applicant,
   asycudaRun,
   bankLoan,
@@ -23,6 +24,8 @@ import {
   employeeDocument,
   employeeRequest,
   fiscalPeriod,
+  goodsReceipt,
+  goodsReturn,
   journalEntry,
   otherReceipt,
   payable,
@@ -34,8 +37,13 @@ import {
   projectCertificate,
   projectMaterialIssue,
   projectVariation,
+  purchaseOrder,
+  recurringContract,
   recurringJournal,
   shipmentContainer,
+  supplierAdvance,
+  supplierCreditMemo,
+  supplierPayment,
   taxCode,
   vacancy,
 } from './db/schema';
@@ -269,6 +277,35 @@ const recurringJournalParentAccess = async (tx: Tx, principal: Principal, object
 };
 
 /**
+ * REQ-PAY-001 PAY3 — the purchase documents' paperwork (2026-10-04).
+ *
+ * The purchase invoice had an upload form and no check registered here, so
+ * every file a person put on one was refused ("access … cannot be
+ * determined"). Each purchase record now answers the same two questions as
+ * the ones above: may this person view that kind of record, and does row
+ * security let them see this one. A debit note is a purchase invoice
+ * (D-PAY-2), so it is answered by `ap_invoice`.
+ */
+const PURCHASE_PARENTS = [
+  ['ap_invoice', apInvoice],
+  ['purchase_order', purchaseOrder],
+  ['goods_receipt', goodsReceipt],
+  ['goods_return', goodsReturn],
+  ['supplier_payment', supplierPayment],
+  ['supplier_advance', supplierAdvance],
+  ['recurring_contract', recurringContract],
+  ['supplier_credit_memo', supplierCreditMemo],
+] as const;
+
+const purchaseParentAccess =
+  (object: string, table: (typeof PURCHASE_PARENTS)[number][1]) =>
+  async (tx: Tx, principal: Principal, objectId: string) => {
+    if (!can(principal, 'view', object)) return false;
+    const [row] = await tx.select({ id: table.id }).from(table).where(eq(table.id, objectId)).limit(1);
+    return Boolean(row);
+  };
+
+/**
  * REQ-PM-001 PM-5 — a progress certificate's papers (the signed measurement,
  * the client's acceptance): whoever reads the project, and row security
  * answers the branch. Kept by number, as the certificate's history is.
@@ -389,6 +426,9 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('performance_review', performanceReviewParentAccess);
   attachments.registerParentAccessCheck('vacancy', vacancyParentAccess);
   attachments.registerParentAccessCheck('payroll_run', payrollRunParentAccess);
+  for (const [object, table] of PURCHASE_PARENTS) {
+    attachments.registerParentAccessCheck(object, purchaseParentAccess(object, table));
+  }
 }
 
 /** Streams a stored file, for a route handler that has already checked access. */

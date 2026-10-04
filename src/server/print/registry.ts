@@ -3,6 +3,7 @@ import * as documents from './documents';
 import * as shipmentDocuments from './shipment-documents';
 import * as customsDocuments from './customs-documents';
 import * as importDocuments from './import-documents';
+import * as purchaseDocuments from './purchase-documents';
 import type { BuildContext, Built } from './documents';
 import * as reports from './reports';
 import * as projectReports from './project-reports';
@@ -61,6 +62,12 @@ const BUILDERS = {
   tax_code: byId(accountingDocuments.taxCode),
   recurring_journal: byId(accountingDocuments.recurringJournal),
   period_close: byId(accountingDocuments.periodClose),
+  purchase_order: byId(purchaseDocuments.purchaseOrder),
+  goods_receipt: byId(purchaseDocuments.goodsReceipt),
+  payment_application: byId(purchaseDocuments.paymentApplication),
+  supplier_advance: byId(purchaseDocuments.supplierAdvance),
+  recurring_contract: byId(purchaseDocuments.recurringContract),
+  supplier_credit_note: byId(purchaseDocuments.supplierCreditNote),
   customer_statement: (ctx, input) => reports.partnerStatement(ctx, 'customer', input.query),
   supplier_statement: (ctx, input) => reports.partnerStatement(ctx, 'supplier', input.query),
   bank_statement: (ctx, input) => (input.id ? reports.bankStatement(ctx, input.id, input.query, 'bank') : Promise.resolve(null)),

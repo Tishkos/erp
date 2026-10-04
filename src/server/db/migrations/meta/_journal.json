@@ -1478,6 +1478,13 @@
       "when": 1795900000103,
       "tag": "0293_transfer_fx_roles_premapped",
       "breakpoints": true
+    },
+    {
+      "idx": 211,
+      "version": "7",
+      "when": 1795900000105,
+      "tag": "0295_supplier_credit_debit_notes",
+      "breakpoints": true
     }
   ]
 }

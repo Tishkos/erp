@@ -21,7 +21,7 @@
  * wants. So the rule is: within tolerance, receive; beyond it, a manager says
  * yes in writing, and the reason is kept.
  */
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   businessPartner,
@@ -852,10 +852,42 @@ export async function viewByNo(tx: Tx, receiptNo: string) {
     .orderBy(asc(goodsReceiptLine.lineNo));
   const [order] = receipt.purchaseOrderId
     ? await tx
-        .select({ orderNo: purchaseOrder.orderNo })
+        .select({ orderNo: purchaseOrder.orderNo, supplierId: purchaseOrder.supplierId })
         .from(purchaseOrder)
         .where(eq(purchaseOrder.id, receipt.purchaseOrderId))
         .limit(1)
     : [];
-  return { receipt, lines, orderNo: order?.orderNo ?? null };
+  // REQ-PAY-001 PAY6 — the receipt line beside its order line: ordered,
+  // received to date (every executed receipt, this one included) and what is
+  // still to come.
+  const orderLineIds = [...new Set(lines.map((line) => line.purchaseOrderLineId))];
+  const ordered = orderLineIds.length
+    ? await tx
+        .select({
+          id: purchaseOrderLine.id,
+          lineNo: purchaseOrderLine.lineNo,
+          quantity: purchaseOrderLine.quantity,
+          receivedQuantity: purchaseOrderLine.receivedQuantity,
+          closedQuantity: purchaseOrderLine.closedQuantity,
+          unitPrice: purchaseOrderLine.unitPrice,
+          description: purchaseOrderLine.description,
+        })
+        .from(purchaseOrderLine)
+        .where(inArray(purchaseOrderLine.id, orderLineIds))
+    : [];
+  const [supplier] = order?.supplierId
+    ? await tx
+        .select({ code: businessPartner.code, legalName: businessPartner.legalName })
+        .from(businessPartner)
+        .where(eq(businessPartner.id, order.supplierId))
+        .limit(1)
+    : [];
+  return {
+    receipt,
+    lines,
+    orderNo: order?.orderNo ?? null,
+    supplierId: order?.supplierId ?? null,
+    supplier: supplier ?? null,
+    orderLines: new Map(ordered.map((row) => [row.id, row])),
+  };
 }

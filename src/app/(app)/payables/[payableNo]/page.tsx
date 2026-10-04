@@ -26,6 +26,7 @@ import { SectionTabs } from '@/components/admin/section-tabs';
 import { StopDialog } from '@/components/admin/stop-dialog';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ProfileLink } from '@/components/admin/profile-link';
 import { formatBusinessDate, formatMoney, formatQuantity, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { PENDING_REASON } from '@domain/payables';
@@ -281,7 +282,8 @@ export default async function PayablePage({
     { label: t('type'), value: type.name },
     {
       label: t('supplier'),
-      value: <bdi dir="auto">{supplier ? `${supplier.name} (${supplier.code})` : '—'}</bdi>,
+      // The supplier's profile is one click away — "like bank loans" (2026-10-04).
+      value: <ProfileLink code={supplier?.code} dir="auto" kind="supplier" name={supplier?.name ?? null} />,
     },
     { label: t('reference'), value: <bdi dir="ltr">{row.supplierReference}</bdi> },
     /*

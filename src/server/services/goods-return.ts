@@ -49,6 +49,7 @@ import * as inventory from './inventory';
 import * as payables from './payables';
 import * as posting from './posting';
 import * as statuses from './statuses';
+import * as notes from './supplier-notes';
 import { allocateDocumentNumber } from './numbering';
 
 export const DOCUMENT_TYPE = 'goods_return';
@@ -1147,28 +1148,21 @@ export async function creditMemo(
 
   // The credit reduces what is owed on the invoice, the same way an advance
   // settlement does (§15 — "credit notes and advances are allocated
-  // transparently").
-  await tx
-    .update(apInvoice)
-    .set({
-      settledAmountIqd: sql`${apInvoice.settledAmountIqd} + ${amount}`,
-      updatedAt: new Date(),
-    })
-    .where(eq(apInvoice.id, document.apInvoiceId));
-
-  const [invoiceAfter] = await tx
-    .select()
-    .from(apInvoice)
-    .where(eq(apInvoice.id, document.apInvoiceId))
-    .limit(1);
-
-  const owed =
-    parseDecimal(invoiceAfter!.totalIqd, 4n) - parseDecimal(invoiceAfter!.settledAmountIqd, 4n);
-
-  await tx
-    .update(apInvoice)
-    .set({ status: owed === 0n ? 'settled' : 'partially_executed', updatedAt: new Date() })
-    .where(eq(apInvoice.id, document.apInvoiceId));
+  // transparently"). REQ-PAY-001 PAY8: through the one writer of a credit's
+  // applications, so the memo's allocated amount says what the invoice's
+  // settled amount says — it was left at 0 before, and the supplier's account
+  // counted the memo a second time as unapplied (0295 corrected those). Up to
+  // what the invoice still owes; the rest stays on the account as a credit.
+  const stillOwed = parseDecimal(invoice.totalIqd, 4n) - parseDecimal(invoice.settledAmountIqd, 4n);
+  const applied = input.amountIqd < stillOwed ? input.amountIqd : stillOwed > 0n ? stillOwed : 0n;
+  if (applied > 0n) {
+    await notes.recordApplication(tx, ctx, {
+      memoId: memo!.id,
+      apInvoiceId: document.apInvoiceId,
+      branchCode: document.branchCode,
+      amountIqd: applied,
+    });
+  }
 
   await tx
     .update(goodsReturn)
@@ -1247,7 +1241,33 @@ export async function viewByNo(tx: Tx, returnNo: string) {
     .where(eq(goodsReturn.returnNo, returnNo))
     .limit(1);
   if (!row) return null;
-  return load(tx, row.id);
+  const found = await load(tx, row.id);
+  // REQ-PAY-001 PAY3 — the parties and documents the record links to: the
+  // supplier's profile, the invoice or receipt it was raised against, and
+  // the credit memo it produced.
+  const [supplier] = await tx
+    .select({ code: businessPartner.code, legalName: businessPartner.legalName })
+    .from(businessPartner)
+    .where(eq(businessPartner.id, found.document.supplierId))
+    .limit(1);
+  const [invoice] = found.document.apInvoiceId
+    ? await tx.select({ invoiceNo: apInvoice.invoiceNo }).from(apInvoice).where(eq(apInvoice.id, found.document.apInvoiceId)).limit(1)
+    : [];
+  const [receipt] = found.document.goodsReceiptId
+    ? await tx.select({ receiptNo: goodsReceipt.receiptNo }).from(goodsReceipt).where(eq(goodsReceipt.id, found.document.goodsReceiptId)).limit(1)
+    : [];
+  const [memo] = await tx
+    .select({ memoNo: supplierCreditMemo.memoNo, status: supplierCreditMemo.status })
+    .from(supplierCreditMemo)
+    .where(eq(supplierCreditMemo.goodsReturnId, found.document.id))
+    .limit(1);
+  return {
+    ...found,
+    supplier: supplier ?? null,
+    invoiceNo: invoice?.invoiceNo ?? null,
+    receiptNo: receipt?.receiptNo ?? null,
+    creditMemo: memo ?? null,
+  };
 }
 
 /**
@@ -1319,7 +1339,8 @@ export async function creditMemosFor(tx: Tx, apInvoiceId: string) {
       returnNo: goodsReturn.returnNo,
     })
     .from(supplierCreditMemo)
-    .innerJoin(goodsReturn, eq(goodsReturn.id, supplierCreditMemo.goodsReturnId))
+    // PAY8 — a credit note may have no return behind it.
+    .leftJoin(goodsReturn, eq(goodsReturn.id, supplierCreditMemo.goodsReturnId))
     .where(eq(supplierCreditMemo.apInvoiceId, apInvoiceId))
     .orderBy(supplierCreditMemo.memoDate);
 }
