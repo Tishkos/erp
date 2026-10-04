@@ -1857,16 +1857,8 @@ export default async function PayablePage({
               </tbody>
             </table>
           </div>
-
-          <div className={s.sapBody}>
-            <Form action={addNote}>
-              <Hidden name="payable_no" value={row.payableNo} />
-              <Field id="add-note" label={t('add_note')} name="note" required wide />
-              <SubmitRow>
-                <Submit label={t('note_save')} small tone="secondary" />
-              </SubmitRow>
-            </Form>
-          </div>
+          {/* The box to add a note is behind the notes door in the title bar
+              (AGENTS.md › the four doors): the status log is a reading. */}
         </div>
       </section>
 
