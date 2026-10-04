@@ -4,14 +4,17 @@ import { expect, test, type Page } from '@playwright/test';
  * REQ-AR-001 — Receivables in a browser (2026-10-04).
  *
  *   The four doors     a draft sales invoice, receipt, credit note and sales
- *                      return each wear Printer, Paperclip, (Notes,) Clock in
+ *                      return each wear Printer, Paperclip, Notes, Clock in
  *                      the title bar from the moment they exist; a file is
- *                      attached to the draft invoice and counted.
+ *                      attached to the draft invoice and counted; a note is
+ *                      added through the shared Notes door, listed, and on
+ *                      the clock.
  *   The money          the invoice is posted, a receipt pays part of it, a
  *                      credit note takes 10 % off, a debit note adds a charge,
  *                      a return is raised against it.
- *   Profiles           the customer's name on every record opens the
- *                      customer's profile (Master Data › Customers).
+ *   Profiles           the customer's name on every record and register
+ *                      opens the customer's profile (Master Data › Customers);
+ *                      the receipt's bank/cash account opens its own.
  *   Drill-down         ageing → customer → invoice → receipt → credits →
  *                      statement; statement row → source document; invoice →
  *                      receipts, credit notes, returns, remaining balance.
@@ -46,16 +49,28 @@ async function press(page: Page, name: string, status: string) {
   await expect(page.locator(`[data-status="${status}"]`).first()).toBeVisible({ timeout: 60_000 });
 }
 
-/** Printer, paperclip, clock — in the title bar, in that order. */
+/** Printer, paperclip, notes, clock — in the title bar, in that order, and nothing else. */
 async function doors(page: Page, documentId: string) {
-  const bar = page.locator(`#${documentId}`).locator('button[title]');
-  const titles = await bar.evaluateAll((buttons) => buttons.map((b) => b.getAttribute('title')));
-  const printer = titles.indexOf('Print / Export');
-  const clip = titles.indexOf('Attachments');
-  const clock = titles.indexOf('Audit log');
-  expect(printer, `${documentId}: ${titles.join(', ')}`).toBeGreaterThanOrEqual(0);
-  expect(clip).toBeGreaterThan(printer);
-  expect(clock).toBeGreaterThan(clip);
+  const bar = page.locator(`#${documentId}`).locator('[class*="sapTitleActions"]').first();
+  const titles = await bar.locator(':scope > button, :scope > a').evaluateAll((nodes) => nodes.map((n) => n.getAttribute('title') ?? ''));
+  expect(titles, `${documentId}: ${titles.join(', ')}`).toEqual(['Print / Export', 'Attachments', 'Notes', 'Audit log']);
+}
+
+/** A note through the shared door: back on the same record, listed, counted, and on the clock. */
+async function note(page: Page, body: string) {
+  await page.getByRole('button', { name: 'Notes', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Notes' });
+  await expect(dialog.getByText('No notes yet.')).toBeVisible();
+  await dialog.locator('input[name="note"]').fill(body);
+  await dialog.getByRole('button', { name: 'Add note' }).click();
+  await page.waitForURL(/saved=1/, { timeout: 60_000 });
+  await expect(page.getByRole('button', { name: 'Notes (1)' })).toBeVisible();
+  await page.getByRole('button', { name: 'Notes (1)' }).click();
+  await expect(page.getByRole('dialog', { name: 'Notes' }).getByRole('cell', { name: body })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Audit log' }).click();
+  await expect(page.getByRole('dialog', { name: 'Audit log' }).getByText(/note added/i).first()).toBeVisible();
+  await page.keyboard.press('Escape');
 }
 
 async function noSidewaysScroll(page: Page) {
@@ -138,6 +153,7 @@ test.describe('REQ-AR-001 · receivables in a browser', () => {
     await page.getByRole('button', { name: 'Print / Export' }).click();
     await expect(page.locator('[data-export-menu="sales_invoice"] a[data-format="pdf"]').first()).toBeVisible();
     await page.keyboard.press('Escape');
+    await note(page, `Customer asked for thirty days ${RUN}`);
 
     await press(page, 'Approve', 'approved');
     await press(page, 'Post', 'posted');
@@ -156,8 +172,9 @@ test.describe('REQ-AR-001 · receivables in a browser', () => {
     receiptNo = decodeURIComponent(page.url().split('/').pop()!.split('?')[0]!);
 
     await doors(page, 'receipt-document');
-    // The bank/cash account is named and, once Accounting builds its profile, linked.
-    await expect(page.locator('#receipt-document')).toContainText('CASH-HQ');
+    // The bank/cash account is a link to its own profile.
+    await expect(page.locator('#receipt-document a[href="/master-data/cash-accounts/CASH-HQ"]').first()).toBeVisible();
+    await note(page, `Transfer slip on file ${RUN}`);
 
     await press(page, 'Approve', 'approved');
     await press(page, 'Post', 'posted');
@@ -181,6 +198,7 @@ test.describe('REQ-AR-001 · receivables in a browser', () => {
     creditNo = decodeURIComponent(page.url().split('/').pop()!.split('?')[0]!);
     await expect(page.locator('[data-status="draft"]').first()).toBeVisible();
     await doors(page, 'note-document');
+    await note(page, `Agreed with the customer by phone ${RUN}`);
     await press(page, 'Approve', 'approved');
     // Posting applies it to the invoice in full (D-AR-7), so it is settled at once.
     await press(page, 'Post', 'settled');
@@ -208,6 +226,7 @@ test.describe('REQ-AR-001 · receivables in a browser', () => {
     await page.waitForURL(/\/sales\/sales-returns\/SRN-/, { timeout: 90_000 });
     returnNo = decodeURIComponent(page.url().split('/').pop()!.split('?')[0]!);
     await doors(page, 'sales-return-document');
+    await note(page, `Goods back in the yard ${RUN}`);
     await shoot(page, 'sales-return-desktop-en');
   });
 
@@ -317,6 +336,9 @@ test.describe('REQ-AR-001 · receivables in a browser', () => {
       ['/sales/credit-notes', 'main'],
       ['/sales/sales-returns', 'main'],
       [`/sales/customer-credits?code=${CUSTOMER}`, 'main'],
+      [`/sales/receivables?code=${CUSTOMER}`, 'main'],
+      ['/sales/customer-reconciliation', 'main'],
+      ['/sales/customer-statements', 'main'],
     ] as const) {
       await page.goto(route);
       const link = page.locator(scope).locator(`a[href*="/sales/customers/${CUSTOMER}"]`).first();

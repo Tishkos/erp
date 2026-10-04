@@ -40,6 +40,7 @@ import type { ActorContext } from '@/server/services/chart-of-accounts';
 import { registerAttachmentRuntime } from '@/server/attachments-runtime';
 import * as attachments from '@/server/services/attachments';
 import * as audit from '@/server/services/audit';
+import * as recordNotes from '@/server/services/record-notes';
 import { prepareExport } from '@/server/print/export';
 import type { ExportKey } from '@/server/print/registry';
 
@@ -605,7 +606,9 @@ describe('the four doors, from the draft (owner, 2026-10-04)', () => {
    * "Every invoice — notes, attachments, audit, print — after the draft is
    * created." Each receivables record, the moment it exists: a print model
    * that builds, a file that may be stapled to it (the parent check in
-   * attachments-runtime knows the object), and a history with its first event.
+   * attachments-runtime knows the object), a note through the shared Notes
+   * door (record-notes knows the object, under the record's own grant), and
+   * a history with its first event — the note among them.
    */
   beforeAll(() => {
     registerAttachmentRuntime();
@@ -620,6 +623,12 @@ describe('the four doors, from the draft (owner, 2026-10-04)', () => {
       attachments.upload(tx, clerk, { objectType, objectId, fileName: 'paper.pdf', content: Buffer.from('%PDF-1.4 paper') }),
     );
     expect(await as(clerk, (tx) => attachments.currentFor(tx, objectType, objectId))).toHaveLength(before + 1);
+    // The Notes door: the clerk who edits the draft may say something about it; it is listed and on the clock.
+    await as(clerk, (tx) => recordNotes.addNote(tx, clerk, { object: objectType, recordId: objectId, body: `Door check ${number}` }));
+    const said = await as(manager, (tx) => recordNotes.listNotes(tx, { object: objectType, recordId: objectId }));
+    expect(said.map((row) => row.body), objectType).toContain(`Door check ${number}`);
+    const trail = await as(manager, (tx) => audit.timelineWithAttachments(tx, objectType, objectId));
+    expect(trail.map((row) => row.action), objectType).toContain(recordNotes.noteAction(objectType));
     const printed = await as(manager, (tx) =>
       prepareExport(tx, manager, { key: exportKey, format: 'pdf', locale: 'en', input: { id: number, query: new URLSearchParams() } }),
     );
