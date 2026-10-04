@@ -430,6 +430,12 @@ export async function resetTestData(): Promise<void> {
   await client.query('delete from bank_transfer');
   await client.query('delete from cash_count');
 
+  // Receivables (0280) — credit applications before the receipts, memos,
+  // notes and invoices they join; notes before the invoices they correct.
+  // Applications are append-only in production; the guard is lifted here.
+  await client.query('delete from customer_credit_application');
+  await client.query('delete from customer_note');
+
   // Collections and write-offs before the invoices they hang off. The activity
   // log is append-only in production (blueprint 5.4); the guard is lifted here.
   await client.query('delete from collection_activity');
@@ -941,7 +947,9 @@ export async function resetTestData(): Promise<void> {
                          'GOODS_RETURN', 'SUPPLIER_CREDIT_MEMO',
                          'SUPPLIER_PAYMENT', 'SALES_ORDER', 'PICK_LIST', 'DELIVERY_NOTE',
                          'AR_INVOICE', 'CUSTOMER_RECEIPT',
-                         'SALES_RETURN', 'CUSTOMER_CREDIT_MEMO', 'AR_WRITE_OFF', 'CASH_COUNT', 'BANK_TRANSFER',
+                         'SALES_RETURN', 'CUSTOMER_CREDIT_MEMO', 'AR_WRITE_OFF',
+                         -- Receivables, migration 0280.
+                         'CUSTOMER_CREDIT_NOTE', 'CUSTOMER_DEBIT_NOTE', 'CASH_COUNT', 'BANK_TRANSFER',
                          'PAYMENT_PROPOSAL', 'PAYMENT_BATCH', 'BANK_STATEMENT', 'CASH_ADVANCE', 'BANK_RECONCILIATION', 'OTHER_RECEIPT',
                          -- Phase 09, seeded by migrations 0120-0125.
                          'MT_CLIENT_ACCOUNT', 'MT_CLIENT_DEPOSIT', 'MONEY_TRANSFER', 'MT_EXPENSE',

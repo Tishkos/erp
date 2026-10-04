@@ -125,7 +125,9 @@ export async function raiseDueNotices(
           // Where to go. §21's notices link to the thing rather than describe it.
           link:
             side === 'customer'
-              ? `/sales/ar-invoices/${item.invoiceNo}`
+              ? item.documentKind === 'debit_note'
+                ? `/sales/credit-notes/${item.invoiceNo}`
+                : `/sales/ar-invoices/${item.invoiceNo}`
               : `/payables/invoices/${item.invoiceNo}`,
         },
         { branchCode: filter.branchCode ?? null },

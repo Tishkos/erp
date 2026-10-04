@@ -29,6 +29,7 @@ import {
   businessPartner,
   customerReceipt,
   customerReceiptAllocation,
+  paymentMethod,
 } from '../db/schema';
 import { parseDecimal, toDecimalString } from '../domain/money';
 import { assertWithinBalance, openBalance } from '../domain/ar-invoicing';
@@ -98,6 +99,22 @@ export class WrongCustomerError extends Error {
   }
 }
 
+export class ReceiptCurrencyError extends Error {
+  readonly code = 'RECEIPT_CURRENCY_MISMATCH';
+
+  constructor(
+    readonly accountCode: string,
+    readonly accountCurrency: string,
+    readonly receiptCurrency: string,
+  ) {
+    super(
+      `${accountCode} holds ${accountCurrency} and this receipt is in ${receiptCurrency} (§17). ` +
+        'Receive into an account in the receipt currency.',
+    );
+    this.name = 'ReceiptCurrencyError';
+  }
+}
+
 export class PayerNotACustomerError extends Error {
   readonly code = 'PAYER_NOT_A_CUSTOMER';
 
@@ -125,6 +142,8 @@ export interface CreateReceiptInput {
   readonly amountIqd: bigint;
   readonly bankReference?: string | null;
   readonly currency?: string;
+  /** How the money came — the payment method master (Receivables, 2026-10-04). */
+  readonly paymentMethodCode?: string | null;
   readonly note?: string | null;
   /** Set by the cash-sale path (06.8). Not for general use. */
   readonly cashSaleInvoiceId?: string | null;
@@ -162,6 +181,37 @@ export async function create(
     if (!payer.isCustomer) throw new PayerNotACustomerError(payer.code);
   }
 
+  /*
+   * §17 — the account's currency is the receipt's currency (Receivables,
+   * 2026-10-04; IMPROVEMENT-002 §2.2 (d)). A receipt into a dollar account was
+   * recorded as dinars with no check, and then refused at posting by the
+   * account's own currency rule. Said here, where it can be corrected: the
+   * posting engine carries one currency per journal, so foreign-currency
+   * money is received into an account in the ledger currency until it
+   * carries one per line.
+   */
+  const [account] = await tx
+    .select({ code: bankCashAccount.code, currency: bankCashAccount.currency })
+    .from(bankCashAccount)
+    .where(eq(bankCashAccount.id, input.bankCashAccountId))
+    .limit(1);
+  if (!account) throw new Error(`No bank or cash account with id '${input.bankCashAccountId}'.`);
+  const currency = input.currency ?? 'IQD';
+  if (account.currency !== currency) {
+    throw new ReceiptCurrencyError(account.code, account.currency, currency);
+  }
+
+  if (input.paymentMethodCode) {
+    const [method] = await tx
+      .select({ code: paymentMethod.code, active: paymentMethod.active })
+      .from(paymentMethod)
+      .where(eq(paymentMethod.code, input.paymentMethodCode))
+      .limit(1);
+    if (!method?.active) {
+      throw new Error(`'${input.paymentMethodCode}' is not an active payment method. Choose one from Payment Methods.`);
+    }
+  }
+
   const allocated = await allocateDocumentNumber(
     tx,
     SEQUENCE_KEY,
@@ -177,8 +227,9 @@ export async function create(
       branchCode: input.branchCode,
       receiptDate: input.receiptDate,
       bankCashAccountId: input.bankCashAccountId,
-      currency: input.currency ?? 'IQD',
+      currency,
       bankReference: input.bankReference ?? null,
+      paymentMethodCode: input.paymentMethodCode ?? null,
       amountIqd: toDecimalString(input.amountIqd, 4n),
       cashSaleInvoiceId: input.cashSaleInvoiceId ?? null,
       note: input.note ?? null,
@@ -632,10 +683,12 @@ export async function list(tx: Tx) {
       customerCode: businessPartner.code,
       bankName: bankCashAccount.name,
       bankCode: bankCashAccount.code,
+      bankType: bankCashAccount.accountType,
       receiptDate: customerReceipt.receiptDate,
       amountIqd: customerReceipt.amountIqd,
       allocatedIqd: customerReceipt.allocatedIqd,
       bankReference: customerReceipt.bankReference,
+      paymentMethodCode: customerReceipt.paymentMethodCode,
       status: customerReceipt.status,
       branchCode: customerReceipt.branchCode,
     })
@@ -657,13 +710,15 @@ export async function partiesOf(tx: Tx, customerReceiptId: string) {
       customerName: businessPartner.legalName,
       bankCode: bankCashAccount.code,
       bankName: bankCashAccount.name,
+      // Bank or cash: which profile the account links to (shared `ProfileLink`, 2026-10-04).
+      bankType: bankCashAccount.accountType,
     })
     .from(customerReceipt)
     .leftJoin(businessPartner, eq(businessPartner.id, customerReceipt.customerId))
     .leftJoin(bankCashAccount, eq(bankCashAccount.id, customerReceipt.bankCashAccountId))
     .where(eq(customerReceipt.id, customerReceiptId))
     .limit(1);
-  return row ?? { customerCode: null, customerName: null, bankCode: null, bankName: null };
+  return row ?? { customerCode: null, customerName: null, bankCode: null, bankName: null, bankType: null };
 }
 
 /** The invoices this receipt settles, with what it put against each. */

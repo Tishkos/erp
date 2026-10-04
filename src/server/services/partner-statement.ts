@@ -32,6 +32,7 @@ import {
   apInvoice,
   arInvoice,
   customerCreditMemo,
+  customerNote,
   customerReceipt,
   goodsReturn,
   journalEntry,
@@ -59,6 +60,7 @@ export type DocumentKind =
   | 'ar_invoice'
   | 'customer_receipt'
   | 'customer_credit_memo'
+  | 'customer_note'
   | 'ap_invoice'
   | 'supplier_payment'
   | 'goods_return';
@@ -177,6 +179,16 @@ const CUSTOMER_CREDIT_MEMO: DocumentSource = {
       .where(inArray(customerCreditMemo.id, ids)),
 };
 
+/** Receivables (2026-10-04) — a credit or debit note posts under its own id. */
+const CUSTOMER_NOTE: DocumentSource = {
+  kind: 'customer_note',
+  find: (tx, ids) =>
+    tx
+      .select({ id: customerNote.id, number: customerNote.noteNo, dueDate: customerNote.dueDate })
+      .from(customerNote)
+      .where(inArray(customerNote.id, ids)),
+};
+
 const AP_INVOICE: DocumentSource = {
   kind: 'ap_invoice',
   find: (tx, ids) =>
@@ -205,7 +217,7 @@ const GOODS_RETURN: DocumentSource = {
 };
 
 const RAISED_BY: Readonly<Record<PartySide, readonly DocumentSource[]>> = {
-  customer: [AR_INVOICE, CUSTOMER_RECEIPT, CUSTOMER_CREDIT_MEMO],
+  customer: [AR_INVOICE, CUSTOMER_RECEIPT, CUSTOMER_CREDIT_MEMO, CUSTOMER_NOTE],
   supplier: [AP_INVOICE, SUPPLIER_PAYMENT, GOODS_RETURN],
   // Money arrives from a customer and leaves to a supplier; a bank account
   // sees both halves and neither of its own.

@@ -88,6 +88,32 @@ describe('FX1 · Payables, Logistics and Treasury & Banking', () => {
     expect(keysOf('master_banking')).toEqual(['banks', 'bank_cash_accounts', 'cash_accounts']);
   });
 
+  it('Receivables is one heading, Sales & Receivables, in the order a receivable lives (2026-10-04)', () => {
+    expect(keysOf('sales').slice(0, 8)).toEqual([
+      'ar_invoices',
+      'customer_receipts',
+      'ar_allocations',
+      'ar_statements',
+      'ar_open_items',
+      'customer_credit_memos',
+      'sales_returns',
+      'ar_reconciliation',
+    ]);
+    const route = (itemKey: string) =>
+      routeFor(section('sales').items.find((item) => item.key === itemKey)!, 'sales');
+    expect(route('ar_allocations')).toBe('/sales/customer-credits');
+    expect(route('customer_credit_memos')).toBe('/sales/credit-notes');
+    expect(route('ar_reconciliation')).toBe('/sales/customer-reconciliation');
+  });
+
+  it('Customers live in Master Data only, at the route every customer link uses', () => {
+    const everywhere = MENU.flatMap((s) => s.items.filter((item) => item.key === 'customers').map(() => s.key));
+    expect(everywhere).toEqual(['master_data']);
+    expect(
+      routeFor(section('master_data').items.find((item) => item.key === 'customers')!, 'master_data'),
+    ).toBe('/sales/customers');
+  });
+
   it('the moved screens keep their routes (D-FX-1)', () => {
     const route = (sectionKey: string, itemKey: string) =>
       routeFor(

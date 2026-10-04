@@ -7,6 +7,8 @@ import { parseDecimal } from '@domain/money';
 import { parseQuantity } from '@domain/uom';
 import * as ar from '@/server/services/ar-invoice';
 import * as inventory from '@/server/services/inventory';
+import * as attachments from '@/server/services/attachments';
+import { registerAllRecords } from '@/server/records';
 import { LINE_ROWS } from './lines';
 
 const LIST = '/sales/ar-invoices';
@@ -193,4 +195,30 @@ export async function reverseArInvoice(formData: FormData): Promise<void> {
     (tx, ctx) => ar.reverse(tx, ctx, text(formData, 'id'), { reason: text(formData, 'reason') }),
     record(invoiceNo),
   );
+}
+
+/**
+ * A file stapled to the invoice — the signed copy, the customer's PO
+ * (Receivables, 2026-10-04: every record wears the paperclip).
+ */
+export async function attachToArInvoice(formData: FormData): Promise<void> {
+  const invoiceNo = text(formData, 'invoice_no');
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(withQuery(record(invoiceNo), 'error', 'attachment_missing'));
+  }
+  const upload = file as File;
+  const content = Buffer.from(await upload.arrayBuffer());
+  // Where files go and who may read them back — registered before the first upload of a cold process.
+  registerAllRecords();
+  await runAdminAndReturn(async (tx, ctx) => {
+    const found = await ar.viewByNo(tx, invoiceNo);
+    if (!found) redirect(withQuery(record(invoiceNo), 'error', 'not_found'));
+    await attachments.upload(tx, ctx, {
+      objectType: ar.PERMISSION_OBJECT,
+      objectId: found.id,
+      fileName: upload.name,
+      content,
+    });
+  }, record(invoiceNo));
 }

@@ -5,16 +5,26 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { RecordHistory } from '@/components/admin/history';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
-import { ExportMenu } from '@/components/print/export-menu';
+import { ExportIcon } from '@/components/print/export-menu';
+import { Attachments } from '@/components/admin/attachments';
+import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
+import Link from 'next/link';
 import { PrintSheet } from '@/components/print/print-sheet';
 import { printSheet } from '@/server/print/sheet';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { toDecimalString } from '@domain/money';
+import { businessDateOf } from '@/server/domain/business-date';
 import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as receipts from '@/server/services/customer-receipt';
-import { allocateOldestFirst, allocateReceipt, approveReceipt, postReceipt } from '../actions';
+import * as credits from '@/server/services/customer-credits';
+import * as paymentMethods from '@/server/services/payment-methods';
+import * as attachmentsService from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
+import { allocateOldestFirst, allocateReceipt, approveReceipt, attachToReceipt, postReceipt } from '../actions';
 
 /**
  * One Receipt — Operations build, block 6.
@@ -76,11 +86,40 @@ export default async function ReceiptPage({
       // twice and the second submit was refused as an over-allocation.
       plan: await receipts.planFor(tx, seen),
       parties: await receipts.partiesOf(tx, seen.id),
+      // Receivables (2026-10-04): what the receipt settled besides invoices
+      // (debit notes), its payment method, and its paperwork.
+      elsewhere: await credits.applicationsOfSource(tx, 'receipt', seen.id),
+      // The invoices it paid: an invoice it settled in full has left the open
+      // list above, so the receipt says here what it went to.
+      allocations: await receipts.allocationsOf(tx, seen.id),
+      method: seen.paymentMethodCode
+        ? await paymentMethods.get(tx, seen.paymentMethodCode).catch(() => null)
+        : null,
+      attached: await attachmentsService.currentFor(tx, receipts.PERMISSION_OBJECT, seen.id),
+      notes: await recordNotes.listNotes(tx, { object: receipts.PERMISSION_OBJECT, recordId: seen.id }),
     };
   });
 
   if (!found) notFound();
-  const { receipt, open, plan, parties } = found;
+  const { receipt, open, plan, parties, elsewhere, allocations, method, attached } = found;
+  // One register of what the receipt settled: invoices (its allocations) and
+  // debit notes (credit applications), oldest first, each opening its document.
+  const settled = [
+    ...allocations.map((row, index) => ({
+      key: `allocation-${index}`,
+      date: businessDateOf(new Date(row.allocatedAt)),
+      href: `/sales/ar-invoices/${encodeURIComponent(row.invoiceNo)}`,
+      number: row.invoiceNo,
+      amount: row.amountIqd,
+    })),
+    ...elsewhere.map((row) => ({
+      key: row.id,
+      date: row.appliedOn,
+      href: `/sales/credit-notes/${encodeURIComponent(row.targetNo)}`,
+      number: row.targetNo,
+      amount: row.amountIqd,
+    })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
   const unallocated = receipt.unappliedIqd;
 
   const money = (amount: string) => formatMoney(amount, 'IQD', locale as Locale);
@@ -93,6 +132,8 @@ export default async function ReceiptPage({
     receipt.status === 'draft' && can(principal, 'approve', receipts.PERMISSION_OBJECT);
   const mayPost =
     receipt.status === 'approved' && can(principal, 'post', receipts.PERMISSION_OBJECT);
+  // A cash account has its own profile page; everything else is a bank account's.
+  const accountKind = parties.bankType === 'cash' ? 'cash_account' : 'bank_account';
 
   const fields: DocumentField[] = [
     // The number, not "Reference" — the reference is the field below, and two
@@ -104,14 +145,36 @@ export default async function ReceiptPage({
     // the document did not say back. The printed copy has carried them all
     // along, so the screen was the odd one out. §16 — a receipt whose payer is
     // unknown says so rather than naming nobody.
-    { label: column('customer_code'), value: <bdi dir="ltr">{parties.customerCode ?? '—'}</bdi> },
-    { label: column('customer_name'), value: <bdi dir="auto">{parties.customerName ?? '—'}</bdi> },
+    // Each a link to its profile — the customer's, and the bank or cash
+    // account's — "like Bank Loans: we can click the bank or the customer".
+    {
+      label: column('customer_code'),
+      value: <ProfileLink code={parties.customerCode} kind="customer">{parties.customerCode ?? '—'}</ProfileLink>,
+    },
+    {
+      label: column('customer_name'),
+      value: (
+        <ProfileLink code={parties.customerCode} dir="auto" kind="customer">
+          {parties.customerName ?? '—'}
+        </ProfileLink>
+      ),
+    },
     {
       label: column('posting_date'),
       value: <bdi dir="ltr">{formatBusinessDate(receipt.receiptDate, locale as Locale)}</bdi>,
     },
-    { label: column('bank_code'), value: <bdi dir="ltr">{parties.bankCode ?? '—'}</bdi> },
-    { label: column('bank_name'), value: <bdi dir="auto">{parties.bankName ?? '—'}</bdi> },
+    {
+      label: column('bank_code'),
+      value: <ProfileLink code={parties.bankCode} kind={accountKind}>{parties.bankCode ?? '—'}</ProfileLink>,
+    },
+    {
+      label: column('bank_name'),
+      value: (
+        <ProfileLink code={parties.bankCode} dir="auto" kind={accountKind}>
+          {parties.bankName ?? '—'}
+        </ProfileLink>
+      ),
+    },
     { label: column('branch_code'), value: <bdi dir="ltr">{receipt.branchCode}</bdi> },
     {
       label: t('customer_receipts.amount'),
@@ -125,13 +188,20 @@ export default async function ReceiptPage({
       label: t('customer_receipts.reference'),
       value: <bdi dir="auto">{receipt.bankReference ?? '—'}</bdi>,
     },
+    { label: t('customer_receipts.currency'), value: <bdi dir="ltr">{receipt.currency}</bdi> },
+    {
+      label: t('customer_receipts.payment_method'),
+      value: (
+        <bdi dir="auto">{method ? `${method.code} · ${method.name}` : (receipt.paymentMethodCode ?? '—')}</bdi>
+      ),
+    },
   ];
+  const mayAttach = can(principal, 'create', 'attachment');
 
   const sheet = await printSheet('customer_receipt', receipt.receiptNo);
 
   return (
     <AdminPage
-      actions={<ExportMenu exportKey="customer_receipt" id={receipt.receiptNo} />}
       back={{ href: '/sales/customer-receipts', label: t('back') }}
       title={receipt.receiptNo}
       trail={[{ href: '/', label: t('dashboard_label') }]}
@@ -176,8 +246,34 @@ export default async function ReceiptPage({
             ) : null}
           </>
         }
-        auditHref="#audit-log"
-        auditLabel={t('history')}
+        titleActions={
+          <>
+            {/* Printer, paperclip, notes, clock — the standing order (2026-10-03). */}
+            <ExportIcon
+              exportKey="customer_receipt"
+              id={receipt.receiptNo}
+              title={`${page('customer_receipts')} ${receipt.receiptNo}`}
+            />
+            <AttachmentsButton
+              closeLabel={t('close')}
+              count={attached.length}
+              label={t('attachments.title')}
+              title={t('attachments.title')}
+            >
+              <Attachments
+                action={attachToReceipt}
+                hidden={{ receipt_no: receipt.receiptNo }}
+                mayAttach={mayAttach}
+                objectId={receipt.id}
+                objectType={receipts.PERMISSION_OBJECT}
+              />
+            </AttachmentsButton>
+            <RecordNotesDoor notes={found.notes} object={receipts.PERMISSION_OBJECT} recordId={receipt.id} />
+            <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
+              <RecordHistory objectId={receipt.id} objectType={receipts.PERMISSION_OBJECT} />
+            </HistoryButton>
+          </>
+        }
         documentType={page('customer_receipts')}
         fields={fields}
         id="receipt-document"
@@ -246,7 +342,65 @@ export default async function ReceiptPage({
         </table>
       </DocumentWindow>
 
-      <RecordHistory objectId={receipt.id} objectType={receipts.PERMISSION_OBJECT} />
+      {/* What the receipt settled — the invoices it was allocated to and the
+          debit notes it was applied to — and the way to put what is left
+          against a debit note (Customer Credits & Advances' work). */}
+      {settled.length > 0 || (receipt.customerId && unallocated > 0n && receipt.status === 'posted') ? (
+        <section aria-labelledby="receipt-elsewhere-title" className={s.sapDoc}>
+          <div className={s.sapWindow}>
+            <h2 className={s.sapTitle} id="receipt-elsewhere-title">
+              <span>{t('customer_receipts.applied_elsewhere')}</span>
+              <span className={s.sapTitleMeta}>
+                {unallocated > 0n ? (
+                  <Link
+                    className={s.sapLink}
+                    href={`/sales/customer-credits?credit=${encodeURIComponent(receipt.receiptNo)}#apply`}
+                  >
+                    {t('customer_receipts.apply_remaining', { amount: money(toDecimalString(unallocated, 4n)) })}
+                  </Link>
+                ) : null}
+              </span>
+            </h2>
+            <div className={s.sapTableWrap}>
+              <table aria-labelledby="receipt-elsewhere-title" className={s.sapTable}>
+                <thead>
+                  <tr>
+                    <th scope="col">{column('date')}</th>
+                    <th scope="col">{column('reference')}</th>
+                    <th className={s.sapNum} scope="col">
+                      {column('amount')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {settled.length === 0 ? (
+                    <tr>
+                      <td className={s.sapEmptyRow} colSpan={3}>
+                        {t('customer_receipts.nothing_elsewhere')}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {settled.map((row) => (
+                    <tr key={row.key}>
+                      <td>
+                        <bdi dir="ltr">{formatBusinessDate(row.date, locale as Locale)}</bdi>
+                      </td>
+                      <td className={s.sapAccountCell}>
+                        <Link className={s.sapLink} href={row.href}>
+                          <bdi dir="ltr">{row.number}</bdi>
+                        </Link>
+                      </td>
+                      <td className={s.sapNum}>
+                        <bdi dir="ltr">{money(row.amount)}</bdi>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      ) : null}
       {sheet ? <PrintSheet {...sheet} /> : null}
     </AdminPage>
   );

@@ -165,6 +165,25 @@ export const POSTING_MAP: readonly MappedDocument[] = Object.freeze([
     ],
   },
   {
+    // Receivables (0280) — a credit note with no goods behind it: a price
+    // allowance after the sale. The same two roles as the memo, so the
+    // allowance reports beside the returns rather than netting revenue.
+    event: 'sales.customer_credit_note',
+    lines: [
+      line('customer_receivable', 'credit', true, 'customer'),
+      line('sales_returns', 'debit', true),
+    ],
+  },
+  {
+    // Receivables (0280) — a charge the invoice missed. The invoice's roles,
+    // because it is more of the same sale.
+    event: 'sales.customer_debit_note',
+    lines: [
+      line('customer_receivable', 'debit', true, 'customer'),
+      line('sales_revenue', 'credit', true),
+    ],
+  },
+  {
     // Operations block 7 — Opening Stock. The stock side is each item's own
     // inventory account; what it is opened against is asked here.
     event: 'inventory.opening_stock',

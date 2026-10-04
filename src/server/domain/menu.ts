@@ -101,35 +101,50 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     ],
   },
   {
+    /*
+     * Sales & Receivables — the module's one heading, in the order a
+     * receivable lives (by direction, 2026-10-04): the invoice that creates
+     * it, the receipt that pays it, the credits a customer holds, the
+     * statement and the ageing that read it, the notes and returns that
+     * correct it, and the reconciliation that proves it to the ledger.
+     *
+     * Customers are Master Data's — "Customers belong only in Master Data" —
+     * so the customer master is listed there, once, and every screen here
+     * reads it. Its route did not move (D-FX-1).
+     *
+     * Credits & Advances and Customer Reconciliation are Appendix A's
+     * Allocations and Reconciliation (finance_ar), brought here and given
+     * routes; the rest of Finance — Receivables stays where it was.
+     */
     key: 'sales',
     ordinal: 3,
     items: [
-      page('sales_dashboard', 'sales_dashboard'),
-      page('customers', 'business_partner', '/sales/customers'),
-      // A customer's account statement, beside the customer whose account it
-      // is. Appendix A filed it under Receivables; the sponsor asked for it
-      // here (2026-09-23), which is the same refinement that moved Customers
-      // out of Master Data — the screen sits under the heading whose work it
-      // belongs to, and still only once. It grants over `business_partner`
-      // because that is the record it reads and the object the page
-      // authorises on; an object nobody can hold would hide the screen from
-      // everyone but a Super User.
+      page('ar_invoices', 'ar_invoice'),
+      page('customer_receipts', 'customer_receipt'),
+      // An object anybody who reads receipts already holds: the credits are
+      // receipts' remainders first, and applying one is the receipt's own
+      // `execute`.
+      page('ar_allocations', 'customer_receipt', '/sales/customer-credits'),
+      // A customer's account statement. Appendix A filed it under Receivables;
+      // it grants over `business_partner` because that is the record it reads
+      // and the object the page authorises on.
       page('ar_statements', 'business_partner', '/sales/customer-statements'),
+      // The ageing, beside the invoices it ages (2026-09-30).
+      page('ar_open_items', 'ar_invoice', '/sales/receivables'),
+      page('customer_credit_memos', 'customer_credit_memo', '/sales/credit-notes'),
+      page('sales_returns', 'sales_return'),
+      // The subledger against the control account. Read under the invoices'
+      // object, as the ageing's tie is.
+      page('ar_reconciliation', 'ar_invoice', '/sales/customer-reconciliation'),
+      // Not built yet — kept in the tree (Appendix A), hidden until they are.
+      page('sales_dashboard', 'sales_dashboard'),
       page('customer_price_lists', 'price_list'),
       page('sales_orders', 'sales_order'),
       page('reservations', 'stock_reservation'),
       page('pick_lists', 'pick_list'),
       page('delivery_notes', 'delivery_note'),
-      page('ar_invoices', 'ar_invoice'),
-      // Beside the invoices it ages. Appendix A filed it under Receivables; it
-      // sits here for the reason the Account Statement does — the screen
-      // belongs under the heading whose work it is (2026-09-30).
-      page('ar_open_items', 'ar_invoice', '/sales/receivables'),
       page('cash_sales', 'cash_sale'),
-      page('customer_receipts', 'customer_receipt'),
       page('credit_control', 'credit_control'),
-      page('sales_returns', 'sales_return'),
-      page('customer_credit_memos', 'customer_credit_memo'),
       page('warranty_inquiry', 'warranty'),
       page('sales_reports', 'sales_report'),
       page('sales_settings', 'sales_settings'),
@@ -374,11 +389,11 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     items: [
       page('customer_ledger', 'customer_ledger'),
       page('ar_receipts', 'customer_receipt'),
-      page('ar_allocations', 'ar_allocation'),
+      // Allocations and Reconciliation moved to Sales & Receivables
+      // (2026-10-04), where the receivable is worked.
       page('credit_limits', 'credit_limit'),
       page('collections', 'collection'),
       page('ar_ageing', 'ar_ageing'),
-      page('ar_reconciliation', 'ar_reconciliation'),
     ],
   },
   {
@@ -510,6 +525,9 @@ export const MENU: readonly MenuSection[] = Object.freeze([
     key: 'master_data',
     ordinal: 18,
     items: [
+      // "Customers belong only in Master Data" (2026-10-04). The route is the
+      // one every customer link already uses (D-FX-1).
+      page('customers', 'business_partner', '/sales/customers'),
       page('chart_of_accounts', 'chart_of_account', '/master-data/chart-of-accounts'),
       page('statement_mapping', 'financial_statement', '/master-data/statement-mapping'),
       page('currencies_rates', 'exchange_rate', '/master-data/exchange-rates'),

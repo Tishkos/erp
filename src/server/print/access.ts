@@ -15,6 +15,8 @@ export const EXPORT_ACCESS = {
   sales_invoice: { kind: 'document', route: '/sales/ar-invoices', object: 'ar_invoice' },
   supplier_payment: { kind: 'document', route: '/payables/supplier-payments', object: 'supplier_payment' },
   customer_receipt: { kind: 'document', route: '/sales/customer-receipts', object: 'customer_receipt' },
+  // Receivables (2026-10-04) — a credit or debit note, from its own page.
+  customer_note: { kind: 'document', route: '/sales/credit-notes', object: 'customer_credit_memo' },
   sales_return: { kind: 'document', route: '/sales/sales-returns', object: 'sales_return' },
   purchase_return: { kind: 'document', route: '/payables/goods-returns', object: 'goods_return' },
   transfer: { kind: 'document', route: '/inventory/transfers', object: 'warehouse_transfer' },

@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation';
 import { runAdmin, runAdminAndReturn, text, withQuery } from '@/server/admin-action';
 import { parseDecimal } from '@domain/money';
 import * as receipts from '@/server/services/customer-receipt';
+import * as attachments from '@/server/services/attachments';
+import { registerAllRecords } from '@/server/records';
 
 const LIST = '/sales/customer-receipts';
 const record = (receiptNo: string) => `${LIST}/${encodeURIComponent(receiptNo)}`;
@@ -18,6 +20,7 @@ export async function createReceipt(formData: FormData): Promise<void> {
       bankCashAccountId: text(formData, 'bank_cash_account_id'),
       amountIqd: parseDecimal(text(formData, 'amount_iqd').trim() || '0', 4n),
       bankReference: text(formData, 'bank_reference').trim() || null,
+      paymentMethodCode: text(formData, 'payment_method_code') || null,
     }),
   );
 
@@ -79,4 +82,27 @@ export async function allocateOldestFirst(formData: FormData): Promise<void> {
     (tx, ctx) => receipts.allocateOldestFirst(tx, ctx, text(formData, 'id')),
     record(receiptNo),
   );
+}
+
+/** A file stapled to the receipt — the bank slip, the cheque copy (Receivables, 2026-10-04). */
+export async function attachToReceipt(formData: FormData): Promise<void> {
+  const receiptNo = text(formData, 'receipt_no');
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(withQuery(record(receiptNo), 'error', 'attachment_missing'));
+  }
+  const upload = file as File;
+  const content = Buffer.from(await upload.arrayBuffer());
+  // Where files go and who may read them back — registered before the first upload of a cold process.
+  registerAllRecords();
+  await runAdminAndReturn(async (tx, ctx) => {
+    const found = await receipts.viewByNo(tx, receiptNo);
+    if (!found) redirect(withQuery(record(receiptNo), 'error', 'not_found'));
+    await attachments.upload(tx, ctx, {
+      objectType: receipts.PERMISSION_OBJECT,
+      objectId: found.id,
+      fileName: upload.name,
+      content,
+    });
+  }, record(receiptNo));
 }
