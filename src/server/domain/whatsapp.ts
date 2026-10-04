@@ -554,6 +554,38 @@ const bounded = (key: string, raw: string, min: number, max: number): number => 
   return n;
 };
 
+/**
+ * Does the bot hear this message at all? — by direction, 2026-10-04: "only one
+ * group, also never reply to personal messages … it's private, just for one
+ * group".
+ *
+ * The bridge is linked to a person's own WhatsApp account, so everything that
+ * account receives passes through it: their private chats, their family
+ * groups. With `group_only` on — the default — the bot hears the one
+ * registered group and nothing else: a private message and any other group
+ * are dropped before anything is read, logged or remembered about them, and
+ * until a group is registered it hears nothing at all.
+ *
+ * With `group_only` off it is the older arrangement: the registered group,
+ * and a listed number's own chat.
+ */
+export function listensTo(settings: BotSettings, groupJid: string | null | undefined): boolean {
+  const inItsGroup = Boolean(groupJid) && settings.groupJid !== '' && groupJid === settings.groupJid;
+  if (settings.groupOnly) return inItsGroup && settings.groupQueries;
+  if (groupJid) return inItsGroup && settings.groupQueries;
+  return true;
+}
+
+/**
+ * May the bot write there? The same rule from the other side, held at the one
+ * place every outgoing message passes: with `group_only` on, the only address
+ * it will write to is its group — whatever part of the code asked.
+ */
+export function maySendTo(settings: BotSettings, to: { readonly groupJid?: string | null }): boolean {
+  if (!settings.groupOnly) return true;
+  return Boolean(to.groupJid) && settings.groupJid !== '' && to.groupJid === settings.groupJid;
+}
+
 /** The rows of `whatsapp_setting` as typed settings; a missing key is its seed. */
 export function settingsFrom(rows: ReadonlyArray<{ readonly key: string; readonly value: string }>): BotSettings {
   const map = new Map(rows.map((r) => [r.key, r.value]));

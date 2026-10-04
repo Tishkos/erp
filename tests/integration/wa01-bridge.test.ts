@@ -41,13 +41,13 @@ async function createUser(roles: string, name = 'Test User'): Promise<ActorConte
 const scope = (ctx: ActorContext) => ({ userId: ctx.principal.userId, branchCode: BAGHDAD });
 const systemScope = () => ({ userId: admin.principal.userId, branchCode: '', isSuperUser: true });
 
-type Sent = { e164: string; text: string; attachment: string | null };
+type Sent = { e164: string; groupJid: string | null; text: string; attachment: string | null };
 let sent: Sent[];
 let transportError: string | null;
 
 const transport: wa.Transport = async (to, message) => {
   if (transportError) throw new Error(transportError);
-  sent.push({ e164: to.e164, text: message.text, attachment: message.attachment?.fileName ?? null });
+  sent.push({ e164: to.e164, groupJid: to.groupJid ?? null, text: message.text, attachment: message.attachment?.fileName ?? null });
   return { waMessageId: `WA-${sent.length}` };
 };
 
@@ -74,6 +74,9 @@ beforeEach(async () => {
   sent = [];
   transportError = null;
   await ownerPool.query(`update notification_rule set channels = ARRAY['in_app','email','whatsapp'] where code = 'journal_awaiting_approval'`);
+  // Most of this file is about a person's own copy, which is the arrangement
+  // with `group_only` off; the group-only tests switch it back on themselves.
+  await ownerPool.query(`update whatsapp_setting set value = 'off' where key = 'group_only'`);
 });
 
 afterEach(() => {
@@ -131,6 +134,8 @@ describe('W1 · wa01-outbox — the whatsapp channel delivers, fails with its re
     await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_jid', '120363000000000001@g.us'));
     await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_notifications', 'true'));
 
+    // With `group_only` off: each person their own copy, and the group one.
+
     await withScope(scope(officer), (tx) => notifications.raise(tx, EVENT));
     wa.registerWhatsappSender(transport);
     const result = await withScope(systemScope(), (tx) => notifications.deliverChannel(tx, 'whatsapp'));
@@ -143,6 +148,68 @@ describe('W1 · wa01-outbox — the whatsapp channel delivers, fails with its re
       { intent: 'notification', n: 2 },
       { intent: 'notification.group', n: 1 },
     ]);
+  });
+
+  it('group only — the default: one copy, in the group, and nothing to any private chat', async () => {
+    // 2026-10-04, by direction: "it should only send it to the group … never
+    // reply to personal messages … it's private, just for one group".
+    for (const person of [manager, secondManager]) {
+      await withScope(scope(admin), (tx) =>
+        wa.saveContact(tx, admin, {
+          userId: person.principal.userId,
+          e164: person === manager ? '+9647701112233' : '+9647701112244',
+          allowNotifications: true,
+          allowQueries: false,
+          allowDigest: false,
+        }),
+      );
+    }
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_jid', '120363000000000001@g.us'));
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_notifications', 'true'));
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_only', 'true'));
+
+    await withScope(scope(officer), (tx) => notifications.raise(tx, EVENT));
+    wa.registerWhatsappSender(transport);
+    const result = await withScope(systemScope(), (tx) => notifications.deliverChannel(tx, 'whatsapp'));
+    // Both people's notifications are delivered — by the group's one copy.
+    expect(result).toMatchObject({ sent: 2, failed: 0 });
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ groupJid: '120363000000000001@g.us' });
+    const { rows } = await ownerPool.query(
+      `select intent, group_jid, count(*)::int as n from whatsapp_message where direction = 'out' group by 1, 2 order by 1`,
+    );
+    expect(rows).toEqual([{ intent: 'notification.group', group_jid: '120363000000000001@g.us', n: 1 }]);
+  });
+
+  it('group only, with notifications to the group switched off: nothing is sent, and the delivery says why', async () => {
+    await withScope(scope(admin), (tx) =>
+      wa.saveContact(tx, admin, { userId: manager.principal.userId, e164: '+9647701112233', allowNotifications: true, allowQueries: false, allowDigest: false }),
+    );
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_only', 'true'));
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_jid', '120363000000000001@g.us'));
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_notifications', 'false'));
+
+    await withScope(scope(officer), (tx) => notifications.raise(tx, EVENT));
+    wa.registerWhatsappSender(transport);
+    const result = await withScope(systemScope(), (tx) => notifications.deliverChannel(tx, 'whatsapp'));
+    expect(result).toMatchObject({ sent: 0, failed: 0 });
+    expect(sent).toHaveLength(0);
+    expect((await deliveries('whatsapp')).find((row) => row.recipient_user_id === manager.principal.userId)).toMatchObject({ status: 'suppressed' });
+  });
+
+  it('group only, with no group registered yet: nothing is sent to anybody', async () => {
+    await withScope(scope(admin), (tx) =>
+      wa.saveContact(tx, admin, { userId: manager.principal.userId, e164: '+9647701112233', allowNotifications: true, allowQueries: false, allowDigest: false }),
+    );
+    await withScope(scope(admin), (tx) => wa.saveSetting(tx, admin, 'group_only', 'true'));
+
+    await withScope(scope(officer), (tx) => notifications.raise(tx, EVENT));
+    wa.registerWhatsappSender(transport);
+    const result = await withScope(systemScope(), (tx) => notifications.deliverChannel(tx, 'whatsapp'));
+    expect(result).toMatchObject({ sent: 0, failed: 0 });
+    expect(sent).toHaveLength(0);
+    expect((await deliveries('whatsapp')).find((row) => row.recipient_user_id === manager.principal.userId)).toMatchObject({ status: 'suppressed' });
   });
 
   it('copies the next day’s notice into the group again', async () => {

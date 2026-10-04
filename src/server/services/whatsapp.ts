@@ -698,20 +698,38 @@ export function registerWhatsappSender(transport: Transport): void {
     if (!contact.userActive) throw new notifications.DeliverySuppressed('user deactivated');
     if (!contact.allowNotifications) throw new notifications.DeliverySuppressed('WhatsApp notifications switched off for this contact');
     const text = `*${message.subject}*\n${message.body}`;
-    const outId = await recordOutbound(tx, { e164: contact.e164, body: text, sender: contact, deliveryId: message.deliveryId, intent: 'notification', detail: { eventType: message.eventType, objectType: message.objectType, objectId: message.objectId } });
-    try {
-      const { waMessageId } = await transport({ e164: contact.e164 }, { text });
-      await markOutbound(tx, outId, { status: 'sent', waMessageId });
-    } catch (error) {
-      await markOutbound(tx, outId, { status: 'failed', errorMessage: error instanceof Error ? error.message : String(error) });
-      throw error;
+    const settings = await settingsOf(tx);
+    /*
+     * Group only (by direction, 2026-10-04: "it should only send it to the
+     * group and also it should only answer in the group"). With `group_only`
+     * on — the default — nothing is ever sent to anybody's own chat: the
+     * notification is the group's copy, once, and that copy is this person's
+     * delivery; with no group registered yet there is nowhere to say it, and
+     * it is suppressed. With `group_only` off the person gets theirs as
+     * before, and the group its one copy beside it.
+     */
+    const groupOnly = settings.groupOnly;
+    if (groupOnly && settings.groupJid === '') {
+      throw new notifications.DeliverySuppressed('the bot speaks only in its group, and no group is registered yet');
+    }
+    if (groupOnly && !settings.groupNotifications) {
+      throw new notifications.DeliverySuppressed('the bot speaks only in its group, and notifications to the group are switched off');
+    }
+    if (!groupOnly) {
+      const outId = await recordOutbound(tx, { e164: contact.e164, body: text, sender: contact, deliveryId: message.deliveryId, intent: 'notification', detail: { eventType: message.eventType, objectType: message.objectType, objectId: message.objectId } });
+      try {
+        const { waMessageId } = await transport({ e164: contact.e164 }, { text });
+        await markOutbound(tx, outId, { status: 'sent', waMessageId });
+      } catch (error) {
+        await markOutbound(tx, outId, { status: 'failed', errorMessage: error instanceof Error ? error.message : String(error) });
+        throw error;
+      }
     }
 
     // WA-5 — and into the group, once per notification rather than once per
     // recipient, so ten managers do not make ten copies. It carries the
     // subject and body the rule already wrote: a notification says what
     // happened and names its document, never a figure nobody asked for.
-    const settings = await settingsOf(tx);
     if (settings.groupJid && settings.groupNotifications && (await firstGroupDelivery(tx, message.eventKey))) {
       const groupOut = await recordOutbound(tx, {
         e164: contact.e164,
@@ -733,9 +751,11 @@ export function registerWhatsappSender(transport: Transport): void {
         const { waMessageId } = await transport({ e164: contact.e164, groupJid: settings.groupJid }, { text });
         await markOutbound(tx, groupOut, { status: 'sent', waMessageId });
       } catch (error) {
-        // The person already has it; the group copy failing is not a reason
-        // to retry the whole delivery.
         await markOutbound(tx, groupOut, { status: 'failed', errorMessage: error instanceof Error ? error.message : String(error) });
+        // With their own copy sent, the group's failing is not a reason to
+        // retry the whole delivery. In group-only mode the group's copy is
+        // the delivery, so its failure is the delivery's and is retried.
+        if (groupOnly) throw error;
       }
     }
   });

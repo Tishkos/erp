@@ -68,6 +68,9 @@ import * as actions from '../../src/server/services/whatsapp-actions';
 import { agentClientFor, anthropicClient, modelRouter } from '../../src/server/services/whatsapp-router';
 import { runAgentFor, type AgentClient } from '../../src/server/services/whatsapp-agent';
 import { cliAgentClient, cliReady } from '../../src/server/services/whatsapp-cli-brain';
+import { listensTo, maySendTo } from '../../src/server/domain/whatsapp';
+import { nameOf } from '../../src/server/domain/whatsapp-names';
+import { knownNames, rememberNames } from '../../src/server/services/whatsapp-names';
 import { questionForFiles, type SentFile } from '../../src/server/domain/whatsapp-files';
 import { expired, isConfirmation, isRefusal, type PendingAction } from '../../src/server/domain/whatsapp-do';
 import { extractSentFile } from '../../src/server/services/whatsapp-files';
@@ -216,11 +219,17 @@ async function paced(perMinute: number): Promise<void> {
   sentAt.push(Date.now());
 }
 
-function transportFor(sock: () => WASocket | null, perMinute: () => number): wa.Transport {
+function transportFor(sock: () => WASocket | null, current: () => Awaited<ReturnType<typeof wa.settings>>): wa.Transport {
   return async (to, message) => {
     const socket = sock();
     if (!socket) throw new Error('the bridge is not connected to WhatsApp');
-    await paced(perMinute());
+    // The last word on where the bot writes: in group-only mode, its group
+    // and nowhere else, whichever part of the code asked (2026-10-04 — the
+    // account it is linked to is a person's own).
+    if (!maySendTo(current(), to)) {
+      throw new Error('group only: the bot writes to its one registered group and to no private chat');
+    }
+    await paced(current().throttlePerMinute);
     // WA-5 — a group id addresses the group; otherwise the person's number.
     const jid = to.groupJid && isGroupJid(to.groupJid) ? to.groupJid : e164ToJid(to.e164);
     let sent: WAMessage | undefined;
@@ -359,6 +368,35 @@ function senderOf(message: WAMessage, ownE164: string | null): { readonly e164: 
   return { e164, groupJid: null };
 }
 
+/**
+ * The names WhatsApp shows the bridge, kept as they are shown (2026-10-04, by
+ * direction: "fetch them from their name in WhatsApp").
+ *
+ * A contact as Baileys hands it over, whatever shape this version gives it:
+ * the number may be the id itself, or — where WhatsApp addresses the person by
+ * a hidden id — beside it. `name` is what the linked phone saved the number
+ * as; `notify` is what the person called themselves.
+ */
+function noteContacts(contacts: ReadonlyArray<unknown>): void {
+  const seen: { e164: string; saved?: string | null; profile?: string | null }[] = [];
+  for (const raw of contacts) {
+    const contact = (raw ?? {}) as Record<string, unknown>;
+    const e164 = [contact.id, contact.jid, contact.phoneNumber]
+      .filter((value): value is string => typeof value === 'string' && value.includes('@'))
+      .map((value) => jidToE164(jidNormalizedUser(value)))
+      .find((value): value is string => Boolean(value));
+    if (!e164) continue;
+    const text = (value: unknown) => (typeof value === 'string' ? value : null);
+    seen.push({ e164, saved: text(contact.name), profile: text(contact.notify) ?? text(contact.verifiedName) });
+  }
+  try {
+    const learned = rememberNames(seen);
+    if (learned > 0) log(`names: ${learned} learned from WhatsApp`);
+  } catch (error) {
+    log(`names: could not be kept — ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 async function handleInbound(
   scope: RequestScope,
   send: wa.Transport,
@@ -376,6 +414,35 @@ async function handleInbound(
   // otherwise be an empty row, which reads as though nothing was said.
   const body = text || `[${sentFile?.fileName ?? 'file'}]`;
 
+  /*
+   * The one group, and nothing else — first, before anything is read, logged
+   * or remembered (2026-10-04, by direction: "never reply to personal
+   * messages … it's private, just for one group").
+   *
+   * The bridge is linked to a person's own WhatsApp account, so this handler
+   * is handed everything that account receives and everything its owner types:
+   * private chats, family groups. With `group_only` on, a message that is not
+   * in the registered group ends here — no log row, no line in the log file,
+   * no name kept — and until a group is registered nothing is heard at all.
+   */
+  const settings = await withScope(scope, (tx) => wa.settings(tx));
+  if (!listensTo(settings, groupJid)) {
+    // Only with `group_only` off can this be another group, and that much may
+    // be said; a private message under `group_only` leaves no trace.
+    if (!settings.groupOnly && groupJid) log(`inbound from ${e164} in ${groupJid}: ignored (not the registered group)`);
+    return;
+  }
+
+  // Who WhatsApp says this is — kept only for a number on the expected list,
+  // so somebody named for the group can be put to their user by name.
+  if (!message.key.fromMe && message.pushName) {
+    try {
+      rememberNames([{ e164, profile: message.pushName }]);
+    } catch {
+      /* a name that cannot be kept is not a reason to drop the message */
+    }
+  }
+
   // Its own voice, heard back. Every answer the bridge sends is recorded with
   // the id WhatsApp gave it, so an id already in the log as outbound is the
   // bot listening to itself — the one thing that must never start a round.
@@ -384,27 +451,6 @@ async function handleInbound(
     const mine = await withScope(scope, (tx) => wa.sentByBridge(tx, message.key.id ?? null));
     if (mine) return;
     log(`inbound from ${e164}: typed on the bot's own phone, answering it`);
-  }
-
-  // WA-5 — one group, and no other. An unregistered group, or any group but
-  // the registered one, is silence: the same answer an unlisted number gets.
-  // Read before anything is logged, so a stranger's group leaves no trail of
-  // its own in the company's log.
-  const settings = await withScope(scope, (tx) => wa.settings(tx));
-  if (groupJid && !(wa.groupAllowed(settings, groupJid) && settings.groupQueries)) {
-    log(`inbound from ${e164} in ${groupJid}: ignored (not the registered group)`);
-    return;
-  }
-  // Questions belong in the group: an answer in a private chat is an answer
-  // nobody else saw. Read, logged, and left — the group is the record.
-  if (!groupJid && settings.groupJid && settings.groupOnly) {
-    await withScope(scope, async (tx) => {
-      const sender = await wa.resolveNumber(tx, e164);
-      const id = await wa.recordInbound(tx, { e164, body, waMessageId: message.key.id ?? null, sender, groupJid: null });
-      await wa.finishInbound(tx, id, { status: 'refused', intent: 'none', detail: { reason: 'direct messages are not answered; ask in the group' } });
-    });
-    log(`inbound from ${e164}: direct message ignored (questions belong in the group)`);
-    return;
   }
 
   // 1. Who is this, and may they ask? Logged either way; silence otherwise.
@@ -427,7 +473,7 @@ async function handleInbound(
     return { inboundId, sender, allowed };
   });
   if (!allowed.ok || !sender) {
-    log(`inbound from ${e164}: refused (${allowed.ok ? 'no sender' : allowed.reason})`);
+    log(`inbound from ${e164}${message.pushName ? ` (${message.pushName})` : ''}: refused (${allowed.ok ? 'no sender' : allowed.reason})`);
     return;
   }
 
@@ -624,7 +670,8 @@ async function handleInbound(
     log(`inbound from ${e164}: failed — ${detail}`);
     await withScope(scope, (tx) => wa.finishInbound(tx, inboundId, { status: 'failed', intent: null, errorMessage: detail }));
     try {
-      await send({ e164 }, { text: words(locale).error });
+      // Where the question was asked — the group, when it was asked there.
+      await send({ e164, ...(groupJid ? { groupJid } : {}) }, { text: words(locale).error });
     } catch {
       /* the failure is on the record; the apology may fail too */
     }
@@ -829,7 +876,10 @@ async function sendDigest(scope: RequestScope, send: wa.Transport, settings: Awa
   // Marked first: a digest that fails to send is retried tomorrow, not every poll.
   await withScope(scope, (tx) => wa.markDigestSent(tx, day));
   const recipients = await withScope(scope, (tx) => wa.digestRecipients(tx));
-  for (const recipient of recipients) {
+  // Group only (2026-10-04): with `group_only` on, the digest is the group's
+  // one copy and nobody is written to on their own.
+  const groupOnly = settings.groupOnly;
+  for (const recipient of groupOnly ? [] : recipients) {
     try {
       const reply = await wa.answer({ userId: recipient.userId, text: 'summary', settings, locale: settings.digestLocale });
       const outId = await withScope(scope, (tx) => wa.recordOutbound(tx, { e164: recipient.e164, body: reply.text, sender: recipient, intent: 'digest', detail: reply.detail }));
@@ -925,14 +975,32 @@ async function greet(scope: RequestScope, send: wa.Transport, botE164: string | 
  */
 async function listGroups(socket: WASocket): Promise<void> {
   const all = await socket.groupFetchAllParticipating();
-  const rows = Object.values(all);
+  // The account is a person's own, so its other groups are nobody's business
+  // here: name the group (`--list-groups "ERP trial"`) and only it is shown.
+  const wanted = (process.argv[process.argv.indexOf('--list-groups') + 1] ?? '').trim().toLowerCase();
+  const named = wanted && !wanted.startsWith('--') ? wanted : '';
+  const rows = Object.values(all).filter((group) => !named || (group.subject ?? '').toLowerCase().includes(named));
+  if (named && rows.length === 0) {
+    log(`no group whose name contains "${named}" (the account is in ${Object.keys(all).length} group(s))`);
+    return;
+  }
   if (rows.length === 0) {
     log('the bot is in no groups yet — add it to the group, then run this again');
     return;
   }
   log(`${rows.length} group(s):`);
+  const book = knownNames();
   for (const group of rows) {
     console.log(`  ${group.id}   ${group.subject}   (${group.participants?.length ?? 0} members)`);
+    for (const raw of group.participants ?? []) {
+      const member = raw as unknown as Record<string, unknown>;
+      const e164 = [member.id, member.phoneNumber, member.jid]
+        .filter((value): value is string => typeof value === 'string' && value.includes('@'))
+        .map((value) => jidToE164(jidNormalizedUser(value)))
+        .find((value): value is string => Boolean(value));
+      const shown = typeof member.notify === 'string' ? member.notify : typeof member.name === 'string' ? member.name : null;
+      console.log(`      ${e164 ?? String(member.id ?? '?')}   ${(e164 ? nameOf(book, e164) : null) ?? shown ?? ''}`);
+    }
   }
   console.log('\nRegister the one you want in Administration → WhatsApp → the group id field.');
 }
@@ -1009,7 +1077,7 @@ async function main(): Promise<void> {
    */
   let linked = false;
   let stopping = false;
-  const send = transportFor(() => socket, () => settings.throttlePerMinute);
+  const send = transportFor(() => socket, () => settings);
   wa.registerWhatsappSender(send);
 
   const heartbeat = (state: string) =>
@@ -1040,6 +1108,11 @@ async function main(): Promise<void> {
     socket.ev.on('creds.update', () => {
       saveCreds().catch((e) => log(`saving credentials failed: ${e}`));
     });
+
+    // The contact list comes with the link, and again whenever a name changes.
+    socket.ev.on('contacts.upsert', (contacts) => noteContacts(contacts));
+    socket.ev.on('contacts.update', (updates) => noteContacts(updates));
+    socket.ev.on('messaging-history.set', (history) => noteContacts(history.contacts ?? []));
 
     socket.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect, qr } = update;
