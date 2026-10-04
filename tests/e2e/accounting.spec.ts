@@ -267,7 +267,9 @@ test.describe('Phase 1 · from the chart of accounts to the financial statements
     await page.waitForLoadState('networkidle');
     const pl = page.locator('section', { hasText: 'Income Statement' }).last();
     await expect(pl).toContainText('Revenue');
-    await expect(pl).toContainText('Net profit');
+    // The result line is named by its sign, and what the rest of the suite
+    // has posted this year decides the sign.
+    await expect(pl).toContainText(/Net (profit|loss)/);
 
     await page.goto(`/finance/balance-sheet?to=${YEAR}-12-31`);
     await page.waitForLoadState('networkidle');

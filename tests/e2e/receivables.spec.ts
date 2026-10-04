@@ -373,13 +373,14 @@ test.describe('REQ-AR-001 · receivables in a browser', () => {
       ['/sales/customer-statements', 'main'],
     ] as const) {
       await page.goto(route);
-      const link = page.locator(scope).locator(`a[href*="/sales/customers/${CUSTOMER}"]`).first();
+      // The whole code, not a prefix: other runs leave CUS-000012 beside CUS-00001.
+      const link = page.locator(scope).locator(`a[href^="/sales/customers/${CUSTOMER}?"]`).first();
       await expect(link, route).toHaveAttribute('href', profile);
     }
     // The return names its invoice, and the receipt its bank/cash account.
     await page.goto(`/sales/sales-returns/${encodeURIComponent(returnNo)}`);
     await expect(page.locator('#sales-return-document').getByRole('link', { name: invoiceNo })).toBeVisible();
-    await page.locator(`a[href*="/sales/customers/${CUSTOMER}"]`).first().click();
+    await page.locator(`a[href^="/sales/customers/${CUSTOMER}?"]`).first().click();
     await page.waitForURL(profile);
     await expect(page.getByRole('heading', { level: 1 })).toContainText(CUSTOMER);
   });

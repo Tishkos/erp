@@ -213,7 +213,12 @@ test.describe('01.12 gate · export returns exactly the on-screen rows', () => {
   });
 
   test('exports every row when the screen is unfiltered', async ({ page, request }) => {
-    const onScreen = await page.locator('table[aria-labelledby="chart-title"] tbody tr').count();
+    // The register pages at fifty (HD15) and says its true count in the
+    // title; the export is the whole register, which is that count.
+    const meta = await page.locator('#chart-title').innerText();
+    const onScreen = /(\d+)\s+records?/.test(meta)
+      ? Number(/(\d+)\s+records?/.exec(meta)![1])
+      : await page.locator('table[aria-labelledby="chart-title"] tbody tr').count();
 
     const cookies = await page.context().cookies();
     const response = await request.get('/master-data/chart-of-accounts/export', {

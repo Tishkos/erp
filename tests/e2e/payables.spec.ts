@@ -426,8 +426,8 @@ test.describe('A22 · payables in a browser', () => {
     await page.waitForURL(/first_due_date=2026-12-31/);
     await expect(page.getByLabel('Due date 2')).toHaveValue('2027-03-31');
     await expect(page.getByLabel('Due date 4')).toHaveValue('2027-09-30');
-    // The bank picker is a client field and comes back on its first bank.
-    await create.getByLabel('Bank', { exact: true }).selectOption({ label: 'Rafidain Bank' });
+    // The terms come back as typed, the bank included.
+    await expect(create.getByLabel('Bank', { exact: true })).toHaveValue('BNK-0005');
     await create.getByLabel('Purpose').selectOption('import_finance');
     await create.getByRole('button', { name: 'Create loan' }).click();
     await page.waitForURL(/\/treasury\/loans\/LOAN-/, { timeout: 60_000 });
