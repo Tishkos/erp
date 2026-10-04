@@ -137,7 +137,7 @@ const BASES: Readonly<Record<ProfileKind, string | null>> = {
   project_budget: '/projects/budgets',
   project_variation: '/projects/change-orders',
   project_material_issue: '/projects/material-issues',
-  currency: null, // missing — accounting builds it
+  currency: null, // missing — shared (exchange rates are a settings screen, no record page)
   fixed_asset: null, // missing — shared (no module owns it yet)
   investment: null, // missing — shared (no module owns it yet)
 };
