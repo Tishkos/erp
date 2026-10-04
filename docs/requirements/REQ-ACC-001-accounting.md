@@ -1,7 +1,12 @@
 # REQ-ACC-001 — Accounting module: navbar and finance architecture
 
-Branch: `feat/accounting-module` · Owner: the Accounting agent · Status: **in progress**
-Started 2026-10-04 from `main` @ `946633a`.
+| | |
+|---|---|
+| **Requirement ID** | `REQ-ACC-001` |
+| **Branch** | `feat/accounting-module` (started 2026-10-04 from `main` @ `946633a`) |
+| **Test case(s)** | `tests/integration/nav-internal-transfers.test.ts`; the menu layout in `tests/unit/ui-frameworks.test.ts`, `fx1-menu.test.ts`, `screen-catalogue.test.ts` |
+| **Status** | IN BUILD — menu and the Internal Transfers engine done (Part C); screens in Part D to come |
+| **Approved by** | *The sponsor's direction of 2026-10-04 (Part A); the reading in Part B not yet approved.* |
 
 This file is the hand-off. Part A is the sponsor's requirement, verbatim.
 Part B is how it was read against the code. Part C is what is done, Part D
