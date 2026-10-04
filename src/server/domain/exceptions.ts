@@ -261,7 +261,7 @@ interface Thresholds {
   readonly findingsPerDetector: number;
 }
 
-export const THRESHOLDS: Thresholds = Object.freeze({
+const THRESHOLD_VALUES: Thresholds = {
   /** A reconciliation left open with a difference this many days after its statement's last day. */
   bankReconciliation: [
     { atLeast: 7, severity: 'medium' },
@@ -326,7 +326,9 @@ export const THRESHOLDS: Thresholds = Object.freeze({
   pdExpiryWarningDays: 14,
   /** Per detector: more findings than this and the rest are summarised, not dropped silently. */
   findingsPerDetector: 200,
-});
+};
+
+export const THRESHOLDS: Thresholds = Object.freeze(THRESHOLD_VALUES);
 
 // ---------------------------------------------------------------------------
 // Which kind of notification a finding raises, and when
