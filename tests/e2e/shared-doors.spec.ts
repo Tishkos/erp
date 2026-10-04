@@ -117,7 +117,8 @@ test.describe('shared · the four doors and profile links', () => {
     await page.goto(record);
     await page.screenshot({ path: `${SHOTS}/certificate-desktop-en.png`, fullPage: true });
     const invoices = await page.request.get('/payables/invoices');
-    const invoiceNo = /href="\/payables\/invoices\/([^"?]+)"/.exec(await invoices.text())?.[1];
+    // A real invoice, not the "new" form: invoice numbers end in digits.
+    const invoiceNo = /href="\/payables\/invoices\/([^"?/]*\d)"/.exec(await invoices.text())?.[1];
     if (invoiceNo) {
       await page.goto(`/payables/invoices/${invoiceNo}`);
       await page.screenshot({ path: `${SHOTS}/purchase-invoice-desktop-en.png`, fullPage: true });
