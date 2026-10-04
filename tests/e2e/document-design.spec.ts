@@ -218,8 +218,10 @@ test.describe('an invoice is built like a journal entry', () => {
     await expect(carried).toContainText('1');
 
     // The one line it was raised with, and a blank one under it. The lines are
-    // typed into on the record — not read back as text, as they were.
-    const rows = document.locator('tbody tr:not([aria-hidden="true"])');
+    // typed into on the record — not read back as text, as they were. The
+    // grid is named by its heading: the Notes door in the title bar holds a
+    // table of its own (2026-10-04), whose rows are not lines.
+    const rows = document.locator('table[aria-labelledby="ar-invoice-document-lines-heading"] tbody tr:not([aria-hidden="true"])');
     await expect(rows).toHaveCount(2);
 
     // Fill the blank row: another opens under it, as on the form.

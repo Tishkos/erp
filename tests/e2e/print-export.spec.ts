@@ -69,13 +69,28 @@ async function press(page: Page, name: string, status: string) {
   await expect(done()).toBeVisible({ timeout: 30_000 });
 }
 
-/** Every format of one menu, in one language, as files read back. */
+/**
+ * Every format of one menu, in one language, as files read back.
+ *
+ * A report carries the disclosure menu; a record carries the printer door
+ * (the first of its four — AGENTS.md, 2026-10-03), a dialog with the same
+ * links behind the title bar's icon. Both are `[data-export-menu]`; the door
+ * is opened by its button, the menu by its summary.
+ */
 async function downloadAll(page: Page, key: string, lang: 'en' | 'ar') {
   const menu = page.locator(`[data-export-menu="${key}"]`).first();
+  await expect(menu).toBeAttached({ timeout: 60_000 });
+  const isDoor = await menu.evaluate((element) => element.tagName !== 'DETAILS');
+  if (isDoor) {
+    const door = page.locator('dialog', { has: menu });
+    if (!(await door.evaluate((element) => (element as HTMLDialogElement).open))) {
+      await page.getByRole('button', { name: lang === 'ar' ? /^طباعة \/ تصدير/ : /^Print \/ Export/ }).first().click();
+    }
+  }
   await expect(menu).toBeVisible({ timeout: 60_000 });
   const files: Record<string, { name: string; data: Buffer }> = {};
   for (const format of ['pdf', 'xlsx', 'docx'] as const) {
-    if (!(await menu.evaluate((element) => (element as HTMLDetailsElement).open))) {
+    if (!isDoor && !(await menu.evaluate((element) => (element as HTMLDetailsElement).open))) {
       await menu.locator('summary').click();
     }
     const [download] = await Promise.all([
@@ -100,10 +115,14 @@ test('a Purchase Invoice is raised, sent for approval, and posted by the CEO', a
 
     await page.goto('/payables/invoices/new');
     await page.getByLabel('Supplier Code').fill(supplierCode);
-    const due = page.locator('input[name="due_date"]');
-    if (!(await due.inputValue())) await due.fill(TODAY);
-    // The item code is a searchable field (an input over a datalist).
+    // The purchase invoice asks no due date since AP17 (the supplier's terms
+    // set it); the sales invoice still does.
+    // The item code is a searchable field (an input over a datalist). The
+    // name following the code proves the grid is hydrated: the quantity and
+    // price are controlled inputs, and a value typed before hydration is
+    // reset by it, which once posted this invoice at 1 × the default price.
     await page.locator('input[name="item_code_0"]').fill('ITM-SEED');
+    await expect(page.getByLabel('Item Name').first()).toHaveValue(/Seed/, { timeout: 30_000 });
     await page.getByLabel('Quantity').first().fill('3');
     await page.getByLabel('Unit Price').first().fill('2500');
     await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');
@@ -137,8 +156,9 @@ test('a Sales Invoice puts something on the customer’s statement', async ({ br
     await page.goto('/sales/ar-invoices/new');
     await page.getByLabel('Customer Code').fill(customerCode);
     const due = page.locator('input[name="due_date"]');
-    if (!(await due.inputValue())) await due.fill(TODAY);
+    if ((await due.count()) > 0 && !(await due.inputValue())) await due.fill(TODAY);
     await page.locator('input[name="item_code_0"]').fill('ITM-SEED');
+    await expect(page.getByLabel('Item Name').first()).toHaveValue(/Seed/, { timeout: 30_000 });
     await page.getByLabel('Quantity').first().fill('1');
     await page.getByLabel('Unit Price').first().fill('9000');
     await page.locator('select[name="warehouse_code_0"]').selectOption('WH-HQ');

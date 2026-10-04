@@ -433,7 +433,9 @@ test.describe('A22 · payables in a browser', () => {
     await page.waitForURL(/\/treasury\/loans\/LOAN-/, { timeout: 60_000 });
     const loanNo = decodeURIComponent(page.url().split('/treasury/loans/')[1]!.split('?')[0]!);
     await expect(page.getByRole('heading', { level: 1, name: loanNo })).toBeVisible();
-    await expect(page.getByText('980,000', { exact: false }).first()).toBeVisible();
+    // The history door holds the same figure in a closed dialog, so only
+    // the visible one — the Net proceeds field — is asked for.
+    await expect(page.getByText('980,000', { exact: false }).filter({ visible: true }).first()).toBeVisible();
     await expect(page.getByRole('cell', { name: '250,000 IQD' }).first()).toBeVisible();
     // The person who entered it does not approve it.
     await expect(page.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0);
@@ -456,7 +458,7 @@ test.describe('A22 · payables in a browser', () => {
     const pay = admin.getByRole('dialog');
     await pay.getByRole('textbox', { name: 'Bank reference' }).fill(`RAF-DR-${RUN}`);
     await pay.getByRole('button', { name: 'Pay instalment' }).click();
-    await expect(admin.getByText(`RAF-DR-${RUN}`).first()).toBeVisible({ timeout: 30_000 });
+    await expect(admin.getByText(`RAF-DR-${RUN}`).filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
     await second.close();
 
     // The register: 750,000 still owed on it.
