@@ -6891,6 +6891,8 @@
   },
   "posting_map": {
     "event": {
+      "treasury_bank_transfer": "تحويل داخلي",
+      "treasury_loan_revaluation": "إعادة تقييم القرض",
       "purchasing_ap_invoice": "فاتورة شراء",
       "sales_ar_invoice": "فاتورة بيع",
       "sales_customer_receipt": "سند قبض من عميل",

@@ -6891,6 +6891,8 @@
   },
   "posting_map": {
     "event": {
+      "treasury_bank_transfer": "Internal Transfer",
+      "treasury_loan_revaluation": "Loan Revaluation",
       "purchasing_ap_invoice": "Purchase Invoice",
       "sales_ar_invoice": "Sales Invoice",
       "sales_customer_receipt": "Customer Receipt",

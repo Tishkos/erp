@@ -113,7 +113,9 @@ describe('IM3 · the daily check (OP-7, OP-8)', () => {
     mkdirSync(jobs, { recursive: true });
     writeFileSync(join(jobs, 'backup.last'), `${new Date().toISOString()} 1 12\n`);
     writeFileSync(join(jobs, 'due-notices.last'), `${new Date(Date.now() - 5 * 86_400_000).toISOString()} 1 3\n`);
-    writeFileSync(join(jobs, 'health-check.last'), `${new Date().toISOString()} 0 1\n`);
+    // Its own last run ended 1 because it found something: that is not a failed job,
+    // and reporting it would make it end 1 again tomorrow, for ever.
+    writeFileSync(join(jobs, 'health-check.last'), `${new Date().toISOString()} 1 1\n`);
     const report = await db.transaction((tx) => check(tx, { backupRoot: dir, jobStateDir: jobs }));
     const failed = report.findings.filter((f) => f.code === 'job_failed');
     expect(failed).toHaveLength(1);

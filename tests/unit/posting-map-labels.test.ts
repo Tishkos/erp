@@ -11,8 +11,9 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { POSTING_MAP } from '@domain/posting-map';
 
-type Catalogue = { posting_map: { role: Record<string, string> } };
-const roles = (locale: 'en' | 'ar') => (JSON.parse(readFileSync(`messages/${locale}.json`, 'utf8')) as Catalogue).posting_map.role;
+type Catalogue = { posting_map: { role: Record<string, string>; event: Record<string, string> } };
+const catalogue = (locale: 'en' | 'ar') => (JSON.parse(readFileSync(`messages/${locale}.json`, 'utf8')) as Catalogue).posting_map;
+const roles = (locale: 'en' | 'ar') => catalogue(locale).role;
 
 describe('the posting map and its labels', () => {
   it('names every role in both languages', () => {
@@ -20,6 +21,16 @@ describe('the posting map and its labels', () => {
     for (const locale of ['en', 'ar'] as const) {
       const have = roles(locale);
       expect(used.filter((role) => !have[role]), locale).toEqual([]);
+    }
+  });
+
+  it('names every document in both languages', () => {
+    // The screen titles a document with posting_map.event.<event, dots as underscores>:
+    // treasury.bank_transfer and treasury.loan_revaluation had none (the same error log).
+    const events = POSTING_MAP.map((document) => document.event.replaceAll('.', '_')).sort();
+    for (const locale of ['en', 'ar'] as const) {
+      const have = catalogue(locale).event;
+      expect(events.filter((event) => !have[event]), locale).toEqual([]);
     }
   });
 });
