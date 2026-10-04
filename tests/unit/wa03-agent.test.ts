@@ -107,7 +107,7 @@ describe('WA-3 · the tool list', () => {
   it('names each tool once, and covers the books as well as the payables', () => {
     const names = AGENT_TOOLS.map((tool) => tool.name);
     expect(new Set(names).size).toBe(names.length);
-    for (const needed of ['trial_balance', 'open_items', 'stock_valuation', 'approvals_waiting', 'list_warehouses']) {
+    for (const needed of ['trial_balance', 'open_items', 'stock_valuation', 'approvals_waiting', 'list_warehouses', 'screens', 'guide', 'report_issue', 'reported_issues']) {
       expect(names, needed).toContain(needed);
     }
   });
@@ -154,7 +154,44 @@ describe('WA-3 · the instructions', () => {
   });
 
   it('answers in Arabic when asked in Arabic', () => {
-    expect(systemPrompt({ ...base, locale: 'ar' })).toMatch(/Reply in Arabic/);
+    expect(systemPrompt({ ...base, locale: 'ar' })).toMatch(/reply in Arabic/i);
+  });
+
+  it('answers in the language of the message, whichever it is, and switches with the person', () => {
+    // 2026-10-04, by direction: "answer should be based on their language".
+    expect(prompt).toMatch(/Answer in the language of the message you are answering/);
+    expect(prompt).toMatch(/If they switch language, switch with them/);
+    expect(prompt).toMatch(/Kurdish gets Kurdish/);
+    expect(systemPrompt({ ...base, locale: 'en' })).toMatch(/reply in the language it is written in/);
+  });
+
+  it('shows somebody how: the guide and the menu first, then the path, the steps, the fields and what happens next', () => {
+    // 2026-10-04, by direction: "very good in navbar step by step where to go and explain the fields".
+    expect(prompt).toMatch(/call guide .* and screens .* BEFORE you answer/);
+    expect(prompt).toMatch(/the module in the top bar → the heading in its dropdown → the screen/);
+    expect(prompt).toMatch(/numbered steps, one action each/);
+    expect(prompt).toMatch(/what the field means, whether it can be left empty/);
+    expect(prompt).toMatch(/what happens after they save/);
+    expect(prompt).toMatch(/go through every field in the order the form shows them/);
+  });
+
+  it('writes a problem down, and tells a defect from the system doing its job', () => {
+    // 2026-10-04, by direction: "if have issues saves the issues in md file".
+    expect(prompt).toMatch(/call report_issue with everything you know/);
+    expect(prompt).toMatch(/is not an issue: explain it/);
+    expect(prompt).toMatch(/still help/);
+  });
+
+  it('is for everybody, in a testing phase, and leaves what a person may see to their role', () => {
+    expect(prompt).toMatch(/Everybody in the company may ask you/);
+    expect(prompt).toMatch(/TESTING PHASE/);
+    expect(prompt).toMatch(/their role's to decide, not yours/);
+  });
+
+  it('says what he can do, and what stays on the screens', () => {
+    expect(prompt).toMatch(/move a document one step by its number \(document_step\)/);
+    expect(prompt).toMatch(/create a customer or a supplier/);
+    expect(prompt).toMatch(/What stays on the screens: anything with lines to type/);
   });
 });
 
@@ -233,7 +270,8 @@ describe('WA-3 · the loop', () => {
       create: async () => ({ content: [{ type: 'tool_use', id: 't', name: 'company_summary', input: {} }] }),
     };
     const result = await runAgent({ ...base, client: forever, question: 'go on then', runTool: says('again') });
-    expect(result.used.length).toBeLessThanOrEqual(8);
+    // Twelve: a how-to reads the guide and the menu before it answers (2026-10-04).
+    expect(result.used.length).toBeLessThanOrEqual(12);
     expect(result.text).toMatch(/narrow the question/i);
   });
 

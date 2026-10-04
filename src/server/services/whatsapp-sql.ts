@@ -32,9 +32,12 @@ export async function runQuery(tx: Tx, raw: string, limit?: number): Promise<Que
 
   const rowCap = Math.min(Math.max(1, Number(limit) || ROW_CAP), ROW_CAP);
   try {
-    // `set local` lasts to the end of this transaction, which is this one
-    // question: the next query sets it again.
-    await tx.execute(sql`set local statement_timeout = ${String(TIMEOUT_MS)}`);
+    // Local to this transaction, which is this one question: the next query
+    // sets it again. Through `set_config`, not `SET LOCAL … = $1`: SET takes no
+    // bound parameter, so the statement was refused and every query with it —
+    // "Failed query: set local statement_timeout = $1" (found 2026-10-04 by
+    // the first test that ran this against a database).
+    await tx.execute(sql`select set_config('statement_timeout', ${String(TIMEOUT_MS)}, true)`);
     const result = (await tx.execute(sql.raw(checked.sql))) as unknown as { rows?: Record<string, unknown>[] } | Record<string, unknown>[];
     const rows = Array.isArray(result) ? result : (result.rows ?? []);
     return { ok: true, text: rowsToText(rows, { rowCap }), rows: rows.length, sql: checked.sql };

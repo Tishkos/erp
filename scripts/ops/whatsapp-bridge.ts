@@ -600,6 +600,7 @@ async function handleInbound(
                 history,
                 userName,
                 files,
+                chat,
                 // WA-8 — the capability IS the hook: a contact who may not
                 // act is given nowhere to put a proposal, and the tool says
                 // so rather than appearing to work.

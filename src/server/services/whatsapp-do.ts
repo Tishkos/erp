@@ -15,15 +15,44 @@
  * `ACTION_NAMES`. Resist adding one whose service does not already refuse
  * properly on its own: this file must never be the thing that decides whether
  * something is allowed.
+ *
+ * A document's step (2026-10-04) is one case for ten families: `WHERE` finds
+ * the document by its number and `RUN` is the call its own screen makes. A new
+ * family is a row in `DOCUMENT_FAMILIES` and one in each of those two.
  */
+import { sql } from 'drizzle-orm';
 import { withScope, type Tx } from '../db/client';
-import type { Principal } from '../domain/permissions';
+import { businessToday } from '../domain/business-date';
+import { can, type Principal } from '../domain/permissions';
 import { money } from '../domain/whatsapp';
-import { actionLabel, type ActionName, type PendingAction } from '../domain/whatsapp-do';
+import {
+  DOCUMENT_FAMILIES,
+  DOCUMENT_STEPS,
+  STEPS_NEEDING_REASON,
+  actionLabel,
+  familyOf,
+  stepConsequence,
+  tidyNumber,
+  type ActionName,
+  type DocumentFamily,
+  type DocumentStep,
+  type PendingAction,
+} from '../domain/whatsapp-do';
 import { registerAllRecords } from '../records';
+import * as apInvoices from './ap-invoice';
 import * as approvals from './approvals';
+import * as arInvoices from './ar-invoice';
 import * as audit from './audit';
+import type { ActorContext } from './chart-of-accounts';
+import * as customerReceipts from './customer-receipt';
+import * as goodsReceipts from './goods-receipt';
+import * as goodsReturns from './goods-return';
+import * as journals from './journal';
 import * as openingStockService from './opening-stock';
+import * as partnersService from './partners';
+import * as purchaseOrders from './purchase-order';
+import * as supplierPayments from './supplier-payment';
+import * as treasury from './treasury';
 import { principalOf, type ReadContext } from './whatsapp';
 import { waitingFor } from './whatsapp-actions';
 
@@ -39,11 +68,110 @@ export type Ran = { readonly ok: true; readonly said: string } | { readonly ok: 
  * with the case and spacing of wherever it was copied from.
  */
 function documentNumber(args: Record<string, unknown>): string {
-  return String(args.document ?? args.documentNo ?? args.no ?? '')
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, '');
+  return tidyNumber(args.document ?? args.documentNo ?? args.no ?? '');
 }
+
+// ---------------------------------------------------------------------------
+// The document families — 2026-10-04
+// ---------------------------------------------------------------------------
+
+/** Where a family's rows are, to find one by its number. Names only: nothing here is typed by anybody. */
+const WHERE: Readonly<Record<DocumentFamily['key'], { readonly table: string; readonly number: string; readonly amount?: string }>> = {
+  ap_invoice: { table: 'ap_invoice', number: 'invoice_no', amount: 'total_iqd' },
+  ar_invoice: { table: 'ar_invoice', number: 'invoice_no' },
+  purchase_order: { table: 'purchase_order', number: 'order_no' },
+  goods_receipt: { table: 'goods_receipt', number: 'receipt_no' },
+  goods_return: { table: 'goods_return', number: 'return_no' },
+  supplier_payment: { table: 'supplier_payment', number: 'payment_no', amount: 'amount_iqd' },
+  customer_receipt: { table: 'customer_receipt', number: 'receipt_no', amount: 'amount_iqd' },
+  journal_entry: { table: 'journal_entry', number: 'entry_no' },
+  bank_transfer: { table: 'bank_transfer', number: 'transfer_no', amount: 'amount' },
+  opening_stock: { table: 'opening_stock', number: 'document_no' },
+};
+
+interface Located {
+  readonly id: string;
+  readonly status: string;
+  readonly branchCode: string | null;
+  readonly amount: string | null;
+}
+
+/**
+ * One document by its number, under whoever is asking.
+ *
+ * Row-level security is already applied, so a document in a branch they
+ * cannot see is simply not found — the same answer its screen would give.
+ */
+async function locate(tx: Tx, family: DocumentFamily, documentNo: string): Promise<Located | null> {
+  const at = WHERE[family.key];
+  const amount = at.amount ? sql`${sql.identifier(at.amount)}::text` : sql`null::text`;
+  const result = await tx.execute(sql`
+    select id::text as id, status::text as status, branch_code as branch_code, ${amount} as amount
+      from ${sql.identifier(at.table)}
+     where upper(${sql.identifier(at.number)}) = ${documentNo}
+     limit 1`);
+  const row = result.rows[0] as { id: string; status: string; branch_code: string | null; amount: string | null } | undefined;
+  return row ? { id: row.id, status: row.status, branchCode: row.branch_code, amount: row.amount } : null;
+}
+
+/**
+ * Each family's steps, as the calls its own screen makes.
+ *
+ * Nothing is decided here: every function below authorises the caller, checks
+ * the document's state, the maker-checker rule and the period itself, and
+ * refuses in its own words. This table is only the address book.
+ */
+type StepRun = (tx: Tx, ctx: ActorContext, id: string, reason: string) => Promise<unknown>;
+
+const RUN: Readonly<Record<DocumentFamily['key'], Partial<Record<DocumentStep, StepRun>>>> = {
+  ap_invoice: {
+    submit: (tx, ctx, id) => apInvoices.submit(tx, ctx, id),
+    post: (tx, ctx, id) => apInvoices.post(tx, ctx, id),
+    reverse: (tx, ctx, id, reason) => apInvoices.reverse(tx, ctx, id, { reason }),
+  },
+  ar_invoice: {
+    approve: (tx, ctx, id) => arInvoices.approve(tx, ctx, id),
+    post: (tx, ctx, id) => arInvoices.post(tx, ctx, id),
+    reverse: (tx, ctx, id, reason) => arInvoices.reverse(tx, ctx, id, { reason }),
+  },
+  purchase_order: {
+    submit: (tx, ctx, id) => purchaseOrders.submit(tx, ctx, id),
+    approve: (tx, ctx, id) => purchaseOrders.approve(tx, ctx, id),
+    cancel: (tx, ctx, id, reason) => purchaseOrders.cancel(tx, ctx, id, reason),
+  },
+  goods_receipt: {
+    submit: (tx, ctx, id) => goodsReceipts.submit(tx, ctx, id),
+    post: (tx, ctx, id) => goodsReceipts.post(tx, ctx, id),
+  },
+  goods_return: {
+    approve: (tx, ctx, id) => goodsReturns.approve(tx, ctx, id),
+    post: (tx, ctx, id) => goodsReturns.post(tx, ctx, id),
+  },
+  supplier_payment: {
+    post: (tx, ctx, id) => supplierPayments.post(tx, ctx, id),
+    reverse: (tx, ctx, id, reason) => supplierPayments.reverse(tx, ctx, id, { reversalDate: businessToday(), reason }),
+  },
+  customer_receipt: {
+    approve: (tx, ctx, id) => customerReceipts.approve(tx, ctx, id),
+    post: (tx, ctx, id) => customerReceipts.post(tx, ctx, id),
+  },
+  journal_entry: {
+    submit: (tx, ctx, id) => journals.submit(tx, ctx, id),
+    approve: (tx, ctx, id) => journals.approve(tx, ctx, id),
+    reject: (tx, ctx, id, reason) => journals.reject(tx, ctx, id, reason),
+    reverse: (tx, ctx, id, reason) => journals.reverse(tx, ctx, id, { reason }),
+  },
+  bank_transfer: {
+    approve: (tx, ctx, id) => treasury.approveTransferAsChecker(tx, ctx, id),
+    post: (tx, ctx, id) => treasury.postTransfer(tx, ctx, id),
+  },
+  opening_stock: {
+    submit: (tx, ctx, id) => openingStockService.submit(tx, ctx, id),
+    approve: (tx, ctx, id) => openingStockService.approve(tx, ctx, id),
+  },
+};
+
+const families = () => DOCUMENT_FAMILIES.map((family) => `${family.label} (${family.prefix}-…: ${family.steps.join(', ')})`).join('; ');
 
 /**
  * Resolve and describe, without changing anything.
@@ -142,11 +270,127 @@ export async function prepare(input: {
     };
   }
 
+  if (action === 'document_step') {
+    const step = String(input.args.step ?? '').trim().toLowerCase() as DocumentStep;
+    if (!DOCUMENT_STEPS.includes(step)) {
+      return { ok: false, reason: `Which step? One of: ${DOCUMENT_STEPS.join(', ')}.` };
+    }
+    if (!no) return { ok: false, reason: 'Which document? I need its number, as it is written on the system.' };
+    const family = familyOf(no);
+    if (!family) {
+      return {
+        ok: false,
+        reason: `I cannot tell what kind of document ${no} is from its number. The ones I can move a step: ${families()}. For anything else, tell them which screen to do it on.`,
+      };
+    }
+    if (!(family.steps as readonly DocumentStep[]).includes(step)) {
+      // Where a family has no such step by number, the person may still hold
+      // it in their approval inbox — and a purchase invoice's approval is its
+      // posting, by somebody who may approve and did not raise it.
+      const viaInbox = step === 'approve' || step === 'reject';
+      return {
+        ok: false,
+        reason: [
+          `A ${family.label} has no "${step}" step of its own. Its steps: ${family.steps.join(', ')}.`,
+          family.key === 'ap_invoice' && step === 'approve'
+            ? 'For a purchase invoice, posting IS the approval: it is posted by somebody who holds the approve right and did not raise it.'
+            : '',
+          viaInbox
+            ? `If it is waiting in this person's approval inbox (approvals_waiting shows what is), propose ${step}_document for it instead.`
+            : 'Explain that, and what they should do instead.',
+        ]
+          .filter((part) => part !== '')
+          .join(' '),
+      };
+    }
+    if (STEPS_NEEDING_REASON.includes(step) && !reason) {
+      return { ok: false, reason: `To ${step} a document the system wants a reason. Ask them for it, then propose it again with the reason.` };
+    }
+    const found = await locate(input.ctx.tx, family, no);
+    if (!found) {
+      return { ok: false, reason: `There is no ${family.label} ${no} that this person can see. Check the number with them (the list screen shows it).` };
+    }
+    if (family.key === 'journal_entry' && step === 'reverse') {
+      // A journal a document posted is that document's to reverse: mirroring
+      // the journal alone leaves the invoice, the stock and the sub-ledger
+      // exactly as they were, and the books then disagree with themselves.
+      // (The journal screen does offer it — a defect noted on 2026-10-04 —
+      // and chat does not repeat it.)
+      const origin = await input.ctx.tx.execute(sql`select source::text as source, source_module from journal_entry where id = ${found.id}`);
+      const row = origin.rows[0] as { source: string; source_module: string | null } | undefined;
+      if (row && row.source !== 'manual') {
+        return {
+          ok: false,
+          reason: `${no} was posted by a document (${row.source_module ?? 'the system'}), not typed by hand. Reversing the journal alone would leave that document and its stock as they are. Find the document that posted it (the query tool: journal_entry.source_doc_id) and propose reversing the document itself — its reversal mirrors this journal for them.`,
+        };
+      }
+    }
+    const sentence = [
+      `${step} ${family.label} ${no}`,
+      `it is ${found.status.replace(/_/g, ' ')} now${found.branchCode ? `, branch ${found.branchCode}` : ''}${found.amount ? `, ${money(found.amount)}${family.key === 'bank_transfer' ? '' : ' IQD'}` : ''}`,
+      reason ? `reason: ${reason}` : '',
+      stepConsequence(step),
+    ]
+      .filter((part) => part !== '')
+      .join(NL);
+    return {
+      ok: true,
+      pending: { ...base, step, target: { kind: family.key, id: found.id, documentNo: no, branchCode: found.branchCode }, sentence },
+    };
+  }
+
+  if (action === 'create_partner') {
+    const role = String(input.args.role ?? '').trim().toLowerCase();
+    if (role !== 'customer' && role !== 'supplier') return { ok: false, reason: "Is it a customer or a supplier? Ask, then propose it with role 'customer' or 'supplier'." };
+    const name = String(input.args.name ?? '').trim();
+    if (name.length < 2) return { ok: false, reason: `What is the ${role}'s name, as it should appear on documents?` };
+    const detail = (key: string) => String(input.args[key] ?? '').trim();
+    const payload: Record<string, string> = { role, name };
+    for (const key of ['phone', 'email', 'address', 'tradeName'] as const) if (detail(key)) payload[key] = detail(key);
+    const approves = can(input.ctx.principal, 'approve', partnersService.PERMISSION_OBJECT);
+    const sentence = [
+      `create the ${role} "${name}"`,
+      ['phone', 'email', 'address', 'tradeName'].filter((key) => payload[key]).map((key) => `${key}: ${payload[key]}`).join(' · '),
+      'The system gives it its code (CUS-… or SUP-…). A name that is already a partner is not made twice: it is given this role as well.',
+      approves
+        ? 'It will be approved straight away, so it can be used on documents.'
+        : 'This person cannot approve partners, so it will be a prospect until somebody who can approves it on its profile.',
+    ]
+      .filter((part) => part !== '')
+      .join(NL);
+    return {
+      ok: true,
+      pending: { ...base, payload, target: { kind: 'business_partner', id: '', documentNo: name, branchCode: null }, sentence },
+    };
+  }
+
+  if (action === 'approve_partner') {
+    const code = tidyNumber(input.args.document ?? input.args.code ?? '');
+    if (!code) return { ok: false, reason: 'Which partner? I need its code, such as SUP-000004 or CUS-000012 (list_partners finds it by name).' };
+    let partner: Awaited<ReturnType<typeof partnersService.getByCode>>;
+    try {
+      partner = await partnersService.getByCode(input.ctx.tx, code);
+    } catch {
+      return { ok: false, reason: `There is no customer or supplier with the code ${code}.` };
+    }
+    if (partner.status !== 'prospect') {
+      return { ok: false, reason: `${code} · ${partner.legalName} is ${partner.status.replace(/_/g, ' ')}, not a prospect — there is nothing to approve. Tell them its status.` };
+    }
+    const sentence = [
+      `approve ${code} · ${partner.legalName} (${[partner.isCustomer ? 'customer' : '', partner.isSupplier ? 'supplier' : ''].filter(Boolean).join(' and ')})`,
+      'It is a prospect now. Approved, it can be chosen on orders, invoices and payments.',
+    ].join(NL);
+    return {
+      ok: true,
+      pending: { ...base, target: { kind: 'business_partner', id: partner.id, documentNo: code, branchCode: null }, sentence },
+    };
+  }
+
   return { ok: false, reason: `I cannot do "${input.action}". What I can do: ${actionNames()}.` };
 }
 
 function actionNames(): string {
-  return 'approve or reject a document that is waiting for you, and approve opening stock';
+  return `approve or reject a document that is waiting for you; approve opening stock; move a document a step by its number — ${families()}; create a customer or a supplier; approve a prospect partner`;
 }
 
 /**
@@ -185,6 +429,48 @@ export async function run(input: {
 }
 
 async function perform(tx: Tx, principal: Principal, branchCode: string, pending: PendingAction): Promise<string> {
+  if (pending.action === 'document_step') {
+    const family = DOCUMENT_FAMILIES.find((candidate) => candidate.key === pending.target.kind);
+    const step = pending.step ?? null;
+    const call = family && step ? RUN[family.key][step] : undefined;
+    if (!family || !step || !call) throw new Error(`There is no "${String(step)}" step for ${pending.target.documentNo}.`);
+    await call(tx, { principal, branchCode }, pending.target.id, pending.reason ?? '');
+    const after = await locate(tx, family, pending.target.documentNo);
+    const done: Readonly<Record<DocumentStep, string>> = {
+      submit: 'submitted',
+      approve: 'approved',
+      reject: 'rejected',
+      post: 'posted',
+      reverse: 'reversed',
+      cancel: 'cancelled',
+    };
+    return `${family.label} ${pending.target.documentNo} ${done[step]}.${after ? ` It is ${after.status.replace(/_/g, ' ')} now.` : ''}`;
+  }
+
+  if (pending.action === 'create_partner') {
+    const payload = pending.payload ?? {};
+    const role = payload.role === 'supplier' ? 'supplier' : 'customer';
+    const made = await partnersService.createInRole(tx, { principal, branchCode }, role, {
+      legalName: payload.name ?? pending.target.documentNo,
+      tradeName: payload.tradeName ?? null,
+      phone: payload.phone ?? null,
+      email: payload.email ?? null,
+      address: payload.address ?? null,
+    });
+    const now = await partnersService.getByCode(tx, made.code);
+    return [
+      `${role === 'supplier' ? 'Supplier' : 'Customer'} ${made.code} · ${now.legalName} is on the system.`,
+      now.status === 'active'
+        ? 'It is approved, so it can be used on documents now.'
+        : 'It is a prospect: somebody who may approve partners has to approve it on its profile before it can be used.',
+    ].join(' ');
+  }
+
+  if (pending.action === 'approve_partner') {
+    await partnersService.approve(tx, { principal, branchCode }, pending.target.documentNo);
+    return `${pending.target.documentNo} approved. It can be chosen on documents now.`;
+  }
+
   if (pending.action === 'approve_document' || pending.action === 'reject_document') {
     const decision = pending.action === 'approve_document' ? 'approve' : 'reject';
     await approvals.decide(tx, principal, {
@@ -223,7 +509,9 @@ function auditDone(
       e164: input.e164,
       chat: input.pending.chat,
       documentNo: input.pending.target.documentNo,
-      what: actionLabel(input.pending.action),
+      what: actionLabel(input.pending.action, input.pending.step),
+      ...(input.pending.step ? { step: input.pending.step } : {}),
+      ...(input.pending.payload ? { payload: input.pending.payload } : {}),
       proposedAt: input.pending.proposedAt,
       confirmed: true,
       detail: detail.slice(0, 500),

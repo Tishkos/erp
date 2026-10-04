@@ -30,12 +30,104 @@
  * The typed form (`approve PAYAPP-…` and a six-digit code, WA-6) is still
  * there and unchanged. That one is for a person who knows exactly what they
  * want; this one is for a conversation.
+ *
+ * ── Widened, 2026-10-04 ────────────────────────────────────────────────────
+ * By direction, for the testing phase: "help them doing actions … everything
+ * related in the system they can do". Three more kinds of proposal, all on the
+ * same three-party rule and all through the document's own service:
+ *
+ *   * `document_step` — move a document one step along its own life by its
+ *     number: submit, approve, reject, post, reverse or cancel, for the
+ *     families in `DOCUMENT_FAMILIES`. Which steps a family has is the list of
+ *     verbs its service exports; whether *this* person may take one is the
+ *     service's answer when it runs.
+ *   * `create_partner` — a new customer or supplier, by name.
+ *   * `approve_partner` — a prospect made usable (§6).
+ *
+ * What stays on the screens: anything with lines to type — an invoice, an
+ * order, a journal. Noah says where the screen is and what each field wants
+ * (`domain/system-guide.ts`); he does not key a document from a sentence.
  */
 
 /** What Noah may propose. Every one of these runs through its own service. */
-export type ActionName = 'approve_document' | 'reject_document' | 'approve_opening_stock';
+export type ActionName =
+  | 'approve_document'
+  | 'reject_document'
+  | 'approve_opening_stock'
+  | 'document_step'
+  | 'create_partner'
+  | 'approve_partner';
 
-export const ACTION_NAMES: readonly ActionName[] = ['approve_document', 'reject_document', 'approve_opening_stock'];
+export const ACTION_NAMES: readonly ActionName[] = [
+  'approve_document',
+  'reject_document',
+  'approve_opening_stock',
+  'document_step',
+  'create_partner',
+  'approve_partner',
+];
+
+/** One step along a document's life. */
+export const DOCUMENT_STEPS = ['submit', 'approve', 'reject', 'post', 'reverse', 'cancel'] as const;
+export type DocumentStep = (typeof DOCUMENT_STEPS)[number];
+
+/** The steps that are refused without a reason, as on the screens. */
+export const STEPS_NEEDING_REASON: readonly DocumentStep[] = ['reject', 'reverse', 'cancel'];
+
+/**
+ * The documents a step may be proposed for, by the prefix of their number,
+ * and the steps each one's service has.
+ *
+ * `approve` is listed only where the service approves directly. A family
+ * without it (a purchase invoice) is approved through the approval inbox —
+ * `approve_document` — which is where the approval engine routed it.
+ */
+export const DOCUMENT_FAMILIES = [
+  { prefix: 'API', key: 'ap_invoice', label: 'purchase invoice', steps: ['submit', 'post', 'reverse'] },
+  { prefix: 'INV', key: 'ar_invoice', label: 'sales invoice', steps: ['approve', 'post', 'reverse'] },
+  { prefix: 'PO', key: 'purchase_order', label: 'purchase order', steps: ['submit', 'approve', 'cancel'] },
+  { prefix: 'GRN', key: 'goods_receipt', label: 'goods receipt', steps: ['submit', 'post'] },
+  { prefix: 'GRT', key: 'goods_return', label: 'purchase return', steps: ['approve', 'post'] },
+  { prefix: 'PAY', key: 'supplier_payment', label: 'supplier payment', steps: ['post', 'reverse'] },
+  { prefix: 'RCT', key: 'customer_receipt', label: 'customer receipt', steps: ['approve', 'post'] },
+  { prefix: 'JE', key: 'journal_entry', label: 'journal entry', steps: ['submit', 'approve', 'reject', 'reverse'] },
+  { prefix: 'BTR', key: 'bank_transfer', label: 'internal transfer', steps: ['approve', 'post'] },
+  { prefix: 'OPN', key: 'opening_stock', label: 'opening stock', steps: ['submit', 'approve'] },
+] as const satisfies readonly { readonly prefix: string; readonly key: string; readonly label: string; readonly steps: readonly DocumentStep[] }[];
+
+export type DocumentFamily = (typeof DOCUMENT_FAMILIES)[number];
+
+/** A number as people type it, tidied: upper case, no spaces. */
+export function tidyNumber(raw: unknown): string {
+  return String(raw ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '');
+}
+
+/** Which family a number belongs to, by its prefix — `API-HQ-2026-000004` is a purchase invoice. */
+export function familyOf(documentNo: string): DocumentFamily | null {
+  const prefix = tidyNumber(documentNo).split('-')[0] ?? '';
+  return DOCUMENT_FAMILIES.find((family) => family.prefix === prefix) ?? null;
+}
+
+/** What a step does that the person should hear before saying yes. */
+export function stepConsequence(step: DocumentStep): string {
+  switch (step) {
+    case 'submit':
+      return 'Submitting sends it for approval; from then on it is no longer a draft to edit.';
+    case 'approve':
+      return 'Approving lets it take effect or go on to posting. Whoever raised it cannot be the one who approves it.';
+    case 'reject':
+      return 'Rejecting sends it back to whoever raised it, with the reason.';
+    case 'post':
+      return 'Posting writes its journal — and moves the stock, where it carries goods. A posted document is never edited afterwards, only reversed.';
+    case 'reverse':
+      return 'Reversing mirrors its journal and puts back any stock it moved, dated today. It cannot be undone; the document would have to be raised again.';
+    case 'cancel':
+      return 'Cancelling closes it for good.';
+  }
+}
 
 /** What the action will be done to, resolved while proposing. */
 export interface ActionTarget {
@@ -62,6 +154,10 @@ export interface PendingAction {
   readonly chat: string;
   readonly target: ActionTarget;
   readonly reason: string | null;
+  /** `document_step` — which step. */
+  readonly step?: DocumentStep | null;
+  /** `create_partner` — what to create: `role`, `name`, and the optional contact details. */
+  readonly payload?: Readonly<Record<string, string>> | null;
   /** The facts Noah must put to them before he asks. */
   readonly sentence: string;
   readonly proposedAt: string;
@@ -180,8 +276,11 @@ export function expired(pending: PendingAction, now: Date = new Date()): boolean
 }
 
 /** What a proposal is called in the log and the audit trail. */
-export function actionLabel(action: ActionName): string {
+export function actionLabel(action: ActionName, step?: DocumentStep | null): string {
   if (action === 'approve_document') return 'approve the document';
   if (action === 'reject_document') return 'reject the document';
-  return 'approve the opening stock';
+  if (action === 'approve_opening_stock') return 'approve the opening stock';
+  if (action === 'document_step') return `${step ?? 'move'} the document`;
+  if (action === 'create_partner') return 'create the partner';
+  return 'approve the partner';
 }

@@ -7,6 +7,9 @@
  * caller's transaction, which PostgreSQL itself holds read-only, under the
  * asker's own user and grants (W-R1).
  */
+import { sql } from 'drizzle-orm';
+import { can } from '../domain/permissions';
+import { ISSUE_KINDS, ISSUE_SEVERITIES, type IssueKind, type IssueSeverity } from '../domain/system-guide';
 import { helpText, money, quantity } from '../domain/whatsapp';
 import { describeSentFile, type SentFile } from '../domain/whatsapp-files';
 import type { PendingAction } from '../domain/whatsapp-do';
@@ -14,6 +17,7 @@ import * as itemsService from './items';
 import * as openingStockService from './opening-stock';
 import * as doService from './whatsapp-do';
 import * as sqlService from './whatsapp-sql';
+import * as systemGuide from './system-guide';
 import { runAgent, type AgentClient, type AgentResult, type PriorTurn, type ToolOutcome } from '../domain/whatsapp-agent';
 import * as apInvoices from './ap-invoice';
 import * as arInvoices from './ar-invoice';
@@ -24,7 +28,7 @@ import * as openItemsService from './open-items';
 import * as partnersService from './partners';
 import * as trialBalanceService from './trial-balance';
 import * as waActions from './whatsapp-actions';
-import { draft, warehousesFor, type Drafted, type ReadContext } from './whatsapp';
+import { QUERY_ROLE, draft, warehousesFor, type Drafted, type ReadContext } from './whatsapp';
 
 export { AGENT_TOOLS, systemPrompt, runAgent } from '../domain/whatsapp-agent';
 export type { AgentClient, AgentMessage, AgentResult, PriorTurn, ToolOutcome } from '../domain/whatsapp-agent';
@@ -69,12 +73,37 @@ export interface ActionHooks {
   readonly propose: (pending: PendingAction) => void;
 }
 
-export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?: ActionHooks) {
+/** Who is asking and where, for what a tool writes down about them. */
+export interface AskerMeta {
+  readonly userName: string;
+  /** The group or the number the question came from. */
+  readonly chat?: string | null;
+}
+
+export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?: ActionHooks, meta?: AskerMeta) {
+  /*
+   * Everybody may ask (2026-10-04), so each tool answers for the asker's own
+   * role, as the screen behind it does. Most already did — `draft` and the
+   * services that take a principal check the grant themselves. These are the
+   * ones that read a table directly: the grant their screen asks for is asked
+   * for here, and the refusal names it so Noah can say who gives it.
+   */
+  const lacks = (object: string): ToolOutcome | null =>
+    can(ctx.principal, 'view', object)
+      ? null
+      : {
+          text: `This person's role does not include "${object.replaceAll('_', ' ')}" (the permission view on ${object}), so its figures are not theirs to see. Tell them that plainly, and that an administrator gives the permission on Settings → Administration → Roles. Do not look for the same figures another way.`,
+        };
+  /** The free query reads any table: it is for the roles that read everything. */
+  const readsEverything = ctx.principal.isSuperUser || ctx.principal.roleCodes.includes(QUERY_ROLE);
+
   return async function runTool(name: string, args: Record<string, unknown>): Promise<ToolOutcome> {
     switch (name) {
       case 'company_summary':
         return fromDrafted(await draft(ctx, { kind: 'summary' }));
       case 'list_warehouses': {
+        const no = lacks('warehouse');
+        if (no && !can(ctx.principal, 'view', 'inventory_movement')) return no;
         const { all } = await warehousesFor(ctx, '');
         if (all.length === 0) return { text: 'There are no warehouses on the system.' };
         return { text: all.map((house: { code: string; name: string }) => `${house.code} · ${house.name}`).join('\n') };
@@ -99,6 +128,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
           } as never),
         );
       case 'trial_balance': {
+        const no = lacks('trial_balance');
+        if (no) return no;
         const to = typeof args.to === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args.to) ? args.to : ctx.today;
         const currency = args.currency === 'USD' ? 'USD' : 'IQD';
         const rows = await trialBalanceService.trialBalance(ctx.tx, {
@@ -144,6 +175,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         return { text: [`${list.length} stock line(s):`, ...lines].join('\n') };
       }
       case 'list_partners': {
+        const no = lacks('business_partner');
+        if (no) return no;
         const side = args.side === 'supplier' ? 'supplier' : 'customer';
         const rows = await partnersService.listActiveInRole(ctx.tx, side);
         if (rows.length === 0) return { text: `There are no ${side}s on the system.` };
@@ -162,6 +195,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         };
       }
       case 'invoice': {
+        const refused = lacks(args.side === 'sales' ? 'ar_invoice' : 'ap_invoice');
+        if (refused) return refused;
         const no = String(args.no ?? '').trim();
         if (!no) return { text: 'Which invoice number?' };
         const found =
@@ -180,6 +215,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         };
       }
       case 'bank_and_cash': {
+        const no = lacks('bank_account');
+        if (no) return no;
         const code = String(args.code ?? '').trim();
         if (code) {
           const one = await bankAccounts.detail(ctx.tx, code.toUpperCase());
@@ -204,6 +241,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         };
       }
       case 'employees': {
+        const no = lacks('employee');
+        if (no) return no;
         const rows = (await employeesService.list(ctx.tx)) as unknown as Record<string, unknown>[];
         const asked = String(args.search ?? '').trim().toLowerCase();
         const shown = asked
@@ -223,8 +262,15 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         };
       }
       case 'schema':
-        return { text: await sqlService.describeSchema(ctx.tx, typeof args.table === 'string' ? args.table : undefined) };
       case 'query': {
+        if (!readsEverything) {
+          return {
+            text: 'The free query is for the roles that read the whole company (the CEO role, a super user). For this person use the named tools — each one shows what their own role may see — and the guide and screens for how the system works.',
+          };
+        }
+        if (name === 'schema') {
+          return { text: await sqlService.describeSchema(ctx.tx, typeof args.table === 'string' ? args.table : undefined) };
+        }
         const asked = String(args.sql ?? '').trim();
         if (!asked) return { text: 'No query given.' };
         const result = await sqlService.runQuery(ctx.tx, asked, typeof args.limit === 'number' ? args.limit : undefined);
@@ -234,6 +280,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         return { text: result.text };
       }
       case 'items': {
+        const no = lacks('item');
+        if (no) return no;
         const rows = (await itemsService.listAll(ctx.tx)) as unknown as Record<string, unknown>[];
         const asked = String(args.search ?? '').trim().toLowerCase();
         const shown = asked ? rows.filter((row) => JSON.stringify(Object.values(row)).toLowerCase().includes(asked)) : rows;
@@ -253,6 +301,8 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
         };
       }
       case 'opening_stock': {
+        const refused = lacks('opening_stock');
+        if (refused) return refused;
         const no = String(args.no ?? '').trim().toUpperCase();
         if (no) {
           const found = await openingStockService.viewByNo(ctx.tx, no);
@@ -290,7 +340,7 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
       case 'propose_action': {
         if (!actions) {
           return {
-            text: 'You cannot act in this chat. The contact is not allowed to take actions — an administrator turns that on per person on the WhatsApp screen. Explain that, and that reading is unaffected.',
+            text: 'You cannot act for this person: their contact is not allowed to take actions. An administrator turns that on per person on Settings → Administration → WhatsApp (the Actions switch on their contact). Explain that, show them how to do it on the screen themselves (guide + screens), and say that reading is unaffected.',
           };
         }
         const prepared = await doService.prepare({
@@ -330,6 +380,35 @@ export function toolRunnerFor(ctx: ReadContext, files: SentFiles = [], actions?:
             .join(chr10()),
         };
       }
+      case 'screens':
+        return { text: systemGuide.screens(ctx.principal, typeof args.search === 'string' ? args.search : null) };
+      case 'guide':
+        return { text: systemGuide.guide(typeof args.search === 'string' ? args.search : null) };
+      case 'report_issue': {
+        const summary = String(args.summary ?? '').trim();
+        if (summary.length < 4) return { text: 'Not written down: say in one line what is wrong (summary).' };
+        const kind = (ISSUE_KINDS as readonly string[]).includes(String(args.kind)) ? (args.kind as IssueKind) : 'other';
+        const severity = (ISSUE_SEVERITIES as readonly string[]).includes(String(args.severity)) ? (args.severity as IssueSeverity) : 'slows_work';
+        const text = (key: string) => (typeof args[key] === 'string' ? (args[key] as string) : null);
+        // Who they are, read as them: the list is read by people, and "who" should be a name they know.
+        const me = await ctx.tx.execute(sql`select display_name, email from app_user where id = ${ctx.principal.userId}`);
+        const row = me.rows[0] as { display_name?: string; email?: string } | undefined;
+        const who = `${row?.display_name ?? meta?.userName ?? ctx.principal.userId}${row?.email ? ` <${row.email}>` : ''} · branch ${ctx.branchCode}`;
+        const filed = systemGuide.reportIssue({
+          who,
+          chat: meta?.chat ? `WhatsApp ${meta.chat.includes('@g.us') ? 'group' : 'chat'}` : 'WhatsApp',
+          issue: { summary, kind, severity, screen: text('screen'), doing: text('doing'), happened: text('happened'), message: text('message'), document: text('document'), note: text('note') },
+        });
+        return {
+          text: `Written down as ${filed.id}. Tell them it is on the issues list under that number, and then help them with a way round if there is one.`,
+        };
+      }
+      case 'reported_issues': {
+        if (!(ctx.principal.isSuperUser || can(ctx.principal, 'configure', 'whatsapp') || can(ctx.principal, 'view', 'audit_event'))) {
+          return { text: 'The whole list is for administrators. This person can still report a problem, and be told the number it was filed under.' };
+        }
+        return { text: systemGuide.issuesReported(typeof args.limit === 'number' ? args.limit : 10, Boolean(args.openOnly)) };
+      }
       case 'what_the_bot_can_do':
         return { text: helpText(ctx.locale) };
       default:
@@ -351,6 +430,8 @@ export async function runAgentFor(input: {
   readonly files?: SentFiles;
   /** WA-8 — present only when this contact may act. */
   readonly actions?: ActionHooks;
+  /** The group or number the question came from, for what a tool writes down. */
+  readonly chat?: string | null;
 }): Promise<AgentResult> {
   return runAgent({
     client: input.client,
@@ -361,6 +442,6 @@ export async function runAgentFor(input: {
     locale: input.ctx.locale,
     branchCode: input.ctx.branchCode,
     today: input.ctx.today,
-    runTool: toolRunnerFor(input.ctx, input.files ?? [], input.actions),
+    runTool: toolRunnerFor(input.ctx, input.files ?? [], input.actions, { userName: input.userName, chat: input.chat ?? input.actions?.chat ?? null }),
   });
 }

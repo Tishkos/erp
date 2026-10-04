@@ -11,13 +11,21 @@
  * log and the audit trail (W-R4), written by the bridge in its own
  * transaction after the read — by code, never by the text of the message.
  *
- * Who may ask is two facts, both checked on every message: the user holds the
- * `ceo` role (D-WA-3 as ratified: "only ceo role"), and their contact row says
- * `allow_queries`. Anybody else gets silence (W-R3).
+ * Who may ask is two facts, both checked on every message: the number belongs
+ * to an active user, and their contact row says `allow_queries`. Anybody else
+ * gets silence (W-R3).
+ *
+ * Until 2026-10-04 there was a third — the `ceo` role (D-WA-3, "only ceo
+ * role"). The owner lifted it: "make it available for all users … everyone can
+ * use it and ask anything about the system". What keeps that safe is what was
+ * always underneath: an answer is read as the asker, so a storekeeper is told
+ * what a storekeeper's screens show. The tools check the asker's own grants
+ * (`whatsapp-agent.ts` › `toolRunnerFor`), and the free query is left to the
+ * people whose role reads everything.
  */
 import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import { applyScope, db, withScope, type RequestScope, type Tx } from '../db/client';
-import { appUser, businessPartner, notificationRule, payableHold, userRole, warehouse, whatsappContact, whatsappMessage, whatsappSession, whatsappSetting } from '../db/schema';
+import { appUser, businessPartner, notificationRule, payableHold, warehouse, whatsappContact, whatsappMessage, whatsappSession, whatsappSetting } from '../db/schema';
 import { businessToday } from '../domain/business-date';
 import { can, type Principal } from '../domain/permissions';
 import {
@@ -62,7 +70,11 @@ import * as reports from '../print/reports';
 import { registerAllLists } from '../lists';
 
 export const PERMISSION_OBJECT = 'whatsapp';
-/** The role that may ask (D-WA-3, ratified 2026-10-02). */
+/**
+ * The role that reads everything. Until 2026-10-04 it was also the only role
+ * that might ask (D-WA-3); now anybody may, and this marks who is given the
+ * free query as well as the named tools.
+ */
 export const QUERY_ROLE = 'ceo';
 
 // ---------------------------------------------------------------------------
@@ -82,15 +94,6 @@ export interface ContactInput {
   readonly allowActions?: boolean;
 }
 
-async function holdsRole(tx: Tx, userId: string, roleCode: string): Promise<boolean> {
-  const [row] = await tx
-    .select({ userId: userRole.userId })
-    .from(userRole)
-    .where(and(eq(userRole.userId, userId), eq(userRole.roleCode, roleCode)))
-    .limit(1);
-  return Boolean(row);
-}
-
 /** Creates or updates a user's contact row — one per user, one number per row. */
 export async function saveContact(tx: Tx, ctx: ActorContext, input: ContactInput): Promise<{ id: string; created: boolean }> {
   await permit(ctx, 'configure', PERMISSION_OBJECT);
@@ -98,8 +101,8 @@ export async function saveContact(tx: Tx, ctx: ActorContext, input: ContactInput
   if (!e164) throw new WhatsappValidationError('e164', 'is not a phone number (+9647xxxxxxxxx)');
   const [user] = await tx.select({ id: appUser.id, isActive: appUser.isActive }).from(appUser).where(eq(appUser.id, input.userId)).limit(1);
   if (!user) throw new AdminNotFoundError('user', input.userId);
-  if (input.allowQueries && !(await holdsRole(tx, input.userId, QUERY_ROLE))) {
-    throw new WhatsappValidationError('allow_queries', `only a user holding the ${QUERY_ROLE} role may ask questions (D-WA-3)`);
+  if (!user.isActive && input.allowQueries) {
+    throw new WhatsappValidationError('allow_queries', 'the user is deactivated; a deactivated user cannot ask questions');
   }
   const [taken] = await tx.select({ id: whatsappContact.id, userId: whatsappContact.userId }).from(whatsappContact).where(eq(whatsappContact.e164, e164)).limit(1);
   if (taken && taken.userId !== input.userId) throw new WhatsappValidationError('e164', 'is already another user\'s number');
@@ -234,12 +237,16 @@ export async function resolveNumber(tx: Tx, e164: string): Promise<ResolvedSende
   return row ?? null;
 }
 
-/** W-R3 + D-WA-3: may this number ask? Every condition, so the log can say which failed. */
+/**
+ * W-R3: may this number ask? Every condition, so the log can say which failed.
+ *
+ * Any active user whose contact allows questions (2026-10-04 — the `ceo` role
+ * is no longer one of the conditions; see the note at the top of this file).
+ */
 export function mayAsk(sender: ResolvedSender | null): { ok: true } | { ok: false; reason: string } {
   if (!sender) return { ok: false, reason: 'unlisted number' };
   if (!sender.active) return { ok: false, reason: 'contact deactivated' };
   if (!sender.userActive) return { ok: false, reason: 'user deactivated' };
-  if (!sender.isCeo) return { ok: false, reason: `user does not hold the ${QUERY_ROLE} role` };
   if (!sender.allowQueries) return { ok: false, reason: 'queries not allowed for this contact' };
   return { ok: true };
 }
@@ -873,7 +880,6 @@ export async function answer(input: {
   const settings = input.settings ?? DEFAULT_SETTINGS;
   const principal = await principalOf(input.userId);
   if (!principal.isActive) throw new NotAllowedToAsk('user deactivated');
-  if (!principal.roleCodes.includes(QUERY_ROLE)) throw new NotAllowedToAsk(`user does not hold the ${QUERY_ROLE} role`);
   const branchCode = principal.defaultBranchCode ?? '';
   if (!branchCode) throw new NotAllowedToAsk('user has no branch');
 

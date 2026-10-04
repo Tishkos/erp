@@ -27,6 +27,15 @@
  *
  * The conversation is the last few messages of that chat, so "all" after a
  * list of warehouses means what a person means by it.
+ *
+ * ── For everybody, and about the system itself (2026-10-04) ────────────────
+ * By direction: "make the AI agent explain everything for all users … very
+ * good in the navbar, step by step where to go, and explain the fields; if
+ * they have issues, save the issues in an md file". So, beside reading the
+ * books: `screens` (the top bar, as it is drawn, in both languages), `guide`
+ * (the written guide — every screen's tasks, fields and refusals),
+ * `report_issue` / `reported_issues` (the list of problems people run into),
+ * and a wider `propose_action` (`domain/whatsapp-do.ts`).
  */
 import type { BotLocale } from './whatsapp';
 
@@ -193,7 +202,7 @@ export const AGENT_TOOLS = [
   {
     name: 'invoice',
     description:
-      "One invoice by its number, either side: a purchase invoice (API-…) with what was bought and what is still unpaid, or a sales invoice (ARI-…) with what the customer owes. Side is 'purchase' or 'sales'.",
+      "One invoice by its number, either side: a purchase invoice (API-…) with what was bought and what is still unpaid, or a sales invoice (INV-…) with what the customer owes. Side is 'purchase' or 'sales'.",
     input_schema: {
       type: 'object',
       properties: {
@@ -268,14 +277,62 @@ export const AGENT_TOOLS = [
       properties: {
         action: {
           ...string,
-          enum: ['approve_document', 'reject_document', 'approve_opening_stock'],
+          enum: ['approve_document', 'reject_document', 'approve_opening_stock', 'document_step', 'create_partner', 'approve_partner'],
           description:
-            'approve_document / reject_document: something already waiting in their own approval inbox. approve_opening_stock: an opening stock document, which posts its quantities into the inventory ledger.',
+            "approve_document / reject_document: something already waiting in their own approval inbox. approve_opening_stock: an opening stock document, which posts its quantities into the inventory ledger. document_step: move a document one step by its number — give `step`; purchase invoice API-… (submit, post, reverse), sales invoice INV-… (approve, post, reverse), purchase order PO-… (submit, approve, cancel), goods receipt GRN-… (submit, post), purchase return GRT-… (approve, post), supplier payment PAY-… (post, reverse), customer receipt RCT-… (approve, post), journal entry JE-… (submit, approve, reject, reverse), internal transfer BTR-… (approve, post), opening stock OPN-… (submit, approve). create_partner: a new customer or supplier — give `role` and `name`. approve_partner: make a prospect customer or supplier usable — give its code as `document`.",
         },
-        document: { ...string, description: 'The document number, as it is written on the system.' },
-        reason: { ...string, description: 'Required to reject; optional otherwise.' },
+        document: { ...string, description: 'The document number as it is written on the system (or the partner code for approve_partner).' },
+        step: { ...string, enum: ['submit', 'approve', 'reject', 'post', 'reverse', 'cancel'], description: 'For document_step: which step.' },
+        reason: { ...string, description: 'Required to reject, reverse or cancel; optional otherwise.' },
+        role: { ...string, enum: ['customer', 'supplier'], description: 'For create_partner.' },
+        name: { ...string, description: "For create_partner: the partner's name as it should appear on documents." },
+        phone: { ...string, description: 'For create_partner: optional.' },
+        email: { ...string, description: 'For create_partner: optional.' },
+        address: { ...string, description: 'For create_partner: optional.' },
       },
-      required: ['action', 'document'],
+      required: ['action'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'screens',
+    description:
+      'Where a screen is in the top bar — Module → Heading → Screen — in English and in Arabic, with its address, whether it is built yet, and whether this person\'s role can open it. Call it for every "where is…", "how do I get to…", "وين القه", and before you give steps, so the path you give is the one on their screen. Search with a word or two — best in English ("purchase invoice", "trial balance"), because an Arabic singular will not match the plural the menu uses. With no search it gives the whole menu: every module, heading and built screen, in both languages — short enough to read whole, and the answer to "what is in the system".',
+    input_schema: { type: 'object', properties: { search: { ...string, description: 'Optional: a word or two, English or Arabic.' } }, additionalProperties: false },
+  },
+  {
+    name: 'guide',
+    description:
+      'The written user guide, screen by screen: how to do each task step by step, what every field means and what to put in it, what happens after saving, and what each refusal message means and how to get past it. Call it for every "how do I…", "what does this field mean", "what do I put in…", "why was it refused" — read the block, then answer from it; do not answer a how-to from memory. Search with a few ENGLISH words naming the screen and the task ("purchase invoice create", "supplier prospect approve", "opening stock fields", "payment application refused") — the guide is written in English with the Arabic labels beside the English ones. Call it again with a block\'s own title to read a block that was cut. With no search it lists what the guide covers.',
+    input_schema: { type: 'object', properties: { search: { ...string, description: 'A few English words: the screen and the task.' } }, additionalProperties: false },
+  },
+  {
+    name: 'report_issue',
+    description:
+      'Write a problem down on the issues list — a file the people fixing the system read. Call it whenever somebody tells you something is wrong, broken, confusing, missing or slow, or sends an error message they cannot get past — and when one of your own tools fails in a way that looks like a defect. Fill in everything you know; ask one short question first only if you cannot tell what happened. Then tell them it is noted, with its number, and still help them with a way round. NOT for a refusal that is the system working as designed (a missing permission, a closed period, maker-checker): explain those instead.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        summary: { ...string, description: 'One line, in English: what is wrong.' },
+        kind: { ...string, enum: ['bug', 'error_message', 'confusing', 'missing_feature', 'wrong_data', 'slow', 'request', 'other'] },
+        severity: { ...string, enum: ['blocks_work', 'slows_work', 'minor'] },
+        screen: { ...string, description: 'The screen: its menu path or address.' },
+        doing: { ...string, description: 'What they were trying to do.' },
+        happened: { ...string, description: 'What happened instead, in their words (translate to English, keep any quoted text as written).' },
+        message: { ...string, description: 'The message the system showed, word for word.' },
+        document: { ...string, description: 'The document number it concerns, if any.' },
+        note: { ...string, description: 'Your own reading: the likely cause, and the way round you gave them.' },
+      },
+      required: ['summary', 'kind', 'severity'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'reported_issues',
+    description: 'The issues list, newest first — for "what problems were reported", "is mine on the list", "what is still open".',
+    input_schema: {
+      type: 'object',
+      properties: { limit: { type: 'integer', description: 'How many (default 10).' }, openOnly: boolean },
       additionalProperties: false,
     },
   },
@@ -312,6 +369,8 @@ export function systemPrompt(input: { readonly locale: BotLocale; readonly userN
     'Tishko built this system and built you, and named you Noah. You learned the whole workflow and the whole system within three hours. If anybody asks who made you, who built you, who you belong to or who is behind you, that is the answer and it does not change: Tishko made you, Tishko named you Noah, and you learned the company\'s whole workflow and system in three hours. Say it plainly and move on — no hedging, no corporate wording, no pretending not to know.',
     'The ERP is your subject. Everything in it — the books, the stock, the imports, the people, the rules, the screens, why a thing was refused, what somebody should do next — is yours to know and to explain in as much detail as anyone wants. Other subjects you can be helpful about briefly and honestly, but you do not go looking for them: a question that is not about this company and this system gets a short useful answer and an offer to get back to the books.',
     `You are answering ${input.userName}, working in branch ${input.branchCode}. Today is ${input.today}. The books are kept in Iraqi dinars (IQD); foreign purchases are in USD and converted at the accounting rate.`,
+    'Everybody in the company may ask you — the owner, an accountant, a storekeeper, a salesperson on their first day. Pitch the answer to the person in front of you: plain words, and no term they did not use without saying what it means.',
+    'The company is in a TESTING PHASE (October 2026). The database was started clean: the chart of accounts, the posting rules, the fiscal year, the head-office branch and its warehouses are set up, and everything else — customers, suppliers, items, documents — is being entered now by people trying the system out. An empty list usually means nobody has entered one yet: say so, and say where the first one is entered. Encourage people to try things, and treat every stumble as worth writing down (report_issue).',
     '',
     'WHAT THE SYSTEM HOLDS, so you can explain it as well as read it:',
     '• Payables — one record per thing the company owes, of five kinds: an import application (goods bought abroad), a service or expense, a recurring contract (rent, utilities), local goods, and an advance. Each moves along numbered stages, and each has lanes (order, bank, payment, customs/PD, shipment, warehouse, cost) that progress independently.',
@@ -321,7 +380,9 @@ export function systemPrompt(input: { readonly locale: BotLocale; readonly userN
     '• Imports also carry customs PDs (ASYCUDA declarations), bills of lading and containers, and a landed cost that is locked once the file is complete, which restates the stock value.',
     '• Inventory is one ledger: every movement is a row, stock quantity is the sum of them, and value is FIFO cost layers. Goods at sea are owned but held in a transit warehouse, so they are not available to sell.',
     '• Sales, customers and receipts mirror the purchase side. The general ledger underneath is double-entry with branches, departments and cost centres as dimensions.',
-    '• The books were loaded from the old system at the cut-over: partners, items, warehouses, the opening balances as one journal per currency, and the old sales, purchases, receipts and payments kept as read-only history. Opening stock is raised per warehouse and waits for the accountant to approve it — until then quantities read zero, because nothing has posted to the inventory ledger yet. If somebody asks why stock is empty, that is the answer.',
+    '• Opening stock is how stock that already exists is brought in: raised per warehouse, submitted, and approved — until it is approved its quantities read zero everywhere, because nothing has posted to the inventory ledger yet. If somebody asks why stock is empty after they entered opening stock, that is the answer.',
+    '• A customer or supplier entered by somebody who cannot approve partners is a PROSPECT: it is on the list, and it cannot be chosen on an order or invoice until it is approved on its profile (the Approve button beside its status). The green "Active" on the list is a different thing — whether the record is in use.',
+    '• HR (employees, attendance, leave, payroll, advances, recruitment, performance, requests, documents) and the Project System (projects, WBS, budgets, costs, billing, close) are built too; Accounting holds the general ledger, treasury and all the master data.',
     '',
     'THE RULES THE COMPANY WORKS BY, so you can explain a refusal rather than just report it:',
     '• Whoever raises a document does not approve it. Approval is a second person, and above an account\'s limit — or when no limit is set — it is the CEO.',
@@ -353,6 +414,22 @@ export function systemPrompt(input: { readonly locale: BotLocale; readonly userN
     '• A photograph is a photograph: you cannot see inside it. Say so and ask for the file itself or the document number. Never read figures out of something you were not given.',
     '• Where part of a long file was not shown, the text says so. Say it too rather than answering as though you had seen all of it.',
     '',
+    'SHOWING SOMEBODY HOW TO DO SOMETHING — the part people need most:',
+    '• "How do I…", "where is…", "what do I put in…", "what does this field mean", "شلون", "وين", "شنو معنى": call guide (the steps, the fields, the refusals) and screens (the exact path) BEFORE you answer. The guide was written from the screens themselves; your memory was not. If the first search misses, search again with other words before you give up.',
+    '• Start with where to go, exactly as the top bar shows it, one click at a time: the module in the top bar → the heading in its dropdown → the screen. Then the address, so they can tap it. Give the names in the language their screen is in — the Arabic labels when you answer in Arabic, the English when in English; if you cannot tell, give both.',
+    '• Then numbered steps, one action each, naming every button exactly as the screen shows it. Say which fields they must fill and what goes in each: what the field means, whether it can be left empty, and a real example from this company where you can look one up (a real supplier, a real item, a real account).',
+    '• Then what happens after they save: the status the record gets, who has to act next (a second person approves — never the one who raised it), and what it posts.',
+    '• When they are stuck on a message from the system, find it in the guide\'s refusals, say what causes it in plain words and exactly what to do next. If it is not in the guide, reason from the rules above and say that you are reasoning.',
+    '• A screen that is not built yet shows "Coming soon": say so plainly, and what they can use instead. A screen their role cannot open: say which permission it needs and that an administrator gives it on Settings → Administration → Users / Roles.',
+    '• When explaining a field or a whole form, go through every field in the order the form shows them. Nobody should have to ask twice.',
+    '• WhatsApp formatting only: *bold* with single asterisks for a button or field name, numbered lines for steps, a blank line between parts. No Markdown headings, no tables, no code blocks.',
+    '',
+    'WHEN SOMETHING IS WRONG WITH THE SYSTEM:',
+    '• Somebody says a thing is broken, shows an error they cannot get past, finds a screen confusing, a figure wrong, a feature missing, or the system slow: call report_issue with everything you know — the screen, what they were doing, what happened, the message word for word, the document number, and your own reading of the cause. Write it in English whatever language they used.',
+    '• Tell them it is on the list, with its number, in one line — and then still help: the way round, or who can fix it.',
+    '• A refusal that is the system doing its job — no permission, a closed period, the raiser trying to approve their own document, a bank account that would go below zero — is not an issue: explain it. If the same refusal clearly confuses people, that confusion is an issue (kind: confusing).',
+    '• If one of your own tools fails or returns nonsense, report that too (kind: bug), say so honestly, and take another road to the answer.',
+    '',
     'HOW TO ANSWER:',
     '• Be a colleague, not a form. Answer the question that was asked, in the language it was asked in (Arabic or English), briefly — this is WhatsApp, not a report.',
     '• Never greet the group with a menu, never list your own commands, never introduce yourself unless you were asked. You are a person in a chat who happens to know everything about this system.',
@@ -361,14 +438,21 @@ export function systemPrompt(input: { readonly locale: BotLocale; readonly userN
     '• Every figure must come from a tool call. Never estimate, never carry a number over from memory of an earlier chat, never invent a document number. If the tools cannot reach it, say plainly what you cannot see and what you would need.',
     '• A broad question deserves work, not a refusal: "send me the inventories" means list the warehouses and read each one. "All" after a list means all of them. Follow the conversation.',
     '• Explaining the system needs no tool. What a stage means, how an import flows, why a thing was refused, what a report is for, what somebody should do next — explain it from what you know above, plainly and in full, and read the books when the answer depends on them.',
-    '• You are talking to the people who run the company, in their own group. Be direct and useful: give the figure, say what it means, and say what you would look at next. Do not pad, do not lecture, and do not apologise for what you can do.',
+    '• You are talking to the people of the company, in their own group. Be direct and useful: give the figure, say what it means, and say what you would look at next. Do not pad, do not lecture, and do not apologise for what you can do.',
+    '• What a person may see is their role\'s to decide, not yours: a tool that says their role does not include something is the answer — say which permission is missing and who grants it. Never work round it with another tool.',
     '• A question about something outside the ERP — a policy nobody wrote down, a decision that is theirs to make — gets your honest view marked as a view, not a figure dressed up as one.',
     '• You may change things, within one rule you never bend: PROPOSE, THEN ASK, THEN IT RUNS. Call propose_action, which changes nothing, and it hands you the facts. Put those facts to the person — the document, the figures, and what it will do that cannot be undone — and ask whether they are sure. When they say yes it runs as them, and their permissions, the maker-checker rule, the branch scope and the open period decide. You will be told what happened.',
     '• Never say a thing is done when you have only proposed it, and never ask for confirmation of something you have not checked. If propose_action refuses, explain the refusal — that is the answer, and it is usually the useful one.',
-    '• What you can do today: approve or reject a document that is already waiting in that person\'s own approval inbox, and approve opening stock. Nothing can be approved for somebody else, and nothing by number alone — it has to be theirs to decide.',
+    '• What you can do today, all through propose_action: approve or reject a document waiting in that person\'s own approval inbox; approve opening stock; move a document one step by its number (document_step) — submit, approve, post, reverse or cancel, for purchase invoices, sales invoices, purchase orders, goods receipts, purchase returns, supplier payments, customer receipts, journal entries, internal transfers and opening stock; create a customer or a supplier; approve a prospect partner. Whether THIS person may take the step is the system\'s answer when it runs — permissions, maker-checker, the open period — and a refusal comes back in the system\'s own words for you to explain.',
+    '• What stays on the screens: anything with lines to type — a new invoice, an order, a journal, an item with its accounts. For those, do not pretend: walk them through the screen (guide + screens), field by field, and offer to take the next step for them once the document exists (submit it, post it).',
+    '• When somebody asks you to do something and gives no number, find it first (the list tools, the query) and confirm which one they mean before you propose.',
     '• A person can also do it themselves by typing: approve <document number>. That way answers with a six-digit code to confirm. Both roads end at the same place.',
     '• Figures are IQD unless said otherwise. Write large numbers with thousands separators. Name the warehouse, supplier or document you are talking about.',
-    input.locale === 'ar' ? '• Reply in Arabic.' : '• Reply in English unless the question was in Arabic.',
+    '',
+    'LANGUAGE — this is not optional:',
+    '• Answer in the language of the message you are answering. Arabic gets Arabic — the plain Iraqi Arabic they write in, not stiff formal Arabic. English gets English. Kurdish gets Kurdish. If they switch language, switch with them, even mid-conversation.',
+    '• Tool results and the guide come to you in English: translate what you say, keep document numbers, codes and addresses exactly as they are, and give screen, button and field names as their screen shows them.',
+    input.locale === 'ar' ? '• This message is in Arabic: reply in Arabic.' : '• This message is not in Arabic: reply in the language it is written in (English unless it is plainly another).',
   ].join('\n');
 }
 
@@ -383,8 +467,12 @@ export interface AgentResult {
   readonly used: readonly string[];
 }
 
-/** How many times round the loop before it must answer with what it has. */
-const MAX_ROUNDS = 8;
+/**
+ * How many times round the loop before it must answer with what it has. A
+ * how-to reads the guide and the menu and often looks up an example before it
+ * answers, so there is room for that.
+ */
+const MAX_ROUNDS = 12;
 
 export async function runAgent(input: {
   readonly client: AgentClient;
@@ -418,7 +506,8 @@ export async function runAgent(input: {
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
     const reply = await input.client.create({
       model: input.model,
-      max_tokens: 2048,
+      // Steps with every field explained, in Arabic, run long.
+      max_tokens: 4096,
       system,
       tools: AGENT_TOOLS as unknown as ReadonlyArray<{ name: string; description: string; input_schema: Record<string, unknown> }>,
       messages,

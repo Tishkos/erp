@@ -192,6 +192,13 @@ rm -rf "\$BUILD_DIR"
 pm2 restart "\$PM2_NAME" --update-env
 pm2 save
 
+# The WhatsApp bridge is its own process (systemd, not pm2) and runs the
+# scripts tree directly: without a restart it keeps answering with the last
+# release's tools and instructions. Skipped where the unit is not installed.
+if systemctl is-enabled --quiet whatsapp-bridge 2>/dev/null; then
+  systemctl restart whatsapp-bridge && echo "whatsapp-bridge restarted"
+fi
+
 # OP-7 — the crontab is the file in the repository.
 APP="\$APP" bash "\$APP/scripts/ops/install-cron.sh"
 printf '%s  %s  %s  deployed\n' "\$STAMP" "\$(cut -c1-12 REVISION)" "\$DEPLOYER" >> "\$APP/var/deploys.log"

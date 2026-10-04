@@ -300,30 +300,34 @@ describe('W2 · wa01-allowlist — silence for anyone not on the list', () => {
     expect(wa.mayAsk(sender)).toEqual({ ok: true });
   });
 
-  it('mayAsk names what is missing: unlisted, deactivated contact, deactivated user, no CEO role, queries off', async () => {
+  it('mayAsk names what is missing: unlisted, deactivated contact, deactivated user, queries off — and no longer asks for the CEO role', async () => {
     expect(wa.mayAsk(null)).toEqual({ ok: false, reason: 'unlisted number' });
     await withScope(scope(admin), (tx) =>
       wa.saveContact(tx, admin, { userId: manager.principal.userId, e164: '+9647701112233', allowNotifications: true, allowQueries: false, allowDigest: false }),
     );
     const managerContact = (await withScope(scope(admin), (tx) => wa.resolveNumber(tx, '+9647701112233')))!;
-    expect(wa.mayAsk(managerContact)).toEqual({ ok: false, reason: 'user does not hold the ceo role' });
-    expect(wa.mayAsk({ ...managerContact, isCeo: true })).toEqual({ ok: false, reason: 'queries not allowed for this contact' });
+    expect(wa.mayAsk(managerContact)).toEqual({ ok: false, reason: 'queries not allowed for this contact' });
+    // 2026-10-04, by direction — "make it available for all users": the role is not a condition.
+    expect(managerContact.isCeo).toBe(false);
+    expect(wa.mayAsk({ ...managerContact, allowQueries: true })).toEqual({ ok: true });
     expect(wa.mayAsk({ ...managerContact, active: false })).toEqual({ ok: false, reason: 'contact deactivated' });
     expect(wa.mayAsk({ ...managerContact, userActive: false })).toEqual({ ok: false, reason: 'user deactivated' });
   });
 
-  it('D-WA-3 — allow_queries cannot be given to a user who does not hold the CEO role', async () => {
-    expect(
-      await rejection(
-        withScope(scope(admin), (tx) =>
-          wa.saveContact(tx, admin, { userId: manager.principal.userId, e164: '+9647701112233', allowNotifications: true, allowQueries: true, allowDigest: false }),
-        ),
-      ),
-    ).toMatch(/only a user holding the ceo role/);
+  it('allow_queries may be given to any active user (D-WA-3 lifted, 2026-10-04)', async () => {
+    await withScope(scope(admin), (tx) =>
+      wa.saveContact(tx, admin, { userId: manager.principal.userId, e164: '+9647701112233', allowNotifications: true, allowQueries: true, allowDigest: false, allowActions: true }),
+    );
+    const sender = (await withScope(scope(admin), (tx) => wa.resolveNumber(tx, '+9647701112233')))!;
+    expect(sender).toMatchObject({ userId: manager.principal.userId, isCeo: false, allowQueries: true, allowActions: true });
+    expect(wa.mayAsk(sender)).toEqual({ ok: true });
+    expect(wa.mayAct(sender)).toEqual({ ok: true });
   });
 
-  it('answer() itself refuses a user without the CEO role, whatever the bridge was told', async () => {
-    expect(await rejection(wa.answer({ userId: manager.principal.userId, text: 'help' }))).toMatch(/does not hold the ceo role/);
+  it('answer() answers anybody who is active, as themselves — the manager is read as the manager', async () => {
+    const asManager = await wa.answer({ userId: manager.principal.userId, text: 'help' });
+    expect(asManager.intent).toEqual({ kind: 'help' });
+    expect(asManager.readAs.userId).toBe(manager.principal.userId);
     const reply = await wa.answer({ userId: ceo.principal.userId, text: 'help' });
     expect(reply.intent).toEqual({ kind: 'help' });
     expect(reply.text).toContain('read as The CEO');

@@ -2,9 +2,9 @@ import { expect, test, type Page } from '@playwright/test';
 
 /**
  * REQ-WA-001 §6 — the WhatsApp screen is in the administration tabs, its
- * windows draw, it reads at mobile RTL, a contact is added from it, and the
- * D-WA-3 rule (questions only for a CEO) is refused on the screen with the
- * existing Flash, not a page of its own.
+ * windows draw, it reads at mobile RTL, and a contact is added from it — with
+ * Questions, for somebody who is not the CEO (D-WA-3 was lifted on 2026-10-04:
+ * anybody may ask, and is answered as themselves).
  */
 const ADMIN = { email: 'admin@example.com', password: 'Ledger-Trial-Balance-7' };
 
@@ -39,27 +39,17 @@ test.describe('REQ-WA-001 · the WhatsApp screen', () => {
     await expect(page.getByRole('heading', { name: 'جهات الاتصال', level: 2 })).toBeVisible();
   });
 
-  test('a contact is added from the screen; questions for a non-CEO are refused with the Flash', async ({ page }) => {
+  test('a contact is added from the screen, with questions, for somebody who is not the CEO', async ({ page }) => {
     test.setTimeout(180_000);
     await signIn(page, ADMIN);
     await page.goto('/administration/whatsapp');
     const form = page.locator('form:has(input[name="e164"])');
-    // The officer does not hold the CEO role: Questions is refused.
     const officer = (await form.locator('select[name="user_id"] option', { hasText: 'officer@example.com' }).first().getAttribute('value'))!;
     await form.locator('select[name="user_id"]').selectOption(officer);
-    await form.locator('input[name="e164"]').fill(`07801${String(Date.now()).slice(-6)}`);
+    const number = `07803${String(Date.now()).slice(-6)}`;
+    await form.locator('input[name="e164"]').fill(number);
     await form.locator('input[name="allow_queries"]').check();
     await form.locator('button[type="submit"]').click();
-    await page.waitForURL(/error=/);
-    await expect(page.getByText(/only a user holding the ceo role/)).toBeVisible();
-
-    // Without Questions it is saved and listed.
-    await page.goto('/administration/whatsapp');
-    const again = page.locator('form:has(input[name="e164"])');
-    await again.locator('select[name="user_id"]').selectOption(officer);
-    const number = `07803${String(Date.now()).slice(-6)}`;
-    await again.locator('input[name="e164"]').fill(number);
-    await again.locator('button[type="submit"]').click();
     await page.waitForURL(/saved=1/);
     await expect(page.getByText(`+964${number.slice(1)}`)).toBeVisible();
   });

@@ -108,3 +108,27 @@ the e-mail rows are marked `suppressed` and the log says so once per run.
 | The CEO asks and hears nothing | the message log: `no reply` with the reason (unlisted / deactivated / not CEO / questions off) |
 | The CEO is answered "I can't answer that yet" | the phrase is outside the catalogue and no router model is configured; set `ANTHROPIC_API_KEY` on the bridge host, or ask with a catalogue phrase |
 | The number is banned | D-WA-5: re-pair a replacement SIM; if it recurs, the official Cloud API replaces the bridge layer only |
+
+## Noah for everybody (2026-10-04)
+
+* **Who may ask:** any active user with a contact row whose *Questions* switch
+  is on (Settings → Administration → WhatsApp). The CEO role is no longer
+  required. Each person is answered as themselves: a tool refuses what their
+  role cannot see and says which permission is missing.
+* **Who may act:** a contact whose *Actions* switch is on. Noah proposes, the
+  person answers with a plain yes, and the step runs through the document's own
+  service as that person — approve or reject from the inbox, a document's next
+  step by its number (submit, approve, post, reverse, cancel), a new customer
+  or supplier, approving a prospect.
+* **What he knows about the system:** the top bar as it is drawn (`screens`)
+  and the written guide in `docs/guide/` (`guide`). A deploy replaces the
+  guide; nothing needs restarting beyond the bridge itself.
+* **Issues:** whatever people report to him is appended to
+  `/opt/qs-erp-next/var/issues/reported-issues.md` — read it with
+  `ssh root@31.97.123.206 cat /opt/qs-erp-next/var/issues/reported-issues.md`,
+  or ask him "what issues were reported?". Change `Status: open` to
+  `Status: fixed` when one is dealt with.
+* **Without a phone:** `npx tsx scripts/ops/ask-noah.ts <email> "<question>"`
+  on the server answers exactly as the group would be answered, as that user.
+* After a deploy: `systemctl restart whatsapp-bridge`, so the bridge runs the
+  new instructions and tools.
