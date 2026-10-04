@@ -52,7 +52,6 @@ import { pool, withScope, type RequestScope } from '../../src/server/db/client';
 import {
   checkingLine,
   detectLocale,
-  greetingLine,
   digestDue,
   e164ToJid,
   helpText,
@@ -1020,51 +1019,6 @@ async function sendDigest(scope: RequestScope, send: wa.Transport, settings: Awa
   log(`digest for ${day}: ${recipients.length} recipient(s)`);
 }
 
-// ---------------------------------------------------------------------------
-// The greeting on connect
-// ---------------------------------------------------------------------------
-
-/**
- * A reconnect is not news. Baileys drops and resumes a socket routinely — a
- * 515 on first pair, a network blink, a server restart — and a greeting on
- * every one of those would be the bot talking over the people in the group.
- * One greeting, then quiet for this long however many times it reconnects.
- */
-const GREETING_QUIET_MS = 30 * 60_000;
-let lastGreetingAt = 0;
-
-/**
- * Says hello in the group when the bridge comes up, so the room can see it is
- * listening.
- *
- * One line, as a colleague arriving would, and a different one each time —
- * the words are in `domain/whatsapp`, with the reasoning for them.
- */
-async function greet(scope: RequestScope, send: wa.Transport, botE164: string | null): Promise<void> {
-  const settings = await withScope(scope, (tx) => wa.settings(tx));
-  if (!settings.groupJid) return;
-  // The log's `e164` is a phone number by CHECK constraint, and a greeting is
-  // the bot speaking: its own number is the honest answer. Without one (an
-  // odd pairing) the words still go out and only the log row is skipped.
-  if (Date.now() - lastGreetingAt < GREETING_QUIET_MS) return;
-  lastGreetingAt = Date.now();
-
-  const text = greetingLine(settings.digestLocale);
-
-  try {
-    const outId = botE164
-      ? await withScope(scope, (tx) =>
-          wa.recordOutbound(tx, { e164: botE164, groupJid: settings.groupJid, body: text, intent: 'greeting' }),
-        )
-      : null;
-    const { waMessageId } = await send({ e164: botE164 ?? '', groupJid: settings.groupJid }, { text });
-    if (outId !== null) await withScope(scope, (tx) => wa.markOutbound(tx, outId, { status: 'sent', waMessageId }));
-    log('greeting posted to the group');
-  } catch (error) {
-    log(`greeting failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
 /**
  * `--list-groups` — every group the bot has been added to, with its id.
  *
@@ -1227,7 +1181,9 @@ async function main(): Promise<void> {
         log(`connected as ${socket?.user?.id ?? '?'}`);
         linked = true;
         void heartbeat('connected');
-        if (!LIST_GROUPS) void greet(scope, send, jidToE164(jidNormalizedUser(socket?.user?.id ?? '')));
+        // Nothing is said on connect (2026-10-04, by direction: he speaks only
+        // when a message begins with the trigger). It used to post a greeting
+        // here; a bridge that restarts is not news to the people in the group.
         // `--list-groups` is a question, not a service: it answers and leaves.
         if (LIST_GROUPS && socket) {
           const live = socket;

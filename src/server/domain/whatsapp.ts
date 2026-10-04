@@ -394,40 +394,6 @@ export function checkingLine(locale: BotLocale): string {
   return line;
 }
 
-/*
- * What he says when he comes back on.
- *
- * The first version of this recited the phrases the bot understood, and the
- * sponsor's objection to it is the reason the agent exists at all: a list of
- * commands teaches people to type commands. It is one line now, in his own
- * voice, and a different line each time — a bridge that reconnects twice in
- * an evening should not post the same sentence twice.
- *
- * He names himself, because a room needs to know who has just arrived.
- */
-const GREETINGS = {
-  en: [
-    "Noah here — I'm back on. Ask me anything about the system.",
-    "Noah, back online. What do you need?",
-    "I'm here. Anything you want to know about the books or the stock, just ask.",
-    "Back up and listening — Noah.",
-  ],
-  ar: [
-    'نوح هنا، رجعت أشتغل. اسألوني عن أي شيء بالنظام.',
-    'نوح، رجعت. شتحتاجون؟',
-    'آني موجود. أي شيء عن الحسابات أو المخازن، اسألوني.',
-    'رجعت أشتغل وأسمعكم — نوح.',
-  ],
-} as const;
-
-let greetingAt = 0;
-export function greetingLine(locale: BotLocale): string {
-  const list = GREETINGS[locale];
-  const line = list[greetingAt % list.length]!;
-  greetingAt += 1;
-  return line;
-}
-
 /** W-R7 — every reply names when it was read, under which branch, as whom. */
 export function footer(locale: BotLocale, input: { readonly at: Date; readonly branchCode: string; readonly userName: string }): string {
   const at = input.at.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';

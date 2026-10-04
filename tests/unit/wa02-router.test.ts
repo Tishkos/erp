@@ -3,7 +3,7 @@
  * whitelist) — the pure parts of the bot, held from text alone.
  */
 import { describe, expect, it } from 'vitest';
-import { checkingLine, greetingLine } from '@/server/domain/whatsapp';
+import { checkingLine } from '@/server/domain/whatsapp';
 import {
   DELIVERY_MAX_ATTEMPTS,
   isDeliveryDue,
@@ -234,16 +234,5 @@ describe('WA-5 · the words he says as a person would', () => {
     expect(new Set(en).size).toBe(4);
     const ar = [checkingLine('ar'), checkingLine('ar'), checkingLine('ar')];
     expect(new Set(ar).size).toBe(3);
-  });
-
-  it('greets in Arabic in Arabic and in English in English', () => {
-    expect(greetingLine('ar')).toMatch(/[\u0600-\u06FF]/);
-    expect(greetingLine('en')).not.toMatch(/[\u0600-\u06FF]/);
-  });
-
-  it('introduces himself by name and not by a list of commands', () => {
-    const lines = [greetingLine('en'), greetingLine('en'), greetingLine('en'), greetingLine('en')];
-    expect(lines.some((line) => line.includes('Noah'))).toBe(true);
-    for (const line of lines) expect(line).not.toMatch(/approve <|type |command/i);
   });
 });

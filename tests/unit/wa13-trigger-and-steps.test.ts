@@ -9,6 +9,7 @@
  *
  * Pure: text in, a decision out.
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { AI_SILENCERS, AI_TRIGGER, DEFAULT_SETTINGS, triggerOf } from '@domain/whatsapp';
 import { systemPrompt } from '@domain/whatsapp-agent';
@@ -83,6 +84,20 @@ describe('the trigger', () => {
     expect(DEFAULT_SETTINGS.groupDigest).toBe(false);
     expect(DEFAULT_SETTINGS.groupOnly).toBe(true);
     expect(DEFAULT_SETTINGS.agentModel).toBe('claude-opus-5-5');
+  });
+
+  it('says nothing when the bridge connects, and reads no group message before the trigger', () => {
+    // It used to post "Noah here — I'm back on" on every start. A restart is
+    // not news to the people in the group, and nobody asked.
+    const bridge = readFileSync('scripts/ops/whatsapp-bridge.ts', 'utf8');
+    expect(bridge).not.toMatch(/greet\w*\(/);
+    expect(bridge).not.toMatch(/intent: 'greeting'/);
+    // The trigger is decided before the message is recorded.
+    const gate = bridge.indexOf('const trigger = triggerOf(typed);');
+    const recorded = bridge.indexOf('wa.recordInbound(tx');
+    expect(gate).toBeGreaterThan(0);
+    expect(recorded).toBeGreaterThan(gate);
+    expect(bridge.slice(gate, gate + 120)).toContain("if (trigger.kind !== 'ask') return;");
   });
 
   it('tells him how he is reached, and to ask for a yes that can reach him', () => {
