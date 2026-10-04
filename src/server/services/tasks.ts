@@ -364,12 +364,16 @@ export async function amend(tx: Tx, ctx: ActorContext, taskNo: string, input: Am
   if (input.description !== undefined) patch.description = assertDescription(input.description);
   if (input.priority !== undefined) patch.priority = assertPriority(input.priority);
   if (input.dueDate !== undefined) {
-    const due = assertDueDate(input.dueDate, businessToday());
     // A deadline already in the past may be left as it is; a new one is not set in the past.
-    if (due !== row.dueDate) patch.dueDate = due;
+    const wanted = (input.dueDate ?? '').trim() || null;
+    if (wanted !== row.dueDate) patch.dueDate = assertDueDate(wanted, businessToday());
   }
   if (input.tags !== undefined) patch.tags = normaliseTags(input.tags);
-  if (input.relatedType !== undefined || input.relatedNo !== undefined) Object.assign(patch, await relatedOf(tx, ctx, input.relatedType, input.relatedNo, row.id));
+  if (input.relatedType !== undefined || input.relatedNo !== undefined) {
+    // The record already named stays as it is (its raiser may since have lost the right to open it); only a change is looked up.
+    const same = (input.relatedType ?? '').trim() === (row.relatedType ?? '') && (input.relatedNo ?? '').trim() === (row.relatedLabel ?? '');
+    if (!same) Object.assign(patch, await relatedOf(tx, ctx, input.relatedType, input.relatedNo, row.id));
+  }
 
   const before: Record<string, unknown> = {};
   const after: Record<string, unknown> = {};

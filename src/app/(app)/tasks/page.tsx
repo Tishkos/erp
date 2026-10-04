@@ -12,7 +12,7 @@ import { Pagination } from '@/components/ui';
 import { formatBusinessDate, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
 import { visibleRoute } from '@/server/delivered';
-import { TASK_PRIORITIES, SCOPE_VIAS } from '@/server/domain/tasks';
+import { SCOPE_VIAS, TASK_PRIORITIES, TASK_STATUS_TONE } from '@/server/domain/tasks';
 import { registerAllRecords } from '@/server/records';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as tasks from '@/server/services/tasks';
@@ -28,19 +28,6 @@ import { createTask } from './actions';
  * underneath, as the supplier statement stacks its own.
  */
 export const dynamic = 'force-dynamic';
-
-/** A task's status chip borrows the tone of the document status it resembles; the words are the task's own. */
-export const STATUS_TONE: Readonly<Record<string, string>> = {
-  draft: 'draft',
-  assigned: 'submitted',
-  accepted: 'approved',
-  in_progress: 'executed',
-  blocked: 'rejected',
-  submitted: 'partially_executed',
-  completed: 'posted',
-  rejected: 'reversed',
-  cancelled: 'cancelled',
-};
 
 export default async function TasksPage({ searchParams }: { searchParams: SearchParams }) {
   if (!visibleRoute('/tasks')) notFound();
@@ -203,7 +190,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Search
                   </tr>
                 ) : null}
                 {result.rows.map((row) => {
-                  const tone = STATUS_TONE[row.status] ?? 'draft';
+                  const tone = TASK_STATUS_TONE[row.status] ?? 'draft';
                   const who = view === 'mine' ? { name: row.assignedByName } : { name: row.assigneeName };
                   return (
                     <tr key={row.id}>

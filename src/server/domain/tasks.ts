@@ -129,6 +129,23 @@ export function allowedPairs(): readonly (readonly [TaskStatus, TaskStatus])[] {
 
 export const isFinal = (status: TaskStatus): boolean => status === 'completed' || status === 'cancelled';
 
+/**
+ * The tone a task's status chip wears. The words are the task's own
+ * (`admin.tasks.status_<code>`); the colour borrows the document status it
+ * most resembles, so no new chip class is drawn.
+ */
+export const TASK_STATUS_TONE: Readonly<Record<string, string>> = {
+  draft: 'draft',
+  assigned: 'submitted',
+  accepted: 'approved',
+  in_progress: 'executed',
+  blocked: 'rejected',
+  submitted: 'partially_executed',
+  completed: 'posted',
+  rejected: 'reversed',
+  cancelled: 'cancelled',
+};
+
 /** Where this action leads, or a refusal in the sentence the screen shows. */
 export function assertTransition(taskNo: string, from: string, action: TaskAction): TaskStatus {
   const rule = TRANSITIONS[action];
