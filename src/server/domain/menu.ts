@@ -85,6 +85,10 @@ export const MENU: readonly MenuSection[] = Object.freeze([
       // The Exception Center (platform phase, Agent 7): what in the books and the work needs a person,
       // found by the system and kept until its cause is gone. One object `exception`, every role may view.
       page('exceptions', 'exception', '/exceptions'),
+      // The ERP Control Center (platform phase, Agent 9): real checks of whether Qimah is internally consistent, with the
+      // figures behind each and the way to the record. Read only. One object `control_center`, granted to the CEO, the
+      // accounting manager and the system administrator (migration 0390).
+      page('control_center', 'control_center', '/control-center'),
       // Internal chat (platform phase, Agent 1): conversations between people
       // inside the ERP, one object `chat` every role may view.
       page('chat', 'chat', '/chat'),

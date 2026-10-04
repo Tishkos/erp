@@ -431,8 +431,10 @@ const whatsappReader: Reader = async ({ tx, now }) => {
   const items: Item[] = [];
   if (!status.paired) items.push(item('whatsapp_not_paired', { state: status.state ?? '' }, null, '/administration/whatsapp'));
   if (status.paired && status.state !== 'connected') items.push(item('whatsapp_state', { state: status.state ?? '' }, status.me, '/administration/whatsapp'));
-  if (status.lastSeenAt === null || now.getTime() - status.lastSeenAt.getTime() > BRIDGE_SILENCE_MS) {
-    items.push(item('whatsapp_silent', { lastSeenDate: status.lastSeenAt ? businessDateOf(status.lastSeenAt) : '' }, status.me, '/administration/whatsapp'));
+  if (status.lastSeenAt === null) {
+    items.push(item('whatsapp_never_seen', {}, status.me, '/administration/whatsapp'));
+  } else if (now.getTime() - status.lastSeenAt.getTime() > BRIDGE_SILENCE_MS) {
+    items.push(item('whatsapp_silent', { lastSeenDate: businessDateOf(status.lastSeenAt) }, status.me, '/administration/whatsapp'));
   }
   return readingOf({
     figures: [text('bridge_state', status.state ?? '—'), count('pending_deliveries', status.pendingDeliveries)],

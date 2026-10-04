@@ -19,6 +19,7 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { NewRecordDialog } from '@/components/admin/dialog';
 import { Attachments } from '@/components/admin/attachments';
 import { RecordHistory } from '@/components/admin/history';
+import { RelatedRecords } from '@/components/admin/related-records';
 import { AttachmentsButton, HistoryButton, NotesButton } from '@/components/admin/icon-dialog';
 import { ExportIcon, ExportMenu } from '@/components/print/export-menu';
 import * as papers from '@/server/services/payable-papers';
@@ -35,6 +36,7 @@ import { requireContext, withCurrentUser } from '@/server/session';
 import { loadPayableRecord } from './load';
 import * as events from '@/server/services/payable-events';
 import * as payables from '@/server/services/payables';
+import * as relationships from '@/server/services/relationships';
 import * as paymentApplications from '@/server/services/payment-applications';
 import * as customs from '@/server/services/customs-pd';
 import * as banksService from '@/server/services/banks';
@@ -192,6 +194,12 @@ export default async function PayablePage({
   // Every attachment the import has, wherever it was put: on the invoice,
   // the declaration, a payment application, a bill of lading or a container.
   const allPapers = await withCurrentUser((tx) => papers.papersFor(tx, row.id));
+
+  // Platform phase, Agent 9 — the chain of real records around this import, as this reader may see it.
+  const related =
+    row.payableTypeCode === 'import'
+      ? await withCurrentUser((tx) => relationships.graphFor(tx, { principal, branchCode: context.scope.branchCode }, 'import', row.payableNo))
+      : null;
 
   const activeRail = rail.filter((stage) => stage.active);
   const currentSeq = activeRail.find((stage) => stage.code === row.stageCode)?.sequence ?? 0;
@@ -1785,6 +1793,9 @@ export default async function PayablePage({
           </div>
         </section>
       ) : null}
+
+      {/* ── Related records: the chain around the import, only the steps and records this reader may open. ── */}
+      {related ? <RelatedRecords graph={related} variant="window" /> : null}
 
       {/* ── The status log (§7.2 — records everything) ───────────────── */}
       <section aria-labelledby="payable-log-title" className={s.sapDoc}>
