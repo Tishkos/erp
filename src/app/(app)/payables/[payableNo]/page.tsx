@@ -360,6 +360,13 @@ export default async function PayablePage({
       <DocumentWindow
         titleActions={
           <>
+            {/* Printer, paperclip, notes, clock — the standing order (2026-10-03):
+                the import application's own copy first. */}
+            <ExportIcon
+              exportKey="import_application"
+              id={row.payableNo}
+              title={`${type.name} ${row.payableNo}`}
+            />
             <AttachmentsButton
               closeLabel={admin('close')}
               count={found.attachments.rows.length}
@@ -375,13 +382,6 @@ export default async function PayablePage({
                 objectType={payables.PERMISSION_OBJECT}
               />
             </AttachmentsButton>
-            {/* The printer, first — the import application's own copy
-                (2026-10-03). */}
-            <ExportIcon
-              exportKey="import_application"
-              id={row.payableNo}
-              title={`${type.name} ${row.payableNo}`}
-            />
             {/*
               The notes somebody wrote on this import, behind the same door the
               purchase invoice uses (2026-10-03). They are `NOTE_ADDED` events
@@ -502,8 +502,9 @@ export default async function PayablePage({
             {lines.map((line) => (
               <tr key={line.id}>
                 <td>{line.lineNo}</td>
+                {/* The item opens its own profile (the shared `ProfileLink`, 2026-10-04). */}
                 <td>
-                  <bdi dir="ltr">{line.itemCode ?? '—'}</bdi>
+                  <ProfileLink code={line.itemCode} kind="item" />
                 </td>
                 <td>{line.description}</td>
                 <td className={s.sapNum}>
@@ -1671,7 +1672,7 @@ export default async function PayablePage({
                     {shipment.quantities.map((line) => (
                       <tr key={line.itemCode}>
                         <td>
-                          <bdi dir="ltr">{line.itemCode}</bdi> {line.itemName ?? ''}
+                          <ProfileLink code={line.itemCode} kind="item" /> {line.itemName ?? ''}
                         </td>
                         {[line.ordered, line.planned, line.received, line.damaged, line.short, line.claimed, line.inTransit, line.notYetShipped].map((value, index) => (
                           <td className={s.sapNum} key={index}>
@@ -1856,16 +1857,8 @@ export default async function PayablePage({
               </tbody>
             </table>
           </div>
-
-          <div className={s.sapBody}>
-            <Form action={addNote}>
-              <Hidden name="payable_no" value={row.payableNo} />
-              <Field id="add-note" label={t('add_note')} name="note" required wide />
-              <SubmitRow>
-                <Submit label={t('note_save')} small tone="secondary" />
-              </SubmitRow>
-            </Form>
-          </div>
+          {/* The box to add a note is behind the notes door in the title bar
+              (AGENTS.md › the four doors): the status log is a reading. */}
         </div>
       </section>
 

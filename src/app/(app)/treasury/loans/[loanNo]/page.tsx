@@ -19,9 +19,11 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { Attachments } from '@/components/admin/attachments';
 import { RecordHistory } from '@/components/admin/history';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
-import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { LoanSettlementTotal } from '@/components/admin/loan-settlement-total';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import * as attachmentsService from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -184,17 +186,23 @@ export default async function LoanPage({
     { label: t('col_no'), value: <bdi dir="ltr">{loan.loanNo}</bdi> },
     { label: t('col_status'), value: t(`status_${loan.status}`), status: windowTone(chip) },
     {
+      // The bank and the account open their own profiles — "we can directly
+      // click the bank" (by direction, 2026-10-04) — through the shared `ProfileLink`.
       label: t('bank'),
-      value: <bdi dir="auto">{found.bank ? `${found.bank.name}${found.bank.swiftBic ? ` · ${found.bank.swiftBic}` : ''}` : loan.bankCode}</bdi>,
+      value: (
+        <ProfileLink code={loan.bankCode} dir="auto" kind="bank">
+          {found.bank ? `${found.bank.name}${found.bank.swiftBic ? ` · ${found.bank.swiftBic}` : ''}` : loan.bankCode}
+        </ProfileLink>
+      ),
     },
     {
       label: t('account'),
       value: (
-        <Link className={s.sapLink} href={`/master-data/bank-accounts/${encodeURIComponent(found.account.code)}`}>
-          <bdi dir="ltr">
-            {found.account.code} · {found.account.name}
-          </bdi>
-        </Link>
+        <ProfileLink
+          code={found.account.code}
+          kind={found.account.accountType === 'cash' ? 'cash_account' : 'bank_account'}
+          name={found.account.name}
+        />
       ),
     },
     { label: t('principal'), value: <bdi dir="ltr">{money(loan.principalTxn)}</bdi> },
@@ -255,10 +263,11 @@ export default async function LoanPage({
    */
   const scheduleRows = schedule;
 
-  // What the paperclip says it holds.
-  const attachedCount = await withCurrentUser((tx) =>
-    attachmentsService.currentFor(tx, loans.PERMISSION_OBJECT, loan.id),
-  ).then((rows) => rows.length);
+  // What the paperclip says it holds, and the notes behind the third door.
+  const [attachedCount, notes] = await withCurrentUser(async (tx) => [
+    (await attachmentsService.currentFor(tx, loans.PERMISSION_OBJECT, loan.id)).length,
+    await recordNotes.listNotes(tx, { object: loans.PERMISSION_OBJECT, recordId: loan.id }),
+  ] as const);
 
   return (
     <AdminPage
@@ -532,9 +541,9 @@ export default async function LoanPage({
         titleActions={
           <>
             {/* The paperclip, the notes and the clock, as every record wears
-                them (2026-10-03, notes 2026-10-04). The loan has no print model
-                yet, so it has no printer: a door onto nothing is worse than no
-                door. */}
+                them (2026-10-03; notes 2026-10-04). The loan has no print
+                model yet, so it has no printer: a door onto nothing is worse
+                than no door. */}
             <AttachmentsButton
               closeLabel={admin('close')}
               count={attachedCount}
@@ -549,7 +558,7 @@ export default async function LoanPage({
                 objectType={loans.PERMISSION_OBJECT}
               />
             </AttachmentsButton>
-            <RecordNotesDoor object={loans.PERMISSION_OBJECT} recordId={loan.id} />
+            <RecordNotesDoor notes={notes} object={loans.PERMISSION_OBJECT} recordId={loan.id} />
             <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
               <RecordHistory objectId={loan.id} objectType={loans.PERMISSION_OBJECT} />
             </HistoryButton>

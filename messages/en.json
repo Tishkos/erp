@@ -5462,7 +5462,11 @@
       "document_type_bank": "Bank deposit — other source",
       "document_type_transfer": "Bank deposit — cash",
       "into_cash": "Into cash account",
-      "reference_cash": "Reference"
+      "reference_cash": "Reference",
+      "source_bank": "Bank",
+      "source_transfer": "Cash to bank",
+      "document_type_bank": "Bank deposit",
+      "document_type_transfer": "Bank deposit — cash to bank"
     },
     "availability": {
       "subtitle": "What each warehouse holds, item by item: on hand, available to issue, and what is reserved, in transit, in quarantine, damaged or returned — every figure summed from the stock ledger.",

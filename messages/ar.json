@@ -5462,7 +5462,11 @@
       "document_type_bank": "إيداع مصرفي — مصدر آخر",
       "document_type_transfer": "إيداع مصرفي — نقدي",
       "into_cash": "إلى حساب نقدي",
-      "reference_cash": "المرجع"
+      "reference_cash": "المرجع",
+      "source_bank": "مصرفي",
+      "source_transfer": "نقد إلى المصرف",
+      "document_type_bank": "إيداع مصرفي",
+      "document_type_transfer": "إيداع مصرفي — من النقد"
     },
     "availability": {
       "subtitle": "ما يحتويه كل مستودع، مادةً مادة: الموجود، والمتاح للصرف، والمحجوز، وما في الطريق، وفي الحجر، والتالف، والمرتجع — كل رقم مجموع من دفتر المخزون.",

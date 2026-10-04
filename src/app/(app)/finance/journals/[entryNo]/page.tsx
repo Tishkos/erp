@@ -358,7 +358,8 @@ export default async function JournalPage({
                           <ProfileLink code={line.accountCode} kind="gl_account" name={line.accountName} />
                         </td>
                         <td>
-                          <bdi dir="ltr">{line.departmentCode ?? ''}</bdi>
+                          {/* The department opens its own profile (the shared `ProfileLink`, 2026-10-04). */}
+                          {line.departmentCode ? <ProfileLink code={line.departmentCode} kind="department" /> : null}
                         </td>
                         {/* The ledger figure, in IQD. A line entered in another
                             currency says what was typed, beneath it. */}

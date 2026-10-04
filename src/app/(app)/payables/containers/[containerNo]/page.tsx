@@ -266,7 +266,7 @@ export default async function ContainerPage({
                           <tr key={line.id}>
                             <td>
                               <Hidden name={`line_${index}`} value={line.id} />
-                              <bdi dir="ltr">{line.itemCode ?? '—'}</bdi> {line.description}
+                              <ProfileLink code={line.itemCode} kind="item" /> {line.description}
                             </td>
                             <td className={s.sapNum}>
                               <bdi dir="ltr">{amount(line.plannedQty)}</bdi>
@@ -512,8 +512,9 @@ export default async function ContainerPage({
             {lines.map((line) => (
               <tr key={line.id}>
                 <td>{line.lineNo}</td>
+                {/* The item opens its own profile (the shared `ProfileLink`, 2026-10-04). */}
                 <td>
-                  <bdi dir="ltr">{line.itemCode ?? '—'}</bdi>
+                  <ProfileLink code={line.itemCode} kind="item" />
                 </td>
                 <td>
                   <bdi dir="auto">{line.description}</bdi>

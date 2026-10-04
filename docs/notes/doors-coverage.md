@@ -7,7 +7,9 @@ parts have profiles."* AGENTS.md › *Every record wears the same four doors* an
 where every record page stands. The rows marked **owner module** were surveyed
 on `main` 81a5ede and are each module agent's to finish on its own branch; the
 orchestrator re-checks them at merge. Every other row is `feat/shared-module`'s
-and reads as it is on that branch.
+and reads as it is on that branch. **The merged branch was reviewed page by
+page on 2026-10-04: `docs/notes/doors-review-2026-10-04.md` is the table as the
+code is, and says where this one was behind or wrong.**
 
 Columns: **P** printer (`ExportIcon` in the title bar), **A** paperclip
 (`AttachmentsButton` / `RecordAttachmentsDoor`), **N** notes (`RecordNotesDoor`),
