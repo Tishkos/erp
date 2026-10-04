@@ -471,6 +471,7 @@ export async function receive(
           branchCode: input.branchCode,
           movementDate: input.movementDate,
           costIqd: fifoCostOf(input.quantity, input.unitCostIqd),
+          inbound: true,
           sourceDocumentType: input.sourceDocumentType ?? null,
           sourceDocumentId: input.sourceDocumentId ?? null,
           dimensions: input.dimensions,
@@ -916,7 +917,11 @@ const POSTING_EFFECTS: Readonly<
   // "Inventory loss | Inventory Loss Expense | Inventory / Inventory in Transit"
   write_off: { debit: 'inventory_loss', credit: 'inventory' },
   damage: { debit: 'inventory_loss', credit: 'inventory' },
-  count_adjustment: { debit: 'inventory_loss', credit: 'inventory' },
+  // IMPROVEMENT-002 (sponsor, 2026-10-04) — a Stock Count's difference is an
+  // inventory adjustment, as Item Reconciliation's is; inventory loss is for
+  // write-off and damage only. A shortfall: Dr adjustment / Cr inventory. A
+  // surplus is the other way round (`INBOUND_EFFECTS`).
+  count_adjustment: { debit: 'inventory_adjustment', credit: 'inventory' },
   opening_stock: { debit: 'inventory', credit: 'opening_balance' },
   sales_return: { debit: 'inventory', credit: 'cogs' },
   // Appendix C: "Goods Return | Dr Return Clearing / Supplier position |
@@ -927,6 +932,27 @@ const POSTING_EFFECTS: Readonly<
   // and the supplier agreeing to credit it, and the Supplier Credit Memo empties
   // it (Dr Supplier A/P / Cr Return Clearing).
   goods_return: { debit: 'return_clearing', credit: 'inventory' },
+});
+
+/**
+ * The effect of a movement of these kinds when it brings stock *in*. A count
+ * that finds more than the system held puts stock on the books: Dr inventory /
+ * Cr inventory adjustment — not the shortfall's lines with a positive amount.
+ */
+const INBOUND_EFFECTS: Readonly<
+  Record<string, { readonly debit: string; readonly credit: string } | undefined>
+> = Object.freeze({
+  count_adjustment: { debit: 'inventory', credit: 'inventory_adjustment' },
+});
+
+/**
+ * The event a kind posts under. A Stock Count's adjustment posts through the
+ * mapping Item Reconciliation already asks Finance for
+ * (`inventory.stock_adjustment` › `inventory_adjustment`), so one account
+ * answers for both and the Posting Mappings screen lists it once.
+ */
+const EVENT_OF: Readonly<Record<string, string | undefined>> = Object.freeze({
+  count_adjustment: 'inventory.stock_adjustment',
 });
 
 /** Whether a movement of this kind posts at all. */
@@ -951,6 +977,8 @@ export function postingRequestFor(input: {
   branchCode: string;
   movementDate: string;
   costIqd: bigint;
+  /** True for a movement that brings stock in (a receipt); its kind may post the other way round. */
+  inbound?: boolean;
   sourceDocumentType?: string | null;
   sourceDocumentId?: string | null;
   /**
@@ -960,7 +988,7 @@ export function postingRequestFor(input: {
    */
   dimensions?: Readonly<Record<string, string | null | undefined>> | undefined;
 }): PostingRequest | null {
-  const effect = POSTING_EFFECTS[input.kind];
+  const effect = (input.inbound ? INBOUND_EFFECTS[input.kind] : undefined) ?? POSTING_EFFECTS[input.kind];
   if (!effect || input.costIqd === 0n) return null;
 
   const amount = toDecimalString(input.costIqd < 0n ? -input.costIqd : input.costIqd, 4n);
@@ -972,7 +1000,7 @@ export function postingRequestFor(input: {
   const criteria = { warehouseCode: input.warehouseCode, branchCode: input.branchCode };
 
   return {
-    eventType: `inventory.${input.kind}`,
+    eventType: EVENT_OF[input.kind] ?? `inventory.${input.kind}`,
     // The document that moved the stock decides which dimensions it must
     // carry (§4.2's document-type layer) — a sales return's credit to COGS is
     // judged as a sales return, not as a bare movement.

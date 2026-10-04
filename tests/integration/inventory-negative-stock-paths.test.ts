@@ -277,6 +277,7 @@ describe('04.4 gate · no configuration permits negative stock', () => {
 
 describe('04.8 gate · the adjustment posts and reconciles to the G/L', () => {
   let inventoryAccountId: string;
+  let adjustmentAccountId: string;
 
   beforeEach(async () => {
     await ownerPool.query(
@@ -303,7 +304,9 @@ describe('04.8 gate · the adjustment posts and reconciles to the G/L', () => {
 
     for (const [role, parent, code, name] of [
       ['inventory', 'A000001', 'A900001', 'Inventory'],
-      ['inventory_loss', 'X000001', 'X900001', 'Inventory Loss'],
+      // IMPROVEMENT-002 — a count's difference is an inventory adjustment,
+      // through the mapping Item Reconciliation uses; loss is for write-offs.
+      ['inventory_adjustment', 'X000001', 'X900001', 'Inventory Adjustments'],
     ] as const) {
       const { rows: parents } = await ownerPool.query(
         `select id, account_type from chart_of_account where code = $1`,
@@ -318,14 +321,47 @@ describe('04.8 gate · the adjustment posts and reconciles to the G/L', () => {
       );
       await ownerPool.query(
         `insert into posting_rule (event_type, line_role, account_id, is_active, created_by)
-         values ('inventory.count_adjustment', $1, $2, true, $3)`,
+         values ('inventory.stock_adjustment', $1, $2, true, $3)`,
         [role, rows[0].id, manager.principal.userId],
       );
       if (role === 'inventory') inventoryAccountId = rows[0].id;
+      else adjustmentAccountId = rows[0].id;
     }
   });
 
-  it('posts a shortfall as an inventory loss at FIFO cost', async () => {
+  /** The posted balance (debit − credit) of one account. */
+  const balanceOf = async (accountId: string) => {
+    const { rows } = await ownerPool.query(
+      `select coalesce(sum(l.debit_iqd) - sum(l.credit_iqd), 0)::text as balance
+         from journal_line l
+         join journal_entry e on e.id = l.journal_entry_id
+        where l.account_id = $1 and e.status = 'posted'`,
+      [accountId],
+    );
+    return rows[0].balance as string;
+  };
+
+  it('posts a surplus the right way round: Dr inventory / Cr inventory adjustment', async () => {
+    await stock('100', '10');
+    const { id } = await withScope(scope(), (tx) =>
+      counts.plan(tx, manager, { branchCode: BAGHDAD, warehouseCode: STORES, plannedOn: '2026-03-01', scope: 'item', scopeFilter: ITEM }),
+    );
+    await withScope(scope(), (tx) => counts.recordCount(tx, manager, id, { countedOn: '2026-03-02', quantities: { 1: qty('105') } }));
+    await withScope(scope(), (tx) => counts.approveVariance(tx, manager, id, 'Five found behind the racking.'));
+    await withScope(scope(), (tx) =>
+      counts.adjust(tx, manager, id, {
+        adjustedOn: '2026-03-05',
+        surplusUnitCostIqd: 100_000n,
+        post: true,
+        dimensions: { department: 'FIN', business_line: 'PRODUCT_SALES' },
+      }),
+    );
+    // 5 found at 10 = 50 onto the books, against the adjustment account.
+    expect(await balanceOf(inventoryAccountId)).toBe('50.0000');
+    expect(await balanceOf(adjustmentAccountId)).toBe('-50.0000');
+  });
+
+  it('posts a shortfall as an inventory adjustment at FIFO cost', async () => {
     await stock('100', '10');
 
     const { id } = await withScope(scope(), (tx) =>
@@ -354,15 +390,9 @@ describe('04.8 gate · the adjustment posts and reconciles to the G/L', () => {
       }),
     );
 
-    // 8 units at 10 = 80, credited out of inventory.
-    const { rows } = await ownerPool.query(
-      `select coalesce(sum(l.debit_iqd) - sum(l.credit_iqd), 0)::text as balance
-         from journal_line l
-         join journal_entry e on e.id = l.journal_entry_id
-        where l.account_id = $1 and e.status = 'posted'`,
-      [inventoryAccountId],
-    );
-    expect(Number(rows[0].balance)).toBe(-80);
+    // 8 units at 10 = 80, credited out of inventory, debited to the adjustment.
+    expect(await balanceOf(inventoryAccountId)).toBe('-80.0000');
+    expect(await balanceOf(adjustmentAccountId)).toBe('80.0000');
   });
 
   it('leaves the layers and the ledger agreeing afterwards', async () => {
