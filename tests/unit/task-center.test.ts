@@ -396,9 +396,9 @@ describe('TC7 · the catalogue and the migrations', () => {
 
   it('appends its migrations after the journal, in order, with times past the platform block before it', () => {
     const journal = JSON.parse(read('src/server/db/migrations/meta/_journal.json')) as { entries: { idx: number; when: number; tag: string }[] };
-    const mine = journal.entries.filter((e) => /^034[0-3]_/.test(e.tag));
-    expect(mine.map((e) => e.tag)).toEqual(['0340_task_core', '0341_task_scope', '0342_task_grants', '0343_task_team']);
-    expect(mine.map((e) => e.when)).toEqual([1795900000150, 1795900000151, 1795900000152, 1795900000153]);
+    const mine = journal.entries.filter((e) => /^034[0-4]_/.test(e.tag));
+    expect(mine.map((e) => e.tag)).toEqual(['0340_task_core', '0341_task_scope', '0342_task_grants', '0343_task_team', '0344_task_system_session']);
+    expect(mine.map((e) => e.when)).toEqual([1795900000150, 1795900000151, 1795900000152, 1795900000153, 1795900000154]);
     // The history has lineage repairs out of order; what is held is that ours come after everything else, strictly.
     const others = journal.entries.filter((e) => !mine.includes(e)).map((e) => e.when);
     expect(Math.min(...mine.map((e) => e.when))).toBeGreaterThan(Math.max(...others));

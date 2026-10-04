@@ -71,6 +71,12 @@ type TaskRow = typeof task.$inferSelect;
 type Reader = { principal: Principal };
 
 const OWED_SQL = sql`('assigned', 'accepted', 'in_progress', 'blocked')`;
+/**
+ * A uuid[] parameter. An array handed to a `sql` template is spread as a list,
+ * and an empty one becomes `()`; the text form `{a,b}` is one parameter, empty or not.
+ * Every element has been through `uuidOf` or came from a uuid column.
+ */
+const uuidArray = (ids: readonly string[]) => sql`${`{${ids.join(',')}}`}::uuid[]`;
 const uuidOf = (value: string | null | undefined): string | null => {
   const id = (value ?? '').trim();
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? id : null;
@@ -217,9 +223,9 @@ async function whoMaySee(tx: Tx, ids: readonly string[], row: TaskRow): Promise<
   if (ids.length === 0) return [];
   const result = await tx.execute(sql`
     select c.id::text as id
-      from unnest(${ids as string[]}::uuid[]) as c(id)
+      from unnest(${uuidArray(ids)}) as c(id)
      where app_task_visible_to(c.id, ${row.status}, ${row.createdBy}::uuid, ${row.assignedBy}::uuid, ${row.assigneeId}::uuid,
-                               ${row.watcherIds as string[]}::uuid[], ${row.departmentCode}, ${row.branchCode})`);
+                               ${uuidArray(row.watcherIds)}, ${row.departmentCode}, ${row.branchCode})`);
   return (result.rows as { id: string }[]).map((r) => r.id);
 }
 
@@ -680,7 +686,7 @@ async function peopleByIds(tx: Tx, ids: readonly string[]): Promise<Map<string, 
   if (unique.length === 0) return new Map();
   const result = await tx.execute(sql`
     select u.id, u.display_name as name, (select m.employee_no from employee m where m.app_user_id = u.id limit 1) as "employeeNo"
-      from app_user u where u.id = any(${unique}::uuid[])`);
+      from app_user u where u.id = any(${uuidArray(unique)})`);
   return new Map((result.rows as unknown as Person[]).map((p) => [p.id, p]));
 }
 
