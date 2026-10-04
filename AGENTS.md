@@ -57,6 +57,7 @@ Integration suites: `npx vitest run --project integration tests/integration/ops1
 * Known open item: `CASH-ACCOUNTANT_ERBIL` points at a deleted `chart_of_account`; until it is re-linked on the Bank/Cash Accounts screen the restore drill fails on that foreign key.
 * `deploy.sh` runs the integration suite; `SKIP_INTEGRATION=<reason>` skips it and records the reason in `var/deploy-skips.log`.
 * Server notes and credentials live in `~/.config/qs-erp/vps.md`, outside the tree.
+* **A database built from nothing** (the live one was, on 2026-10-04, by direction) needs more than its migrations. In this order, from `/opt/qs-erp-next` with `.env` loaded: `npm run db:migrate`; `bash scripts/ops/new-company-setup.sh` (Finance department, the fiscal year and its twelve periods, the USD rate); the first users (`create-first-user.ts`, or the Users screen); `npx tsx scripts/ops/ensure-chart-of-accounts.ts --branch HQ` (the chart, its statement lines and every posting rule); `npx tsx scripts/ops/ensure-stage-warehouses.ts --branch HQ` (In Process / On Board / On Port — without them a posted import invoice opens no tracking and Invoice Status Tracking stays empty); `npx tsx scripts/ops/ensure-user-employees.ts --apply`. Bank and cash accounts are the company's own, made on the Bank/Cash Accounts screen against the chart's cash and bank G/L accounts.
 
 ## Correcting a posted invoice
 
