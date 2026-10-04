@@ -144,3 +144,47 @@ describe('§25 · no user-facing sentence is written into a component', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('§25 · a key is written once in each locale', () => {
+  /**
+   * JSON keeps the last of two equal keys and says nothing about the first, so
+   * a merge that lands the same key from two branches silently shows one
+   * side's words and not the other's. The 2026-10-04 six-module merge left
+   * `deposits.document_type_bank` twice in both locales; the record page said
+   * "Bank deposit" where the spec, and the first key, said "Bank deposit —
+   * other source". The parser is asked to count instead of to choose.
+   */
+  function duplicates(path: string): string[] {
+    const found: string[] = [];
+    const trail: string[] = [];
+    const seen: Set<string>[] = [];
+    const text = readFileSync(path, 'utf8');
+    // A key is a string followed by a colon at the start of a member; the
+    // nesting is tracked by braces outside strings.
+    const token = /"((?:[^"\\]|\\.)*)"\s*:|[{}]|"(?:[^"\\]|\\.)*"/g;
+    let match: RegExpExecArray | null;
+    let pendingKey: string | null = null;
+    while ((match = token.exec(text))) {
+      const [raw, key] = match;
+      if (raw === '{') {
+        trail.push(pendingKey ?? '');
+        seen.push(new Set());
+        pendingKey = null;
+      } else if (raw === '}') {
+        trail.pop();
+        seen.pop();
+      } else if (key !== undefined) {
+        const scope = seen[seen.length - 1]!;
+        if (scope.has(key)) found.push(`${trail.slice(1).concat(key).join('.')}`);
+        scope.add(key);
+        pendingKey = key;
+      }
+    }
+    return found;
+  }
+
+  it('finds no key written twice in en.json or ar.json', () => {
+    expect(duplicates(join(process.cwd(), 'messages', 'en.json'))).toEqual([]);
+    expect(duplicates(join(process.cwd(), 'messages', 'ar.json'))).toEqual([]);
+  });
+});

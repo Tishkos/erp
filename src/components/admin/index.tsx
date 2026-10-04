@@ -423,15 +423,31 @@ export function LinkButton({
   label,
   tone = 'secondary',
   small,
+  download,
 }: {
   readonly href: string;
   readonly label: string;
   readonly tone?: 'primary' | 'secondary';
   readonly small?: boolean;
+  /**
+   * A file to download, not a screen to open: a plain anchor, as the export
+   * menu's. A `Link` to a route handler is prefetched the moment it is in
+   * view, which ran the export — reading, rendering and writing its
+   * `exported` audit row — on every visit to the Chart of Accounts, with
+   * nobody having pressed anything.
+   */
+  readonly download?: boolean;
 }) {
   const cls = [styles.button, tone === 'primary' ? styles.primary : '', small ? styles.small : '']
     .filter(Boolean)
     .join(' ');
+  if (download) {
+    return (
+      <a className={cls} download href={href}>
+        {label}
+      </a>
+    );
+  }
   return (
     <Link className={cls} href={href}>
       {label}
