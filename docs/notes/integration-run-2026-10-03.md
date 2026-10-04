@@ -206,3 +206,30 @@ Every finding above is closed on `main`. The suite was run whole, serially, on a
 **Also found and fixed:** a fresh database could not migrate in one run. Migration 0260 uses the enum value `whatsapp`, which 0242 adds. `migrate.ts` now commits after each migration that adds an enum value.
 
 **Still open on the live database:** `BANK-000001` at −10,000 IQD, posted before the control existed. It needs a deposit, or the reversal of the payment that caused it, entered on the server.
+
+---
+
+## The six-module merge — 4 October 2026
+
+**Branch** `feat/erp-integration` (shared, accounting, payables, receivables, logistics and inventory merged over `main`).
+**Database** `erp_test_integration`, migrated from scratch to 0301, used by nothing else.
+**Scope** all 169 integration files, serially, twice.
+
+| Run | Files | Tests | Log |
+|---|---|---|---|
+| 1 (`f8f150d`) | 5 failed, 164 passed | 7 failed, 2,604 passed, 1 skipped, 4 todo | `orchestration/integration-full-1.log` |
+| final (`2edc3e9`) | 169 passed | 2,611 passed, 1 skipped, 4 todo | `orchestration/integration-full-final.log` |
+
+Every failure was a suite reading a behaviour one merged module changed on purpose, or two modules' changes meeting for the first time. No product rule was weakened.
+
+| File · test | Cause | Fix |
+|---|---|---|
+| `ap01-event-coverage` · the tables carrying `payable_id` | Inventory's 0285 adds `landed_cost_departure` with a `payable_id`. | Listed; it is written by the lock, which writes `LANDED_COST_LOCKED` (lc01, lc03). |
+| `ap05-shipment` (3) · transit `on_hand` | Inventory's 0287: a transit warehouse's `on_hand` is 0; the goods are `held` and `in_transit`. | The tests read `held` / `in_transit`. |
+| `log01-chain` · `ledgerBalance` | The same 0287 read through the logistics fixture. | The fixture reads `held`. |
+| `logistics-views.transitWarehouses` (merge defect, caught by the chain test) | Read `on_hand` of transit warehouses — nothing after 0287; the Transit Warehouses screen would have been empty and the reconciliation short on every import. | Reads `held`. |
+| `log01-views` · the lock (and `log01-chain` behind it) | Inventory's `lockDateFor`: a lock is dated no later than today and no earlier than the last receipt; the logistics timeline sat in late October and November 2026. | The whole logistics timeline moved two months earlier, every ordering kept; the fixture says why it must stay in the past. |
+| `treasury-exit-gate` · the forecast's sources (red on `main` since 7d85424) | `loan_repayments` and `loan_drawdowns` joined the cash forecast (§15.7). | Eight sources, named. |
+| `containerReceipt` print model (noise, not red) | Its totals label asked for `column.total`, a key in neither locale. | `admin.reports.totals`, as every other print model. |
+
+The skipped test is `ap08-migration`'s legacy-sheet read, which skips when the sheet is not on the machine. `npm run typecheck` and the unit suite (115 files, 1,758 tests) are green at `2edc3e9`.
