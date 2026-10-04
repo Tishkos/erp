@@ -157,6 +157,46 @@ the e-mail rows are marked `suppressed` and the log says so once per run.
   people in the application and by e-mail. A restart of the bridge is silent.
 * The model is the `agent_model` setting — `claude-opus-5-5`.
 
+## What people can do in the group
+
+Everything starts with `!ai` at the beginning of the message.
+
+* **Ask anything** — `!ai why is the customer's account empty?`, `!ai what's stuck?`,
+  `!ai how do I add a supplier?` (he answers in steps, a picture at each step).
+* **Tag somebody** — `!ai explain this to @Ali in Arabic`: the answer is written
+  to Ali and tags him. It is still read as the person who asked.
+* **Reply to a message** with `!ai explain this` — he is shown that one message
+  (and its picture or file), nothing else from the group.
+* **Send a picture** — a screenshot of an error, a photo of a paper invoice —
+  with `!ai what is this?` in its caption. He reads it.
+* **Send a supplier's invoice** (PDF, Excel or photo) with `!ai enter this` — he
+  keys a draft purchase invoice and reads it back; nothing posts.
+* **Have him do a step** — `!ai post INV-…`: he shows what it will do and waits
+  for `!ai yes`.
+
+## Noah's test set
+
+`tests/noah/questions.ts` holds some fifty real questions, each with what a
+right answer cannot be without: the tools he must have used, facts that must be
+in the words, things that must never be said, the language, the pictures, a
+proposal made and not run. Run them against the real model after any change to
+his instructions, his tools, the guide or the pictures:
+
+```
+npx tsx scripts/ops/noah-eval.ts                     # all of them, about half an hour
+npx tsx scripts/ops/noah-eval.ts --only howto --only action
+npx tsx scripts/ops/noah-eval.ts --only doc-why-draft-en
+npx tsx scripts/ops/noah-eval.ts --list
+```
+
+It answers each question exactly as the bridge would (the path `ask-noah.ts`
+uses), as the seeded administrator unless the case names somebody else. It
+never acts: a proposal is recorded for the judge and dropped, and an issue he
+files goes to a scratch file. One line per case, a tally by area, and every
+answer in full in `var/noah/eval-<date>.json`. It ends 1 if a case fails. The
+facts are those of the seeded development database; when a fact moves, correct
+the case, and when Noah answers badly, leave it failing and fix Noah.
+
 ## When Noah gets something wrong
 
 Every answer keeps what he did to reach it. On the server:
