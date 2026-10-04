@@ -58,6 +58,7 @@ import * as coa from '@/server/services/chart-of-accounts';
 import * as customs from '@/server/services/customs-pd';
 import * as gr from '@/server/services/goods-return';
 import * as inventory from '@/server/services/inventory';
+import * as valuation from '@/server/services/inventory-valuation';
 import * as landed from '@/server/services/landed-cost';
 import * as periods from '@/server/services/periods';
 import * as closing from '@/server/services/project-close';
@@ -1894,3 +1895,76 @@ describe('13 · stock that comes back after a lock brings its landed share back'
   }, SLOW);
 });
 
+// ===========================================================================
+describe('14 · stock valued at a past date is exact and stable: final, provisional, refused, flagged — and agrees with the G/L', () => {
+  const at = (asOf: string, extra: Partial<valuation.ValuationFilter> = {}) =>
+    as(world.manager, (tx) => valuation.valuationAt(tx, world.manager.principal, { asOf, itemCode: PANEL, allPermittedBranches: true, ...extra }));
+
+  it('the quantity is the ledger at the date, the unit cost is today\'s less the locks dated after it, and layers = G/L on every day', async () => {
+    const imp = await receivedImport();
+    await sell('200', { on: '2026-09-01' });
+    await writeOffPd(imp);
+    await charge(imp, '100000');
+    await lockImport(imp); // dated 30 September
+    expect(await layerOf(imp.layerId)).toMatchObject({ remaining: '300.000000', unit: '10200.0000' });
+
+    // Between the invoice (3 August, into In Process) and the receipt (20 August): 500 in transit, worth 5,000,000.
+    const inTransit = await at('2026-08-10');
+    expect(inTransit).toMatchObject({ status: 'provisional', finalThrough: null, costingMethod: 'FIFO', totalQuantity: '500', totalIqd: '5000000.0000', differenceIqd: '0.0000', flags: [] });
+    expect(inTransit.lines).toEqual([expect.objectContaining({ warehouseCode: IN_PROCESS, isTransit: true, quantity: '500', unitCostIqd: '10000.0000', valueIqd: '5000000.0000' })]);
+    // After the receipt, before the sale.
+    const received = await at('2026-08-25');
+    expect(received.lines).toEqual([expect.objectContaining({ warehouseCode: WAREHOUSE, isTransit: false, quantity: '500', unitCostIqd: '10000.0000', valueIqd: '5000000.0000' })]);
+    expect([received.totalIqd, received.glTotalIqd, received.differenceIqd]).toEqual(['5000000.0000', '5000000.0000', '0.0000']);
+    // After the sale, before the lock: 300 at the pre-lock cost — the lock's 200 a unit is dated after.
+    const sold = await at('2026-09-15');
+    expect(sold.lines).toEqual([expect.objectContaining({ quantity: '300', unitCostIqd: '10000.0000', valueIqd: '3000000.0000' })]);
+    expect([sold.totalIqd, sold.glTotalIqd, sold.differenceIqd]).toEqual(['3000000.0000', '3000000.0000', '0.0000']);
+    // On and after the lock day: 300 at 10,200.
+    for (const day of [LOCK_ON, businessToday()]) {
+      const locked = await at(day);
+      expect(locked.lines).toEqual([expect.objectContaining({ quantity: '300', unitCostIqd: '10200.0000', valueIqd: '3060000.0000' })]);
+      expect([locked.totalIqd, locked.glTotalIqd, locked.differenceIqd]).toEqual(['3060000.0000', '3060000.0000', '0.0000']);
+      expect(locked.accounts).toEqual([expect.objectContaining({ accountId: world.accounts.inventory, layersIqd: '3060000.0000', glIqd: '3060000.0000', differenceIqd: '0.0000' })]);
+    }
+    // Before anything: nothing, and nothing in the ledger.
+    expect(await at('2026-08-01')).toMatchObject({ lines: [], totalIqd: '0.0000', glTotalIqd: '0.0000', differenceIqd: '0.0000' });
+    // Narrowed to the warehouse and to a category nothing is in.
+    expect((await at('2026-09-15', { warehouseCode: IN_PROCESS })).lines).toEqual([]);
+    expect((await at('2026-09-15', { category: 'NO-SUCH-CATEGORY' })).lines).toEqual([]);
+
+    // Tomorrow is refused.
+    const tomorrow = addBusinessDays(businessToday(), 1);
+    expect(await rejection(at(tomorrow))).toMatch(/has not come/);
+
+    // The company-wide figure the period close asks, at a date: exact, as text.
+    expect(await as(world.manager, (tx) => valuation.stockAgainstGl(tx, '2026-09-15'))).toMatchObject({ differenceIqd: '0.0000' });
+  }, SLOW);
+
+  it('a date inside the unbroken run of closed periods is final; an issue dated before its layer\'s receipt flags the range, never corrects it', async () => {
+    // January and February closed in sequence: anything up to 28 February is final.
+    const { rows: months } = await ownerPool.query(`select id from fiscal_period where ends_on <= '2026-02-28' and status <> 'closed' order by starts_on`);
+    for (const month of months) await as(world.manager, (tx) => periods.setPeriodStatus(tx, world.manager, month.id, 'closed', 'Month end'));
+    expect(await as(world.manager, (tx) => valuation.finalThrough(tx))).toBe('2026-02-28');
+    expect(valuation.statusOf('2026-02-15', businessToday(), '2026-02-28')).toBe('final');
+    expect(valuation.statusOf('2026-03-01', businessToday(), '2026-02-28')).toBe('provisional');
+    expect((await at('2026-02-15')).status).toBe('final');
+    expect((await at('2026-03-01')).status).toBe('provisional');
+
+    // Received on 20 August; a sale dated 15 August draws on that layer — an impossible range [15 Aug, 20 Aug).
+    const imp = await receivedImport();
+    await sell('40', { on: '2026-08-15' });
+    const inside = await at('2026-08-17');
+    expect(inside.flags).toEqual([
+      expect.objectContaining({ itemCode: PANEL, warehouseCode: WAREHOUSE, layerId: imp.layerId, from: '2026-08-15', to: '2026-08-20', quantity: '40' }),
+    ]);
+    expect(inside.flags[0]!.detail).toMatch(/cannot be right and is not corrected/);
+    // The ledger's own figure stands beside the flag: forty below nothing in the store, the transit layer still whole.
+    expect(inside.lines.find((line) => line.warehouseCode === WAREHOUSE)).toMatchObject({ quantity: '-40', valueIqd: '-400000.0000', flagged: true });
+    expect(inside.lines.find((line) => line.warehouseCode === IN_PROCESS)).toMatchObject({ quantity: '500', flagged: false });
+    // Outside the range nothing is flagged, and the position is what it is.
+    const after = await at('2026-08-25');
+    expect(after.flags).toEqual([]);
+    expect(after.lines).toEqual([expect.objectContaining({ warehouseCode: WAREHOUSE, quantity: '460', valueIqd: '4600000.0000', flagged: false })]);
+  }, SLOW);
+});
