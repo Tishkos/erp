@@ -105,9 +105,13 @@ describe('the screen catalogue covers the approved tree', () => {
     // Organisation, Payslips, Expense Claims, Travel and Asset Assignment out;
     // plus the Accounting navbar (2026-10-04): Account Reconciliation, Tax
     // Codes and Payments & Receipts in, Treasury's separate Receipts and
-    // Payments out (one register of the money that moved replaces both).
-    expect(allMenuItems()).toHaveLength(243);
-    expect(Object.keys(SCREENS)).toHaveLength(243);
+    // Payments out (one register of the money that moved replaces both);
+    // plus IMPROVEMENT-002's inventory menu (2026-10-04): Stock Receipts,
+    // Stock Issues, Stock Count, Inventory Checks and Inventory Valuation in,
+    // the unbuilt Quarantine, Returns, Damaged Goods, Serial / Batch,
+    // Reports and Settings placeholders out.
+    expect(allMenuItems()).toHaveLength(242);
+    expect(Object.keys(SCREENS)).toHaveLength(242);
   });
 
   it('uses only declared archetypes', () => {
@@ -129,7 +133,8 @@ describe('the screen catalogue covers the approved tree', () => {
     // Accounting navbar: + 1 (account reconciliation) + 1 (payments &
     // receipts) + 2 (tax codes) + 1 (bank reconciliation is a record now),
     // − 2 − 2 (receipts, payments).
-    expect(total).toBe(358);
+    // IMPROVEMENT-002 inventory: + 1 + 1 + 2 + 1 + 1 in, − 1 − 2 − 2 − 1 − 1 − 1 out.
+    expect(total).toBe(356);
   });
 });
 
@@ -182,7 +187,7 @@ describe('every screen has one address', () => {
       [...byRoute].filter(([, keys]) => keys.length > 1).map(([route, keys]) => [route, keys.sort()]),
     );
     expect(shared).toEqual({});
-    expect(screenRoutes().size).toBe(243);
+    expect(screenRoutes().size).toBe(242);
   });
 
   it('marks only the delivered screens as reading real data', () => {
@@ -236,6 +241,8 @@ describe('every screen has one address', () => {
       '/hr/reports',
       '/hr/requests',
       '/inventory/availability',
+      // IMPROVEMENT-002 — the inventory screens.
+      '/inventory/checks',
       // Operations build — block 7's Warehouses Report.
       '/inventory/fifo-valuation',
       // Block 8 — Invoice Status Tracking.
@@ -244,11 +251,15 @@ describe('every screen has one address', () => {
       // Block 7 — Opening Stock, Item Reconciliation, Stock Movement, Transfer.
       '/inventory/opening-stock',
       // The Stock Ledger (2026-09-27).
+      '/inventory/stock-count',
+      '/inventory/stock-issues',
       '/inventory/stock-ledger',
       '/inventory/stock-movements',
+      '/inventory/stock-receipts',
       '/inventory/stock-reconciliation',
       '/inventory/transfers',
       '/inventory/uom',
+      '/inventory/valuation',
       '/master-data/bank-accounts',
       // REQ-AP-001 Stage 3 — the bank master.
       '/master-data/banks',

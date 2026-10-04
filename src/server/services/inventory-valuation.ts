@@ -41,7 +41,6 @@ import { MONEY_SCALE, divideHalfUp, parseDecimal, toDecimalString } from '../dom
 import type { Principal } from '../domain/permissions';
 import { PermissionDeniedError, can } from '../domain/permissions';
 import { QUANTITY_FACTOR, formatQuantity, parseQuantity } from '../domain/uom';
-import * as periods from './periods';
 
 export const PERMISSION_OBJECT = 'inventory_movement';
 
@@ -128,6 +127,10 @@ const amountOf = (value: string | null | undefined) => parseDecimal(value ?? '0'
 
 /** The last day of the unbroken run of closed periods from the first, or null. */
 export async function finalThrough(tx: Tx): Promise<string | null> {
+  // Loaded lazily: `periods` opens the database client at import, and the
+  // period-close catalogue unit test imports `closing-checks` → this file
+  // without a database.
+  const periods = await import('./periods');
   const all = await periods.calendar(tx);
   let last: string | null = null;
   for (const period of all) {
