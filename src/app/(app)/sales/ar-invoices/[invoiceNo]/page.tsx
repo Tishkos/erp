@@ -8,8 +8,11 @@ import { InvoiceSettlement } from '@/components/admin/invoice-settlement';
 import { ReceivableInvoiceActivity } from '@/components/admin/receivable-invoice-activity';
 import { Attachments } from '@/components/admin/attachments';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { ExportIcon } from '@/components/print/export-menu';
 import * as attachmentsService from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
 import { InvoiceLinesGrid } from '@/components/admin/invoice-lines-grid';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -128,6 +131,9 @@ export default async function ArInvoicePage({
           .filter((id): id is string => Boolean(id))
           .map((id) => coa.loadAccount(tx, id).catch(() => null)),
       ),
+      // The Notes door (shared, 2026-10-04): what people have said about this
+      // invoice, kept as its own audit events.
+      notes: await recordNotes.listNotes(tx, { object: ar.PERMISSION_OBJECT, recordId: document.id }),
     };
   });
 
@@ -193,8 +199,20 @@ export default async function ArInvoicePage({
   const fields: DocumentField[] = [
     { label: column('invoice_no'), value: <bdi dir="ltr">{invoice.invoiceNo}</bdi> },
     { label: column('status'), value: status(invoice.status), status: invoice.status },
-    { label: column('customer_code'), value: <bdi dir="ltr">{customer?.code ?? '—'}</bdi> },
-    { label: column('customer_name'), value: <bdi dir="auto">{customer?.name ?? '—'}</bdi> },
+    // The customer is a link to their profile (Master Data › Customers) — "like
+    // Bank Loans: we can click the bank or the customer" (2026-10-04).
+    {
+      label: column('customer_code'),
+      value: <ProfileLink code={customer?.code} kind="customer">{customer?.code ?? '—'}</ProfileLink>,
+    },
+    {
+      label: column('customer_name'),
+      value: (
+        <ProfileLink code={customer?.code} dir="auto" kind="customer">
+          {customer?.name ?? '—'}
+        </ProfileLink>
+      ),
+    },
     {
       label: column('posting_date'),
       value: <bdi dir="ltr">{formatBusinessDate(invoice.invoiceDate, locale as Locale)}</bdi>,
@@ -335,8 +353,8 @@ export default async function ArInvoicePage({
         }
         titleActions={
           <>
-            {/* Printer, paperclip, clock — the standing order (2026-10-03).
-                The invoice keeps no notes log, so it has no notes door. */}
+            {/* Printer, paperclip, notes, clock — the standing order (2026-10-03),
+                from the draft. */}
             <ExportIcon
               exportKey="sales_invoice"
               id={invoice.invoiceNo}
@@ -356,6 +374,7 @@ export default async function ArInvoicePage({
                 objectType={ar.PERMISSION_OBJECT}
               />
             </AttachmentsButton>
+            <RecordNotesDoor notes={found.notes} object={ar.PERMISSION_OBJECT} recordId={invoice.id} />
             <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
               <RecordHistory objectId={invoice.id} objectType={ar.PERMISSION_OBJECT} />
             </HistoryButton>

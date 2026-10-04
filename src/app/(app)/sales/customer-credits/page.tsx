@@ -14,6 +14,7 @@ import {
 } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ProfileLink } from '@/components/admin/profile-link';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -261,10 +262,10 @@ export default async function CustomerCreditsPage({ searchParams }: { searchPara
                       <bdi dir="ltr">{day(row.documentDate)}</bdi>
                     </td>
                     <td>
-                      <bdi dir="ltr">{row.customerCode}</bdi>
+                      <ProfileLink code={row.customerCode} kind="customer">{row.customerCode}</ProfileLink>
                     </td>
                     <td>
-                      <bdi dir="auto">{row.customerName}</bdi>
+                      <ProfileLink code={row.customerCode} dir="auto" kind="customer">{row.customerName}</ProfileLink>
                     </td>
                     <td>
                       {row.sourceInvoiceNo ? (
@@ -427,7 +428,8 @@ export default async function CustomerCreditsPage({ searchParams }: { searchPara
                 {byCustomer.map(([code, row]) => (
                   <tr key={code}>
                     <td>
-                      <bdi dir="auto">{row.name}</bdi> <span className="muted"><bdi dir="ltr">{code}</bdi></span>
+                      <ProfileLink code={code} dir="auto" kind="customer">{row.name}</ProfileLink>{' '}
+                      <span className="muted"><bdi dir="ltr">{code}</bdi></span>
                     </td>
                     <td className={s.sapNum}>
                       <bdi dir="ltr">{money(str(row.outstanding))}</bdi>

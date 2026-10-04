@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, admin as s } from './index';
 import { ReportFilter, ReportWindow, currencyFrom } from './report-filter';
+import { ProfileLink } from './profile-link';
 import { SectionTabs } from './section-tabs';
 import type { SearchParams } from './params';
 import { Denied } from '@/components/denied';
@@ -531,7 +532,8 @@ export async function AccountStatement({
                         <Link className={s.sapLink} href={`${screen.route}?code=${encodeURIComponent(row.partyCode)}&from=${from}&to=${to}&currency=${currency}`}>
                           <bdi dir="auto">{row.partyName}</bdi>
                         </Link>{' '}
-                        <span className="muted"><bdi dir="ltr">{row.partyCode}</bdi></span>
+                        {/* The name opens the statement; the code the party's profile (shared ProfileLink, 2026-10-04). */}
+                        <span className="muted"><ProfileLink code={row.partyCode} kind={side}>{row.partyCode}</ProfileLink></span>
                       </td>
                       <td className={s.sapNum}>{party?.invoices ?? 0}</td>
                       <td className={s.sapNum}><strong><bdi dir="ltr">{money(party?.outstandingIqd ?? '0')}</bdi></strong></td>
@@ -564,7 +566,7 @@ export async function AccountStatement({
                 <tbody>
                   {creditRows.map((row) => (
                     <tr key={`credit-${row.partyCode}`}>
-                      <td>{row.partyName} <span className="muted">{row.partyCode}</span></td>
+                      <td><ProfileLink code={row.partyCode} dir="auto" kind={side}>{row.partyName}</ProfileLink> <span className="muted">{row.partyCode}</span></td>
                       <td><bdi dir="ltr">{row.oldestDate ? day(row.oldestDate) : '—'}</bdi></td>
                       <td className={s.sapNum}><strong><bdi dir="ltr">{money(row.unappliedCreditsIqd)}</bdi></strong></td>
                     </tr>
@@ -585,7 +587,7 @@ export async function AccountStatement({
                 <tbody>
                   {nonInvoiceDebitRows.map((row) => (
                     <tr key={`debit-${row.partyCode}`}>
-                      <td>{row.partyName} <span className="muted">{row.partyCode}</span></td>
+                      <td><ProfileLink code={row.partyCode} dir="auto" kind={side}>{row.partyName}</ProfileLink> <span className="muted">{row.partyCode}</span></td>
                       <td><bdi dir="ltr">{row.oldestDate ? day(row.oldestDate) : '—'}</bdi></td>
                       <td className={s.sapNum}><strong><bdi dir="ltr">{money(row.otherNonInvoiceDebitIqd)}</bdi></strong></td>
                     </tr>

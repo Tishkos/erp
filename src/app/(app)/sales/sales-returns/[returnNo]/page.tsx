@@ -6,6 +6,8 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { RecordHistory } from '@/components/admin/history';
 import { Attachments } from '@/components/admin/attachments';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
 import { ExportIcon } from '@/components/print/export-menu';
@@ -16,6 +18,7 @@ import { visibleRoute } from '@/server/delivered';
 import { printSheet } from '@/server/print/sheet';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as attachmentsService from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
 import * as sr from '@/server/services/sales-return';
 import * as warehouses from '@/server/services/warehouses';
 import { acceptReturn, attachToReturn, rejectReturn } from '../actions';
@@ -80,6 +83,7 @@ export default async function SalesReturnPage({
       parties: await sr.partiesOf(tx, document.id),
       // The paperwork behind the paperclip: how many there are.
       attached: await attachmentsService.currentFor(tx, sr.PERMISSION_OBJECT, document.id),
+      notes: await recordNotes.listNotes(tx, { object: sr.PERMISSION_OBJECT, recordId: document.id }),
     };
   });
 
@@ -96,8 +100,23 @@ export default async function SalesReturnPage({
   const fields: DocumentField[] = [
     { label: column('reference'), value: <bdi dir="ltr">{returnDoc.returnNo}</bdi> },
     { label: column('status'), value: status(returnDoc.status), status: returnDoc.status },
-    { label: column('customer_code'), value: <bdi dir="ltr">{found.parties?.customerCode ?? '—'}</bdi> },
-    { label: column('customer_name'), value: <bdi dir="auto">{found.parties?.customerName ?? '—'}</bdi> },
+    // The customer is a link to their profile (shared `ProfileLink`, 2026-10-04).
+    {
+      label: column('customer_code'),
+      value: (
+        <ProfileLink code={found.parties?.customerCode} kind="customer">
+          {found.parties?.customerCode ?? '—'}
+        </ProfileLink>
+      ),
+    },
+    {
+      label: column('customer_name'),
+      value: (
+        <ProfileLink code={found.parties?.customerCode} dir="auto" kind="customer">
+          {found.parties?.customerName ?? '—'}
+        </ProfileLink>
+      ),
+    },
     {
       label: column('posting_date'),
       value: <bdi dir="ltr">{formatBusinessDate(returnDoc.requestedOn, locale as Locale)}</bdi>,
@@ -169,7 +188,7 @@ export default async function SalesReturnPage({
         number={returnDoc.returnNo}
         titleActions={
           <>
-            {/* Printer, paperclip, clock — the standing order (2026-10-03),
+            {/* Printer, paperclip, notes, clock — the standing order (2026-10-03),
                 from the moment the return is raised. */}
             <ExportIcon
               exportKey="sales_return"
@@ -190,6 +209,7 @@ export default async function SalesReturnPage({
                 objectType={sr.PERMISSION_OBJECT}
               />
             </AttachmentsButton>
+            <RecordNotesDoor notes={found.notes} object={sr.PERMISSION_OBJECT} recordId={returnDoc.id} />
             <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
               <RecordHistory objectId={returnDoc.id} objectType={sr.PERMISSION_OBJECT} />
             </HistoryButton>

@@ -6,6 +6,8 @@ import { DocumentWindow, type DocumentField } from '@/components/admin/document-
 import { RecordHistory } from '@/components/admin/history';
 import { Attachments } from '@/components/admin/attachments';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import { ExportIcon } from '@/components/print/export-menu';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -16,6 +18,7 @@ import { visibleRoute } from '@/server/delivered';
 import { requireContext, withCurrentUser } from '@/server/session';
 import * as attachmentsService from '@/server/services/attachments';
 import * as notes from '@/server/services/customer-notes';
+import * as recordNotes from '@/server/services/record-notes';
 import { approveNote, attachToNote, cancelNote, postNote, reverseNote } from '../actions';
 
 /**
@@ -23,8 +26,7 @@ import { approveNote, attachToNote, cancelNote, postNote, reverseNote } from '..
  * which the register lists beside them and which opens here read-only.
  *
  * The Purchase Invoice's record: the document window with its four doors in
- * the title bar (printer, paperclip, clock — a note keeps no notes log), its
- * header fields, the actions row, and as its lines what it has been applied
+ * the title bar (printer, paperclip, notes, clock), its header fields, the actions row, and as its lines what it has been applied
  * to (a credit) or settled by (a debit). Applying a credit's remainder is
  * Customer Credits & Advances' work, and the row links there.
  */
@@ -60,11 +62,22 @@ export default async function NotePage({
   const found = await withCurrentUser(async (tx) => {
     const note = await notes.viewByNo(tx, number);
     if (note) {
-      return { note, memo: null, attached: await attachmentsService.currentFor(tx, notes.ATTACHMENT_OBJECT, note.id) };
+      return {
+        note,
+        memo: null,
+        attached: await attachmentsService.currentFor(tx, notes.ATTACHMENT_OBJECT, note.id),
+        // The note's own notes are kept under its own object, as its files are.
+        notes: await recordNotes.listNotes(tx, { object: notes.ATTACHMENT_OBJECT, recordId: note.id }),
+      };
     }
     const memo = await notes.memoByNo(tx, number);
     if (memo) {
-      return { note: null, memo, attached: await attachmentsService.currentFor(tx, 'customer_credit_memo', memo.id) };
+      return {
+        note: null,
+        memo,
+        attached: await attachmentsService.currentFor(tx, 'customer_credit_memo', memo.id),
+        notes: await recordNotes.listNotes(tx, { object: 'customer_credit_memo', recordId: memo.id }),
+      };
     }
     return null;
   });
@@ -83,8 +96,18 @@ export default async function NotePage({
       { label: column('document_no'), value: <bdi dir="ltr">{memo.memoNo}</bdi> },
       { label: column('status'), value: statusLabel(memo.status), status: memo.status },
       { label: t('kind'), value: t('register_credit_memo') },
-      { label: column('customer_code'), value: <bdi dir="ltr">{memo.customerCode}</bdi> },
-      { label: column('customer_name'), value: <bdi dir="auto">{memo.customerName}</bdi> },
+      {
+        label: column('customer_code'),
+        value: <ProfileLink code={memo.customerCode} kind="customer">{memo.customerCode}</ProfileLink>,
+      },
+      {
+        label: column('customer_name'),
+        value: (
+          <ProfileLink code={memo.customerCode} dir="auto" kind="customer">
+            {memo.customerName}
+          </ProfileLink>
+        ),
+      },
       { label: column('posting_date'), value: <bdi dir="ltr">{day(memo.memoDate)}</bdi> },
       {
         label: column('invoice_no'),
@@ -149,6 +172,7 @@ export default async function NotePage({
                   objectType="customer_credit_memo"
                 />
               </AttachmentsButton>
+              <RecordNotesDoor notes={found.notes} object="customer_credit_memo" recordId={memo.id} />
               <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
                 <RecordHistory objectId={memo.id} objectType="customer_credit_memo" />
               </HistoryButton>
@@ -192,8 +216,19 @@ export default async function NotePage({
     { label: column('document_no'), value: <bdi dir="ltr">{note.noteNo}</bdi> },
     { label: column('status'), value: statusLabel(note.status), status: note.status },
     { label: t('kind'), value: t(`kind_${note.kind}`) },
-    { label: column('customer_code'), value: <bdi dir="ltr">{note.customerCode}</bdi> },
-    { label: column('customer_name'), value: <bdi dir="auto">{note.customerName}</bdi> },
+    // The customer is a link to their profile (shared `ProfileLink`, 2026-10-04).
+    {
+      label: column('customer_code'),
+      value: <ProfileLink code={note.customerCode} kind="customer">{note.customerCode}</ProfileLink>,
+    },
+    {
+      label: column('customer_name'),
+      value: (
+        <ProfileLink code={note.customerCode} dir="auto" kind="customer">
+          {note.customerName}
+        </ProfileLink>
+      ),
+    },
     { label: column('posting_date'), value: <bdi dir="ltr">{day(note.noteDate)}</bdi> },
     { label: column('due_date'), value: <bdi dir="ltr">{credit ? '—' : day(note.dueDate)}</bdi> },
     {
@@ -303,7 +338,7 @@ export default async function NotePage({
         number={note.noteNo}
         titleActions={
           <>
-            {/* Printer, paperclip, clock — the standing order (2026-10-03). */}
+            {/* Printer, paperclip, notes, clock — the standing order (2026-10-03). */}
             <ExportIcon exportKey="customer_note" id={note.noteNo} title={`${t(`kind_${note.kind}`)} ${note.noteNo}`} />
             <AttachmentsButton
               closeLabel={admin('close')}
@@ -319,13 +354,18 @@ export default async function NotePage({
                 objectType={notes.ATTACHMENT_OBJECT}
               />
             </AttachmentsButton>
+            <RecordNotesDoor notes={found.notes} object={notes.ATTACHMENT_OBJECT} recordId={note.id} />
             <HistoryButton closeLabel={admin('close')} label={admin('history')} title={admin('history')}>
               {/* The note's events are the credit memo object's (it governs
-                  notes); its files are filed under its own, so they are named. */}
+                  notes); its files and its notes are kept under its own, so
+                  they are named. */}
               <RecordHistory
                 objectId={note.id}
                 objectType={notes.PERMISSION_OBJECT}
-                related={[{ objectType: 'attachment', field: 'parent', value: `${notes.ATTACHMENT_OBJECT}:${note.id}` }]}
+                related={[
+                  { objectType: 'attachment', field: 'parent', value: `${notes.ATTACHMENT_OBJECT}:${note.id}` },
+                  { objectType: notes.ATTACHMENT_OBJECT, objectId: note.id },
+                ]}
               />
             </HistoryButton>
           </>

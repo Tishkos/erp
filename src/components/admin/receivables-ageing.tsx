@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, admin as s } from '@/components/admin';
 import { ReportWindow } from './report-filter';
+import { ProfileLink } from './profile-link';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import type { SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
@@ -255,14 +256,12 @@ export async function ReceivablesAgeing({ searchParams }: { readonly searchParam
           // The way down from one customer: their record, their statement,
           // and the credits they hold.
           <p className={s.sapTitleMeta} style={{ padding: '0 1rem' }}>
-            <bdi dir="auto">{chosen.legalName}</bdi>{' '}
+            <ProfileLink code={chosen.code} dir="auto" kind="customer">{chosen.legalName}</ProfileLink>{' '}
             <span className="muted">
               <bdi dir="ltr">{chosen.code}</bdi>
             </span>
             {' · '}
-            <Link className={s.sapLink} href={`/sales/customers/${encodeURIComponent(chosen.code)}?role=customer`}>
-              {r('customer_record')}
-            </Link>
+            <ProfileLink code={chosen.code} dir="auto" kind="customer">{r('customer_record')}</ProfileLink>
             {' · '}
             <Link className={s.sapLink} href={`/sales/customer-statements?code=${encodeURIComponent(chosen.code)}`}>
               {r('statement')}
@@ -303,11 +302,12 @@ export async function ReceivablesAgeing({ searchParams }: { readonly searchParam
               {items.map((item) => (
                 <tr key={item.invoiceId}>
                   <td>
+                    {/* The name narrows the ageing to this customer; the code opens their profile. */}
                     <Link className={s.sapLink} href={narrowedHref(item.partyCode)}>
                       <bdi dir="auto">{item.partyName}</bdi>
                     </Link>{' '}
                     <span className="muted">
-                      <bdi dir="ltr">{item.partyCode}</bdi>
+                      <ProfileLink code={item.partyCode} kind="customer">{item.partyCode}</ProfileLink>
                     </span>
                   </td>
                   <td className={s.sapAccountCell}>

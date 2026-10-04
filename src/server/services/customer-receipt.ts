@@ -683,6 +683,7 @@ export async function list(tx: Tx) {
       customerCode: businessPartner.code,
       bankName: bankCashAccount.name,
       bankCode: bankCashAccount.code,
+      bankType: bankCashAccount.accountType,
       receiptDate: customerReceipt.receiptDate,
       amountIqd: customerReceipt.amountIqd,
       allocatedIqd: customerReceipt.allocatedIqd,
@@ -709,13 +710,15 @@ export async function partiesOf(tx: Tx, customerReceiptId: string) {
       customerName: businessPartner.legalName,
       bankCode: bankCashAccount.code,
       bankName: bankCashAccount.name,
+      // Bank or cash: which profile the account links to (shared `ProfileLink`, 2026-10-04).
+      bankType: bankCashAccount.accountType,
     })
     .from(customerReceipt)
     .leftJoin(businessPartner, eq(businessPartner.id, customerReceipt.customerId))
     .leftJoin(bankCashAccount, eq(bankCashAccount.id, customerReceipt.bankCashAccountId))
     .where(eq(customerReceipt.id, customerReceiptId))
     .limit(1);
-  return row ?? { customerCode: null, customerName: null, bankCode: null, bankName: null };
+  return row ?? { customerCode: null, customerName: null, bankCode: null, bankName: null, bankType: null };
 }
 
 /** The invoices this receipt settles, with what it put against each. */

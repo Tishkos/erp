@@ -14,6 +14,7 @@ import {
 } from '@/components/admin';
 import { outcomeOf, type SearchParams } from '@/components/admin/params';
 import { Denied } from '@/components/denied';
+import { ProfileLink } from '@/components/admin/profile-link';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import { formatBusinessDate, formatMoney, type Locale } from '@/i18n/config';
 import { can } from '@domain/permissions';
@@ -156,10 +157,10 @@ export default async function CreditNotesPage({ searchParams }: { searchParams: 
                       <bdi dir="ltr">{row.kind === 'debit_note' ? day(row.dueDate) : '—'}</bdi>
                     </td>
                     <td>
-                      <bdi dir="ltr">{row.customerCode}</bdi>
+                      <ProfileLink code={row.customerCode} kind="customer">{row.customerCode}</ProfileLink>
                     </td>
                     <td>
-                      <bdi dir="auto">{row.customerName}</bdi>
+                      <ProfileLink code={row.customerCode} dir="auto" kind="customer">{row.customerName}</ProfileLink>
                     </td>
                     <td>
                       {row.invoiceNo ? (

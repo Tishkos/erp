@@ -8,6 +8,8 @@ import { Denied } from '@/components/denied';
 import { ExportIcon } from '@/components/print/export-menu';
 import { Attachments } from '@/components/admin/attachments';
 import { AttachmentsButton, HistoryButton } from '@/components/admin/icon-dialog';
+import { ProfileLink } from '@/components/admin/profile-link';
+import { RecordNotesDoor } from '@/components/admin/record-notes-door';
 import Link from 'next/link';
 import { PrintSheet } from '@/components/print/print-sheet';
 import { printSheet } from '@/server/print/sheet';
@@ -21,6 +23,7 @@ import * as receipts from '@/server/services/customer-receipt';
 import * as credits from '@/server/services/customer-credits';
 import * as paymentMethods from '@/server/services/payment-methods';
 import * as attachmentsService from '@/server/services/attachments';
+import * as recordNotes from '@/server/services/record-notes';
 import { allocateOldestFirst, allocateReceipt, approveReceipt, attachToReceipt, postReceipt } from '../actions';
 
 /**
@@ -93,6 +96,7 @@ export default async function ReceiptPage({
         ? await paymentMethods.get(tx, seen.paymentMethodCode).catch(() => null)
         : null,
       attached: await attachmentsService.currentFor(tx, receipts.PERMISSION_OBJECT, seen.id),
+      notes: await recordNotes.listNotes(tx, { object: receipts.PERMISSION_OBJECT, recordId: seen.id }),
     };
   });
 
@@ -128,6 +132,8 @@ export default async function ReceiptPage({
     receipt.status === 'draft' && can(principal, 'approve', receipts.PERMISSION_OBJECT);
   const mayPost =
     receipt.status === 'approved' && can(principal, 'post', receipts.PERMISSION_OBJECT);
+  // A cash account has its own profile page; everything else is a bank account's.
+  const accountKind = parties.bankType === 'cash' ? 'cash_account' : 'bank_account';
 
   const fields: DocumentField[] = [
     // The number, not "Reference" — the reference is the field below, and two
@@ -139,14 +145,36 @@ export default async function ReceiptPage({
     // the document did not say back. The printed copy has carried them all
     // along, so the screen was the odd one out. §16 — a receipt whose payer is
     // unknown says so rather than naming nobody.
-    { label: column('customer_code'), value: <bdi dir="ltr">{parties.customerCode ?? '—'}</bdi> },
-    { label: column('customer_name'), value: <bdi dir="auto">{parties.customerName ?? '—'}</bdi> },
+    // Each a link to its profile — the customer's, and the bank or cash
+    // account's — "like Bank Loans: we can click the bank or the customer".
+    {
+      label: column('customer_code'),
+      value: <ProfileLink code={parties.customerCode} kind="customer">{parties.customerCode ?? '—'}</ProfileLink>,
+    },
+    {
+      label: column('customer_name'),
+      value: (
+        <ProfileLink code={parties.customerCode} dir="auto" kind="customer">
+          {parties.customerName ?? '—'}
+        </ProfileLink>
+      ),
+    },
     {
       label: column('posting_date'),
       value: <bdi dir="ltr">{formatBusinessDate(receipt.receiptDate, locale as Locale)}</bdi>,
     },
-    { label: column('bank_code'), value: <bdi dir="ltr">{parties.bankCode ?? '—'}</bdi> },
-    { label: column('bank_name'), value: <bdi dir="auto">{parties.bankName ?? '—'}</bdi> },
+    {
+      label: column('bank_code'),
+      value: <ProfileLink code={parties.bankCode} kind={accountKind}>{parties.bankCode ?? '—'}</ProfileLink>,
+    },
+    {
+      label: column('bank_name'),
+      value: (
+        <ProfileLink code={parties.bankCode} dir="auto" kind={accountKind}>
+          {parties.bankName ?? '—'}
+        </ProfileLink>
+      ),
+    },
     { label: column('branch_code'), value: <bdi dir="ltr">{receipt.branchCode}</bdi> },
     {
       label: t('customer_receipts.amount'),
@@ -220,7 +248,7 @@ export default async function ReceiptPage({
         }
         titleActions={
           <>
-            {/* Printer, paperclip, clock — the standing order (2026-10-03). */}
+            {/* Printer, paperclip, notes, clock — the standing order (2026-10-03). */}
             <ExportIcon
               exportKey="customer_receipt"
               id={receipt.receiptNo}
@@ -240,6 +268,7 @@ export default async function ReceiptPage({
                 objectType={receipts.PERMISSION_OBJECT}
               />
             </AttachmentsButton>
+            <RecordNotesDoor notes={found.notes} object={receipts.PERMISSION_OBJECT} recordId={receipt.id} />
             <HistoryButton closeLabel={t('close')} label={t('history')} title={t('history')}>
               <RecordHistory objectId={receipt.id} objectType={receipts.PERMISSION_OBJECT} />
             </HistoryButton>

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { AdminPage, admin as s } from '@/components/admin';
+import { ProfileLink } from '@/components/admin/profile-link';
 import { ReportWindow } from '@/components/admin/report-filter';
 import { SectionTabs } from '@/components/admin/section-tabs';
 import type { SearchParams } from '@/components/admin/params';
@@ -230,7 +231,7 @@ export default async function CustomerReconciliationPage({ searchParams }: { sea
                       <bdi dir="ltr">{row.accountCode}</bdi>
                     </td>
                     <td>
-                      <bdi dir="ltr">{row.partyCode ?? '—'}</bdi>
+                      <ProfileLink code={row.partyCode} kind="customer">{row.partyCode ?? '—'}</ProfileLink>
                     </td>
                     <td>
                       <bdi dir="auto">{row.description ?? row.sourceModule ?? '—'}</bdi>
@@ -280,7 +281,8 @@ export default async function CustomerReconciliationPage({ searchParams }: { sea
             {parties.map((row) => (
               <tr key={row.partyCode}>
                 <td>
-                  <bdi dir="auto">{row.partyName}</bdi> <span className="muted"><bdi dir="ltr">{row.partyCode}</bdi></span>
+                  <ProfileLink code={row.partyCode} dir="auto" kind="customer">{row.partyName}</ProfileLink>{' '}
+                  <span className="muted"><bdi dir="ltr">{row.partyCode}</bdi></span>
                 </td>
                 <td className={s.sapNum}>
                   <bdi dir="ltr">{money(row.ledgerIqd)}</bdi>

@@ -156,6 +156,8 @@ const TARGETS = new Map<string, NoteTarget>([
   ['ar_invoice', target('ar_invoice', 'edit_draft', inTable('ar_invoice', 'id', 'branch_code'))],
   ['customer_receipt', target('customer_receipt', 'edit_draft', inTable('customer_receipt', 'id', 'branch_code'))],
   ['customer_credit_memo', target('customer_credit_memo', 'edit_draft', inTable('customer_credit_memo', 'id', 'branch_code'))],
+  // Receivables (2026-10-04) — a credit or debit note (`customer_note`, REQ-AR-001) is governed by the memo's grant (D-AR-9).
+  ['customer_note', target('customer_credit_memo', 'edit_draft', inTable('customer_note', 'id', 'branch_code'))],
   ['sales_return', target('sales_return', 'edit_draft', inTable('sales_return', 'id', 'branch_code'))],
   ['sales_order', target('sales_order', 'edit_draft', inTable('sales_order', 'id', 'branch_code'))],
   ['delivery_note', target('delivery_note', 'edit_draft', inTable('delivery_note', 'id', 'branch_code'))],
