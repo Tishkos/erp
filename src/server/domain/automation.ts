@@ -35,6 +35,7 @@ import {
   type RecipientKind,
 } from './automation-events';
 import { SEVERITIES, type Severity } from './exceptions';
+import { can, type PermissionVerb, type Principal } from './permissions';
 import { TASK_PRIORITIES, type TaskPriority } from './tasks';
 
 export class AutomationError extends Error {
@@ -337,6 +338,56 @@ export function evaluate(definition: Definition, payload: Readonly<Record<string
   }
   const matched = unmet.length === 0;
   return { matched, unmet, planned: matched ? definition.actions : [] };
+}
+
+// ---------------------------------------------------------------------------
+// Reach: what the owner could do by hand
+// ---------------------------------------------------------------------------
+
+export interface Requirement {
+  readonly verb: PermissionVerb;
+  readonly object: string;
+}
+
+/**
+ * What a person must hold to do an action by hand — each alternative is a set
+ * that is enough on its own. A rule runs as its owner, so this is the first half
+ * of the intersection of the owner's reach and the action's own checks (the
+ * second half is the owning service, asked again when the action runs): an
+ * action the owner could not do by hand is refused and logged as skipped.
+ */
+export function requirementsOf(eventKey: EventKey, action: Action): readonly (readonly Requirement[])[] {
+  const event = EVENTS[eventKey];
+  switch (action.kind) {
+    case 'create_notification':
+    case 'open_workflow':
+      // Telling somebody about a record is something anybody who can open it may do.
+      return [[{ verb: 'view', object: event.object }]];
+    case 'create_task':
+      return [[{ verb: 'create', object: 'task' }, { verb: 'submit', object: 'task' }, { verb: 'view', object: event.object }]];
+    case 'request_approval':
+      // Asking for a review of a purchase invoice is what submitting (or approving) one is.
+      return [[{ verb: 'submit', object: 'ap_invoice' }], [{ verb: 'approve', object: 'ap_invoice' }]];
+    case 'create_exception':
+      return [[{ verb: 'execute', object: 'exception' }, { verb: 'view', object: event.object }]];
+  }
+}
+
+export interface Reach {
+  readonly ok: boolean;
+  /** What is missing: the first alternative's shortfall. */
+  readonly missing: readonly Requirement[];
+}
+
+export function reachOf(principal: Principal, eventKey: EventKey, action: Action): Reach {
+  const alternatives = requirementsOf(eventKey, action);
+  let best: readonly Requirement[] | null = null;
+  for (const set of alternatives) {
+    const missing = set.filter((r) => !can(principal, r.verb, r.object));
+    if (missing.length === 0) return { ok: true, missing: [] };
+    if (best === null || missing.length < best.length) best = missing;
+  }
+  return { ok: false, missing: best ?? [] };
 }
 
 // ---------------------------------------------------------------------------
