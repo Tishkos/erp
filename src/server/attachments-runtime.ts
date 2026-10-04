@@ -52,6 +52,7 @@ import {
   supplierAdvance,
   supplierCreditMemo,
   supplierPayment,
+  task,
   taxCode,
   vacancy,
 } from './db/schema';
@@ -494,6 +495,20 @@ const chatMessageParentAccess = async (tx: Tx, principal: Principal, objectId: s
   return Boolean(row);
 };
 
+/**
+ * The Task Center (platform phase, Agent 3) — a task's files and notes are
+ * for the people the task is for: the grant to view tasks, and the task's own
+ * row policy (its creator, assigner, assignee and watchers; a section's
+ * manager, whoever the assignee reports to, an administrator in the branch)
+ * answers which tasks exist for the reader. A draft is its creator's alone.
+ */
+const taskParentAccess = async (tx: Tx, principal: Principal, objectId: string) => {
+  if (!can(principal, 'view', 'task')) return false;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectId)) return false;
+  const [row] = await tx.select({ id: task.id }).from(task).where(eq(task.id, objectId)).limit(1);
+  return Boolean(row);
+};
+
 let registered = false;
 
 /** Idempotent: every entry point may call it, and the first one wins. */
@@ -536,6 +551,7 @@ export function registerAttachmentRuntime(): void {
   attachments.registerParentAccessCheck('vacancy', vacancyParentAccess);
   attachments.registerParentAccessCheck('payroll_run', payrollRunParentAccess);
   attachments.registerParentAccessCheck('chat_message', chatMessageParentAccess);
+  attachments.registerParentAccessCheck('task', taskParentAccess);
   for (const [object, table] of PURCHASE_PARENTS) {
     attachments.registerParentAccessCheck(object, purchaseParentAccess(object, table));
   }

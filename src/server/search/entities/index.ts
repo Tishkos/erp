@@ -33,6 +33,7 @@ import {
   supplier,
   warehouse,
 } from './masters';
+import { task } from './tasks';
 
 export const BUILT_IN: readonly SearchType[] = [
   // Master records
@@ -55,6 +56,8 @@ export const BUILT_IN: readonly SearchType[] = [
   salesReturn,
   journalEntry,
   bankLoan,
+  // Work
+  task,
   // Imports and shipping
   payable,
   billOfLading,

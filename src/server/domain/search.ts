@@ -426,6 +426,10 @@ const CHIP: Readonly<Record<string, string>> = {
   totally_written_off: 'settled',
   expired_validated: 'closed',
   expired_part_written_off: 'closed',
+  // A task on its road (the Task Center; draft, submitted, accepted, blocked, rejected and cancelled are above).
+  assigned: 'submitted',
+  in_progress: 'executed',
+  completed: 'posted',
 };
 
 /** Every status code the search can show; each has a `search.status.<code>` translation in both locales. */

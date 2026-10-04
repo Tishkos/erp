@@ -146,8 +146,8 @@ describe('the screen catalogue covers the approved tree', () => {
     // Ledger, Advances, Payments, Allocations, Ageing), + 1 in (Supplier Credits).
     // REQ-LOG-001: + 2 + 2 (declarations, ports) + 8 (the registers).
     // IMPROVEMENT-002 inventory: + 1 + 1 + 2 + 1 + 1 in, − 1 − 2 − 2 − 1 − 1 − 1 out.
-    // Platform phase: + 1 (Chat, a workspace) + 1 (Cloud Files Settings).
-    expect(total).toBe(364);
+    // Platform phase: + 1 (Chat, a workspace) + 1 (Cloud Files Settings) + 1 (My Tasks, an inbox that became a document).
+    expect(total).toBe(365);
   });
 });
 
@@ -388,6 +388,8 @@ describe('every screen has one address', () => {
       '/sales/sales-returns',
       // Global Search — the results page behind the palette.
       '/search',
+      // The Task Center (platform phase, Agent 3).
+      '/tasks',
       // REQ-ACC-001 Part D — Bank Reconciliation, the Cash Forecast.
       '/treasury/bank-reconciliation',
       '/treasury/cash-forecast',

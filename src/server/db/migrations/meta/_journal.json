@@ -1583,6 +1583,41 @@
       "when": 1795900000140,
       "tag": "0330_global_search",
       "breakpoints": true
+    },
+    {
+      "idx": 226,
+      "version": "7",
+      "when": 1795900000150,
+      "tag": "0340_task_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 227,
+      "version": "7",
+      "when": 1795900000151,
+      "tag": "0341_task_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 228,
+      "version": "7",
+      "when": 1795900000152,
+      "tag": "0342_task_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 229,
+      "version": "7",
+      "when": 1795900000153,
+      "tag": "0343_task_team",
+      "breakpoints": true
+    },
+    {
+      "idx": 230,
+      "version": "7",
+      "when": 1795900000154,
+      "tag": "0344_task_system_session",
+      "breakpoints": true
     }
   ]
 }

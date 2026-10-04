@@ -90,6 +90,7 @@ chat_message
 chat_participant
 chat_conversation
 chat_presence
+task
 cloud_file_link
 employee_request_line
 employee_document

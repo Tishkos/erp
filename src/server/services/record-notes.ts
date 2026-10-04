@@ -212,6 +212,9 @@ const TARGETS = new Map<string, NoteTarget>([
   ['bank', target('bank', 'configure', inTable('bank', 'code', null))],
   ['bank_account', target('bank_account', 'configure', inTable('bank_cash_account', 'code', null))],
   ['chart_of_account', target('chart_of_account', 'edit_draft', inTable('chart_of_account', 'id', null))],
+  // The Task Center (platform phase) — kept by number, as its history is. Whoever can open the task (its row
+  // policy decides which exist for the reader) may add a note; a note is dated, signed and never edited.
+  ['task', target('task', 'view', inTable('task', 'task_no', 'branch_code'))],
 ]);
 
 /** A module's own record joins the door. Additive: an existing object is never replaced. */

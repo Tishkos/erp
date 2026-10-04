@@ -122,6 +122,8 @@ export const EXPORT_ACCESS = {
   applicant: { kind: 'document', route: '/hr/recruitment', object: 'recruitment' },
   // A person's request of any kind, at any stage (an issued letter prints as the letter): theirs to print, as the letter is.
   employee_request: { kind: 'document', route: '/hr/requests', object: 'employee_request', selfService: true },
+  // The Task Center (platform phase): a task prints from its own page, to whoever can open it.
+  task: { kind: 'document', route: '/tasks', object: 'task' },
 } as const satisfies Record<
   string,
   { readonly kind: 'document' | 'report'; readonly route: string; readonly object: string; readonly selfService?: boolean }
