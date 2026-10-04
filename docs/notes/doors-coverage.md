@@ -40,7 +40,8 @@ rule), `view` (a read-only rendering of another record's data: printer only).
 | `treasury/loans/[loanNo]` — bank loan (the party-link model) | ❌ | ✅ | ❌ | ✅ | **none** | bank account: link ✅; bank: text ❌ | payables | owner module |
 | `treasury/deposits/[depositNo]` | ❌ | ✅ | ❌ | ✅ | none | journal: link ✅; bank/cash account: text ❌ | payables | owner module |
 | `finance/journals/[entryNo]` | ◐ | ✅ | ❌ | ◐ (own audit page) | `journal_entry` | G/L accounts: text ❌ | accounting | owner module |
-| `inventory/opening-stock/[documentNo]` (record framework) | ◐ | ❌ | ❌ | ◐ | `opening_stock` | warehouse, items: text ❌ | inventory | owner module |
+| `inventory/opening-stock/[documentNo]` | ✅ | ✅ | ✅ | ✅ | `opening_stock` | warehouse, items: links ✅ | inventory | done (2026-10-04) |
+| `inventory/stock-count/[countNo]` — stock count (new) | ✅ | ✅ | ✅ | ✅ | `stock_count` | warehouse, items: links ✅ | inventory | done (2026-10-04) |
 
 ## Logistics documents
 
@@ -98,8 +99,8 @@ The employee link on an HR record is shown only to readers who hold `view` on
 | `master-data/banks/[code]` | `bank` | ❌ | ◐ | accounting | owner module |
 | `master-data/bank-accounts/[code]`, `master-data/cash-accounts/[code]` | `bank_account`, `cash_account` | ❌ | ◐ | accounting | owner module |
 | `master-data/chart-of-accounts/[code]` | `gl_account` | ❌ | ◐ (record framework) | accounting | owner module |
-| `master-data/items/[code]` (`/inventory/items/…`) | `item` | ❌ | ◐ | inventory | owner module |
-| `master-data/warehouses/[code]` | `warehouse` | ❌ | ◐ | inventory | owner module |
+| `master-data/items/[code]` (`/inventory/items/…`) | `item` | ✅ | ✅ | inventory | done (2026-10-04) |
+| `master-data/warehouses/[code]` | `warehouse` | ✅ | ✅ | inventory | done (2026-10-04) |
 | `hr/employees/[employeeNo]` | `employee` | ✅ | ✅ | shared | profile |
 | `projects/[code]` | `project` | ✅ | ✅ | shared | profile |
 | `master-data/branches/[code]`, `master-data/departments/[code]`, `master-data/cost-centres/[code]` | `branch`, `department`, `cost_centre` | ❌ | ◐ (`AuditLogButton` + `RecordHistory`) | shared | profile (history only — no record links to a note on them yet) |
